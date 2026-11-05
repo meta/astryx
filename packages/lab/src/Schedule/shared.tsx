@@ -79,7 +79,7 @@ export function ScheduleFrame({
   children: ReactNode;
 }) {
   const {plugins} = useScheduleContext();
-  // The ring is silent; the Schedule announces its own busy start (AST-086 FR8).
+  // The ring is silent; the Schedule announces its own busy start.
   useStatusAnnouncement(isLoading ? 'Loading events' : null, 'polite', {
     skipPageLoad: true,
   });

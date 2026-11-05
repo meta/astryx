@@ -406,7 +406,7 @@ export function EmojiPicker({
     t,
   ]);
   const firstMatch = sections[0]?.emojis[0];
-  // The ring is silent; the picker announces its own busy start (AST-086 FR8).
+  // The ring is silent; the picker announces its own busy start.
   useStatusAnnouncement(
     isLoading && (queryWords.length === 0 || sections.length === 0)
       ? t('@astryx.emojiPicker.loading')

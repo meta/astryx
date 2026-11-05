@@ -90,8 +90,8 @@ export interface AnnounceRenderedTextOptions {
  * The rendered text an assistive technology would read from `element`. Block
  * boxes read apart: a block tag, an element whose computed display is not
  * inline, and any child of a flex or grid container (which the layout
- * blockifies), so two stacked `Text` spans never run together
- * (`spec:AST-086` FR7). Hidden parts are skipped; nothing on screen changes.
+ * blockifies), so two stacked `Text` spans never run together. Hidden parts
+ * are skipped; nothing on screen changes.
  */
 export function renderedText(element: HTMLElement): string {
   const view = element.ownerDocument.defaultView;
@@ -201,7 +201,7 @@ export function useAnnounceRenderedText(
           .split(/\s+/)
           .map(id => {
             // Each referenced element as read: its hidden parts dropped, as
-            // the accessible name drops them (AST-086 FR12).
+            // the accessible name drops them.
             const target = element.ownerDocument.getElementById(id);
             return target == null ? '' : renderedText(target);
           })

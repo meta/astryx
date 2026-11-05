@@ -654,7 +654,7 @@ export function CommentAvatarFrame({user}: {user: CommentUser}) {
   );
 }
 
-/** Runs beneath Dialog so useAnnounce reaches its modal scope (AST-086 FR14). */
+/** Runs beneath Dialog so useAnnounce reaches its modal scope. */
 function BusyStatus({isBusy, message}: {isBusy: boolean; message: string}) {
   useStatusAnnouncement(isBusy ? message : null, 'polite', {
     skipPageLoad: true,
@@ -764,7 +764,7 @@ export function HistoryDialog({
         content={
           <LayoutContent>
             {/* Keep the announcement owner beneath Dialog: the shared channel
-                routes its busy start into this modal (AST-086 FR8, FR14). */}
+                routes its busy start into this modal. */}
             <BusyStatus
               isBusy={history.isLoading}
               message={t('@astryx.comments.historyLoading')}

@@ -459,12 +459,12 @@ export function Spinner({
     (typeof label === 'string' ? label : undefined) ??
     t('@astryx.spinner.loading');
 
-  // Only a standalone Spinner is its own owner (`spec:AST-086` FR2, FR8): a
-  // Core component that composes it silences it through the internal
-  // SpinnerOwnerContext, and app code hides it with `aria-hidden`. A caller
-  // `role` other than progressbar also keeps it silent, as it shipped, so app
-  // code that silenced a composed ring that way needs no change
-  // (`spec:AST-017` FR53); new code uses `aria-hidden`.
+  // Only a standalone Spinner announces. A Core component that composes it
+  // owns the task and silences it through the internal SpinnerOwnerContext;
+  // app code hides it with `aria-hidden`. A caller `role` other than
+  // progressbar also keeps it silent, as it shipped, so app code that
+  // silenced a composed ring that way keeps working; new code uses
+  // `aria-hidden`.
   const isComposedInOwner = use(SpinnerOwnerContext);
   const isHidden =
     restProps['aria-hidden'] === true || restProps['aria-hidden'] === 'true';
@@ -484,8 +484,7 @@ export function Spinner({
   const spinner = (
     <span
       ref={hasLabel ? undefined : rootRef}
-      // An indeterminate progress indicator: no aria-valuenow (OQ1, decided
-      // by `spec:AST-020` FR15).
+      // An indeterminate progress indicator, so no aria-valuenow.
       role="progressbar"
       aria-label={namedByVisibleLabel ? undefined : resolvedAriaLabel}
       aria-labelledby={namedByVisibleLabel ? labelId : undefined}

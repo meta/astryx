@@ -7,10 +7,9 @@
  * @input A loading message, a Spinner size
  * @output LoadingMessage: a silent Spinner ring above readable loading words
  * @position Shared by Lab owners that announce their own busy start: the ring
- *   is hidden from assistive technology, as a composed indicator is silent
- *   (`spec:AST-086` FR8), and the words stay readable (FR7), laid out as
- *   Spinner's own labelled wrapper is (an inline column, centred, with
- *   `--spacing-2` between)
+ *   is hidden from assistive technology, since its owner announces, and the
+ *   words stay readable, laid out as Spinner's own labelled wrapper is (an
+ *   inline column, centred, with `--spacing-2` between)
  */
 
 import * as stylex from '@stylexjs/stylex';

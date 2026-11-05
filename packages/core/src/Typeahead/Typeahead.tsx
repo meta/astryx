@@ -387,7 +387,7 @@ function EndLane({
   return (
     <div {...stylex.props(styles.endLane)}>
       {isBusy && (
-        // Named, never live: the typeahead announces its search (FR8).
+        // Named, never live: the typeahead announces its search.
         <SpinnerOwnerContext value={true}>
           <Spinner size="sm" aria-label={loadingLabel} role="img" />
         </SpinnerOwnerContext>

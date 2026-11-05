@@ -1756,7 +1756,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       />
       {isLoading && busyLane == null && (
         <span {...stylex.props(styles.loadingStatus)}>
-          {/* Named, never live: the typeahead announces its search (FR8). */}
+          {/* Named, never live: the typeahead announces its search. */}
           <SpinnerOwnerContext value={true}>
             <Spinner
               size="sm"

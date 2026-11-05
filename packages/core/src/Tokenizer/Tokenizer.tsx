@@ -744,7 +744,7 @@ function EndLane({
   return (
     <div ref={laneRef} {...stylex.props(laneXStyle)}>
       {(isBusy || hasBusySlot) && (
-        // Named, never live: the tokenizer announces its search (FR8).
+        // Named, never live: the tokenizer announces its search.
         <SpinnerOwnerContext value={true}>
           <Spinner
             // Remounts when a search starts, so the ring syncs its phase on
