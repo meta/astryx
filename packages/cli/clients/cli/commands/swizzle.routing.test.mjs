@@ -340,3 +340,36 @@ describe('swizzle — StyleX build setup note (#3373)', () => {
     expect(humanResult.stdout).not.toMatch(/StyleX compiler/i);
   });
 });
+
+describe('swizzle — shared modules outside the component folder (spec:AST-110 FR4)', () => {
+  it('names the owner modules it copied beside the component', async () => {
+    const core = path.join(project, 'node_modules', '@astryxdesign', 'core');
+    const rowDir = path.join(core, 'src', 'Row');
+    fs.mkdirSync(rowDir, {recursive: true});
+    fs.mkdirSync(path.join(core, 'src', 'privateAttributes'), {recursive: true});
+    fs.mkdirSync(path.join(core, 'src', 'motion'), {recursive: true});
+    fs.writeFileSync(
+      path.join(core, 'package.json'),
+      '{"name":"@astryxdesign/core","version":"0.0.13"}',
+    );
+    fs.writeFileSync(
+      path.join(rowDir, 'Row.tsx'),
+      `import {rowStyles} from '../privateAttributes/row.stylex';\nexport const Row = () => null;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'privateAttributes', 'row.stylex.ts'),
+      `import {fade} from '../motion/fade.stylex';\nexport const rowStyles = fade;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'motion', 'fade.stylex.ts'),
+      `export const fade = 1;\n`,
+    );
+    writeProjectPackageJson(project);
+
+    const humanResult = await runCli(['swizzle', 'Row', '-f'], project);
+    expect(humanResult.code).toBe(0);
+    expect(humanResult.stdout).toContain(
+      'Shared modules: ../privateAttributes/row.stylex.ts, ../motion/fade.stylex.ts (copied whole; their imports between each other stay relative)',
+    );
+  });
+});

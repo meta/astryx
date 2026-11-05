@@ -4,27 +4,10 @@
 
 /**
  * @file useScrollOverflow.ts
- * @input Uses React useRef, useState, useCallback, useEffect
- * @output Exports useScrollOverflow hook for tracking scroll position edges
+ * @input React refs, state and effects
+ * @output useScrollOverflow, which tracks the overflow at the scroll edges
  * @position Core hook; used by Carousel and TabList for fade-edge and button
  *   state
- *
- * Observes a scroll container and reports whether content overflows at the
- * start, end, or both edges. Updates on every scroll, and while the container
- * is rendered on what else changes the overflow with or without the
- * container resizing: its own size, a child's size (a slide's content
- * growing), a child added or removed, and its class or style (a new gap or
- * padding). A layout read on an element the browser is not
- * rendering (an ancestor with `display: none`, or a `content-visibility:
- * hidden` subtree) either answers zeros or makes the browser lay out that
- * whole hidden subtree for the answer, so an observation delivered for a
- * hidden container, and the measurement at registration inside one, are
- * skipped; the hook keeps its last state until the resize observation that
- * follows the reveal (one frame after it paints). A scroll is measured
- * whether or not the container is rendered: a scroll of a hidden container
- * is script's (a selected tab revealed under a hidden panel), its layout is
- * already the scroll's, and a reveal at the same size brings no resize to
- * measure it with.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts
@@ -144,10 +127,10 @@ export function useScrollOverflow() {
     });
   }, []);
 
-  // Registration, resize and content changes: only a rendered container. A
-  // hidden one has no edges to report, and reading its layout would make the
-  // browser render the hidden subtree it sits in; the resize observation that
-  // follows the reveal measures again.
+  // Only a rendered container is measured at registration and on a resize or
+  // content change. A layout read on a hidden one makes the browser render
+  // its hidden subtree. The resize observation after the reveal measures
+  // again.
   const measure = useCallback(() => {
     const el = elRef.current;
     if (el && isRendered(el)) {
@@ -155,10 +138,9 @@ export function useScrollOverflow() {
     }
   }, [measureNow]);
 
-  // A scroll: measured hidden or not. Script scrolled the hidden container
-  // (its layout is already the scroll's), and a reveal at the same size
-  // brings no resize observation, so this is the read that keeps the edges
-  // right for it.
+  // A scroll is measured hidden or not. Script scrolled the hidden container,
+  // so its layout is already current. A reveal at the same size brings no
+  // resize observation, so this read keeps the edges right.
   const measureOnScroll = useCallback(() => {
     const el = elRef.current;
     if (el) {

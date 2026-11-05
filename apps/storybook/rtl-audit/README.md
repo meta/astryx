@@ -19,7 +19,7 @@ independent auto passes: **D1 (icon-mirror)**, **D5 (positional-mirror)**, and
 **D6 (directional-decoration)**.
 
 > **Scope in CI.** `pr-rtl` runs after merges to `main` and in release checks at
-> full scope, and on a PR only with the `ci:heavy-lanes` label (spec:AST-030
+> full scope, and on a PR only with the `ci:run-rtl` label (spec:AST-030
 > FR12). On a labelled PR it passes `--filter` with the components the PR
 > touched (from `analysis.json`), matching `pr-a11y`. Eligibility is classified
 > by the component policy and package registry loaded from the trusted base ref;
@@ -36,7 +36,7 @@ independent auto passes: **D1 (icon-mirror)**, **D5 (positional-mirror)**, and
 > policy requires full scope, every manifest must be runnable with an empty
 > filter and all five package reports must arrive. A planned scan ending in ERROR
 > is incomplete. Missing or malformed analysis/index/manifest input, a noncanonical owner, stale output, a missing or unexpected report, and
-> an all-skipped required matrix all fail closed. An RTL-harness-only PR labelled `ci:heavy-lanes` runs the fixed
+> an all-skipped required matrix all fail closed. An RTL-harness-only PR labelled `ci:run-rtl` runs the fixed
 > `Chart,ChartLegend` routing smoke scope so package discovery and curated aliases
 > cannot skip their own check; without the label, `main`'s `release-check` covers
 > the harness after merge (spec:AST-030 FR12). The
@@ -192,8 +192,8 @@ spike this guard removed the single false positive.
 its parent's width** is skipped: a full-bleed strip spans the _entire_ parent,
 so it occupies both halves and has **no left/right side** to land on the wrong
 one. This catches `useResizable`'s **vertical** grab zone (`ResizeHandle`'s
-`hitAreaOffsetY`): a full-width strip anchored `insetInlineStart:0;
-insetInlineEnd:0` with a purely-visual centering `translate(-50%,…)`, so its
+`hitAreaCenteredY`): a full-width strip anchored `insetInlineStart:0;
+insetInlineEnd:0` and centred on the block axis only, so its
 geometric _center_ sits at the parent origin (relCenterX≈0) **identically in LTR
 and RTL**. The mirror assertion would otherwise compute `expected = parentW − 0
 = parentW` and fire a spurious `Δ = parentW`. The degenerate-parent guard misses
@@ -373,7 +373,7 @@ below), so the signal does not hard-block yet.
 
 ## Adding a curated target
 
-Edit `targets.json`. Each entry is:
+Edit `targets.json`, keeping it sorted by `component`, then `storyId`, so parallel pull requests add entries in different places. `node apps/storybook/rtl-audit/sort-targets.mjs --fix` sorts it; the RTL audit's node tests fail on an unsorted file. Each entry is:
 
 ```jsonc
 {

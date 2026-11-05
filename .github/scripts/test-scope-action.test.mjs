@@ -11,6 +11,7 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import {createRequire} from 'node:module';
 import path from 'node:path';
 
@@ -40,6 +41,7 @@ const CLASSIFIER_FILES = new Set([
   'scripts/component-packages.cjs',
 ]);
 const AUDIT_FILE = '.github/scripts/component-audit-scope.cjs';
+const OFFICIAL_PACKAGES = 'packages/cli/assets/discover/official-packages.json';
 
 function pullRequestContext(baseRef = 'main') {
   return {
@@ -68,6 +70,8 @@ async function decide({
   headError,
   missingBase = [],
   baseOverrides = {},
+  truncated = [],
+  policyError,
 } = {}) {
   const outputs = {};
   const messages = {info: [], warning: [], notice: [], failed: []};
@@ -82,7 +86,32 @@ async function decide({
     setFailed: message => messages.failed.push(message),
   };
   const notFound = () => Object.assign(new Error('Not Found'), {status: 404});
+  const policyText = file => {
+    if (missingBase.includes(file)) return null;
+    if (file in baseOverrides) return baseOverrides[file];
+    return fs.readFileSync(path.join(root, file), 'utf8');
+  };
+  const graphqlCalls = [];
   const github = {
+    // The trusted policy: one aliased Blob per `<sha>:<path>` expression.
+    graphql: async (query, variables) => {
+      graphqlCalls.push({query, variables});
+      if (policyError) throw policyError;
+      const repository = {};
+      for (const [key, expression] of Object.entries(variables)) {
+        if (!/^f\d+$/.test(key)) continue;
+        const [ref, file] = [expression.slice(0, 40), expression.slice(41)];
+        contentCalls.push({file, ref});
+        const known =
+          CLASSIFIER_FILES.has(file) ||
+          file === AUDIT_FILE ||
+          file === OFFICIAL_PACKAGES;
+        const text = ref === BASE_SHA && known ? policyText(file) : null;
+        repository[key] =
+          text == null ? null : {text, isTruncated: truncated.includes(file)};
+      }
+      return {repository};
+    },
     paginate: async () => {
       if (files instanceof Error) throw files;
       return files;
@@ -91,27 +120,7 @@ async function decide({
       pulls: {listFiles: () => {}},
       repos: {
         getContent: async ({path: file, ref}) => {
-          contentCalls.push({file, ref});
-          if (
-            ref === BASE_SHA &&
-            (CLASSIFIER_FILES.has(file) || file === AUDIT_FILE)
-          ) {
-            if (missingBase.includes(file)) throw notFound();
-            if (file in baseOverrides) {
-              return {
-                data: {
-                  content: Buffer.from(baseOverrides[file]).toString('base64'),
-                },
-              };
-            }
-            return {
-              data: {
-                content: fs
-                  .readFileSync(path.join(root, file))
-                  .toString('base64'),
-              },
-            };
-          }
+          contentCalls.push({file, ref, rest: true});
           if (ref === HEAD_SHA && headError) {
             throw Object.assign(new Error('Server Error'), {status: headError});
           }
@@ -145,7 +154,7 @@ async function decide({
       else delete process.env[key];
     }
   }
-  return {outputs, messages, contentCalls};
+  return {outputs, messages, contentCalls, graphqlCalls};
 }
 
 const changed = (...names) =>
@@ -158,6 +167,7 @@ describe('per-job scope step', () => {
     expect(Object.keys(action.outputs).sort()).toEqual(
       [
         'applies',
+        'head_file_present',
         'changed_files_path',
         'decided',
         'docsite_only',
@@ -166,6 +176,7 @@ describe('per-job scope step', () => {
         'has_components',
         'has_rtl_components',
         'has_rtl_harness',
+        'lab_only',
         'release_bump',
         'spec_only',
         'tooling_only',
@@ -221,6 +232,47 @@ describe('per-job scope step', () => {
     ).toEqual([...CLASSIFIER_FILES].map(file => ({file, ref: BASE_SHA})));
   });
 
+  it('reads the trusted policy in one GraphQL query and no REST call', async () => {
+    const {graphqlCalls, contentCalls} = await decide({
+      files: changed('packages/core/src/Button/Button.tsx'),
+      inputs: {'component-audit': 'true'},
+    });
+    expect(graphqlCalls).toHaveLength(1);
+    expect(graphqlCalls[0].variables).toEqual({
+      owner: 'o',
+      repo: 'r',
+      f0: `${BASE_SHA}:.github/scripts/change-scope.cjs`,
+      f1: `${BASE_SHA}:.github/scripts/knowledge-paths.cjs`,
+      f2: `${BASE_SHA}:scripts/component-packages.cjs`,
+      f3: `${BASE_SHA}:${AUDIT_FILE}`,
+      f4: `${BASE_SHA}:${OFFICIAL_PACKAGES}`,
+    });
+    expect(contentCalls.filter(call => call.rest)).toEqual([]);
+  });
+
+  it.each([
+    ['the query fails', {policyError: new Error('Something went wrong')}],
+    [
+      'a policy file is truncated',
+      {truncated: ['.github/scripts/change-scope.cjs']},
+    ],
+  ])('puts everything in scope when %s', async (_, options) => {
+    const {outputs, messages} = await decide({
+      files: changed('docs/specs/AST-999-example/spec.md'),
+      ...options,
+    });
+    expect(outputs).toMatchObject({
+      spec_only: 'false',
+      full_suite: 'true',
+      decided: 'false',
+    });
+    expect(messages.warning).toEqual([
+      expect.stringMatching(
+        /^Scope could not be decided \(.+\); everything is in scope\.$/,
+      ),
+    ]);
+  });
+
   it('does not apply when no changed path is in the declared scope', async () => {
     const {outputs} = await decide({
       files: changed('packages/cli/assets/codemods/registry.json'),
@@ -248,6 +300,53 @@ describe('per-job scope step', () => {
       files: changed('docs/specs/AST-030/spec.md'),
     });
     expect(outputs).toMatchObject({spec_only: 'true', applies: 'false'});
+  });
+
+  it('does not apply on the Lab-only lane, and reports it (spec:AST-030 FR26)', async () => {
+    const {outputs} = await decide({
+      files: changed('packages/lab/src/Tour/Tour.tsx', '.changeset/tour.md'),
+      inputs: {paths: INTERACTION_PATHS},
+    });
+    expect(outputs).toMatchObject({
+      lab_only: 'true',
+      applies: 'false',
+      spec_only: 'false',
+    });
+    const mixed = await decide({
+      files: changed(
+        'packages/lab/src/Tour/Tour.tsx',
+        'packages/core/src/Button/Button.tsx',
+      ),
+    });
+    expect(mixed.outputs).toMatchObject({lab_only: 'false', applies: 'true'});
+  });
+
+  it('reports no Lab-only lane when the base classifier predates it', async () => {
+    const old = fs
+      .readFileSync(path.join(root, '.github/scripts/change-scope.cjs'), 'utf8')
+      .replace('\\nlab_only=${result.labOnly}', '');
+    expect(old).not.toContain('lab_only=');
+    const {outputs} = await decide({
+      files: changed('packages/lab/src/Tour/Tour.tsx'),
+      baseOverrides: {'.github/scripts/change-scope.cjs': old},
+    });
+    expect(outputs).toMatchObject({
+      lab_only: 'false',
+      applies: 'true',
+      decided: 'true',
+    });
+  });
+
+  it('reports no Lab-only lane outside a pull request or when undecidable', async () => {
+    const push = await decide({
+      context: {...pullRequestContext(), eventName: 'workflow_dispatch'},
+    });
+    expect(push.outputs.lab_only).toBe('false');
+    const broken = await decide({
+      files: changed('packages/lab/src/Tour/Tour.tsx'),
+      missingBase: ['.github/scripts/change-scope.cjs'],
+    });
+    expect(broken.outputs).toMatchObject({lab_only: 'false', decided: 'false'});
   });
 
   it('fails when the trusted classifier rejects the change', async () => {
@@ -366,6 +465,33 @@ describe('per-job scope step', () => {
       expect(outputs.applies).toBe('true');
     });
 
+    it('reports a head without the file whether or not touches holds', async () => {
+      for (const file of ['packages/core/src/Button/Button.tsx', 'README.md']) {
+        const {outputs} = await decide({files: changed(file), inputs});
+        expect(outputs.head_file_present, file).toBe('false');
+      }
+      const {outputs} = await decide({
+        files: changed('README.md'),
+        headFiles: ['playwright.interaction.config.ts'],
+        inputs,
+      });
+      expect(outputs.head_file_present).toBe('true');
+    });
+
+    it('keeps the file present for a pull request that renames or deletes it', async () => {
+      for (const file of [
+        {
+          filename: 'playwright.old-interaction.config.ts',
+          previous_filename: 'playwright.interaction.config.ts',
+          status: 'renamed',
+        },
+        {filename: 'playwright.interaction.config.ts', status: 'removed'},
+      ]) {
+        const {outputs} = await decide({files: [file], inputs});
+        expect(outputs.head_file_present).toBe('true');
+      }
+    });
+
     it('still applies to a pull request that deletes the file, so the check fails', async () => {
       const {outputs} = await decide({
         files: [
@@ -439,6 +565,16 @@ describe('per-job scope step', () => {
       });
     });
 
+    it('keeps the component audits for a Lab-only change, so a label still runs its suite (spec:AST-030 FR26)', async () => {
+      const {outputs} = await decide({
+        files: changed('packages/lab/src/Tour/Tour.tsx'),
+        inputs,
+      });
+      expect(outputs.lab_only).toBe('true');
+      expect(outputs.applies).toBe('false');
+      expect(outputs.has_components).toBe('true');
+    });
+
     it('runs every audit in full when the base lacks the audit classifier', async () => {
       const {outputs, messages} = await decide({
         files: changed('packages/core/src/Button/Button.tsx'),
@@ -465,5 +601,235 @@ describe('per-job scope step', () => {
         expect.stringContaining('Component audit scope could not be decided'),
       ]);
     });
+  });
+});
+
+describe('a new Lab component (spec:AST-030 FR26)', () => {
+  const component = [
+    {filename: 'packages/lab/src/CommentPin/CommentPin.tsx', status: 'added'},
+    {filename: 'packages/lab/src/CommentPin/index.ts', status: 'added'},
+    {filename: 'packages/lab/src/index.ts', status: 'modified'},
+  ];
+  const routes = {
+    filename: 'internal/shadcn-registry/routes.lock.json',
+    status: 'modified',
+    patch: [
+      '@@ -556,6 +556,11 @@',
+      '       "path": "components/lab/code-editor",',
+      '       "aliases": []',
+      '     },',
+      '+    {',
+      '+      "name": "component-lab-comment-pin",',
+      '+      "path": "components/lab/comment-pin",',
+      '+      "aliases": []',
+      '+    },',
+      '@@ -1885,6 +1890,11 @@',
+      '+    {',
+      '+      "name": "example-comment-pin-host-owned-placement",',
+      '+      "path": "examples/comment-pin/host-owned-placement",',
+      '+      "aliases": []',
+      '+    },',
+    ].join('\n'),
+  };
+  const labStory = {
+    filename: 'apps/storybook/stories/CommentPin.stories.tsx',
+    status: 'added',
+    patch: [
+      '@@ -0,0 +1,3 @@',
+      "+import type {Meta} from '@storybook/react';",
+      "+import {CommentPin} from '@astryxdesign/lab';",
+      "+import {Text} from '@astryxdesign/core/Text';",
+    ].join('\n'),
+  };
+  const officialLines = fs
+    .readFileSync(path.join(root, OFFICIAL_PACKAGES), 'utf8')
+    .split('\n');
+  const labLine =
+    officialLines.findIndex(line =>
+      line.includes('"package": "@astryxdesign/lab"'),
+    ) + 1;
+  const official = at => ({
+    filename: OFFICIAL_PACKAGES,
+    status: 'modified',
+    patch: [
+      `@@ -${at},3 +${at},7 @@`,
+      ` ${officialLines[at - 1]}`,
+      '+        {',
+      '+          "kind": "component",',
+      '+          "name": "CommentPin"',
+      '+        },',
+      ` ${officialLines[at]}`,
+      ` ${officialLines[at + 1]}`,
+    ].join('\n'),
+  });
+
+  it('stays in the Lab-only lane with its routes, discovery entry and story', async () => {
+    const {outputs} = await decide({
+      files: [...component, routes, labStory, official(labLine + 6)],
+    });
+    expect(outputs.lab_only).toBe('true');
+    expect(outputs.full_suite).toBe('false');
+  });
+
+  it('runs full CI when a core story changes with it', async () => {
+    const {outputs} = await decide({
+      files: [
+        ...component,
+        routes,
+        labStory,
+        {
+          filename: 'apps/storybook/stories/Button.stories.tsx',
+          status: 'added',
+          patch: "@@ -0,0 +1 @@\n+import {Button} from '@astryxdesign/core';",
+        },
+      ],
+    });
+    expect(outputs.lab_only).toBe('false');
+  });
+
+  it("runs full CI when a route names another component, or the discovery edit is outside Lab's entry", async () => {
+    const otherRoute = {
+      ...routes,
+      patch: routes.patch.replaceAll('comment-pin', 'button'),
+    };
+    expect(
+      (await decide({files: [...component, otherRoute]})).outputs.lab_only,
+    ).toBe('false');
+    expect(
+      (await decide({files: [...component, official(10)]})).outputs.lab_only,
+    ).toBe('false');
+  });
+
+  it('runs full CI for a changed existing story, even one that imports Lab', async () => {
+    const {outputs} = await decide({
+      files: [...component, routes, {...labStory, status: 'modified'}],
+    });
+    expect(outputs.lab_only).toBe('false');
+  });
+
+  it('runs full CI for a new Lab story of a component the change does not carry', async () => {
+    const {outputs} = await decide({
+      files: [
+        ...component,
+        routes,
+        {
+          ...labStory,
+          filename: 'apps/storybook/stories/Drawer.stories.tsx',
+          patch: "@@ -0,0 +1 @@\n+import {Drawer} from '@astryxdesign/lab';",
+        },
+      ],
+    });
+    expect(outputs.lab_only).toBe('false');
+  });
+
+  it('runs full CI for a renamed entry file', async () => {
+    const {outputs} = await decide({
+      files: [
+        ...component,
+        {
+          ...labStory,
+          status: 'renamed',
+          previous_filename: 'apps/storybook/stories/OldPin.stories.tsx',
+        },
+      ],
+    });
+    expect(outputs.lab_only).toBe('false');
+  });
+
+  it('keeps the full suite for a mixed change that carries Lab routes', async () => {
+    const {outputs} = await decide({
+      files: [
+        ...component,
+        routes,
+        {filename: 'packages/core/src/Button/Button.tsx', status: 'modified'},
+      ],
+    });
+    expect(outputs.lab_only).toBe('false');
+    expect(outputs.full_suite).toBe('true');
+  });
+
+  it('runs full CI when GitHub leaves out a patch, or the story does not import Lab', async () => {
+    const {patch: _omitted, ...noPatch} = routes;
+    expect(
+      (await decide({files: [...component, noPatch]})).outputs.lab_only,
+    ).toBe('false');
+    const coreOnlyStory = {
+      ...labStory,
+      patch: "@@ -0,0 +1 @@\n+import {Text} from '@astryxdesign/core/Text';",
+    };
+    expect(
+      (await decide({files: [...component, coreOnlyStory]})).outputs.lab_only,
+    ).toBe('false');
+  });
+});
+
+describe('the temporary policy folder', () => {
+  // os.tmpdir() reads TMPDIR on each call, so each case gets its own folder.
+  async function inFreshTemp(run) {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'scope-tmp-test-'));
+    const runnerTemp = fs.mkdtempSync(path.join(os.tmpdir(), 'scope-runner-'));
+    const saved = {
+      TMPDIR: process.env.TMPDIR,
+      RUNNER_TEMP: process.env.RUNNER_TEMP,
+    };
+    process.env.TMPDIR = temp;
+    process.env.RUNNER_TEMP = runnerTemp;
+    try {
+      const result = await run();
+      return {result, left: fs.readdirSync(temp)};
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      fs.rmSync(temp, {recursive: true, force: true});
+      fs.rmSync(runnerTemp, {recursive: true, force: true});
+    }
+  }
+
+  it('is removed after a decided scope', async () => {
+    const {result, left} = await inFreshTemp(() =>
+      decide({files: changed('packages/core/src/Button/Button.tsx')}),
+    );
+    expect(result.outputs.decided).toBe('true');
+    expect(left).toEqual([]);
+  });
+
+  it('is removed when a base policy file cannot be read', async () => {
+    const {result, left} = await inFreshTemp(() =>
+      decide({
+        files: changed('packages/core/src/Button/Button.tsx'),
+        truncated: ['scripts/component-packages.cjs'],
+      }),
+    );
+    expect(result.outputs.decided).toBe('false');
+    expect(left).toEqual([]);
+  });
+
+  it('is removed when the trusted classifier rejects the change', async () => {
+    const {result, left} = await inFreshTemp(() =>
+      decide({
+        files: changed('packages/core/src/Button/Button.tsx'),
+        baseOverrides: {
+          '.github/scripts/change-scope.cjs': 'process.exit(1);\n',
+        },
+      }),
+    );
+    expect(result.messages.failed).toHaveLength(1);
+    expect(left).toEqual([]);
+  });
+
+  it('is removed after a component-audit scope, while the changed-file list stays for later steps', async () => {
+    const {result, left} = await inFreshTemp(() =>
+      decide({
+        files: changed('packages/core/src/Button/Button.tsx'),
+        inputs: {'component-audit': 'true'},
+      }).then(r => ({
+        ...r,
+        listed: fs.existsSync(r.outputs.changed_files_path),
+      })),
+    );
+    expect(result.listed).toBe(true);
+    expect(left).toEqual([]);
   });
 });

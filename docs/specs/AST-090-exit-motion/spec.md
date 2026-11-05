@@ -72,14 +72,21 @@ components read through two shared primitives is a system fact.
 ## Non-goals
 
 - Exits of touch presentations, which each component's record gives under
-  `spec:AST-094` FR7 and FR8 (FR14). The exit tokens here do not reach touch
-  motion: its roles stay internal, and a theme reaches it only through
-  `spec:AST-108`'s knobs (`spec:AST-094` FR4, DEC-15).
+  `spec:AST-094` FR7 and FR8 (FR14). The exit switches here do not reach touch
+  exits; in a component whose main interaction is a tap, a touch exit that a
+  tap, a key or the program starts plays `--duration-exit` and `--ease-exit`; in
+  a gesture component, such as a sheet or the Lightbox, every exit plays its
+  spring, and a gesture-driven exit starts from the release velocity (FR14).
 - Surfaces that already animate out (`Drawer`, `BottomSheet`, `MobileNav`,
-  `Toast`, and the `TopNavMegaMenu` panel) keep their exits, durations, and
-  curves. `BottomSheet`'s close in a pointer presentation reads `--ease-exit`
-  at the curve it uses (FR12); moving the others onto the exit vocabulary is a
-  visual change for a separate decision.
+  `Toast`, and the `TopNavMegaMenu` panel) keep their durations and curves in a
+  pointer presentation, and for an exit a gesture drives, a swipe or a drag with
+  velocity, which keeps its measured spring. In a touch presentation, an exit
+  that a tap, a key or the program starts plays `--duration-exit` and
+  `--ease-exit` in a tap component, and the component's spring in a gesture
+  component, `BottomSheet`'s close included (FR14). `BottomSheet`'s close in a
+  pointer presentation reads `--ease-exit` at the curve it uses (FR12); moving
+  the others' pointer-presentation exits onto the exit vocabulary is a visual
+  change for a separate decision.
 - Layers with no entrance (`Typeahead` suggestions, `MultiSelector`,
   `Tokenizer`, the date and time pickers, the `TabList` overflow menu, the
   `TopNav` and `SideNav` menus, and Chat trigger menus) gain no exit here.
@@ -124,13 +131,19 @@ governs them in a touch presentation.
 - **FR4 — A leaving surface takes no input.** From the moment its close begins,
   no pointer press or key activates anything in a leaving surface's own content.
   Toasts that a leaving dialog hosts are not its content (FR13).
-- **FR5 — A leaving surface keeps its dismissal role.** Until it is hidden, a
-  leaving surface keeps the dismissal role it had while open (`spec:AST-003`
-  FR1). A leaving active or blocking owner stays present on the shared
+- **FR5 — A leaving surface keeps its dismissal role, apart from a closing
+  pinned layer.** Until it is hidden, a leaving surface keeps the dismissal role
+  it had while open (`spec:AST-003` FR1), except a closing pinned `Tooltip`,
+  below. A leaving active or blocking owner stays present on the shared
   dismissal stack (`family:overlay-dismissal` FR2), so an Escape press or
-  platform close request during its exit does not reach an owner beneath it. A
-  leaving passive dependent, such as `Tooltip`, stays passive and shields
-  nothing (`spec:AST-003` FR4).
+  platform close request during its exit does not reach an owner beneath it,
+  except a closing pinned `Tooltip`, which leaves the stack when its exit
+  starts. A
+  leaving passive dependent, such as an unpinned `Tooltip`, stays passive and
+  shields nothing (`spec:AST-003` FR4). A pinned `Tooltip` that
+  is closing plays its exit and stops taking Escape once the exit starts: it is
+  no longer the stack's owner, so the member beneath it takes the next Escape
+  (`spec:AST-003` FR4, DEC-6).
 - **FR6 — Focus leaves with the close.** A layer surface hands focus back when
   its close begins, as it does with the exit off, and from then on its exit is
   hidden from assistive technology: a screen reader neither reads nor announces
@@ -169,11 +182,16 @@ governs them in a touch presentation.
   above it for the whole exit (`spec:AST-003` FR16). When it is hidden, they
   move to the latest remaining outlet with their entries and timers intact
   (`spec:AST-003` FR18, FR19).
-- **FR14 — Touch presentations keep their native exit.** A dialog or layer
-  surface in a touch presentation plays the exit its component's record gives
-  it under `spec:AST-094` FR7 and FR8. The exit switches, `--ease-exit`, and
-  `--duration-exit` do not change that exit: a theme that leaves a kind off
-  does not remove it, and a theme that turns a kind on does not replace it.
+- **FR14 — Touch exits are never removed; a tap component's tap-started exits
+  play the theme's exit timing.** A dialog or layer surface in a touch presentation plays the
+  exit its component's record gives it under `spec:AST-094` FR7 and FR8. In a
+  component whose main interaction is a tap, a touch presentation's exit that a
+  tap, key or program starts plays the theme's exit duration and easing,
+  `--duration-exit` and `--ease-exit`; in a gesture component, such as a sheet
+  or the Lightbox, that exit plays the component's spring from rest, and a
+  gesture-driven exit keeps its velocity spring (`spec:AST-094` FR7, FR45). The
+  exit switches do not change that exit: a theme that leaves a kind off does not
+  remove it, and a theme that turns a kind on does not replace it.
 
 ### Platform support
 
@@ -199,22 +217,28 @@ governs them in a touch presentation.
   it does with the exit off, and its exit plays after that on the runtime's
   shared exit copy (INV14), drawn in the top layer where the layer was. Native
   close reconciliation stays single-fired (INV6). A leaving active or blocking
-  owner keeps its place on the dismissal stack until its exit ends (FR5). A
+  owner keeps its place on the dismissal stack until its exit ends, except a
+  closing pinned Tooltip, which leaves it when its exit starts
+  (FR5). A
   leaving Dialog keeps supplying its modal outlet until it is hidden (FR13);
   BottomSheet's outlet behavior does not change.
 - `architecture:component-style-authoring`: no claim changes. A layer's exit
   is the one transient exit copy INV7 allows, made by the shared mechanism and
   removed when the exit ends (FR9).
 - `family:overlay-dismissal`: no claim changes. A leaving member stays present
-  for FR2 until it is hidden, and animation stays member-owned (AV6).
+  for FR2 until it is hidden, except a closing pinned Tooltip,
+  which leaves the stack when its exit starts (FR5), and animation stays
+  member-owned (AV6).
 - `spec:AST-003`: no claim changes. A leaving surface keeps its interaction role
-  (FR1), and a leaving passive dependent such as `Tooltip` still never shields
-  an owner (FR4, DEC-1). A leaving dialog is still the current native modal, so
+  (FR1), a leaving passive dependent such as an unpinned `Tooltip` still never
+  shields an owner (FR4, DEC-1), and a closing pinned `Tooltip`
+  gives up Escape when its exit starts (FR4, DEC-6). A leaving dialog is still the current native modal, so
   it keeps its outlet and toasts stay operable above it (FR16, FR18).
-- `spec:AST-094`: no claim changes. A touch presentation keeps the exit FR7 and
-  FR8 give it (FR14), and its motion roles stay internal (FR4, DEC-15). The exit
-  tokens here time pointer presentations, which its non-goals leave to the
-  theme's duration and easing tokens.
+- `spec:AST-094`: a touch presentation keeps the exit FR7 and FR8 give it
+  (FR14). One that a tap, a key or the program starts plays `--duration-exit`
+  and `--ease-exit` in a tap component and the component's spring in a gesture
+  component, and one a gesture drives keeps its velocity spring (`spec:AST-094`
+  FR7, FR45, DEC-26).
 - `spec:AST-108`: no claim changes. Its FR2 admits `--ease-exit` at the same
   curve at every `character`; a spring-driven exit plays its own exit role and
   a CSS part beside it takes the spring's settle time (FR3, FR4a); and an exit
@@ -232,33 +256,38 @@ governs them in a touch presentation.
 - `component:Popover`: AR4 keeps its focus-return claim; FR6 states when the
   return happens for a layer.
 - `component:BottomSheet`: its close in a pointer presentation reads
-  `--ease-exit`. Its touch close keeps its own motion, which the exit tokens do
-  not reach (`spec:AST-094` FR7, DEC-15).
+  `--ease-exit`. BottomSheet is a gesture component: in a touch presentation, a
+  close that a tap, a key or the program starts plays the sheet's spring from
+  rest, and a swipe or a drag that closes it keeps its measured spring from the
+  release (`spec:AST-094` FR7, FR45). Implementation gap: a coarse-pointer close
+  started by a tap or key plays `--duration-medium` today.
 - Consumer docs: `motion` describes both curves, that exits are off by default
-  in a pointer presentation, how a theme turns each kind on, that touch
-  presentations keep their native exits, and that callers keep content rendered
-  while a surface closes. The token tables and the theme template list the new
-  tokens, and each member component's docs describe its exit.
+  in a pointer presentation, how a theme turns each kind on, that a touch exit
+  is never removed, that a tap component's tap-started one plays the theme's
+  exit timing, and that a sheet's and the Lightbox's touch close springs (FR14),
+  and that callers keep content rendered while a surface closes. The token
+  tables and the theme template list the new tokens, and each member component's
+  docs describe its exit.
 
 ## Verification
 
-| Contract | Verification                                                                                                | Representative states                                                                                                                     | Mutation or failure expectation                                                                                                                            |
-| -------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Component unit suites run unchanged with default tokens                                                     | Every dialog and layer member in a pointer presentation, opened and closed                                                                | A surface stays rendered after its close with default tokens                                                                                               |
-| FR2      | Real-browser test under a theme that sets one kind, fine primary pointer                                    | Dialogs on with layers off; layers on with dialogs off; a nested `Theme`                                                                  | The unset kind animates, or the set kind closes at once                                                                                                    |
-| FR3      | Real-browser frame sampling during an exit                                                                  | A dialog with and without an opener, a fullscreen dialog, a layer in each placement, right-to-left                                        | The surface leaves its entrance path, or keeps the entrance curve                                                                                          |
-| FR4      | Real-browser test                                                                                           | A press and an Enter key on a control inside a leaving surface                                                                            | The control activates                                                                                                                                      |
-| FR5      | Dismissal invariant tests                                                                                   | Escape during a leaving Dialog or Popover with an owner beneath; Escape during a leaving Tooltip over a Dialog                            | The owner beneath a leaving owner closes, or a leaving Tooltip absorbs the press                                                                           |
-| FR6      | Unit and real-browser focus and accessibility-tree tests                                                    | Dialog and layer closes, by keyboard and by pointer; the accessibility tree during a layer exit                                           | Dialog focus returns before the dialog is hidden or lands on the body; layer focus waits for the exit; a leaving layer's exit is in the accessibility tree |
-| FR7      | Unit tests                                                                                                  | Controlled and uncontrolled closes                                                                                                        | A callback or `isOpen` waits for the exit                                                                                                                  |
-| FR8      | Unit and real-browser tests                                                                                 | Reopen during an exit, unmount during an exit, `Activity` hidden during an exit                                                           | The surface disappears and reappears, or stays after unmount                                                                                               |
-| FR9      | Unit test with a suppressed end event; real-browser test with animations and transitions disabled page-wide | Open and close in one update; page-wide `transition: none`; no end event                                                                  | The surface is present more than 100ms after its exit duration                                                                                             |
-| FR10     | Real-browser test with reduced motion emulated, fine primary pointer                                        | Each kind turned on                                                                                                                       | An exit plays                                                                                                                                              |
-| FR11     | Real-browser frame sampling during an exit                                                                  | A hover card, a menu with an open sub-menu, a selector with a search query                                                                | The leaving surface shows other content, or none, before it is hidden                                                                                      |
-| FR12     | Token default tests, theme template inventory test, token documentation check                               | Defaults; the `BottomSheet` closing curve                                                                                                 | A default drifts, or `BottomSheet` restates the curve                                                                                                      |
-| FR13     | Real-browser test                                                                                           | A toast action pressed, and a toast dismissed, during a dialog exit; the same toast after the dialog is hidden                            | The toast ignores input or fades with the dialog during the exit, or loses its entries or timers when the dialog is hidden                                 |
-| FR14     | Real-browser test with a coarse primary pointer, after hydration                                            | A Dialog, a Popover, and a menu opened and closed by a finger, with each kind switched off and on; the same surfaces under reduced motion | A switch changes the touch exit, or the surface closes without the exit `spec:AST-094` FR7 and FR8 give it                                                 |
-| Platform | Real-browser tests in Chromium and WebKit                                                                   | A dialog exit and a layer exit with each kind on; a layer close where the Popover API is missing                                          | A layer exit paints outside the top layer or does not play, or a close without the Popover API is delayed                                                  |
+| Contract | Verification                                                                                                | Representative states                                                                                                                                                             | Mutation or failure expectation                                                                                                                                                          |
+| -------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Component unit suites run unchanged with default tokens                                                     | Every dialog and layer member in a pointer presentation, opened and closed                                                                                                        | A surface stays rendered after its close with default tokens                                                                                                                             |
+| FR2      | Real-browser test under a theme that sets one kind, fine primary pointer                                    | Dialogs on with layers off; layers on with dialogs off; a nested `Theme`                                                                                                          | The unset kind animates, or the set kind closes at once                                                                                                                                  |
+| FR3      | Real-browser frame sampling during an exit                                                                  | A dialog with and without an opener, a fullscreen dialog, a layer in each placement, right-to-left                                                                                | The surface leaves its entrance path, or keeps the entrance curve                                                                                                                        |
+| FR4      | Real-browser test                                                                                           | A press and an Enter key on a control inside a leaving surface                                                                                                                    | The control activates                                                                                                                                                                    |
+| FR5      | Dismissal invariant tests                                                                                   | Escape during a leaving Dialog or Popover with an owner beneath; Escape during a leaving unpinned Tooltip over a Dialog; Escape during the exit of a pinned Tooltip over a Dialog | The owner beneath a leaving owner closes, a leaving unpinned Tooltip absorbs the press, or a closing pinned Tooltip takes an Escape after its exit starts                                |
+| FR6      | Unit and real-browser focus and accessibility-tree tests                                                    | Dialog and layer closes, by keyboard and by pointer; the accessibility tree during a layer exit                                                                                   | Dialog focus returns before the dialog is hidden or lands on the body; layer focus waits for the exit; a leaving layer's exit is in the accessibility tree                               |
+| FR7      | Unit tests                                                                                                  | Controlled and uncontrolled closes                                                                                                                                                | A callback or `isOpen` waits for the exit                                                                                                                                                |
+| FR8      | Unit and real-browser tests                                                                                 | Reopen during an exit, unmount during an exit, `Activity` hidden during an exit                                                                                                   | The surface disappears and reappears, or stays after unmount                                                                                                                             |
+| FR9      | Unit test with a suppressed end event; real-browser test with animations and transitions disabled page-wide | Open and close in one update; page-wide `transition: none`; no end event                                                                                                          | The surface is present more than 100ms after its exit duration                                                                                                                           |
+| FR10     | Real-browser test with reduced motion emulated, fine primary pointer                                        | Each kind turned on                                                                                                                                                               | An exit plays                                                                                                                                                                            |
+| FR11     | Real-browser frame sampling during an exit                                                                  | A hover card, a menu with an open sub-menu, a selector with a search query                                                                                                        | The leaving surface shows other content, or none, before it is hidden                                                                                                                    |
+| FR12     | Token default tests, theme template inventory test, token documentation check                               | Defaults; the `BottomSheet` closing curve                                                                                                                                         | A default drifts, or `BottomSheet` restates the curve                                                                                                                                    |
+| FR13     | Real-browser test                                                                                           | A toast action pressed, and a toast dismissed, during a dialog exit; the same toast after the dialog is hidden                                                                    | The toast ignores input or fades with the dialog during the exit, or loses its entries or timers when the dialog is hidden                                                               |
+| FR14     | Real-browser test with a coarse primary pointer, after hydration                                            | A Dialog, a Popover, and a menu opened and closed by a finger, with each kind switched off and on; the same surfaces under reduced motion                                         | A switch changes the touch exit, a touch exit that a tap starts plays off `--duration-exit` and `--ease-exit`, or the surface closes without the exit `spec:AST-094` FR7 and FR8 give it |
+| Platform | Real-browser tests in Chromium and WebKit                                                                   | A dialog exit and a layer exit with each kind on; a layer close where the Popover API is missing                                                                                  | A layer exit paints outside the top layer or does not play, or a close without the Popover API is delayed                                                                                |
 
 ## Decision log
 
@@ -318,16 +347,21 @@ is also the default.
 
 Rejected: holding the live layer in the top layer with an `overlay` transition, which plays only in browsers that support that transition.
 
-### DEC-5 — Touch presentations keep their native exit
+### DEC-5 — Touch exits are never removed; a tap component's tap-started exits play the theme's exit timing
 
 **Reference:** `spec:AST-090/DEC-5`
 **Decider:** `cixzhang`, `2026-10-28`
 
-On a touch device a surface moves the way its native counterpart does, by
-default and with no opt-in (`spec:AST-094`), and that record leaves pointer
-presentations' timing and easing to the theme's tokens. The switches here
-therefore govern pointer presentations only, and a touch presentation keeps
-its native exit whatever they resolve to.
+On a touch device a surface keeps the look of its native counterpart, by default
+and with no opt-in (`spec:AST-094`). That record springs the motion of a
+component whose main interaction is a gesture and gives a tap component's
+tap-started motion, under every pointer, the theme's tokens (`spec:AST-094`
+FR45). The switches here govern whether a pointer presentation's exit plays, and
+a touch presentation keeps its exit whatever they resolve to. In a tap
+component, a touch exit that a tap, a key or the program starts plays the
+theme's exit duration and easing, `--duration-exit` and `--ease-exit`; in a
+gesture component it plays the component's spring, and a gesture-driven exit
+keeps its velocity spring (`spec:AST-094` FR45, DEC-26).
 
 Rejected: letting the exit switches turn touch exits off, which removes the exit `spec:AST-094` FR7 requires.
 

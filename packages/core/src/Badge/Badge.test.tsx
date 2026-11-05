@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
+import {createElement, Fragment, type ReactNode} from 'react';
 import {render, screen} from '@testing-library/react';
 import {Badge} from './Badge';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
@@ -102,6 +103,27 @@ describe('Badge', () => {
       const {container} = render(<Badge label="" />);
       expect(container.firstElementChild).not.toHaveAttribute('title');
     });
+  });
+
+  it('grows with its label only when the label renders something', () => {
+    const classOf = (label: ReactNode) =>
+      render(<Badge label={label} />).container.firstElementChild!.className;
+    const empty = classOf('');
+    const labelled = classOf('New');
+    expect(labelled).not.toBe(empty);
+    // React renders nothing for these, so the badge keeps its fixed height.
+    for (const [index, label] of [null, undefined, true, false, ''].entries()) {
+      expect(classOf(label), `nothing ${index}`).toBe(empty);
+    }
+    // These render (0 shows "0"); a container counts without looking inside.
+    for (const [index, label] of [
+      0,
+      'x',
+      [],
+      createElement(Fragment),
+    ].entries()) {
+      expect(classOf(label), `renders ${index}`).toBe(labelled);
+    }
   });
 
   it('renders astryx-* class names for theme targeting', () => {

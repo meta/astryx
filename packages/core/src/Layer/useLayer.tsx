@@ -29,6 +29,7 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {createPortal} from 'react-dom';
 import {LayerContentBoundary} from './layerScopedContext';
+import {layerClickBoundary} from './layerClickBoundary';
 import {addAnchorName, removeAnchorName} from './anchorName';
 import {currentGesture, currentGestureHasClicked} from './gestureCounter';
 import {resolveLayerPortalTarget} from './layerHost';
@@ -56,7 +57,7 @@ import {
 import {preserveAnimations} from './preserveAnimations';
 import {useLayerContext} from './LayerContext';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {overlayPaddingReset} from '../Layout/padding.stylex';
+import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 
 const styles = stylex.create({
   // Base reset for all layers
@@ -353,13 +354,15 @@ export interface FixedLayerOptions extends BaseLayerOptions {
 export interface ContextLayerReturn {
   /**
    * Ref to attach to trigger element.
-   * Injects anchorName style for CSS anchor positioning.
+   * While the layer is shown, and until its exit animation ends, the trigger
+   * carries the layer's CSS anchor name.
    */
   ref: RefCallback<HTMLElement>;
 
   /**
    * The CSS anchor name to use for positioning.
    * Use this when you need to set anchorName manually (e.g., display:contents wrapper).
+   * Set it only while the layer is shown or its exit animation runs.
    */
   anchorId: string;
 
@@ -443,6 +446,14 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    * its trigger keeps open.
    */
   keepsAnchorClear?: boolean;
+  /**
+   * With `lazyMount`, the layer stays mounted once its first `show()` mounted
+   * it: hiding leaves it in place, so its close plays out and every later
+   * `show()` opens it at once. A layer never shown still mounts only its inert
+   * marker. For a component with many triggers that each own a layer (a
+   * context menu on every table cell).
+   */
+  keepsMountAfterShow?: boolean;
 }
 
 type InternalContextLayerReturn = ContextLayerReturn & InternalLayerFields;
@@ -536,6 +547,24 @@ function untransform(
   const left = rect.left + rect.width / 2 - centre.x - originX;
   const top = rect.top + rect.height / 2 - centre.y - originY;
   return new DOMRect(left, top, width, height);
+}
+
+/**
+ * The finite animations still running on `layer` and its content. A layer
+ * that fades out keeps running them after the browser hides it, and it stays
+ * placed against its anchor until they end.
+ */
+function exitAnimations(layer: HTMLElement | null): Animation[] {
+  if (layer == null || typeof layer.getAnimations !== 'function') {
+    return [];
+  }
+  return layer
+    .getAnimations({subtree: true})
+    .filter(
+      animation =>
+        animation.playState === 'running' &&
+        animation.effect?.getComputedTiming().endTime !== Infinity,
+    );
 }
 
 /**
@@ -1151,6 +1180,10 @@ function useLayerImplementation(
 ): InternalContextLayerReturn | InternalFixedLayerReturn {
   const {mode, onShow, onHide, lightDismiss = false} = options;
   const lazyMount = mode === 'context' ? (options.lazyMount ?? false) : false;
+  const keepsMountAfterShow =
+    lazyMount && mode === 'context'
+      ? (options.keepsMountAfterShow ?? false)
+      : false;
   const keepsAnchorClear =
     mode === 'context' ? (options.keepsAnchorClear ?? false) : false;
   const id = useId();
@@ -1202,6 +1235,41 @@ function useLayerImplementation(
   // State drives re-renders; the ref lets the imperative calls avoid
   // stale-closure reads of the previous isOpen value.
   const isOpenRef = useRef(false);
+
+  // The exit of the layer that closed last, while it still paints. Its
+  // trigger stays an anchor until it ends, also when the trigger attaches
+  // again during it. Null once it has ended.
+  const exitRef = useRef<object | null>(null);
+
+  // A closed trigger is no anchor, once the layer stops painting. A show
+  // during the exit keeps the name, and so does a later exit.
+  const releaseAnchor = useCallback(
+    (layer: HTMLElement | null) => {
+      const exit = {};
+      exitRef.current = exit;
+      const release = () => {
+        if (exitRef.current !== exit) {
+          return;
+        }
+        exitRef.current = null;
+        const trigger = triggerRef.current;
+        if (!isOpenRef.current && trigger != null) {
+          removeAnchorName(trigger, anchorId);
+        }
+      };
+      const running = exitAnimations(layer);
+      if (running.length === 0) {
+        release();
+        return;
+      }
+      void Promise.all(
+        running.map(async animation =>
+          animation.finished.catch(() => undefined),
+        ),
+      ).then(release);
+    },
+    [anchorId],
+  );
 
   // The gesture during which the browser last closed this layer on its own.
   // Read through wasJustDismissed by triggers deciding whether a click is
@@ -1360,12 +1428,12 @@ function useLayerImplementation(
   );
 
   const clearContextMount = useCallback(() => {
-    if (mode !== 'context' || !lazyMount) {
+    if (mode !== 'context' || !lazyMount || keepsMountAfterShow) {
       return;
     }
     contextMountRef.current = null;
     mountStore.set(null);
-  }, [mode, lazyMount, mountStore]);
+  }, [mode, lazyMount, keepsMountAfterShow, mountStore]);
 
   const show = useCallback(() => {
     // Every caller lands here, so this is where the dismissing press is
@@ -1403,6 +1471,12 @@ function useLayerImplementation(
       popover.removeAttribute(LAYER_CLEARS_ANCHOR_ATTRIBUTE);
       popover.removeAttribute(LAYER_SCROLLS_ATTRIBUTE);
       applyDeferredWritingContext(popover);
+      // The trigger takes the layer's anchor name in the task that shows the
+      // layer, so the layer's first frame is placed against it.
+      const anchor = triggerRef.current;
+      if (anchor != null) {
+        addAnchorName(anchor, anchorId);
+      }
       // A hide the browser runs itself (an Escape its close watcher answers)
       // is counted too, from `beforetoggle` until the element's `toggle`, a
       // task after the hide has returned. The show is asked of the browser
@@ -1410,6 +1484,11 @@ function useLayerImplementation(
       // light dismiss at pointerup, then this show at the click); only a show
       // it refuses replays once the hide's count has ended.
       if (!showPopoverElement(popover)) {
+        // The replay anchors the trigger again; until then it is closed. An
+        // exit still running keeps the name.
+        if (anchor != null && exitRef.current == null) {
+          removeAnchorName(anchor, anchorId);
+        }
         replayWhenSettled();
         return;
       }
@@ -1421,6 +1500,7 @@ function useLayerImplementation(
       onShow?.();
     }
   }, [
+    anchorId,
     onShow,
     keepsAnchorClear,
     requestContextMount,
@@ -1457,8 +1537,9 @@ function useLayerImplementation(
       setIsOpen(false);
       onHide?.();
     }
+    releaseAnchor(popoverRef.current);
     clearContextMount();
-  }, [onHide, clearContextMount]);
+  }, [onHide, clearContextMount, releaseAnchor]);
 
   // A deferred show() replays through a ref so the queued closure reaches the
   // current callback rather than the one captured when it was queued.
@@ -1480,7 +1561,11 @@ function useLayerImplementation(
         removeAnchorName(triggerRef.current, anchorId);
       }
 
-      if (el) {
+      // Only a shown layer's trigger is an anchor. WebKit's Linux ports run the
+      // transform animation of an element that holds an anchor on the main
+      // thread. A busy task would then freeze a surface that moves around a
+      // closed trigger.
+      if (el && (isOpenRef.current || exitRef.current != null)) {
         addAnchorName(el, anchorId);
       }
 
@@ -1547,6 +1632,8 @@ function useLayerImplementation(
     forgetDismissalRef.current = forget;
   }, []);
 
+  // Syncs the document's capture-phase gesture tracking with this mount.
+  // Unmount forgets the layer's dismissal.
   useEffect(() => {
     // Install capture-phase gesture tracking before the first interaction.
     currentGesture();
@@ -1588,12 +1675,13 @@ function useLayerImplementation(
         rememberDismissal(
           (e.currentTarget as HTMLElement | null)?.ownerDocument ?? document,
         );
+        releaseAnchor(e.currentTarget as HTMLElement | null);
         setIsOpen(false);
         onHide?.();
         clearContextMount();
       }
     },
-    [onHide, clearContextMount, rememberDismissal],
+    [onHide, clearContextMount, rememberDismissal, releaseAnchor],
   );
 
   // Ref callback for popover element — sets up the `toggle` listener.
@@ -1682,14 +1770,21 @@ function useLayerImplementation(
   const sentinelRefCallback = useCallback(
     (el: HTMLTemplateElement | null) => {
       sentinelRef.current = el;
-      if (el && (!lazyMount || pendingShowRef.current || isOpenRef.current)) {
+      // A layer that keeps its mount re-resolves it too once it has one.
+      if (
+        el &&
+        (!lazyMount ||
+          pendingShowRef.current ||
+          isOpenRef.current ||
+          (keepsMountAfterShow && contextMountRef.current != null))
+      ) {
         // The render call may have moved while the hook stayed mounted.
         // Resolve again from the newly attached marker rather than reusing a
         // portal target from its previous JSX position.
         requestContextMount();
       }
     },
-    [lazyMount, requestContextMount],
+    [lazyMount, keepsMountAfterShow, requestContextMount],
   );
 
   // Re-bind when the handler identity changes while the element stays mounted,
@@ -1890,7 +1985,10 @@ function useLayerImplementation(
             ...extraStyle,
           }}
           onMouseEnter={onMouseEnter}
-          onMouseLeave={onMouseLeave}>
+          onMouseLeave={onMouseLeave}
+          // Presses inside the layer do not reach handlers around where it
+          // is written.
+          {...layerClickBoundary()}>
           <LayerContentBoundary>{children}</LayerContentBoundary>
         </Container>
       );
@@ -1951,7 +2049,10 @@ function useLayerImplementation(
           id={id}
           popover={lightDismiss ? 'auto' : 'manual'}
           className={combinedClassName}
-          style={{...stylexResult.style, ...positionStyle, ...extraStyle}}>
+          style={{...stylexResult.style, ...positionStyle, ...extraStyle}}
+          // Presses inside the layer do not reach handlers around where it
+          // is written.
+          {...layerClickBoundary()}>
           <LayerContentBoundary>{children}</LayerContentBoundary>
         </div>
       );

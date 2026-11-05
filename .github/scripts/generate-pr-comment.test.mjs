@@ -66,243 +66,223 @@ describe('generate-pr-comment diffMode caveat', () => {
   });
 });
 
-describe('generate-pr-comment preview availability', () => {
-  it.each([
-    ['none', [], false, false],
-    [
-      'storybook',
-      ['--storybook-url', 'https://example.test/pr/1/'],
-      true,
-      false,
-    ],
-    [
-      'sandbox',
-      ['--sandbox-url', 'https://example.test/pr/1/sandbox/'],
-      false,
-      true,
-    ],
-    [
-      'both',
-      [
-        '--storybook-url',
-        'https://example.test/pr/1/',
-        '--sandbox-url',
-        'https://example.test/pr/1/sandbox/',
-      ],
-      true,
-      true,
-    ],
-  ])(
-    'renders independent %s availability',
-    (state, urls, storybook, sandbox) => {
-      const stdout = runComment(baseAnalysis, [
-        ...urls,
-        '--preview-state',
-        state,
-        '--source-conclusion',
-        'success',
-      ]);
-
-      expect(stdout.includes('View Storybook for this PR')).toBe(storybook);
-      expect(stdout.includes('View Sandbox for this PR')).toBe(sandbox);
-      expect(stdout.includes('> **Preview availability:**')).toBe(
-        !storybook || !sandbox,
-      );
-      expect(stdout).toContain('<!-- astryx-pr-analysis -->');
-    },
-  );
-
-  it('explains that failed CI published no previews', () => {
-    const stdout = runComment(baseAnalysis, [
-      '--preview-state',
-      'none',
-      '--source-conclusion',
-      'failure',
-    ]);
-
-    expect(stdout).toContain('CI concluded failure');
-    expect(stdout).not.toContain('View Storybook for this PR');
-    expect(stdout).not.toContain('View Sandbox for this PR');
-  });
-});
-
-describe('generate-pr-comment base sizes', () => {
-  const sized = {
-    ...baseAnalysis,
-    componentStats: {
-      Card: {package: '@astryxdesign/core', esmSize: '160B', esmBytes: 160},
-    },
-    bundlePackages: [
-      {
-        package: '@astryxdesign/core',
-        esmSize: '900B',
-        gzipSize: '300B',
-        gzipBytes: 300,
-      },
-    ],
-  };
-
-  it('fills Before and Delta from base stats', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-base-stats-'));
+describe('generate-pr-comment compact report', () => {
+  function withInputs(inputs, analysis = baseAnalysis, extra = []) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-report-'));
     try {
-      const baseFile = path.join(dir, 'size-base.json');
-      fs.writeFileSync(
-        baseFile,
-        JSON.stringify({
-          baseComponentStats: {
-            Card: {
-              package: '@astryxdesign/core',
-              esmSize: '100B',
-              esmBytes: 100,
-            },
-          },
-          baseBundlePackages: [
-            {package: '@astryxdesign/core', gzipSize: '280B', gzipBytes: 280},
-          ],
-        }),
-      );
-      const out = runComment(sized, ['--base-stats', baseFile]);
-      expect(out).toContain('| Entry File (ESM) | 100B | 160B | +60B |');
-      expect(out).toContain(
-        '| @astryxdesign/core | 900B | 280B | 300B | +20B |',
-      );
-    } finally {
-      fs.rmSync(dir, {recursive: true, force: true});
-    }
-  });
-
-  it('never reports a delta for an unmeasured size', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-base-null-'));
-    try {
-      const baseFile = path.join(dir, 'size-base.json');
-      fs.writeFileSync(
-        baseFile,
-        JSON.stringify({
-          baseComponentStats: {
-            Card: {
-              package: '@astryxdesign/charts',
-              esmSize: null,
-              esmBytes: null,
-            },
-          },
-          baseBundlePackages: [
-            {package: '@astryxdesign/core', gzipSize: null, gzipBytes: null},
-          ],
-        }),
-      );
-      const out = runComment(
-        {
-          ...sized,
-          componentStats: {
-            Card: {
-              package: '@astryxdesign/charts',
-              esmSize: null,
-              esmBytes: null,
-            },
-          },
-          bundlePackages: [
-            {
-              package: '@astryxdesign/core',
-              esmSize: '900B',
-              gzipSize: '300B',
-              gzipBytes: 300,
-            },
-          ],
-        },
-        ['--base-stats', baseFile],
-      );
-      expect(out).toContain('| Entry File (ESM) | N/A | N/A | N/A |');
-      expect(out).toContain('| @astryxdesign/core | 900B | N/A | 300B | N/A |');
-      expect(out).not.toMatch(/\| [+-]?0B \|/);
-    } finally {
-      fs.rmSync(dir, {recursive: true, force: true});
-    }
-  });
-
-  it('keeps N/A without base stats', () => {
-    const out = runComment(sized);
-    expect(out).toContain('| Entry File (ESM) | N/A | 160B | N/A |');
-    expect(out).toContain('| Package | Size (ESM) | Size (CJS) | Gzipped |');
-  });
-});
-
-describe('generate-pr-comment touch-only budget', () => {
-  function withBase(head, base) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-budget-'));
-    try {
-      const baseFile = path.join(dir, 'size-base.json');
-      fs.writeFileSync(
-        baseFile,
-        JSON.stringify({
-          baseComponentSizes: {'core/BottomSheet': base},
-          baseBundlePackages: [],
-        }),
-      );
-      return runComment(
-        {
-          ...baseAnalysis,
-          modifiedComponents: [],
-          componentSizes: {'core/BottomSheet': head},
-          bundlePackages: [],
-        },
-        ['--base-stats', baseFile],
-      );
+      const args = [];
+      for (const [name, value] of Object.entries(inputs)) {
+        const file = path.join(dir, `${name}.json`);
+        fs.writeFileSync(file, JSON.stringify(value));
+        args.push(`--${name}`, file);
+      }
+      return runComment(analysis, [...args, ...extra]);
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
   }
+  const HEAD = 'a'.repeat(40);
+  const READY = 'https://astryx-abc123-fbopensource.vercel.app';
+  const size = (importGzipBytes, cssGzipBytes = 1000) => ({
+    package: '@astryxdesign/core',
+    importGzipBytes,
+    cssGzipBytes,
+  });
+  const sized = names => ({
+    ...baseAnalysis,
+    modifiedComponents: [],
+    componentSizes: Object.fromEntries(
+      names.map(([key, after]) => [key, size(after)]),
+    ),
+    baseComponentSizes: Object.fromEntries(
+      names.map(([key, , before]) => [key, size(before)]),
+    ),
+  });
 
-  it('flags JavaScript growth over 2 KB and CSS growth over 1 KB, family folders included', () => {
-    const out = withBase(
-      {
-        package: '@astryxdesign/core',
-        importGzipBytes: 10000,
-        cssGzipBytes: 3000,
-      },
-      {
-        package: '@astryxdesign/core',
-        importGzipBytes: 7000,
-        cssGzipBytes: 1900,
-      },
-    );
-    expect(out).toContain('### ⚠️ Touch-only size budget');
-    expect(out).toContain(
-      '| core/BottomSheet | 6.8KB | 9.8KB | +2.9KB ⚠️ | 1.9KB | 2.9KB | +1.1KB ⚠️ |',
+  it("opens with this head's preview, before anything else", () => {
+    const out = withInputs({preview: {state: 'ready', sha: HEAD, url: READY}});
+    const body = out.slice(out.indexOf('<!-- astryx-pr-analysis -->'));
+    expect(body.split('\n')[2]).toBe('### 🔎 Preview · `aaaaaaa`');
+    expect(body.split('\n')[4]).toBe(
+      `**[Storybook](${READY}/storybook/) · [Sandbox](${READY}/sandbox/)** · built from this PR's head`,
     );
   });
 
-  it('does not flag growth within budget', () => {
-    const out = withBase(
-      {
-        package: '@astryxdesign/core',
-        importGzipBytes: 9000,
-        cssGzipBytes: 2900,
-      },
-      {
-        package: '@astryxdesign/core',
-        importGzipBytes: 7000,
-        cssGzipBytes: 1900,
-      },
+  it('shows three components and collapses the rest, the biggest growth first', () => {
+    const out = withInputs(
+      {preview: {state: 'ready', sha: HEAD, url: READY}},
+      sized([
+        ['core/A', 5000, 5000],
+        ['core/B', 9000, 8000],
+        ['core/C', 7000, 6900],
+        ['core/D', 4000, 4100],
+        ['core/E', 3000, 2990],
+      ]),
     );
-    expect(out).not.toContain('Touch-only size budget');
-    expect(out).toContain(
-      '| core/BottomSheet | 6.8KB | 8.8KB | +2.0KB | 1.9KB | 2.8KB | +1000B |',
+    const visible = out.slice(0, out.indexOf('<details>'));
+    expect(visible).toContain('### Modified components');
+    expect(visible.match(/^\| \[[A-E]\]/gm)).toHaveLength(3);
+    expect(visible.indexOf('[B]')).toBeLessThan(visible.indexOf('[C]'));
+    expect(visible.indexOf('[C]')).toBeLessThan(visible.indexOf('[E]'));
+    expect(out).toContain('<summary>2 more components</summary>');
+    expect(out.slice(out.indexOf('<details>'))).toContain(
+      `| [D](${READY}/components/D) |`,
     );
+    expect(out).toContain(`| [B](${READY}/components/B) |`);
   });
 
-  it('does not flag a component that is new at head', () => {
-    const out = withBase(
-      {
-        package: '@astryxdesign/core',
-        importGzipBytes: 90000,
-        cssGzipBytes: 9000,
-      },
-      {
-        package: '@astryxdesign/core',
-        importGzipBytes: null,
-        cssGzipBytes: null,
-      },
-    );
-    expect(out).not.toContain('Touch-only size budget');
+  it('never reports a delta for an unmeasured size', () => {
+    const out = runComment({
+      ...baseAnalysis,
+      componentSizes: {'core/Card': size(null), 'core/New': size(3000)},
+      baseComponentSizes: {'core/Card': size(2000)},
+    });
+    expect(out).toContain('| Card | 1000 B CSS (0) |');
+    expect(out).toContain('| New | 2.9 kB (new) · 1000 B CSS (new) |');
+  });
+
+  it('fills the base from base stats', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-base-'));
+    try {
+      const baseFile = path.join(dir, 'base.json');
+      fs.writeFileSync(
+        baseFile,
+        JSON.stringify({baseComponentSizes: {'core/Card': size(2000)}}),
+      );
+      const out = runComment(
+        {...baseAnalysis, componentSizes: {'core/Card': size(1500)}},
+        ['--base-stats', baseFile],
+      );
+      expect(out).toContain('| Card | 1.5 kB (−500 B) · 1000 B CSS (0) |');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('collapses accessibility violations', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-a11y-'));
+    try {
+      const file = path.join(dir, 'a11y.json');
+      fs.writeFileSync(
+        file,
+        JSON.stringify({
+          components: {
+            Card: {
+              violations: [{id: 'label', impact: 'serious', description: 'x'}],
+            },
+          },
+        }),
+      );
+      const out = runComment(baseAnalysis, ['--a11y', file]);
+      expect(out).toContain('<summary>Accessibility: 1 violation(s)</summary>');
+      expect(out).toContain('| Card | — | — | — · ✗ · — |');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('notes a run that did not succeed', () => {
+    const out = runComment(baseAnalysis, ['--source-conclusion', 'failure']);
+    expect(out).toContain('CI concluded failure');
+  });
+
+  it('renders report strings as literal text', () => {
+    const out = runComment({
+      ...baseAnalysis,
+      componentSizes: {'core/<img src=x>': size(1000)},
+    });
+    expect(out).not.toContain('<img src=x>');
+  });
+});
+
+describe('comment length budget', () => {
+  it('leaves a report that already fits byte-identical, accessibility details included', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-budget-a11y-'));
+    try {
+      const file = path.join(dir, 'a11y.json');
+      const components = Object.fromEntries(
+        Array.from({length: 100}, (_, i) => [
+          `Part${i}`,
+          {
+            violations: [
+              {
+                id: `rule-${i}`,
+                impact: 'serious',
+                description: 'x'.repeat(320),
+              },
+            ],
+          },
+        ]),
+      );
+      fs.writeFileSync(file, JSON.stringify({components}));
+      const out = runComment(baseAnalysis, ['--a11y', file]);
+      expect(out).toContain('rule-99');
+      expect(out).not.toMatch(/did not fit/);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it("keeps a report with 150 long API rows under GitHub's comment limit", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-budget-'));
+    try {
+      const rows = Array.from({length: 150}, (_, i) => ({
+        change: 'added',
+        entry: '.',
+        section: 'Types',
+        item: `type Wide${i}`,
+        member: null,
+        line: `type Wide${i} = ${"'a' | ".repeat(150)}'z'`,
+        usage: `import type {Wide${i}} from '@astryxdesign/core'`,
+      }));
+      const apiChanges = path.join(dir, 'api-changes.json');
+      fs.writeFileSync(
+        apiChanges,
+        JSON.stringify({
+          version: 1,
+          packages: [
+            {
+              pkg: '@astryxdesign/core',
+              baseline: false,
+              stale: false,
+              missing: false,
+              counts: {added: 150, changed: 0, removed: 0},
+              rows,
+            },
+          ],
+        }),
+      );
+      const visual = path.join(dir, 'verdict.json');
+      fs.writeFileSync(
+        visual,
+        JSON.stringify({
+          status: 'failed',
+          counts: {total: 3, failed: 3},
+          failures: [],
+        }),
+      );
+      const out = runComment({...baseAnalysis, diffMode: 'two-dot'}, [
+        '--api-changes',
+        apiChanges,
+        '--source-conclusion',
+        'failure',
+        '--visual',
+        visual,
+      ]);
+      expect(out.length).toBeLessThan(60_500);
+      // The short status lines survive; the API rows are what gets cut.
+      expect(out).toMatch(/CI concluded failure/);
+      expect(out).toMatch(/Approximate analysis/);
+      expect(out).toMatch(/could not be captured/);
+      expect(out).toMatch(/Not run on this PR/);
+      expect(out).toMatch(/more lines did not fit GitHub's comment limit/);
+      expect((out.match(/<details/g) || []).length).toBe(
+        (out.match(/<\/details>/g) || []).length,
+      );
+      expect(out).toContain('<sub>Generated by PR Enrichment workflow');
+      expect(out.startsWith('## PR Analysis Report')).toBe(true);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });

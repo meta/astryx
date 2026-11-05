@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-
 /**
  * @description Analyzes PR changes to detect new/modified components and gather stats
- * @input --base <branch> --head <ref> --output <file> [--base-root <dir> [--base-only]] [--force-full]
+ * @input --base <branch> --head <ref> --output <file> [--base-record <file>] [--force-full]
+ *   | --main-record --output <file>
  * @output JSON file with component analysis; exits non-zero if the base...head diff fails (e.g. shallow clone without a merge base).
- *   With --base-root (a built checkout of the merge base), the analysis also
- *   records baseComponentStats and baseBundlePackages measured in that tree;
- *   --base-only writes just those, with the head and base commits they belong to.
+ *   With --base-record (the merge base's record, which Main keeps for each
+ *   commit), the analysis also carries baseComponentStats, baseBundlePackages
+ *   and baseComponentSizes read from it.
+ *   --main-record writes that record for the current built tree: every public
+ *   component's import and CSS size, the source modules its bundle reaches and
+ *   its entry stats, and every component package's bundle stats.
  *   A changed module outside every component folder (a shared hook, the
  *   animator) owns the components whose bundle reaches it, so browser audits
  *   run for those reverse dependents; one no component reaches, or --force-full
@@ -17,7 +20,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { execSync } = require('node:child_process');
+const {execSync} = require('node:child_process');
 const {
   gzipBytes: gzipTextBytes,
   measureComponentImport,
@@ -31,10 +34,10 @@ const {
   flatPackageComponentNames,
   nestedPackageComponentNames,
 } = require('../../scripts/component-packages.cjs');
-const { isComponentSpecRecordPath } = require('./knowledge-paths.cjs');
+const {isComponentSpecRecordPath} = require('./knowledge-paths.cjs');
 
 const args = process.argv.slice(2);
-const getArg = (name) => {
+const getArg = name => {
   const idx = args.indexOf(`--${name}`);
   return idx !== -1 ? args[idx + 1] : null;
 };
@@ -42,13 +45,9 @@ const getArg = (name) => {
 const baseBranch = getArg('base') || 'main';
 const headRef = getArg('head') || 'HEAD';
 const outputFile = getArg('output') || 'analysis.json';
-const baseRoot = getArg('base-root');
-const baseOnly = args.includes('--base-only');
+const baseRecordFile = getArg('base-record');
+const mainRecordMode = args.includes('--main-record');
 const forceFull = args.includes('--force-full');
-if (baseOnly && !baseRoot) {
-  console.error('::error::--base-only needs --base-root');
-  process.exit(1);
-}
 
 const STORYBOOK_STORIES = 'apps/storybook/stories';
 
@@ -62,8 +61,8 @@ const PACKAGES = COMPONENT_PACKAGES.map(pkg => ({
   dir: path.dirname(pkg.src),
 }));
 
-const pkgSrc = (pkg) => pkg.src;
-const pkgDist = (pkg) => `${pkg.dir}/dist`;
+const pkgSrc = pkg => pkg.src;
+const pkgDist = pkg => `${pkg.dir}/dist`;
 
 // Get canonical direct public component names for a package. Nested family,
 // context, and shared directories deliberately stay unresolved so audits widen.
@@ -75,14 +74,19 @@ function familyMembers(pkg, folder) {
   if (!familyIndex.has(pkg.name)) {
     familyIndex.set(pkg.name, {
       canonical: new Set(nestedPackageComponentNames(process.cwd(), pkg)),
-      exports: componentExportsFromBarrel(path.join(sourceDir, 'index.ts'), sourceDir),
+      exports: componentExportsFromBarrel(
+        path.join(sourceDir, 'index.ts'),
+        sourceDir,
+      ),
     });
   }
-  const { canonical, exports } = familyIndex.get(pkg.name);
+  const {canonical, exports} = familyIndex.get(pkg.name);
   const directory = path.join(sourceDir, folder);
   try {
     return documentedComponentNames(directory).filter(
-      (name) => canonical.has(name) && exports.get(name)?.startsWith(`${directory}${path.sep}`),
+      name =>
+        canonical.has(name) &&
+        exports.get(name)?.startsWith(`${directory}${path.sep}`),
     );
   } catch {
     return [];
@@ -105,14 +109,17 @@ function folderComponents(pkg, folder, repoRoot = process.cwd()) {
       exports:
         pkg.layout === 'flat'
           ? new Map()
-          : componentExportsFromBarrel(path.join(sourceDir, 'index.ts'), sourceDir),
+          : componentExportsFromBarrel(
+              path.join(sourceDir, 'index.ts'),
+              sourceDir,
+            ),
     });
   }
-  const { canonical, exports } = folderIndex.get(key);
+  const {canonical, exports} = folderIndex.get(key);
   if (pkg.layout === 'flat') return canonical.has(folder) ? [folder] : [];
   const directory = path.join(sourceDir, folder);
   return [...canonical]
-    .filter((name) => {
+    .filter(name => {
       const file = exports.get(name);
       return file === directory || file?.startsWith(`${directory}${path.sep}`);
     })
@@ -192,14 +199,16 @@ function componentIndexRef(pkg, componentName) {
 function getChangedFiles() {
   const threeDot = `${baseBranch}...${headRef}`;
   const tryThreeDot = () => {
-    const output = execSync(`git diff --name-only ${threeDot}`, { encoding: 'utf8' });
+    const output = execSync(`git diff --name-only ${threeDot}`, {
+      encoding: 'utf8',
+    });
     return output.trim().split('\n').filter(Boolean);
   };
   try {
-    return { files: tryThreeDot(), diffMode: 'three-dot' };
+    return {files: tryThreeDot(), diffMode: 'three-dot'};
   } catch (e) {
     console.warn(
-      `::warning::three-dot diff ${threeDot} failed - attempting to deepen the clone and retry`
+      `::warning::three-dot diff ${threeDot} failed - attempting to deepen the clone and retry`,
     );
     console.warn(diffErrorDetail(e));
   }
@@ -215,12 +224,12 @@ function getChangedFiles() {
     const baseName = baseBranch.replace(/^origin\//, '');
     execSync(
       `git fetch --deepen=200 origin ${baseName}:refs/remotes/origin/${baseName}`,
-      { encoding: 'utf8', stdio: 'pipe' },
+      {encoding: 'utf8', stdio: 'pipe'},
     );
-    return { files: tryThreeDot(), diffMode: 'three-dot' };
+    return {files: tryThreeDot(), diffMode: 'three-dot'};
   } catch (e) {
     console.warn(
-      `::warning::deepen failed (${diffErrorDetail(e)}) - falling back to two-dot diff`
+      `::warning::deepen failed (${diffErrorDetail(e)}) - falling back to two-dot diff`,
     );
   }
 
@@ -230,14 +239,21 @@ function getChangedFiles() {
   // with diffMode: 'two-dot' for any consumer to caveat.
   const twoDot = `${baseBranch}..${headRef}`;
   try {
-    const output = execSync(`git diff --name-only ${twoDot}`, { encoding: 'utf8' });
-    return { files: output.trim().split('\n').filter(Boolean), diffMode: 'two-dot' };
+    const output = execSync(`git diff --name-only ${twoDot}`, {
+      encoding: 'utf8',
+    });
+    return {
+      files: output.trim().split('\n').filter(Boolean),
+      diffMode: 'two-dot',
+    };
   } catch (e) {
     // A failed diff (e.g. base ref missing on a too-shallow clone) is not the
     // same as "no changes" — fail loudly instead of publishing an empty
     // analysis report that looks legitimate.
     console.error(`::error::git diff ${twoDot} failed: ${e.message}`);
-    console.error('The clone is likely too shallow to contain the base ref (see fetch-depth in ci.yml).');
+    console.error(
+      'The clone is likely too shallow to contain the base ref (see fetch-depth in ci.yml).',
+    );
     process.exit(1);
   }
 }
@@ -252,10 +268,13 @@ function diffErrorDetail(e) {
 // Check if a component exists in the base branch.
 function componentExistsInBase(pkg, componentName) {
   try {
-    execSync(`git show ${baseBranch}:${componentIndexRef(pkg, componentName)}`, {
-      encoding: 'utf8',
-      stdio: 'pipe',
-    });
+    execSync(
+      `git show ${baseBranch}:${componentIndexRef(pkg, componentName)}`,
+      {
+        encoding: 'utf8',
+        stdio: 'pipe',
+      },
+    );
     return true;
   } catch {
     // A nested component folder without an index barrel still exists in base.
@@ -263,7 +282,7 @@ function componentExistsInBase(pkg, componentName) {
     try {
       const listing = execSync(
         `git ls-tree --name-only ${baseBranch} -- ${pkgSrc(pkg)}/${componentName}/`,
-        { encoding: 'utf8', stdio: 'pipe' },
+        {encoding: 'utf8', stdio: 'pipe'},
       );
       return listing.trim().length > 0;
     } catch {
@@ -277,7 +296,7 @@ function parseExportsFromSource(content) {
   const exports = [];
   for (const match of exportMatches) {
     const inner = match.replace(/export\s*{\s*/, '').replace(/\s*}/, '');
-    exports.push(...inner.split(',').map((e) => e.trim().split(' ')[0]));
+    exports.push(...inner.split(',').map(e => e.trim().split(' ')[0]));
   }
   if (content.includes('export default')) {
     exports.push('default');
@@ -290,7 +309,7 @@ function getBaseExports(pkg, componentName) {
   try {
     const content = execSync(
       `git show ${baseBranch}:${componentIndexRef(pkg, componentName)}`,
-      { encoding: 'utf8', stdio: 'pipe' }
+      {encoding: 'utf8', stdio: 'pipe'},
     );
     return parseExportsFromSource(content);
   } catch {
@@ -324,7 +343,9 @@ function getFileSizeBytes(filePath) {
 function getGzipBytes(filePath) {
   if (!filePath || !fs.existsSync(filePath)) return null;
   try {
-    const output = execSync(`gzip -c "${filePath}" | wc -c`, { encoding: 'utf8' });
+    const output = execSync(`gzip -c "${filePath}" | wc -c`, {
+      encoding: 'utf8',
+    });
     const bytes = parseInt(output.trim(), 10);
     return Number.isFinite(bytes) && bytes > 0 ? bytes : null;
   } catch {
@@ -355,7 +376,7 @@ function packageIsModule(pkg) {
 // as `index.mjs` and CommonJS as `index.js`. `index.mjs`/`index.cjs` are ESM
 // and CommonJS wherever they exist. A missing file is never measured.
 function resolveEntries(distDir, pkg) {
-  const existing = (name) => {
+  const existing = name => {
     const file = path.join(distDir, name);
     return fs.existsSync(file) ? file : null;
   };
@@ -384,11 +405,13 @@ function getExports(pkg, componentName) {
 function componentSourceFiles(pkg, componentName) {
   if (pkg.layout === 'flat') {
     const file = componentSrcPath(pkg, componentName);
-    return fs.existsSync(file) ? [{ dir: path.dirname(file), name: path.basename(file) }] : [];
+    return fs.existsSync(file)
+      ? [{dir: path.dirname(file), name: path.basename(file)}]
+      : [];
   }
   const dir = componentSrcPath(pkg, componentName);
   try {
-    return fs.readdirSync(dir).map((name) => ({ dir, name }));
+    return fs.readdirSync(dir).map(name => ({dir, name}));
   } catch {
     return [];
   }
@@ -399,11 +422,13 @@ function getPropsCount(pkg, componentName) {
   const files = componentSourceFiles(pkg, componentName);
   if (files.length === 0) return null;
   // Prefer the file named after the component (bare or XDS-prefixed).
-  const names = files.map((f) => f.name);
+  const names = files.map(f => f.name);
   const mainName =
-    [`XDS${componentName}.tsx`, `${componentName}.tsx`].find((f) => names.includes(f)) ||
+    [`XDS${componentName}.tsx`, `${componentName}.tsx`].find(f =>
+      names.includes(f),
+    ) ||
     names.find(
-      (f) =>
+      f =>
         (/^XDS[A-Z]\w+\.tsx$/.test(f) || /^[A-Z]\w+\.tsx$/.test(f)) &&
         !f.includes('.test.') &&
         !f.includes('Context.'),
@@ -411,12 +436,14 @@ function getPropsCount(pkg, componentName) {
   if (!mainName) return null;
   try {
     const content = fs.readFileSync(path.join(files[0].dir, mainName), 'utf8');
-    const propsMatch = content.match(/(?:type|interface)\s+\w*Props\w*\s*=?\s*{([^}]+)}/);
+    const propsMatch = content.match(
+      /(?:type|interface)\s+\w*Props\w*\s*=?\s*{([^}]+)}/,
+    );
     if (propsMatch) {
       return propsMatch[1]
         .split('\n')
         .filter(
-          (line) =>
+          line =>
             line.trim() &&
             !line.trim().startsWith('//') &&
             !line.trim().startsWith('*') &&
@@ -432,7 +459,7 @@ function getPropsCount(pkg, componentName) {
 // Check if component has tests
 function hasTests(pkg, componentName) {
   return componentSourceFiles(pkg, componentName).some(
-    (f) => f.name.endsWith('.test.ts') || f.name.endsWith('.test.tsx'),
+    f => f.name.endsWith('.test.ts') || f.name.endsWith('.test.tsx'),
   );
 }
 
@@ -443,17 +470,20 @@ function hasStories(pkg, componentName) {
     const files = fs.readdirSync(storiesDir);
     if (
       files.some(
-        (f) =>
-          f.toLowerCase().includes(componentName.toLowerCase()) && f.endsWith('.stories.tsx'),
+        f =>
+          f.toLowerCase().includes(componentName.toLowerCase()) &&
+          f.endsWith('.stories.tsx'),
       )
     )
       return true;
     const exports = getExports(pkg, componentName);
-    const xdsComponents = exports.filter((e) => e.startsWith('XDS'));
-    return xdsComponents.some((comp) => {
+    const xdsComponents = exports.filter(e => e.startsWith('XDS'));
+    return xdsComponents.some(comp => {
       const name = comp.replace(/^XDS/, '');
       return files.some(
-        (f) => f.toLowerCase().includes(name.toLowerCase()) && f.endsWith('.stories.tsx'),
+        f =>
+          f.toLowerCase().includes(name.toLowerCase()) &&
+          f.endsWith('.stories.tsx'),
       );
     });
   } catch {
@@ -469,23 +499,30 @@ function getStoryTitle(pkg, componentName) {
     const exports = getExports(pkg, componentName);
     const searchNames = [
       componentName,
-      ...exports.filter((e) => e.startsWith('XDS')).map((e) => e.replace(/^XDS/, '')),
+      ...exports
+        .filter(e => e.startsWith('XDS'))
+        .map(e => e.replace(/^XDS/, '')),
     ];
     const storyFiles = files.filter(
-      (f) =>
+      f =>
         f.endsWith('.stories.tsx') &&
-        searchNames.some((name) => f.toLowerCase().includes(name.toLowerCase())),
+        searchNames.some(name => f.toLowerCase().includes(name.toLowerCase())),
     );
     if (storyFiles.length === 0) return null;
-    const exactMatch = storyFiles.find((f) =>
-      searchNames.some((name) => f.toLowerCase() === `${name.toLowerCase()}.stories.tsx`),
+    const exactMatch = storyFiles.find(f =>
+      searchNames.some(
+        name => f.toLowerCase() === `${name.toLowerCase()}.stories.tsx`,
+      ),
     );
     const orderedFiles = exactMatch
-      ? [exactMatch, ...storyFiles.filter((f) => f !== exactMatch)]
+      ? [exactMatch, ...storyFiles.filter(f => f !== exactMatch)]
       : storyFiles;
     const titles = orderedFiles
-      .map((storyFile) => {
-        const content = fs.readFileSync(path.join(storiesDir, storyFile), 'utf8');
+      .map(storyFile => {
+        const content = fs.readFileSync(
+          path.join(storiesDir, storyFile),
+          'utf8',
+        );
         const titleMatch = content.match(/title:\s*['"]([^'"]+)['"]/);
         return titleMatch ? titleMatch[1] : null;
       })
@@ -533,7 +570,7 @@ function getComponentLOC(pkg, componentName) {
     totalLOC += countLOC(path.join(f.dir, f.name));
     fileCount++;
   }
-  return { totalLOC, fileCount };
+  return {totalLOC, fileCount};
 }
 
 // Calculate cyclomatic complexity (simplified - counts decision points)
@@ -568,9 +605,9 @@ function getComplexity(pkg, componentName) {
     else if (complexity <= 15) rating = 'Medium';
     else if (complexity <= 30) rating = 'High';
     else rating = 'Very High';
-    return { score: complexity, rating };
+    return {score: complexity, rating};
   } catch {
-    return { score: 0, rating: 'Unknown' };
+    return {score: 0, rating: 'Unknown'};
   }
 }
 
@@ -579,7 +616,8 @@ const stylesheetCache = new Map();
 function packageStylesheet(pkg) {
   const file = packageStylesheetPath(path.join(process.cwd(), pkg.dir));
   if (!file) return null;
-  if (!stylesheetCache.has(file)) stylesheetCache.set(file, fs.readFileSync(file, 'utf8'));
+  if (!stylesheetCache.has(file))
+    stylesheetCache.set(file, fs.readFileSync(file, 'utf8'));
   return stylesheetCache.get(file);
 }
 
@@ -587,7 +625,7 @@ function packageStylesheet(pkg) {
 // defines its export.
 function packageTargets(pkg) {
   if (pkg.layout === 'flat') {
-    return getComponentNames(pkg).map((name) => ({
+    return getComponentNames(pkg).map(name => ({
       key: `${pkg.packageName}/${name}`,
       pkg,
       name,
@@ -595,7 +633,10 @@ function packageTargets(pkg) {
     }));
   }
   const sourceDir = path.join(process.cwd(), pkgSrc(pkg));
-  const exports = componentExportsFromBarrel(path.join(sourceDir, 'index.ts'), sourceDir);
+  const exports = componentExportsFromBarrel(
+    path.join(sourceDir, 'index.ts'),
+    sourceDir,
+  );
   const targets = [];
   for (const name of nestedPackageComponentNames(process.cwd(), pkg)) {
     const file = exports.get(name);
@@ -617,67 +658,94 @@ function packageTargets(pkg) {
 // collects each changed source path some component reaches (its folder, or a
 // module in its bundle) in `paths`, and in `measured` each package whose
 // bundles could be read: there, a module no bundle holds reaches nothing.
-function sizeTargets(changedFiles, reached = null) {
-  const withoutExtension = (file) => file.replace(/\.(tsx?|jsx?|mjs)$/, '');
-  // Each package's changed modules, and its built dist to find them in: a
-  // bundle in any package can reach them (Lab, Charts, Rich Text and Vega
-  // import Core).
-  const changed = [];
-  for (const pkg of PACKAGES) {
-    const prefix = pkgSrc(pkg) + '/';
-    const changedModules = new Set(
-      changedFiles
-        .filter((file) => file.startsWith(prefix))
-        .map((file) => withoutExtension(file.slice(prefix.length))),
-    );
-    if (changedModules.size === 0) continue;
+const withoutExtension = file => file.replace(/\.(tsx?|jsx?|mjs)$/, '');
+
+// Each package's dist by real path (esbuild reports bundle inputs by real
+// path), to map a bundle input back to its source module.
+function distRealPaths() {
+  return PACKAGES.map(pkg => {
     const dist = path.join(process.cwd(), pkgDist(pkg));
-    changed.push({
-      pkg,
-      prefix,
-      changedModules,
-      changedTops: new Set([...changedModules].map((file) => file.split('/')[0])),
-      // esbuild reports inputs by real path.
-      distReal: fs.existsSync(dist) ? fs.realpathSync(dist) : dist,
-    });
-  }
-  if (changed.length === 0) return [];
-  const targets = [];
-  for (const pkg of PACKAGES) {
-    const own = changed.find((entry) => entry.pkg === pkg) ?? null;
-    const dist = path.join(process.cwd(), pkgDist(pkg));
-    const all = packageTargets(pkg);
-    const reach = bundleInputsByEntry(all.map((target) => path.join(dist, target.distModule)));
-    for (const target of all) {
-      const top = withoutExtension(target.distModule.split('/')[0]);
-      const inputs = reach?.get(path.join(dist, target.distModule)) ?? [];
-      const reachedPaths = inputs.flatMap((input) =>
-        changed.flatMap((entry) => {
-          const relative = path.relative(entry.distReal, input);
-          const module = withoutExtension(relative);
-          return !relative.startsWith('..') && entry.changedModules.has(module)
-            ? [entry.prefix + module]
-            : [];
-        }),
-      );
-      const isOwnFolder = own != null && own.changedTops.has(top);
-      if (isOwnFolder || reachedPaths.length > 0) targets.push(target);
-      if (reached != null) {
-        for (const reachedPath of reachedPaths) reached.paths.add(reachedPath);
-        if (isOwnFolder) reached.paths.add(own.prefix + top);
+    return {pkg, distReal: fs.existsSync(dist) ? fs.realpathSync(dist) : dist};
+  });
+}
+
+// One package's public components in the current built tree, each with the
+// source modules (`src` paths without extension, any package) its bundle
+// reaches; `measured` says whether the package's bundles could be read.
+function componentReach(pkg, dists) {
+  const dist = path.join(process.cwd(), pkgDist(pkg));
+  const all = packageTargets(pkg);
+  const reach = bundleInputsByEntry(
+    all.map(target => path.join(dist, target.distModule)),
+  );
+  const sources = new Map();
+  for (const target of all) {
+    const reached = new Set();
+    for (const input of reach?.get(path.join(dist, target.distModule)) ?? []) {
+      for (const {pkg: owner, distReal} of dists) {
+        const relative = path.relative(distReal, input);
+        if (!relative.startsWith('..') && !path.isAbsolute(relative)) {
+          reached.add(pkgSrc(owner) + '/' + withoutExtension(relative));
+        }
       }
     }
-    if (reached != null && own != null && reach != null && reach.size > 0) {
-      reached.measured.add(own.prefix);
+    sources.set(target.key, reached);
+  }
+  return {all, sources, measured: reach != null && reach.size > 0};
+}
+
+// The one targeting rule for both trees (a built head here, the merge base's
+// record in recordTargets): a component is affected when its own folder or
+// file changed (`ownFolder`), or its bundle reaches a changed source module
+// (`reachedPaths`).
+function affectedBy(target, reachedSources, changedFiles) {
+  const prefix = pkgSrc(target.pkg) + '/';
+  const top = withoutExtension(target.distModule.split('/')[0]);
+  const ownFolder = changedFiles.some(
+    file =>
+      file.startsWith(prefix) &&
+      withoutExtension(file.slice(prefix.length)).split('/')[0] === top,
+  );
+  const changed = new Set(changedFiles.map(withoutExtension));
+  return {
+    ownFolder: ownFolder ? prefix + top : null,
+    reachedPaths: [...(reachedSources ?? [])].filter(source =>
+      changed.has(source),
+    ),
+  };
+}
+
+function sizeTargets(changedFiles, reached = null) {
+  const touches = pkg =>
+    changedFiles.some(file => file.startsWith(pkgSrc(pkg) + '/'));
+  if (!PACKAGES.some(touches)) return [];
+  const dists = distRealPaths();
+  const targets = [];
+  for (const pkg of PACKAGES) {
+    const {all, sources, measured} = componentReach(pkg, dists);
+    for (const target of all) {
+      const {ownFolder, reachedPaths} = affectedBy(
+        target,
+        sources.get(target.key),
+        changedFiles,
+      );
+      if (ownFolder || reachedPaths.length > 0) targets.push(target);
+      if (reached != null) {
+        for (const reachedPath of reachedPaths) reached.paths.add(reachedPath);
+        if (ownFolder) reached.paths.add(ownFolder);
+      }
     }
+    if (reached != null && measured && touches(pkg))
+      reached.measured.add(pkgSrc(pkg) + '/');
   }
   return targets;
 }
 
 // Targets from either tree, once each by key.
 function unionTargets(first, second) {
-  const byKey = new Map(first.map((target) => [target.key, target]));
-  for (const target of second) if (!byKey.has(target.key)) byKey.set(target.key, target);
+  const byKey = new Map(first.map(target => [target.key, target]));
+  for (const target of second)
+    if (!byKey.has(target.key)) byKey.set(target.key, target);
   return [...byKey.values()];
 }
 
@@ -720,7 +788,9 @@ function getComponentStats(pkg, componentName) {
     pkg.layout === 'flat'
       ? null
       : path.join(process.cwd(), pkgDist(pkg), componentName);
-  const entries = distDir ? resolveEntries(distDir, pkg) : { esmPath: null, cjsPath: null };
+  const entries = distDir
+    ? resolveEntries(distDir, pkg)
+    : {esmPath: null, cjsPath: null};
   const loc = getComponentLOC(pkg, componentName);
   const complexity = getComplexity(pkg, componentName);
   return {
@@ -744,7 +814,7 @@ function getComponentStats(pkg, componentName) {
 // Get total bundle stats for a package's published entry.
 function getPackageBundleStats(pkg) {
   const distDir = path.join(process.cwd(), pkgDist(pkg));
-  const { esmPath, cjsPath } = resolveEntries(distDir, pkg);
+  const {esmPath, cjsPath} = resolveEntries(distDir, pkg);
   // Gzip the primary published entry: ESM when it exists, else CommonJS.
   const gzipBytes = getGzipBytes(esmPath || cjsPath);
   return {
@@ -765,11 +835,13 @@ function getPackageBundleStats(pkg) {
 // Main analysis
 function analyze() {
   console.log(`Analyzing changes from ${baseBranch} to ${headRef}...`);
-  const { files: changedFiles, diffMode } = getChangedFiles();
-  console.log(`Found ${changedFiles.length} changed files (diff mode: ${diffMode})`);
+  const {files: changedFiles, diffMode} = getChangedFiles();
+  console.log(
+    `Found ${changedFiles.length} changed files (diff mode: ${diffMode})`,
+  );
   if (diffMode === 'two-dot') {
     console.warn(
-      '::warning::using approximate two-dot diff - the file list may include base-only churn and may miss the PR\'s own changes when they also exist on base'
+      "::warning::using approximate two-dot diff - the file list may include base-only churn and may miss the PR's own changes when they also exist on base",
     );
   }
 
@@ -786,16 +858,26 @@ function analyze() {
   // Stable theme packages are a visual surface of their own. They do not own
   // component source dirs, so the component loop below cannot discover them;
   // without this, changing a published theme silently skips pr-visual.
-  const changedStableThemes = [...new Set(
-    changedFiles.flatMap((file) => {
-      const match = file.match(/^packages\/themes\/([^/]+)\/src\//);
-      if (!match) return [];
-      const manifest = path.join(process.cwd(), 'packages', 'themes', match[1], 'package.json');
-      if (!fs.existsSync(manifest)) return [];
-      const pkg = JSON.parse(fs.readFileSync(manifest, 'utf8'));
-      return pkg.private === true || pkg.astryx?.canaryOnly === true ? [] : [match[1]];
-    }),
-  )].sort();
+  const changedStableThemes = [
+    ...new Set(
+      changedFiles.flatMap(file => {
+        const match = file.match(/^packages\/themes\/([^/]+)\/src\//);
+        if (!match) return [];
+        const manifest = path.join(
+          process.cwd(),
+          'packages',
+          'themes',
+          match[1],
+          'package.json',
+        );
+        if (!fs.existsSync(manifest)) return [];
+        const pkg = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+        return pkg.private === true || pkg.astryx?.canaryOnly === true
+          ? []
+          : [match[1]];
+      }),
+    ),
+  ].sort();
 
   for (const pkg of PACKAGES) {
     const allComponents = getComponentNames(pkg);
@@ -816,7 +898,7 @@ function analyze() {
 
       if (!allComponents.includes(componentName)) {
         const source = `${pkg.packageName}/${componentName}`;
-        unresolvedFiles.push({ source, file });
+        unresolvedFiles.push({source, file});
         if (!unresolvedComponentSources.includes(source)) {
           unresolvedComponentSources.push(source);
         }
@@ -824,7 +906,9 @@ function analyze() {
       }
       const existsInBase = componentExistsInBase(pkg, componentName);
       const owner = `${pkg.packageName}/${componentName}`;
-      const owners = existsInBase ? modifiedComponentOwners : newComponentOwners;
+      const owners = existsInBase
+        ? modifiedComponentOwners
+        : newComponentOwners;
       if (!owners.includes(owner)) owners.push(owner);
 
       // Keep the legacy bare-name shape for existing report consumers. The
@@ -845,7 +929,9 @@ function analyze() {
 
   console.log(`Changed packages: ${[...changedPackages].join(', ') || 'none'}`);
   console.log(`New components: ${newComponents.join(', ') || 'none'}`);
-  console.log(`Modified components: ${modifiedComponents.join(', ') || 'none'}`);
+  console.log(
+    `Modified components: ${modifiedComponents.join(', ') || 'none'}`,
+  );
   console.log(
     `Component owners: ${[...newComponentOwners, ...modifiedComponentOwners].join(', ') || 'none'}`,
   );
@@ -854,56 +940,73 @@ function analyze() {
   // brand-new exports alongside existing ones).
   const newExports = [];
   for (const key of modifiedComponents) {
-    const pkg = PACKAGES.find((p) => p.name === componentStats[key].package);
+    const pkg = PACKAGES.find(p => p.name === componentStats[key].package);
     const headExports = componentStats[key]?.exports || [];
     const baseExports = getBaseExports(pkg, key);
-    newExports.push(...headExports.filter((e) => e.startsWith('XDS') && !baseExports.includes(e)));
+    newExports.push(
+      ...headExports.filter(
+        e => e.startsWith('XDS') && !baseExports.includes(e),
+      ),
+    );
   }
   for (const key of newComponents) {
-    newExports.push(...(componentStats[key]?.exports || []).filter((e) => e.startsWith('XDS')));
+    newExports.push(
+      ...(componentStats[key]?.exports || []).filter(e => e.startsWith('XDS')),
+    );
   }
-  if (newExports.length > 0) console.log(`New exports: ${newExports.join(', ')}`);
+  if (newExports.length > 0)
+    console.log(`New exports: ${newExports.join(', ')}`);
 
   // Bundle sizes: report every package the PR actually touched. If none of the
   // component packages changed (e.g. a docs- or tooling-only PR that still runs
   // analysis), report no bundle rows rather than a stale, misattributed core row.
-  const bundlePackages = PACKAGES.filter((p) => changedPackages.has(p.name)).map((p) =>
-    getPackageBundleStats(p),
+  const bundlePackages = PACKAGES.filter(p => changedPackages.has(p.name)).map(
+    p => getPackageBundleStats(p),
   );
 
-  // Base measurements come from a built checkout of the merge base. Component
-  // and package lists stay the head's; only the stats are read in the base tree.
+  // Base measurements come from the merge base's record, which Main keeps for
+  // each commit (writeMainRecord). Component and package lists stay the
+  // head's; only the stats are read from the record.
   let baseComponentStats = null;
   let baseBundlePackages = null;
-  // Components a change can affect, by reach in the head build and, when the
-  // merge base is built, in the base build too: CI's size-base job builds only
-  // the base, and a module change can add or remove reach.
-  const reachedSources = { paths: new Set(), measured: new Set() };
+  // Components a change can affect, by reach in the head build and, from the
+  // record, in the merge base's build too: a module change can add or remove
+  // reach.
+  const reachedSources = {paths: new Set(), measured: new Set()};
   const headTargets = sizeTargets(changedFiles, reachedSources);
   let targets = headTargets;
   let baseComponentSizes = null;
-  if (baseRoot) {
-    const headDir = process.cwd();
-    process.chdir(path.resolve(headDir, baseRoot));
-    try {
-      baseComponentStats = {};
-      for (const key of modifiedComponents) {
-        const pkg = PACKAGES.find((p) => p.name === componentStats[key].package);
-        baseComponentStats[key] = getComponentStats(pkg, key);
-      }
-      baseBundlePackages = PACKAGES.filter((p) => changedPackages.has(p.name)).map((p) =>
-        getPackageBundleStats(p),
-      );
-      // Each tree is measured through its own defining modules, so a renamed
-      // module is not mistaken for a missing one.
-      const baseTargets = sizeTargets(changedFiles);
-      baseComponentSizes = measureSizes(unionTargets(baseTargets, headTargets));
-      targets = unionTargets(headTargets, baseTargets);
-    } finally {
-      process.chdir(headDir);
+  const baseRecord = readBaseRecord();
+  if (baseRecord) {
+    baseComponentStats = {};
+    for (const key of modifiedComponents) {
+      const pkg = PACKAGES.find(p => p.name === componentStats[key].package);
+      const stats = baseRecord.componentStats?.[`${pkg.packageName}/${key}`];
+      if (stats) baseComponentStats[key] = stats;
+    }
+    baseBundlePackages = PACKAGES.filter(p => changedPackages.has(p.name)).map(
+      p =>
+        (baseRecord.bundlePackages || []).find(
+          entry => entry.package === p.name,
+        ) || {
+          package: p.name,
+        },
+    );
+    // Each tree is measured through its own defining modules, so a renamed
+    // module is not mistaken for a missing one.
+    const baseTargets = recordTargets(baseRecord, changedFiles);
+    targets = unionTargets(headTargets, baseTargets);
+    baseComponentSizes = {};
+    for (const target of unionTargets(baseTargets, headTargets)) {
+      const recorded = baseRecord.components?.[target.key];
+      baseComponentSizes[target.key] = {
+        package: target.pkg.name,
+        importGzipBytes: recorded?.importGzipBytes ?? null,
+        cssGzipBytes: recorded?.cssGzipBytes ?? null,
+      };
     }
   }
-  const componentSizes = baseOnly ? null : measureSizes(targets);
+  const componentSizes = measureSizes(targets);
 
   // Every changed module, inside a component folder or not (a shared hook,
   // the animator, a family folder), adds the components whose head bundle
@@ -912,14 +1015,16 @@ function analyze() {
   // In a package whose bundles were read, a module no bundle holds adds none.
   // One outside every component folder in a package whose bundles could not
   // be read stays unresolved and asks for full audits, as does --force-full.
-  const isDecided = (file) =>
-    [...reachedSources.measured].some((prefix) => file.startsWith(prefix)) ||
-    [...reachedSources.paths].some((reachedPath) => {
+  const isDecided = file =>
+    [...reachedSources.measured].some(prefix => file.startsWith(prefix)) ||
+    [...reachedSources.paths].some(reachedPath => {
       const module = file.replace(/\.(tsx?|jsx?|mjs)$/, '');
       return module === reachedPath || module.startsWith(reachedPath + '/');
     });
-  const unreachedSources = unresolvedComponentSources.filter((source) =>
-    unresolvedFiles.some((entry) => entry.source === source && !isDecided(entry.file)),
+  const unreachedSources = unresolvedComponentSources.filter(source =>
+    unresolvedFiles.some(
+      entry => entry.source === source && !isDecided(entry.file),
+    ),
   );
   // One affected set of component folders, which visual and RTL both audit
   // (spec:AST-030 FR13): each reverse dependent's folder, and each changed
@@ -927,19 +1032,23 @@ function analyze() {
   // folders (its stories are keyed by folder); RTL reads every component each
   // folder implements (its routes are keyed by component: FieldLabel, not
   // Field).
-  const folderOf = (target) => target.distModule.split('/')[0].replace(/\.(tsx?|jsx?|mjs)$/, '');
+  const folderOf = target =>
+    target.distModule.split('/')[0].replace(/\.(tsx?|jsx?|mjs)$/, '');
   const dependentComponentFolders = [];
   const dependentComponentOwners = [];
-  if (!baseOnly) {
-    const touched = new Set([...newComponentOwners, ...modifiedComponentOwners]);
+  {
+    const touched = new Set([
+      ...newComponentOwners,
+      ...modifiedComponentOwners,
+    ]);
     const addFolder = (pkg, folder) => {
       const qualified = `${pkg.packageName}/${folder}`;
       if (dependentComponentFolders.includes(qualified)) return;
       const members = folderComponents(pkg, folder);
       const owners = (members.length > 0 ? members : [folder]).map(
-        (name) => `${pkg.packageName}/${name}`,
+        name => `${pkg.packageName}/${name}`,
       );
-      if (owners.every((owner) => touched.has(owner))) return;
+      if (owners.every(owner => touched.has(owner))) return;
       dependentComponentFolders.push(qualified);
       for (const owner of owners) {
         if (!touched.has(owner) && !dependentComponentOwners.includes(owner)) {
@@ -950,26 +1059,20 @@ function analyze() {
     for (const target of headTargets) addFolder(target.pkg, folderOf(target));
     for (const source of unresolvedComponentSources) {
       const [packageName, folder] = source.split('/');
-      const pkg = PACKAGES.find((candidate) => candidate.packageName === packageName);
-      if (pkg != null && pkg.layout !== 'flat' && familyMembers(pkg, folder).length > 0) {
+      const pkg = PACKAGES.find(
+        candidate => candidate.packageName === packageName,
+      );
+      if (
+        pkg != null &&
+        pkg.layout !== 'flat' &&
+        familyMembers(pkg, folder).length > 0
+      ) {
         addFolder(pkg, folder);
       }
     }
-    console.log(`Reverse dependents: ${dependentComponentOwners.join(', ') || 'none'}`);
-  }
-
-  if (baseOnly) {
-    const baseResult = {
-      headSha: execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim(),
-      baseSha: execSync('git rev-parse HEAD', { cwd: baseRoot, encoding: 'utf8' }).trim(),
-      baseComponentStats,
-      baseBundlePackages,
-      baseComponentSizes,
-      analyzedAt: new Date().toISOString(),
-    };
-    fs.writeFileSync(outputFile, JSON.stringify(baseResult, null, 2));
-    console.log(`Base stats written to ${outputFile}`);
-    return baseResult;
+    console.log(
+      `Reverse dependents: ${dependentComponentOwners.join(', ') || 'none'}`,
+    );
   }
 
   const result = {
@@ -994,10 +1097,18 @@ function analyze() {
     diffMode,
     bundlePackages,
     componentSizes,
-    ...(baseRoot ? { baseComponentStats, baseBundlePackages, baseComponentSizes } : {}),
+    ...(baseRecord
+      ? {
+          baseSha: baseRecord.sha,
+          baseComponentStats,
+          baseBundlePackages,
+          baseComponentSizes,
+        }
+      : {}),
     // Back-compat: keep totalBundle pointed at core when core changed, so any
     // older consumer of this field still resolves.
-    totalBundle: bundlePackages.find((b) => b.package === '@astryxdesign/core') || null,
+    totalBundle:
+      bundlePackages.find(b => b.package === '@astryxdesign/core') || null,
     analyzedAt: new Date().toISOString(),
   };
 
@@ -1006,6 +1117,107 @@ function analyze() {
   return result;
 }
 
-if (require.main === module) analyze();
+// The merge base's record, or null when none was given or it cannot be read
+// (Before and Delta then stay N/A).
+function readBaseRecord() {
+  if (!baseRecordFile) return null;
+  try {
+    const record = JSON.parse(fs.readFileSync(baseRecordFile, 'utf8'));
+    return record?.schema === 1 ? record : null;
+  } catch (e) {
+    console.warn(
+      `::warning::could not read the merge base's size record: ${e.message}`,
+    );
+    return null;
+  }
+}
 
-module.exports = { folderComponents };
+// The components a change can affect in the merge base's build, from its
+// record: as sizeTargets decides in a built tree, a component whose own folder
+// or file changed, or whose bundle reached a changed module of any package.
+function recordTargets(record, changedFiles) {
+  const targets = [];
+  for (const [key, component] of Object.entries(record.components || {})) {
+    const pkg = PACKAGES.find(
+      candidate => candidate.name === component.package,
+    );
+    if (!pkg) continue;
+    const target = {
+      key,
+      pkg,
+      name: component.name,
+      distModule: component.distModule,
+    };
+    const sources = new Set(
+      (component.reaches || []).map(index => record.modules[index]),
+    );
+    const {ownFolder, reachedPaths} = affectedBy(target, sources, changedFiles);
+    if (ownFolder || reachedPaths.length > 0) targets.push(target);
+  }
+  return targets;
+}
+
+// What a pull request needs from its merge base, measured once per main
+// commit in Main's build (deploy.yml) instead of in each pull request: every
+// public component's import and CSS size and the source modules its bundle
+// reaches (as `src` paths without extension, by index into `modules`), every
+// component folder's entry stats, and every component package's bundle stats.
+function writeMainRecord() {
+  const modules = [];
+  const moduleIndex = new Map();
+  const indexOf = source => {
+    if (!moduleIndex.has(source)) {
+      moduleIndex.set(source, modules.length);
+      modules.push(source);
+    }
+    return moduleIndex.get(source);
+  };
+  const dists = distRealPaths();
+  const components = {};
+  const componentStats = {};
+  for (const pkg of PACKAGES) {
+    const dist = path.join(process.cwd(), pkgDist(pkg));
+    if (!fs.existsSync(dist)) continue;
+    const {all, sources} = componentReach(pkg, dists);
+    const sizes = measureSizes(all);
+    for (const target of all) {
+      const reaches = new Set([...sources.get(target.key)].map(indexOf));
+      components[target.key] = {
+        package: pkg.name,
+        name: target.name,
+        distModule: target.distModule,
+        importGzipBytes: sizes[target.key].importGzipBytes,
+        cssGzipBytes: sizes[target.key].cssGzipBytes,
+        reaches: [...reaches].sort((a, b) => a - b),
+      };
+    }
+    for (const name of getComponentNames(pkg)) {
+      componentStats[`${pkg.packageName}/${name}`] = getComponentStats(
+        pkg,
+        name,
+      );
+    }
+  }
+  const record = {
+    schema: 1,
+    sha: execSync('git rev-parse HEAD', {encoding: 'utf8'}).trim(),
+    modules,
+    components,
+    componentStats,
+    bundlePackages: PACKAGES.filter(pkg =>
+      fs.existsSync(path.join(process.cwd(), pkgDist(pkg))),
+    ).map(pkg => getPackageBundleStats(pkg)),
+  };
+  fs.writeFileSync(outputFile, JSON.stringify(record));
+  console.log(
+    `Main record written to ${outputFile}: ${Object.keys(components).length} components.`,
+  );
+  return record;
+}
+
+if (require.main === module) {
+  if (mainRecordMode) writeMainRecord();
+  else analyze();
+}
+
+module.exports = {folderComponents};

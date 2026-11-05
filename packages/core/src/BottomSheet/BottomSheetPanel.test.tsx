@@ -8,6 +8,7 @@
  * @position Internal presentation tests shared by standalone and switcher modes
  */
 
+import * as stylex from '@stylexjs/stylex';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
@@ -42,6 +43,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// A device with a touch pointer: only `(any-pointer: coarse)` matches.
+function stubTouchPointer() {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches: query === '(any-pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
 function renderPanel(
   state: BottomSheetPanelState,
   callbacks: {
@@ -74,7 +92,151 @@ function getPanel(): HTMLElement {
   return panel;
 }
 
+const callerSizeStyles = stylex.create({
+  height: {height: 500},
+  maxHeight: {maxHeight: 500},
+  color: {color: 'rebeccapurple'},
+});
+
 describe('BottomSheetPanel', () => {
+  it('keeps 40% of the viewport of its surface below the screen, for the whole stretch past the top', () => {
+    stubTouchPointer();
+    renderPanel({kind: 'open', entering: false});
+    // A finger's rubber band over a sheet as tall as the viewport shows at
+    // most 35.5% of the viewport.
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe(
+      `${Math.ceil(window.innerHeight * 0.4)}px`,
+    );
+  });
+
+  it('keeps the smallest reserve, 48 px, under a height the caller sets, on a device with a touch pointer', () => {
+    // Nothing extends a caller's height by the reserve, so a deeper one would
+    // hide that much more of the sheet below the screen.
+    stubTouchPointer();
+    render(
+      <BottomSheetPanel
+        label="Sheet details"
+        state={{kind: 'open', entering: false}}
+        height="hug"
+        style={{...panelTransitionStyle, height: 500}}
+        onDismiss={() => {}}
+        onScrimOpacity={() => {}}>
+        Panel content
+      </BottomSheetPanel>,
+    );
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe('48px');
+  });
+
+  it('keeps the smallest reserve, 48 px, under a size the caller sets through xstyle, on a device with a touch pointer', () => {
+    stubTouchPointer();
+    render(
+      <BottomSheetPanel
+        label="Sheet details"
+        state={{kind: 'open', entering: false}}
+        height="hug"
+        style={panelTransitionStyle}
+        xstyle={callerSizeStyles.height}
+        onDismiss={() => {}}
+        onScrimOpacity={() => {}}>
+        Panel content
+      </BottomSheetPanel>,
+    );
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe('48px');
+  });
+
+  it('keeps the smallest reserve, 48 px, under a maximum size in an xstyle array, on a device with a touch pointer', () => {
+    stubTouchPointer();
+    render(
+      <BottomSheetPanel
+        label="Sheet details"
+        state={{kind: 'open', entering: false}}
+        height="hug"
+        style={panelTransitionStyle}
+        xstyle={[callerSizeStyles.color, callerSizeStyles.maxHeight]}
+        onDismiss={() => {}}
+        onScrimOpacity={() => {}}>
+        Panel content
+      </BottomSheetPanel>,
+    );
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe('48px');
+  });
+
+  it('keeps the smallest reserve, 48 px, under a class name the caller passes, on a device with a touch pointer', () => {
+    // A class name's rules can size the sheet, and nothing can read them.
+    stubTouchPointer();
+    render(
+      <BottomSheetPanel
+        label="Sheet details"
+        state={{kind: 'open', entering: false}}
+        height="hug"
+        className="caller-sheet"
+        style={panelTransitionStyle}
+        onDismiss={() => {}}
+        onScrimOpacity={() => {}}>
+        Panel content
+      </BottomSheetPanel>,
+    );
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe('48px');
+  });
+
+  it('keeps the smallest reserve, 48 px, under any xstyle, whose rules nothing can read, on a device with a touch pointer', () => {
+    stubTouchPointer();
+    render(
+      <BottomSheetPanel
+        label="Sheet details"
+        state={{kind: 'open', entering: false}}
+        height="hug"
+        style={panelTransitionStyle}
+        xstyle={callerSizeStyles.color}
+        onDismiss={() => {}}
+        onScrimOpacity={() => {}}>
+        Panel content
+      </BottomSheetPanel>,
+    );
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe('48px');
+  });
+
+  it('keeps the viewport reserve under an empty xstyle and a style that does not size the sheet, on a device with a touch pointer', () => {
+    stubTouchPointer();
+    render(
+      <BottomSheetPanel
+        label="Sheet details"
+        state={{kind: 'open', entering: false}}
+        height="hug"
+        style={{...panelTransitionStyle, color: 'rebeccapurple'}}
+        xstyle={[false, undefined]}
+        onDismiss={() => {}}
+        onScrimOpacity={() => {}}>
+        Panel content
+      </BottomSheetPanel>,
+    );
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).not.toBe(
+      '48px',
+    );
+  });
+
+  it('keeps the smallest reserve, 48 px, on a device with no touch pointer', () => {
+    renderPanel({kind: 'open', entering: false});
+    expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe('48px');
+  });
+
+  it('follows the viewport with its reserve while it is presented', () => {
+    const viewportHeight = window.innerHeight;
+    stubTouchPointer();
+    renderPanel({kind: 'open', entering: false});
+    try {
+      act(() => {
+        window.innerHeight = 1000;
+        window.dispatchEvent(new Event('resize'));
+      });
+      expect(getPanel().style.getPropertyValue('--_sheet-reserve')).toBe(
+        '400px',
+      );
+    } finally {
+      window.innerHeight = viewportHeight;
+    }
+  });
+
   it('reports entrance completion only for the surface transform', () => {
     const onMotionStart = vi.fn();
     const onMotionComplete = vi.fn();
@@ -155,6 +317,31 @@ describe('BottomSheetPanel', () => {
     );
     fireEvent.transitionEnd(getPanel(), {propertyName: 'transform'});
     expect(onMotionComplete).toHaveBeenLastCalledWith('exiting');
+  });
+
+  it('keeps exiting when the engine replaces the exit transition mid-flight', () => {
+    const onMotionComplete = vi.fn();
+    renderPanel({kind: 'exiting'}, {onMotionComplete});
+    const panel = getPanel();
+    // Chromium cancels a running transition whose end value changes, and
+    // starts one from where it was. The exit's percentage transform changes
+    // when the closing frame moves the sheet's height by a fraction of a pixel.
+    panel.getAnimations = () =>
+      [{transitionProperty: 'transform', playState: 'running'}] as never;
+    fireEvent.transitionCancel(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).not.toHaveBeenCalled();
+    panel.getAnimations = () => [];
+    fireEvent.transitionEnd(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).toHaveBeenCalledWith('exiting');
+  });
+
+  it('ends the exit when its transition is cancelled with nothing running on', () => {
+    const onMotionComplete = vi.fn();
+    renderPanel({kind: 'exiting'}, {onMotionComplete});
+    const panel = getPanel();
+    panel.getAnimations = () => [];
+    fireEvent.transitionCancel(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).toHaveBeenCalledWith('exiting');
   });
 
   it('completes immediately when the rendered transition is disabled', () => {
@@ -297,6 +484,22 @@ describe('BottomSheetPanel', () => {
     expect(handleBar![1]).toContain("position: 'absolute'");
     expect(handleBar![1]).toContain('linear-gradient(to bottom');
     expect(handleBar![1]).toContain("colorVars['--color-background-surface']");
+  });
+
+  // While the sheet's transform animates between detents, WebKit can draw the
+  // bar under the scrolling body. The pill then vanishes until the sheet rests.
+  // This is asserted on the style definition, as the test above is.
+  it('gives the floating handle bar a compositing layer of its own', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const source = fs.readFileSync(
+      path.resolve(__dirname, './BottomSheetPanel.tsx'),
+      'utf-8',
+    );
+
+    const handleBar = source.match(/handleBar: \{([\s\S]*?)\n {2}\},/);
+    expect(handleBar).not.toBeNull();
+    expect(handleBar![1]).toContain("willChange: 'transform'");
   });
 
   // In dark mode the surface fill and the scrim sit a few RGB steps apart and

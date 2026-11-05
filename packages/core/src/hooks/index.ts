@@ -133,6 +133,8 @@ export type {
   UseInteractiveRoleOptions,
 } from './useInteractiveRole';
 
+export {useAnimator} from './useAnimator';
+
 export {useLongPress} from './useLongPress';
 export type {UseLongPressOptions, UseLongPressHandlers} from './useLongPress';
 
@@ -148,3 +150,11 @@ export type {
   ContainerRevealOptions,
   ContentRevealOptions,
 } from './useContainerReveal';
+
+export {usePanGesture} from './usePanGesture';
+export type {
+  PanGesture,
+  PanGestureEvent,
+  PanGestureOptions,
+  PanGestureState,
+} from '../gestures/createPanGesture';

@@ -98,7 +98,14 @@ import {
   headingLinksHeadingStyle,
 } from './plugins/HeadingLinksRenderer';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator, type TranslatorFn} from '../i18n';
+import type {TranslatorFn} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Markdown/Markdown.generated';
+
+registerEnglishFallback(english);
 
 type SyncReactNode = Exclude<React.ReactNode, Promise<unknown>>;
 type RenderExtensionNode = MarkdownExtensionNode;
@@ -1592,6 +1599,7 @@ function renderBlock(
       }
       try {
         const rendered = renderer.render({node: proposal.node});
+        // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- a plugin renderer's '' is its output; only null, undefined or a boolean asks for the readable fallback
         if (rendered == null || typeof rendered === 'boolean') {
           return fallback;
         }
@@ -2165,7 +2173,7 @@ export function Markdown<
   'data-testid': testId,
   ...props
 }: MarkdownProps<Plugins>): React.ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // Keep one list while it names the same values, so an inline
   // `codeLanguages={[…]}` does not re-render every block on each parent
   // render (adjusting state during render, not in an Effect).

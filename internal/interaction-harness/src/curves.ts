@@ -6,6 +6,7 @@
  *   the Web Animations API in the page (CSS transitions and CSS animations are
  *   Web Animations too)
  * @output `holdAnimations` (pause every running animation and describe it),
+ *   `armHold` (the page holds what an action starts, as soon as it runs),
  *   `seekAnimations` (move them to t ms from the held origin, each keeping
  *   its offset), `sampleCurve` (the presented
  *   transform/opacity at each t, with the individual `translate`, `rotate` and
@@ -22,6 +23,7 @@
  */
 
 import type {Locator, Page} from '@playwright/test';
+import {defineCurveEnd} from './curve-end';
 import {parseTransform, type TimedValue, type Transform2D} from './math';
 
 /** How far inside its end a seek past an animation's end lands, ms. */
@@ -31,7 +33,9 @@ export const END_INSET_MS = 0.5;
  * Page side: records every animation the document runs, from its first frame
  * or its creation (a frame loop on the page's real requestAnimationFrame, and
  * the CSS animation and transition events), so an animation that starts and
- * ends before a test looks is still seen, with the time it finished. Each
+ * ends before a test looks is still seen, with the time it finished (from its
+ * finish event, or from a CSS run's end event when the page cancels it there
+ * before the finish event comes). Each
  * entry keeps the animation's start time too: a page that cancels a finished
  * animation (an entrance whose class is removed on `animationend`) nulls its
  * `startTime`.
@@ -41,6 +45,11 @@ function animationRecorder(): void {
   if (w.__harnessAnimations) {
     return;
   }
+  // The run a CSS animation or transition event names.
+  const cssRunName = (event: Event) =>
+    event.type.startsWith('animation')
+      ? (event as AnimationEvent).animationName
+      : (event as TransitionEvent).propertyName;
   // The page's real frames, even when a timer gate already holds its callbacks.
   const frame = (
     (
@@ -57,8 +66,24 @@ function animationRecorder(): void {
     // Where the run began, as the engine had it when it finished.
     finishStart: number | null;
   }[] = [];
+  // Start events that found no animation to record (see `onStart`), with
+  // the target's ancestors as they were: an exit the page removes at its end
+  // is still named for the container it left.
+  const unread: {
+    at: number;
+    target: EventTarget | null;
+    ancestors: Element[];
+    type: string;
+    name: string;
+  }[] = [];
   // Each recorded animation's entry.
   const entries = new WeakMap<Animation, (typeof log)[number]>();
+  // The times kept below are real: a page time plus the span a page freeze
+  // stood still so far. A later freeze then leaves them where they were.
+  const span = () =>
+    (window as unknown as {__harnessFreeze?: {offset: number}}).__harnessFreeze
+      ?.offset ?? 0;
+  const real = (time: number | null) => (time == null ? null : time + span());
   // Entries whose start time has not resolved yet (still pending when seen).
   let unstarted: (typeof log)[number][] = [];
   let armedAt = performance.now();
@@ -79,6 +104,46 @@ function animationRecorder(): void {
     );
     return Number(animation.startTime) - end / Math.abs(rate);
   };
+  // Dates a recorded run's finish as the engine has it now. Its start time is
+  // usually still set (the finish listener, added as the animation was made,
+  // runs before the page's own, and the end-event listener below runs in the
+  // capture phase), and the run ended where that start puts its end, through
+  // the rate. Without one, the start the recorder holds stands in, kept as
+  // the run ran (after a pause, a seek or a rate change). A run that ends as
+  // it starts (one reversed from rest) can finish before any start resolves:
+  // it then began where the finish event's timeline time `at` puts its start.
+  // Read later, the start time can say otherwise (WebKit resolves or moves it
+  // a frame later), and the finish event itself arrives late (a frame or more
+  // after a finish() call).
+  const dateFinish = (
+    entry: {
+      animation: Animation;
+      finishedAt: number | null;
+      startedAt: number | null;
+      finishStart: number | null;
+    },
+    at: number | null,
+  ) => {
+    const animation = entry.animation;
+    const end = Number(
+      (animation.effect as KeyframeEffect | null)?.getComputedTiming()
+        .endTime ?? 0,
+    );
+    const speed = Math.abs(animation.playbackRate || 1);
+    // The finish event's timeline time is the engine's own, already real.
+    entry.finishStart =
+      real(playStart(animation)) ??
+      entry.startedAt ??
+      (at == null ? null : at - end / speed);
+    entry.finishedAt =
+      entry.finishStart == null
+        ? performance.now() + span()
+        : entry.finishStart + end / speed;
+    if (entry.startedAt == null) {
+      // Cancelled before a frame read its start: back from where it ended.
+      entry.startedAt = entry.finishStart ?? entry.finishedAt - end / speed;
+    }
+  };
   const remember = (animation: Animation) => {
     const recorded = entries.get(animation);
     if (recorded != null) {
@@ -87,7 +152,7 @@ function animationRecorder(): void {
       // kept is the one it runs on, which its finish falls back to once the
       // page has cancelled it.
       if (animation.playState === 'running' && animation.startTime != null) {
-        recorded.startedAt = playStart(animation);
+        recorded.startedAt = real(playStart(animation));
       }
       return;
     }
@@ -110,7 +175,7 @@ function animationRecorder(): void {
       animation,
       seenAt: performance.now(),
       finishedAt: null as number | null,
-      startedAt: playStart(animation),
+      startedAt: real(playStart(animation)),
       finishStart: null as number | null,
       ancestors,
     };
@@ -119,35 +184,8 @@ function animationRecorder(): void {
       unstarted.push(entry);
     }
     animation.addEventListener('finish', event => {
-      const end = Number(
-        (animation.effect as KeyframeEffect | null)?.getComputedTiming()
-          .endTime ?? 0,
-      );
-      const speed = Math.abs(animation.playbackRate || 1);
-      // The run as the engine has it at its finish: this listener, added as
-      // the animation was made, runs before the page's own, so its start time
-      // is usually still set, and the run ended where that start puts its
-      // end, through the rate. Without one, the start the recorder holds
-      // stands in, kept as the run ran (after a pause, a seek or a rate
-      // change): in Chromium a CSS animation or transition whose element the
-      // page removes on its end event is cancelled before this runs. A run that ends as it starts (one reversed from rest) can finish
-      // before any start resolves: it then began where the event's timeline
-      // time puts its start. Read later, the start time can say otherwise
-      // (WebKit resolves or moves it a frame later), and the event itself
-      // arrives late (a frame or more after a finish() call).
       const at = (event as AnimationPlaybackEvent).timelineTime;
-      entry.finishStart =
-        playStart(animation) ??
-        entry.startedAt ??
-        (at == null ? null : Number(at) - end / speed);
-      entry.finishedAt =
-        entry.finishStart == null
-          ? performance.now()
-          : entry.finishStart + end / speed;
-      if (entry.startedAt == null) {
-        // Cancelled before a frame read its start: back from where it ended.
-        entry.startedAt = entry.finishStart ?? entry.finishedAt - end / speed;
-      }
+      dateFinish(entry, at == null ? null : Number(at));
     });
     log.push(entry);
     if (log.length > 5000) {
@@ -160,22 +198,164 @@ function animationRecorder(): void {
     }
     unstarted = unstarted.filter(entry => {
       if (entry.startedAt == null && entry.animation.startTime != null) {
-        entry.startedAt = playStart(entry.animation);
+        entry.startedAt = real(playStart(entry.animation));
       }
       return entry.startedAt == null && entry.animation.playState !== 'idle';
     });
   };
+  // While a rendering trace runs (traceRendering sets
+  // `__harnessRenderingTrace`), the recorder stands down. Its per-frame
+  // callback would make every frame a main-thread frame, in which Blink
+  // restyles each running animation's target, a composited one included (and
+  // lays out an anchored one), and document.getAnimations() flushes style:
+  // exactly what the trace counts. So it runs no frame callback, and a CSS
+  // animation or transition event reads only the animations of the element it
+  // names, once, at that animation's start (one that ends inside the trace is
+  // otherwise never seen). The animate() wrapper below still records script
+  // animations (it reads no style), and traceRendering resumes the recorder
+  // once the trace ends.
+  const tracing = () =>
+    (window as unknown as {__harnessRenderingTrace?: boolean})
+      .__harnessRenderingTrace === true;
+  let looping = false;
   const tick = () => {
+    if (tracing()) {
+      looping = false;
+      return;
+    }
     record();
     frame(tick);
+  };
+  const loop = () => {
+    if (!looping) {
+      looping = true;
+      frame(tick);
+    }
   };
   // What already runs when the recorder starts (a spinner on a page the
   // harness touches for the first time) is seen now, before any watch arms;
   // first seen a frame later, it would read as started by the watched action.
+  // (A recorder that starts during a trace reads once here, then waits.)
   record();
-  frame(tick);
+  loop();
+  // A start event with nothing left to read: a CSS animation shorter than the
+  // gap between two of the page's frames can start and finish inside it, and
+  // WebKit sends its start event only at the next frame, when
+  // `getAnimations()` no longer lists a finished animation that fills
+  // nothing. No object is left to record, so the event is kept: a wait that
+  // finds nothing names what it missed.
+  // Whether a recorded entry is the run a CSS animation or transition event
+  // is about: the same element (and pseudo-element) and name.
+  const isRunOf = (entry: {animation: Animation}, event: Event) => {
+    const effect = entry.animation.effect as KeyframeEffect | null;
+    const a = entry.animation as unknown as {
+      animationName?: string;
+      transitionProperty?: string;
+    };
+    return (
+      effect?.target === event.target &&
+      (effect?.pseudoElement || '') ===
+        ((event as AnimationEvent).pseudoElement || '') &&
+      (a.animationName ?? a.transitionProperty) === cssRunName(event)
+    );
+  };
+  const onStart = (event: Event) => {
+    if (tracing()) {
+      // Inside a trace, read only the element the event names, once: a
+      // document-wide read flushes style.
+      const target = event.target;
+      if (target instanceof Element) {
+        // A pseudo-element's animation (`::backdrop`) is in the subtree.
+        const pseudo = (event as AnimationEvent | TransitionEvent)
+          .pseudoElement;
+        for (const animation of target.getAnimations({subtree: !!pseudo})) {
+          remember(animation);
+        }
+      }
+      return;
+    }
+    record();
+    // Only a live run answers: a replay of an animation that finished on the
+    // same element is a new run, and missed if nothing recorded it. A run the
+    // document still lists, running or paused, answers too: one that starts
+    // paused is never recorded, and one replayed with play() keeps the
+    // finish of its first run.
+    const live =
+      log.some(
+        entry =>
+          entry.finishedAt == null &&
+          entry.animation.playState !== 'idle' &&
+          isRunOf(entry, event),
+      ) ||
+      document
+        .getAnimations()
+        .some(
+          animation =>
+            (animation.playState === 'running' ||
+              animation.playState === 'paused') &&
+            isRunOf({animation}, event),
+        );
+    if (!live) {
+      const ancestors: Element[] = [];
+      for (
+        let node = event.target instanceof Element ? event.target : null;
+        node != null;
+        node = node.parentElement
+      ) {
+        ancestors.push(node);
+      }
+      unread.push({
+        at: performance.now(),
+        target: event.target,
+        ancestors,
+        type: event.type,
+        name: cssRunName(event),
+      });
+      if (unread.length > 500) {
+        unread.splice(0, unread.length - 500);
+      }
+    }
+  };
   for (const type of ['animationstart', 'transitionrun', 'transitionstart']) {
-    document.addEventListener(type, record, true);
+    document.addEventListener(type, onStart, true);
+  }
+  // Whether a run stands at its end in the direction it plays: finished, or
+  // still reading `running` with its current time there, to a microsecond
+  // (Chromium read 0.00000003 ms for a reversed run at its start). Chromium
+  // can send a CSS run's end event a frame before the run itself finishes.
+  const atEnd = (animation: Animation) => {
+    if (animation.playState === 'finished') {
+      return true;
+    }
+    if (animation.playState !== 'running' || animation.currentTime == null) {
+      return false;
+    }
+    const time = Number(animation.currentTime);
+    const end = Number(
+      (animation.effect as KeyframeEffect | null)?.getComputedTiming()
+        .endTime ?? 0,
+    );
+    return animation.playbackRate < 0 ? time <= 0.001 : time >= end - 0.001;
+  };
+  // A CSS run's end event, read before the page's own listeners (this one is
+  // on the document, in the capture phase), while the run still has its start
+  // time. A page that removes the element at its end cancels a run whose end
+  // event came before it finished, and a cancelled run never finishes: under
+  // load, a CSS exit reversed partway sent `transitionend` at current time 0,
+  // still `running`, and was cancelled a frame later with no finish event.
+  const onEnd = (event: Event) => {
+    for (const entry of log) {
+      if (
+        entry.finishedAt == null &&
+        atEnd(entry.animation) &&
+        isRunOf(entry, event)
+      ) {
+        dateFinish(entry, null);
+      }
+    }
+  };
+  for (const type of ['animationend', 'transitionend']) {
+    document.addEventListener(type, onEnd, true);
   }
   // A script animation is recorded as it is made: WebKit can start and finish
   // a short one between two frames of a fresh page.
@@ -190,17 +370,49 @@ function animationRecorder(): void {
   };
   w.__harnessAnimations = {
     log,
-    record,
+    unread,
+    // A read from outside the recorder (a wait's poll) stands down while a
+    // trace runs, as the frame loop does: document.getAnimations() flushes
+    // style. CSS start events and the animate() wrapper still log what
+    // starts, and resume() catches up.
+    record: () => {
+      if (!tracing()) {
+        record();
+      }
+    },
+    // Catches up on what started during a trace, then runs its frames again.
+    resume: () => {
+      record();
+      loop();
+    },
     // Record first, then stamp strictly after the newest entry: a step that
     // changed style just before has its transition created by that read,
-    // and it started before the arm.
-    arm: () => {
-      record();
+    // and it started before the arm. While a trace runs the page-wide read
+    // stands down, as record() does; the watched element's own animations
+    // are still read, which resolves its pending style change. That read
+    // restyles the element (and lays out an anchored one) in the task that
+    // takes the watch, so a traced proof takes its watch before the window
+    // it counts (README: No Layout / Paint).
+    arm: (element?: Element) => {
+      if (!tracing()) {
+        record();
+      } else if (element != null) {
+        for (const animation of element.getAnimations({subtree: true})) {
+          remember(animation);
+        }
+      }
       const newest = log.length === 0 ? 0 : log[log.length - 1].seenAt;
       armedAt = Math.max(performance.now(), newest + 0.001);
       return armedAt;
     },
     armedAt: () => armedAt,
+    // Drops every animation the log holds, with the elements and ancestors
+    // they keep alive; later waits record afresh.
+    release: () => {
+      log.length = 0;
+      unread.length = 0;
+      unstarted = [];
+    },
   };
 }
 
@@ -221,169 +433,37 @@ async function installRecorder(page: Page): Promise<void> {
  * keyframes end in a run of identical values (an end value held so that a
  * later interruption can read it) ends where that run starts, when it plays
  * forward under a linear or cubic-bézier effect easing (the time the run
- * starts is solved from the curve); any other ends at its end time.
+ * starts is solved from the curve); any other ends at its end time. The same
+ * evaluate installs `window.__harnessHold(root)`, which holds every running
+ * animation on the document timeline (only those whose target is `root` or
+ * inside it, when `root` is set) and returns what it held (see
+ * `holdAnimations`), so `holdAnimations` and `armHold` hold the same way.
  */
 async function installCurveEnd(page: Page): Promise<void> {
   await installRecorder(page);
-  await page.evaluate(() => {
-    const w = window as unknown as {
-      __harnessCurveEnd?: (animation: Animation) => number;
-    };
-    if (w.__harnessCurveEnd) {
-      return;
-    }
-    const timingKeys = new Set([
-      'offset',
-      'computedOffset',
-      'easing',
-      'composite',
-    ]);
-    const values = (k: ComputedKeyframe) =>
-      JSON.stringify(
-        Object.keys(k)
-          .filter(p => !timingKeys.has(p))
-          .sort()
-          .map(p => [p, String(k[p])]),
-      );
-    w.__harnessCurveEnd = animation => {
-      const effect = animation.effect as KeyframeEffect | null;
-      const timing = effect?.getComputedTiming();
-      const delay = Number(timing?.delay ?? 0);
-      const active = Number(timing?.activeDuration ?? 0);
-      if (
-        effect == null ||
-        !Number.isFinite(active) ||
-        Number(timing?.iterations ?? 1) !== 1
-      ) {
-        return delay + active;
-      }
-      // A held end is read only for an animation that plays forward: run
-      // backward (a reverse or alternating direction, or `reverse()`'s
-      // negative playback rate), the held run is where its motion starts.
-      if (
-        (timing?.direction ?? 'normal') !== 'normal' ||
-        animation.playbackRate < 0
-      ) {
-        return delay + active;
-      }
-      const frames = effect.getKeyframes();
-      // A run holds only when it reaches offset 1 and every frame in it keys
-      // every property the animation keys: a property left out, or a last
-      // frame before offset 1, gets an implicit end frame and keeps moving.
-      const keyed = new Set(
-        frames.flatMap(k => Object.keys(k).filter(p => !timingKeys.has(p))),
-      );
-      const keysAll = (k: ComputedKeyframe) =>
-        [...keyed].every(p => k[p] !== undefined);
-      const last = frames[frames.length - 1];
-      if (last == null || Number(last.computedOffset) !== 1 || !keysAll(last)) {
-        return delay + active;
-      }
-      let first = frames.length - 1;
-      while (
-        first > 0 &&
-        keysAll(frames[first - 1]) &&
-        values(frames[first - 1]) === values(frames[first])
-      ) {
-        first -= 1;
-      }
-      const offset = Number(frames[first]?.computedOffset ?? 1);
-      if (offset >= 1) {
-        return delay + active;
-      }
-      // Keyframe offsets are progress, not time. Under a cubic-bézier effect
-      // easing (the CSS keywords included) whose progress only rises, the
-      // time the held run starts is solved from the curve; under any other
-      // easing (steps, linear() stops, an overshoot) the curve is read to the
-      // full end.
-      const easing = String(effect.getTiming().easing ?? 'linear').trim();
-      const named: Record<string, number[]> = {
-        linear: [0, 0, 1, 1],
-        ease: [0.25, 0.1, 0.25, 1],
-        'ease-in': [0.42, 0, 1, 1],
-        'ease-out': [0, 0, 0.58, 1],
-        'ease-in-out': [0.42, 0, 0.58, 1],
-      };
-      const match = /^cubic-bezier\(([^)]+)\)$/.exec(easing);
-      const points =
-        named[easing] ?? (match ? match[1].split(',').map(Number) : null);
-      if (
-        points == null ||
-        points.length !== 4 ||
-        !points.every(Number.isFinite) ||
-        points[1] < 0 ||
-        points[1] > 1 ||
-        points[3] < 0 ||
-        points[3] > 1
-      ) {
-        return delay + active;
-      }
-      const [x1, y1, x2, y2] = points;
-      const bezier = (u: number, p1: number, p2: number) =>
-        3 * (1 - u) * (1 - u) * u * p1 + 3 * (1 - u) * u * u * p2 + u * u * u;
-      let lo = 0;
-      let hi = 1;
-      for (let i = 0; i < 60; i += 1) {
-        const mid = (lo + hi) / 2;
-        if (bezier(mid, y1, y2) < offset) {
-          lo = mid;
-        } else {
-          hi = mid;
-        }
-      }
-      return delay + bezier((lo + hi) / 2, x1, x2) * active;
-    };
-  });
-}
-
-export interface HeldAnimation {
-  readonly index: number;
-  /** `CSSTransition`, `CSSAnimation` or `Animation` (script-created). */
-  readonly kind: string;
-  /** Transitioned property or animation name, when CSS made it. */
-  readonly name: string | null;
-  readonly target: string | null;
-  readonly durationMs: number;
-  readonly delayMs: number;
-  /**
-   * Where its curve ends, ms from its start (delay included): before a held
-   * end value, if its keyframes end in one and it plays forward under a
-   * linear or cubic-bézier effect easing; otherwise its end time.
-   */
-  readonly curveEndMs: number;
-  readonly easing: string;
-  readonly keyframes: readonly Record<string, unknown>[];
-  /** Where it was when held, ms. */
-  readonly heldAtMs: number | null;
-  /**
-   * How much later than the held origin (the earliest start among the
-   * animations the first hold took) it started, ms; negative for an earlier
-   * start held by a later hold. A seek to t moves it to its own t - offsetMs,
-   * so staggered starts stay staggered.
-   */
-  readonly offsetMs: number;
+  // The hold, installed with the curve end it reads: one round trip installs
+  // both, so a hold sent from the test costs no extra one.
+  await page.evaluate(
+    `(${defineCurveEnd.toString()})();(${defineHold.toString()})();`,
+  );
 }
 
 /**
- * Pauses every running animation in the document (optionally only those whose
- * target is inside `scope`) and returns what was held. Finished animations,
- * animations the page paused, and animations on a scroll or view timeline are
- * left as they are. Later `seekAnimations` calls move exactly the held set,
- * each by its offset from the held origin, and `releaseAnimations` resumes
- * only it. A second call adds to the held set: what the first held stays held
- * until the release, and offsets keep counting from the origin the first call
- * set (the earliest start it took), so offsets already returned stay true.
- * An animation the page cancels after the hold (retargeting a CSS transition
- * cancels it) leaves the held set: seeking, sampling and releasing skip it
- * rather than revive it.
+ * Installs `window.__harnessHold(root)` in the page, once (see
+ * `installCurveEnd`). A page function: it closes over nothing, and reads the
+ * curve end `defineCurveEnd` installs.
  */
-export async function holdAnimations(
-  page: Page,
-  scope?: Locator,
-): Promise<HeldAnimation[]> {
-  const scopeHandle = scope ? await scope.elementHandle() : null;
-  await installCurveEnd(page);
-  return page.evaluate(root => {
+function defineHold(): void {
+  const w = window as unknown as {
+    __harnessHold?: (
+      root: Element | null,
+      skip?: ReadonlySet<Animation>,
+    ) => unknown[];
+  };
+  if (w.__harnessHold) {
+    return;
+  }
+  w.__harnessHold = (root: Element | null, skip?: ReadonlySet<Animation>) => {
     const curveEnd = (
       window as unknown as {__harnessCurveEnd: (a: Animation) => number}
     ).__harnessCurveEnd;
@@ -402,6 +482,7 @@ export async function holdAnimations(
       return (
         animation.playState === 'running' &&
         animation.timeline instanceof DocumentTimeline &&
+        !(skip?.has(animation) ?? false) &&
         (root == null ||
           (target != null && (root === target || root.contains(target))))
       );
@@ -479,7 +560,239 @@ export async function holdAnimations(
         offsetMs: offsets[index],
       };
     });
-  }, scopeHandle);
+  };
+}
+
+export interface HeldAnimation {
+  readonly index: number;
+  /** `CSSTransition`, `CSSAnimation` or `Animation` (script-created). */
+  readonly kind: string;
+  /** Transitioned property or animation name, when CSS made it. */
+  readonly name: string | null;
+  readonly target: string | null;
+  readonly durationMs: number;
+  readonly delayMs: number;
+  /**
+   * Where its curve ends, ms from its start (delay included): before a held
+   * end value, if its keyframes end in one and it plays forward under a
+   * linear or cubic-bézier effect easing; otherwise its end time.
+   */
+  readonly curveEndMs: number;
+  readonly easing: string;
+  readonly keyframes: readonly Record<string, unknown>[];
+  /** Where it was when held, ms. */
+  readonly heldAtMs: number | null;
+  /**
+   * How much later than the held origin (the earliest start among the
+   * animations the first hold took) it started, ms; negative for an earlier
+   * start held by a later hold. A seek to t moves it to its own t - offsetMs,
+   * so staggered starts stay staggered.
+   */
+  readonly offsetMs: number;
+}
+
+/**
+ * Pauses every running animation in the document (optionally only those whose
+ * target is inside `scope`) and returns what was held. Finished animations,
+ * animations the page paused, and animations on a scroll or view timeline are
+ * left as they are. Later `seekAnimations` calls move exactly the held set,
+ * each by its offset from the held origin, and `releaseAnimations` resumes
+ * only it. A second call adds to the held set: what the first held stays held
+ * until the release, and offsets keep counting from the origin the first call
+ * set (the earliest start it took), so offsets already returned stay true.
+ * An animation the page cancels after the hold (retargeting a CSS transition
+ * cancels it) leaves the held set: seeking, sampling and releasing skip it
+ * rather than revive it.
+ */
+export async function holdAnimations(
+  page: Page,
+  scope?: Locator,
+): Promise<HeldAnimation[]> {
+  const scopeHandle = scope ? await scope.elementHandle() : null;
+  await installCurveEnd(page);
+  return page.evaluate(
+    root =>
+      (
+        window as unknown as {
+          __harnessHold: (root: Element | null) => HeldAnimation[];
+        }
+      ).__harnessHold(root),
+    scopeHandle,
+  );
+}
+
+/** An armed hold (`armHold`): the page holds on its own; read what it held. */
+export interface ArmedHold {
+  /** What the page held, once an animation under the scope ran. */
+  held(): Promise<HeldAnimation[]>;
+}
+
+let armedHolds = 0;
+
+/**
+ * Arms the page to hold every running animation under `scope` (the whole
+ * document without one) itself, as soon as one of them runs (and has run
+ * `minProgressMs`, 0 by default; or as soon as `count` of them run, for parts
+ * that start apart; with `newOnly`, only animations that start after the arm
+ * count and are held, so a turn that starts mid-motion is held while the
+ * motion goes on), and resolves once it is armed: await it
+ * before the action that starts the animation, then read `held()` after. A
+ * hold sent from the test once the animation runs (`holdAnimations`) reaches
+ * the page later the busier the machine is, and a short animation can end
+ * first; the page itself looks on every frame and every 4 ms between them and
+ * holds it as soon as it runs, which a starved page only delays, as it delays
+ * the animation's own start. What it
+ * holds joins the held set as `holdAnimations`' does, so `seekAnimations`,
+ * `sampleCurve` and `releaseAnimations` read it the same way, and a later
+ * hold adds to it. Arm it while nothing under `scope` runs, or pass
+ * `newOnly`: otherwise an animation already running counts. The busy-window control's own animation
+ * (`startBusyControl`) never counts, but an unscoped hold, which takes every
+ * running animation, pauses it too: scope the hold in a busy-window proof.
+ * `held()` rejects when nothing under the scope runs within `timeout` ms of
+ * arming.
+ *
+ * @example
+ * ```
+ * const hold = await armHold(page, row);
+ * await driver.play(tap(center, {holdMs: 400}));
+ * const [release] = await hold.held();
+ * ```
+ */
+export async function armHold(
+  page: Page,
+  scope?: Locator,
+  {
+    count = 1,
+    minProgressMs = 0,
+    newOnly = false,
+    timeout = 5_000,
+  }: {
+    count?: number;
+    minProgressMs?: number;
+    newOnly?: boolean;
+    timeout?: number;
+  } = {},
+): Promise<ArmedHold> {
+  const scopeHandle = scope ? await scope.elementHandle() : null;
+  await installCurveEnd(page);
+  armedHolds += 1;
+  const id = armedHolds;
+  await page.evaluate(
+    ([root, needed, minProgress, fresh, wait, key]) => {
+      const w = window as unknown as {
+        __harnessHold: (
+          root: Element | null,
+          skip?: ReadonlySet<Animation>,
+        ) => unknown[];
+        __harnessTimerGate?: {
+          frame?: typeof requestAnimationFrame;
+          now?: () => number;
+          timeout?: typeof setTimeout;
+        };
+        __harnessArmed?: Record<number, Promise<unknown[]>>;
+      };
+      // The harness's own waits run on the real timers: a frozen timer gate
+      // (story.ts) holds only the page's.
+      const frame =
+        w.__harnessTimerGate?.frame ??
+        window.requestAnimationFrame.bind(window);
+      const later =
+        w.__harnessTimerGate?.timeout ?? window.setTimeout.bind(window);
+      // The deadline reads the real clock, which a page freeze does not stop.
+      const realNow = w.__harnessTimerGate?.now ?? (() => performance.now());
+      const deadline = realNow() + wait;
+      // With `newOnly`, what the document has when armed neither counts nor
+      // joins the hold: a motion already running goes on, and the page holds
+      // the one that starts after it.
+      const before = fresh ? new Set(document.getAnimations()) : undefined;
+      const counts = (animation: Animation) => {
+        const target =
+          (animation.effect as KeyframeEffect | null)?.target ?? null;
+        return (
+          animation.playState === 'running' &&
+          animation.timeline instanceof DocumentTimeline &&
+          !(before?.has(animation) ?? false) &&
+          (root == null ||
+            (target != null && (root === target || root.contains(target)))) &&
+          !(
+            target instanceof Element &&
+            target.closest('[data-harness-control]') != null
+          ) &&
+          Number(animation.currentTime ?? 0) /
+            Math.abs(animation.playbackRate || 1) >=
+            minProgress
+        );
+      };
+      const held = new Promise<unknown[]>((resolve, reject) => {
+        // Looked for on every frame and every 4 ms between them: WebKit can
+        // present no frame for about 70 ms while it first composites a newly
+        // animated layer (longer on a loaded runner), and its animations and
+        // timers run on meanwhile, so a look between frames holds a short one
+        // that much earlier.
+        let done = false;
+        let round = 0;
+        const schedule = () => {
+          const mine = ++round;
+          const run = () => {
+            // Of the frame and the timer a round schedules, the first runs.
+            if (mine === round) {
+              tick();
+            }
+          };
+          frame(run);
+          later(run, 4);
+        };
+        const tick = () => {
+          if (done) {
+            return;
+          }
+          if (document.getAnimations().filter(counts).length >= needed) {
+            done = true;
+            try {
+              resolve(w.__harnessHold(root, before));
+            } catch (error) {
+              reject(error);
+            }
+          } else if (realNow() > deadline) {
+            done = true;
+            reject(
+              new Error(
+                `armHold: no animation under the scope ran within ${wait} ms`,
+              ),
+            );
+          } else {
+            schedule();
+          }
+        };
+        schedule();
+      });
+      // Read by `held()`; a rejection nobody reads yet is not the page's.
+      held.catch(() => undefined);
+      w.__harnessArmed = {...w.__harnessArmed, [key]: held};
+    },
+    [
+      scopeHandle,
+      Math.max(count, 1),
+      Math.max(minProgressMs, 0),
+      newOnly,
+      timeout,
+      id,
+    ] as const,
+  );
+  return {
+    held: () =>
+      page.evaluate(key => {
+        const w = window as unknown as {
+          __harnessArmed?: Record<number, Promise<HeldAnimation[]>>;
+        };
+        const held = w.__harnessArmed?.[key];
+        if (held == null) {
+          throw new Error('armHold: this hold was never armed on this page');
+        }
+        delete w.__harnessArmed?.[key];
+        return held;
+      }, id),
+  };
 }
 
 /**
@@ -584,7 +897,8 @@ export interface CurveSample {
    * The time the sampled element presents: `t`, or just inside the end of
    * its own animations when the sample was taken at or past it (see
    * `seekAnimations`). Read from the element's own animations only (from
-   * every held one if none targets it).
+   * every held one if none targets it); when sampling a pseudo-element, from
+   * that pseudo-element's.
    */
   readonly presentedAt: number;
   /**
@@ -618,13 +932,19 @@ export interface CurveSample {
  * held origin, as for `seekAnimations`). Hold the animations first. An animation of the
  * individual `translate`, `rotate` or `scale` properties is included: they
  * are composed with `transform` into one matrix.
+ *
+ * `pseudoElement` samples the element's `::before` or `::after` instead:
+ * its presented values, labelled by its own animations (those whose effect
+ * targets the element with that pseudo-element), as a component that animates
+ * a pseudo-element (`element.animate(keyframes, {pseudoElement})`) draws it.
  */
 export async function sampleCurve(
   locator: Locator,
   times: readonly number[],
+  {pseudoElement}: {pseudoElement?: '::before' | '::after'} = {},
 ): Promise<CurveSample[]> {
   const raw = await locator.evaluate(
-    (element, {ts, inset}) => {
+    (element, {ts, inset, pseudo}) => {
       const w = window as unknown as {
         __harnessHeld?: Animation[];
         __harnessHeldStarts?: number[];
@@ -647,12 +967,17 @@ export async function sampleCurve(
           'sampleCurve: no held animations (call holdAnimations first)',
         );
       }
-      // The properties each held animation of this element animates. A
-      // `::before` or `::after` animation is not the element's own: its
-      // clock would label the element's samples with another box's time.
+      // The properties each held animation of the sampled box animates: the
+      // element's own, or its pseudo-element's when one is sampled. Another
+      // box's animation (the element's `::before` when the element is
+      // sampled) is not its own: its clock would label the samples with
+      // another box's time.
       const own = held.map(animation => {
         const effect = animation.effect as KeyframeEffect | null;
-        if (effect?.target !== element || effect.pseudoElement != null) {
+        if (
+          effect?.target !== element ||
+          (effect.pseudoElement ?? null) !== pseudo
+        ) {
           return null;
         }
         const properties = new Set<string>();
@@ -701,7 +1026,10 @@ export async function sampleCurve(
         const or = (value: number, fallback: number) =>
           Number.isFinite(value) ? value : fallback;
         const presentedAt = or(presentedOwn, or(presented, t));
-        const style = getComputedStyle(element);
+        const style =
+          pseudo == null
+            ? getComputedStyle(element)
+            : getComputedStyle(element, pseudo);
         // translate · rotate · scale · transform, as CSS applies them (all
         // about the same transform origin, which `transform` excludes too).
         // A percentage resolves against the border box, unrounded
@@ -805,7 +1133,7 @@ export async function sampleCurve(
         };
       });
     },
-    {ts: [...times], inset: END_INSET_MS},
+    {ts: [...times], inset: END_INSET_MS, pseudo: pseudoElement ?? null},
   );
   return raw.map(r => ({
     t: r.t,
@@ -863,6 +1191,47 @@ export interface ActiveAnimation {
 }
 
 /**
+ * Runs `fn` on `locator`'s element: through the locator, or, `quietly`,
+ * through a handle to the element it matches now (none yet: `[]`). Each
+ * locator.evaluate makes a main-thread frame, which a trace counts;
+ * `elementHandles()` and a handle's evaluate make none.
+ */
+async function readElement<A, R>(
+  locator: Locator,
+  quietly: boolean,
+  fn: (element: Element, arg: A) => R[],
+  arg: A,
+  timeout: number,
+): Promise<R[]> {
+  const run = fn as unknown as (element: Element, arg: unknown) => R[];
+  if (!quietly) {
+    return locator.evaluate(run, arg as unknown, {timeout});
+  }
+  const handles = await locator.elementHandles();
+  try {
+    if (handles.length > 1) {
+      throw new Error(
+        `waitForAnimation: ${String(locator)} matches ${handles.length} elements`,
+      );
+    }
+    return handles.length === 0
+      ? []
+      : await handles[0].evaluate(run, arg as unknown);
+  } finally {
+    await Promise.all(handles.map(handle => handle.dispose()));
+  }
+}
+
+/** The rejection for a wait whose element is not in the document. */
+function notInDocument(name: string, cause?: unknown): Error {
+  return new Error(
+    `${name}: the element is not in the document. An exit that removes ` +
+      'its element is read through its container (watch the parent).',
+    cause === undefined ? undefined : {cause},
+  );
+}
+
+/**
  * Runs a locator read within the wait's own deadline. A locator waits for
  * its element with no timeout of its own, so one the page removed (an exit
  * at its end) or never mounted would hold the wait to the test's timeout;
@@ -883,11 +1252,7 @@ async function withinTimeout<T>(
       if ((await locator.count()) > 0) {
         return null;
       }
-      throw new Error(
-        `${name}: the element is not in the document. An exit that removes ` +
-          'its element is read through its container (watch the parent).',
-        {cause: error},
-      );
+      throw notInDocument(name, error);
     }
     throw error;
   }
@@ -908,10 +1273,24 @@ async function withinTimeout<T>(
  * the page's first contact with this module, take `watchAnimations(locator)`
  * before the action instead.
  *
+ * In WebKit a CSS animation shorter than a gap between two of the page's
+ * frames can start and finish inside it: its start event comes at the next
+ * frame, when nothing is left to record, and the wait's error names it (a
+ * starved page's frames can come a second apart).
+ *
  * A run going backward is read when it was reversed before it started. The
  * recorder keeps one entry per `Animation` object, so an animation reversed
  * or replayed mid-run is misread: a watch taken before the reversal rejects,
  * and an unwatched wait returns at once with a curve dated before it.
+ *
+ * Started inside a `traceRendering` body, it stands down as the recorder
+ * does, so it adds no frame the trace counts: it takes the element's
+ * animations from the recorder's log, judges a started one by its own times,
+ * and reaches the element through a handle to what the locator matches at
+ * each look. That holds for script animations and CSS transitions. On a CSS
+ * `@keyframes` animation (and, unwatched, a cancelled CSS transition) it reads
+ * the animation's timing, which flushes its style and adds Layouts to the
+ * trace: wait on one with `waitForRest`, or after the trace.
  */
 export async function waitForAnimation(
   locator: Locator,
@@ -927,19 +1306,34 @@ export async function waitForAnimation(
   } = {},
 ): Promise<ActiveAnimation[]> {
   const deadline = Date.now() + timeout;
-  await installCurveEnd(locator.page());
+  const page = locator.page();
+  await installCurveEnd(page);
+  // Inside a rendering trace the wait stands down (see the page function),
+  // and it reads the element through handles: each locator.evaluate makes a
+  // main-thread frame (a Layout of an anchored element), where a handle's
+  // evaluate adds none.
+  const traced = await page.evaluate(
+    () =>
+      (window as unknown as {__harnessRenderingTrace?: boolean})
+        .__harnessRenderingTrace === true,
+  );
   for (;;) {
     const read = await withinTimeout(
       'waitForAnimation',
       locator,
       deadline,
       evaluateTimeout =>
-        locator.evaluate(
+        readElement(
+          locator,
+          traced,
           (element, {minProgress, since: watchedFrom}) => {
             // The harness's own read: a trace sets it apart (trace.ts HARNESS_READ).
             console.timeStamp('harness-read');
             const w = window as unknown as {
               __harnessCurveEnd: (a: Animation) => number;
+              __harnessTiming: (
+                effect: AnimationEffect | null | undefined,
+              ) => ComputedEffectTiming | null;
               __harnessAnimations: {
                 log: {
                   animation: Animation;
@@ -955,7 +1349,21 @@ export async function waitForAnimation(
             };
             const curveEnd = w.__harnessCurveEnd;
             const recorder = w.__harnessAnimations;
+            // Inside a rendering trace the wait stands down as the recorder does:
+            // record() reads nothing, the animations come from the recorder's log
+            // rather than getAnimations(), and a started one runs by its own
+            // times, since playState flushes a CSS animation's style.
+            const traced =
+              (window as unknown as {__harnessRenderingTrace?: boolean})
+                .__harnessRenderingTrace === true;
             recorder.record();
+            // The recorder keeps real times. A live start time is a page time.
+            // It trails real time by the span a page freeze stood still, so it
+            // takes that span as it stands now. The stamps then share the trace's
+            // clock.
+            const span =
+              (window as unknown as {__harnessFreeze?: {offset: number}})
+                .__harnessFreeze?.offset ?? 0;
             const describe = (
               a: Animation,
               finishedAt: number | null,
@@ -963,7 +1371,7 @@ export async function waitForAnimation(
               finishStart: number | null = null,
             ) => {
               const effect = a.effect as KeyframeEffect | null;
-              const timing = effect?.getComputedTiming();
+              const timing = w.__harnessTiming(effect);
               // A finished run is dated from its start as its finish recorded
               // it: a later startTime read can say otherwise. The recorded
               // start stands in once the page has cancelled it. A run going
@@ -978,9 +1386,10 @@ export async function waitForAnimation(
                   ? finishStart
                   : a.startTime == null
                     ? recordedStart
-                    : rate < 0
-                      ? Number(a.startTime) - endTime / speed
-                      : Number(a.startTime);
+                    : span +
+                      (rate < 0
+                        ? Number(a.startTime) - endTime / speed
+                        : Number(a.startTime));
               const startedAt =
                 performance.timeOrigin + Number(start ?? Number.NaN);
               const name =
@@ -1049,25 +1458,36 @@ export async function waitForAnimation(
             // finished must not answer for it. Only document-timeline animations
             // count, as for holdAnimations: a scroll- or view-timeline one moves
             // only when something scrolls and never progresses on its own.
+            const runs = (a: Animation) => {
+              if (!(a.timeline instanceof DocumentTimeline)) {
+                return false;
+              }
+              if (!traced || a.startTime == null) {
+                return a.playState === 'running';
+              }
+              const time = Number(a.currentTime ?? 0);
+              return a.playbackRate < 0
+                ? time > 0
+                : time < Number(w.__harnessTiming(a.effect)?.endTime ?? 0);
+            };
+            const onElement = () =>
+              recorder.log.filter(
+                e => inside(e.animation) || e.ancestors.includes(element),
+              );
             const live = (
-              watchedFrom == null
+              watchedFrom == null && !traced
                 ? element.getAnimations({subtree: true})
-                : recorded
+                : (watchedFrom == null ? onElement() : recorded)
                     .filter(e => e.finishedAt == null)
                     .map(e => e.animation)
-            ).filter(
-              a =>
-                !isControl(a) &&
-                a.playState === 'running' &&
-                a.timeline instanceof DocumentTimeline,
-            );
+            ).filter(a => !isControl(a) && runs(a));
             const running = live.filter(a => a.startTime != null);
             // Progress along the curve, on the timeline: a delay presents nothing
             // (going backward, the end delay plays first), a run going backward
             // (`reverse()`) progresses from its end, and a faster rate presents
             // more curve per ms.
             const progressed = running.filter(a => {
-              const timing = a.effect?.getComputedTiming();
+              const timing = w.__harnessTiming(a.effect);
               const time = Number(a.currentTime ?? 0);
               const local =
                 a.playbackRate < 0
@@ -1092,16 +1512,26 @@ export async function waitForAnimation(
                 return e.finishedAt;
               }
               const a = e.animation;
-              if (a.playState !== 'finished' || a.startTime == null) {
+              if (a.startTime == null) {
                 return null;
               }
-              const end = Number(
-                (a.effect as KeyframeEffect | null)?.getComputedTiming()
-                  .endTime ?? 0,
+              const end = Number(w.__harnessTiming(a.effect)?.endTime ?? 0);
+              // Traced, by its own times; otherwise by its state.
+              const time = Number(a.currentTime ?? 0);
+              const done = traced
+                ? a.playbackRate < 0
+                  ? time <= 0
+                  : time >= end
+                : a.playState === 'finished';
+              if (!done) {
+                return null;
+              }
+              return (
+                span +
+                (a.playbackRate < 0
+                  ? Number(a.startTime)
+                  : Number(a.startTime) + end / Math.abs(a.playbackRate || 1))
               );
-              return a.playbackRate < 0
-                ? Number(a.startTime)
-                : Number(a.startTime) + end / Math.abs(a.playbackRate || 1);
             };
             return recorded
               .filter(e => finishedAt(e) != null)
@@ -1115,7 +1545,7 @@ export async function waitForAnimation(
               );
           },
           {minProgress: minProgressMs, since: since ?? null},
-          {timeout: evaluateTimeout},
+          evaluateTimeout,
         ),
     );
     const found = read ?? [];
@@ -1124,24 +1554,97 @@ export async function waitForAnimation(
       return found;
     }
     if (Date.now() > deadline) {
+      // A traced read goes through handles, which find no element rather
+      // than wait for one: a missing element is reported as missing, as the
+      // untraced read reports it.
+      if (traced && (await locator.count()) === 0) {
+        throw notInDocument('waitForAnimation');
+      }
+      // Start events on the element that found nothing to read: animations
+      // that started and finished between two of the page's frames.
+      const missed = await locator
+        .evaluate(
+          (element, watchedFrom) => {
+            const recorder = (
+              window as unknown as {
+                __harnessAnimations: {
+                  unread: {
+                    at: number;
+                    ancestors: Element[];
+                    name: string;
+                  }[];
+                  armedAt: () => number;
+                };
+              }
+            ).__harnessAnimations;
+            const after = watchedFrom ?? recorder.armedAt();
+            // Matched through the ancestors kept at the event, as the log is:
+            // an exit the page removed is still named for its container. A
+            // missed transition sends two start events; it is named once.
+            return [
+              ...new Set(
+                recorder.unread
+                  .filter(u => u.at >= after && u.ancestors.includes(element))
+                  .map(u => u.name),
+              ),
+            ];
+          },
+          since ?? null,
+          {timeout: 1_000},
+        )
+        .catch(() => [] as string[]);
       throw new Error(
-        'waitForAnimation: no animation started on the element, none running ' +
-          'and none recorded since the last wait. If the action is the ' +
-          "page's first contact with the harness, take " +
-          'watchAnimations(locator) before it.',
+        missed.length > 0
+          ? `waitForAnimation: the element's ${missed.join(', ')} started and finished between two of the page's frames: its start event came after it had finished, with nothing left to read (WebKit sends it at the next frame; README: engine limits). Make the animation last longer than the page's frame gaps under load.`
+          : 'waitForAnimation: no animation started on the element, none running ' +
+              'and none recorded since the last wait. If the action is the ' +
+              "page's first contact with the harness, take " +
+              'watchAnimations(locator) before it.',
       );
     }
     await new Promise(resolve => setTimeout(resolve, 4));
   }
 }
 
-/** Marks now as the point later waits count animations from. */
-async function armRecorder(page: Page): Promise<number> {
-  return page.evaluate(() =>
+/**
+ * Empties the page's animation log, so a count taken next (heap size, event
+ * listeners, DOM nodes) reads the page's own objects and not the animations,
+ * elements and ancestors the recorder kept. Waits after it record afresh; a
+ * page the recorder never ran on is left alone.
+ */
+export async function releaseAnimationLog(page: Page): Promise<void> {
+  await page.evaluate(() =>
     (
-      window as unknown as {__harnessAnimations: {arm: () => number}}
-    ).__harnessAnimations.arm(),
+      window as unknown as {__harnessAnimations?: {release: () => void}}
+    ).__harnessAnimations?.release(),
   );
+}
+
+/**
+ * Marks now as the point later waits count animations from. With a locator,
+ * its element's pending style change is resolved first, also inside a trace
+ * (reached through a handle, which adds no main-thread frame).
+ */
+async function armRecorder(page: Page, locator?: Locator): Promise<number> {
+  const handles = locator == null ? [] : await locator.elementHandles();
+  try {
+    if (handles.length === 1) {
+      return await handles[0].evaluate(element =>
+        (
+          window as unknown as {
+            __harnessAnimations: {arm: (element?: Element) => number};
+          }
+        ).__harnessAnimations.arm(element as Element),
+      );
+    }
+    return await page.evaluate(() =>
+      (
+        window as unknown as {__harnessAnimations: {arm: () => number}}
+      ).__harnessAnimations.arm(),
+    );
+  } finally {
+    await Promise.all(handles.map(handle => handle.dispose()));
+  }
 }
 
 export interface AnimationWatch {
@@ -1159,7 +1662,9 @@ export interface AnimationWatch {
 /**
  * Starts watching `locator`'s element before an action, so the animation the
  * action starts is caught even when it ends before the test looks (a short
- * entrance on a cold page):
+ * entrance on a cold page). Taking the watch reads the element's animations,
+ * which restyles it, inside a rendering trace too: take a traced watch before
+ * the window the proof counts:
  *
  *   const watch = await watchAnimations(sheet);
  *   await driver.play(tap(button));
@@ -1169,7 +1674,7 @@ export async function watchAnimations(
   locator: Locator,
 ): Promise<AnimationWatch> {
   await installCurveEnd(locator.page());
-  const since = await armRecorder(locator.page());
+  const since = await armRecorder(locator.page(), locator);
   return {
     started: options => waitForAnimation(locator, {...options, since}),
   };
@@ -1188,6 +1693,19 @@ export async function watchAnimations(
  * forward run under a linear or cubic-bézier effect easing); under any other
  * easing or direction, waitForRest waits the hold out, and a hold longer than
  * `timeout` rejects with "still moving".
+ *
+ * While a rendering trace runs (`traceRendering`), it stands down as the
+ * animation recorder does: a per-frame callback would make every frame a
+ * main-thread frame, which the trace counts. It then waits on timers for the
+ * scheduled ends of the curves on the element instead (a run going backward,
+ * until it finishes), so motion that no animation drives (a script writing
+ * styles) is not seen until the trace ends. Its one read of the element's
+ * animations, as it is called, restyles the element (and lays out an anchored
+ * one) when an animation is already running there: await it right after the
+ * action that starts the motion, before the window a proof counts, not in its
+ * middle (README: No Layout / Paint). Finding no animation, it looks again `frames` times a frame
+ * apart before settling, so one the action starts a few frames later is
+ * waited for.
  */
 export async function waitForRest(
   locator: Locator,
@@ -1204,7 +1722,15 @@ export async function waitForRest(
       await locator.evaluate(
         (element, {ms, need}) =>
           new Promise<void>((resolve, reject) => {
-            const deadline = performance.now() + ms;
+            // The deadline reads the real clock, which a page freeze does not
+            // stop.
+            const realNow =
+              (
+                window as unknown as {
+                  __harnessTimerGate?: {now?: () => number};
+                }
+              ).__harnessTimerGate?.now ?? (() => performance.now());
+            const deadline = realNow() + ms;
             const curveEnd = (
               window as unknown as {__harnessCurveEnd: (a: Animation) => number}
             ).__harnessCurveEnd;
@@ -1220,15 +1746,94 @@ export async function waitForRest(
                 backdrop,
               ].join(' | ');
             };
-            // The page's real frames, even while a timer gate holds its callbacks.
-            const frame =
+            // The page's real frames and timers, even while a timer gate holds
+            // its callbacks: a frozen gate never holds the wait itself.
+            const gate = (
+              window as unknown as {
+                __harnessTimerGate?: {
+                  frame: typeof requestAnimationFrame;
+                  timeout?: typeof setTimeout;
+                };
+              }
+            ).__harnessTimerGate;
+            const frame = gate?.frame ?? requestAnimationFrame;
+            const timeout = gate?.timeout ?? setTimeout;
+            // Set by traceRendering while it traces (see the recorder above).
+            const tracing = () =>
+              (window as unknown as {__harnessRenderingTrace?: boolean})
+                .__harnessRenderingTrace === true;
+            const settle = () => {
+              // Later waits count animations from here.
               (
-                window as unknown as {
-                  __harnessTimerGate?: {frame: typeof requestAnimationFrame};
-                }
-              ).__harnessTimerGate?.frame ?? requestAnimationFrame;
-            let last = read();
+                window as unknown as {__harnessAnimations?: {arm: () => number}}
+              ).__harnessAnimations?.arm();
+              resolve();
+            };
+            let last = '';
             let still = 0;
+            const frames = () => {
+              last = read();
+              still = 0;
+              frame(tick);
+            };
+            // While traced: one look at the animations, then a timer to the latest
+            // scheduled curve end. One not started yet is looked at again a frame
+            // later; a trace that has ended hands over to the per-frame check.
+            // Finding nothing settles only after `frames` looks a frame apart, as
+            // the per-frame check needs `frames` still frames: an animation the
+            // action starts a frame or two later is still waited for.
+            let idle = 0;
+            const scheduled = () => {
+              let wait = 0;
+              for (const a of element.getAnimations({subtree: true})) {
+                // A scroll- or view-timeline animation moves only when something
+                // scrolls: it has no scheduled end to wait for (holdAnimations
+                // skips it the same way).
+                if (!(a.timeline instanceof DocumentTimeline)) {
+                  continue;
+                }
+                if (
+                  a.pending ||
+                  (a.playState === 'running' && a.startTime == null)
+                ) {
+                  wait = Math.max(wait, 16);
+                } else if (a.playState === 'running') {
+                  // The curve's time left through the playback rate: forward, to
+                  // its (held) end; backward (`reverse()`), to local time 0,
+                  // where it finishes, as the untraced path waits it out.
+                  const rate = a.playbackRate || 1;
+                  const at = Number(a.currentTime ?? 0);
+                  const left =
+                    rate > 0 ? (curveEnd(a) - at) / rate : at / -rate;
+                  wait = Math.max(wait, left);
+                }
+              }
+              if (wait <= 0) {
+                idle += 1;
+                if (idle >= need) {
+                  settle();
+                  return;
+                }
+                wait = 16;
+              } else {
+                idle = 0;
+              }
+              const room = deadline - realNow();
+              timeout(
+                () => {
+                  if (realNow() > deadline) {
+                    reject(
+                      new Error('waitForRest: still moving at the deadline'),
+                    );
+                  } else if (tracing()) {
+                    scheduled();
+                  } else {
+                    frames();
+                  }
+                },
+                Math.min(wait, Math.max(0, room)) + 1,
+              );
+            };
             const tick = () => {
               const now = read();
               const moving = element.getAnimations({subtree: true}).some(
@@ -1245,20 +1850,20 @@ export async function waitForRest(
               still = !moving && now === last ? still + 1 : 0;
               last = now;
               if (still >= need) {
-                // Later waits count animations from here.
-                (
-                  window as unknown as {
-                    __harnessAnimations?: {arm: () => number};
-                  }
-                ).__harnessAnimations?.arm();
-                resolve();
-              } else if (performance.now() > deadline) {
+                settle();
+              } else if (realNow() > deadline) {
                 reject(new Error(`waitForRest: still moving (${now})`));
+              } else if (tracing()) {
+                scheduled();
               } else {
                 frame(tick);
               }
             };
-            frame(tick);
+            if (tracing()) {
+              scheduled();
+            } else {
+              frames();
+            }
           }),
         {ms: timeout, need: frames},
         {timeout: evaluateTimeout},

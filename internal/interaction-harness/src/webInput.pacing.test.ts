@@ -5,12 +5,13 @@
  * @input webInput.ts's wheel pacing error and re-take
  * @output Unit cases: a wheel burst's steps arrive when the page received
  *   them in WebKit and at their stamps in Chromium; its gaps past its bound
- *   are the page's when its own handling of the step before caused them, and
- *   the dispatch's otherwise; each error names its gaps; and a proof is
+ *   are the page's when its own handling of the step before caused them and
+ *   widened them past the harness's own send spacing, and the dispatch's
+ *   otherwise; each error names its gaps; and a proof is
  *   re-taken once, only on a dispatch stall, with the re-take listed.
  * @position Node unit tests beside the harness's browser self-tests.
  *
- * SYNC: When modified, update webInput.ts (wheelArrivals, wheelGapCauses,
+ * SYNC: When modified, update webInput.ts (wheelArrivals, wheelSendGaps, wheelGapCauses,
  *   WheelPacingError, WheelPageStallError, retakeOnWheelPacing).
  */
 
@@ -19,6 +20,7 @@ import {
   retakeOnWheelPacing,
   wheelArrivals,
   wheelGapCauses,
+  wheelSendGaps,
   WheelPacingError,
   WheelPageStallError,
 } from './webInput';
@@ -104,6 +106,96 @@ describe('wheelGapCauses', () => {
       pageStalls: [],
       dispatchStalls: [150],
     });
+  });
+});
+
+describe('wheelSendGaps', () => {
+  it('spaces each received gap by when the harness sent the two steps', () => {
+    expect(
+      wheelSendGaps(
+        Array.from({length: 4}, () => ({dx: 10})),
+        [0, 400, 801, 1200],
+        Array.from({length: 4}, (): [number, number] => [10, 0]),
+      ),
+    ).toEqual([400, 401, 399]);
+  });
+
+  it('spaces a coalesced step from the first sent step it carries', () => {
+    // WebKit held three steps and delivered them as one 30 px step: the page
+    // could have held the first of them, sent 16 ms after the step before.
+    expect(
+      wheelSendGaps(
+        Array.from({length: 4}, () => ({dy: 10})),
+        [0, 16, 32, 48],
+        [
+          [0, 10],
+          [0, 30],
+        ],
+      ),
+    ).toEqual([16]);
+  });
+
+  it('leaves a gap unknown when the received deltas match no sent step', () => {
+    expect(
+      wheelSendGaps(
+        [{dx: 10}, {dx: 10}],
+        [0, 16],
+        [
+          [10, 0],
+          [7, 0],
+        ],
+      ),
+    ).toEqual([null]);
+  });
+});
+
+describe('wheelGapCauses with the send spacing', () => {
+  it('gives a held-back WebKit gap to the dispatch when it is no wider than the harness sent the steps', () => {
+    // Steps sent 400 ms apart: the first reached the page 290 ms late, a
+    // starved renderer then held the page 64 ms past its 30 ms listener, and
+    // the second arrived as the page came free, 111 ms after the first.
+    expect(wheelGapCauses('webkit', [0, 111], [96, 141], 100, [400])).toEqual({
+      pageStalls: [],
+      dispatchStalls: [111],
+    });
+  });
+
+  it('gives the page a stall behind a late first step, whose coalesced steps were sent at the burst pace', () => {
+    // 19 steps sent 16 ms apart; the first reached the page 290 ms late, the
+    // listener then held the page 150 ms, and steps 1 to 18 arrived coalesced
+    // as it finished.
+    const steps = Array.from({length: 19}, () => ({dy: 10}));
+    const sentAt = steps.map((_, i) => 16 * i);
+    const sendGaps = wheelSendGaps(steps, sentAt, [
+      [0, 10],
+      [0, 180],
+    ]);
+    expect(sendGaps).toEqual([16]);
+    expect(
+      wheelGapCauses('webkit', [290, 442], [440, 443], 100, sendGaps),
+    ).toEqual({
+      pageStalls: [{gapMs: 152, handlingMs: 150}],
+      dispatchStalls: [],
+    });
+  });
+
+  it('still gives the page a gap its listener widened past the send spacing', () => {
+    // A 150 ms listener on steps sent 16 ms apart.
+    expect(
+      wheelGapCauses('webkit', [0, 152, 168], [150, 153, 169], 100, [16, 16]),
+    ).toEqual({
+      pageStalls: [{gapMs: 152, handlingMs: 150}],
+      dispatchStalls: [],
+    });
+  });
+
+  it('keeps the one-frame rule where the send spacing is unknown', () => {
+    expect(wheelGapCauses('webkit', [0, 152], [150, 153], 100, [null])).toEqual(
+      {
+        pageStalls: [{gapMs: 152, handlingMs: 150}],
+        dispatchStalls: [],
+      },
+    );
   });
 });
 

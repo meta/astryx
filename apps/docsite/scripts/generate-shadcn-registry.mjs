@@ -11,6 +11,8 @@
  * items create public re-exports; blocks and pages copy app-level composition
  * source that already imports published package paths and add adjacent receipts
  * so Astryx can reconcile later releases without taking ownership of user edits.
+ * An install is a copy: it replaces demo content and demo media as `template
+ * copy` does. The item description discloses that; the receipt keeps its shape.
  */
 
 import * as fs from 'node:fs';
@@ -21,6 +23,15 @@ import stylexPlugin from '@stylexjs/babel-plugin';
 import ts from 'typescript';
 import {registryItemSchema, registrySchema} from 'shadcn/schema';
 import {stripCopyrightHeader} from '../../../packages/cli/foundation/text/copyright-header.mjs';
+import {
+  missingPublishedImport,
+  packageExportsSpecifier,
+  packageNameFromSpecifier,
+} from './published-exports.mjs';
+import {
+  MARKED_VIDEO_PLACEHOLDER,
+  replaceTemplateDemos,
+} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {
   createShadcnPrecompiledDeclaration,
   shadcnJavaScriptTarget,
@@ -53,34 +64,6 @@ class UnpublishedAstryxDependencyError extends Error {
     this.name = 'UnpublishedAstryxDependencyError';
     this.packageName = packageName;
   }
-}
-
-function packageNameFromSpecifier(specifier) {
-  if (specifier.startsWith('@')) {
-    return specifier.split('/').slice(0, 2).join('/');
-  }
-  return specifier.split('/')[0];
-}
-
-function packageExportsSpecifier(pkg, specifier) {
-  const packageExports = pkg.packageExports;
-  if (packageExports == null) return true;
-
-  const subpath = specifier.slice(pkg.name.length);
-  const exportKey = subpath ? `.${subpath}` : '.';
-  if (typeof packageExports === 'string' || Array.isArray(packageExports)) {
-    return exportKey === '.';
-  }
-  if (Object.hasOwn(packageExports, exportKey)) return true;
-
-  return Object.keys(packageExports).some(key => {
-    const wildcardIndex = key.indexOf('*');
-    if (wildcardIndex === -1) return false;
-    return (
-      exportKey.startsWith(key.slice(0, wildcardIndex)) &&
-      exportKey.endsWith(key.slice(wildcardIndex + 1))
-    );
-  });
 }
 
 function readImportSpecifiers(source, fileName) {
@@ -311,6 +294,42 @@ function precompiledDeclarationFile(itemName, sourceTarget) {
   };
 }
 
+/**
+ * The item description, plus a sentence that discloses the replaced demo
+ * content when there is any. The install writes into a project and returns no
+ * response, so the description and the marked placeholders are the disclosure.
+ * @param {string} description
+ * @param {{demoMediaReplaced: number, demoContentReplaced: number}} replaced
+ */
+export function withReplacementNote(description, replaced) {
+  const {demoMediaReplaced, demoContentReplaced} = replaced;
+  if (demoMediaReplaced + demoContentReplaced === 0) return description;
+  const counts = [
+    demoMediaReplaced > 0 &&
+      `${demoMediaReplaced} demo media ${demoMediaReplaced === 1 ? 'reference' : 'references'}`,
+    demoContentReplaced > 0 &&
+      `${demoContentReplaced} demo content ${demoContentReplaced === 1 ? 'element' : 'elements'}`,
+  ].filter(Boolean);
+  const lead = /[.!?]$/u.test(description.trimEnd())
+    ? description.trimEnd()
+    : `${description.trimEnd()}.`;
+  return `${lead} Astryx replaced ${counts.join(' and ')} with marked placeholders; put your own content there.`;
+}
+
+/**
+ * The entry with the source a copy starts from. An entry whose `source` is
+ * already a copy, such as `template show` output, names its authored file in
+ * `authoredSourcePath`; the install applies every copy replacement to that file.
+ * @template {{source: string, authoredSourcePath?: string | null}} T
+ * @param {T} entry
+ * @returns {T}
+ */
+function withAuthoredSource(entry) {
+  return entry.authoredSourcePath
+    ? {...entry, source: fs.readFileSync(entry.authoredSourcePath, 'utf-8')}
+    : entry;
+}
+
 function withCompositionReceipt(item, identity, sourceVersion) {
   const [sourceFile, ...supportFiles] = item.files;
   const receiptTarget = registryReceiptTarget(sourceFile.target, item.name);
@@ -397,8 +416,12 @@ function blockItem(
     block.category,
     `${block.dirName}.tsx`,
   );
+  const {source: copiedSource, ...replaced} = replaceTemplateDemos(
+    block.source,
+    {videoPlaceholder: MARKED_VIDEO_PLACEHOLDER},
+  );
   const compiled = precompileStylexSource(
-    stripCopyrightHeader(block.source),
+    stripCopyrightHeader(copiedSource),
     fileName,
   );
   const sourceTarget = `components/astryx/${kind === 'block' ? 'blocks' : `${kind}s`}/${block.dirName}.${compiled.extension}`;
@@ -408,7 +431,10 @@ function blockItem(
       name: itemName,
       type: 'registry:block',
       title: block.displayName || block.name,
-      description: block.description || `Astryx ${kind}: ${block.name}.`,
+      description: withReplacementNote(
+        block.description || `Astryx ${kind}: ${block.name}.`,
+        replaced,
+      ),
       author: 'Astryx',
       dependencies: dependenciesForSource(
         compiled.source,
@@ -460,8 +486,12 @@ function pageItem(
     template.slug,
     'page.tsx',
   );
+  const {source: copiedSource, ...replaced} = replaceTemplateDemos(
+    template.source,
+    {videoPlaceholder: MARKED_VIDEO_PLACEHOLDER},
+  );
   const compiled = precompileStylexSource(
-    stripCopyrightHeader(template.source),
+    stripCopyrightHeader(copiedSource),
     fileName,
   );
   const sourceTarget = `app/astryx/${template.slug}/page.${compiled.extension}`;
@@ -471,7 +501,10 @@ function pageItem(
       name: itemName,
       type: 'registry:page',
       title: template.name,
-      description: template.description || `Astryx page: ${template.name}.`,
+      description: withReplacementNote(
+        template.description || `Astryx page: ${template.name}.`,
+        replaced,
+      ),
       author: 'Astryx',
       dependencies: dependenciesForSource(
         compiled.source,
@@ -571,6 +604,7 @@ export function buildShadcnRegistry({
   dependencyTag = null,
   externalDependencySpecs = {},
   skipBlocksWithUnavailableComponents = false,
+  publishedImports = null,
 }) {
   const cliPackage = packages.find(pkg => pkg.name === '@astryxdesign/cli');
   const sourceVersion = dependencyTag ?? cliPackage?.version;
@@ -617,27 +651,79 @@ export function buildShadcnRegistry({
   const packageCatalog = new Map(packages.map(pkg => [pkg.name, pkg]));
   const blockItems = [];
   let skippedUnpublishedBlocks = 0;
-  for (const block of blocks) {
+  // Every item left out, with why, and every one kept unchecked, so a "not
+  // run" never reads as a pass.
+  const skippedItems = [];
+  const unreadImports = [];
+  function releaseOf(specifier) {
+    const pkg = packageCatalog.get(packageNameFromSpecifier(specifier));
+    return pkg == null
+      ? null
+      : {packageName: pkg.name, version: pkg.version ?? null};
+  }
+  // Whether every name an item imports from its own packages is published.
+  // A published subpath can lack a name a later release adds there, such as a
+  // new function; the item returns once a release exports it. An item whose
+  // own packages' declarations cannot be read stays, and the build names it.
+  function exportsPublished(kind, name, source) {
+    if (publishedImports == null) return true;
+    const {missing, unread} = missingPublishedImport(source, publishedImports);
+    if (missing != null) {
+      skippedItems.push({
+        kind,
+        name,
+        reason: 'export',
+        ...missing,
+        ...releaseOf(missing.specifier),
+      });
+      return false;
+    }
+    for (const specifier of unread) {
+      const release = releaseOf(specifier);
+      if (release != null) {
+        unreadImports.push({kind, name, specifier, ...release});
+      }
+    }
+    return true;
+  }
+  for (const block of blocks.map(withAuthoredSource)) {
     // A released subpath can still lack a named component added after the last
     // package release. Production blocks must satisfy both contracts: the
     // imported subpath below and the published component snapshot here.
-    if (
-      skipBlocksWithUnavailableComponents &&
-      block.componentsUsed?.some(
-        componentName => !availableComponentNames.has(componentName),
-      )
-    ) {
+    const unavailable = skipBlocksWithUnavailableComponents
+      ? (block.componentsUsed ?? []).filter(
+          component => !availableComponentNames.has(component),
+        )
+      : [];
+    if (unavailable.length > 0) {
+      skippedItems.push({
+        kind: 'block',
+        name: block.dirName,
+        reason: 'component',
+        names: unavailable,
+      });
       skippedUnpublishedBlocks++;
       continue;
     }
-    const unpublishedComponentImport = readImportSpecifiers(
+    const undeclared = readImportSpecifiers(
       block.source,
       `${block.dirName}.tsx`,
     ).find(specifier => {
       const pkg = packageCatalog.get(packageNameFromSpecifier(specifier));
       return pkg != null && !packageExportsSpecifier(pkg, specifier);
     });
-    if (unpublishedComponentImport) {
+    if (undeclared != null) {
+      skippedItems.push({
+        kind: 'block',
+        name: block.dirName,
+        reason: 'subpath',
+        specifier: undeclared,
+        ...releaseOf(undeclared),
+      });
+      skippedUnpublishedBlocks++;
+      continue;
+    }
+    if (!exportsPublished('block', block.dirName, block.source)) {
       skippedUnpublishedBlocks++;
       continue;
     }
@@ -653,6 +739,12 @@ export function buildShadcnRegistry({
       );
     } catch (error) {
       if (error instanceof UnpublishedAstryxDependencyError) {
+        skippedItems.push({
+          kind: 'block',
+          name: block.dirName,
+          reason: 'package',
+          packageName: error.packageName,
+        });
         skippedUnpublishedBlocks++;
         continue;
       }
@@ -663,7 +755,11 @@ export function buildShadcnRegistry({
 
   const pageItems = [];
   let skippedUnpublishedPages = 0;
-  for (const template of templates) {
+  for (const template of templates.map(withAuthoredSource)) {
+    if (!exportsPublished('page', template.slug, template.source)) {
+      skippedUnpublishedPages++;
+      continue;
+    }
     try {
       pageItems.push(
         pageItem(
@@ -676,6 +772,12 @@ export function buildShadcnRegistry({
       );
     } catch (error) {
       if (error instanceof UnpublishedAstryxDependencyError) {
+        skippedItems.push({
+          kind: 'page',
+          name: template.slug,
+          reason: 'package',
+          packageName: error.packageName,
+        });
         skippedUnpublishedPages++;
         continue;
       }
@@ -708,6 +810,8 @@ export function buildShadcnRegistry({
   return {
     registry,
     items,
+    skippedItems,
+    unreadImports,
     counts: {
       components: componentItems.filter(
         item => item.astryx.kind === 'component',
@@ -727,6 +831,84 @@ export function buildShadcnRegistry({
   };
 }
 
+function releaseText({packageName, version}) {
+  return version ? `${packageName} ${version}` : packageName;
+}
+
+const SKIP_NOTICES = {
+  component: skip =>
+    `uses ${skip.names.join(', ')}, which the published components do not include`,
+  subpath: skip =>
+    `imports ${skip.specifier}, a subpath ${releaseText(skip)} does not export`,
+  package: skip => `needs ${skip.packageName}, which has no published release`,
+  export: skip =>
+    `imports ${skip.names.join(', ')} from ${skip.specifier}, which ` +
+    `${releaseText(skip)} does not export`,
+};
+
+/** The order notices print in: GitHub's run page shows only the first ten. */
+const NOTICE_ORDER = ['export', 'unread', 'subpath', 'package', 'component'];
+
+/** One line per item the registry leaves out or keeps unchecked. */
+export function registrySkipNotices({skippedItems, unreadImports}) {
+  const lines = [
+    ...skippedItems.map(skip => ({
+      reason: skip.reason,
+      line:
+        `not run until a release has it: ${skip.kind} ${skip.name} ` +
+        SKIP_NOTICES[skip.reason](skip),
+    })),
+    ...unreadImports.map(kept => ({
+      reason: 'unread',
+      line:
+        `could not read what ${kept.specifier} exports in ` +
+        `${releaseText(kept)}; kept ${kept.kind} ${kept.name}`,
+    })),
+  ];
+  return lines
+    .sort(
+      (a, b) => NOTICE_ORDER.indexOf(a.reason) - NOTICE_ORDER.indexOf(b.reason),
+    )
+    .map(({line}) => line);
+}
+
+function workflowCommandText(text) {
+  return text
+    .replaceAll('%', '%25')
+    .replaceAll('\r', '%0D')
+    .replaceAll('\n', '%0A');
+}
+
+/**
+ * Prints each notice, and in GitHub Actions also as an annotation and a job
+ * summary list, so a "not run" never reads as a pass.
+ */
+export function reportRegistrySkips(
+  notices,
+  {env = process.env, log = console.log, appendFile = fs.appendFileSync} = {},
+) {
+  const heading = `${notices.length} not run or unchecked`;
+  if (notices.length > 0 && env.GITHUB_ACTIONS === 'true') {
+    log(
+      `::notice title=ShadCN registry::${heading}; the job summary lists them all`,
+    );
+  }
+  for (const notice of notices) {
+    log(`  ShadCN registry: ${notice}`);
+    if (env.GITHUB_ACTIONS === 'true') {
+      log(`::notice title=ShadCN registry::${workflowCommandText(notice)}`);
+    }
+  }
+  if (notices.length > 0 && env.GITHUB_STEP_SUMMARY) {
+    appendFile(
+      env.GITHUB_STEP_SUMMARY,
+      `### ShadCN registry: ${heading}\n\n` +
+        notices.map(notice => `- ${notice}`).join('\n') +
+        '\n',
+    );
+  }
+}
+
 function writeJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), {recursive: true});
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
@@ -741,6 +923,8 @@ export function generateShadcnRegistryForTarget({target, outDir, ...options}) {
     outDir,
     ...options,
     skipBlocksWithUnavailableComponents: target === 'latest',
+    publishedImports:
+      target === 'latest' ? (options.publishedImports ?? null) : null,
   });
 }
 
@@ -754,6 +938,7 @@ export function generateShadcnRegistry({
   dependencyTag,
   externalDependencySpecs,
   skipBlocksWithUnavailableComponents,
+  publishedImports,
 }) {
   const result = buildShadcnRegistry({
     packages,
@@ -764,6 +949,7 @@ export function generateShadcnRegistry({
     dependencyTag,
     externalDependencySpecs,
     skipBlocksWithUnavailableComponents,
+    publishedImports,
   });
   fs.rmSync(outDir, {recursive: true, force: true});
   fs.mkdirSync(outDir, {recursive: true});
@@ -775,6 +961,8 @@ export function generateShadcnRegistry({
   }
   return {
     ...result.counts,
+    skippedItems: result.skippedItems,
+    unreadImports: result.unreadImports,
     itemNames: new Set(result.items.map(item => item.name)),
     itemPaths: new Set(result.items.map(item => item.astryx.path)),
     routes: result.items.flatMap(item => [
