@@ -358,6 +358,55 @@ describe('neutral selected fill', () => {
       }
     },
   );
+
+  // The text that sits on the fill keeps normal-text AA: a selected row's
+  // secondary text (scoped up on selected rows) and the muted syntax colours
+  // on a highlighted code line.
+  const pair = (value: unknown): [string, string] => {
+    const match = /^light-dark\((#[0-9a-f]{6}), (#[0-9a-f]{6})\)$/i.exec(
+      String(value),
+    );
+    if (match == null) {
+      throw new Error(`not a light-dark pair: ${String(value)}`);
+    }
+    return [match[1], match[2]];
+  };
+  const foregrounds = {
+    'item selected --color-text-secondary': pair(
+      neutralTheme.components?.item?.selected?.['--color-text-secondary'],
+    ),
+    'tree-list-item selected --color-text-secondary': pair(
+      neutralTheme.components?.['tree-list-item']?.selected?.[
+        '--color-text-secondary'
+      ],
+    ),
+    '--color-syntax-comment': pair(
+      neutralTheme.tokens['--color-syntax-comment'],
+    ),
+    '--color-syntax-operator': pair(
+      neutralTheme.tokens['--color-syntax-operator'],
+    ),
+    '--color-syntax-punctuation': pair(
+      neutralTheme.tokens['--color-syntax-punctuation'],
+    ),
+  };
+  it('scopes the lifted secondary text to selected rows in the generated CSS', () => {
+    const css = generateThemeCSS(neutralTheme).component;
+    for (const target of ['item', 'tree-list-item']) {
+      expect(css).toMatch(
+        new RegExp(
+          `\\.astryx-${target}\\[data-selected="selected"\\][^{]*\\{[^}]*--color-text-secondary`,
+        ),
+      );
+    }
+  });
+  it.each(Object.entries(foregrounds))(
+    '%s reads at 4.5:1 on the fill in both modes',
+    (_, [light, dark]) => {
+      expect(contrastRatio(light, lightFill)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(dark, darkFill)).toBeGreaterThanOrEqual(4.5);
+    },
+  );
 });
 
 describe('neutral syntax contrast', () => {
@@ -366,12 +415,12 @@ describe('neutral syntax contrast', () => {
     for (const token of ['comment', 'operator'] as const) {
       expect(neutralTheme.tokens[`--color-syntax-${token}`]).toBe(
         lightDark(
-          neutralPalettes.neutral.light[45],
-          neutralPalettes.neutral.dark[65],
+          neutralPalettes.neutral.light[35],
+          neutralPalettes.neutral.dark[75],
         ),
       );
       expect(
-        contrastRatio(neutralPalettes.neutral.light[45], background),
+        contrastRatio(neutralPalettes.neutral.light[35], background),
       ).toBeGreaterThanOrEqual(4.5);
     }
   });

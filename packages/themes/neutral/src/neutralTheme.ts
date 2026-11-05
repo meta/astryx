@@ -17,17 +17,17 @@ const neutralSyntax = defineSyntaxTheme({
   tokens: {
     keyword: [purple.light[30], purple.light[80]],
     string: [green.light[30], green.light[80]],
-    comment: [neutral.light[45], neutral.dark[65]],
+    comment: [neutral.light[35], neutral.dark[75]],
     number: [orange.light[30], orange.dark[80]],
     function: [blue.light[30], blue.dark[80]],
     type: [purple.light[30], purple.light[80]],
     variable: [neutral.light[5], neutral.dark[90]],
-    operator: [neutral.light[45], neutral.dark[65]],
+    operator: [neutral.light[35], neutral.dark[75]],
     constant: [orange.light[30], orange.dark[80]],
     tag: [red.light[30], red.dark[80]],
     attribute: [yellow.light[30], yellow.light[80]],
     property: [teal.light[30], teal.light[80]],
-    punctuation: [neutral.light[45], neutral.dark[65]],
+    punctuation: [neutral.light[35], neutral.dark[75]],
     background: [neutral.light[100], neutral.dark[5]],
   },
 });
@@ -273,6 +273,20 @@ export const neutralTheme = defineTheme({
   },
 
   components: {
+    // A selected row's fill (`--color-accent-muted`) is darker in dark mode
+    // than the secondary text's 4.5:1 floor allows, so a selected row lifts
+    // its secondary text to the next stop that clears it.
+    item: {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
+      },
+    },
+    'tree-list-item': {
+      selected: {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
+      },
+    },
+
     button: {
       'variant:destructive': {
         backgroundColor: 'var(--color-error-muted)',
