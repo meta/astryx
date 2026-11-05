@@ -939,7 +939,12 @@ interface SelectorOptionRowProps {
   renderOption: ((option: SelectorOptionData) => ReactNode) | undefined;
   SelectionMark: IndicatorComponent<IndicatorMap['check']>;
   onSelect: (item: SelectorOptionData) => void;
-  onHover: (item: SelectorOptionData, flatIndex: number) => void;
+  /** `isActive`: the option was already the highlighted one when entered. */
+  onHover: (
+    item: SelectorOptionData,
+    flatIndex: number,
+    isActive: boolean,
+  ) => void;
 }
 
 /**
@@ -993,7 +998,7 @@ const SelectorOptionRow = memo(function SelectorOptionRow({
       aria-selected={isSelected}
       aria-disabled={item.disabled}
       onClick={() => onSelect(item)}
-      onMouseEnter={() => onHover(item, flatIndex)}
+      onMouseEnter={() => onHover(item, flatIndex, isHighlighted)}
       {...mergeProps(
         // Stable theme target on the option row itself, mirroring
         // `multi-selector-option`: it carries the row's size and runtime
@@ -1521,6 +1526,27 @@ export function Selector<T extends SelectorOptionType>(
 
   // Only after keyboard input does the active option draw the focus ring; a
   // pointer highlight keeps the fill alone, as a focused menu row does.
+  // Modality changes only on a key or a press, so a hover alone still reads
+  // as keyboard. The option the mouse enters therefore draws no ring until a
+  // key moves the highlight again. Entering the option that is already
+  // active, as when a key scrolls it under a still mouse, changes nothing.
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const keyDownAfterHover = useCallback(
+    (e: React.KeyboardEvent) => {
+      setHoveredIndex(null);
+      comboboxKeyDown(e);
+    },
+    [comboboxKeyDown],
+  );
+  const mouseEnterOption = useCallback(
+    (item: SelectorOptionData, index: number, isActive: boolean) => {
+      if (!isActive) {
+        setHoveredIndex(index);
+      }
+      comboboxItemMouseEnter(item, index);
+    },
+    [comboboxItemMouseEnter],
+  );
   const {
     isKeyboardHighlight: isHighlightFromKeyboard,
     noteHighlightMove,
@@ -1528,8 +1554,8 @@ export function Selector<T extends SelectorOptionType>(
     onItemMouseEnter,
   } = useKeyboardHighlight(
     triggerModality.readModality,
-    comboboxKeyDown,
-    comboboxItemMouseEnter,
+    keyDownAfterHover,
+    mouseEnterOption,
   );
   const onTriggerClick = useCallback(() => {
     comboboxTriggerClick();
@@ -1595,7 +1621,8 @@ export function Selector<T extends SelectorOptionType>(
       const index = optionIndexFromRow(row);
       const item = filteredItems[index];
       if (item != null) {
-        onItemMouseEnter(item, index);
+        // A press is pointer input, even on the active option.
+        onItemMouseEnter(item, index, false);
       }
     },
     onActivate: row => {
@@ -1613,6 +1640,7 @@ export function Selector<T extends SelectorOptionType>(
         return;
       }
       noteHighlightMove();
+      setHoveredIndex(null);
       // With hasSearch the query input owns typing, so type-to-select is off.
       if (!hasSearch && typeahead.onKeyDown(e)) {
         e.preventDefault();
@@ -1770,7 +1798,9 @@ export function Selector<T extends SelectorOptionType>(
         id={getItemId(flatIndex)}
         isHighlighted={flatIndex === highlightedIndex}
         isKeyboardHighlighted={
-          flatIndex === highlightedIndex && isHighlightFromKeyboard
+          flatIndex === highlightedIndex &&
+          isHighlightFromKeyboard &&
+          flatIndex !== hoveredIndex
         }
         isSelected={item.value === normalizedValue}
         size={size}
@@ -1786,6 +1816,7 @@ export function Selector<T extends SelectorOptionType>(
       indicatorPosition,
       highlightedIndex,
       isHighlightFromKeyboard,
+      hoveredIndex,
       size,
       normalizedValue,
       getItemId,
