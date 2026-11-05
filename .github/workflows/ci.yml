@@ -2509,7 +2509,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -2692,7 +2692,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/Layer/(inputHold|modalOutlet)\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/Layer/(inputHold|modalOutlet)\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
           # Lists the changed files, so the planner adds a changed spec.
@@ -4059,9 +4059,6 @@ jobs:
         if: steps.scope.outputs.applies != 'true'
         run: echo "No component or browser accessibility spec changed; no contract to run."
 
-      # The tested merge commit, as the touched-components job checks out: a
-      # head that predates these scripts does not have them. The specs run at
-      # the head (see "Check out the head that built the Storybook").
       # The checkouts below replace the workspace, scope checkout included, so
       # the marker of this lane's environment, and its check, move out first.
       - name: Keep this lane's environment marker from the workflow's commit
@@ -4071,6 +4068,9 @@ jobs:
           cp .test-scope/.github/scripts/lane-environment.mjs "$RUNNER_TEMP/lane-environment/.github/scripts/"
           cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/lane-environment/.github/"
 
+      # The tested merge commit, as the touched-components job checks out: a
+      # head that predates these scripts does not have them. The specs run at
+      # the head (see "Check out the head that built the Storybook").
       - name: Check out the selection scripts
         if: steps.scope.outputs.applies == 'true'
         uses: actions/checkout@v7

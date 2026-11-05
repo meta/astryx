@@ -50,7 +50,12 @@ describe('the lane environment markers', () => {
         `${lane}: append ${current} to environments and set version to ${environments.length + 1}`,
       ).toBe(current);
       expect(version, lane).toBe(environments.length);
-      expect(new Set(environments).size, lane).toBe(environments.length);
+      // A rollback appends an earlier hash again; only a repeat in a row is
+      // not a change.
+      for (let i = 1; i < environments.length; i++)
+        expect(environments[i], `${lane} entry ${i + 1}`).not.toBe(
+          environments[i - 1],
+        );
     }
   });
 
@@ -73,6 +78,20 @@ describe('the lane environment markers', () => {
       const changed = structuredClone(job);
       change(changed);
       expect(environmentOf([changed])).not.toBe(before);
+    }
+  });
+});
+
+describe('the lanes that copy the marker', () => {
+  it('run on a change to the marker or its check', () => {
+    for (const id of ['pr-interaction', 'pr-interaction-webkit']) {
+      const scope = ci.jobs[id].steps.find(each => each.id === 'scope');
+      const pattern = new RegExp(scope.with.paths);
+      for (const file of [
+        '.github/scripts/lane-environment.mjs',
+        '.github/lane-environments.json',
+      ])
+        expect(pattern.test(file), `${id} ${file}`).toBe(true);
     }
   });
 });
