@@ -41,6 +41,9 @@ import {Selector} from '../Selector';
 import {Text} from '../Text';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useListFocus} from '../hooks/useListFocus';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {focusForLastInput} from '../utils/focusReturn';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
@@ -460,6 +463,9 @@ export function Pagination({
     wrap: true,
     orientation: 'horizontal',
   });
+  // The click's focus takes the ring of the dots' own document's last input.
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  const dotsRef = useMergedRefs(dotsListRef, modalityRef);
 
   const computedTotalPages =
     totalPagesProp ??
@@ -688,7 +694,7 @@ export function Pagination({
 
         return (
           <div
-            ref={dotsListRef}
+            ref={dotsRef}
             {...stylex.props(styles.dotsContainer)}
             // The dots already behave as an APG radio group (one Tab stop,
             // arrows, Home/End, selection follows focus), so they expose its
@@ -714,13 +720,11 @@ export function Pagination({
                   // The active dot is the single roving tab stop; useListFocus
                   // maintains it as focus and the active page move.
                   tabIndex={isActive ? 0 : -1}
-                  // Selection is driven by focus (handleDotsFocus); clicking only
-                  // needs to focus the dot, which some browsers (Safari) skip for
-                  // buttons, so focus it explicitly.
-                  onClick={e => e.currentTarget.focus()}
-                  // A press must not choose a page before release, so it can
-                  // still be taken back by sliding off: the browser does not
-                  // focus the dot on the press, and the click focuses it.
+                  // Focus selects the page (handleDotsFocus). The click focuses
+                  // the dot, with the ring the last input calls for.
+                  onClick={e => focusForLastInput(e.currentTarget)}
+                  // A press must not choose a page before release. Sliding off
+                  // takes it back. So the press does not focus the dot.
                   onMouseDown={e => e.preventDefault()}
                   // Disabled dots stay focusable (spec:AST-085 FR1); the page
                   // only follows focus while enabled (handleDotsFocus).
