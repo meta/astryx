@@ -16,6 +16,8 @@ export type {
   TimeInputProps,
   TimeInputSize,
   TimeInputHourFormat,
+  TimeInputNativePicker,
+  TimeInputPresentation,
   TimeInputStatus,
   TimeInputStatusType,
 } from './TimeInput';

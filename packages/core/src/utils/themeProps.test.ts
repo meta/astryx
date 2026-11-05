@@ -1,39 +1,33 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect} from 'vitest';
+import {describe, expect, it} from 'vitest';
 import {themeDataAttributes, themeProps} from './themeProps';
 
 describe('themeProps', () => {
-  it('returns base class for component', () => {
+  it('returns the stable target class for a component', () => {
     expect(themeProps('card').className).toBe('astryx-card');
   });
 
-  it('adds variant classes', () => {
+  it('emits only the stable target class while reflecting props and state', () => {
     expect(
       themeProps('button', {variant: 'secondary', size: 'sm'}).className,
-    ).toBe('astryx-button secondary sm');
-  });
-
-  it('prefixes numeric values with prop name', () => {
-    expect(themeProps('heading', {level: 1}).className).toBe(
-      'astryx-heading level-1',
+    ).toBe('astryx-button');
+    expect(themeProps('switch', {checked: 'checked'}).className).toBe(
+      'astryx-switch',
     );
   });
 
-  it('skips null and undefined props', () => {
+  it('does not turn numeric values into classes', () => {
+    expect(themeProps('heading', {level: 1}).className).toBe('astryx-heading');
+    expect(themeProps('heading', {level: '3'}).className).toBe(
+      'astryx-heading',
+    );
+  });
+
+  it('ignores nullish reflected values in the class name', () => {
     expect(
       themeProps('button', {variant: 'primary', size: undefined}).className,
-    ).toBe('astryx-button primary');
-  });
-
-  it('works with no props', () => {
-    expect(themeProps('divider').className).toBe('astryx-divider');
-  });
-
-  it('handles string numeric values', () => {
-    expect(themeProps('heading', {level: '3'}).className).toBe(
-      'astryx-heading level-3',
-    );
+    ).toBe('astryx-button');
   });
 
   it('reflects visual props as data attributes', () => {
@@ -58,9 +52,9 @@ describe('themeProps', () => {
     });
   });
 
-  it('returns class and data attributes together', () => {
+  it('returns the stable target and canonical data attributes together', () => {
     expect(themeProps('button', {variant: 'primary', size: 'sm'})).toEqual({
-      className: 'astryx-button primary sm',
+      className: 'astryx-button',
       'data-variant': 'primary',
       'data-size': 'sm',
     });

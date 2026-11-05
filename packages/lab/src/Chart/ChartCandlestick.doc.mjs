@@ -5,7 +5,7 @@
 export const docs = {
   name: 'ChartCandlestick',
   displayName: 'Chart Candlestick',
-  group: 'Chart',
+  group: 'Charts',
   category: 'Data Visualization',
 
   usage: {

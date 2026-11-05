@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "fixture": "tailwind-v4-control",
+  "synthetic": false,
+  "source": "https://github.com/vitejs/vite",
+  "generator": "create-vite",
+  "version": "9.2.0",
+  "commit": "57f0bf51a08dec0ec507258434cead9b72718e3f",
+  "license": "MIT",
+  "commands": [
+    {
+      "command": "pnpm dlx create-vite@9.2.0 tailwind-v4-control --template react-ts --no-interactive",
+      "flags": ["--template", "react-ts", "--no-interactive"]
+    },
+    {
+      "command": "pnpm add tailwindcss@4.3.3 @tailwindcss/vite@4.3.3",
+      "flags": []
+    }
+  ],
+  "authoredPatches": [
+    "Pinned every dependency, pnpm, and the Node 24 range.",
+    "Added the Tailwind Vite plugin and only background/foreground semantic variables.",
+    "Replaced the starter screen with fixed host controls, a form, and a table."
+  ],
+  "refresh": {
+    "command": "pnpm -F @astryxdesign/vibe-tests fixtures:refresh -- tailwind-v4-control",
+    "notes": "Regenerate from the pinned commands, reapply the authored patches, regenerate the lockfile, then refresh this manifest."
+  },
+  "manifest": {
+    "algorithm": "sha256",
+    "files": {
+      "index.html": "d8daff351fd28efd42676b86e34c9312cf08410898a07f025082d619fe933240",
+      "package.json": "6388776258b624beb19538053dd7103c02f70024f3f4be79e4d7c489797db986",
+      "pnpm-lock.yaml": "5b50b51c8b1f5045813b3fbdcf9842527e684b34eb7aa1129a7c496b0be3158c",
+      "src/App.tsx": "aa4b438e70fcf7abebfda1e19f974ecc505d3ec0e225e9bb60fccb6360437644",
+      "src/index.css": "40c956dc7a7bfedf424aa3be1384390e728b912df21d3a0a55bfd0bbb01a0092",
+      "src/main.tsx": "47cc0b4b1cc9e21351c3a37b160d7f64277f59cd57937659022cdae97608a6a5",
+      "tsconfig.json": "39e5a743eb4be3f35a40bb28a216567a2df28de553728b5e9fb545ace0a2042c",
+      "vite.config.ts": "c5f65f5b80994105ba79afc20590c2e42ca0c67166dfaf250269eb0bab9db3b6"
+    }
+  }
+}

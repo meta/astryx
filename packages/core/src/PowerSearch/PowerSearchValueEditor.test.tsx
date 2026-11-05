@@ -3,7 +3,7 @@
 /**
  * @file PowerSearchValueEditor.test.tsx
  * @input Uses vitest, @testing-library/react, PowerSearchValueEditor
- * @output Unit tests for PowerSearch editor bugs #1103, #1106, #1107
+ * @output Unit tests for PowerSearch value editors, including date-range ordering
  * @position Testing; validates PowerSearchValueEditor.tsx
  */
 
@@ -79,6 +79,77 @@ function createSearchSource(
     bootstrap: () => items.slice(0, 5),
   };
 }
+
+describe('isDisabled reaches every built-in value editor', () => {
+  const items = [
+    {id: 'a', label: 'Alpha'},
+    {id: 'b', label: 'Beta'},
+  ];
+  const enumValues = [
+    {value: 'a', label: 'Alpha'},
+    {value: 'b', label: 'Beta'},
+  ];
+  const cases: ReadonlyArray<[string, OperatorValue]> = [
+    ['string', {type: 'string'}],
+    [
+      'string with a search source',
+      {type: 'string', searchSource: createSearchSource(items)},
+    ],
+    [
+      'string_list',
+      {type: 'string_list', searchSource: createSearchSource(items)},
+    ],
+    ['integer', {type: 'integer'}],
+    ['float', {type: 'float'}],
+    ['time', {type: 'time'}],
+    ['date_absolute', {type: 'date_absolute'}],
+    ['date_relative', {type: 'date_relative'}],
+    ['date_range', {type: 'date_range'}],
+    ['enum', {type: 'enum', values: enumValues}],
+    ['enum_list', {type: 'enum_list', values: enumValues}],
+    [
+      'entity_list',
+      {type: 'entity_list', searchSource: createSearchSource(items)},
+    ],
+  ];
+
+  // Every form control the editor renders outside a closed popover (a date
+  // input's calendar stays mounted while closed, and its disabled trigger
+  // cannot open it), so a disabled built-in editor leaves nothing a person
+  // can type into, press, or open.
+  function controlsOf(container: HTMLElement): HTMLElement[] {
+    return Array.from(
+      container.querySelectorAll<HTMLElement>(
+        'input, textarea, button, select, [role="combobox"], [contenteditable="true"]',
+      ),
+    ).filter(element => {
+      const popover = element.closest<HTMLElement>('[popover]');
+      return (
+        element.getAttribute('aria-hidden') !== 'true' &&
+        (popover == null || popover.matches(':popover-open'))
+      );
+    });
+  }
+
+  const isUnavailable = (element: HTMLElement) =>
+    (element as HTMLInputElement).disabled === true ||
+    element.getAttribute('aria-disabled') === 'true';
+
+  it.each(cases)('%s', (_name, operatorValue) => {
+    const {container} = render(
+      <PowerSearchValueEditor
+        operatorValue={operatorValue}
+        filterValue={undefined}
+        onChange={() => {}}
+        config={stubConfig}
+        isDisabled
+      />,
+    );
+    const controls = controlsOf(container);
+    expect(controls.length).toBeGreaterThan(0);
+    expect(controls.filter(element => !isUnavailable(element))).toEqual([]);
+  });
+});
 
 // =============================================================================
 // #1103 — StringEditor ignores searchSource
@@ -246,9 +317,125 @@ describe('numeric editor commit timing', () => {
   });
 });
 
-// =============================================================================
-// #1106 — EntityListEditor drops photo, no renderItem
-// =============================================================================
+describe('DateRangeEditor', () => {
+  it('uses one ordered range picker for reverse endpoint selection', () => {
+    const onChange = vi.fn();
+    render(
+      <PowerSearchValueEditor
+        operatorValue={{type: 'date_range'}}
+        filterValue={{
+          type: 'date_range',
+          value: {
+            start: {
+              type: 'ABSOLUTE',
+              unixSeconds: Date.parse('2026-01-05T00:00:00Z') / 1000,
+            },
+            end: {
+              type: 'ABSOLUTE',
+              unixSeconds: Date.parse('2026-01-07T00:00:00Z') / 1000,
+            },
+          },
+        }}
+        onChange={onChange}
+        config={stubConfig}
+      />,
+    );
+
+    const calendarTriggers = screen.getAllByRole('button', {
+      name: 'Open calendar',
+    });
+    expect(calendarTriggers).toHaveLength(1);
+    fireEvent.click(calendarTriggers[0]);
+
+    const later = document.querySelector<HTMLButtonElement>(
+      'button[data-date="2026-01-20"]',
+    );
+    const earlier = document.querySelector<HTMLButtonElement>(
+      'button[data-date="2026-01-10"]',
+    );
+    expect(later).not.toBeNull();
+    expect(earlier).not.toBeNull();
+    fireEvent.click(later!);
+    fireEvent.click(earlier!);
+
+    expect(onChange).toHaveBeenCalledWith({
+      type: 'date_range',
+      value: {
+        start: {
+          type: 'ABSOLUTE',
+          unixSeconds: Date.parse('2026-01-10T00:00:00Z') / 1000,
+        },
+        end: {
+          type: 'ABSOLUTE',
+          unixSeconds: Date.parse('2026-01-20T00:00:00Z') / 1000,
+        },
+      },
+    });
+  });
+
+  it('renders an absolute-to-now range without changing the filter', () => {
+    const nowSpy = vi
+      .spyOn(Date, 'now')
+      .mockReturnValue(Date.parse('2026-01-20T12:00:00Z'));
+    const onChange = vi.fn();
+    try {
+      render(
+        <PowerSearchValueEditor
+          operatorValue={{type: 'date_range'}}
+          filterValue={{
+            type: 'date_range',
+            value: {
+              start: {
+                type: 'ABSOLUTE',
+                unixSeconds: Date.parse('2026-01-05T00:00:00Z') / 1000,
+              },
+              end: {type: 'NOW'},
+            },
+          }}
+          onChange={onChange}
+          config={stubConfig}
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', {name: /^date range:/i}),
+      ).toHaveTextContent('Jan 5 – Jan 20');
+      expect(onChange).not.toHaveBeenCalled();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('renders a relative-to-now range without changing the filter', () => {
+    const nowSpy = vi
+      .spyOn(Date, 'now')
+      .mockReturnValue(Date.parse('2026-01-20T12:00:00Z'));
+    const onChange = vi.fn();
+    try {
+      render(
+        <PowerSearchValueEditor
+          operatorValue={{type: 'date_range'}}
+          filterValue={{
+            type: 'date_range',
+            value: {
+              start: {type: 'RELATIVE', backValue: 10, unit: 'day'},
+              end: {type: 'NOW'},
+            },
+          }}
+          onChange={onChange}
+          config={stubConfig}
+        />,
+      );
+
+      expect(
+        screen.getByRole('button', {name: /^date range:/i}),
+      ).toHaveTextContent('Jan 10 – Jan 20');
+      expect(onChange).not.toHaveBeenCalled();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+});
 
 describe('EntityListEditor (#1106)', () => {
   const entitiesWithPhoto: PowerSearchEntity[] = [
@@ -512,5 +699,56 @@ describe('maxMenuItems', () => {
 
   it('caps entity-list suggestions', async () => {
     await expectCapped({type: 'entity_list', searchSource: source});
+  });
+});
+
+// =============================================================================
+// EnumListEditor shows the whole closed vocabulary
+// =============================================================================
+
+describe('EnumListEditor', () => {
+  const values = Array.from({length: 12}, (_, index) => ({
+    value: `option-${index}`,
+    label: `Option ${index}`,
+  }));
+
+  it('shows every value on focus instead of the typeahead default of 10', async () => {
+    render(
+      <PowerSearchValueEditor
+        operatorValue={{type: 'enum_list', values}}
+        filterValue={undefined}
+        onChange={vi.fn()}
+        config={stubConfig}
+      />,
+    );
+
+    fireEvent.focus(screen.getByRole('combobox'));
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    expect(screen.getAllByRole('option', {hidden: true})).toHaveLength(12);
+    expect(screen.getByText('Option 11')).toBeInTheDocument();
+  });
+
+  it('shows every matching value when searching', async () => {
+    render(
+      <PowerSearchValueEditor
+        operatorValue={{type: 'enum_list', values}}
+        filterValue={undefined}
+        onChange={vi.fn()}
+        config={stubConfig}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.change(screen.getByRole('combobox'), {
+        target: {value: 'Option'},
+      });
+      await new Promise(resolve => setTimeout(resolve, 200));
+    });
+
+    expect(screen.getAllByRole('option', {hidden: true})).toHaveLength(12);
+    expect(screen.getByText('Option 11')).toBeInTheDocument();
   });
 });

@@ -3,9 +3,17 @@
 'use client';
 
 import {useState} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {DateTimeInput} from '@astryxdesign/core/DateTimeInput';
 import type {ISODateTimeString} from '@astryxdesign/core/DateTimeInput';
 import {Stack} from '@astryxdesign/core/Layout';
+
+const styles = stylex.create({
+  container: {
+    width: {default: '100%', '@media (min-width: 480px)': 400},
+    maxWidth: '100%',
+  },
+});
 
 export default function DateTimeInputWithValidation() {
   const [errorVal, setErrorVal] = useState<ISODateTimeString | undefined>(
@@ -19,7 +27,7 @@ export default function DateTimeInputWithValidation() {
   );
 
   return (
-    <Stack direction="vertical" gap={4} width="100%" style={{maxWidth: 400}}>
+    <Stack direction="vertical" gap={4} xstyle={styles.container}>
       <DateTimeInput
         label="Meeting time"
         value={errorVal}

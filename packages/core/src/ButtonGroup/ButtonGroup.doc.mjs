@@ -39,6 +39,53 @@ export const docs = {
   usage: {
     description:
       'ButtonGroup joins related actions into a single connected control. Use it when multiple buttons represent related choices or operations that belong together visually, like copy/cut/paste, or undo/redo.',
+    accessibility: [
+      {
+        name: 'Text label',
+        category: 'Color contrast',
+        criterion: '1.4.3 Contrast (Minimum)',
+        requirement: '4.5:1',
+        states: ['Rest', 'Hover', 'Pointer down'],
+        description:
+          'Text in each button must have at least 4.5:1 contrast with its background in every state. For Hover and Pointer down, measure the final background after the overlay is applied.',
+      },
+      {
+        name: 'Essential icon or spinner arc',
+        category: 'Color contrast',
+        criterion: '1.4.11 Non-text Contrast',
+        requirement: '3:1',
+        states: ['Icon only', 'Loading'],
+        description:
+          'An icon used instead of text must have at least 3:1 contrast with the button background. The moving spinner arc must also meet 3:1. An icon beside a visible label does not need its own check.',
+      },
+      {
+        name: 'Visible control boundary',
+        category: 'Color contrast',
+        criterion: '1.4.11 Non-text Contrast',
+        requirement: '3:1 if needed',
+        states: ['Rest'],
+        description:
+          'Some groups need a divider or edge to show each button. That divider or edge must have at least 3:1 contrast.',
+      },
+      {
+        name: 'Keyboard focus indicator',
+        category: 'Color contrast',
+        criterion: '1.4.11 Non-text Contrast',
+        requirement: '3:1',
+        states: ['Focus visible'],
+        description:
+          'The focus outline must have at least 3:1 contrast with the area around it.',
+      },
+      {
+        name: 'Disabled appearance',
+        category: 'Color contrast',
+        criterion: '1.4.3 and 1.4.11 exceptions',
+        requirement: 'Not required',
+        states: ['Disabled'],
+        description:
+          'Disabled controls do not need to meet these contrast ratios.',
+      },
+    ],
     bestPractices: [
       {guidance: true, description: 'Group buttons that perform related actions on the same object, like copy, cut, paste on selected text.'},
       {guidance: true, description: 'Use the same variant for all buttons in a group so they look like a single connected unit.'},

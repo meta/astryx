@@ -8,7 +8,7 @@
 import {ComponentDocKindSchema} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
-/** @typedef {import('../types').ComponentDoc} ComponentDoc */
+/** @typedef {import('../types.js').ComponentDoc} ComponentDoc */
 
 /**
  * Validate an unknown value as a stamped component doc, or throw.

@@ -1,0 +1,1085 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+'use strict';
+/* global Buffer, module, process, require */
+
+/* eslint-disable @typescript-eslint/no-require-imports */
+const fs = require('node:fs');
+const path = require('node:path');
+const {classifyChanges} = require('./change-scope.cjs');
+const {
+  GATE_STATUS_CONTEXT,
+  approvedDescription,
+  fingerprintSpecContent,
+  mirrorDescription,
+  parseOwnerCommandTarget,
+  canonicalRunUrl,
+  describeOwnerCommandProblem,
+  newestGateRun,
+  parseOwnerCommandIntent,
+  leadingAuthority,
+  recordApprovalGroups,
+  parseOwnerFile,
+  requiredApprovalGroups,
+  resolveOwnerDecision,
+} = require('./spec-owner-decision.cjs');
+const {
+  REVIEW_GATE_CONTEXT,
+  SPEC_MIRROR_PREFIX,
+  SPEC_TOO_LARGE_TEXT,
+  SPEC_WAITING_TEXT,
+  composeReviewGate,
+  readCodeGate,
+  readSpecGate,
+} = require('./review-signal-decision.cjs');
+/* eslint-enable @typescript-eslint/no-require-imports */
+
+// One run's GitHub API requests before it stops undecided. Reading a spec
+// change hundreds of files wide would otherwise spend the repository's shared
+// hourly budget that every workflow needs (spec:AST-030 FR15).
+const REQUEST_BUDGET = 300;
+
+class RequestBudgetExceeded extends Error {}
+
+/**
+ * Reconcile one pull request's spec gate. A run that reaches the request
+ * budget leaves the gate pending as too large to reconcile automatically; a
+ * maintainer's dispatch of the Review signal workflow is exempt and decides.
+ */
+async function reconcileSpecOwnerGate(options) {
+  const budget = {onExceeded: null};
+  try {
+    await reconcileWithinBudget({...options, budget});
+  } catch (error) {
+    if (!(error instanceof RequestBudgetExceeded) || !budget.onExceeded) {
+      throw error;
+    }
+    await budget.onExceeded();
+  }
+}
+
+function isCommandComment(eventName, payload) {
+  if (eventName !== 'issue_comment') return true;
+  return parseOwnerCommandIntent(payload.comment?.body) !== null;
+}
+
+function isAuthorizedEvent(eventName, payload, owners) {
+  if (eventName === 'issue_comment') {
+    const login = payload.comment?.user?.login?.toLowerCase();
+    return Boolean(
+      login && owners.has(login) && isCommandComment(eventName, payload),
+    );
+  }
+  if (eventName === 'pull_request_review') {
+    const login = payload.review?.user?.login?.toLowerCase();
+    return Boolean(login && owners.has(login));
+  }
+  return true;
+}
+
+function labelNames(pr) {
+  return new Set(pr.labels.map(label => label.name));
+}
+
+function isSpecPath(filePath) {
+  const scope = classifyChanges([{filename: filePath}]);
+  return scope.touchesKnowledgeRecords || scope.touchesDesignAssets;
+}
+
+function isSettled(pr) {
+  return Boolean(pr.merged_at) || pr.state === 'closed';
+}
+
+async function reconcileWithinBudget({
+  github,
+  context,
+  core,
+  workspace = process.env.GITHUB_WORKSPACE,
+  env = process.env,
+  now = () => new Date(),
+  budget,
+  // The job's request count (lib/rate-limit-backoff.cjs); no budget without it.
+  requestCounter,
+  requestBudget = REQUEST_BUDGET,
+}) {
+  // Read when the first budgeted call is made, never before the event checks.
+  const requestCount = () =>
+    (requestCounter ?? github.__rateLimitBackoff)?.requests ?? null;
+  // Checked before each file read and comparison, the calls that grow with
+  // the pull request. Reads start in parallel batches before the job's count
+  // sees them, so each checked call is also counted here as it starts.
+  let countAtFirstCheck = null;
+  let checkedCalls = 0;
+  function spendRequest() {
+    const observed = requestCount();
+    if (observed == null || context.eventName === 'workflow_dispatch') return;
+    countAtFirstCheck ??= observed;
+    const spent = Math.max(observed, countAtFirstCheck + checkedCalls);
+    if (spent >= requestBudget) {
+      throw new RequestBudgetExceeded(
+        `Stopped after ${spent} GitHub API requests (budget ${requestBudget}).`,
+      );
+    }
+    checkedCalls += 1;
+  }
+  const {owner, repo} = context.repo;
+  const repository = `${owner}/${repo}`;
+  if (
+    context.eventName === 'pull_request_review' &&
+    context.payload.pull_request?.head?.repo?.full_name !== repository
+  ) {
+    core.info(
+      'Skipping fork pull request review; use an exact-head owner command to reconcile.',
+    );
+    return;
+  }
+
+  const designOwners = parseOwnerFile(
+    fs.readFileSync(path.join(workspace, '.github/DESIGNOWNERS'), 'utf8'),
+  );
+  const engineeringOwners = parseOwnerFile(
+    fs.readFileSync(path.join(workspace, '.github/ENGOWNERS'), 'utf8'),
+  );
+  const allOwners = new Set([...engineeringOwners, ...designOwners]);
+  if (!isAuthorizedEvent(context.eventName, context.payload, allOwners)) {
+    core.info('Ignoring an event from someone outside the eligible owners.');
+    return;
+  }
+
+  const pullNumber = Number(
+    context.payload.pull_request?.number ??
+      context.payload.issue?.number ??
+      context.payload.inputs?.pr,
+  );
+  if (!pullNumber) {
+    throw new Error('Could not resolve a pull request number.');
+  }
+
+  const runId = BigInt(String(context.runId));
+  const runUrl = canonicalRunUrl(
+    repository,
+    String(context.runId),
+    String(context.runAttempt),
+  );
+
+  async function getPullRequest() {
+    const {data} = await github.rest.pulls.get({
+      owner,
+      repo,
+      pull_number: pullNumber,
+    });
+    return data;
+  }
+
+  async function listStatuses(headSha) {
+    return github.paginate(github.rest.repos.listCommitStatusesForRef, {
+      owner,
+      repo,
+      ref: headSha,
+      per_page: 100,
+    });
+  }
+
+  async function createStatus({
+    sha,
+    context: statusContext,
+    state,
+    description,
+    targetUrl = runUrl,
+  }) {
+    const {data} = await github.rest.repos.createCommitStatus({
+      owner,
+      repo,
+      sha,
+      context: statusContext,
+      state,
+      description: description.slice(0, 140),
+      target_url: targetUrl,
+    });
+    return data;
+  }
+
+  async function newestRun(headSha) {
+    return newestGateRun(await listStatuses(headSha), repository);
+  }
+
+  /**
+   * The freshest possible answer to "may this head still be written at all".
+   * A settled or moved head is never writable, whichever run is current: an
+   * approval that lands after the merge it claims to gate is not evidence.
+   * Any read that throws propagates and nothing is published.
+   */
+  async function isLiveHeadWritable(headSha) {
+    const live = await getPullRequest();
+    if (isSettled(live)) {
+      core.info(
+        'The pull request settled while this run reconciled; leaving the head status as it merged.',
+      );
+      return false;
+    }
+    if (live.head.sha !== headSha) {
+      core.info(
+        'The head moved while this run reconciled; leaving the status to the run for the new head.',
+      );
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * The last read before a terminal write. GitHub has no conditional status
+   * write, so the window cannot be closed — it can only be made as small as
+   * one API call and made to fail closed. Read the run currency first and the
+   * live pull request last, so the head/settlement facts are the freshest
+   * thing known at the moment of the write.
+   */
+  async function isPublishable(headSha) {
+    if (!(await isCurrentRun(headSha))) return false;
+    return isLiveHeadWritable(headSha);
+  }
+
+  async function restoreNewerStatus(headSha) {
+    const newest = await newestRun(headSha);
+    if (newest === null || newest.runId <= runId) return false;
+    // Yielding is still a write. A newer run's status is no more publishable
+    // on a merged or moved head than this run's own would be, so the restore
+    // takes the same live guard — and still reports the yield, because this
+    // run's claim on the head is over either way.
+    if (await isLiveHeadWritable(headSha)) {
+      await createStatus({
+        sha: headSha,
+        context: GATE_STATUS_CONTEXT,
+        state: newest.status.state,
+        description: newest.status.description,
+        targetUrl: newest.status.target_url,
+      });
+      await publishReviewGate(headSha, readSpecGate([newest.status]));
+    }
+    core.info(
+      `Run ${context.runId} yielded to newer run ${newest.runId.toString()}.`,
+    );
+    return true;
+  }
+
+  async function isCurrentRun(headSha) {
+    const newest = await newestRun(headSha);
+    return newest === null || newest.runId <= runId;
+  }
+
+  // The owners whose approval decided the gate, once the decision is known.
+  let approvedBy = [];
+  /** Publish the mirror, then the review gate composed with code review. */
+  async function setFinalStatus(headSha, state, text, missing = null) {
+    const approvers = state === 'success' ? approvedBy : [];
+    if (!(await isPublishable(headSha))) return false;
+    await createStatus({
+      sha: headSha,
+      context: GATE_STATUS_CONTEXT,
+      state,
+      description: mirrorDescription({state, missing, approvers}),
+    });
+    if (await restoreNewerStatus(headSha)) return false;
+    await publishReviewGate(headSha, {
+      satisfied: state === 'success',
+      text: state === 'success' && approvers.length === 0 ? null : text,
+    });
+    // The write cannot be undone, so verify what it landed on. A success that
+    // raced a merge is reported loudly.
+    const after = await getPullRequest();
+    if (isSettled(after) || after.head.sha !== headSha) {
+      core.warning(
+        `Published ${state} for ${headSha.slice(0, 7)} as the pull request settled or moved; treat that status as unverified.`,
+      );
+      return false;
+    }
+    return !(await restoreNewerStatus(headSha));
+  }
+
+  async function removeLabel(name, pr = null) {
+    // A pull request read in this run that lacks the label needs no call.
+    if (pr && !(pr.labels ?? []).some(label => label?.name === name)) return;
+    try {
+      await github.rest.issues.removeLabel({
+        owner,
+        repo,
+        issue_number: pullNumber,
+        name,
+      });
+    } catch (error) {
+      if (error.status !== 404) throw error;
+    }
+  }
+
+  async function ensureLabel(pr, name, color, description) {
+    try {
+      await github.rest.issues.getLabel({owner, repo, name});
+    } catch (error) {
+      if (error.status !== 404) throw error;
+      try {
+        await github.rest.issues.createLabel({
+          owner,
+          repo,
+          name,
+          color,
+          description,
+        });
+      } catch (createError) {
+        if (createError.status !== 422) throw createError;
+      }
+    }
+    if (!labelNames(pr).has(name)) {
+      await github.rest.issues.addLabels({
+        owner,
+        repo,
+        issue_number: pullNumber,
+        labels: [name],
+      });
+    }
+  }
+
+  async function readText(fullName, ref, filePath) {
+    spendRequest();
+    const [repoOwner, repoName] = fullName.split('/');
+    try {
+      const {data} = await github.rest.repos.getContent({
+        owner: repoOwner,
+        repo: repoName,
+        path: filePath,
+        ref,
+      });
+      if (Array.isArray(data) || !data.content) {
+        throw new Error(
+          `Knowledge record ${filePath} could not be read as text.`,
+        );
+      }
+      return Buffer.from(data.content, 'base64').toString('utf8');
+    } catch (error) {
+      if (error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  /**
+   * Every file's blob at `ref`, from one tree read. Empty when GitHub cuts
+   * the tree short or the read fails, so each base text is then read.
+   */
+  async function readBaseBlobs(fullName, ref) {
+    const [repoOwner, repoName] = fullName.split('/');
+    try {
+      const {data} = await github.rest.git.getTree({
+        owner: repoOwner,
+        repo: repoName,
+        tree_sha: ref,
+        recursive: 'true',
+      });
+      if (data.truncated) return new Map();
+      return new Map(
+        (data.tree ?? [])
+          .filter(entry => entry.type === 'blob')
+          .map(entry => [entry.path, entry.sha]),
+      );
+    } catch (error) {
+      core.warning(`Could not read the base tree: ${error.message}`);
+      return new Map();
+    }
+  }
+
+  /** A spec path's text at `ref`, or null when the path is absent there. */
+  async function readSpecContent(fullName, ref, filePath) {
+    spendRequest();
+    const [repoOwner, repoName] = fullName.split('/');
+    try {
+      const {data} = await github.rest.repos.getContent({
+        owner: repoOwner,
+        repo: repoName,
+        path: filePath,
+        ref,
+      });
+      if (Array.isArray(data)) return null;
+      if (data.content == null) return `blob:${data.sha}`;
+      // Only Markdown is read as text; other assets hash as their bytes.
+      return filePath.endsWith('.md')
+        ? Buffer.from(data.content, 'base64').toString('utf8')
+        : `base64:${data.content.replace(/\s/g, '')}`;
+    } catch (error) {
+      if (error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  /** Details notes: the newest approval of other content; a revocation. */
+  function ownerActNotes({
+    reviews: ownerReviews,
+    comments: allComments,
+    owners: eligible,
+    approvesCurrentContent,
+  }) {
+    const stale = ownerReviews
+      .filter(
+        review =>
+          review.state === 'APPROVED' &&
+          !approvesCurrentContent(review.commit_id),
+      )
+      .map(review => review.submitted_at);
+    // Comments arrive oldest first, so the last act per owner wins.
+    const lastAct = new Map();
+    for (const comment of allComments) {
+      const login = comment.user?.login?.toLowerCase() ?? '';
+      const target =
+        eligible.has(login) && parseOwnerCommandTarget(comment.body);
+      if (!target) continue;
+      if (target.approved && !approvesCurrentContent(target.sha)) {
+        stale.push(comment.created_at);
+      }
+      lastAct.set(login, {owner: login, ...target, at: comment.created_at});
+    }
+    const revokedBy =
+      [...lastAct.values()]
+        .filter(act => !act.approved)
+        .sort((x, y) => Date.parse(y.at) - Date.parse(x.at))[0] ?? null;
+    return {
+      staleApprovalAt: stale.filter(Boolean).sort().at(-1) ?? null,
+      revokedBy,
+    };
+  }
+
+  /** The gate's details: the run summary its statuses link to. */
+  async function writeDetails({
+    statusText,
+    headSha,
+    approvalRequired,
+    approved: isApproved,
+    records: changedRecords,
+    currentContent,
+    notes,
+    commandProblem,
+  }) {
+    if (typeof core.summary?.addRaw !== 'function') return;
+    // The same per-record rule the decision uses, so the two never disagree.
+    const groupFor = record => {
+      const groups = recordApprovalGroups(record);
+      if (groups.size === 0) return 'none (draft)';
+      return groups.has('spec') ? 'eng owner' : 'design or eng owner';
+    };
+    const authorityOf = content => leadingAuthority(content) ?? 'no authority';
+    const rows = changedRecords.map(record => {
+      const text = record.headContent ?? record.baseContent ?? '';
+      const id = text.match(/^id:\s*(.+)$/m)?.[1]?.trim() ?? record.path;
+      const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? '';
+      const before =
+        record.baseContent == null ? 'new' : authorityOf(record.baseContent);
+      const after =
+        record.headContent == null
+          ? 'removed'
+          : authorityOf(record.headContent);
+      const change = before === after ? after : `${before} → ${after}`;
+      return `| \`${id}\` | ${title} | ${change} | ${groupFor(record)} |`;
+    });
+    // `<sha>` in the status text is literal, not markup.
+    const lines = [`### ${statusText.replace(/</g, '&lt;')}`, ''];
+    if (!isApproved && notes.revokedBy) {
+      lines.push(
+        `Approval revoked by @${notes.revokedBy.owner} at ${notes.revokedBy.at}.`,
+        '',
+      );
+    } else if (!isApproved && notes.staleApprovalAt) {
+      lines.push(
+        `Spec changed after approval at ${notes.staleApprovalAt}; approve the current head again.`,
+        '',
+      );
+    }
+    if (commandProblem) {
+      lines.push(`Your owner command decided nothing: ${commandProblem}.`, '');
+    }
+    if (approvalRequired && !isApproved) {
+      lines.push(
+        'Approve the current spec text with a comment on the pull request:',
+        '',
+        '```',
+        `/approve-spec ${headSha}`,
+        '```',
+        '',
+      );
+    }
+    lines.push(
+      '| Record | Title | Authority | Needs approval from |',
+      '| --- | --- | --- | --- |',
+      ...rows,
+      '',
+      '<details><summary>Changed spec paths and content fingerprint</summary>',
+      '',
+      ...Object.keys(currentContent.files).map(filePath => `- \`${filePath}\``),
+      '',
+      `Fingerprint \`${currentContent.fingerprint}\`. An approval of any commit with this fingerprint counts, so commits that leave these paths' text unchanged (other paths, merges from main, rebases, the draft → current flip) keep it.`,
+      '',
+      '</details>',
+    );
+    try {
+      await core.summary.addRaw(lines.join('\n')).write();
+    } catch (error) {
+      core.warning(`Could not write the gate details: ${error.message}`);
+    }
+  }
+
+  /** Compose the review gate; with no code half yet, review-signal does. */
+  async function publishReviewGate(headSha, spec) {
+    // If another job writes between this read and write, compose again, so a
+    // withdrawn code review is never overwritten with success.
+    const written = new Set();
+    const othersNewest = statuses =>
+      statuses.find(
+        status =>
+          status.context === REVIEW_GATE_CONTEXT && !written.has(status.id),
+      ) ?? null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const live = await listStatuses(headSha);
+      const basis = othersNewest(live);
+      const code = readCodeGate(live.filter(status => !written.has(status.id)));
+      if (!code) return;
+      const gate = composeReviewGate({
+        codeGated: code.gated,
+        codeDescription: code.description,
+        spec,
+      });
+      // The details link names the spec decision run: a newer one on yield,
+      // whether the gate it restores waits or succeeds.
+      const targetUrl = gate.target_url ?? spec?.url ?? runUrl;
+      const current = live.find(
+        status => status.context === REVIEW_GATE_CONTEXT,
+      );
+      if (
+        current?.state === gate.state &&
+        current?.description === gate.description &&
+        current?.target_url === targetUrl
+      ) {
+        return;
+      }
+      if (!(await isLiveHeadWritable(headSha))) return;
+      const status = await createStatus({
+        sha: headSha,
+        context: REVIEW_GATE_CONTEXT,
+        state: gate.state,
+        description: gate.description,
+        targetUrl,
+      });
+      if (status?.id != null) written.add(status.id);
+      if (othersNewest(await listStatuses(headSha))?.id === basis?.id) return;
+    }
+  }
+
+  async function fetchSnapshot() {
+    const before = await getPullRequest();
+    const headSha = before.head.sha;
+    const [files, statuses] = await Promise.all([
+      github.paginate(github.rest.pulls.listFiles, {
+        owner,
+        repo,
+        pull_number: pullNumber,
+        per_page: 100,
+      }),
+      listStatuses(headSha),
+    ]);
+    const after = await getPullRequest();
+    if (after.head.sha !== headSha) return null;
+
+    const scope = classifyChanges(files, {expectedCount: after.changed_files});
+    // Owner reviews, commands and dismissals only decide a change to
+    // knowledge records; every other pull request skips those reads, which
+    // spend the repository's shared API budget on each event. The head is
+    // confirmed again after them, below.
+    const list = (method, target) =>
+      scope.touchesKnowledgeRecords
+        ? github.paginate(method, {owner, repo, ...target, per_page: 100})
+        : Promise.resolve([]);
+    const [reviews, comments, timeline] = await Promise.all([
+      list(github.rest.pulls.listReviews, {pull_number: pullNumber}),
+      list(github.rest.issues.listComments, {issue_number: pullNumber}),
+      list(github.rest.issues.listEventsForTimeline, {
+        issue_number: pullNumber,
+      }),
+    ]);
+    const knowledgeChanges = files.filter(
+      file =>
+        scope.complete &&
+        (classifyChanges([{filename: file.filename}]).touchesKnowledgeRecords ||
+          (file.previous_filename &&
+            classifyChanges([{filename: file.previous_filename}])
+              .touchesKnowledgeRecords)),
+    );
+    // A renamed record whose head blob is its old path's blob at the base has
+    // the same text at both, so its base text needs no read of its own.
+    const baseBlobs = knowledgeChanges.some(file => file.status === 'renamed')
+      ? await readBaseBlobs(after.base.repo.full_name, after.base.sha)
+      : new Map();
+    const records = await Promise.all(
+      knowledgeChanges.map(async file => {
+        const previousPath = file.previous_filename || file.filename;
+        const baseIsTextRecord = previousPath.endsWith('.md');
+        const headIsTextRecord = file.filename.endsWith('.md');
+        const headContent =
+          !headIsTextRecord || file.status === 'removed'
+            ? null
+            : await readText(
+                after.head.repo.full_name,
+                after.head.sha,
+                file.filename,
+              );
+        const unchangedRename =
+          headContent != null &&
+          baseIsTextRecord &&
+          file.status === 'renamed' &&
+          file.sha != null &&
+          baseBlobs.get(previousPath) === file.sha;
+        return {
+          path: file.filename,
+          previousPath,
+          baseContent:
+            !baseIsTextRecord || file.status === 'added'
+              ? null
+              : unchangedRename
+                ? headContent
+                : await readText(
+                    after.base.repo.full_name,
+                    after.base.sha,
+                    previousPath,
+                  ),
+          headContent,
+        };
+      }),
+    );
+    const latest = await getPullRequest();
+    if (latest.head.sha !== headSha) return null;
+    return {
+      pr: latest,
+      files,
+      reviews,
+      comments,
+      timeline,
+      statuses,
+      scope,
+      records,
+    };
+  }
+
+  /**
+   * A head that changes no knowledge record has one decision, whatever any
+   * owner says: "No knowledge records changed." It depends only on the head's
+   * files, so it is written once per head and later events read it back
+   * instead of reconciling (two reads when the event carries the full pull
+   * request). Returns whether it decided the head, and the live pull request
+   * when it had to read one, so the full reconcile does not read it again.
+   */
+  async function decideHeadWithoutRecords() {
+    const eventPr = context.payload.pull_request;
+    const livePr =
+      eventPr?.changed_files == null ? await getPullRequest() : null;
+    const pr = livePr ?? eventPr;
+    const undecided = {done: false, livePr};
+    if (isSettled(pr)) return undecided;
+    const files = await github.paginate(github.rest.pulls.listFiles, {
+      owner,
+      repo,
+      pull_number: pullNumber,
+      per_page: 100,
+    });
+    const scope = classifyChanges(files, {expectedCount: pr.changed_files});
+    if (!scope.complete || scope.touchesKnowledgeRecords) return undecided;
+
+    const headSha = pr.head.sha;
+    const decided = {satisfied: true, text: null};
+    const statuses = await listStatuses(headSha);
+    const spec = readSpecGate(statuses);
+    const isDecided =
+      spec.known &&
+      spec.satisfied &&
+      newestGateRun(statuses, repository)?.status.description ===
+        mirrorDescription({state: 'success'});
+    const code = readCodeGate(statuses);
+    const gate =
+      code &&
+      composeReviewGate({
+        codeGated: code.gated,
+        codeDescription: code.description,
+        spec: decided,
+      });
+    const current = statuses.find(
+      status => status.context === REVIEW_GATE_CONTEXT,
+    );
+    const isGateCurrent =
+      !gate ||
+      (current?.state === gate.state &&
+        current?.description === gate.description);
+    if (labelNames(pr).has(env.REVIEW_LABEL)) {
+      await removeLabel(env.REVIEW_LABEL);
+    }
+    if (isDecided && isGateCurrent) {
+      core.info('This head already carries its decision: no records changed.');
+      return {done: true};
+    }
+    if (!(await isLiveHeadWritable(headSha))) return {done: true};
+    if (!isDecided) {
+      await createStatus({
+        sha: headSha,
+        context: GATE_STATUS_CONTEXT,
+        state: 'success',
+        description: mirrorDescription({state: 'success'}),
+      });
+    }
+    // The details link names the run that decided this head.
+    await publishReviewGate(
+      headSha,
+      isDecided ? {...decided, url: spec.url} : decided,
+    );
+    return {done: true};
+  }
+
+  // A failed fast path falls through to the full reconcile, which writes the
+  // waiting review gate before anything else can fail.
+  let fastPath = {done: false, livePr: null};
+  try {
+    fastPath = await decideHeadWithoutRecords();
+  } catch (error) {
+    core.warning(`Falling back to the full reconcile: ${error.message}`);
+  }
+  if (fastPath.done) return;
+
+  const initialPr = fastPath.livePr ?? (await getPullRequest());
+  // Nothing about a merged or closed head is still being decided. Reconciling
+  // one can only publish a decision that arrives after the merge it claims to
+  // gate, so stop before writing any status.
+  if (isSettled(initialPr)) {
+    core.info(
+      'The pull request is already merged or closed; the gate does not rewrite a settled head.',
+    );
+    return;
+  }
+  const initialHead = initialPr.head.sha;
+  await createStatus({
+    sha: initialHead,
+    context: GATE_STATUS_CONTEXT,
+    state: 'pending',
+    description: `Reconciling exact head ${initialHead.slice(0, 7)}.`,
+  });
+  // The spec half is unknown until this run decides it, so the review gate
+  // waits meanwhile: a run that fails part-way (after a /revoke-spec, say)
+  // leaves it pending, never an earlier success. Written before the yield
+  // check, like the mirror, so a newer run's decision is restored over it.
+  await publishReviewGate(initialHead, readSpecGate([]));
+  if (await restoreNewerStatus(initialHead)) return;
+  // From here a run can reach the request budget. It then says so on both
+  // statuses, so an owner's command never reads as taken, and leaves the
+  // decision to a maintainer's dispatch.
+  budget.onExceeded = async () => {
+    core.warning(
+      `Stopped after ${requestCount()} GitHub API requests: this pull request is too large to reconcile automatically. Run the Review signal workflow with pr=${pullNumber} to decide it.`,
+    );
+    if (!(await isPublishable(initialHead))) return;
+    await createStatus({
+      sha: initialHead,
+      context: GATE_STATUS_CONTEXT,
+      state: 'pending',
+      description: `${SPEC_MIRROR_PREFIX}too large to reconcile automatically`,
+    });
+    if (await restoreNewerStatus(initialHead)) return;
+    await publishReviewGate(initialHead, {
+      satisfied: false,
+      text: SPEC_TOO_LARGE_TEXT,
+    });
+  };
+
+  const commentAuthor = context.payload.comment?.user?.login?.toLowerCase();
+  const snapshot = await fetchSnapshot();
+  if (snapshot === null || snapshot.pr.head.sha !== initialHead) {
+    core.info(
+      'The pull request head changed while this run was reading state.',
+    );
+    return;
+  }
+  if (!(await isCurrentRun(initialHead))) {
+    core.info(`Run ${context.runId} yielded before mutation.`);
+    return;
+  }
+
+  const {pr, scope, records, reviews, comments, timeline, statuses} = snapshot;
+
+  // A malformed owner command decides nothing; the details say why.
+  const commandProblem =
+    context.eventName === 'issue_comment' && commentAuthor
+      ? describeOwnerCommandProblem(
+          parseOwnerCommandIntent(context.payload.comment?.body),
+        )
+      : null;
+
+  if (!scope.touchesKnowledgeRecords) {
+    await removeLabel(env.REVIEW_LABEL, pr);
+    await setFinalStatus(
+      initialHead,
+      'success',
+      'No knowledge records changed.',
+    );
+    return;
+  }
+
+  const requiredGroups = requiredApprovalGroups(records, {
+    complete: scope.complete,
+    touchesDesignAssets: scope.touchesDesignAssets,
+  });
+  const ownerApprovalRequired =
+    requiredGroups.spec || requiredGroups.design || requiredGroups.theme;
+  if (requiredGroups.spec && engineeringOwners.length === 0) {
+    throw new Error('No ENGOWNERS are configured.');
+  }
+  if (
+    (requiredGroups.design || requiredGroups.theme) &&
+    engineeringOwners.length === 0 &&
+    designOwners.length === 0
+  ) {
+    throw new Error('No ENGOWNERS or DESIGNOWNERS are configured.');
+  }
+  const designApprovers = [...new Set([...engineeringOwners, ...designOwners])];
+  const themeApprovers = [...new Set([...engineeringOwners, ...designOwners])];
+
+  // --- The spec content an approval binds (DEC-14). ---
+  const specPaths = [
+    ...new Set(
+      snapshot.files.flatMap(file =>
+        [file.filename, file.previous_filename].filter(
+          filePath => filePath && isSpecPath(filePath),
+        ),
+      ),
+    ),
+  ].sort();
+  const textCache = new Map();
+  // The snapshot already read every changed Markdown record at the head; the
+  // same text is the spec content there, so the fingerprint reuses it. A
+  // renamed record's old path is absent at the head.
+  // Only a rename leaves its old path absent at the head: a copy's source
+  // stays, and a path another change re-adds is present.
+  const presentAtHead = new Set(
+    snapshot.files
+      .filter(file => file.status !== 'removed')
+      .map(file => file.filename),
+  );
+  const renamedAway = new Set(
+    snapshot.files
+      .filter(file => file.status === 'renamed' && file.previous_filename)
+      .map(file => file.previous_filename),
+  );
+  for (const record of records) {
+    if (!record.path.endsWith('.md') || record.headContent == null) continue;
+    textCache.set(
+      `${initialHead.toLowerCase()}\0${record.path}`,
+      Promise.resolve(record.headContent),
+    );
+    if (
+      renamedAway.has(record.previousPath) &&
+      !presentAtHead.has(record.previousPath)
+    ) {
+      textCache.set(
+        `${initialHead.toLowerCase()}\0${record.previousPath}`,
+        Promise.resolve(null),
+      );
+    }
+  }
+  function specText(sha, filePath) {
+    const key = `${sha.toLowerCase()}\0${filePath}`;
+    if (!textCache.has(key)) {
+      textCache.set(
+        key,
+        readSpecContent(pr.head.repo.full_name, sha, filePath),
+      );
+    }
+    return textCache.get(key);
+  }
+  async function fingerprintAt(sha, paths) {
+    const entries = await Promise.all(
+      paths.map(async filePath => ({
+        path: filePath,
+        content: await specText(sha, filePath),
+      })),
+    );
+    return fingerprintSpecContent(entries);
+  }
+  // Each changed spec path's git blob at a commit, from a file list GitHub
+  // already returned: 'absent' for a removed file or a renamed file's old
+  // path. Equal blobs are equal bytes, so such a path's normalized text needs
+  // no read; a path the list does not name stays unknown and is read.
+  function specBlobs(changedFiles) {
+    const blobs = new Map();
+    // Only a rename leaves its old path absent; a copy's source stays and is
+    // unknown here. A path one change renames away and another re-adds is
+    // present: the file's own entry decides, so old paths are marked first.
+    // A path with no blob of its own stays unknown.
+    for (const file of changedFiles) {
+      if (
+        file.status === 'renamed' &&
+        file.previous_filename &&
+        isSpecPath(file.previous_filename)
+      ) {
+        blobs.set(file.previous_filename, 'absent');
+      }
+    }
+    for (const file of changedFiles) {
+      if (!isSpecPath(file.filename)) continue;
+      if (file.status === 'removed') blobs.set(file.filename, 'absent');
+      else if (file.sha) blobs.set(file.filename, file.sha);
+      else blobs.delete(file.filename);
+    }
+    return blobs;
+  }
+  const headBlobs = specBlobs(snapshot.files);
+  // An approved commit's spec paths join the head's, so dropping an approved
+  // change no longer matches. A failed comparison matches nothing.
+  async function specChangesAt(sha) {
+    spendRequest();
+    const {data} = await github.rest.repos.compareCommitsWithBasehead({
+      owner,
+      repo,
+      basehead: `${pr.base.sha}...${sha}`,
+    });
+    const changedFiles = data.files ?? [];
+    return {
+      paths: changedFiles.flatMap(file =>
+        [file.filename, file.previous_filename].filter(
+          filePath => filePath && isSpecPath(filePath),
+        ),
+      ),
+      blobs: specBlobs(changedFiles),
+    };
+  }
+  async function hasCurrentContent(sha) {
+    try {
+      const atSha = await specChangesAt(sha);
+      const paths = [...new Set([...specPaths, ...atSha.paths])].sort();
+      // The fingerprints match exactly when every path's normalized text
+      // does, so only paths without a shared blob are read and compared.
+      const unsettled = paths.filter(filePath => {
+        const headBlob = headBlobs.get(filePath);
+        return headBlob === undefined || headBlob !== atSha.blobs.get(filePath);
+      });
+      if (unsettled.length === 0) return true;
+      const [atHead, atShaContent] = await Promise.all([
+        fingerprintAt(initialHead, unsettled),
+        fingerprintAt(sha, unsettled),
+      ]);
+      return atHead.fingerprint === atShaContent.fingerprint;
+    } catch (error) {
+      if (error instanceof RequestBudgetExceeded) throw error;
+      core.warning(`Could not compare ${sha.slice(0, 7)}: ${error.message}`);
+      return false;
+    }
+  }
+  const currentContent = await fingerprintAt(initialHead, specPaths);
+  // Only commits an eligible owner named, by review or command, are read.
+  const authorLogin = pr.user.login.toLowerCase();
+  const ownerReviews = reviews.filter(review => {
+    const login = review.user?.login?.toLowerCase();
+    // GitHub refuses an author's approving review; never count one anyway.
+    return login && login !== authorLogin && allOwners.has(login);
+  });
+  const namedShas = new Set([
+    ...ownerReviews.map(review => review.commit_id?.toLowerCase()),
+    ...comments
+      .filter(comment =>
+        allOwners.has(comment.user?.login?.toLowerCase() ?? ''),
+      )
+      .map(comment => parseOwnerCommandTarget(comment.body)?.sha),
+  ]);
+  const sameContent = new Set([initialHead.toLowerCase()]);
+  for (const sha of [...namedShas].filter(Boolean)) {
+    if (!sameContent.has(sha) && (await hasCurrentContent(sha))) {
+      sameContent.add(sha);
+    }
+  }
+  const approvesCurrentContent = sha =>
+    sha != null && sameContent.has(sha.toLowerCase());
+
+  const decisionInput = {
+    reviews: ownerReviews,
+    comments,
+    dismissalEvents: timeline,
+    headSha: initialHead,
+    approvesCurrentContent,
+  };
+  const specDecision = requiredGroups.spec
+    ? resolveOwnerDecision({...decisionInput, owners: engineeringOwners})
+    : {approved: true, owner: null};
+  const designDecision = requiredGroups.design
+    ? resolveOwnerDecision({...decisionInput, owners: designApprovers})
+    : {approved: true, owner: null};
+  const themeDecision = requiredGroups.theme
+    ? resolveOwnerDecision({...decisionInput, owners: themeApprovers})
+    : {approved: true, owner: null};
+  const approved =
+    specDecision.approved && designDecision.approved && themeDecision.approved;
+  const approvingOwners = [
+    specDecision.owner,
+    designDecision.owner,
+    themeDecision.owner,
+  ]
+    .filter(Boolean)
+    .filter((ownerName, index, owners) => owners.indexOf(ownerName) === index);
+  const missingGroups = {
+    spec: !specDecision.approved,
+    design: !designDecision.approved,
+    theme: !themeDecision.approved,
+    heldBy: [specDecision, designDecision, themeDecision].find(
+      decision => decision.approved === false && decision.source === 'review',
+    )?.owner,
+  };
+  const statusText =
+    ownerApprovalRequired && !approved
+      ? missingGroups.heldBy
+        ? SPEC_WAITING_TEXT.held(missingGroups.heldBy)
+        : SPEC_WAITING_TEXT[missingGroups.spec ? 'eng' : 'design']
+      : ownerApprovalRequired
+        ? approvedDescription(approvingOwners)
+        : 'Draft-only knowledge change; owner approval is not required.';
+  await writeDetails({
+    statusText,
+    headSha: initialHead,
+    approvalRequired: ownerApprovalRequired,
+    approved,
+    records,
+    currentContent,
+    notes: ownerActNotes({
+      reviews: ownerReviews,
+      comments,
+      owners: allOwners,
+      approvesCurrentContent,
+    }),
+    commandProblem,
+  });
+
+  if (ownerApprovalRequired && !approved) {
+    if (!(await isCurrentRun(initialHead))) return;
+    await ensureLabel(
+      pr,
+      env.REVIEW_LABEL,
+      'd4c5f9',
+      'Current knowledge records await owner approval',
+    );
+    await setFinalStatus(initialHead, 'pending', statusText, missingGroups);
+    return;
+  }
+
+  if (pr.draft) {
+    if (!(await isCurrentRun(initialHead))) return;
+    await removeLabel(env.REVIEW_LABEL);
+    await setFinalStatus(
+      initialHead,
+      'success',
+      'Draft PR; owner gate is not blocking.',
+    );
+    return;
+  }
+
+  const successDescription = statusText;
+  approvedBy = ownerApprovalRequired ? approvingOwners : [];
+
+  if (!(await isCurrentRun(initialHead))) return;
+  await removeLabel(env.REVIEW_LABEL);
+  await setFinalStatus(initialHead, 'success', successDescription);
+}
+
+module.exports = {isCommandComment, reconcileSpecOwnerGate};

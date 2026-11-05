@@ -17,23 +17,43 @@ describe('astryx theme targets', () => {
     const {status, stdout} = await runCli(['theme', 'targets', 'Switch']);
 
     expect(status).toBe(0);
-    expect(stdout).toMatch(/^switch\s+Switch\s+size\s+checked, disabled$/m);
-    expect(stdout).toMatch(/^switch-thumb\s+Switch\s+size\s+checked$/m);
+    // Inline layout: key  component - props - states - className
+    expect(stdout).toMatch(
+      /^switch\s+Switch - size - checked, disabled - astryx-switch$/m,
+    );
+    expect(stdout).toMatch(
+      /^switch-thumb\s+Switch - size - checked - astryx-switch-thumb$/m,
+    );
     expect(stdout).toMatch(/4 across 1 component/);
+  });
+
+  it('omits removed aliases from the target list', async () => {
+    const {status, stdout} = await runCli(['theme', 'targets', 'Popover']);
+
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/^popover\s{2,}Popover/m);
+    expect(stdout).not.toContain('popover-surface');
   });
 
   it('lists the whole surface when unfiltered', async () => {
     const {status, stdout} = await runCli(['theme', 'targets']);
 
     expect(status).toBe(0);
-    const rows = stdout.split('\n').filter(l => /^[a-z][a-z0-9-]*\s{2,}/.test(l));
+    const rows = stdout
+      .split('\n')
+      .filter(l => /^[a-z][a-z0-9-]*\s{2,}/.test(l));
     expect(rows.length).toBeGreaterThan(100);
     expect(stdout).toMatch(/^button\s/m);
     expect(stdout).toMatch(/^switch-thumb\s/m);
   }, 30_000);
 
   it('returns a theme.targets envelope under --json', async () => {
-    const {status, stdout} = await runCli(['--json', 'theme', 'targets', 'Switch']);
+    const {status, stdout} = await runCli([
+      '--json',
+      'theme',
+      'targets',
+      'Switch',
+    ]);
 
     expect(status).toBe(0);
     const payload = JSON.parse(stdout);

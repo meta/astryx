@@ -12,15 +12,23 @@
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {unthemedLength} from '../__tests__/unthemedLength';
+import {Icon} from '../Icon/Icon';
 import {IconButton} from './IconButton';
 
 describe('IconButton', () => {
-  it('renders as an icon-only button with aria-label', () => {
+  // Retained, narrowed: the shared button-pattern contract proves the role and
+  // the computed accessible name in a real engine. What stays is IconButton's
+  // own mapping — it always routes `label` to `aria-label`, and renders the
+  // icon it was given.
+  it('maps label to aria-label and renders the icon', () => {
     render(
       <IconButton label="Settings" icon={<span data-testid="icon">⚙</span>} />,
     );
-    const button = screen.getByRole('button', {name: 'Settings'});
-    expect(button).toHaveAttribute('aria-label', 'Settings');
+    expect(screen.getByRole('button')).toHaveAttribute(
+      'aria-label',
+      'Settings',
+    );
     expect(screen.getByTestId('icon')).toBeInTheDocument();
   });
 
@@ -34,16 +42,97 @@ describe('IconButton', () => {
     expect(visibleText).not.toContain('Settings');
   });
 
-  it('forwards variant prop', () => {
-    render(
-      <IconButton label="Delete" icon={<span>🗑</span>} variant="destructive" />,
-    );
-    expect(screen.getByRole('button', {name: 'Delete'})).toBeInTheDocument();
+  it('reflects each variant on the button target', () => {
+    for (const variant of [
+      'primary',
+      'secondary',
+      'ghost',
+      'destructive',
+    ] as const) {
+      const {unmount} = render(
+        <IconButton label="Delete" icon={<span>🗑</span>} variant={variant} />,
+      );
+      expect(screen.getByRole('button', {name: 'Delete'})).toHaveAttribute(
+        'data-variant',
+        variant,
+      );
+      unmount();
+    }
   });
 
-  it('forwards size prop', () => {
-    render(<IconButton label="Add" icon={<span>+</span>} size="sm" />);
-    expect(screen.getByRole('button', {name: 'Add'})).toBeInTheDocument();
+  it('reflects each size on the button target', () => {
+    for (const size of ['sm', 'md', 'lg'] as const) {
+      const {unmount} = render(
+        <IconButton label="Add" icon={<span>+</span>} size={size} />,
+      );
+      expect(screen.getByRole('button', {name: 'Add'})).toHaveAttribute(
+        'data-size',
+        size,
+      );
+      unmount();
+    }
+  });
+
+  it('stays icon-only when a caller passes isIconOnly anyway', () => {
+    // The type rejects this prop; an untyped caller can still pass it.
+    const untyped = {isIconOnly: false} as Record<string, unknown>;
+    render(<IconButton label="Settings" icon={<span>⚙</span>} {...untyped} />);
+    const button = screen.getByRole('button', {name: 'Settings'});
+    expect(button).toHaveAttribute('aria-label', 'Settings');
+    expect(button.textContent).not.toContain('Settings');
+  });
+
+  it('describes the button with its tooltip, keeping label as the name', () => {
+    render(
+      <IconButton
+        label="Notifications"
+        icon={<span>🔔</span>}
+        tooltip="View notifications"
+      />,
+    );
+    const button = screen.getByRole('button', {name: 'Notifications'});
+    expect(button).toHaveAccessibleDescription('View notifications');
+  });
+
+  it.each([
+    ['sm', 'sm', '1rem'],
+    ['md', 'sm', '1rem'],
+    ['lg', 'md', '1.25rem'],
+  ] as const)(
+    'renders the %s button wrapper and inherited Icon at the same size',
+    (buttonSize, iconSize, renderedSize) => {
+      render(
+        <IconButton
+          label="Add"
+          icon={<Icon icon="check" data-testid="icon" />}
+          size={buttonSize}
+        />,
+      );
+
+      const icon = screen.getByTestId('icon');
+      const wrapper = icon.parentElement;
+      expect(wrapper).not.toBeNull();
+
+      expect(icon).toHaveAttribute('data-size', iconSize);
+      // The glyph reads the theme's size vars; with no theme it falls back to
+      // the size's own rem value, which the wrapper declares directly.
+      expect(unthemedLength(getComputedStyle(icon).width)).toBe(renderedSize);
+      expect(unthemedLength(getComputedStyle(icon).height)).toBe(renderedSize);
+      expect(getComputedStyle(wrapper!).width).toBe(renderedSize);
+      expect(getComputedStyle(wrapper!).height).toBe(renderedSize);
+    },
+  );
+
+  it('preserves an explicit Astryx Icon size', () => {
+    render(
+      <IconButton
+        label="Add"
+        icon={<Icon icon="check" size="lg" data-testid="icon" />}
+        size="sm"
+      />,
+    );
+
+    expect(screen.getByTestId('icon')).toHaveAttribute('data-size', 'lg');
   });
 
   it('handles click events', async () => {
@@ -78,7 +167,9 @@ describe('IconButton', () => {
   it('shows loading state', () => {
     render(<IconButton label="Save" icon={<span>💾</span>} isLoading />);
     const button = screen.getByRole('button');
-    expect(button).toBeDisabled();
+    // Busy is aria-disabled (focusable), not native disabled — see #4871.
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('forwards ref correctly', () => {

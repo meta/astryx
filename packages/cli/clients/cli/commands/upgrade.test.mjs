@@ -6,13 +6,17 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import {Command} from 'commander';
 import {registerUpgrade} from './upgrade.mjs';
-import {generateCompressedIndex} from '../../../foundation/agent-docs/agent-docs.mjs';
+import {
+  generateCompressedIndex,
+  renderAgentDocsBlock,
+} from '../../../foundation/agent-docs/agent-docs.mjs';
 
 let tmpDir;
 let originalCwd;
 let logCalls;
 let stdoutCalls;
 let exitCode;
+let previousProcessExitCode;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-upgrade-test-'));
@@ -21,6 +25,8 @@ beforeEach(() => {
   logCalls = [];
   stdoutCalls = [];
   exitCode = undefined;
+  previousProcessExitCode = process.exitCode;
+  process.exitCode = undefined;
   vi.spyOn(console, 'log').mockImplementation((...args) => {
     logCalls.push(args.join(' '));
   });
@@ -40,6 +46,7 @@ beforeEach(() => {
 afterEach(() => {
   process.chdir(originalCwd);
   fs.rmSync(tmpDir, {recursive: true, force: true});
+  process.exitCode = previousProcessExitCode;
   vi.restoreAllMocks();
 });
 
@@ -128,6 +135,43 @@ describe('upgrade argument validation', () => {
     expect(result).not.toBeNull();
     expect(result.error).toMatch(/Missing required --from/);
     expect(exitCode).toBe(1);
+  });
+
+  it('allows receipt-only upgrades without --from', async () => {
+    writeSourceFile();
+    const result = await runJson([
+      '--json',
+      'upgrade',
+      '--registry',
+      '--path',
+      'src',
+    ]);
+
+    expect(result).toMatchObject({
+      type: 'upgrade.registry',
+      data: {found: 0, applied: false},
+    });
+    expect(exitCode).toBeUndefined();
+  });
+
+  it('exits 1 while preserving the receipt for unresolved registry items', async () => {
+    writeInstalledCore('0.6.0');
+    fs.mkdirSync(path.join(tmpDir, 'src', '.astryx'), {recursive: true});
+    fs.writeFileSync(path.join(tmpDir, 'src', '.astryx', 'broken.json'), '{}');
+
+    const result = await runJson([
+      '--json',
+      'upgrade',
+      '--registry',
+      '--path',
+      'src',
+    ]);
+
+    expect(result).toMatchObject({
+      type: 'upgrade.registry',
+      data: {ok: false, invalid: 1},
+    });
+    expect(process.exitCode).toBe(1);
   });
 
   it('rejects bogus --from values', async () => {
@@ -270,10 +314,13 @@ describe('upgrade agent-docs refresh (#4168)', () => {
     expect(fs.readFileSync(path.join(tmpDir, 'AGENTS.md'), 'utf-8')).toBe(corrupted);
   });
 
-  it('stays silent when the block already matches the installed version', async () => {
+  it('stays silent when the block matches the fully rendered project state', async () => {
     writePkg();
     writeInstalledCore('0.0.15');
-    writeAgentBlock('AGENTS.md', '0.0.15');
+    const expected = await renderAgentDocsBlock(tmpDir, {
+      installedVersion: '0.0.15',
+    });
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), `# Doc\n\n${expected}\n`);
 
     const result = await runJson(['--json', 'upgrade', '--from', '0.0.15', '--apply']);
 

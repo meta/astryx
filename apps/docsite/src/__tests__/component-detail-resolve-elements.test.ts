@@ -2,16 +2,35 @@
 
 import {isValidElement, type ReactElement} from 'react';
 import {describe, expect, it, vi} from 'vitest';
-import {resolveValue} from '../components/component-detail/resolveElements';
+import {
+  getComponent,
+  resolveValue,
+} from '../components/component-detail/resolveElements';
 
 vi.mock('@astryxdesign/core', () => ({
   Badge: () => null,
+  Card: () => null,
+  Grid: () => null,
+  HStack: () => null,
   Icon: () => null,
   SideNavItem: () => null,
   Text: () => null,
 }));
 
 describe('component detail element resolution', () => {
+  it('resolves external components and nested descriptors lazily', () => {
+    expect(getComponent('RichTextEditor')).not.toBeNull();
+    const tourStep = resolveValue({
+      __element: 'TourStep',
+      props: {title: 'Review'},
+    });
+    expect(isValidElement(tourStep)).toBe(true);
+    expect((tourStep as ReactElement).type).not.toBe('TourStep');
+    expect(
+      ((tourStep as ReactElement).type as {displayName?: string}).displayName,
+    ).toBe('TourStep');
+  });
+
   it('resolves descriptor arrays from playground defaults into React elements', () => {
     const resolved = resolveValue([
       {__element: 'SideNavItem', props: {label: 'Dashboard'}},
@@ -58,4 +77,16 @@ describe('component detail element resolution', () => {
     expect(isValidElement(resolved.status.message)).toBe(true);
     expect(resolved.status.message.props.children).toBe('Bad date');
   });
+
+  it.each([
+    ['GridSpan', 'Grid', {columns: 3, gap: 2}],
+    ['StackItem', 'HStack', {gap: 2, width: 300}],
+  ])(
+    "resolves %s's playground.wrapper (%s) to a real component and its props (#5893, #5899)",
+    (_subComponent, wrapperName, wrapperProps) => {
+      const WrapperComponent = getComponent(wrapperName);
+      expect(WrapperComponent).not.toBeNull();
+      expect(resolveValue(wrapperProps)).toEqual(wrapperProps);
+    },
+  );
 });

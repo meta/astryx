@@ -51,6 +51,12 @@ const meta: Meta<typeof MoreMenu> = {
       options: ['start', 'center', 'end'],
       description: 'Alignment of the menu along the placement axis',
     },
+    presentation: {
+      control: 'select',
+      options: ['popover', 'bottom-sheet', 'adaptive'],
+      description:
+        'Popover, BottomSheet, or adaptive compact-touch presentation',
+    },
     'data-testid': {
       control: 'text',
       description: 'Test ID for testing frameworks',
@@ -251,6 +257,82 @@ export const InToolbar: Story = {
             label: 'Delete',
             icon: TrashIcon,
             onClick: () => console.log('Delete'),
+          },
+        ]}
+      />
+    </div>
+  ),
+};
+
+export const BottomSheetPresentation: Story = {
+  name: 'Presentation / BottomSheet',
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {defaultViewport: 'mobile1'},
+    docs: {
+      story: {inline: false, height: '560px'},
+      description: {
+        story:
+          'The real MoreMenu component using DropdownMenu’s BottomSheet presentation. Its visible kebab trigger remains the discoverable mobile entry point.',
+      },
+    },
+  },
+  render: () => (
+    <div style={{padding: 16, display: 'flex', justifyContent: 'flex-end'}}>
+      <MoreMenu
+        presentation="bottom-sheet"
+        label="Project actions"
+        items={[
+          {label: 'Edit', icon: PencilIcon, onClick: () => {}},
+          {
+            label: 'Duplicate',
+            icon: DocumentDuplicateIcon,
+            onClick: () => {},
+          },
+          {label: 'Share', icon: ShareIcon, onClick: () => {}},
+          {
+            label: 'Delete',
+            icon: TrashIcon,
+            variant: 'destructive',
+            onClick: () => {},
+          },
+        ]}
+      />
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector('button');
+    if (trigger instanceof HTMLElement) {
+      trigger.click();
+    }
+  },
+};
+
+export const AdaptivePresentation: Story = {
+  name: 'Presentation / adaptive',
+  parameters: {
+    layout: 'fullscreen',
+    viewport: {defaultViewport: 'mobile1'},
+    docs: {
+      description: {
+        story:
+          'Uses the built-in adaptive policy: BottomSheet on a compact touch screen (a coarse primary pointer, and a viewport narrower than the theme `md` breakpoint (768px by default) or shorter than 500px), anchored popover otherwise. Use device emulation to exercise the touch branch.',
+      },
+    },
+  },
+  render: () => (
+    <div style={{padding: 16, display: 'flex', justifyContent: 'flex-end'}}>
+      <MoreMenu
+        presentation="adaptive"
+        label="Project actions"
+        items={[
+          {label: 'Edit', icon: PencilIcon, onClick: () => {}},
+          {label: 'Share', icon: ShareIcon, onClick: () => {}},
+          {
+            label: 'Delete',
+            icon: TrashIcon,
+            variant: 'destructive',
+            onClick: () => {},
           },
         ]}
       />

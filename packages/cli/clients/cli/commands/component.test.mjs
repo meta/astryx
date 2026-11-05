@@ -12,7 +12,10 @@ import {
   findComponentSource,
   levenshteinDistance,
   findClosestComponents,
-} from './component/index.mjs';
+} from './component.mjs';
+import {runCli} from '../../../test-utils/run-cli.mjs';
+
+const REPO_ROOT = path.resolve(import.meta.dirname, '../../../../..');
 
 let tmpDir;
 
@@ -525,7 +528,7 @@ describe('findExternalComponentDoc', () => {
 describe('searchComponents', () => {
   it('finds Collapsible when searching "accordion"', async () => {
     const {searchComponents, discoverComponents} =
-      await import('./component/index.mjs');
+      await import('./component.mjs');
     const components = discoverComponents('packages/core');
     const results = await searchComponents(
       'accordion',
@@ -539,7 +542,7 @@ describe('searchComponents', () => {
 
   it('finds Dialog when searching "modal"', async () => {
     const {searchComponents, discoverComponents} =
-      await import('./component/index.mjs');
+      await import('./component.mjs');
     const components = discoverComponents('packages/core');
     const results = await searchComponents(
       'modal',
@@ -553,7 +556,7 @@ describe('searchComponents', () => {
 
   it('returns multiple matches for ambiguous terms like "select"', async () => {
     const {searchComponents, discoverComponents} =
-      await import('./component/index.mjs');
+      await import('./component.mjs');
     const components = discoverComponents('packages/core');
     const results = await searchComponents(
       'select',
@@ -568,7 +571,7 @@ describe('searchComponents', () => {
 
   it('finds exact name matches with score 100', async () => {
     const {searchComponents, discoverComponents} =
-      await import('./component/index.mjs');
+      await import('./component.mjs');
     const components = discoverComponents('packages/core');
     const results = await searchComponents(
       'Button',
@@ -581,7 +584,7 @@ describe('searchComponents', () => {
 
   it('returns empty array for complete gibberish', async () => {
     const {searchComponents, discoverComponents} =
-      await import('./component/index.mjs');
+      await import('./component.mjs');
     const components = discoverComponents('packages/core');
     const results = await searchComponents(
       'zzzzzzzzzzz',
@@ -590,4 +593,20 @@ describe('searchComponents', () => {
     );
     expect(results.length).toBe(0);
   });
+});
+
+describe('component <Name> text output', () => {
+  // The text is a projection of the JSON envelope: it may show less, never
+  // data the envelope does not carry.
+  it('shows no related-block records that the JSON lacks', async () => {
+    const json = await runCli(['--json', 'component', 'Button'], REPO_ROOT);
+    expect(json.code).toBe(0);
+    expect(JSON.stringify(JSON.parse(json.stdout).data)).not.toContain('dirName');
+
+    const text = await runCli(['component', 'Button'], REPO_ROOT);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain('# Button');
+    expect(text.stdout).not.toMatch(/^dirName:/m);
+    expect(text.stdout).not.toContain('Related block templates');
+  }, 30_000);
 });

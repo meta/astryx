@@ -6,7 +6,7 @@ export const doc = {
   name: 'ContextMenu',
   displayName: 'Context Menu',
   description:
-    'A right-click area that opens a context menu with action items.',
+    'An adaptive context area that supports long-press on compact touch screens and right-click elsewhere.',
   isReady: true,
   isShowcase: true,
   aspectRatio: 1,

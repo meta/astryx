@@ -8,9 +8,8 @@
  * Applies theme tokens and sets color-scheme for light-dark() to work.
  * Themes are created with `defineTheme()` and applied via CSS:
  * - Token overrides set as CSS custom properties on [data-astryx-theme]
- * - Component overrides scoped via @scope'd CSS selectors on the stable Astryx
- *   selector surface (`.xds-*` classes today; components also emit `data-*`
- *   prop reflections for the data-attribute selector migration)
+ * - Component overrides scoped via @scope'd CSS selectors on stable Astryx
+ *   target classes combined with reflected `data-*` prop/state attributes
  *
  * Root detection: The first Theme in the tree (no parent Theme)
  * automatically syncs attributes to `document.documentElement`:
@@ -42,11 +41,15 @@ import * as stylex from '@stylexjs/stylex';
 import type {ThemeMode} from './types';
 import {colorVars, typographyVars} from './tokens.stylex';
 import {generateThemeCSS, type DefinedTheme} from './defineTheme';
-import {generateDataTokenDefaultsCSS} from './generateThemeRules';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {ThemeContext} from './useTheme';
 import {warnOnce} from '../utils/devWarning';
+import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
+import {
+  reducedMotionMarkProps,
+  setRootReducedMotionMark,
+} from '../privateAttributes/reducedMotion.stylex';
 
 /**
  * Theme provider props
@@ -78,6 +81,11 @@ const wrapperStyles = stylex.create({
   system: {
     colorScheme: 'light dark',
   },
+  // The mark's custom property (REDUCED_MOTION_PROPERTY), which every element
+  // under the mark inherits.
+  reducedMotion: {
+    '--_astryx-reduced-motion': '1',
+  },
 });
 
 // =============================================================================
@@ -85,11 +93,15 @@ const wrapperStyles = stylex.create({
 // =============================================================================
 
 /**
- * Context to detect whether this Theme is nested inside another.
- * The root provider (no parent context) syncs data-theme to <html>.
- * @internal
+ * True below a Theme; the root Theme (no parent context) syncs data-theme
+ * to <html>. A detached React root that conceptually sits inside the app
+ * (useToast's fallback viewport) provides it as `true` itself, so a Theme
+ * rendered in toast content themes its subtree without claiming <html> as
+ * if it were the app's root Theme.
+ * @internal Not exported from the theme barrel; useToast imports it from
+ * './theme/Theme' directly.
  */
-const ThemeNestingContext = React.createContext(false);
+export const ThemeNestingContext = React.createContext(false);
 ThemeNestingContext.displayName = 'ThemeNestingContext';
 
 // =============================================================================
@@ -98,16 +110,7 @@ ThemeNestingContext.displayName = 'ThemeNestingContext';
 
 /** Track which themes have already been injected */
 const injectedThemes = new Set<string>();
-
-/**
- * How many mounted `Theme`s are relying on the injected data-token defaults.
- *
- * The defaults are one document-wide `:root` block, shared by every theme, so
- * they are injected once and removed only when the last theme that took a
- * reference unmounts — tearing them down with whichever provider happened to
- * inject them would strip the palette from the providers still mounted.
- */
-let dataTokenDefaultsRefCount = 0;
+const THEME_LAYER_ORDER = '@layer reset, astryx-base, astryx-theme;';
 
 /**
  * Hook to inject theme CSS into the document.
@@ -117,6 +120,7 @@ let dataTokenDefaultsRefCount = 0;
 function useThemeStyleInjection(theme: DefinedTheme): void {
   const id = useId();
 
+  // Syncs the document's stylesheets with the runtime theme CSS.
   useInsertionEffect(() => {
     // Built themes have their CSS in a separate file — skip injection
     if (theme.__built) {
@@ -143,27 +147,8 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
     );
 
     const {prose, component} = generateThemeCSS(theme);
-    const base = generateDataTokenDefaultsCSS();
     injectedThemes.add(themeKey);
     const cleanups: (() => void)[] = [() => injectedThemes.delete(themeKey)];
-
-    // Data token defaults go into @layer astryx-base, where StyleX puts the
-    // core token defaults, so a theme's own `--color-data-*` outranks them by
-    // layer. Appended (never prepended) so it cannot register `astryx-base`
-    // ahead of `reset` and invert the layer order.
-    if (base) {
-      if (dataTokenDefaultsRefCount++ === 0) {
-        const baseStyle = document.createElement('style');
-        baseStyle.setAttribute(dataAttr('theme-base'), '');
-        baseStyle.textContent = `@layer astryx-base {\n${base}\n}`;
-        document.head.appendChild(baseStyle);
-      }
-      cleanups.push(() => {
-        if (--dataTokenDefaultsRefCount === 0) {
-          document.querySelector(`style[${dataAttr('theme-base')}]`)?.remove();
-        }
-      });
-    }
 
     // Prose defaults go into @layer reset — lowest priority, scoped to
     // the theme region. Any class-based style (StyleX, .xds-*) wins.
@@ -171,7 +156,7 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
       const proseStyle = document.createElement('style');
       proseStyle.setAttribute(dataAttr('theme-prose'), theme.name);
       proseStyle.setAttribute(dataAttr('id'), id);
-      proseStyle.textContent = `@layer reset {\n${prose}\n}`;
+      proseStyle.textContent = `${THEME_LAYER_ORDER}\n@layer reset {\n${prose}\n}`;
       document.head.appendChild(proseStyle);
     }
 
@@ -181,7 +166,7 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
       const compStyle = document.createElement('style');
       compStyle.setAttribute(dataAttr('theme'), theme.name);
       compStyle.setAttribute(dataAttr('id'), id);
-      compStyle.textContent = `@layer astryx-theme {\n${component}\n}`;
+      compStyle.textContent = `${THEME_LAYER_ORDER}\n@layer astryx-theme {\n${component}\n}`;
       document.head.appendChild(compStyle);
     }
 
@@ -223,12 +208,18 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
  *
  * - 'light' | 'dark' → sets data-theme="light" | "dark"
  * - 'system' → removes data-theme (reset.css defaults to color-scheme: light dark)
+ *
+ * A theme that reduces motion for everyone also marks `<html>` with
+ * `data-astryx-reduced-motion` and its custom property, so layers portaled
+ * outside the wrapper reduce their motion too.
  */
 function useRootThemeSync(
   isNested: boolean,
   mode: ThemeMode,
   themeName: string,
+  reducesMotion: boolean,
 ): void {
+  // Syncs the theme attributes on the root `<html>` element.
   useIsomorphicLayoutEffect(() => {
     if (isNested) {
       return;
@@ -246,12 +237,20 @@ function useRootThemeSync(
 
     // Sync theme name so @scope rules reach portals/fallback viewports.
     document.documentElement.setAttribute(dataAttr('theme'), themeName);
+    setRootReducedMotionMark(document.documentElement, reducesMotion);
+    if (reducesMotion) {
+      document.documentElement.style.setProperty(REDUCED_MOTION_PROPERTY, '1');
+    } else {
+      document.documentElement.style.removeProperty(REDUCED_MOTION_PROPERTY);
+    }
 
     return () => {
       document.documentElement.removeAttribute('data-theme');
       document.documentElement.removeAttribute(dataAttr('theme'));
+      setRootReducedMotionMark(document.documentElement, false);
+      document.documentElement.style.removeProperty(REDUCED_MOTION_PROPERTY);
     };
-  }, [isNested, mode, themeName]);
+  }, [isNested, mode, themeName, reducesMotion]);
 }
 
 // =============================================================================
@@ -281,7 +280,11 @@ export function Theme({
   registerTheme(theme);
 
   useThemeStyleInjection(theme);
-  useRootThemeSync(isNested, mode, theme.name);
+  // resolveMotionKnobs resolves no public theme to 'always', so no theme
+  // marks its root.
+  const reducesMotion =
+    resolveMotionKnobs(theme.__axes?.motion).reducedMotion === 'always';
+  useRootThemeSync(isNested, mode, theme.name, reducesMotion);
 
   // Get color-scheme style
   const colorSchemeStyle =
@@ -298,8 +301,13 @@ export function Theme({
     <ThemeContext value={ctxValue}>
       <ThemeNestingContext value={true}>
         <div
-          {...stylex.props(wrapperStyles.base, colorSchemeStyle)}
+          {...stylex.props(
+            wrapperStyles.base,
+            colorSchemeStyle,
+            reducesMotion && wrapperStyles.reducedMotion,
+          )}
           data-astryx-theme={theme.name}
+          {...reducedMotionMarkProps(reducesMotion)}
           data-theme={mode === 'system' ? undefined : mode}>
           {children}
         </div>

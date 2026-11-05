@@ -19,7 +19,7 @@
  * append it to LINKIFIERS.
  */
 
-import {docTopics} from '../generated/docsRegistry';
+import {docRedirects, docTopics} from '../generated/docsRegistry';
 import {components} from '../generated/componentRegistry';
 
 /** Returns an href for a code span it recognizes, or null to pass. */
@@ -35,9 +35,10 @@ const KNOWN_TOPICS = new Set(docTopics.map(d => d.topic));
  * topics return null so a renamed doc degrades to plain code, not a 404.
  */
 const docTopic: CodeLinkifier = code => {
-  const match = /^(?:npx )?astryx docs(?:\s+([a-z][\w-]*))?(?:\s.*)?$/.exec(
-    code,
-  );
+  const match =
+    /^(?:npx (?:@astryxdesign\/cli(?:@\S+)?|astryx)|astryx) docs(?:\s+([a-z][\w-]*(?:\/[a-z][\w-]*)*))?(?:\s.*)?$/.exec(
+      code,
+    );
   if (!match) {
     return null;
   }
@@ -45,7 +46,14 @@ const docTopic: CodeLinkifier = code => {
   if (topic == null) {
     return '/docs';
   }
-  return KNOWN_TOPICS.has(topic) ? `/docs/${topic}` : null;
+  // A docs-tree guide has a slug named after its route, with "/" as "-": its
+  // own page (`authoring/quick-start`), or a redirect to its section on
+  // its namespace's page (`layout/scaffold` -> /docs/layout#scaffold).
+  const slug = topic.replaceAll('/', '-');
+  if (KNOWN_TOPICS.has(slug)) {
+    return `/docs/${slug}`;
+  }
+  return docRedirects[slug] ?? null;
 };
 
 /** Every documented component and hook name; each has a /components page. */

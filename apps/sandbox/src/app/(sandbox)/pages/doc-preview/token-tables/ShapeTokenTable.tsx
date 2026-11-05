@@ -14,7 +14,9 @@ const styles = stylex.create({
     width: 96,
     height: 96,
     backgroundColor: 'var(--color-accent-muted)',
-    border: '2px solid var(--color-accent)',
+    borderWidth: '2px',
+    borderStyle: 'solid',
+    borderColor: 'var(--color-accent)',
     flexShrink: 0,
   },
   borderLine: {

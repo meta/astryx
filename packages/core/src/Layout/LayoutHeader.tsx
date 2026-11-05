@@ -11,6 +11,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Layout/Layout.doc.mjs
+ * - /packages/core/src/Layout/LayoutHeader.doc.mjs
  * - /apps/storybook/stories/Layout.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/Layout/ (showcase blocks)
  */
@@ -19,13 +20,15 @@ import type {AriaRole, ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import {use} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {layoutHeaderMarker} from './layoutEdges.stylex';
 import {LayoutDividerContext} from './LayoutDividerContext';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import type {SizeValue, SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {
   paddingStyles,
+  paddingBlockEndStyles,
   containerPaddingInlineVarStyles,
   containerPaddingBlockStartVarStyles,
   containerPaddingBlockEndVarStyles,
@@ -43,13 +46,13 @@ const styles = stylex.create({
     maxWidth: 'var(--layout-content-width, none)',
     marginInline: 'auto',
     // Default: outer padding on edges that touch container, inner on interior edges
-    paddingInlineStart: `var(--layout-padding-outer-x, ${spacingVars['--spacing-4']})`,
-    paddingInlineEnd: `var(--layout-padding-outer-x, ${spacingVars['--spacing-4']})`,
-    paddingBlockStart: `var(--layout-padding-outer-y, ${spacingVars['--spacing-4']})`,
+    paddingInlineStart: `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
+    paddingInlineEnd: `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
+    paddingBlockStart: `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
     paddingBlockEnd: `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
-    '--container-padding-inline-start': `var(--layout-padding-outer-x, ${spacingVars['--spacing-4']})`,
-    '--container-padding-inline-end': `var(--layout-padding-outer-x, ${spacingVars['--spacing-4']})`,
-    '--container-padding-block-start': `var(--layout-padding-outer-y, ${spacingVars['--spacing-4']})`,
+    '--container-padding-inline-start': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-inline-end': `var(--layout-padding-own-outer-x, var(--layout-padding-outer-x, ${spacingVars['--spacing-4']}))`,
+    '--container-padding-block-start': `var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']}))`,
     '--container-padding-block-end': `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
   },
   fullBleed: {
@@ -105,6 +108,15 @@ export interface LayoutHeaderProps extends BaseProps<HTMLDivElement> {
   padding?: SpacingStep;
 
   /**
+   * Block-end (bottom) padding override. Takes precedence over `padding` on
+   * that edge only; the block-start edge and both inline edges are left alone.
+   * `paddingBlockEnd={0}` docks the last child on the header's bottom edge, so
+   * a tab strip's underline meets `hasDivider` with no hand-written margin.
+   * Accepts numeric spacing steps: 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10.
+   */
+  paddingBlockEnd?: SpacingStep;
+
+  /**
    * Accessible label for the landmark.
    * Required when role is set and multiple landmarks of the same type exist.
    */
@@ -140,6 +152,7 @@ export function LayoutHeader({
   height,
   label,
   padding,
+  paddingBlockEnd,
   role,
   xstyle,
   className,
@@ -161,6 +174,7 @@ export function LayoutHeader({
       {...mergeProps(
         themeProps('layout-header'),
         stylex.props(
+          layoutHeaderMarker,
           styles.header,
           dynamicStyles.sizing(height ?? null),
 
@@ -179,6 +193,12 @@ export function LayoutHeader({
           padding != null && containerPaddingInlineVarStyles[padding],
           padding != null && containerPaddingBlockStartVarStyles[padding],
           padding != null && containerPaddingBlockEndVarStyles[padding],
+          // Per-edge override last so it wins over `padding` on its own edge.
+          // The container var moves with it so bleed children compensate
+          // against the padding actually applied, not the one asked for.
+          paddingBlockEnd != null && paddingBlockEndStyles[paddingBlockEnd],
+          paddingBlockEnd != null &&
+            containerPaddingBlockEndVarStyles[paddingBlockEnd],
         )}>
         {children}
       </div>

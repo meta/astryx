@@ -20,16 +20,15 @@
     "src"
   ],
   "scripts": {
-    "build": "rimraf dist && astryx theme build src/probeTheme.ts -o dist/theme.css --icons-specifier ./registries.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
+    "build": "node ../../../scripts/clean-dist.mjs && astryx theme build src/probeTheme.ts -o dist/theme.css --icons-specifier ./registries.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "0.5.0",
+    "@astryxdesign/core": "0.7.9",
     "react": ">=19"
   },
   "devDependencies": {
-    "rimraf": "^6.0.1",
     "tsup": "^8.3.0",
-    "@astryxdesign/cli": "0.5.0"
+    "@astryxdesign/cli": "0.7.9"
   },
   "module": "./dist/source.mjs"
 }

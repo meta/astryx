@@ -11,12 +11,17 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, renderHook} from '@testing-library/react';
+import {rubberBand} from '../motion/rubberBand';
 import {
+  isInsideNestedLayer,
   useSheetGestures,
   type UseSheetGesturesOptions,
 } from './useSheetGestures';
 
 const SHEET_HEIGHT = 400;
+// A touch device's reserve below the screen, deeper than the whole band over
+// the sheet's visible 240 px.
+const TOUCH_RESERVE = 160;
 
 // A fake pointer event object good enough for the handlers, which only read
 // pointerId, clientY, timeStamp, preventDefault, and currentTarget's capture +
@@ -28,11 +33,13 @@ function pointerEvent(
   pointerId = 1,
   button = 0,
   isPrimary = true,
+  pointerType?: string,
 ) {
   return {
     pointerId,
     button,
     isPrimary,
+    pointerType,
     clientY,
     timeStamp,
     currentTarget: target,
@@ -82,6 +89,11 @@ type Hook = {
   result: {current: ReturnType<typeof useSheetGestures>};
 };
 
+// The live drag position: written per input sample, not rendered.
+function liveOffset(hook: Hook): number {
+  return hook.result.current.activeOffsetRef.current;
+}
+
 function down(hook: Hook, y: number, t: number, target: HTMLElement) {
   // Register the sheet element the way the component does on mount, so the
   // hook can measure its height (it no longer queries the DOM for it).
@@ -100,6 +112,55 @@ function up(hook: Hook, y: number, t: number, target: HTMLElement) {
     hook.result.current.handleProps.onPointerUp(pointerEvent(y, t, target)),
   );
 }
+
+// A handle pull of `pull` px up from y 400, held still, then lifted, by a
+// pointer of `pointerType`. Returns the stretch at the hold.
+function handlePull(
+  hook: Hook,
+  target: HTMLElement,
+  pull: number,
+  t0: number,
+  pointerType: string,
+): number {
+  const event = (y: number, t: number) =>
+    pointerEvent(y, t, target, 1, 0, true, pointerType);
+  act(() => hook.result.current.sheetRef(target));
+  act(() => hook.result.current.handleProps.onPointerDown(event(400, t0)));
+  act(() =>
+    hook.result.current.handleProps.onPointerMove(
+      event(400 - pull / 2, t0 + 200),
+    ),
+  );
+  act(() =>
+    hook.result.current.handleProps.onPointerMove(event(400 - pull, t0 + 400)),
+  );
+  const stretch = -liveOffset(hook);
+  act(() =>
+    hook.result.current.handleProps.onPointerUp(event(400 - pull, t0 + 900)),
+  );
+  return stretch;
+}
+
+describe('isInsideNestedLayer', () => {
+  it("is true for a target inside a <dialog> rendered within the body, and false for the body's own content", () => {
+    const body = document.createElement('div');
+    const own = document.createElement('button');
+    body.append(own);
+    const nested = document.createElement('dialog');
+    const nestedHandle = document.createElement('div');
+    nested.append(nestedHandle);
+    body.append(nested);
+    expect(isInsideNestedLayer(own, body)).toBe(false);
+    expect(isInsideNestedLayer(body, body)).toBe(false);
+    expect(isInsideNestedLayer(nestedHandle, body)).toBe(true);
+    expect(isInsideNestedLayer(nested, body)).toBe(true);
+    // A dialog above the body (the sheet's own) does not count.
+    const ownDialog = document.createElement('dialog');
+    ownDialog.append(body);
+    expect(isInsideNestedLayer(own, body)).toBe(false);
+    expect(isInsideNestedLayer(null, body)).toBe(false);
+  });
+});
 
 describe('useSheetGestures', () => {
   it('dismisses on a fast downward flick (swipe-to-close)', () => {
@@ -152,11 +213,97 @@ describe('useSheetGestures', () => {
     expect(hook.result.current.settledOffset).toBe(0);
   });
 
+  describe('release projection', () => {
+    // A release is judged where the sheet would coast to at the finger's
+    // speed, the way a thrown scroll view is, not where the finger left it.
+    it('dismisses on a medium throw released short of the dismiss line', () => {
+      const {hook, onDismiss} = setup({snapHeights: () => [200]});
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      // 150px in 150ms = 1px/ms. The finger stops at 150, well short of the
+      // 280px line; a surface moving at that speed coasts far past it.
+      move(hook, 50, 50, t);
+      move(hook, 100, 100, t);
+      move(hook, 150, 150, t);
+      up(hook, 150, 152, t);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
+    it('lands a gentle throw on the next detent, not back where it started', () => {
+      const onSnap = vi.fn();
+      const {hook, onDismiss} = setup({snapHeights: () => [200], onSnap});
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      // 60px in 200ms = 0.3px/ms: too slow to be a flick, too short to reach
+      // the 200px detent by position. The coast carries it there.
+      move(hook, 30, 100, t);
+      move(hook, 60, 200, t);
+      up(hook, 60, 202, t);
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(hook.result.current.settledOffset).toBe(200);
+      expect(onSnap).toHaveBeenLastCalledWith(200);
+    });
+
+    it('reads the release speed over the last stretch, so one slow sample does not cancel a throw', () => {
+      const {hook, onDismiss} = setup({snapHeights: () => [200]});
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 60, 20, t); // 3px/ms
+      move(hook, 62, 90, t); // the lift's own last, slow sample
+      up(hook, 62, 92, t);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
+    it('reads a throw that begins after a hold at its own speed, not the average since touch-down', () => {
+      const {hook, onDismiss} = setup({snapHeights: () => [200]});
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 0, 250, t); // a still hold on the handle
+      move(hook, 30, 275, t); // then 60px in 50ms
+      move(hook, 60, 300, t);
+      up(hook, 60, 302, t);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
+    it('reads a single move after a hold as a move, not as the whole hold', () => {
+      const {hook, onDismiss} = setup({snapHeights: () => [200]});
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 60, 300, t); // one sample, 300ms after touch-down
+      up(hook, 60, 302, t);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
+    it('releases no throw from a finger that rested before lifting', () => {
+      const {hook, onDismiss} = setup({snapHeights: () => [200]});
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 60, 20, t); // 3px/ms ...
+      up(hook, 60, 400, t); // ... then 380ms of rest, then the lift
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(hook.result.current.settledOffset).toBe(0);
+    });
+
+    it('settles a throw that would coast past the line at the shortest detent when canDismiss is false', () => {
+      const {hook, onDismiss} = setup({
+        canDismiss: false,
+        snapHeights: () => [200],
+      });
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 50, 50, t);
+      move(hook, 100, 100, t);
+      up(hook, 100, 102, t);
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(hook.result.current.settledOffset).toBe(200);
+    });
+  });
+
   it('does not flick-dismiss on a fast but short nudge', () => {
     const {hook, onDismiss} = setup({snapHeights: () => [200]});
     const t = makeTarget();
     // Fast (20px/10ms = 2px/ms) but only 20px of travel — under the distance
-    // floor, so it settles rather than dismissing.
+    // floor, so nothing is projected and it settles rather than dismissing.
     down(hook, 0, 0, t);
     move(hook, 20, 10, t);
     up(hook, 20, 12, t);
@@ -396,7 +543,7 @@ describe('useSheetGestures', () => {
     const t = makeTarget();
     down(hook, 0, 0, t);
     move(hook, 90, 100, t); // raw offset 90, 10px from the 100 detent
-    const off = hook.result.current.dragOffset;
+    const off = liveOffset(hook);
     expect(off).toBeGreaterThan(90); // pulled up toward 100
     expect(off).toBeLessThanOrEqual(100);
   });
@@ -406,11 +553,51 @@ describe('useSheetGestures', () => {
     const t = makeTarget();
     down(hook, 0, 0, t);
     move(hook, 50, 100, t);
-    expect(hook.result.current.dragOffset).toBe(50);
+    expect(liveOffset(hook)).toBe(50);
     expect(hook.result.current.isDragging).toBe(true);
-    expect(hook.result.current.contentProps.style.transform).toBe(
-      'translateY(50px)',
+    // Written to the element, not rendered: the move costs one style write
+    // and no commit.
+    expect(t.style.transform).toBe('translateY(50px)');
+  });
+
+  it('renders nothing for a move that keeps the layout split', () => {
+    let renders = 0;
+    const onDismiss = vi.fn();
+    const hook = renderHook(
+      (props: UseSheetGesturesOptions) => {
+        renders += 1;
+        return useSheetGestures(props);
+      },
+      {initialProps: {isOpen: true, onDismiss, snapHeights: () => [200]}},
     );
+    const t = makeTarget();
+    down(hook, 0, 0, t);
+    const rendersAtDown = renders;
+    move(hook, 30, 50, t);
+    move(hook, 60, 100, t);
+    move(hook, 90, 150, t);
+    expect(t.style.transform).toBe('translateY(90px)');
+    // One render announces that the sheet is traveling; the moves after it
+    // render nothing.
+    expect(renders - rendersAtDown).toBeLessThanOrEqual(1);
+  });
+
+  it('restores the full layout height when a drag crosses above its base', () => {
+    const onSnap = vi.fn();
+    const {hook} = setup({snapHeights: () => [200], onSnap});
+    const t = makeTarget();
+    // Rest at the 200px working detent: the sheet gives 200px up as layout.
+    down(hook, 0, 0, t);
+    move(hook, 200, 400, t);
+    up(hook, 200, 800, t);
+    expect(hook.result.current.settledLayoutOffset).toBe(200);
+    // Drag back up above the base: the layout split changes, and that one
+    // render carries the offset the host pairs with the new height.
+    down(hook, 200, 1000, t);
+    move(hook, 150, 1100, t);
+    expect(liveOffset(hook)).toBe(150);
+    expect(liveOffset(hook)).toBe(150);
+    expect(t.style.transform).toBe('translateY(150px)');
   });
 
   it('returns to the settled detent when a context menu interrupts a drag', () => {
@@ -455,6 +642,97 @@ describe('useSheetGestures', () => {
     expect(onDismiss).not.toHaveBeenCalled();
   });
 
+  describe('pinch', () => {
+    // A second finger is a pinch, and pinch-zoom belongs to the browser.
+    it('declares pinch-zoom on the sliding surface and the handle', () => {
+      const {hook} = setup();
+      expect(hook.result.current.contentProps.style.touchAction).toBe(
+        'pinch-zoom',
+      );
+      expect(hook.result.current.handleProps.style.touchAction).toBe(
+        'pinch-zoom',
+      );
+    });
+
+    it('returns to the settled detent when a second finger lands on the handle', () => {
+      const {hook, onDismiss} = setup({snapHeights: () => [200]});
+      const target = makeTarget();
+      down(hook, 0, 0, target);
+      move(hook, 120, 200, target);
+      expect(hook.result.current.isDragging).toBe(true);
+
+      act(() =>
+        hook.result.current.handleProps.onPointerDown(
+          pointerEvent(160, 220, target, 2, 0, false),
+        ),
+      );
+
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(hook.result.current.contentProps.style.transform).toBeUndefined();
+      // The first finger's later release is not a drag either.
+      up(hook, 300, 400, target);
+      expect(onDismiss).not.toHaveBeenCalled();
+    });
+
+    it('returns to the detent when the browser cancels a handle drag to take a pinch', () => {
+      const onSnap = vi.fn();
+      const {hook, onDismiss} = setup({snapHeights: () => [200], onSnap});
+      const target = makeTarget();
+      down(hook, 0, 0, target);
+      // Fast enough that settling from here would throw the sheet away.
+      move(hook, 60, 20, target);
+      act(() =>
+        hook.result.current.handleProps.onPointerCancel(
+          pointerEvent(60, 22, target),
+        ),
+      );
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(hook.result.current.contentProps.style.transform).toBeUndefined();
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(onSnap).not.toHaveBeenCalled();
+    });
+
+    it('returns a handle drag to its detent when a second finger lands off the sheet', () => {
+      const {hook, onDismiss} = setup({snapHeights: () => [200]});
+      const target = makeTarget();
+      down(hook, 0, 0, target);
+      move(hook, 40, 100, target);
+      expect(hook.result.current.isDragging).toBe(true);
+      act(() =>
+        hook.result.current.handleProps.onTouchMove({
+          currentTarget: target,
+          touches: [
+            {identifier: 1, clientY: 40},
+            {identifier: 2, clientY: -60},
+          ],
+        } as unknown as React.TouchEvent),
+      );
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(hook.result.current.contentProps.style.transform).toBeUndefined();
+      expect(onDismiss).not.toHaveBeenCalled();
+    });
+
+    it('drops an armed body pull when a second pointer lands on the body', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const body = makeTarget();
+      act(() => hook.result.current.sheetRef(body));
+      act(() =>
+        hook.result.current.bodyProps.onPointerDown(pointerEvent(0, 0, body)),
+      );
+      act(() =>
+        hook.result.current.bodyProps.onPointerDown(
+          pointerEvent(80, 10, body, 2, 0, false),
+        ),
+      );
+      act(() =>
+        hook.result.current.bodyProps.onPointerMove(
+          pointerEvent(60, 100, body),
+        ),
+      );
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+  });
+
   it('does not start a drag from a secondary pointer button', () => {
     const {hook} = setup();
     const target = makeTarget();
@@ -476,9 +754,52 @@ describe('useSheetGestures', () => {
     move(hook, 20, 100, t); // drag up 80px past the top of a rested-at-top sheet
     // Overscroll is allowed but damped: a resisted fraction of the raw -80,
     // and negative (above the top), not the raw distance and not clamped to 0.
-    const off = hook.result.current.dragOffset;
+    const off = liveOffset(hook);
     expect(off).toBeLessThan(0);
     expect(off).toBeGreaterThan(-80); // resisted, so smaller in magnitude
+  });
+
+  it('stretches a finger pulling up past the top on the rubber band, the same on every pull, with no cap', () => {
+    const {hook} = setup({
+      snapHeights: () => [200],
+      offscreenBlockEndInset: TOUCH_RESERVE,
+    });
+    const t = makeTarget();
+    const stretches = [0, 1, 2].map(i =>
+      handlePull(hook, t, 300, i * 2000, 'touch'),
+    );
+    // The band runs over the sheet's visible height: 400 px less its reserve
+    // below the screen.
+    const expected = rubberBand(300, SHEET_HEIGHT - TOUCH_RESERVE);
+    expect(expected).toBeGreaterThan(48);
+    for (const stretch of stretches) {
+      expect(stretch).toBeCloseTo(expected, 6);
+    }
+    expect(hook.result.current.settledOffset).toBe(0);
+  });
+
+  it('never stretches a finger past the reserve below the screen', () => {
+    // A touch device's reserve covers the whole band. Where the reserve is
+    // short, the stretch stops at it, so the page never shows.
+    const {hook} = setup({
+      snapHeights: () => [200],
+      offscreenBlockEndInset: 20,
+    });
+    const t = makeTarget();
+    expect(rubberBand(1000, 380)).toBeGreaterThan(20);
+    expect(handlePull(hook, t, 1000, 0, 'touch')).toBe(20);
+  });
+
+  it('keeps a mouse or a pen pulling up past the top on its own stretch, capped at 48 px', () => {
+    const {hook} = setup({
+      snapHeights: () => [200],
+      offscreenBlockEndInset: 48,
+    });
+    const t = makeTarget();
+    expect(handlePull(hook, t, 80, 0, 'mouse')).toBeCloseTo(28, 6);
+    expect(handlePull(hook, t, 300, 2000, 'mouse')).toBe(48);
+    expect(handlePull(hook, t, 80, 4000, 'pen')).toBeCloseTo(28, 6);
+    expect(handlePull(hook, t, 300, 6000, 'pen')).toBe(48);
   });
 
   it('dismisses a single-height sheet on a slow drag past the floor', () => {
@@ -527,7 +848,7 @@ describe('useSheetGestures', () => {
       bodyDown(hook, 0, 0, body);
       bodyMove(hook, 40, 100, body); // pull down while at the top
       expect(hook.result.current.isDragging).toBe(true);
-      expect(hook.result.current.dragOffset).toBe(40);
+      expect(liveOffset(hook)).toBe(40);
     });
 
     /**
@@ -596,17 +917,23 @@ describe('useSheetGestures', () => {
       document.body.appendChild(sheet);
       return el;
     }
-    function touch(el: HTMLElement, type: string, y: number, id = 1) {
+    function touch(
+      el: HTMLElement,
+      type: string,
+      y: number,
+      id = 1,
+      touchType = 'direct',
+    ) {
       const ev = new Event(type, {bubbles: true, cancelable: true});
       // jsdom lacks TouchEvent; attach the fields the handler reads.
       Object.defineProperty(ev, 'changedTouches', {
-        value: [{identifier: id, clientY: y}],
+        value: [{identifier: id, clientY: y, touchType}],
       });
       Object.defineProperty(ev, 'touches', {
         value:
           type === 'touchend' || type === 'touchcancel'
             ? []
-            : [{identifier: id, clientY: y}],
+            : [{identifier: id, clientY: y, touchType}],
       });
       Object.defineProperty(ev, 'currentTarget', {value: el});
       el.dispatchEvent(ev);
@@ -652,14 +979,14 @@ describe('useSheetGestures', () => {
       expect(hook.result.current.isDragging).toBe(true);
       // The handoff is only worth taking if the sheet follows the finger:
       // 50px of pull expands 50px toward the tallest detent.
-      expect(hook.result.current.dragOffset).toBe(150);
+      expect(liveOffset(hook)).toBe(150);
     });
 
-    it('leaves a bottom pull-up with the scroller at the tallest detent', () => {
-      // Regression: the sheet is already fully expanded, so an upward pull has
-      // nowhere to expand to. Promoting it produced a rubber-band the release
-      // threw straight back, and stole the gesture from the scroller.
-      const {hook} = setup({snapHeights: () => [200]});
+    it('stretches the sheet with a pull up past a list already at its end, at the tallest detent, without claiming the touch', () => {
+      const {hook} = setup({
+        snapHeights: () => [200],
+        offscreenBlockEndInset: TOUCH_RESERVE,
+      });
       const el = makeScroller({
         scrollTop: 600,
         clientHeight: 200,
@@ -669,12 +996,22 @@ describe('useSheetGestures', () => {
       act(() => hook.result.current.bodyProps.ref(el));
       expect(hook.result.current.settledOffset).toBe(0);
 
+      let first: Event | undefined;
+      let past: Event | undefined;
       act(() => {
         touch(el, 'touchstart', 300);
-        touch(el, 'touchmove', 250); // pull up
+        first = touch(el, 'touchmove', 250); // the pull starts at the end
+        past = touch(el, 'touchmove', 150);
       });
-      expect(hook.result.current.isDragging).toBe(false);
-      expect(hook.result.current.dragOffset).toBe(0);
+      // The rest of the pull past the end stretches the sheet. The list keeps
+      // its touch, so a reversal can scroll it back.
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(-liveOffset(hook)).toBeCloseTo(
+        rubberBand(100, SHEET_HEIGHT - TOUCH_RESERVE),
+        6,
+      );
+      expect(first?.defaultPrevented).toBe(false);
+      expect(past?.defaultPrevented).toBe(false);
     });
 
     it('does not preventDefault a bottom pull-up at the tallest detent', () => {
@@ -700,6 +1037,72 @@ describe('useSheetGestures', () => {
       expect(pullUp?.defaultPrevented).toBe(false);
       expect(reverseDown?.defaultPrevented).toBe(false);
       expect(hook.result.current.isDragging).toBe(false);
+    });
+
+    it('stretches the sheet on every pull up at the tallest detent when its content fits', () => {
+      const {hook} = setup({
+        snapHeights: () => [200],
+        offscreenBlockEndInset: TOUCH_RESERVE,
+      });
+      // Nothing to scroll: the content fits its box.
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 200,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      expect(hook.result.current.settledOffset).toBe(0);
+      for (let i = 0; i < 3; i += 1) {
+        let pull: Event | undefined;
+        act(() => {
+          touch(el, 'touchstart', 300);
+          touch(el, 'touchmove', 250);
+          pull = touch(el, 'touchmove', 150);
+        });
+        // The content has no scroll to give the pull, so the sheet takes it.
+        expect(pull?.defaultPrevented).toBe(true);
+        // 150 px past the top, on the rubber band over the visible height.
+        expect(-liveOffset(hook)).toBeCloseTo(
+          rubberBand(150, SHEET_HEIGHT - TOUCH_RESERVE),
+          6,
+        );
+        act(() => {
+          touch(el, 'touchend', 150);
+        });
+        expect(hook.result.current.isDragging).toBe(false);
+        expect(hook.result.current.settledOffset).toBe(0);
+      }
+    });
+
+    it("keeps a stylus pulling up on the body at the tallest detent on a pen's stretch, capped at 48 px", () => {
+      const {hook} = setup({
+        snapHeights: () => [200],
+        offscreenBlockEndInset: TOUCH_RESERVE,
+      });
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 200,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      // An Apple Pencil raises touch events marked `stylus`.
+      act(() => {
+        touch(el, 'touchstart', 300, 1, 'stylus');
+        touch(el, 'touchmove', 260, 1, 'stylus');
+        touch(el, 'touchmove', 220, 1, 'stylus');
+      });
+      expect(-liveOffset(hook)).toBeCloseTo(28, 6);
+      act(() => {
+        touch(el, 'touchmove', 0, 1, 'stylus');
+      });
+      expect(-liveOffset(hook)).toBe(48);
+      act(() => {
+        touch(el, 'touchend', 0, 1, 'stylus');
+      });
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(hook.result.current.settledOffset).toBe(0);
     });
 
     it('finishes the active drag when another ended touch is listed first', () => {
@@ -732,6 +1135,122 @@ describe('useSheetGestures', () => {
       expect(hook.result.current.isDragging).toBe(false);
     });
 
+    function secondFinger(el: HTMLElement, y: number, firstY: number) {
+      const ev = new Event('touchstart', {bubbles: true, cancelable: true});
+      Object.defineProperty(ev, 'changedTouches', {
+        value: [{identifier: 2, clientY: y}],
+      });
+      Object.defineProperty(ev, 'touches', {
+        value: [
+          {identifier: 1, clientY: firstY},
+          {identifier: 2, clientY: y},
+        ],
+      });
+      Object.defineProperty(ev, 'currentTarget', {value: el});
+      el.dispatchEvent(ev);
+    }
+
+    it('leaves a pinch at the top to the browser', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      let pull: Event | undefined;
+      act(() => {
+        touch(el, 'touchstart', 100);
+        secondFinger(el, 140, 100);
+        // The spread carries the second finger down past the promotion slop.
+        pull = touch(el, 'touchmove', 160, 2);
+      });
+      expect(pull?.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+
+    it('returns a pull in flight to its detent when a second finger lands', () => {
+      const {hook, onDismiss} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      act(() => {
+        touch(el, 'touchstart', 0);
+        touch(el, 'touchmove', 50);
+      });
+      expect(hook.result.current.isDragging).toBe(true);
+
+      let after: Event | undefined;
+      act(() => {
+        secondFinger(el, 120, 50);
+        after = touch(el, 'touchmove', 90);
+        touch(el, 'touchend', 90);
+      });
+      expect(after?.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(hook.result.current.contentProps.style.transform).toBeUndefined();
+      expect(onDismiss).not.toHaveBeenCalled();
+    });
+
+    it('leaves a pinch to the browser when the body finger lands first and the second lands on the handle', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      const handle = makeTarget();
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      let pull: Event | undefined;
+      act(() => {
+        touch(el, 'touchstart', 100);
+        hook.result.current.handleProps.onPointerDown(
+          pointerEvent(20, 10, handle, 2, 0, false),
+        );
+        // The spread carries the body finger down past the promotion slop.
+        pull = touch(el, 'touchmove', 160);
+      });
+      expect(pull?.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+
+    it('leaves a pinch to the browser when the second finger lands off the body', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      let pull: Event | undefined;
+      act(() => {
+        touch(el, 'touchstart', 100);
+        // No listener here saw the second finger arrive; `touches` lists it.
+        const ev = new Event('touchmove', {bubbles: true, cancelable: true});
+        Object.defineProperty(ev, 'changedTouches', {
+          value: [{identifier: 1, clientY: 160}],
+        });
+        Object.defineProperty(ev, 'touches', {
+          value: [
+            {identifier: 1, clientY: 160},
+            {identifier: 2, clientY: 20},
+          ],
+        });
+        Object.defineProperty(ev, 'currentTarget', {value: el});
+        el.dispatchEvent(ev);
+        pull = ev;
+      });
+      expect(pull?.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+
     it('leaves native scrolling alone in the middle of the content', () => {
       const {hook} = setup({snapHeights: () => [200]});
       const el = makeScroller({
@@ -745,6 +1264,197 @@ describe('useSheetGestures', () => {
         touch(el, 'touchstart', 300);
         touch(el, 'touchmove', 250);
       });
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+  });
+
+  describe('body touch handoff from a nested scroller', () => {
+    // A host that scrolls content in a box of its own inside the body (a
+    // pinned header and footer around a scrolling middle, a grid) never moves
+    // the body's scrollTop. The edge that decides the handoff is the edge of
+    // the box under the finger, not the body's.
+    function makeNested(opts: {
+      bodyScrollTop: number;
+      bodyScrollHeight?: number;
+      innerScrollTop: number;
+      innerScrollHeight?: number;
+    }) {
+      const sheet = makeTarget();
+      const body = document.createElement('div');
+      Object.defineProperty(body, 'scrollTop', {
+        value: opts.bodyScrollTop,
+        writable: true,
+      });
+      Object.defineProperty(body, 'clientHeight', {value: 400});
+      Object.defineProperty(body, 'scrollHeight', {
+        value: opts.bodyScrollHeight ?? 400,
+      });
+      body.getBoundingClientRect = () => ({height: SHEET_HEIGHT}) as DOMRect;
+      const inner = document.createElement('div');
+      inner.style.overflowY = 'auto';
+      Object.defineProperty(inner, 'scrollTop', {
+        value: opts.innerScrollTop,
+        writable: true,
+      });
+      Object.defineProperty(inner, 'clientHeight', {value: 200});
+      Object.defineProperty(inner, 'scrollHeight', {
+        value: opts.innerScrollHeight ?? 800,
+      });
+      const tile = document.createElement('button');
+      inner.appendChild(tile);
+      body.appendChild(inner);
+      sheet.appendChild(body);
+      document.body.appendChild(sheet);
+      return {body, inner, tile};
+    }
+    function touchOn(
+      target: HTMLElement,
+      listener: HTMLElement,
+      type: string,
+      y: number,
+      id = 1,
+    ) {
+      const ev = new Event(type, {bubbles: true, cancelable: true});
+      Object.defineProperty(ev, 'changedTouches', {
+        value: [{identifier: id, clientY: y}],
+      });
+      Object.defineProperty(ev, 'touches', {
+        value:
+          type === 'touchend' || type === 'touchcancel'
+            ? []
+            : [{identifier: id, clientY: y}],
+      });
+      Object.defineProperty(ev, 'currentTarget', {value: listener});
+      target.dispatchEvent(ev);
+      return ev;
+    }
+
+    it('leaves a pull-down to a nested scroller that is scrolled', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const {body, tile} = makeNested({bodyScrollTop: 0, innerScrollTop: 120});
+      act(() => hook.result.current.sheetRef(body));
+      act(() => hook.result.current.bodyProps.ref(body));
+      let pull: Event | undefined;
+      act(() => {
+        touchOn(tile, body, 'touchstart', 100);
+        pull = touchOn(tile, body, 'touchmove', 160);
+      });
+      expect(pull?.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+
+    it('promotes a pull-down from the top of a nested scroller', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const {body, tile} = makeNested({bodyScrollTop: 0, innerScrollTop: 0});
+      act(() => hook.result.current.sheetRef(body));
+      act(() => hook.result.current.bodyProps.ref(body));
+      let pull: Event | undefined;
+      act(() => {
+        touchOn(tile, body, 'touchstart', 100);
+        pull = touchOn(tile, body, 'touchmove', 160);
+      });
+      expect(pull?.defaultPrevented).toBe(true);
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(liveOffset(hook)).toBe(60);
+      expect(body.style.transform).toBe('translateY(60px)');
+    });
+
+    it('chains to a scrolled body before the sheet when the nested box is at its top', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const {body, tile} = makeNested({
+        bodyScrollTop: 80,
+        bodyScrollHeight: 900,
+        innerScrollTop: 0,
+      });
+      act(() => hook.result.current.sheetRef(body));
+      act(() => hook.result.current.bodyProps.ref(body));
+      let pull: Event | undefined;
+      act(() => {
+        touchOn(tile, body, 'touchstart', 100);
+        pull = touchOn(tile, body, 'touchmove', 160);
+      });
+      // The browser scrolls the body back up; the sheet's turn has not come.
+      expect(pull?.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+
+    it('reads the body when the nested box has nothing to scroll', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const {body, tile} = makeNested({
+        bodyScrollTop: 0,
+        innerScrollTop: 0,
+        innerScrollHeight: 200,
+      });
+      act(() => hook.result.current.sheetRef(body));
+      act(() => hook.result.current.bodyProps.ref(body));
+      act(() => {
+        touchOn(tile, body, 'touchstart', 100);
+        touchOn(tile, body, 'touchmove', 160);
+      });
+      expect(hook.result.current.isDragging).toBe(true);
+    });
+
+    it('leaves a touch that starts inside a nested <dialog> to that layer', () => {
+      // A sheet opened from this sheet's content renders its <dialog> inside
+      // the body, so its touches bubble here. The same pull-down from the
+      // body's own content promotes (see above); from the nested layer it
+      // must not.
+      const {hook} = setup({snapHeights: () => [200]});
+      const {body} = makeNested({
+        bodyScrollTop: 0,
+        innerScrollTop: 0,
+        innerScrollHeight: 200,
+      });
+      const nested = document.createElement('dialog');
+      const nestedHandle = document.createElement('div');
+      nested.appendChild(nestedHandle);
+      body.appendChild(nested);
+      act(() => hook.result.current.sheetRef(body));
+      act(() => hook.result.current.bodyProps.ref(body));
+      let start: Event | undefined;
+      let pull: Event | undefined;
+      act(() => {
+        start = touchOn(nestedHandle, body, 'touchstart', 100);
+        pull = touchOn(nestedHandle, body, 'touchmove', 160);
+      });
+      expect(start?.defaultPrevented).toBe(false);
+      expect(pull?.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(liveOffset(hook)).toBe(0);
+      expect(body.style.transform).toBe('');
+    });
+
+    it('leaves a pull-up to a nested scroller with content below', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const {body, tile} = makeNested({bodyScrollTop: 0, innerScrollTop: 100});
+      act(() => hook.result.current.sheetRef(body));
+      act(() => hook.result.current.bodyProps.ref(body));
+      // Rest at the lower detent, so an expanding handoff would have somewhere
+      // to go if the body's edge were read.
+      down(hook, 0, 0, body);
+      move(hook, 180, 700, body);
+      up(hook, 180, 1100, body);
+      expect(hook.result.current.settledOffset).toBe(200);
+      let pull: Event | undefined;
+      act(() => {
+        touchOn(tile, body, 'touchstart', 300);
+        pull = touchOn(tile, body, 'touchmove', 250);
+      });
+      expect(pull?.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+
+    it('arms the pointer path on the nested scroller too', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const {body, tile} = makeNested({bodyScrollTop: 0, innerScrollTop: 120});
+      act(() => hook.result.current.sheetRef(body));
+      const over = (y: number, t: number) => {
+        const ev = pointerEvent(y, t, body);
+        Object.defineProperty(ev, 'target', {value: tile});
+        return ev;
+      };
+      act(() => hook.result.current.bodyProps.onPointerDown(over(0, 0)));
+      act(() => hook.result.current.bodyProps.onPointerMove(over(40, 100)));
       expect(hook.result.current.isDragging).toBe(false);
     });
   });
@@ -831,7 +1541,7 @@ describe('useSheetGestures', () => {
         touch(el, 'touchmove', 400, 7);
       });
       // 100px of pull past the touchstart, from the 200px detent.
-      expect(hook.result.current.dragOffset).toBe(100);
+      expect(liveOffset(hook)).toBe(100);
     });
 
     // `pointercancel` for that same finger arrives the moment WebKit claims
@@ -865,7 +1575,7 @@ describe('useSheetGestures', () => {
       expect(hook.result.current.isDragging).toBe(true);
       // Anchored where the content ran out, so only the 50px past it moves the
       // sheet. Anchoring at touchstart would have thrown it 350px instead.
-      expect(hook.result.current.dragOffset).toBe(150);
+      expect(liveOffset(hook)).toBe(150);
     });
 
     it('does not preventDefault the mid-gesture handoff', () => {
@@ -899,7 +1609,7 @@ describe('useSheetGestures', () => {
         touch(el, 'touchmove', 200); // the content ended here
         touch(el, 'touchmove', 150);
       });
-      expect(hook.result.current.dragOffset).toBe(150);
+      expect(liveOffset(hook)).toBe(150);
 
       act(() => {
         touch(el, 'touchmove', 210); // back below the anchor
@@ -915,7 +1625,7 @@ describe('useSheetGestures', () => {
         touch(el, 'touchmove', 140);
       });
       expect(hook.result.current.isDragging).toBe(true);
-      expect(hook.result.current.dragOffset).toBe(150);
+      expect(liveOffset(hook)).toBe(150);
     });
 
     it('does not hand off on reaching the end without travelling past it', () => {
@@ -935,10 +1645,13 @@ describe('useSheetGestures', () => {
       expect(hook.result.current.settledOffset).toBe(200);
     });
 
-    it('leaves the mid-gesture pull to the content at the tallest detent', () => {
-      // Same #5161 rule as the touchstart-armed edge: with no taller detent
-      // there is nothing to expand into, so the scroller keeps the gesture.
-      const {hook} = setup({snapHeights: () => [200]});
+    it("stretches the sheet with the rest of a pull past a long list's end at the tallest detent", () => {
+      // The list scrolls to its end first. The rest of the pull stretches the
+      // sheet, and the list keeps its touch.
+      const {hook} = setup({
+        snapHeights: () => [200],
+        offscreenBlockEndInset: TOUCH_RESERVE,
+      });
       const el = makeScroller({
         scrollTop: 300,
         clientHeight: 200,
@@ -955,9 +1668,63 @@ describe('useSheetGestures', () => {
         touch(el, 'touchmove', 200);
         past = touch(el, 'touchmove', 100);
       });
-      expect(hook.result.current.isDragging).toBe(false);
-      expect(hook.result.current.dragOffset).toBe(0);
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(-liveOffset(hook)).toBeCloseTo(
+        rubberBand(100, SHEET_HEIGHT - TOUCH_RESERVE),
+        6,
+      );
       expect(past?.defaultPrevented).toBe(false);
+    });
+
+    it('holds a list still at its end while the sheet takes the rest of the pull, and lets it go on lift', () => {
+      // iOS rubber-bands a scroller past its end, even under `contain`. The
+      // list and the sheet must not both move.
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 300,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+
+      act(() => {
+        touch(el, 'touchstart', 500);
+        touch(el, 'touchmove', 400); // still scrolling
+      });
+      expect(el.style.overscrollBehaviorY).toBe('');
+
+      act(() => {
+        el.scrollTop = 600;
+        touch(el, 'touchmove', 200); // the content ended here
+        touch(el, 'touchmove', 100);
+      });
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(el.style.overscrollBehaviorY).toBe('none');
+
+      act(() => {
+        touch(el, 'touchend', 100);
+      });
+      expect(el.style.overscrollBehaviorY).toBe('');
+    });
+
+    it('lets the list go when the finger comes back to the content end', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = midDetentScroller(hook, 300);
+      act(() => {
+        touch(el, 'touchstart', 500);
+        el.scrollTop = 600;
+        touch(el, 'touchmove', 200); // the content ended here
+        touch(el, 'touchmove', 150);
+      });
+      expect(el.style.overscrollBehaviorY).toBe('none');
+
+      act(() => {
+        touch(el, 'touchmove', 210); // back below the anchor
+      });
+      // The list scrolls again from here, with its own bounce.
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(el.style.overscrollBehaviorY).toBe('');
     });
 
     it('does not hand off while the content can still scroll', () => {

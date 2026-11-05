@@ -8,11 +8,13 @@
 #   needs:code-review   — HIGH-RISK code areas: a new package, a new
 #                         component/module (in core — NOT lab, which is the
 #                         canary staging area), any runtime change under
-#                         core/src (incl. styling — core has high blast radius),
-#                         or public API surface, NOT confined to low-risk areas
-#                         (themes, templates, sandbox, storybook, docsite).
-#                         Requests review from CODEOWNERS. Skipped when the
-#                         author is an ENGOWNER (eng self-serves code).
+#                         core/src, or public API surface, NOT confined to
+#                         low-risk areas (themes, templates, sandbox, storybook,
+#                         docsite). Requests review from CODEOWNERS. ENGOWNERS
+#                         self-serve code. A DESIGNOWNER author also self-serves
+#                         an existing-file Core diff only when the trusted-base
+#                         classifier proves every runtime line appearance-only
+#                         and no other code reason applies.
 #
 #   needs:design-review — DESIGN-AFFECTING changes anywhere: StyleX styling,
 #                         theme/token files, or a template's .tsx. Keyed on
@@ -29,10 +31,10 @@
 # The CODE label DISABLES auto-merge so the PR can't merge unattended (the
 # design label is advisory and does not). Both are cleared when an entitled
 # owner approves (code → CODEOWNER; design → DESIGNOWNER
-# or CODEOWNER). Code detection is path-based and deterministic; design adds a
-# content-based diff score (deterministic too — same diff, same score). The
-# Copilot reviewer reads these labels to focus its review (see
-# .github/copilot-instructions.md).
+# or CODEOWNER). For an author with write or admin permission, the review
+# app named in vars.REVIEW_APP also clears the code gate with its latest
+# approval on the exact head. Code detection is path-based and deterministic; design adds a
+# content-based diff score (deterministic too — same diff, same score).
 #
 # HARD GATE (code review only): this emits a "review-required" COMMIT STATUS.
 # When code review is needed it's set to `pending`, which blocks a required
@@ -44,48 +46,62 @@
 #
 # Design review is ADVISORY: a design-affecting change is labeled
 # needs:design-review and design owners are requested, but it does NOT block
-# the merge. All contributor (non-owner) PRs require code review; owners
-# self-serve code.
+# the merge. All contributor (non-owner) PRs require code review; engineering
+# owners self-serve code, and design owners self-serve only classifier-proven
+# appearance-only Core runtime changes.
 #
 # Uses pull_request_target so it can label / request reviewers / disable
-# auto-merge on fork PRs. It reads the PR file LIST, the PR DIFF TEXT, and the
-# eng/design owner lists from repo VARIABLES (vars.ENGOWNERS / vars.DESIGNOWNERS)
-# via the API — no owner-file content API, no checkout. It never checks out or
-# runs PR-controlled code (the diff is scanned as data; the classifier it feeds
-# is loaded from the BASE ref, not the PR). Do not add checkout or build steps here.
+# auto-merge on fork PRs. An engineering owner's owner command
+# (`/approve-spec`, `/revoke-spec`, an issue_comment in the base context) also
+# runs it, so the command re-evaluates the code half on a fork PR whose review
+# event GitHub held for approval. It reads the PR file list, diff text, and changed Core
+# base/head source bytes as inert API data. The approval helper comes from the
+# trusted workflow SHA; the visual classifier comes from the PR base ref. It reads
+# eng/design owner lists from repository VARIABLES (vars.ENGOWNERS /
+# vars.DESIGNOWNERS) — no checkout and no execution of PR-controlled code.
+# Do not add checkout or build steps to the flag job.
+#
+# ONE REVIEW GATE (spec:AST-030 FR15): "review-required" carries code review and
+# the spec half the spec-owner job decides (DEC-14) from the trusted default branch.
 
 name: Review signal
 
 on:
   pull_request_target:
-    branches: ["main"]
+    branches: ['main']
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   pull_request_review:
-    types: [submitted]
+    types: [submitted, dismissed]
+  # Owner commands for the spec-owner job, which also run the flag job so the
+  # command re-evaluates both halves of the gate (a fork's review event can be
+  # held for approval). The job-level filters skip every other comment before a
+  # runner starts.
+  issue_comment:
+    types: [created]
   # Manual re-trigger. The App only auto-runs on the PR events above, so if it
   # ever misses one (e.g. the workflow was added after a PR was opened, leaving
   # the required "review-required" check stuck as Expected/pending), this is the
-  # recovery lever. Leave `pr` blank to re-flag EVERY open PR (backfill); pass a
-  # number to re-flag just that one.
+  # recovery lever. Leave `pr` blank to re-flag EVERY open, non-draft PR
+  # (backfill); pass a number to re-flag just that one. A backfill too large for
+  # one job splits with `batch` k/n (PRs whose number mod n is k-1).
   workflow_dispatch:
     inputs:
       pr:
-        description: "PR number to re-flag (blank = all open PRs)"
+        description: 'PR number to re-flag (blank = every open, non-draft PR)'
+        required: false
+        type: string
+      batch:
+        description: 'With a blank pr: re-flag only PRs whose number mod n is k-1 (k/n, e.g. 2/4)'
         required: false
         type: string
 
 permissions: {}
 
-concurrency:
-  # One group per PR for the event/single-dispatch paths; a run-scoped group for
-  # the backfill-all dispatch so it is never cancelled by an unrelated re-run.
-  group: review-signal-${{ github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
-  cancel-in-progress: true
-
 env:
-  CODE_LABEL: "needs:code-review"
-  DESIGN_LABEL: "needs:design-review"
-  COMMUNITY_LABEL: "community"
+  CODE_LABEL: 'needs:code-review'
+  DESIGN_LABEL: 'needs:design-review'
+  COMMUNITY_LABEL: 'community'
+  REVIEW_LABEL: needs:spec-owner-review
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -95,8 +111,19 @@ jobs:
     if: >-
       github.event_name == 'pull_request_target'
       || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'issue_comment'
+          && github.event.issue.pull_request != null
+          && (startsWith(github.event.comment.body, '/approve-spec')
+              || startsWith(github.event.comment.body, '/revoke-spec')))
     name: Flag review signals
     runs-on: ubuntu-slim
+    # Per PR (run-scoped for backfill-all). Only this job cancels: a cancelled
+    # spec-owner reconcile could leave its head without a terminal status. An
+    # owner-command run is run-scoped too, so a comment never cancels a pull
+    # request event's run (which may be the only writer of a new head's gate).
+    concurrency:
+      group: review-signal-${{ github.event_name == 'issue_comment' && format('command-{0}', github.run_id) || github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
+      cancel-in-progress: true
     permissions:
       pull-requests: write
       contents: read
@@ -108,16 +135,53 @@ jobs:
         env:
           ENG_OWNERS: ${{ vars.ENGOWNERS }}
           DESIGN_OWNERS: ${{ vars.DESIGNOWNERS }}
+          REVIEW_APP: ${{ vars.REVIEW_APP }}
         with:
           # api.github.com 503s intermittently; an unretried one used to leave a
           # PR with no review-required status at all, blocked forever on
           # "Expected — waiting for status" (#5149, #5152).
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit, with the helper
+            // read from this workflow's own trusted commit (no checkout). The
+            // raw file host spends none of that budget; the API is the fallback.
+            {
+              const helperPath = '.github/scripts/lib/rate-limit-backoff.cjs';
+              let helperSource;
+              try {
+                const response = await fetch(`https://raw.githubusercontent.com/${context.repo.owner}/${context.repo.repo}/${context.sha}/${helperPath}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                helperSource = await response.text();
+              } catch {
+                const {data: helper} = await github.rest.repos.getContent({...context.repo, ref: context.sha, path: helperPath});
+                helperSource = Buffer.from(helper.content, 'base64').toString('utf8');
+              }
+              const helperModule = {exports: {}};
+              new Function('module', 'exports', 'require', helperSource)(
+                helperModule, helperModule.exports,
+                () => { throw new Error('rate-limit-backoff.cjs must stay dependency-free'); },
+              );
+              helperModule.exports.installRateLimitBackoff({github, core});
+            }
             const { owner, repo } = context.repo;
             const CODE = process.env.CODE_LABEL;
             const DESIGN = process.env.DESIGN_LABEL;
             const COMMUNITY = process.env.COMMUNITY_LABEL;
+
+            // Owner handles from a repository variable. An empty or unset
+            // list throws: it is a configuration error, never "no owners"
+            // (see flagOne).
+            function parseHandles(text) {
+              return ((text || '').match(/@?[A-Za-z0-9-]+/g) || [])
+                .map((h) => h.replace(/^@/, '').toLowerCase());
+            }
+            function ownersFromVar(name) {
+              const handles = parseHandles(process.env[name]);
+              if (!handles.length) {
+                throw new Error(`Owner variable ${name} is empty or unset — refusing to bucket authors from an empty list.`);
+              }
+              return handles;
+            }
 
             // Resolve which PR(s) to flag. On a PR event we get the payload PR.
             // On manual dispatch we take the `pr` input (one PR), or re-flag
@@ -131,22 +195,81 @@ jobs:
                 });
                 prs = [data];
               } else {
-                prs = await github.paginate(github.rest.pulls.list, {
+                const open = await github.paginate(github.rest.pulls.list, {
                   owner, repo, state: 'open', per_page: 100,
                 });
-                core.info(`Backfill: re-flagging ${prs.length} open PR(s).`);
+                // A draft is re-flagged when it becomes ready
+                // (ready_for_review), so a backfill skips it.
+                const ready = open.filter(listed => !listed.draft);
+                // A shard keys on the PR number, so it stays the same set
+                // while PRs open and close between dispatches.
+                const batch = (context.payload.inputs.batch || '').trim();
+                prs = ready;
+                if (batch) {
+                  const match = /^(\d+)\/(\d+)$/.exec(batch);
+                  const [k, n] = match ? [Number(match[1]), Number(match[2])] : [0, 0];
+                  if (!(n >= 1 && k >= 1 && k <= n)) {
+                    core.setFailed(`batch must be k/n with 1 <= k <= n; got "${batch}".`);
+                    return;
+                  }
+                  prs = ready.filter(listed => listed.number % n === k - 1);
+                }
+                core.info(
+                  `Backfill${batch ? ` ${batch}` : ''}: re-flagging ${prs.length} of ` +
+                    `${open.length} open PR(s); ${open.length - ready.length} draft(s) skipped.`,
+                );
               }
+            } else if (context.eventName === 'issue_comment') {
+              // An engineering owner's owner command re-evaluates the code
+              // half from the PR's reviews: GitHub can hold a fork's
+              // pull_request_review run for approval, so the approval alone
+              // may never reach the gate. Anyone else's command changes
+              // nothing here.
+              const commenter = (context.payload.comment?.user?.login || '').toLowerCase();
+              if (!ownersFromVar('ENG_OWNERS').includes(commenter)) {
+                core.info(`@${commenter} is not an engineering owner; the code half is unchanged.`);
+                return;
+              }
+              const { data } = await github.rest.pulls.get({
+                owner, repo, pull_number: context.payload.issue.number,
+              });
+              prs = [data];
             } else {
               prs = [context.payload.pull_request];
             }
 
             let hadError = false;
-            for (const pr of prs) {
+            const isBackfill = prs.length > 1 ||
+              (context.eventName === 'workflow_dispatch' &&
+                !(context.payload.inputs.pr || '').trim());
+            for (const [index, listed] of prs.entries()) {
+              if (isBackfill) {
+                // A backfill makes several calls per PR on the job token's
+                // hourly budget. Stop with headroom left for PR events
+                // (reading /rate_limit costs nothing).
+                const {data: limits} = await github.rest.rateLimit.get();
+                const {remaining, limit, reset} = limits.resources.core;
+                if (remaining < Math.min(1500, Math.floor(limit / 3))) {
+                  core.setFailed(
+                    `Backfill stopped before PR #${listed.number} (${prs.length - index} left): ` +
+                      `${remaining} of ${limit} API requests remain until ` +
+                      `${new Date(reset * 1000).toISOString()}; re-run after the reset.`,
+                  );
+                  return;
+                }
+              }
               try {
+                // The list endpoint omits changed_files, which the file check
+                // below needs, so a backfill reads each PR in full.
+                const pr = listed.changed_files == null
+                  ? (await github.rest.pulls.get({
+                      owner, repo, pull_number: listed.number,
+                    })).data
+                  : listed;
                 await flagOne(pr);
               } catch (e) {
                 hadError = true;
-                core.warning(`Failed to flag PR #${pr.number}: ${e.message}`);
+                core.warning(`Failed to flag PR #${listed.number}: ${e.message}`);
               }
             }
             if (hadError) core.setFailed('One or more PRs failed to flag; see warnings.');
@@ -172,21 +295,61 @@ jobs:
             // per-PR try/catch then skips this PR, LEAVES ITS GATE UNTOUCHED
             // (never a false success), and fails the run visibly. An unreadable
             // owner list is never "no owners".
-            function parseHandles(text) {
-              return ((text || '').match(/@?[A-Za-z0-9-]+/g) || [])
-                .map((h) => h.replace(/^@/, '').toLowerCase());
-            }
-            function ownersFromVar(name) {
-              const handles = parseHandles(process.env[name]);
-              if (!handles.length) {
-                throw new Error(`Owner variable ${name} is empty or unset — refusing to bucket authors from an empty list.`);
-              }
-              return handles;
-            }
             const engOwners = ownersFromVar('ENG_OWNERS');
             const designOwners = ownersFromVar('DESIGN_OWNERS');
             const authorIsEng = engOwners.includes(author);
             const authorIsDesign = designOwners.includes(author);
+
+            // Match the trusted workflow version: an older PR base can predate
+            // this helper even though the running workflow requires it.
+            const { data: reviewDecisionFile } = await github.rest.repos.getContent({
+              owner, repo, ref: context.sha,
+              path: '.github/scripts/review-signal-decision.cjs',
+            });
+            const reviewDecisionSource = Buffer.from(
+              reviewDecisionFile.content,
+              'base64',
+            ).toString('utf8');
+            const reviewDecisionModule = { exports: {} };
+            new Function('module', 'exports', 'require', reviewDecisionSource)(
+              reviewDecisionModule,
+              reviewDecisionModule.exports,
+              () => { throw new Error('review-signal-decision.cjs must stay dependency-free'); },
+            );
+            const reviewDecision = reviewDecisionModule.exports;
+
+            // One review gate (DEC-14): code review leads; success needs both.
+            async function publishReviewGate(codeGated, codeDescription) {
+              // Write, then read the spec half once more: the spec-owner job
+              // writes its half before it reads this one, so one of the two
+              // always sees the other's latest write.
+              let gate = null;
+              for (let pass = 0; pass < 2; pass++) {
+                let statuses = [];
+                try {
+                  statuses = await github.paginate(github.rest.repos.listCommitStatusesForRef, {
+                    owner, repo, ref: pr.head.sha, per_page: 100,
+                  });
+                } catch (e) {
+                  core.warning(`Could not read the spec decision: ${e.message}`);
+                }
+                const next = reviewDecision.composeReviewGate({
+                  codeGated,
+                  codeDescription,
+                  spec: reviewDecision.readSpecGate(statuses),
+                });
+                if (gate && next.state === gate.state && next.description === gate.description) break;
+                gate = next;
+                await github.rest.repos.createCommitStatus({
+                  owner, repo, sha: pr.head.sha,
+                  context: 'review-required',
+                  state: gate.state,
+                  description: gate.description,
+                  target_url: gate.target_url,
+                });
+              }
+              return gate;
+            }
 
             // Bot PRs: no gate, no community label. Set the check to success so
             // a required "review-required" doesn't block them, drop any stray
@@ -205,31 +368,33 @@ jobs:
                   }
                 }
               }
-              await github.rest.repos.createCommitStatus({
-                owner, repo, sha: pr.head.sha,
-                context: 'review-required', state: 'success',
-                description: 'Automated (bot) PR — exempt from review gates.',
-              });
+              await publishReviewGate(false, 'Automated (bot) PR — exempt from code review.');
               return;
             }
+
 
             // --- Changed files. ---
             const allFiles = await github.paginate(github.rest.pulls.listFiles, {
               owner, repo, pull_number: pr.number, per_page: 100,
             });
-            // lab is the canary-only staging area — new components are EXPECTED
-            // to develop and harden there before promotion. Skip the entire
-            // packages/lab/** folder for ALL signal detection (code and design)
-            // by filtering it out once, up front. lab is a SAFE SPACE (below).
-            const isLab = (p) => /^packages\/lab\//.test(p);
-            const files = allFiles.filter((f) => !isLab(f.filename));
-            const paths = files.map((f) => f.filename);
+            if (allFiles.length !== pr.changed_files) {
+              throw new Error(
+                `GitHub returned ${allFiles.length} of ${pr.changed_files} changed files; refusing to classify an incomplete PR.`,
+              );
+            }
+            // A change is excluded as a safe-space change only when both its
+            // current and previous path are safe. This keeps unsafe→safe and
+            // Core→safe renames visible and fail-closed.
+            const {files, hasSafeBoundaryRename, paths} =
+              reviewDecision.classifyReviewSignalPaths(allFiles);
+            const isSafeSpace = reviewDecision.isSafeSpace;
 
             // Two DIFFERENT categories — do not conflate them:
             //
             //   SAFE SPACES — experimentation / staging. Exempt from BOTH gates.
             //     No review of any kind is expected here.
-            //     lab (filtered above), sandbox, storybook.
+            //     lab, sandbox, storybook. A rename is safe only when both the
+            //     previous and current paths are safe.
             //
             //   DESIGN SPACES — where design work lives. Exempt from the CODE
             //     gate (low-risk for code), but they TRIGGER the DESIGN gate.
@@ -237,8 +402,6 @@ jobs:
             //
             // Both are low-risk for the CODE gate, so the code gate ignores
             // their union; only the design gate cares about the distinction.
-            const isSafeSpace = (p) =>
-              isLab(p) || /^apps\/(sandbox|storybook)\//.test(p);
             const isDesignSpace = (p) =>
               /^packages\/themes\//.test(p) ||
               /^packages\/cli\/templates\//.test(p) ||
@@ -269,6 +432,9 @@ jobs:
 
             // ============ HIGH-RISK CODE ============
             const codeReasons = [];
+            if (hasSafeBoundaryRename) {
+              codeReasons.push('safe-space boundary rename');
+            }
             const newPackage = files.some(
               (f) => f.status === 'added' &&
                 /^packages\/[^/]+\/package\.json$/.test(f.filename),
@@ -285,20 +451,6 @@ jobs:
               codeReasons.push('public API surface change');
             }
             const coreChange = paths.some(isCoreRuntime);
-            if (coreChange && !codeReasons.includes('new component/module')) {
-              codeReasons.push('core change');
-            }
-
-            // ALL contributor (non-owner) PRs require code review, not just the
-            // high-risk ones. External contributors can't self-merge anyway;
-            // this mainly holds internal contributors who have write access but
-            // are not on the eng/design team. Owners still self-serve code
-            // (gated only by the high-risk reasons above → suppressed for eng).
-            const authorIsOwner = authorIsEng || authorIsDesign;
-            if (!authorIsOwner) codeReasons.push('community contribution');
-
-            // Eng owners self-serve code — no code tag for them.
-            const codeHighRisk = codeReasons.length > 0 && !authorIsEng;
 
             // ============ DESIGN-AFFECTING ============
             // DESIGN SPACES trigger this gate; SAFE SPACES never do (both
@@ -320,18 +472,16 @@ jobs:
             if (paths.some((p) => /^packages\/cli\/templates\/.+\.tsx$/.test(p))) designReasons.push('template change');
             if (paths.some(isDocsiteVisual)) designReasons.push('docsite visual change');
 
-            // Content-based visual signal (#3667). The path signals above
-            // cannot see the most common visual change in this codebase: an
-            // inline `stylex.create` edit inside a component .tsx (no
-            // .stylex.ts touched). Score the diff CONTENT with the shared
-            // classifier. Safety: both the classifier source and the diff come
-            // from the API — the source from the BASE ref (trusted), the diff
-            // as inert text. Best-effort: any failure (huge diff 406, missing
-            // file on old base) logs a warning and falls back to path signals.
-            if (designReasons.length === 0) {
+            // Content-based visual signal (#3667). The classifier also proves
+            // the narrower appearance-only exception for DESIGNOWNER authors.
+            // It and the diff both come from the API: trusted BASE-ref source,
+            // inert PR diff text. Any fetch or parse failure keeps the exception
+            // false, so Core runtime changes continue to require engineering.
+            let visualClassification = null;
+            if (coreChange || designReasons.length === 0) {
               try {
                 const { data: libFile } = await github.rest.repos.getContent({
-                  owner, repo, ref: pr.base.ref,
+                  owner, repo, ref: pr.base.sha,
                   path: '.github/scripts/lib/classify-visual.js',
                 });
                 const libSrc = Buffer.from(libFile.content, 'base64').toString('utf8');
@@ -345,17 +495,87 @@ jobs:
                   { owner, repo, pull_number: pr.number,
                     headers: { accept: 'application/vnd.github.diff' } },
                 );
-                const vc = mod.exports.classifyVisualDiff(String(diff), {
+                const sources = {};
+                const coreRuntimeFiles = files.filter((file) =>
+                  isCoreRuntime(file.filename) ||
+                  (file.previous_filename && isCoreRuntime(file.previous_filename)),
+                );
+                async function readSource(fullName, ref, filePath) {
+                  const [sourceOwner, sourceRepo] = fullName.split('/');
+                  const { data } = await github.rest.repos.getContent({
+                    owner: sourceOwner,
+                    repo: sourceRepo,
+                    ref,
+                    path: filePath,
+                  });
+                  if (Array.isArray(data) || data.type !== 'file' || !data.content) {
+                    throw new Error(`Could not read source bytes for ${filePath}.`);
+                  }
+                  return Buffer.from(data.content, 'base64').toString('utf8');
+                }
+                // The source bytes only prove the appearance-only exception
+                // a design owner may self-serve; an engineering owner
+                // self-serves every code change, so their pull requests skip
+                // these reads (two per changed Core file).
+                for (const file of authorIsEng ? [] : coreRuntimeFiles) {
+                  const previousPath = file.previous_filename || file.filename;
+                  if (file.status !== 'modified' || previousPath !== file.filename) {
+                    continue;
+                  }
+                  const [baseSource, headSource] = await Promise.all([
+                    readSource(
+                      pr.base.repo.full_name,
+                      pr.base.sha,
+                      previousPath,
+                    ),
+                    readSource(
+                      pr.head.repo.full_name,
+                      pr.head.sha,
+                      file.filename,
+                    ),
+                  ]);
+                  sources[file.filename] = {base: baseSource, head: headSource};
+                }
+                visualClassification = mod.exports.classifyVisualDiff(String(diff), {
                   ignorePath: isSafeSpace,
+                  sources,
                 });
-                core.info(`visual content score: ${vc.score} (${vc.bucket})`);
-                if (vc.bucket === 'visual' || vc.bucket === 'likely-visual') {
-                  designReasons.push(`visual diff content (score ${vc.score})`);
+                core.info(`visual content score: ${visualClassification.score} (${visualClassification.bucket}); appearanceOnly=${visualClassification.appearanceOnly}`);
+                if (
+                  designReasons.length === 0 &&
+                  (visualClassification.bucket === 'visual' ||
+                    visualClassification.bucket === 'likely-visual')
+                ) {
+                  designReasons.push(
+                    `visual diff content (score ${visualClassification.score})`,
+                  );
                 }
               } catch (e) {
-                core.warning(`Content-based visual signal skipped: ${e.message}`);
+                core.warning(`Content-based visual classification failed closed: ${e.message}`);
               }
             }
+
+            const appearanceOnly = visualClassification?.appearanceOnly === true;
+            if (coreChange && !codeReasons.includes('new component/module')) {
+              codeReasons.push(appearanceOnly ? 'core visual change' : 'core change');
+            }
+
+            // ALL contributor (non-owner) PRs require code review. The narrow
+            // appearance-only exception below is available only to a DESIGNOWNER;
+            // external contributors stay in the normal contribution flow.
+            const authorIsOwner = authorIsEng || authorIsDesign;
+            if (!authorIsOwner) codeReasons.push('community contribution');
+
+            const onlyCoreVisualChange =
+              codeReasons.length === 1 && codeReasons[0] === 'core visual change';
+            const designOwnerAppearanceSelfServe =
+              authorIsDesign && appearanceOnly && onlyCoreVisualChange;
+            // Eng owners self-serve all code. Design owners self-serve only the
+            // classifier-proven appearance-only Core case above.
+            const codeHighRisk =
+              codeReasons.length > 0 &&
+              !authorIsEng &&
+              !designOwnerAppearanceSelfServe;
 
             // Design owners self-serve design — no design tag for them.
             const designAffecting = designReasons.length > 0 && !authorIsDesign;
@@ -371,42 +591,56 @@ jobs:
             // the PR's reviews here (this job runs on pull_request_target and
             // workflow_dispatch, both of which work for forks) and treat a gate
             // as satisfied when an entitled owner has approved:
-            //   code gate   → an ENGOWNER approval
+            //   code gate   → an ENGOWNER approval, or — for an author with
+            //                 write or admin permission — the review app's
+            //                 (vars.REVIEW_APP) latest verdict, when it approves
             //   design gate → a DESIGNOWNER approval
-            // We use each reviewer's LATEST review state so a later
-            // CHANGES_REQUESTED/DISMISSED correctly un-satisfies it.
+            // Only reviews whose commit_id equals this current PR head count.
+            // Within that head, each reviewer's latest APPROVED /
+            // CHANGES_REQUESTED / DISMISSED state wins. An H1 approval can never
+            // clear H2 for either engineering or design.
+            //
+            // The author's permission is read live at every evaluation. An unset
+            // REVIEW_APP or a failed read leaves the app's reviews without effect
+            // (fail closed to the engineering-owner path).
+            const reviewApp = reviewDecision.normalizeReviewApp(process.env.REVIEW_APP);
+            let authorHasWrite = false;
+            if (reviewApp && codeHighRisk) {
+              try {
+                const { data: permission } =
+                  await github.rest.repos.getCollaboratorPermissionLevel({
+                    owner, repo, username: pr.user.login,
+                  });
+                authorHasWrite = reviewDecision.hasWritePermission(permission);
+              } catch (e) {
+                core.warning(`Could not read author permission; review-app approval does not apply: ${e.message}`);
+              }
+            }
             let codeApproved = false;
+            let codeApprovedBy = null;
             let designApproved = false;
             try {
               const reviews = await github.paginate(github.rest.pulls.listReviews, {
                 owner, repo, pull_number: pr.number, per_page: 100,
               });
-              const latestByUser = new Map();
-              for (const r of reviews) {
-                if (!r.user) continue;
-                // Ignore comment-only reviews; keep the latest APPROVED /
-                // CHANGES_REQUESTED / DISMISSED per reviewer.
-                if (r.state === 'COMMENTED') continue;
-                latestByUser.set(r.user.login.toLowerCase(), r.state);
-              }
-              for (const [login, state] of latestByUser) {
-                if (state !== 'APPROVED') continue;
-                // Code gate: any ENGOWNER approval satisfies it (eng owns the
-                // code; the CODEOWNERS subset is a subset of ENGOWNERS, so
-                // ENGOWNERS covers it). Design gate: only a DESIGNOWNER — an
-                // eng approval does NOT clear a design gate.
-                if (engOwners.includes(login)) codeApproved = true;
-                if (designOwners.includes(login)) designApproved = true;
-              }
+              ({codeApproved, codeApprovedBy, designApproved} =
+                reviewDecision.resolveReviewApprovals({
+                  reviews,
+                  headSha: pr.head.sha,
+                  engOwners,
+                  designOwners,
+                  reviewApp,
+                  authorHasWrite,
+                }));
             } catch (e) {
-              core.warning(`Could not read reviews: ${e.message}`);
+              core.warning(`Could not resolve exact-head reviews: ${e.message}`);
             }
 
             // Effective gate = detected gate minus what an entitled owner
             // already approved.
             const codeGated = codeHighRisk && !codeApproved;
             const designGated = designAffecting && !designApproved;
-            core.info(`approvals: code=${codeApproved} design=${designApproved} → codeGated=${codeGated} designGated=${designGated}`);
+            core.info(`approvals: code=${codeApproved} (${codeApprovedBy || '-'}, authorHasWrite=${authorHasWrite}) design=${designApproved} → codeGated=${codeGated} designGated=${designGated}`);
 
             // --- Apply labels. ---
             const current = pr.labels.map((l) => l.name);
@@ -487,9 +721,9 @@ jobs:
               }
             }
 
-            // No explanatory comment is posted here on purpose. The label is the
-            // mechanical signal; the Copilot reviewer reads it and explains why
-            // review is needed with actual judgment — better than a static one.
+            // No explanatory comment is posted here on purpose. The label and
+            // status are the mechanical signals; reviews provide judgment
+            // separately rather than through a static workflow comment.
 
             // --- The blocking gate: a "review-required" COMMIT STATUS. ---
             // We use a commit STATUS (not a check run) for two reasons:
@@ -508,17 +742,15 @@ jobs:
             // whose POST failed is blocked on a status that will never arrive.
             // Throwing marks the run red and lets the per-PR catch continue a
             // backfill; re-run the workflow to retry.
-            await github.rest.repos.createCommitStatus({
-              owner,
-              repo,
-              sha: pr.head.sha,
-              context: 'review-required',
-              state: codeGated ? 'pending' : 'success',
-              description: codeGated
-                ? `Waiting on code review: ${gateReasons.join(', ')}`.slice(0, 140)
-                : 'No code review required.',
-            });
-            core.info(`review-required status: ${codeGated ? 'pending' : 'success'}`);
+            const gateDescription = codeGated
+              ? `Waiting on code review: ${gateReasons.join(', ')}`.slice(0, 140)
+              : codeHighRisk && codeApprovedBy === 'review-app'
+                ? 'Cleared by review-app approval for a write-access author.'
+                : codeHighRisk && codeApproved
+                  ? 'Cleared by code-owner approval.'
+                  : 'No code review required.';
+            const gate = await publishReviewGate(codeGated, gateDescription);
+            core.info(`review-required status: ${gate.state}`);
             // Neutralize any stale "review-required" CHECK RUN left over from the
             // pre-status gate. Such a leftover (conclusion action_required) drags
             // the status rollup to FAILURE even though we now gate via a commit
@@ -542,17 +774,56 @@ jobs:
             }
             } // end flagOne
 
-  # Anchor job for the review-clear chain. On a review submission the flag job
-  # is skipped (it only runs on pull_request_target / workflow_dispatch), so
-  # without a job that actually runs, the workflow run could end up "skipped"
-  # rather than "completed" and not reliably fire the review-clear workflow_run.
-  # This tiny job always runs on pull_request_review so the workflow completes,
-  # letting review-clear.yml resolve the PR and re-dispatch the fork-safe clear.
+  # Anchor the clear/restore chain for every review state that can change the
+  # effective exact-head engineering approval.
   review-anchor:
-    if: github.event_name == 'pull_request_review' && github.event.review.state == 'approved'
+    if: >-
+      github.event_name == 'pull_request_review' &&
+      contains(fromJSON('["approved","changes_requested","dismissed"]'), github.event.review.state)
     name: Anchor review-clear chain
     runs-on: ubuntu-slim
     permissions: {}
     steps:
-      - name: Note approval
-        run: echo "Approval received; review-clear will re-dispatch the flag job."
+      - name: Note review state change
+        run: echo "Review state changed; review-clear will reconcile the code gate."
+
+  # Spec owner gate: reconcile the spec half for one pull request.
+  spec-owner:
+    # Fork reviews (read-only tokens) are skipped; owners use the command. The
+    # reconciler orders concurrent runs itself: no concurrency group.
+    if: >-
+      (github.event_name != 'pull_request_review' ||
+       github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.event_name != 'issue_comment' ||
+       (github.event.issue.pull_request != null &&
+        (startsWith(github.event.comment.body, '/approve-spec') ||
+         startsWith(github.event.comment.body, '/revoke-spec')))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.pr != '')
+    name: Spec owner gate
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      statuses: write
+    steps:
+      # Every privileged event checks out the trusted default branch. Never
+      # execute the PR merge ref or PR-controlled helpers with write permissions.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Reconcile owner gate
+        uses: actions/github-script@v9
+        with:
+          retries: 3
+          script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
+            const path = require('node:path');
+            const {reconcileSpecOwnerGate} = require(path.join(
+              process.env.GITHUB_WORKSPACE,
+              '.github/scripts/spec-owner-reconcile.cjs',
+            ));
+            await reconcileSpecOwnerGate({github, context, core});

@@ -3,6 +3,7 @@
 import type {Meta, StoryObj} from '@storybook/react';
 import {useState} from 'react';
 import {OverflowList} from '@astryxdesign/core/OverflowList';
+import type {OverflowItem} from '@astryxdesign/core/OverflowList';
 import {Button} from '@astryxdesign/core/Button';
 import {Badge} from '@astryxdesign/core/Badge';
 import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
@@ -410,6 +411,48 @@ export const CappedMultiRow: Story = {
             <Badge key={tag} variant="info" label={tag} />
           ))}
         </OverflowList>
+      </div>
+    );
+  },
+};
+
+// A row that already owns a menu — the collapsed actions join it instead of
+// growing a second anchor. Drag the container's resize handle: the "More" menu
+// stays put and its entries appear and disappear as the row narrows and widens.
+export const StandingAnchor: Story = {
+  render: () => {
+    const actions = ['Rerun', 'Branch', 'Share', 'Export', 'Duplicate'];
+    const [hidden, setHidden] = useState<OverflowItem[]>([]);
+    return (
+      <div
+        style={{
+          resize: 'horizontal',
+          overflow: 'hidden',
+          border: '1px dashed #ccc',
+          padding: 8,
+          width: 520,
+          minWidth: 140,
+          maxWidth: '100%',
+        }}
+        data-testid="standing-anchor"
+        data-hidden-count={hidden.length}>
+        <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+          <div style={{flex: '1 1 auto', minWidth: 0}}>
+            <OverflowList gap={2} onOverflowChange={setHidden}>
+              {actions.map(action => (
+                <Button key={action} label={action} size="sm" />
+              ))}
+            </OverflowList>
+          </div>
+          <DropdownMenu
+            button={{label: 'More', variant: 'ghost', size: 'sm'}}
+            items={[
+              ...hidden.map(({index}) => ({label: actions[index]})),
+              {label: 'Rename session'},
+              {label: 'Delete session'},
+            ]}
+          />
+        </div>
       </div>
     );
   },

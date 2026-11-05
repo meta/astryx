@@ -3,8 +3,10 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * @file Guards `theming.targets` against the real `themeProps()` call sites (#3741).
- * @input Component sources (*.tsx/*.ts) and their `{Name}.doc.mjs` files.
- * @output Vitest failures naming each undocumented class / visual prop.
+ * @input Core/Lab component sources (*.tsx/*.ts), their `{Name}.doc.mjs`
+ *   files, and the Lab promotion-candidate manifest.
+ * @output Vitest failures naming each undocumented class / visual prop on the
+ *   stable Core surface or a capability-participating Lab component.
  * @position Sibling of derivedVarRegistry.test.ts, which already validates the
  *   OTHER fields of the same `theming` block (`vars`, `derived`). `targets` was
  *   the one field with no machine check, so it drifted — twice (#3652, #3680).
@@ -22,15 +24,37 @@
  * `visualProps` or `states`. Docs may list MORE than the source passes —
  * components forward props they don't themselves reflect (Timestamp passes
  * `{format}` but documents `type`/`color`/`format`), and that is intentional.
+ *
+ * Lab is capability-based: a component participates when it already declares
+ * `theming.targets` or enters the existing promotion-candidate manifest. Other
+ * Lab components remain free to iterate with runtime hooks that are not yet a
+ * documented public theming promise.
  */
 
 import {describe, it, expect} from 'vitest';
 import {readdirSync, readFileSync} from 'node:fs';
-import {join, relative} from 'node:path';
+import {basename, join, relative} from 'node:path';
 import ts from 'typescript';
 import {stableClassName} from '../naming';
 
-const SRC_DIR = join(__dirname, '..');
+const CORE_SRC_DIR = join(__dirname, '..');
+const LAB_SRC_DIR = join(__dirname, '../../../lab/src');
+const RICHTEXT_SRC_DIR = join(__dirname, '../../../richtext/src');
+const LAB_PROMOTION_MANIFEST = join(
+  __dirname,
+  '../../../../internal/lab-readiness/manifest.mjs',
+);
+
+interface LabPromotionCandidate {
+  sourceDir: string;
+}
+
+const {CANDIDATES: labPromotionCandidates} = require(
+  LAB_PROMOTION_MANIFEST,
+) as {CANDIDATES: LabPromotionCandidate[]};
+const LAB_PROMOTION_DIRS = new Set(
+  labPromotionCandidates.map(candidate => candidate.sourceDir),
+);
 
 // ---------------------------------------------------------------------------
 // Source scanning: find themeProps() call sites via the TypeScript AST
@@ -190,32 +214,32 @@ function extractThemeTargets(
 
 describe('extractThemeTargets', () => {
   it('reads a bare call with no props', () => {
-    expect(extractThemeTargets(`themeProps('progressbar-track')`)).toEqual([
-      {className: 'astryx-progressbar-track', propKeys: [], isOpaque: false},
+    expect(extractThemeTargets(`themeProps('progress-bar-track')`)).toEqual([
+      {className: 'astryx-progress-bar-track', propKeys: [], isOpaque: false},
     ]);
   });
 
   it('reads shorthand props', () => {
-    expect(extractThemeTargets(`themeProps('progressbar', {variant})`)).toEqual(
-      [
-        {
-          className: 'astryx-progressbar',
-          propKeys: ['variant'],
-          isOpaque: false,
-        },
-      ],
-    );
+    expect(
+      extractThemeTargets(`themeProps('progress-bar', {variant})`),
+    ).toEqual([
+      {
+        className: 'astryx-progress-bar',
+        propKeys: ['variant'],
+        isOpaque: false,
+      },
+    ]);
   });
 
   it('records the KEY, not the value, when a prop is renamed', () => {
     // The trap a regex falls into: `fillVariant` is a local, not a prop.
     expect(
       extractThemeTargets(
-        `themeProps('progressbar-fill', {variant: fillVariant})`,
+        `themeProps('progress-bar-fill', {variant: fillVariant})`,
       ),
     ).toEqual([
       {
-        className: 'astryx-progressbar-fill',
+        className: 'astryx-progress-bar-fill',
         propKeys: ['variant'],
         isOpaque: false,
       },
@@ -258,11 +282,11 @@ describe('extractThemeTargets', () => {
   });
 
   it('reads the keys of a conditional spread', () => {
-    // Heading's real call site: `{level, color, ...(type && {type})}`.
+    // Heading's reflected visual props, including conditional type/weight.
     const [site] = extractThemeTargets(
-      `themeProps('heading', {level, color, ...(type && {type})})`,
+      `themeProps('heading', {level, color, ...(type && {type}), ...(weight && {weight})})`,
     );
-    expect(site.propKeys).toEqual(['level', 'color', 'type']);
+    expect(site.propKeys).toEqual(['level', 'color', 'type', 'weight']);
     expect(site.isOpaque).toBe(false);
   });
 
@@ -314,6 +338,7 @@ type DocBlock = {theming?: {targets?: DocTarget[]}};
 type ComponentDocModule = {docs?: DocBlock; docsZh?: DocBlock};
 
 interface ComponentInfo {
+  packageName: 'core' | 'lab' | 'richtext';
   dir: string;
   sites: ThemeTargetSite[];
   /** The doc blocks that carry theming.targets, by the key they live under. */
@@ -328,7 +353,10 @@ interface ComponentInfo {
  * Reads the file as text rather than requiring it: this runs for directories
  * that have no doc of their own, so most candidates are misses.
  */
-function docFilesDocumenting(classNames: Set<string>): string[] {
+function docFilesDocumenting(
+  srcDir: string,
+  classNames: Set<string>,
+): string[] {
   const matches: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, {withFileTypes: true})) {
@@ -346,18 +374,51 @@ function docFilesDocumenting(classNames: Set<string>): string[] {
       }
     }
   };
-  walk(SRC_DIR);
+  walk(srcDir);
   return matches;
 }
 
-function discoverComponents(): ComponentInfo[] {
-  const results: ComponentInfo[] = [];
-  const dirs = readdirSync(SRC_DIR, {withFileTypes: true})
-    .filter(d => d.isDirectory())
-    .map(d => d.name);
+/**
+ * Every directory under `srcDir`, at any depth, relative to `srcDir`.
+ *
+ * Not just the top level: a component's sources are not always its own direct
+ * children — Table's plugins render from `Table/plugins/<name>/`. Scanning only
+ * the top level exempted every one of those from this guard, which is the same
+ * silent-exemption shape #3741 was filed about.
+ *
+ * Takes `srcDir` rather than closing over a module constant so it serves both
+ * packages, which is what the Lab enrollment above needs.
+ */
+function sourceDirs(srcDir: string): string[] {
+  const out: string[] = [];
+  const walk = (rel: string): void => {
+    for (const entry of readdirSync(join(srcDir, rel), {
+      withFileTypes: true,
+    })) {
+      if (entry.isDirectory()) {
+        const child = rel === '' ? entry.name : join(rel, entry.name);
+        out.push(child);
+        walk(child);
+      }
+    }
+  };
+  walk('');
+  // The package root itself. A package that keeps its components as flat
+  // files rather than one directory each (richtext) has no subdirectory to
+  // find, so without this it is silently discovered as zero components.
+  out.push('');
+  return out;
+}
 
-  for (const dir of dirs) {
-    const dirPath = join(SRC_DIR, dir);
+function discoverComponents(
+  srcDir: string,
+  packageName: ComponentInfo['packageName'],
+  requiredDirs: ReadonlySet<string> = new Set(),
+): ComponentInfo[] {
+  const results: ComponentInfo[] = [];
+
+  for (const dir of sourceDirs(srcDir)) {
+    const dirPath = join(srcDir, dir);
     const dirEntries = readdirSync(dirPath);
 
     const sourceFiles = dirEntries.filter(
@@ -387,9 +448,13 @@ function discoverComponents(): ComponentInfo[] {
     // Both paths match the on-disk listing rather than existsSync: on
     // case-insensitive filesystems existsSync would match a differently-cased
     // doc file that CI never checks. (Same guard as derivedVarRegistry.test.ts.)
-    const docFiles = dirEntries.includes(`${dir}.doc.mjs`)
-      ? [join(dirPath, `${dir}.doc.mjs`)]
-      : docFilesDocumenting(new Set(sites.map(s => s.className)));
+    // `basename`, not `dir`: a nested source dir is a path
+    // (`Table/plugins/foo`), and its own doc file is named for the last
+    // segment.
+    const ownDoc = `${basename(dir)}.doc.mjs`;
+    const docFiles = dirEntries.includes(ownDoc)
+      ? [join(dirPath, ownDoc)]
+      : docFilesDocumenting(srcDir, new Set(sites.map(s => s.className)));
     if (docFiles.length === 0) {
       continue;
     }
@@ -404,18 +469,23 @@ function discoverComponents(): ComponentInfo[] {
       }
       for (const key of ['docs', 'docsZh'] as const) {
         const targets = mod[key]?.theming?.targets;
-        // Only blocks that already document a theming surface are held to it —
-        // a doc with no theming block at all is a separate (documentation) gap.
+        // A normal Core or Lab component enrolls by declaring a theming
+        // surface. Promotion candidates are also enrolled here so a missing
+        // block is a failure rather than a silently skipped readiness gap.
         if (targets != null) {
-          docBlocks.push({key, file: relative(SRC_DIR, docFile), targets});
+          docBlocks.push({key, file: relative(srcDir, docFile), targets});
         }
       }
     }
-    if (docBlocks.length === 0) {
+    const participates =
+      packageName === 'core'
+        ? docBlocks.length > 0
+        : requiredDirs.has(dir) || docBlocks.length > 0;
+    if (!participates) {
       continue;
     }
 
-    results.push({dir, sites, docBlocks});
+    results.push({packageName, dir, sites, docBlocks});
   }
   return results;
 }
@@ -425,24 +495,64 @@ function discoverComponents(): ComponentInfo[] {
 // ---------------------------------------------------------------------------
 
 describe('theming.targets matches the themeProps() call sites', () => {
-  const components = discoverComponents();
+  const components = [
+    ...discoverComponents(CORE_SRC_DIR, 'core'),
+    ...discoverComponents(LAB_SRC_DIR, 'lab', LAB_PROMOTION_DIRS),
+    ...discoverComponents(RICHTEXT_SRC_DIR, 'richtext'),
+  ];
 
-  it('finds components to check', () => {
-    // A refactor that renames themeProps must not silently disable this file.
-    expect(components.length).toBeGreaterThan(0);
+  it('finds participating Core and Lab components', () => {
+    // A refactor that renames themeProps or drops the Lab package from this
+    // inventory must not silently disable either side of the guard.
+    expect(components.some(component => component.packageName === 'core')).toBe(
+      true,
+    );
+    expect(components.some(component => component.packageName === 'lab')).toBe(
+      true,
+    );
+    // richtext keeps its components as flat files, so a regression in
+    // directory discovery would enroll zero of them and the guard would pass
+    // on an unchecked package rather than fail.
+    expect(
+      components.some(component => component.packageName === 'richtext'),
+    ).toBe(true);
   });
 
-  for (const {dir, sites, docBlocks} of components) {
+  it('enrolls every Lab promotion candidate and explicit theming capability', () => {
+    const labDirs = new Set(
+      components
+        .filter(component => component.packageName === 'lab')
+        .map(component => component.dir),
+    );
+    expect([...LAB_PROMOTION_DIRS].filter(dir => !labDirs.has(dir))).toEqual(
+      [],
+    );
+    expect(LAB_PROMOTION_DIRS.has('CircularProgress')).toBe(false);
+    expect(labDirs.has('CircularProgress')).toBe(true);
+    expect(labDirs.has('Schedule')).toBe(false);
+  });
+
+  for (const {packageName, dir, sites, docBlocks} of components) {
+    const componentLabel = `${packageName}/${dir}`;
     const renderedClasses = [...new Set(sites.map(s => s.className))].sort();
+
+    it(`${componentLabel}: participating components declare theming metadata`, () => {
+      expect(
+        docBlocks,
+        `${componentLabel} participates in the public theming contract but has ` +
+          `no loadable .doc.mjs theming.targets. Lab components participate ` +
+          `when they declare theming.targets or enter the promotion manifest.`,
+      ).not.toHaveLength(0);
+    });
 
     for (const {key, file, targets} of docBlocks) {
       const documented = new Set(targets.map(t => t.className));
 
-      it(`${dir} (${file} ${key}): every rendered class is documented`, () => {
+      it(`${componentLabel} (${file} ${key}): every rendered class is documented`, () => {
         const undocumented = renderedClasses.filter(c => !documented.has(c));
         expect(
           undocumented,
-          `${dir} renders ${undocumented.length} astryx-* class(es) that ` +
+          `${componentLabel} renders ${undocumented.length} astryx-* class(es) that ` +
             `${file} ${key}.theming.targets does not document: ` +
             `${undocumented.join(', ')}. An undocumented class is an ` +
             `unthemeable element — theme authors and codegen read targets[] ` +
@@ -450,7 +560,7 @@ describe('theming.targets matches the themeProps() call sites', () => {
         ).toEqual([]);
       });
 
-      it(`${dir} (${file} ${key}): every visual prop passed to themeProps is documented`, () => {
+      it(`${componentLabel} (${file} ${key}): every visual prop passed to themeProps is documented`, () => {
         const missing: string[] = [];
         for (const site of sites) {
           const target = targets.find(t => t.className === site.className);

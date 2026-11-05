@@ -11,12 +11,13 @@ export const doc = {
   type: 'function',
   kind: 'api',
   name: 'parseResponse',
+  namespace: 'cli/api',
   displayName: 'parseResponse()',
   summary: 'Parse `astryx --json` stdout into the structural response envelope.',
   description:
     'The entry point for consuming the CLI as a subprocess. A JSON string is parsed; ' +
     'an already-parsed object is passed through unchanged, so it is safe to call on ' +
-    'either. It returns the structural { type, data, meta? } envelope without narrowing: ' +
+    'either. It returns the structural { apiVersion, type, data, meta? } envelope without narrowing: ' +
     '`data` stays unknown until you discriminate on `type` (or use assertResponse).',
   importPath: '@astryxdesign/cli/json',
   signature: 'parseResponse(raw: unknown): any',
@@ -34,7 +35,7 @@ export const doc = {
     {
       type: 'any',
       description:
-        'The { type, data, meta? } envelope, or a CLIError envelope. The published signature is intentionally untyped; narrow it by casting to the matching *Response type exported from @astryxdesign/cli/json.',
+        'The { apiVersion, type, data, meta? } envelope, or a CLIError envelope ({ apiVersion, error, code, suggestions? }). The published signature is intentionally untyped; narrow it by casting to the matching *Response type exported from @astryxdesign/cli/json.',
     },
   ],
   throws: [

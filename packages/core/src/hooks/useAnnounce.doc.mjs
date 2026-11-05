@@ -1,0 +1,128 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/** @type {import('@astryxdesign/cli/authoring').HookDoc} */
+export const docs = {
+  name: 'useAnnounce',
+  displayName: 'useAnnounce',
+  keywords: [
+    'announce',
+    'live region',
+    'aria-live',
+    'screen reader',
+    'accessibility',
+    'a11y',
+    'status',
+    'alert',
+    'polite',
+    'assertive',
+    'visually hidden',
+    'wcag',
+    'replace',
+    'result count',
+  ],
+  params: [
+    {
+      name: 'options',
+      type: 'UseAnnounceOptions',
+      description: 'Configuration object.',
+      required: false,
+    },
+    {
+      name: 'options.hasReplace',
+      type: 'boolean',
+      description:
+        "The instance states one current state, such as a search's result count: each message it writes withdraws the instance's previous message while that one has not been spoken yet, whatever their politeness, and is spoken at its own politeness. A message already spoken stays. Messages from other instances, and from instances without hasReplace, still join. Give each state a component reports its own instance, for example one for the result count and one for selection changes.",
+      default: 'false',
+      required: false,
+    },
+  ],
+  returns: [
+    {
+      name: 'announce',
+      type: '(message: string, politeness?: "polite" | "assertive") => void',
+      description:
+        'Speaks a message through the live region the caller can be heard from: the shared one on the page body, or, when the calling component is rendered inside an open Astryx modal (Dialog, modal BottomSheet, modal Drawer, Lightbox, MobileNav, CommandPalette), a persistent region inside that modal, since a native modal hides the page-body region from assistive technology. Politeness defaults to "polite"; messages announced in the same frame are joined, in order, into one announcement, and an identical repeat is kept once, except that each message from a hasReplace instance replaces the previous message of that instance not yet spoken. An empty message clears any lingering status, including joined messages not yet spoken, instead of announcing.',
+    },
+  ],
+  usage: {
+    description:
+      'Imperatively announces a message to screen readers through a visually-hidden live region. Use it for state that is only conveyed visually; search result counts, "no results", loading and saved confirmations, validation errors (WCAG 4.1.3 Status Messages). The polite and assertive regions are created empty on first use and stay mounted, which is what makes announcements reliable: most screen readers ignore a live region that is inserted together with its content. Each message is cleared a couple of seconds after it is announced so stale status does not linger in the accessibility tree. A message is delivered where its caller is: from inside an open Astryx modal it goes to a region inside that modal and is heard there with no change to the calling code; a message sent just as the modal is dismissed is delivered through whatever is exposed afterwards rather than lost. A call made outside the modal, even by the component that renders it, uses the page-body region.',
+    bestPractices: [
+      {
+        guidance: true,
+        description:
+          'Reach for this instead of hand-rolling an aria-live div; a region rendered with its content usually does not announce at all.',
+      },
+      {
+        guidance: true,
+        description:
+          'Keep "polite" for status and result counts; reserve "assertive" for errors and time-sensitive alerts, since it interrupts whatever the screen reader is saying.',
+      },
+      {
+        guidance: true,
+        description:
+          'Announce the outcome, not the interaction; "12 results" rather than "search ran".',
+      },
+      {
+        guidance: true,
+        description:
+          'Send a value that keeps changing, such as a result count as the user types, through its own useAnnounce({hasReplace: true}) instance, so input faster than a frame says only the latest count.',
+      },
+      {
+        guidance: false,
+        description:
+          'Announce content that is already visible and correctly labeled in the DOM; that doubles up for screen reader users.',
+      },
+    ],
+  },
+  relatedComponents: ['VisuallyHidden', 'Toast'],
+  relatedHooks: ['useClipboard'],
+  importPath: '@astryxdesign/core/hooks',
+  category: 'accessibility',
+};
+
+/** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
+export const docsDense = {
+  description:
+    'Imperative screen-reader announcements via a visually-hidden live region: the page-body one, or one inside the open Astryx modal the caller is rendered in (a native modal hides the body region). Polite + assertive regions created empty on first use + kept mounted, so announcements are reliable (most AT ignore a live region inserted together w/ its content). Messages auto-clear after ~2s.',
+  paramDescriptions: {
+    options: 'config object.',
+    'options.hasReplace':
+      "instance states one current state (e.g. a search's result count): each message withdraws the instance's previous one not yet spoken, whatever politeness, spoken at its own; spoken messages stay; other instances + instances w/o hasReplace still join. Default false.",
+  },
+  returnDescriptions: {
+    announce:
+      'speaks message through the live region the caller is heard from: page body, or inside the open Astryx modal (Dialog, modal BottomSheet/Drawer, Lightbox, MobileNav, CommandPalette) the calling component is rendered in. politeness defaults "polite"; same-frame messages join in order, identical repeat kept once, except a hasReplace instance replaces its own not-yet-spoken message; empty message clears lingering + not-yet-spoken status.',
+  },
+  usage: {
+    description:
+      'Announces visual-only state to screen readers: result counts, "no results", loading / saved confirmations, validation errors (WCAG 4.1.3). Regions mounted empty up front, so updates announce; text auto-clears so stale status does not linger in a11y tree.',
+    bestPractices: [
+      {
+        guidance: true,
+        description:
+          'Use instead of hand-rolled aria-live div; region rendered w/ its content usually does not announce.',
+      },
+      {
+        guidance: true,
+        description:
+          '"polite" for status / counts; "assertive" only for errors + time-sensitive alerts (it interrupts).',
+      },
+      {
+        guidance: true,
+        description:
+          'Announce outcome, not interaction; "12 results", not "search ran".',
+      },
+      {
+        guidance: true,
+        description:
+          'Changing value (result count while typing): own useAnnounce({hasReplace: true}) instance, so faster-than-a-frame input says only the latest.',
+      },
+      {
+        guidance: false,
+        description:
+          'Announce content already visible + labeled in DOM; doubles up for AT users.',
+      },
+    ],
+  },
+};

@@ -6,7 +6,7 @@ export const docs = {
   name: 'InputGroup',
   displayName: 'Input Group',
   group: 'Field',
-  category: 'Data Input',
+  category: 'Form Controls',
   isHiddenFromOverview: true,
   keywords: [
     'inputgroup',
@@ -24,13 +24,13 @@ export const docs = {
     ],
   },
   description:
-    'Groups an input with prefix/suffix addons in a visually connected container with shared border and focus ring.',
+    'Groups an input with prefix and suffix addons in one connected row. A focused member stays above its neighbours, so its focus ring shows in full.',
   props: [
     {
       name: 'children',
       type: 'ReactNode',
       description:
-        'InputGroupText and compatible input children: TextInput, NumberInput, TimeInput, DateInput, Typeahead, Selector, or MultiSelector.',
+        'InputGroupText, Button addons, and compatible input children: TextInput, NumberInput, TimeInput, DateInput, Typeahead, Selector, or MultiSelector.',
       required: true,
     },
     {
@@ -59,7 +59,7 @@ export const docs = {
     {
       name: 'isOptional',
       type: 'boolean',
-      description: 'Show "(optional)" indicator.',
+      description: 'Show the "Optional" indicator after the label.',
       default: 'false',
     },
     {
@@ -77,7 +77,8 @@ export const docs = {
     {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
-      description: 'Status indicator applied to the group border.',
+      description:
+        'Validation status. Its message shows below the group. The group border does not change; a theme can style the row from `data-status`.',
     },
     {
       name: 'labelTooltip',
@@ -109,6 +110,11 @@ export const docs = {
         guidance: true,
         description:
           'Use InputGroupText for static prefixes/suffixes like "$", "kg", or "https://".',
+      },
+      {
+        guidance: true,
+        description:
+          'Use Button for an action attached to the input; InputGroup connects its corners automatically.',
       },
       {
         guidance: true,
@@ -180,6 +186,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Use InputGroupText for static prefixes/suffixes like "$", "kg", or "https://".',
+      },
+      {
+        guidance: true,
+        description:
+          'Use Button for an action attached to the input; InputGroup connects its corners automatically.',
       },
       {
         guidance: true,

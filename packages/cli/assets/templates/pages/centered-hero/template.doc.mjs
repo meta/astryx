@@ -6,7 +6,9 @@ export const doc = {
   name: 'Centered Hero',
   displayName: 'Centered Hero',
   description:
-    'Centered headline, description, and CTA buttons above a wide hero image.',
+    'Symmetrical centered stack (headline, short blurb, paired call-to-action buttons) resting on one wide full-bleed picture, with nothing on either flank competing.',
+  keywords: ['hero', 'banner', 'splash', 'landing image', 'marketing masthead'],
   isReady: true,
   category: 'Gallery - Hero',
+  icons: {ArrowRightIcon: 'arrowRight'},
 };

@@ -4,16 +4,29 @@
 
 /**
  * @file StepperContext.ts
- * @input Uses React createContext/use
- * @output Exports StepperContext, useStepperContext, and context types
+ * @input Layer-scoped React context/use
+ * @output Exports the public Stepper context hook and package-internal
+ *   coordination used by Stepper and Step
  * @position Context for Stepper <-> Step communication
+ *
+ * `StepperContextValue` is the supported public read. It keeps the Stepper
+ * state, configuration, transition history, and step registration contract
+ * while excluding compact-layout coordination used only by the built-in Step.
+ * Its provider carries exactly those keys, so JavaScript and TypeScript observe
+ * the same boundary.
+ *
+ * `StepperInternalContextValue` is carried by a separate package-internal
+ * provider. It adds compact-layout coordination for Stepper and Step but is not
+ * re-exported from index.ts.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Stepper/Stepper.doc.mjs
  * - /packages/core/src/Stepper/index.ts
+ * - /packages/core/src/Stepper/Stepper.public.test.ts
  */
 
-import {createContext, use} from 'react';
+import {use, type Context} from 'react';
+import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 
 export type StepperOrientation = 'horizontal' | 'vertical';
 export type StepperDensity = 'compact' | 'balanced' | 'spacious';
@@ -28,6 +41,13 @@ export type StepperDensity = 'compact' | 'balanced' | 'spacious';
  */
 export type StepperIndicatorPosition = 'separated' | 'on-track';
 
+/** Options reported by a Step when it registers with Stepper. */
+export interface StepperRegistrationOptions {
+  /** Reads the Step's current disabled state. */
+  getIsDisabled?: () => boolean;
+}
+
+/** Stepper state and coordination available to descendant content. */
 export interface StepperContextValue {
   activeStep: number;
   /**
@@ -37,10 +57,6 @@ export interface StepperContextValue {
    * crossed (see the CONNECTOR FILL block in Step.tsx). Equal to `activeStep`
    * on the first render, which is what keeps a stepper that mounts mid-flow
    * from animating its way to the step it opened on.
-   *
-   * Internal: not part of the public API, and deliberately not a Stepper prop.
-   * When the connector animates is behaviour the stepper owns, not something a
-   * consumer configures.
    */
   previousActiveStep: number;
   orientation: StepperOrientation;
@@ -49,23 +65,58 @@ export interface StepperContextValue {
   density: StepperDensity;
   indicatorPosition: StepperIndicatorPosition;
   /**
-   * Dev-mode index registration. Each Step calls this on mount with its `step`
-   * index. The Stepper tracks the set and warns if two Steps share the same
-   * index. Returns a cleanup function to call on unmount.
+   * Registers a Step index and an optional disabled-state getter. The Stepper
+   * tracks the set, warns if two Steps share an index, and keeps compact
+   * previous/next controls from selecting disabled steps. Returns a cleanup
+   * function to call on unmount.
    */
-  registerStep: (index: number) => () => void;
+  registerStep: (
+    index: number,
+    options?: StepperRegistrationOptions,
+  ) => () => void;
+}
+
+/**
+ * Package-internal Stepper <-> Step coordination. This type is intentionally
+ * absent from the public component barrel.
+ */
+export interface StepperInternalContextValue extends StepperContextValue {
+  /** Number of registered steps used to derive the compact threshold. */
+  stepCount: number;
+  /** Whether a horizontal Stepper is currently using its compact layout. */
+  isCompact: boolean;
+  /** Portal target for the active step's compact summary. */
+  summarySlot: HTMLElement | null;
 }
 
 export const StepperContext = createContext<StepperContextValue | null>(null);
 StepperContext.displayName = 'StepperContext';
 
-export function useStepperContext(): StepperContextValue {
-  const ctx = use(StepperContext);
+export const StepperInternalContext =
+  createContext<StepperInternalContextValue | null>(null);
+StepperInternalContext.displayName = 'StepperInternalContext';
+
+function useContextValue<T>(context: Context<T | null>, hookName: string): T {
+  const ctx = use(context);
   if (ctx == null) {
     throw new Error(
-      'useStepperContext must be used within Stepper. ' +
-        'Wrap your Step in <Stepper>.',
+      `${hookName} must be used within Stepper. Wrap your Step in <Stepper>.`,
     );
   }
   return ctx;
+}
+
+/** Package-internal context read used by the built-in Step. */
+export function useStepperInternalContext(): StepperInternalContextValue {
+  return useContextValue(StepperInternalContext, 'useStepperInternalContext');
+}
+
+/**
+ * Reads the enclosing Stepper's public context.
+ *
+ * Step count, compact state, summary-portal coordination, and threshold
+ * measurement details are intentionally not part of this return type.
+ */
+export function useStepperContext(): StepperContextValue {
+  return useContextValue(StepperContext, 'useStepperContext');
 }

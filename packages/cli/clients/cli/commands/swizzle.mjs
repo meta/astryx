@@ -11,13 +11,14 @@
  */
 
 import {jsonOut} from '../../../foundation/response/json.mjs';
-import {emit, section, list, text, WARN} from '../formatters/index.mjs';
-import {cliError} from '../lib/cli-error.mjs';
+import {emit, section, list, text, WARN, record} from '../formatters/index.mjs';
+import {cliError, rejectEmptyArgument} from '../lib/cli-error.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {swizzle as swizzleApi} from '../../../api/swizzle/swizzle.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {doc as swizzleCommand} from './swizzle.doc.mjs';
 import {doc as swizzleFn} from '../../../api/swizzle/swizzle.doc.mjs';
+import {NO_RESULT_SET, resultSet} from '../../../foundation/debug/index.mjs';
 
 /**
  * @param {import('commander').Command} program
@@ -26,6 +27,9 @@ export function registerSwizzle(program) {
   defineCommand(program, swizzleCommand, {
     fn: swizzleFn,
     action: async (/** @type {string | undefined} */ component, /** @type {{output: string, package?: string, list?: boolean, overwrite?: boolean}} */ options) => {
+      if (!options.list) {
+        rejectEmptyArgument('component', component, 'astryx swizzle');
+      }
       const json = program.opts().json || false;
       const run = getCliInvocation();
 
@@ -41,15 +45,25 @@ export function registerSwizzle(program) {
         });
       } catch (e) {
         const err = /** @type {import('../../../api/error.mjs').AstryxError} */ (e);
-        cliError(err.message, {suggestions: err.suggestions, code: err.code});
-        return;
+        return cliError(err.message, {suggestions: err.suggestions, code: err.code});
       }
 
-      if (json) return jsonOut(result);
+      // `--list` answers with the components you could eject; ejecting one is
+      // a copy into the project, which is an effect with nothing to count.
+      const answered =
+        result.type === 'swizzle.list'
+          ? resultSet({count: result.data.length, resultKind: 'component'})
+          : NO_RESULT_SET;
+
+      if (json) {
+        jsonOut(result);
+        return answered;
+      }
 
       if (result.type === 'swizzle.list') {
         const components = result.data;
         emit(
+          record({package: result.package}),
           section('Available components'),
           list(components),
           text(`Usage: ${run} swizzle <component>`),
@@ -60,7 +74,7 @@ export function registerSwizzle(program) {
             ].join('\n'),
           ),
         );
-        return;
+        return answered;
       }
 
       const {package: ownerPackage, outputDir, filesCopied, usesStyleX, feedback} =
@@ -77,14 +91,16 @@ export function registerSwizzle(program) {
         ),
       ];
 
-      // StyleX build requirement — swizzled StyleX source renders unstyled with
-      // no error unless the consumer's build runs a StyleX compiler.
+      // StyleX build requirement — swizzled StyleX source throws on import
+      // ("Unexpected 'stylex.create' call at runtime") unless the consumer's
+      // build runs a StyleX compiler, so the page does not render at all.
       if (usesStyleX) {
         out.push(
           text(
             [
               `${WARN} These components use StyleX and require a StyleX compiler in your build.`,
-              '  Without one they render unstyled (no error). See setup per framework:',
+              `  Without one, importing them throws "Unexpected 'stylex.create' call at runtime"`,
+              '  and the page does not render. See setup per framework:',
               `  ${run} docs styling`,
               '  Next.js note: the StyleX Babel plugin disables SWC and breaks next/font -',
               '  use an SWC-based StyleX transform instead (covered in the guide).',
@@ -107,6 +123,7 @@ export function registerSwizzle(program) {
       }
 
       emit(...out);
+      return answered;
     },
   });
 }

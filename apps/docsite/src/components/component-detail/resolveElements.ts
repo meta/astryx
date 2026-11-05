@@ -13,6 +13,7 @@ import {
   type ComponentType,
 } from 'react';
 import * as Core from '@astryxdesign/core';
+import {externalComponentPreviews} from '../../generated/componentPreviewRegistry';
 import type {ElementDescriptor} from '../../generated/componentRegistry';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,8 +31,14 @@ export function getComponent(name: string): AnyComponent | null {
       return undefined;
     }
   };
-  const value = readExport(name) ?? readExport(`XDS${name}`);
-  return typeof value === 'function' ? (value as AnyComponent) : null;
+  const value =
+    readExport(name) ??
+    readExport(`XDS${name}`) ??
+    externalComponentPreviews[name];
+  return typeof value === 'function' ||
+    (value != null && typeof value === 'object')
+    ? (value as AnyComponent)
+    : null;
 }
 
 export function isElementDescriptor(v: unknown): v is ElementDescriptor {

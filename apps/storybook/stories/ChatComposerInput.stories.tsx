@@ -4,13 +4,15 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {
   ChatComposer,
   ChatComposerInput,
+  type ChatComposerInputHandle,
   type ChatComposerTrigger,
 } from '@astryxdesign/core/Chat';
 import {createStaticSource} from '@astryxdesign/core/Typeahead';
 import {Badge} from '@astryxdesign/core/Badge';
 import {TypeaheadItem} from '@astryxdesign/core/Typeahead';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
-import {useState} from 'react';
+import {expect, fireEvent, userEvent, within} from 'storybook/test';
+import {useRef, useState} from 'react';
 
 const meta: Meta = {
   title: 'Core/ChatComposerInput',
@@ -42,6 +44,17 @@ const USERS: SearchableItem<{role: string}>[] = [
   {id: 'jordan', label: 'Jordan Lee', auxiliaryData: {role: 'Product'}},
   {id: 'taylor', label: 'Taylor Kim', auxiliaryData: {role: 'Design'}},
   {id: 'morgan', label: 'Morgan Chen', auxiliaryData: {role: 'Infrastructure'}},
+  {
+    id: 'maria',
+    label: 'María José García de la Fuente',
+    auxiliaryData: {role: 'Research'},
+  },
+  {
+    id: 'rdj',
+    label: 'Robert Downey Jr.',
+    auxiliaryData: {role: 'Guest Speaker'},
+  },
+  {id: 'q4_review', label: 'Design Review: Q4', auxiliaryData: {role: 'Topic'}},
 ];
 
 const COMMANDS: SearchableItem<{description: string}>[] = [
@@ -74,6 +87,16 @@ const COMMANDS: SearchableItem<{description: string}>[] = [
 
 const userSource = createStaticSource(USERS);
 const commandSource = createStaticSource(COMMANDS);
+
+const EMOJIS: SearchableItem[] = [
+  {id: 'smile', label: 'smile (😄)'},
+  {id: 'heart', label: 'heart (❤️)'},
+  {id: 'thumbsup', label: 'thumbsup (👍)'},
+  {id: 'fire', label: 'fire (🔥)'},
+  {id: 'rocket', label: 'rocket (🚀)'},
+  {id: 'sparkles', label: 'sparkles (✨)'},
+];
+const emojiSource = createStaticSource(EMOJIS);
 
 const asyncUserSource: SearchSource = {
   search(query: string) {
@@ -150,6 +173,50 @@ export const Disabled: Story = {
   ),
 };
 
+/**
+ * Toggling `isDisabled` on an empty input must not change its own height —
+ * an empty disabled editable region stops reserving its line in Chromium,
+ * and the absolutely positioned placeholder standing in for it doesn't
+ * contribute to layout height, so without an explicit floor the root
+ * shrinks by its own padding and shifts anything bottom-aligned beside it
+ * (#6651).
+ */
+function DisabledHeightToggleExample() {
+  const [isDisabled, setIsDisabled] = useState(false);
+  return (
+    <div>
+      <button type="button" onClick={() => setIsDisabled(value => !value)}>
+        Toggle disabled: {String(isDisabled)}
+      </button>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) auto',
+          alignItems: 'end',
+          gap: 12,
+          padding: 12,
+          border: '1px solid gray',
+          width: 360,
+        }}>
+        <ChatComposerInput
+          value=""
+          onChange={() => {}}
+          placeholder="Type a message…"
+          label="Reproduction input"
+          isDisabled={isDisabled}
+        />
+        <button type="button" style={{width: 36, height: 36}}>
+          ↑
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export const DisabledHeightToggle: Story = {
+  render: () => <DisabledHeightToggleExample />,
+};
+
 /** Max rows — scrolls after 3 lines */
 export const MaxRows: Story = {
   render: () => (
@@ -219,6 +286,91 @@ export const FilePaste: Story = {
   },
 };
 
+/** Programmatic text follows the same observable draft path as typing. */
+export const ImperativeInsertion: Story = {
+  render: () => {
+    const inputRef = useRef<ChatComposerInputHandle>(null);
+    const [value, setValue] = useState('');
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
+        <ChatComposer
+          value={value}
+          onChange={setValue}
+          onSubmit={() => {}}
+          input={
+            <ChatComposerInput
+              handleRef={inputRef}
+              placeholder="Waiting for dictated text"
+            />
+          }
+        />
+        <button
+          type="button"
+          onClick={() => {
+            inputRef.current?.focus();
+            inputRef.current?.insertText('Dictated text');
+          }}>
+          Insert dictated text
+        </button>
+        <output aria-label="Serialized draft">{value || 'Empty'}</output>
+      </div>
+    );
+  },
+  play: async ({canvasElement}) => {
+    const canvas = within(canvasElement);
+    await userEvent.click(
+      canvas.getByRole('button', {name: 'Insert dictated text'}),
+    );
+    await expect(canvas.getByRole('textbox')).toHaveTextContent(
+      'Dictated text',
+    );
+    await expect(
+      canvas.getByRole('status', {name: 'Serialized draft'}),
+    ).toHaveTextContent('Dictated text');
+    await expect(
+      canvas.queryByText('Waiting for dictated text'),
+    ).not.toBeInTheDocument();
+  },
+};
+
+/** Dropped files reach the same attachment callback as pasted files. */
+export const FileDrop: Story = {
+  render: () => {
+    const [files, setFiles] = useState<string[]>([]);
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 12}}>
+        <ChatComposer
+          onSubmit={() => {}}
+          input={
+            <ChatComposerInput
+              onFiles={next => setFiles(next.map(file => file.name))}
+              placeholder="Drop a file here"
+            />
+          }
+        />
+        <output aria-label="Received files">
+          {files.length === 0 ? 'No files' : files.join(', ')}
+        </output>
+      </div>
+    );
+  },
+  play: async ({canvasElement}) => {
+    const canvas = within(canvasElement);
+    const textbox = canvas.getByRole('textbox');
+    const transfer = new DataTransfer();
+    transfer.items.add(
+      new File(['audit'], 'dropped.txt', {type: 'text/plain'}),
+    );
+
+    fireEvent.dragOver(textbox, {dataTransfer: transfer});
+    fireEvent.drop(textbox, {dataTransfer: transfer});
+
+    await expect(
+      canvas.getByRole('status', {name: 'Received files'}),
+    ).toHaveTextContent('dropped.txt');
+  },
+};
+
 // =============================================================================
 // Trigger stories
 // =============================================================================
@@ -231,6 +383,7 @@ export const MentionTrigger: Story = {
     const mentionTrigger: ChatComposerTrigger = {
       character: '@',
       searchSource: userSource,
+      hasMultiWordQuery: true,
       renderItem: item => (
         <TypeaheadItem
           item={item}
@@ -332,7 +485,7 @@ export const AsyncSearch: Story = {
         variant: 'blue' as const,
       }),
       loadingText: 'Searching users…',
-      emptySearchResultsText: 'No users found',
+      emptySearchText: 'No users found',
     };
 
     return (
@@ -356,6 +509,7 @@ export const MultipleTriggers: Story = {
     const mentionTrigger: ChatComposerTrigger = {
       character: '@',
       searchSource: userSource,
+      hasMultiWordQuery: true,
       onSelect: item => ({
         value: `@${item.id}`,
         label: item.label,
@@ -634,6 +788,30 @@ export const GroupedItems: Story = {
           <ChatComposerInput
             triggers={[mentionTrigger]}
             placeholder="Type @ to see grouped mentions..."
+          />
+        }
+      />
+    );
+  },
+};
+
+/** Punctuation trigger (e.g. emoji picker) — type : to see the menu */
+export const PunctuationTrigger: Story = {
+  render: () => {
+    const emojiTrigger: ChatComposerTrigger = {
+      character: ':',
+      searchSource: emojiSource,
+      renderItem: item => <TypeaheadItem item={item} />,
+      onSelect: item => `:${item.id}: `,
+    };
+
+    return (
+      <ChatComposer
+        onSubmit={value => alert(`Sent: ${value}`)}
+        input={
+          <ChatComposerInput
+            triggers={[emojiTrigger]}
+            placeholder="Type : to see emoji suggestions..."
           />
         }
       />

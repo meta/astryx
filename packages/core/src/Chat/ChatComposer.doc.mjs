@@ -6,7 +6,22 @@ export const docs = {
   name: 'ChatComposer',
   subComponentOf: 'Chat',
   displayName: 'Chat Composer',
-  description: 'Layout shell for a chat composer. Arranges named slots (drawer, header, input, footer, send) with page-radius container, hover/focus shadows, and concentric inner radius for child elements.',
+  description:
+    'Layout shell for a chat composer. Arranges named slots (drawer, header, input, footer, send) with page-radius container, elevation, a keyboard-only editor focus ring, and concentric inner radius for child elements.',
+  usage: {
+    description:
+      'ChatComposer is the message-entry shell for a chat surface. It coordinates a controlled or uncontrolled draft, provides a default token-capable input and send/stop action, and arranges optional drawer, header, footer, and status content. Custom inputs and send controls can join the same value, submission, disabled, stop, and focus contract through useChatComposerContext().',
+    anatomy: [
+      {name: 'Composer frame', required: true, description: 'Outer composition root that groups the body with an optional status message above or below it.'},
+      {name: 'Composer body', required: true, description: 'Rounded, elevated surface containing the header, input, and footer.'},
+      {name: 'Drawer', required: false, description: 'Content before the body for attachments or other expandable context, typically ChatComposerDrawer.'},
+      {name: 'Header', required: false, description: 'Row for start-aligned actions and end-aligned contextual information.'},
+      {name: 'Input', required: true, description: 'Default ChatComposerInput or a custom editor connected through useChatComposerContext().'},
+      {name: 'Footer', required: true, description: 'Row for caller-supplied footer and send actions plus the primary action.'},
+      {name: 'Send or stop action', required: true, description: 'Default ChatSendButton or a custom sendButton; it submits the current draft or requests interruption.'},
+      {name: 'Status message', required: false, description: 'Error or warning feedback rendered before or after the composer body.'},
+    ],
+  },
   playground: {
     wrapper: {component: 'Stack', props: {width: 480}},
   },
@@ -60,7 +75,7 @@ export const docs = {
       name: 'elevation',
       type: "'none' | 'low'",
       description:
-        "Resting elevation of the composer body. `low` (the default) keeps today's raised look: low at rest, bumping to med on hover / focus. `none` flattens it and draws a border with the same rest / hover / focus treatment as a text input (emphasized border → accent on focus, matching inset rings).",
+        "Resting elevation of the composer body. `low` (the default) keeps today's raised look: low at rest, bumping to med on hover / focus. `none` flattens it and draws a border. Keyboard focus in the editor adds the shared focus ring in either presentation; pointer focus does not add that ring.",
       default: "'low'",
     },
     {
@@ -192,7 +207,8 @@ export const docsZh = {
     placeholder: '输入为空时显示的占位文本。',
     isDisabled: '禁用编写器。',
     density: '视觉密度。',
-    elevation: "编写器主体的静止高度。low（默认）保持当前的抬起外观——静止时 low，悬停/聚焦时升至 med。none 则扁平化。",
+    elevation:
+      '编写器主体的静止高度。low（默认）保持当前的抬起外观——静止时 low，悬停/聚焦时升至 med。none 会将其扁平化并绘制边框。编辑器通过键盘获得焦点时，两种呈现方式都会显示共享焦点环；指针聚焦不会显示该焦点环。',
     drawer: '插槽：输入上方的可折叠抽屉——附件、上下文标签等。使用 ChatComposerDrawer。',
     headerActions: '插槽：标题左侧操作按钮（附件、提及按钮）。使用仅图标 size="sm" 按钮。',
     headerContext: '插槽：标题右侧上下文信息（上下文窗口使用情况、ProgressBar、辅助文本）。',
@@ -218,7 +234,8 @@ export const docsDense = {
     placeholder: 'placeholder when empty',
     isDisabled: 'disabled; use during streaming or unmet prereqs',
     density: 'visual density',
-    elevation: "resting elevation of composer body: low (default; low→med on hover/focus) | none (flat)",
+    elevation:
+      'resting elevation of composer body: low (default; low→med on hover/focus) | none (flat with border); keyboard-focused editor gets the shared ring in either mode; pointer focus does not',
     drawer: 'slot: collapsible drawer above input: attachments, context chips, etc.; use ChatComposerDrawer',
     headerActions: 'slot: left header actions (attach, mention); icon-only sm buttons',
     headerContext: 'slot: right header context info (window usage, ProgressBar, text)',

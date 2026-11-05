@@ -1,5 +1,21 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Outer chrome',
+    required: true,
+    description:
+      'Section-owned container that supplies the toolbar surface, padding, and selected divider edges.',
+  },
+  {
+    name: 'Toolbar',
+    required: true,
+    description:
+      'Named toolbar row that owns toolbar semantics and the start, optional center, and end layout.',
+  },
+];
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
 
 export const docs = {
@@ -147,6 +163,7 @@ export const docs = {
       ],    },
   ],
   usage: {
+    anatomy,
     description:
       'Toolbar is a horizontal bar with left, center, and right areas. Use it for contextual actions within a content area (above a table, inside a card, or in a panel), not as a page-level header. Set the size once on the toolbar and all buttons, inputs, and tabs inside it match automatically.',
     bestPractices: [
@@ -182,6 +199,7 @@ export const docsZh = {
     },
   ],
   usage: {
+    anatomy,
     description:
       'Toolbar is a horizontal bar with left, center, and right areas. Use it for contextual actions within a content area (above a table, inside a card, or in a panel), not as a page-level header. Set the size once on the toolbar and all buttons, inputs, and tabs inside it match automatically.',
     bestPractices: [
@@ -200,6 +218,7 @@ export const docsZh = {
 export const docsDense = {
   description: 'Horizontal bar w/ left, center, right areas. For contextual actions in content, not page headers. Size cascades to children.',
   usage: {
+    anatomy,
     description:
       'Horizontal bar w/ left, optional center, right. For contextual actions within content (tables, cards, panels), not page-level headers. Size cascades to children.',
     bestPractices: [

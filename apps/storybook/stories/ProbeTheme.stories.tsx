@@ -15,6 +15,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
+import {Popover} from '@astryxdesign/core/Popover';
 import {Card} from '@astryxdesign/core/Card';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {CodeBlock} from '@astryxdesign/core/CodeBlock';
@@ -66,7 +67,9 @@ function AxisCard({
   return (
     <Card>
       <div {...stylex.props(styles.axisCard)}>
-        <Heading level={3}>{title}</Heading>
+        <Heading level={3} accessibilityLevel={2}>
+          {title}
+        </Heading>
         {children}
       </div>
     </Card>
@@ -143,6 +146,16 @@ function ComponentSpecimen() {
         <Badge label="Warning" variant="warning" />
         <Badge label="Error" variant="error" />
       </div>
+      <Popover
+        isOpen
+        hasAutoFocus={false}
+        hasCloseButton={false}
+        hasLightDismiss={false}
+        label="Popover radius probe"
+        width={240}
+        content={<Text type="body">Painted Popover surface</Text>}>
+        <Button label="Popover radius probe" />
+      </Popover>
     </Stack>
   );
 }
@@ -181,7 +194,9 @@ function AllAxesSheet() {
 
         <AxisCard title="5 · Typography">
           <Stack direction="vertical" gap={2}>
-            <Heading level={2}>AstryxProbeFace heading</Heading>
+            <Heading level={2} accessibilityLevel={3}>
+              AstryxProbeFace heading
+            </Heading>
             <Text type="body">Body text inherits the probe font token.</Text>
             <Text type="code">const fontAxis = 'covered';</Text>
           </Stack>

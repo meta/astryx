@@ -23,6 +23,62 @@ export const docs = {
       {guidance: false, description: 'Use the destructive variant without a confirmation step for irreversible actions like deleting data.'},
       {guidance: false, description: 'Use a button for navigation. If it only takes the user to another page, use a link instead. Buttons are for actions like saving, deleting, or submitting.'},
     ],
+    accessibility: [
+      {
+        name: 'Text label',
+        category: 'Color contrast',
+        criterion: '1.4.3 Contrast (Minimum)',
+        requirement: '4.5:1',
+        states: ['Rest', 'Hover', 'Pointer down'],
+        description:
+          'Button text must have at least 4.5:1 contrast with the button background in every state. For Hover and Pointer down, measure the final background after the overlay is applied.',
+      },
+      {
+        name: 'Essential icon or spinner arc',
+        category: 'Color contrast',
+        criterion: '1.4.11 Non-text Contrast',
+        requirement: '3:1',
+        states: ['Icon only', 'Loading'],
+        description:
+          'An icon used instead of text must have at least 3:1 contrast with the button background. The moving spinner arc must also meet 3:1. An icon beside a visible label does not need its own check.',
+      },
+      {
+        name: 'Badge text',
+        category: 'Color contrast',
+        criterion: '1.4.3 Contrast (Minimum)',
+        requirement: '4.5:1',
+        states: ['Rest', 'Hover', 'Pointer down'],
+        description:
+          'Badge text inside a button must have at least 4.5:1 contrast with the Badge background. Check all 14 built-in Badge colors in Rest, Hover, and Pointer down on page and surface backgrounds. This covers 336 pairs per mode. Check custom end content separately.',
+      },
+      {
+        name: 'Visible control boundary',
+        category: 'Color contrast',
+        criterion: '1.4.11 Non-text Contrast',
+        requirement: '3:1 if needed',
+        states: ['Rest'],
+        description:
+          'The button edge needs 3:1 contrast only when users need it to see the control. A text-only button can rely on its label.',
+      },
+      {
+        name: 'Keyboard focus indicator',
+        category: 'Color contrast',
+        criterion: '1.4.11 Non-text Contrast',
+        requirement: '3:1',
+        states: ['Focus visible'],
+        description:
+          'The focus outline needs at least 3:1 contrast with the area around the button. Check every style. Destructive buttons use a red outline.',
+      },
+      {
+        name: 'Disabled appearance',
+        category: 'Color contrast',
+        criterion: '1.4.3 and 1.4.11 exceptions',
+        requirement: 'Not required',
+        states: ['Disabled'],
+        description:
+          'Disabled controls do not need to meet these contrast ratios.',
+      },
+    ],
     anatomy: [
       {name: 'Icon', required: false, description: 'A leading icon that reinforces the label, like a trash icon on a Delete button.'},
       {name: 'Label', required: true, description: 'The visible text describing the action. Also used as the accessible name.'},
@@ -82,7 +138,7 @@ export const docs = {
     {
       name: 'isLoading',
       type: 'boolean',
-      description: 'Shows a loading spinner and disables interaction. Announces "Loading" via a live region.',
+      description: 'Shows a loading spinner and blocks re-activation while staying focusable (aria-busy + aria-disabled, not native disabled, so keyboard focus is never dropped mid-action). Announces "Loading" via a live region.',
       default: 'false',
     },
     {
@@ -101,8 +157,8 @@ export const docs = {
       name: 'icon',
       type: 'ReactNode',
       description:
-        'Icon element rendered before the label text.',
-      slotElements: [{__element: 'Icon', props: {icon: 'check', size: 'sm'}}],
+        'Icon element rendered before the label text. An Astryx Icon with no explicit size defaults to sm for sm/md buttons and md for lg buttons.',
+      slotElements: [{__element: 'Icon', props: {icon: 'check'}}],
     },
     {
       name: 'isIconOnly',
@@ -115,7 +171,7 @@ export const docs = {
       name: 'width',
       type: 'SizeValue',
       description:
-        "Width of the button. Numbers are treated as pixels, strings are used as-is (e.g., '100%' for a full-width button). By default the button sizes to its content.",
+        "Width of the button. Numbers are treated as pixels, strings are used as-is (e.g., '100%' for a full-width button). By default the button sizes to its content, never grows past its container, and truncates its label with an ellipsis when a row is too narrow; icon-only buttons stay square.",
     },
     {
       name: 'children',
@@ -154,7 +210,7 @@ export const docs = {
       name: 'href',
       type: 'string',
       description:
-        'When provided, renders the button as a link element (<a> or custom link component).',
+        'When provided, renders the button as a link element (<a> or custom link component). The destination follows the shared navigation rule described on the Link `href` prop.',
     },
     {
       name: 'as',
@@ -171,6 +227,65 @@ export const docs = {
       name: 'rel',
       type: 'string',
       description: 'HTML rel attribute when rendered as a link (e.g. "noopener noreferrer").',
+    },
+  ],
+  examples: [
+    {
+      label: 'Actions in narrow rows',
+      code: `
+import {useState} from 'react';
+import {Button} from '@astryxdesign/core/Button';
+import {Card} from '@astryxdesign/core/Card';
+import {Heading} from '@astryxdesign/core/Heading';
+import {HStack} from '@astryxdesign/core/HStack';
+import {Icon} from '@astryxdesign/core/Icon';
+import {IconButton} from '@astryxdesign/core/IconButton';
+import {StackItem} from '@astryxdesign/core/Stack';
+import {TextInput} from '@astryxdesign/core/TextInput';
+import {VStack} from '@astryxdesign/core/VStack';
+
+// On a phone (or any card narrower than its actions), a labelled Button
+// shrinks with its row and truncates its label with an ellipsis instead of
+// overflowing or being clipped by the card. The full label stays the
+// accessible name. Icon-only buttons keep their square size.
+function ReviewersCard() {
+  const [emails, setEmails] = useState('');
+  return (
+    <Card maxWidth={560}>
+      <VStack gap={4}>
+        <HStack gap={2} vAlign="center">
+          <StackItem size="fill">
+            <Heading level={3} maxLines={1}>
+              Design review
+            </Heading>
+          </StackItem>
+          <Button label="Request review from the design team" size="sm" />
+          <IconButton
+            label="More review options"
+            icon={<Icon icon="moreHorizontal" />}
+            variant="ghost"
+            size="sm"
+          />
+        </HStack>
+        <TextInput
+          label="Reviewer emails"
+          placeholder="name@example.com"
+          value={emails}
+          onChange={setEmails}
+        />
+        {/* In a 320px form footer the long primary action truncates.
+            StackItem size="static" keeps the short Cancel label whole. */}
+        <HStack gap={2} hAlign="end">
+          <StackItem size="static">
+            <Button label="Cancel" variant="secondary" />
+          </StackItem>
+          <Button label="Send invitations to all 12 reviewers" variant="primary" />
+        </HStack>
+      </VStack>
+    </Card>
+  );
+}
+`,
     },
   ],
   playground: {
@@ -238,8 +353,8 @@ export const docsZh = {
       description: '禁用按钮。存在工具提示时，使用 aria-disabled 代替原生 disabled 以保持可聚焦。',
       default: 'false',
     },
-    {name: 'icon', type: 'ReactNode', description: '图标元素。仅提供 icon 而不提供 children 时，按钮渲染为正方形的纯图标按钮。'},
-    {name: 'width', type: 'SizeValue', description: "按钮宽度。数字按像素处理，字符串按原样使用（如 '100%' 表示全宽按钮）。默认按内容自适应宽度。"},
+    {name: 'icon', type: 'ReactNode', description: '图标元素。未显式指定尺寸的 Astryx Icon 在 sm/md 按钮中默认为 sm，在 lg 按钮中默认为 md。仅提供 icon 而不提供 children 时，按钮渲染为正方形的纯图标按钮。'},
+    {name: 'width', type: 'SizeValue', description: "按钮宽度。数字按像素处理，字符串按原样使用（如 '100%' 表示全宽按钮）。默认按内容自适应宽度，不会超出容器；行宽不足时标签以省略号截断；纯图标按钮保持正方形。"},
     {name: 'children', type: 'ReactNode', description: '可选的可见内容覆盖；label 仍然是必需的（用于无障碍名称）。大多数情况使用 <Button label="Save" />。'},
     {
       name: 'endContent',
@@ -304,10 +419,10 @@ export const docsDense = {
     displayName: 'HTML name for form submission',
     value: 'HTML value for form submission',
     form: 'associates button with form element by ID',
-    isLoading: 'shows spinner+disables interaction; announces via live region',
-    icon: 'icon element rendered before label text',
+    isLoading: 'shows spinner, blocks re-activation but stays focusable (aria-disabled, not native disabled); announces via live region',
+    icon: 'icon element rendered before label text; unsized Astryx Icon defaults to sm for sm/md buttons and md for lg',
     isIconOnly: 'when true, renders square icon-only button; label becomes aria-label',
-    width: "Width of button. Numbers=pixels, strings=as-is (e.g. '100%' for full-width).",
+    width: "Width of button. Numbers=pixels, strings=as-is (e.g. '100%' for full-width). Default: content width, capped at the container; label truncates w/ ellipsis in a narrow row; icon-only stays square.",
     children: 'optional visible override; label is still required for a11y. Prefer <Button label="Save" /> over using children',
     endContent: 'trailing icon/badge after label; ignored when isIconOnly; color inherited',
     tooltip: 'tooltip on hover',

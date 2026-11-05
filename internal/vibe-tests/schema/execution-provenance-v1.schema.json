@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/meta/astryx/blob/main/internal/vibe-tests/schema/execution-provenance-v1.schema.json",
+  "title": "ExecutionProvenanceV1",
+  "description": "Executor-neutral provenance for one vibe-test result.",
+  "type": "object",
+  "required": ["schemaVersion"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "task": {
+      "type": "object",
+      "required": ["id", "sha256"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": true
+    },
+    "fixture": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "commit": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "condition": {"type": "string", "minLength": 1},
+    "rep": {"type": "integer", "minimum": 1},
+    "executor": {
+      "type": "object",
+      "required": ["harness", "model"],
+      "properties": {
+        "harness": {"type": "string", "minLength": 1},
+        "model": {"type": "string", "minLength": 1},
+        "effort": {"type": "string", "minLength": 1},
+        "harnessVersion": {"type": "string", "minLength": 1},
+        "runnerVersion": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "execution": {
+      "type": "object",
+      "properties": {
+        "status": {"type": "string", "minLength": 1},
+        "startedAt": {"type": "string", "format": "date-time"},
+        "finishedAt": {"type": "string", "format": "date-time"},
+        "durationMs": {"type": "number", "minimum": 0},
+        "attempt": {"type": "integer", "minimum": 1},
+        "retry": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": true
+    },
+    "usage": {
+      "type": "object",
+      "required": ["complete"],
+      "properties": {
+        "inputTokens": {"type": "integer", "minimum": 0},
+        "outputTokens": {"type": "integer", "minimum": 0},
+        "source": {"type": "string", "minLength": 1},
+        "complete": {"type": "boolean"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"complete": {"const": true}}},
+          "then": {"required": ["inputTokens", "outputTokens"]}
+        }
+      ],
+      "additionalProperties": true
+    },
+    "environmentHash": {"$ref": "#/$defs/sha256"},
+    "toolPolicyHash": {"$ref": "#/$defs/sha256"}
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    }
+  },
+  "additionalProperties": true
+}

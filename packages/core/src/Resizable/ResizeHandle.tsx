@@ -8,23 +8,12 @@
  * @output Styled drag handle with WAI-ARIA separator role and keyboard support
  * @position Between resizable panels; consumed directly by builders
  *
- * The handle element is 1px wide (the divider line itself), with an
- * absolutely-positioned wider hit area for pointer interaction.
- * Pill grip indicator can sit on either side of the divider (or centered)
- * via pillPlacement. Default 'auto' places the pill on the panel side and
- * flips when the panel collapses to 0px so it stays accessible.
- *
- * Pill placement uses a single stylex dynamic style that accepts a direction
- * multiplier (-1 or 1). The pill element has its own themeProps
- * ('resize-handle-pill') so themes can target size/shape directly.
- *
- * While the panel is collapsed, aria-valuenow is clamped to aria-valuemin
- * (a value below the minimum is invalid per WCAG 4.1.2) and a localized
- * "Collapsed" aria-valuetext announces the real state.
+ * A drag takes pointer capture on the element it starts on, so moves over an
+ * embedded frame still arrive.
  */
 
-import {useCallback, useEffect, useRef, useState} from 'react';
-import type {ReactNode} from 'react';
+import {useCallback, useEffect, useReducer, useRef, useState} from 'react';
+import type {HTMLAttributes, ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -36,13 +25,39 @@ import {
 } from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {mergeProps, rtlStyles} from '../utils';
-import type {ResizableProps} from './useResizable';
+import {
+  getCollapseControls,
+  getEffectiveMaxPx,
+  resizablePropsOf,
+  type ResizableProps,
+  type ResizableRegion,
+} from './useResizable';
+import {
+  createResizeGesture,
+  type ResizeGesture,
+  type ResizeGestureModel,
+} from './resizeGesture';
+import {
+  handOverPane,
+  registerResizeHandle,
+  resizablePaneFor,
+  watchResizablePanes,
+  type ResizablePane,
+} from './resizablePane';
+import {separatorAttributes} from './separatorAttributes';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
+import {useDevWarning} from '../hooks/useDevWarning';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
-const KEYBOARD_STEP = 10;
-const KEYBOARD_LARGE_STEP = 50;
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Resizable/ResizeHandle.generated';
+
+registerEnglishFallback(english);
 
 type PillPlacement = 'start' | 'end' | 'center' | 'auto';
 
@@ -59,30 +74,6 @@ function resolveEffectiveSide(
     return panelSide === 'start' ? 'end' : 'start';
   }
   return panelSide;
-}
-
-/**
- * Hit-area inline bias, expressed as a fraction of the pill's per-side offset.
- *
- * The visible pill is placed by `pillOffsetX`/`pillOffsetY`: anchored at the
- * divider's inline-start edge and pushed one grip-width-plus-gap toward the
- * panel side via a PHYSICAL translate (dir −1 = start, +1 = end). Because that
- * offset is physical, the pill sits on the same physical side of the divider in
- * both LTR and RTL. The grab zone must sit OVER that pill, so it has to use the
- * exact same anchor + physical-offset construction as the pill (just wider) —
- * anchoring the hit area at the divider centre (`insetInlineStart: 50%`) and
- * biasing with a percentage translate mixes a logical anchor (which flips under
- * RTL) with a physical translate (which doesn't), leaving the grab zone stranded
- * to one side under RTL. Returning the pill's `dir` here lets the hit area reuse
- * `pillOffsetX`/`pillOffsetY` so the two elements are positioned identically.
- */
-function hitAreaBiasDir(
-  effectiveSide: 'start' | 'end' | 'center',
-): number | null {
-  if (effectiveSide === 'center') {
-    return null;
-  }
-  return effectiveSide === 'start' ? -1 : 1;
 }
 
 const styles = stylex.create({
@@ -116,6 +107,12 @@ const styles = stylex.create({
     insetInlineStart: 0,
     insetInlineEnd: 0,
     height: 'var(--resize-handle-hit-area, 16px)',
+  },
+  overlayHorizontalOnShortPane: {
+    width: 'min(var(--resize-handle-hit-area, 16px), 50%)',
+  },
+  overlayVerticalOnShortPane: {
+    height: 'min(var(--resize-handle-hit-area, 16px), 50%)',
   },
   horizontal: {
     width: 1,
@@ -176,25 +173,45 @@ const styles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
   },
-  // Centered grab zone (pillPlacement 'center' / no bias): sit the hit area on
-  // the divider itself. Inline centering comes from rtlStyles.centerInline at
-  // the call site (correct in LTR and RTL); this block owns only the block axis.
+  // The grab zone sits centred on the Handle whatever `pillPlacement` says,
+  // which only places the pill. Inline centering comes from
+  // rtlStyles.centerInline at the call site (correct in LTR and RTL); this
+  // block owns only the block axis.
   hitAreaCenteredY: {
     insetBlockStart: '50%',
     transform: 'translateY(-50%)',
+  },
+  hitAreaWithinHandleX: {
+    width: `min(${spacingVars['--spacing-4']}, 100%)`,
+  },
+  hitAreaWithinHandleY: {
+    height: `min(${spacingVars['--spacing-4']}, 100%)`,
   },
 
   // Pill base — themes target .astryx-resize-handle-pill for size/shape.
   pill: {
     position: 'absolute',
     zIndex: 2,
-    pointerEvents: 'none',
+    touchAction: 'none',
+    userSelect: 'none',
     borderRadius: radiusVars['--radius-full'],
     backgroundColor: colorVars['--color-border'],
     transitionProperty: 'opacity, background-color, transform',
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
     top: '50%',
+  },
+  pillGrabHorizontal: {
+    cursor: {
+      default: 'col-resize',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
+  },
+  pillGrabVertical: {
+    cursor: {
+      default: 'row-resize',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
   },
   pillHorizontal: {
     width: 3,
@@ -204,59 +221,93 @@ const styles = stylex.create({
     width: spacingVars['--spacing-8'],
     height: 3,
   },
-  pillHidden: {opacity: 0},
+  // A hidden pill paints nothing, so it takes no pointer either.
+  pillHidden: {opacity: 0, pointerEvents: 'none'},
   pillVisible: {opacity: 1},
   pillHover: {
     opacity: 1,
+    pointerEvents: 'auto',
     backgroundColor: colorVars['--color-border'],
   },
   pillActive: {
     opacity: 1,
+    pointerEvents: 'auto',
     backgroundColor: colorVars['--color-border-emphasized'],
+  },
+  // A pill shown on hover can sit outside the Grab zone. This invisible
+  // extension spans the gap toward the Handle, so the pointer keeps the hover
+  // on its way to the pill. It reaches no further than the pill, and it takes
+  // the pointer only while the pill does. The pill's offset is a physical
+  // translate, so the side toward the Handle is physical too.
+  pillBridgeRight: {
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetBlock: 0,
+      insetInlineStart: {
+        default: 0,
+        ':is([dir="rtl"] *)': `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+      },
+      insetInlineEnd: {
+        default: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+        ':is([dir="rtl"] *)': 0,
+      },
+    },
+  },
+  pillBridgeLeft: {
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetBlock: 0,
+      insetInlineStart: {
+        default: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+        ':is([dir="rtl"] *)': 0,
+      },
+      insetInlineEnd: {
+        default: 0,
+        ':is([dir="rtl"] *)': `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+      },
+    },
+  },
+  pillBridgeDown: {
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetInline: 0,
+      insetBlockStart: 0,
+      insetBlockEnd: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+    },
+  },
+  pillBridgeUp: {
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetInline: 0,
+      insetBlockStart: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+      insetBlockEnd: 0,
+    },
   },
 });
 
 // Dynamic styles — avoids inline style overrides.
 // Each axis gets its own function since StyleX requires static structure.
 const dynamicStyles = stylex.create({
-  // Hit-area inline offset — mirrors the pill's `pillOffsetX`/`pillOffsetY`
-  // construction so the grab zone sits centred on the visible pill in BOTH
-  // directions. Both anchor at the divider's inline-start edge
-  // (`insetInlineStart: 0`) and travel toward the panel side with the SAME
-  // physical translate `dir * (gripWidth + gap)`, so they share the pill's
-  // near edge. The hit area is wider, so it also shifts by half the width
-  // difference `(16px − 3px) / 2 = 6.5px` to align the two CENTRES. That
-  // centring shift is along the inline axis (a box grows from its inline-start
-  // edge toward inline-end), so it must flip physical sign under RTL — unlike
-  // the `dir * (...)` travel, which is physical and identical in both
-  // directions because the pill's own offset is physical. Mixing the previous
-  // divider-relative `50%` anchor with a percentage translate stranded the grab
-  // zone to one side under RTL; this construction keeps it on the pill.
-  //
-  // Only the offset axis is translated. Unlike the pill — a small box anchored
-  // at the divider's midpoint, so it needs a −50% self-shift to centre — the
-  // grab zone is STRETCHED along the handle by hitAreaHorizontal/Vertical's
-  // 0/0 insets, so it is already in place on that axis. A percentage there
-  // would displace it by half the handle's own length, growing with the panel.
-  hitAreaOffsetX: (dir: number) => ({
-    insetInlineStart: 0,
-    transform: {
-      default: `translateX(calc(${dir} * (3px + ${spacingVars['--spacing-1']}) - 6.5px))`,
-      ':is([dir="rtl"] *)': `translateX(calc(${dir} * (3px + ${spacingVars['--spacing-1']}) + 6.5px))`,
-    },
+  // An inline Handle's zone is centred on its line, so half of it reaches into
+  // the pane.
+  hitAreaLengthX: (pane: number) => ({
+    width: `min(${spacingVars['--spacing-4']}, ${pane}px)`,
   }),
-  hitAreaOffsetY: (dir: number) => ({
-    insetBlockStart: 0,
-    transform: `translateY(calc(${dir} * (3px + ${spacingVars['--spacing-1']}) - 6.5px))`,
+  hitAreaLengthY: (pane: number) => ({
+    height: `min(${spacingVars['--spacing-4']}, ${pane}px)`,
   }),
-  pillOffsetX: (dir: number) => ({
+  pillOffsetX: (dir: -1 | 1) => ({
     insetInlineStart: 0,
     transform: `translate(calc(${dir} * (100% + ${spacingVars['--spacing-1']})), -50%)`,
   }),
   // Vertical offset: no rotation — use explicit landscape dimensions.
   // Rotation + offset creates confusing coordinate math since translate
   // operates in pre-rotation local space.
-  pillOffsetY: (dir: number) => ({
+  pillOffsetY: (dir: -1 | 1) => ({
     top: 0,
     transform: `translate(-50%, calc(${dir} * (100% + ${spacingVars['--spacing-1']})))`,
   }),
@@ -313,7 +364,8 @@ export interface ResizeHandleProps extends Omit<
   isAlwaysVisible?: boolean;
 
   /**
-   * Which side of the divider line the pill sits on.
+   * Which side of the divider line the pill sits on. It moves only the pill:
+   * the grab zone stays centred on the divider.
    * - `'auto'` — panel side by default, flips when panel is collapsed to 0px
    * - `'start'` — left (horizontal) or top (vertical)
    * - `'end'` — right (horizontal) or bottom (vertical)
@@ -328,8 +380,8 @@ export interface ResizeHandleProps extends Omit<
    */
   label?: string;
 
-  /** Resize props from useResizable region. */
-  resizable?: ResizableProps;
+  /** The output of `useResizable()`, or its `props`. */
+  resizable?: ResizableRegion | ResizableProps;
 
   /** Custom handle content. Overrides the default pill. */
   children?: ReactNode;
@@ -345,11 +397,12 @@ export interface ResizeHandleProps extends Omit<
  * @example
  * ```
  * <ResizeHandle
- *   resizable={sidebar.props}
+ *   resizable={resizable}
  *   direction="horizontal"
  *   hasDivider />
  * ```
  */
+
 export function ResizeHandle({
   direction = 'horizontal',
   position: positionMode = 'inline',
@@ -359,208 +412,252 @@ export function ResizeHandle({
   isAlwaysVisible = true,
   pillPlacement = 'auto',
   label: labelFromProps,
-  resizable,
+  resizable: resizableValue,
   children,
   xstyle,
   className,
   ref,
   ...props
 }: ResizeHandleProps) {
-  const t = useTranslator();
+  const resizable =
+    resizableValue == null ? undefined : resizablePropsOf(resizableValue);
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.resizable.handle.label');
   const handleRef = useRef<HTMLDivElement>(null);
-  // Removes the in-flight drag's window listeners (and resets body styles).
-  // Held in a ref so unmount can tear down a drag that never got a pointerup.
-  const dragCleanupRef = useRef<(() => void) | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const isHorizontal = direction === 'horizontal';
   const isOverlay = positionMode === 'overlay';
-  const sign = isReversed ? -1 : 1;
+
+  // --- The region a `resizable` prop describes ---
+
+  // The gesture reads the latest props at each input. A drag sees the region
+  // as it is now, not as it was at the press.
+  const resizableRef = useRef(resizable);
+  resizableRef.current = resizable;
+  // The region a drag in flight started on: told the gesture is over even
+  // after the prop has gone.
+  const dragRegionRef = useRef<ResizableProps | undefined>(undefined);
+  const configRef = useRef({direction, isReversed, isDisabled});
+  configRef.current = {direction, isReversed, isDisabled};
+  const [isDragging, setIsDragging] = useState(false);
+  const [regionGesture] = useState<ResizeGesture>(() => {
+    const model: ResizeGestureModel = {
+      state() {
+        const region = resizableRef.current;
+        return {
+          size: region?._size ?? 0,
+          isCollapsed: region?._isCollapsed ?? false,
+          minPx: region?._minSizePx ?? 0,
+          maxPx: region?._maxSizePx ?? Infinity,
+          snaps: region?._snaps ?? [],
+          collapsedSize: region?._collapsedSize ?? 0,
+          collapsible: region?._collapsible ?? false,
+        };
+      },
+      start: () => {
+        dragRegionRef.current = resizableRef.current;
+        resizableRef.current?._onResizeStart();
+      },
+      move: delta => resizableRef.current?._onResizeMove(delta),
+      end: () => {
+        const region = resizableRef.current ?? dragRegionRef.current;
+        dragRegionRef.current = undefined;
+        region?._onResizeEnd();
+      },
+      // Not a resize end, but the gesture is over. The region froze its state
+      // for the drag, so it must hear that the drag ended.
+      cancel: () => {
+        const region = resizableRef.current ?? dragRegionRef.current;
+        dragRegionRef.current = undefined;
+        region?._onResizeCancel?.();
+      },
+      // The hook's own collapse and expand restore the size before the
+      // collapse; a hand-built `ResizableProps` has none.
+      get collapse() {
+        const region = resizableRef.current;
+        return region ? getCollapseControls(region)?.collapse : undefined;
+      },
+      get expand() {
+        const region = resizableRef.current;
+        return region ? getCollapseControls(region)?.expand : undefined;
+      },
+    };
+    return createResizeGesture(
+      () => handleRef.current,
+      model,
+      () => ({
+        ...configRef.current,
+        isDisabled:
+          configRef.current.isDisabled || resizableRef.current == null,
+      }),
+      setIsDragging,
+    );
+  });
+
+  const gesture = resizable != null ? regionGesture : null;
+  const isCollapsed = resizable?._isCollapsed ?? false;
   const effectiveSide = resolveEffectiveSide(
     pillPlacement,
     isReversed,
-    resizable?._isCollapsed ?? false,
+    isCollapsed,
   );
-  // Physical offset direction shared by the pill and the grab zone (null =
-  // centered / no bias). Keeps the two positioned identically in LTR and RTL.
-  const hitBiasDir = hitAreaBiasDir(effectiveSide);
-
-  const getRTLMultiplier = useCallback((): number => {
-    const el = handleRef.current;
-    if (!el) {
-      return 1;
-    }
-    return getComputedStyle(el).direction === 'rtl' ? -1 : 1;
-  }, []);
-
+  // An inline zone reaches at most half of the pane the Handle resizes. An
+  // overlay Handle takes at most half of it. A collapsed pane, or one at 0px,
+  // has nothing to protect and keeps the whole zone.
+  const paneSize = resizable?._size;
+  const paneLength =
+    isCollapsed || paneSize == null || paneSize <= 0 ? undefined : paneSize;
   const isInteracting = isHovered || isFocused;
 
-  // --- Pointer drag ---
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (isDisabled || !resizable) {
-        return;
-      }
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragging(true);
-      resizable._onResizeStart();
-      const startPos = isHorizontal ? e.clientX : e.clientY;
-      const rtl = isHorizontal ? getRTLMultiplier() : 1;
-      document.body.style.cursor = isHorizontal ? 'col-resize' : 'row-resize';
-      document.body.style.userSelect = 'none';
-
-      const onMove = (ev: PointerEvent) => {
-        const currentPos = isHorizontal ? ev.clientX : ev.clientY;
-        const delta = (currentPos - startPos) * rtl * sign;
-        resizable._onResizeMove(delta);
-      };
-      const onUp = () => {
-        cleanup();
-        setIsDragging(false);
-        resizable._onResizeEnd();
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-      };
-      const onCancel = () => {
-        cleanup();
-        setIsDragging(false);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-      };
-      function cleanup() {
-        window.removeEventListener('pointermove', onMove);
-        window.removeEventListener('pointerup', onUp);
-        window.removeEventListener('pointercancel', onCancel);
-        dragCleanupRef.current = null;
-      }
-      window.addEventListener('pointermove', onMove);
-      window.addEventListener('pointerup', onUp);
-      window.addEventListener('pointercancel', onCancel);
-      dragCleanupRef.current = cleanup;
-    },
-    [isDisabled, resizable, isHorizontal, getRTLMultiplier, sign],
+  // A handle whose axis disagrees with its region drags along one axis while
+  // the region measures percentage bounds on the other. `ResizableProps` is
+  // exported, so `_direction` is optional for old hand-built objects. Without
+  // it there is no axis to compare.
+  const regionDirection = resizable?._direction;
+  useDevWarning(
+    'ResizeHandle',
+    `direction="${direction}" but its useResizable region is ` +
+      `"${regionDirection}". They must match: the hook measures one axis ` +
+      'and the handle drags the other.',
+    regionDirection != null && regionDirection !== direction,
   );
 
-  // --- Keyboard ---
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (isDisabled || !resizable) {
-        return;
-      }
-      const step = e.shiftKey ? KEYBOARD_LARGE_STEP : KEYBOARD_STEP;
-      const rtl = isHorizontal ? getRTLMultiplier() : 1;
+  // --- Cleanup on unmount, or when the `resizable` prop goes ---
 
-      switch (e.key) {
-        case 'ArrowRight':
-        case 'ArrowDown': {
-          e.preventDefault();
-          resizable._onResizeStart();
-          resizable._onResizeMove(step * (isHorizontal ? rtl : 1) * sign);
-          resizable._onResizeEnd();
-          break;
-        }
-        case 'ArrowLeft':
-        case 'ArrowUp': {
-          e.preventDefault();
-          resizable._onResizeStart();
-          resizable._onResizeMove(-step * (isHorizontal ? rtl : 1) * sign);
-          resizable._onResizeEnd();
-          break;
-        }
-        case 'Home': {
-          e.preventDefault();
-          resizable._onResizeStart();
-          resizable._onResizeMove(resizable._minSizePx - resizable._size);
-          resizable._onResizeEnd();
-          break;
-        }
-        case 'End': {
-          e.preventDefault();
-          if (resizable._maxSizePx !== Infinity) {
-            resizable._onResizeStart();
-            resizable._onResizeMove(resizable._maxSizePx - resizable._size);
-            resizable._onResizeEnd();
-          }
-          break;
-        }
-        case 'Enter': {
-          e.preventDefault();
-          if (resizable._collapsible) {
-            resizable._onResizeStart();
-            resizable._onResizeMove(
-              resizable._isCollapsed ? resizable._minSizePx : -resizable._size,
-            );
-            resizable._onResizeEnd();
-          }
-          break;
-        }
-      }
-    },
-    [isDisabled, resizable, isHorizontal, getRTLMultiplier, sign],
-  );
-
-  // --- Double-click collapse ---
-  const handleDoubleClick = useCallback(() => {
-    if (isDisabled || !resizable || !resizable._collapsible) {
+  // Removing the grab zone releases its captured pointer and its listeners.
+  // A `resizable` prop that goes away takes the grab zone's handlers too. The
+  // body's cursor and user-select overrides are not on the element, so they
+  // are released here. The region outlives this handle and still has to hear
+  // that its gesture is over.
+  const hasRegion = resizable != null;
+  // Interrupts the region's gesture when the handle loses its region or
+  // unmounts.
+  useEffect(() => {
+    if (!hasRegion) {
       return;
     }
-    resizable._onResizeStart();
-    resizable._onResizeMove(
-      resizable._isCollapsed ? resizable._minSizePx : -resizable._size,
-    );
-    resizable._onResizeEnd();
-  }, [isDisabled, resizable]);
-
-  // --- Cleanup on unmount ---
-  // A drag in flight when the handle unmounts never gets its pointerup, so
-  // tear down the window listeners here too — otherwise every pointermove
-  // keeps driving the (still-mounted) region's resize state after the handle
-  // is gone, and the body cursor/user-select overrides stick.
-  useEffect(() => {
     return () => {
-      if (dragCleanupRef.current) {
-        dragCleanupRef.current();
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-      }
+      regionGesture.interrupt();
+    };
+  }, [hasRegion, regionGesture]);
+
+  // --- The LayoutPanel beside a handle given `resizable` props ---
+
+  // A collapsing panel moves focus here, and the ring follows the last input.
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  // A LayoutPanel at the region's size, with no `resizable` prop, has no
+  // controller to find it. This handle holds it collapsed with the region, so
+  // focus inside it moves here and it goes inert. A panel lent later is found
+  // at once.
+  const [, rerender] = useReducer((count: number) => count + 1, 0);
+  const heldPaneRef = useRef<ResizablePane | null>(null);
+  // The element goes in the handle registry, for a collapsing panel beside it
+  // to hand focus to. When the element goes, a held panel opens.
+  const registryRef = useCallback((element: HTMLDivElement | null) => {
+    if (element == null) {
+      return;
+    }
+    const unregister = registerResizeHandle(element);
+    return () => {
+      unregister();
+      heldPaneRef.current = handOverPane(
+        heldPaneRef.current,
+        null,
+        false,
+        null,
+      );
     };
   }, []);
+  const isRegionCollapsed = resizable?._isCollapsed ?? false;
+  // Syncs with the lent-panel registry. A panel lent or taken back re-renders
+  // this handle, so it looks for its pane again.
+  useEffect(
+    () => (hasRegion ? watchResizablePanes(rerender) : undefined),
+    [hasRegion],
+  );
+  // Syncs the held panel with the region's collapse state after each commit.
+  useIsomorphicLayoutEffect(() => {
+    const element = handleRef.current;
+    const pane =
+      hasRegion && element != null
+        ? resizablePaneFor(element, isReversed)
+        : null;
+    heldPaneRef.current = handOverPane(
+      heldPaneRef.current,
+      pane,
+      isRegionCollapsed,
+      element,
+    );
+  });
 
   // --- ARIA ---
-  // When collapsed the panel's real size (0) sits below aria-valuemin, which
-  // is invalid per WCAG 4.1.2. Clamp aria-valuenow to the minimum and announce
-  // the true state via aria-valuetext instead; the valuetext is removed as
-  // soon as the panel expands so the numeric value reads again.
-  const isCollapsed = resizable?._isCollapsed ?? false;
-  const ariaValueNow = resizable
-    ? isCollapsed
-      ? Math.max(resizable._size, resizable._minSizePx)
-      : resizable._size
+  const sizeNow = resizable?._size;
+  const minNow = resizable?._minSizePx;
+  // A separator with a value needs a maximum (WAI-ARIA, APG window splitter).
+  // Unbounded regions report the basis they can fill; a hand-built props
+  // object without it reports only a configured maximum.
+  const effectiveMax = resizable
+    ? (getEffectiveMaxPx(resizable) ??
+      (resizable._maxSizePx !== Infinity ? resizable._maxSizePx : undefined))
     : undefined;
-  const ariaValueMin = resizable ? resizable._minSizePx : undefined;
-  const ariaValueMax =
-    resizable && resizable._maxSizePx !== Infinity
-      ? resizable._maxSizePx
-      : undefined;
-  const ariaValueText =
-    resizable && isCollapsed ? t('@astryx.resizable.collapsed') : undefined;
+  // The attributes createResizable writes on a plain element, from the same
+  // derivation.
+  const aria = separatorAttributes({
+    direction,
+    isDisabled,
+    value:
+      sizeNow == null || minNow == null
+        ? undefined
+        : {
+            size: sizeNow,
+            minPx: minNow,
+            maxPx: effectiveMax,
+            isCollapsed,
+            collapsedText: t('@astryx.resizable.collapsed'),
+          },
+  });
+
+  // The Grip pill takes the pointer as the Grab zone does, so a pill drawn
+  // outside the zone still resizes.
+  const grabHandlers: Pick<
+    HTMLAttributes<HTMLDivElement>,
+    | 'onPointerDown'
+    | 'onPointerMove'
+    | 'onPointerUp'
+    | 'onPointerCancel'
+    | 'onLostPointerCapture'
+    | 'onPointerEnter'
+    | 'onPointerLeave'
+  > = {
+    onPointerDown: e => {
+      if (!isDisabled) {
+        gesture?.pointerDown(e);
+      }
+    },
+    onPointerMove: e => gesture?.pointerMove(e),
+    onPointerUp: e => gesture?.pointerUp(e),
+    onPointerCancel: e => gesture?.pointerCancel(e),
+    onLostPointerCapture: e => gesture?.pointerCancel(e),
+    onPointerEnter: () => setIsHovered(true),
+    onPointerLeave: () => {
+      if (!isDragging) {
+        setIsHovered(false);
+      }
+    },
+  };
 
   return (
     <div
-      ref={useMergedRefs(ref, handleRef)}
+      ref={useMergedRefs(ref, handleRef, registryRef, modalityRef)}
       role="separator"
-      aria-orientation={isHorizontal ? 'vertical' : 'horizontal'}
-      aria-valuenow={ariaValueNow}
-      aria-valuemin={ariaValueMin}
-      aria-valuemax={ariaValueMax}
-      aria-valuetext={ariaValueText}
+      {...aria}
       aria-label={label}
-      aria-disabled={isDisabled || undefined}
-      tabIndex={isDisabled ? -1 : 0}
-      onDoubleClick={handleDoubleClick}
+      onDoubleClick={() => {
+        if (!isDisabled) {
+          gesture?.doubleClick();
+        }
+      }}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       data-resizing={isDragging || undefined}
@@ -571,6 +668,11 @@ export function ResizeHandle({
           isOverlay && styles.overlay,
           isOverlay &&
             (isHorizontal ? styles.overlayHorizontal : styles.overlayVertical),
+          isOverlay &&
+            paneLength != null &&
+            (isHorizontal
+              ? styles.overlayHorizontalOnShortPane
+              : styles.overlayVerticalOnShortPane),
           !isOverlay && (isHorizontal ? styles.horizontal : styles.vertical),
           !isOverlay &&
             !hasDivider &&
@@ -596,33 +698,30 @@ export function ResizeHandle({
       // this accessibility-critical handler can't be clobbered by a passed prop.
       onKeyDown={e => {
         props.onKeyDown?.(e);
-        handleKeyDown(e);
+        if (!isDisabled) {
+          gesture?.keyDown(e);
+        }
       }}>
       {/* Wider invisible hit area for pointer interaction */}
       <div
         {...stylex.props(
           styles.hitArea,
           isHorizontal ? styles.hitAreaHorizontal : styles.hitAreaVertical,
-          // Bias the grab zone to sit over the visible pill. When the pill is
-          // centered (no bias) just center the hit area on the divider; when
-          // it's offset to a panel side, reuse the pill's physical-offset
-          // construction so the two stay aligned in LTR and RTL alike.
-          hitBiasDir == null
-            ? isHorizontal
-              ? rtlStyles.centerInline('0px')
-              : styles.hitAreaCenteredY
-            : isHorizontal
-              ? dynamicStyles.hitAreaOffsetX(hitBiasDir)
-              : dynamicStyles.hitAreaOffsetY(hitBiasDir),
+          isHorizontal
+            ? rtlStyles.centerInline('0px')
+            : styles.hitAreaCenteredY,
+          isOverlay &&
+            (isHorizontal
+              ? styles.hitAreaWithinHandleX
+              : styles.hitAreaWithinHandleY),
+          !isOverlay &&
+            paneLength != null &&
+            (isHorizontal
+              ? dynamicStyles.hitAreaLengthX(paneLength)
+              : dynamicStyles.hitAreaLengthY(paneLength)),
           isDisabled && styles.disabled,
         )}
-        onPointerDown={handlePointerDown}
-        onPointerEnter={() => setIsHovered(true)}
-        onPointerLeave={() => {
-          if (!isDragging) {
-            setIsHovered(false);
-          }
-        }}
+        {...grabHandlers}
       />
       {/* Pill grip indicator — themed via .astryx-resize-handle-pill */}
       {children ?? (
@@ -641,11 +740,25 @@ export function ResizeHandle({
                   : dynamicStyles.pillOffsetY(
                       effectiveSide === 'start' ? -1 : 1,
                     ),
+              isHorizontal
+                ? styles.pillGrabHorizontal
+                : styles.pillGrabVertical,
               isAlwaysVisible ? styles.pillVisible : styles.pillHidden,
+              !isAlwaysVisible &&
+                effectiveSide !== 'center' &&
+                (isHorizontal
+                  ? effectiveSide === 'start'
+                    ? styles.pillBridgeRight
+                    : styles.pillBridgeLeft
+                  : effectiveSide === 'start'
+                    ? styles.pillBridgeDown
+                    : styles.pillBridgeUp),
               isInteracting && !isDragging && styles.pillHover,
               isDragging && styles.pillActive,
+              isDisabled && styles.disabled,
             ),
           )}
+          {...grabHandlers}
         />
       )}
     </div>

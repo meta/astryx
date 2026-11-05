@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Playground URL builders.
+ * @input Accepts authored source code or a generated page-template slug.
+ * @output Produces links that seed the playground without running work eagerly.
+ * @position Shared navigation helper for docs, themes, and templates.
+ */
+
 import {compressCode} from '../lib/compress';
 import {stripCodeExampleCopyrightHeader} from '../lib/codeExamples';
 
@@ -15,4 +22,13 @@ export function buildPlaygroundHref(source: string, theme?: string): string {
   const compressed = compressCode(cleanedSource);
   const query = theme ? `?theme=${encodeURIComponent(theme)}` : '';
   return `/playground${query}#code=${compressed}`;
+}
+
+/**
+ * Link to a generated page template by slug. The playground already owns the
+ * source registry, so gallery pages can avoid embedding every template's code
+ * in their HTML just to produce a destination URL.
+ */
+export function buildTemplatePlaygroundHref(slug: string): string {
+  return `/playground?template=${encodeURIComponent(slug)}`;
 }

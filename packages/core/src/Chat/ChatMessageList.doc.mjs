@@ -8,12 +8,45 @@ export const docs = {
   displayName: 'Chat Message List',
   isHiddenFromOverview: true,
   description: `Presentational message container with density context and infinite scroll support. Provides role="log" with aria-live="polite" for accessibility. A flex spacer pushes messages to the bottom when the list isn't full; set align="top" to start messages at the top instead.`,
+  playground: {
+    defaults: {
+      children: [
+        {
+          __element: 'ChatMessage',
+          props: {sender: 'user'},
+          children: {
+            __element: 'ChatMessageBubble',
+            children: 'Can you summarize this report?',
+          },
+        },
+        {
+          __element: 'ChatMessage',
+          props: {sender: 'assistant'},
+          children: {
+            __element: 'ChatMessageBubble',
+            children: 'Sure. Revenue is up 12% and churn is flat quarter over quarter.',
+          },
+        },
+      ],
+    },
+    wrapper: {component: 'Stack', props: {width: 480}},
+  },
   props: [
     {
       name: 'children',
       type: 'ReactNode',
       description: 'Message elements: typically ChatMessage or ChatSystemMessage.',
       required: true,
+      slotElements: [
+        {
+          __element: 'ChatMessage',
+          props: {sender: 'user'},
+          children: {
+            __element: 'ChatMessageBubble',
+            children: 'Message text',
+          },
+        },
+      ],
     },
     {
       name: 'emptyState',

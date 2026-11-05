@@ -75,14 +75,6 @@ export const navItemStyles = stylex.create({
     lineHeight: typeScaleVars['--text-label-leading'],
     textAlign: 'start',
     boxSizing: 'border-box',
-    ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-      '@media (hover: hover)': {
-        backgroundColor: colorVars['--color-overlay-hover'],
-      },
-    },
-    ':active': {
-      backgroundColor: colorVars['--color-overlay-pressed'],
-    },
   },
 
   /** Selected/active page indicator — deemphasized background, medium weight */
@@ -117,6 +109,23 @@ export const navItemStyles = stylex.create({
         default: colorVars['--color-neutral'],
         '@media (forced-colors: active)': 'Highlight',
       },
+    },
+    // The touch press model writes these instead of `:active`; the selected
+    // item keeps its fill under a finger the way it does under a mouse, and
+    // paints no overlay at any phase of the press.
+    '[data-astryx-press="on"]': {
+      backgroundColor: {
+        default: colorVars['--color-neutral'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
+      backgroundImage: 'none',
+    },
+    '[data-astryx-press="fading"]': {
+      backgroundColor: {
+        default: colorVars['--color-neutral'],
+        '@media (forced-colors: active)': 'Highlight',
+      },
+      backgroundImage: 'none',
     },
   },
 

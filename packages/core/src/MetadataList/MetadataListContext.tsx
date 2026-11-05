@@ -4,15 +4,15 @@
 
 /**
  * @file MetadataListContext.tsx
- * @input Uses React createContext
+ * @input Layer-scoped React context
  * @output Exports MetadataListContext for sharing config between MetadataList and MetadataListItem
  * @position Internal context; consumed by MetadataList.tsx and MetadataListItem.tsx
  */
 
-import {createContext} from 'react';
+import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 
 export interface MetadataListLabelConfig {
-  position: 'start' | 'top';
+  position?: 'start' | 'top';
   width?: number | string;
 }
 

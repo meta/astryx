@@ -13,14 +13,15 @@ export const doc = {
   type: 'command',
   name: 'theme template',
   displayName: 'astryx theme template',
-  namespace: 'cli',
+  namespace: 'cli/commands',
   summary: 'Write the annotated theme template into your project',
   description:
     'Writes theme.template.ts: the annotated reference for the whole theme surface, covering every ' +
     'defineTheme field, the token families, the component override syntax, and how a theme is ' +
     'consumed, naming the CLI command that prints the authoritative reference for each. Read ' +
-    'it, copy what you need into your own theme file, delete it. Use `theme add <slug>` instead ' +
-    'to start from a theme we ship. Leaves an existing file untouched unless --overwrite.',
+    'it, copy what you need into your own theme file, delete it. Use `theme add <slug>` to ' +
+    'use an installed built theme, extend that theme for ordinary customization, or use ' +
+    '`theme eject <slug>` for a complete source fork. Leaves an existing file untouched unless --overwrite.',
   fn: 'themeTemplate',
   args: [{name: 'path', param: 'options.targetPath', required: false}],
   options: [
@@ -34,9 +35,10 @@ export const doc = {
     {label: 'Write it at the project root', cli: 'astryx theme template'},
     {label: 'Somewhere else', cli: 'astryx theme template src/themes/starter.ts'},
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success, including when an existing file was left untouched'},
-    {code: 1, when: 'the target path escapes the project'},
+    {code: 1, when: 'the target path escapes the project, or the file cannot be written'},
   ],
-  related: ['theme add', 'theme list', 'theme build'],
+  related: ['theme add', 'theme eject', 'theme list', 'theme build'],
 };

@@ -1,0 +1,49 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Keep the retired GitHub Pages origin as one small, durable compatibility page.
+# Stable docs, Storybook, and Sandbox are built and served by Vercel.
+name: Publish GitHub Pages landing
+
+on:
+  push:
+    branches: ['main']
+    paths:
+      - '.github/pages/**'
+      - '.github/workflows/pages-deploy.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: github-pages-landing
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Stage landing and deep-link recovery page
+        run: |
+          mkdir pages-dist
+          cp -R .github/pages/. pages-dist/
+          cp .github/pages/index.html pages-dist/404.html
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: pages-dist
+
+      - name: Deploy landing
+        id: deployment
+        uses: actions/deploy-pages@v5

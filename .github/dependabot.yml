@@ -32,7 +32,12 @@ updates:
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      # "/" covers workflows only — composite actions need their own entry.
+      # Without it, the SHA-pinned pnpm/action-setup in the setup composite
+      # (which runs inside the npm publish jobs) would never get bump PRs.
+      - "/.github/actions/setup"
     schedule:
       interval: "monthly"
     labels:

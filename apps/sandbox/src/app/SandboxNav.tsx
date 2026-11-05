@@ -9,9 +9,10 @@
 
 'use client';
 
+import {useEffect, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {usePathname} from 'next/navigation';
-import Link from 'next/link';
+import {usePathname} from '../router';
+import Link from '../router';
 import {
   SideNav,
   SideNavHeading,
@@ -136,13 +137,34 @@ function SandboxHeader() {
   );
 }
 
+/**
+ * Tools that carry their own page navigation. Entering one collapses this rail
+ * so the two nav levels are not competing for the same edge of the screen; it
+ * is a one-shot on entry rather than a lock, so expanding it back inside the
+ * tool works and sticks.
+ */
+const SELF_NAVIGATING_TOOLS = ['/pages/motion-lab'];
+
 export function SandboxNav() {
   const pathname = usePathname();
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const wasInTool = useRef(false);
+
+  const isInTool = SELF_NAVIGATING_TOOLS.some(p => pathname.startsWith(p));
+
+  useEffect(() => {
+    // Only on the transition, so a manual expand inside the tool is not undone
+    // on the next route change within it.
+    if (isInTool !== wasInTool.current) {
+      setIsCollapsed(isInTool);
+      wasInTool.current = isInTool;
+    }
+  }, [isInTool]);
 
   return (
     <SideNav
       header={<SandboxHeader />}
-      collapsible
+      collapsible={{isCollapsed, onCollapsedChange: setIsCollapsed}}
       resizable={{
         defaultWidth: 300,
         minWidth: 220,

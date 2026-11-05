@@ -21,9 +21,11 @@ export default function KbdModifierCombos() {
         <Kbd keys="mod+shift+p" />
       </HStack>
       <HStack gap={4}>
-        <Text type="body">Special keys:</Text>
+        <Text type="body">Special keys and aliases:</Text>
         <Kbd keys="escape" />
+        <Kbd keys="esc" />
         <Kbd keys="enter" />
+        <Kbd keys="return" />
         <Kbd keys="backspace" />
         <Kbd keys="tab" />
         <Kbd keys="space" />

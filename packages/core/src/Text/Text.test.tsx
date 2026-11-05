@@ -11,6 +11,12 @@ import {Text} from './Text';
 import type {TextType} from './Text';
 import type {TextColor} from '../theme/types';
 
+// jsdom does not resolve var(); the browser spec checks the resolved value.
+// Untruncated text reads the private container override, else break-word.
+const DEFAULT_WRAP = 'var(--_astryx-text-overflow-wrap,break-word)';
+const wrapOf = (element: Element) =>
+  getComputedStyle(element).overflowWrap.replace(/\s/g, '');
+
 describe('Text', () => {
   describe('rendering', () => {
     it('renders without type prop (defaults to body)', () => {
@@ -145,7 +151,6 @@ describe('Text', () => {
       );
       const element = screen.getByText('Tiny code');
       expect(element).toHaveAttribute('data-size', '2xs');
-      expect(element.className).toContain('size-2xs');
     });
 
     it('accepts display prop', () => {
@@ -225,11 +230,38 @@ describe('Text', () => {
     });
   });
 
-  it('renders astryx-* class names for theme targeting', () => {
+  // Text FR3 (spec:AST-020 FR1, WCAG 2.2 1.4.10): a token longer than its line
+  // wraps in text that is not truncated; truncation keeps its own treatment.
+  describe('long unbroken tokens', () => {
+    const token =
+      'https://example.com/aVeryLongUnbrokenTokenThatIsWiderThan320px';
+
+    it('wraps them in inline and block text that is not truncated', () => {
+      render(
+        <>
+          <Text>{token}</Text>
+          <Text display="block">{`${token}/block`}</Text>
+        </>,
+      );
+      expect(wrapOf(screen.getByText(token))).toBe(DEFAULT_WRAP);
+      expect(wrapOf(screen.getByText(`${token}/block`))).toBe(DEFAULT_WRAP);
+    });
+
+    it('leaves single-line truncation clipping on one line', () => {
+      render(<Text maxLines={1}>{token}</Text>);
+      const style = getComputedStyle(screen.getByText(token));
+      expect(style.whiteSpace).toBe('nowrap');
+      expect(style.textOverflow).toBe('ellipsis');
+      expect(style.wordBreak).toBe('break-all');
+      expect(style.overflowWrap).not.toBe('break-word');
+    });
+  });
+
+  it('renders the stable target and type data attribute for theme targeting', () => {
     render(<Text type="body">Themed Text</Text>);
     const element = screen.getByText('Themed Text');
     expect(element.className).toContain('astryx-text');
-    expect(element.className).toContain('body');
+    expect(element).toHaveAttribute('data-type', 'body');
   });
 });
 
@@ -239,12 +271,15 @@ describe('Text custom types', () => {
     const el = screen.getByText('Custom');
     expect(el).toBeInTheDocument();
     expect(el.className).toContain('astryx-text');
-    expect(el.className).toContain('hero');
+    expect(el).toHaveAttribute('data-type', 'hero');
   });
 
   it('applies primary color to custom types by default', () => {
     render(<Text type={'caption' as TextType}>Caption</Text>);
-    expect(screen.getByText('Caption').className).toContain('primary');
+    expect(screen.getByText('Caption')).toHaveAttribute(
+      'data-color',
+      'primary',
+    );
   });
 
   it('allows color override on custom types', () => {
@@ -253,20 +288,23 @@ describe('Text custom types', () => {
         Muted
       </Text>,
     );
-    expect(screen.getByText('Muted').className).toContain('secondary');
+    expect(screen.getByText('Muted')).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
   });
 });
 
 describe('Text custom colors', () => {
-  it('renders a custom color as a stable class for theme CSS to target', () => {
-    // A theme adds a custom color (e.g. via TextColorMap augmentation +
-    // defineTheme). The rendered element carries the color as a class
-    // (astryx-text.<color>) so `.astryx-text.brand { color: ... }` from the
-    // theme applies — mirroring how custom `type`s work.
+  it('reflects a custom color for theme CSS to target', () => {
+    // A theme adds a custom color through TextColorMap augmentation and
+    // defineTheme. The rendered element keeps the stable Text target and
+    // reflects the custom value as data-color so the generated theme selector
+    // can reach it without a collision-prone bare class.
     render(<Text color={'brand' as TextColor}>Branded</Text>);
     const el = screen.getByText('Branded');
     expect(el.className).toContain('astryx-text');
-    expect(el.className).toContain('brand');
+    expect(el).toHaveAttribute('data-color', 'brand');
   });
 
   it('does not crash on a custom color (falls back to the primary StyleX baseline)', () => {
@@ -282,7 +320,7 @@ describe('Text custom colors', () => {
     const custom = screen.getByText('Custom');
     const builtin = screen.getByText('Builtin');
     // Neither throws, and the custom color reuses primary's baseline StyleX
-    // class (the real color comes from theme CSS via the `brand` class).
+    // class (the real color comes from theme CSS via `data-color="brand"`).
     const primaryAtomic = builtin.className
       .split(/\s+/)
       .filter(c => c.startsWith('x'));
@@ -294,7 +332,7 @@ describe('Text custom colors', () => {
 
   it('still applies built-in colors directly', () => {
     render(<Text color="accent">Accent</Text>);
-    expect(screen.getByText('Accent').className).toContain('accent');
+    expect(screen.getByText('Accent')).toHaveAttribute('data-color', 'accent');
   });
 });
 
@@ -339,5 +377,62 @@ describe('truncated text shows one tooltip, not two', () => {
     } finally {
       restore();
     }
+  });
+});
+
+// With hasTruncateTooltip={false} nothing reads the measured overflow, so a
+// long table of truncated cells must not pay a layout read per cell.
+function countScrollWidthReads(run: () => void): number {
+  const proto = window.HTMLElement.prototype;
+  const original = Object.getOwnPropertyDescriptor(proto, 'scrollWidth');
+  let reads = 0;
+  Object.defineProperty(proto, 'scrollWidth', {
+    configurable: true,
+    get() {
+      reads += 1;
+      return 0;
+    },
+  });
+  try {
+    run();
+  } finally {
+    if (original) {
+      Object.defineProperty(proto, 'scrollWidth', original);
+    } else {
+      delete (proto as {scrollWidth?: number}).scrollWidth;
+    }
+  }
+  return reads;
+}
+
+describe('Text maxLines without a truncation tooltip', () => {
+  it('takes no truncation measurement when hasTruncateTooltip is false', () => {
+    const reads = countScrollWidthReads(() => {
+      render(
+        <>
+          {Array.from({length: 20}, (_, index) => (
+            <Text
+              type="body"
+              maxLines={1}
+              hasTruncateTooltip={false}
+              key={index}>
+              Cell {index} with text far wider than its column
+            </Text>
+          ))}
+        </>,
+      );
+    });
+    expect(reads).toBe(0);
+  });
+
+  it('still measures when the tooltip is enabled', () => {
+    const reads = countScrollWidthReads(() => {
+      render(
+        <Text type="body" maxLines={1}>
+          Text far wider than its column
+        </Text>,
+      );
+    });
+    expect(reads).toBeGreaterThan(0);
   });
 });

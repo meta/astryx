@@ -5,7 +5,8 @@
 /**
  * @file Step.tsx
  * @input Uses React, stylex, theme tokens (including the motion duration token
- *   the connector fill animates on), StepperContext
+ *   the connector fill animates on), StepperContext, and per-step theme selector
+ *   state
  * @output Exports Step component and StepProps
  * @position Individual step item; used inside Stepper
  *
@@ -21,7 +22,12 @@
  * the one animated span reading as a single front — an on-track span is drawn
  * by two steps, three where a content slot splits it — is in the component.
  * Nothing about it is public API: Stepper hands each Step the step it came
- * from through context, and the rest is derived.
+ * from through context, and the rest is derived. In a compact horizontal
+ * Stepper, each track node is presentational rather than clickable; navigation
+ * moves to the named previous/next controls in the summary row. The on-track
+ * layout keeps each indicator on the rail and does not repeat the active one
+ * beside the summary label. Each public content slot stays mounted and is
+ * hidden to preserve local state.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Stepper/Stepper.doc.mjs
@@ -32,7 +38,8 @@
  * - /packages/cli/assets/templates/blocks/components/Step/ (showcase blocks)
  */
 
-import {useEffect, type ReactNode} from 'react';
+import {useId, useLayoutEffect, type ReactNode} from 'react';
+import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 
 import {
@@ -51,13 +58,21 @@ import {
   isRenderable,
   themeProps,
 } from '../utils';
+import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {BaseProps} from '../BaseProps';
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useTranslator} from '../i18n';
-import {useStepperContext} from './StepperContext';
+import {useStepperInternalContext} from './StepperContext';
 import {stepMarker} from './stepper.stylex';
 import type {StepStatus} from './StepStatus';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Stepper/Step.generated';
+
+registerEnglishFallback(english);
 
 /**
  * Built-in indicator presets. Anything other than these strings passed to
@@ -88,7 +103,8 @@ export interface StepProps extends BaseProps<HTMLLIElement> {
   description?: string;
   /**
    * Content rendered below the label and description. Useful in vertical
-   * steppers to show form fields or detailed content for each step.
+   * steppers to show form fields or detailed content for each step. Compact
+   * horizontal steppers hide it without unmounting it, preserving local state.
    */
   children?: ReactNode;
 
@@ -196,6 +212,42 @@ function CurrentIcon() {
 // --- Styles ---
 
 const BAR_WIDTH = spacingVars['--spacing-1'];
+
+/**
+ * How much of itself a connector gives up where it meets the indicator, read
+ * from the public `--step-connector-gap` declared on the Stepper root.
+ *
+ * Clipped, not padded. The gap has to apply to two layers — the track, which is
+ * the segment's own background, and the accent fill, which is an absolutely
+ * placed `::before`. Spending it on each separately meant two declarations on
+ * two boxes: a percentage then resolved against a different containing block
+ * for each and stopped them ~1.2px apart. `clip-path` is ONE declaration on the
+ * segment that clips the element and its pseudo-element together, against one
+ * reference box — so every accepted value behaves the same way on both layers,
+ * which is what a public input owes its full value domain.
+ *
+ * Clipping also cannot change layout: the segment keeps its box, so the node it
+ * positions cannot move and the Stepper cannot grow. A raw `1rem` padding grew
+ * a 180px stepper to 240px.
+ *
+ * Still clamped, because the value arrives with nothing in between to reject
+ * it. Both halves earn their place, and not for the reasons padding needed:
+ *
+ * - `max(0px, …)` — `inset()` ACCEPTS a negative length. Chromium computes
+ *   `inset(0 0 -4px 0)` as-is rather than dropping it, which is the opposite
+ *   of padding (there CSS clamps a negative to `0` for you). This normalises
+ *   it to `0` so a negative gap means "no gap" rather than a clip rect
+ *   stretched outside the segment's own box.
+ * - `min(…, --spacing-2)` — the flexible segment's own `min-height`, so an
+ *   oversized gap leaves a short track rather than an unbounded one.
+ *
+ * The Stepper root explicitly inherits the property, so a horizontal Stepper
+ * can receive a consumer value (or its 0px default) from the styled frame while
+ * a theme can still set the property directly on the `stepper` target. The
+ * use-site fallback supplies the same default to an unframed vertical Stepper.
+ */
+const CONNECTOR_GAP = `max(0px, min(var(--step-connector-gap, 0px), ${spacingVars['--spacing-2']}))`;
+
 // Every indicator — check, ring, custom icon, number badge — occupies the same
 // box, so the `auto` mode swapping a number for a check as a step completes
 // never nudges the label or the track.
@@ -303,7 +355,8 @@ const styles = stylex.create({
     // Stretch, not flex-start: a flex-start child is sized to fit-content,
     // which is floored at its own min-content and would spill the label past
     // the step's slice of the track and into the next step. Stretched, the
-    // label row is exactly as wide as the step and the label wraps inside it.
+    // label row is exactly as wide as the step and the label ellipsizes
+    // inside it.
     alignItems: 'stretch',
     flex: 1,
     // `flex: 1` alone does not make the steps equal: a flex item's default
@@ -455,6 +508,10 @@ const styles = stylex.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
+    // The row is a flex item wherever a step stacks it under a bar, so it
+    // needs the floor released too — otherwise it holds itself open at the
+    // label's min-content width and the label never reaches its ellipsis.
+    minWidth: 0,
   },
 
   // Indicator icon container
@@ -484,18 +541,27 @@ const styles = stylex.create({
     color: colorVars['--color-accent'],
   },
   iconSuccess: {
-    color: colorVars['--color-success'],
+    color: colorVars['--color-icon-success'],
   },
   iconWarning: {
-    color: colorVars['--color-warning'],
+    color: colorVars['--color-icon-warning'],
   },
   iconError: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-icon-error'],
   },
 
   // Number badge — same box as every other indicator (see INDICATOR_SIZE).
   numberBadge: {
     display: 'grid',
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
     placeItems: 'center',
     width: INDICATOR_SIZE,
     height: INDICATOR_SIZE,
@@ -553,11 +619,16 @@ const styles = stylex.create({
     fontWeight: fontWeightVars['--font-weight-normal'],
     color: colorVars['--color-text-primary'],
     // Horizontal steps divide the track evenly, so a label can end up with
-    // less room than it wants. Let it shrink past its longest word and break
-    // that word rather than overlap the neighbouring step. Inert wherever
-    // there is room, which is every vertical stepper.
+    // less room than it wants. It stays on one line and ellipsizes rather than
+    // wrapping, so every step in a row keeps the same height and the track
+    // below them stays straight. minWidth releases the flex floor that would
+    // otherwise hold the label at its min-content width and let it overlap the
+    // neighbouring step. Inert wherever there is room, which is most vertical
+    // steppers. The full string stays in the accessible name either way.
     minWidth: 0,
-    overflowWrap: 'break-word',
+    whiteSpace: 'nowrap',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
   },
   labelInProgress: {
     fontWeight: fontWeightVars['--font-weight-semibold'],
@@ -638,7 +709,6 @@ const styles = stylex.create({
 
   // Button reset for clickable steps
   buttonReset: {
-    all: 'unset',
     textAlign: 'start',
     alignItems: 'stretch',
     display: 'flex',
@@ -655,13 +725,7 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
-    backgroundColor: {
-      default: 'transparent',
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-        '@media (hover: hover)': colorVars['--color-overlay-hover'],
-      },
-      ':active': colorVars['--color-overlay-pressed'],
-    },
+    backgroundColor: 'transparent',
   },
 
   // ===================== ON-TRACK LAYOUT =====================
@@ -685,10 +749,8 @@ const styles = stylex.create({
 
   // Interactive wrapper (indicator + label act as one click target).
   otInteractive: {
-    all: 'unset',
     boxSizing: 'border-box',
-    // `all: unset` leaves the <button> UA default of centered text; force
-    // start so vertical labels/descriptions read left-aligned. Horizontal
+    // Force start alignment so vertical labels/descriptions read left-aligned. Horizontal
     // labels re-center via otLabelWrapH (a deeper element).
     textAlign: 'start',
     cursor: {
@@ -702,13 +764,7 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
-    backgroundColor: {
-      default: 'transparent',
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-        '@media (hover: hover)': colorVars['--color-overlay-hover'],
-      },
-      ':active': colorVars['--color-overlay-pressed'],
-    },
+    backgroundColor: 'transparent',
   },
 
   otRowWrap: {
@@ -740,6 +796,43 @@ const styles = stylex.create({
     width: BAR_WIDTH,
     flexShrink: 0,
     borderRadius: 0,
+  },
+  // The gap a connector leaves where it meets the indicator, spent on the side
+  // that faces the node so the pair leaves a symmetric hole around it.
+  //
+  // Clip the segment rather than changing its box: one `clip-path` clips the
+  // segment's own track and its absolutely positioned `::before` fill against
+  // the same reference box. The indicator stays put, the Stepper cannot grow,
+  // and percentage values cannot resolve differently between the two layers.
+  // The inherited value is clamped in CONNECTOR_GAP; its default is declared
+  // once on the Stepper root, where a generated theme override can replace it.
+  //
+  // A public var rather than a per-segment theme vocabulary: "do not touch the
+  // indicator" is one intent, and naming the segments would publish which
+  // pieces this layout happens to be drawn from today.
+  otSegGapLeadV: {
+    clipPath: `inset(0 0 ${CONNECTOR_GAP} 0)`,
+  },
+  otSegGapRailV: {
+    clipPath: `inset(${CONNECTOR_GAP} 0 0 0)`,
+  },
+  // The horizontal pair is PHYSICAL: `clip-path: inset()` takes top/right/
+  // bottom/left and has no logical form, while the row itself reverses under
+  // `dir="rtl"`. Left unflipped, the leading segment sits to the RIGHT of the
+  // node in RTL and still clips its right edge — opening the hole at the join
+  // between steps instead of at the indicator. The block axis needs no such
+  // handling: `dir` does not reverse it.
+  otSegGapLeadH: {
+    clipPath: {
+      default: `inset(0 ${CONNECTOR_GAP} 0 0)`,
+      ':is([dir="rtl"] *)': `inset(0 0 0 ${CONNECTOR_GAP})`,
+    },
+  },
+  otSegGapRailH: {
+    clipPath: {
+      default: `inset(0 0 0 ${CONNECTOR_GAP})`,
+      ':is([dir="rtl"] *)': `inset(0 ${CONNECTOR_GAP} 0 0)`,
+    },
   },
   // Flexible segment (below the node) — grows to fill the step height and
   // meets the next node's leading segment.
@@ -871,6 +964,17 @@ const styles = stylex.create({
   otMarginTop: (value: string) => ({
     marginBlockStart: value,
   }),
+  // The current step, named below a track whose own labels have collapsed.
+  // Centred rather than indented under an indicator: there is one of these and
+  // it sits under the whole track, so it lines up with the track's middle and
+  // not with any one segment of it.
+  summaryRoot: {
+    alignItems: 'center',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacingVars['--spacing-0-5'],
+    minWidth: 0,
+  },
 });
 
 /**
@@ -913,8 +1017,9 @@ export function Step({
   'data-testid': dataTestId,
   ...rest
 }: StepProps) {
-  const t = useTranslator();
-  const ctx = useStepperContext();
+  const pressable = usePressFeedback();
+  const t = useComponentTranslator();
+  const ctx = useStepperInternalContext();
   const {
     activeStep,
     previousActiveStep,
@@ -923,10 +1028,23 @@ export function Step({
     density: ctxDensity,
     indicatorPosition,
     registerStep,
+    isCompact,
+    summarySlot,
   } = ctx;
 
-  // Register this step index with the parent Stepper for duplicate detection.
-  useEffect(() => registerStep(step), [registerStep, step]);
+  // Register this step index with the parent Stepper, which uses the tally to
+  // warn about duplicate indices and work out how much width each step gets.
+  // The optional getter keeps disabled state owned by this Step while compact
+  // navigation can read its latest registration.
+  //
+  // A layout effect, not an effect: the width each step has is the stepper's
+  // width divided by this count, so a stepper narrow enough to collapse can
+  // only know it once every step is counted. Running after paint would show
+  // the full stepper for a frame and then snap it shut.
+  useLayoutEffect(
+    () => registerStep(step, {getIsDisabled: () => isDisabled}),
+    [registerStep, step, isDisabled],
+  );
 
   const density = densityProp ?? ctxDensity;
   // Inline padding of a separated step's hover target. Density varies the block
@@ -957,9 +1075,15 @@ export function Step({
 
   const isVertical = orientation === 'vertical';
   const isActive = progress === 'in-progress';
-  // Any non-disabled step is navigable when an onStepClick handler is provided,
-  // including not-started steps (free navigation across the flow).
-  const isClickable = !isDisabled && onStepClick != null;
+  // A compact horizontal stepper moves navigation to the named controls in its
+  // summary row. Its track — including the on-track indicators — stays purely
+  // presentational so it does not expose a second, denser set of click targets.
+  const hasButton = onStepClick != null && !isCompact;
+  // A disabled step keeps its button, focusable and aria-disabled, so it
+  // keeps its tab stop, is announced as unavailable, and keeps focus when it
+  // becomes disabled while focused (`spec:AST-085` FR1, FR4, FR5); only
+  // activation is withheld.
+  const isClickable = hasButton && !isDisabled;
 
   const handleClick = () => {
     if (isClickable && onStepClick) {
@@ -1190,11 +1314,39 @@ export function Step({
         ? styles.labelInProgress
         : undefined;
 
-  // Indicator + Label row
+  // Both text parts carry {progress, status}, the phase vocabulary of
+  // `step-indicator` above. The label additionally owns Stepper's disabled
+  // paint, so it alone carries disabled below.
+  const labelThemeProps = themeProps('step-label', {
+    progress,
+    status: status ?? undefined,
+    // The label owns Stepper's disabled paint (`styles.labelDisabled` above),
+    // so it owns the selector too. The description does not change under
+    // disabled and deliberately keeps the smaller {progress, status} surface.
+    disabled: isDisabled ? 'disabled' : null,
+  });
+  const descriptionThemeProps = themeProps('step-description', {
+    progress,
+    status: status ?? undefined,
+  });
+
+  // Indicator + Label row. In compact on-track mode the indicator remains
+  // visible on the rail, so the summary reuses this row without drawing the
+  // active indicator a second time beside the label.
   const iconLabelNode = (
     <div {...stylex.props(styles.iconLabelRow)}>
-      {indicatorNode}
-      <span {...stylex.props(styles.label, labelColorStyle)}>{label}</span>
+      {(!isCompact || indicatorPosition !== 'on-track') && indicatorNode}
+      {/* A space between the indicator and the label: the row is a flex
+          container, which drops whitespace-only text, so nothing changes on
+          screen, but a text reading of the button then keeps "1 Account" as two
+          words instead of "1Account". */}{' '}
+      <span
+        {...mergeProps(
+          labelThemeProps,
+          stylex.props(styles.label, labelColorStyle),
+        )}>
+        {label}
+      </span>
       {statusTextNode}
       {isOptional && (
         <>
@@ -1208,19 +1360,33 @@ export function Step({
     </div>
   );
 
+  // A clickable step's name is its number, label and status word; the
+  // description describes it, so a disabled step's reason reaches assistive
+  // technology too (spec:AST-085 FR5).
+  const descriptionID = useId();
   const descriptionNode = isRenderable(description) ? (
     <div
+      id={descriptionID}
       {...stylex.props(
         hasIndicator
           ? styles.descriptionRowWithIndicator
           : styles.descriptionRow,
       )}>
-      <span {...stylex.props(styles.description)}>{description}</span>
+      <span
+        {...mergeProps(
+          descriptionThemeProps,
+          stylex.props(styles.description),
+        )}>
+        {description}
+      </span>
     </div>
   ) : null;
 
+  // Compact horizontal layouts hide public step content without unmounting it,
+  // so local state survives as the container crosses the threshold.
   const contentNode = isRenderable(children) ? (
     <div
+      hidden={isCompact || undefined}
       {...stylex.props(
         styles.stepContent,
         styles.contentIndent(
@@ -1237,6 +1403,44 @@ export function Step({
     progress,
     status: status ?? undefined,
   });
+
+  // ======= SUMMARY: this step, drawn below a collapsed track =======
+  //
+  // Only the current step draws one, into a row the stepper owns and keeps
+  // outside the `<ol>` — so the list is left with exactly the children it was
+  // given, and the on-track connectors go on reading their own
+  // `:first-child`/`:last-child` position to decide which caps to hide.
+  //
+  // Rendered here rather than handed up as data because it reuses
+  // `iconLabelNode`: indicator resolution, status glyphs, completed checks,
+  // disabled tints, and the compact on-track rule above stay in one place. The
+  // description is re-wrapped, though — the row version indents itself under
+  // an indicator, and centred under a track there is nothing to line it up with.
+  const summaryNode =
+    isCompact && isActive && summarySlot != null
+      ? createPortal(
+          <div
+            {...mergeProps(stepThemeProps, stylex.props(styles.summaryRoot))}>
+            {iconLabelNode}
+            {isRenderable(description) ? (
+              <span {...stylex.props(styles.description)}>{description}</span>
+            ) : null}
+          </div>,
+          summarySlot,
+        )
+      : null;
+
+  // Every compact step is presentational, including on-track indicators, so
+  // each item restores its label and status as hidden text. The list stays a
+  // complete ordered sequence with `aria-current` intact, while the summary row
+  // below it owns the compact navigation controls and remains decorative apart
+  // from those buttons.
+  const compactNameNode = isCompact ? (
+    <>
+      <VisuallyHidden>{label}</VisuallyHidden>
+      {statusTextNode}
+    </>
+  ) : null;
 
   // ======= ON-TRACK: indicator is a node on the connector =======
   if (indicatorPosition === 'on-track') {
@@ -1297,7 +1501,13 @@ export function Step({
         {...stylex.props(
           isVertical ? styles.otLabelRowStart : styles.otLabelRowCenter,
         )}>
-        <span {...stylex.props(styles.label, labelColorStyle)}>{label}</span>
+        <span
+          {...mergeProps(
+            labelThemeProps,
+            stylex.props(styles.label, labelColorStyle),
+          )}>
+          {label}
+        </span>
         {statusTextNode}
         {isOptional && (
           <>
@@ -1312,7 +1522,14 @@ export function Step({
     );
 
     const otDescriptionNode = isRenderable(description) ? (
-      <span {...stylex.props(styles.description)}>{description}</span>
+      <span
+        id={descriptionID}
+        {...mergeProps(
+          descriptionThemeProps,
+          stylex.props(styles.description),
+        )}>
+        {description}
+      </span>
     ) : null;
 
     const otContentNode = !isRenderable(children) ? null : isVertical ? (
@@ -1344,7 +1561,9 @@ export function Step({
         </div>
       </div>
     ) : (
-      <div {...stylex.props(styles.otContent)}>{children}</div>
+      <div hidden={isCompact || undefined} {...stylex.props(styles.otContent)}>
+        {children}
+      </div>
     );
 
     if (isVertical) {
@@ -1363,6 +1582,7 @@ export function Step({
                   styles.otSegBaseV,
                   styles.otSegLeadV(densitySpace),
                   styles.connectorTrack,
+                  hasIndicator && styles.otSegGapLeadV,
                   beforeSegStyle,
                   beforeTiming,
                   styles.otSegHiddenIfFirst,
@@ -1378,6 +1598,7 @@ export function Step({
                   styles.otSegBaseV,
                   styles.otSegFlexV,
                   styles.connectorTrack,
+                  hasIndicator && styles.otSegGapRailV,
                   afterSegStyle,
                   railTiming,
                   styles.otSegHiddenIfLast,
@@ -1385,6 +1606,8 @@ export function Step({
               )}
             />
           </div>
+          {/* Whitespace between the indicator column and the label, as in
+              iconLabelNode. */}{' '}
           <div {...stylex.props(styles.otBodyV)}>
             {labelLineNode}
             {otDescriptionNode}
@@ -1404,13 +1627,19 @@ export function Step({
           aria-current={isActive ? 'step' : undefined}
           data-testid={dataTestId}
           {...rest}>
-          {isClickable ? (
+          {hasButton ? (
             <button
               type="button"
               onClick={handleClick}
               aria-label={stepAriaLabel}
+              aria-describedby={
+                isRenderable(description) ? descriptionID : undefined
+              }
+              aria-disabled={isDisabled || undefined}
+              {...pressable}
               {...stylex.props(
                 styles.otInteractive,
+                interactionOverlayStyles.backgroundColor,
                 styles.otRowWrap,
                 styles.otRowPadV(densitySpace),
                 focusOutlineStyles.focusVisible,
@@ -1442,6 +1671,7 @@ export function Step({
               stylex.props(
                 styles.otSegH,
                 styles.connectorTrack,
+                hasIndicator && styles.otSegGapLeadH,
                 beforeSegStyle,
                 beforeTiming,
                 styles.otSegHiddenIfFirst,
@@ -1456,6 +1686,7 @@ export function Step({
               stylex.props(
                 styles.otSegH,
                 styles.connectorTrack,
+                hasIndicator && styles.otSegGapRailH,
                 afterSegStyle,
                 railTiming,
                 styles.otSegHiddenIfLast,
@@ -1463,14 +1694,20 @@ export function Step({
             )}
           />
         </div>
-        <div
-          {...stylex.props(
-            styles.otLabelWrapH,
-            styles.otMarginTop(densitySpace),
-          )}>
-          {labelLineNode}
-          {otDescriptionNode}
-        </div>
+        {/* Whitespace between the rail and the label, as in iconLabelNode. */}{' '}
+        {/* The on-track indicator remains visible as a node on the rail at
+            compact widths, but the wrapper becomes presentational with its
+            label. Navigation moves to the named controls in the summary row. */}
+        {!isCompact && (
+          <div
+            {...stylex.props(
+              styles.otLabelWrapH,
+              styles.otMarginTop(densitySpace),
+            )}>
+            {labelLineNode}
+            {otDescriptionNode}
+          </div>
+        )}
       </>
     );
 
@@ -1486,13 +1723,19 @@ export function Step({
         aria-current={isActive ? 'step' : undefined}
         data-testid={dataTestId}
         {...rest}>
-        {isClickable ? (
+        {hasButton ? (
           <button
             type="button"
             onClick={handleClick}
             aria-label={stepAriaLabel}
+            aria-describedby={
+              isRenderable(description) ? descriptionID : undefined
+            }
+            aria-disabled={isDisabled || undefined}
+            {...pressable}
             {...stylex.props(
               styles.otInteractive,
+              interactionOverlayStyles.backgroundColor,
               styles.otColWrap,
               styles.otPadBlock(densitySpace),
               focusOutlineStyles.focusVisible,
@@ -1508,7 +1751,9 @@ export function Step({
             {innerH}
           </div>
         )}
+        {compactNameNode}
         {otContentNode}
+        {summaryNode}
       </li>
     );
   }
@@ -1542,13 +1787,19 @@ export function Step({
         />
         {/* Body: button wraps only label area, children render outside */}
         <div {...stylex.props(styles.verticalBody)}>
-          {isClickable ? (
+          {hasButton ? (
             <button
               type="button"
               onClick={handleClick}
               aria-label={stepAriaLabel}
+              aria-describedby={
+                isRenderable(description) ? descriptionID : undefined
+              }
+              aria-disabled={isDisabled || undefined}
+              {...pressable}
               {...stylex.props(
                 styles.buttonReset,
+                interactionOverlayStyles.backgroundColor,
                 focusOutlineStyles.focusVisible,
                 density === 'compact' && styles.densityCompact,
                 density === 'balanced' && styles.densityBalanced,
@@ -1602,13 +1853,24 @@ export function Step({
         )}
         aria-hidden="true"
       />
-      {isClickable ? (
+      {/* The click target goes with the label, deliberately. A step narrow
+          enough to lose its label is narrow enough that all that would be left
+          to press is a 4px bar; the stepper puts a pair of named controls
+          under the track instead. */}
+      {isCompact ? (
+        compactNameNode
+      ) : hasButton ? (
         <button
           type="button"
           onClick={handleClick}
           aria-label={stepAriaLabel}
+          aria-describedby={
+            isRenderable(description) ? descriptionID : undefined
+          }
+          aria-disabled={isDisabled || undefined}
           {...stylex.props(
             styles.buttonReset,
+            interactionOverlayStyles.backgroundColor,
             focusOutlineStyles.focusVisible,
             density === 'compact' && styles.densityCompact,
             density === 'balanced' && styles.densityBalanced,
@@ -1631,6 +1893,7 @@ export function Step({
         </div>
       )}
       {contentNode}
+      {summaryNode}
     </li>
   );
 }

@@ -6,7 +6,27 @@ export const doc = {
   name: 'Kanban Board',
   displayName: 'Kanban Board',
   description:
-    'Task board with color-coded status columns, draggable task cards, priority tags, and metadata',
+    'Horizontal lanes of draggable cards where the column itself is the status, so drag and drop between lanes is the state change. Fixed columns, variable-height cards.',
+  keywords: [
+    'kanban',
+    'board',
+    'swimlane',
+    'sprint',
+    'backlog',
+    'tasks',
+    'pipeline',
+  ],
   isReady: true,
   category: 'Tools - Kanban Board',
+  icons: {
+    ArrowPathIcon: 'refresh',
+    ArrowsUpDownIcon: 'arrowsUpDown',
+    CheckCircleIcon: 'success',
+    ClipboardDocumentCheckIcon: 'clipboard',
+    FunnelIcon: 'funnel',
+    InboxIcon: 'inbox',
+    InformationCircleIcon: 'info',
+    MagnifyingGlassIcon: 'search',
+    PlusIcon: 'add',
+  },
 };

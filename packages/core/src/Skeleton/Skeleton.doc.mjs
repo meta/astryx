@@ -1,5 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Placeholder',
+    required: true,
+    description: 'Painted shape that stands in for content while it loads.',
+  },
+];
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
 
 export const docs = {
@@ -49,6 +58,7 @@ export const docs = {
     ],
   },
   usage: {
+    anatomy,
     description:
       'An animated shimmer placeholder that previews the shape of content while it loads. Use it to build loading screens that match the layout of the real content. For content with unknown dimensions, use Spinner instead.',
     bestPractices: [
@@ -98,6 +108,7 @@ export const docsZh = {
     ],
   },
   usage: {
+    anatomy,
     description:
       'An animated shimmer placeholder that previews the shape of content while it loads. Use it to build loading screens that match the layout of the real content. For content with unknown dimensions, use Spinner instead.',
     bestPractices: [
@@ -113,6 +124,7 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   usage: {
+    anatomy,
     description:
       'An animated shimmer placeholder that previews the shape of content while it loads. Use it to build loading screens that match the layout of the real content. For content with unknown dimensions, use Spinner instead.',
     bestPractices: [

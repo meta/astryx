@@ -4,12 +4,13 @@
 
 /**
  * @file context.tsx
- * @input Resolved Schedule events, range, timezone, and active date
+ * @input Resolved Schedule events, range, timezone, locale, and active date
  * @output Schedule context object and hook used by view components
  * @position Internal context bridge between generic Schedule and concrete views
  */
 
 import {createContext, useContext} from 'react';
+import type {Locale} from '@astryxdesign/core/i18n';
 import type {
   CalendarEvent,
   ScheduleRange,
@@ -25,6 +26,7 @@ export interface ScheduleContextValue {
   date: ZonedDateTime;
   focusDate: ZonedDateTime;
   timezoneID: string;
+  locale: Locale;
   range: ScheduleRange;
   isLoading: boolean;
   onPreviousDate: () => void;
@@ -38,9 +40,7 @@ export interface ScheduleContextValue {
   headingLevel: 2 | 3 | 4 | 5 | 6;
 }
 
-export const ScheduleContext = createContext<ScheduleContextValue | null>(
-  null,
-);
+export const ScheduleContext = createContext<ScheduleContextValue | null>(null);
 
 export function useScheduleContext(): ScheduleContextValue {
   const context = useContext(ScheduleContext);

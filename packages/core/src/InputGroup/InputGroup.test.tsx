@@ -9,6 +9,7 @@
  * SYNC: When InputGroup component changes, update tests to match new behavior
  */
 
+import {createRef} from 'react';
 import {describe, it, expect} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {InputGroup} from './InputGroup';
@@ -20,6 +21,9 @@ import {Typeahead} from '../Typeahead';
 import type {SearchableItem, SearchSource} from '../Typeahead';
 import {Selector} from '../Selector';
 import {MultiSelector} from '../MultiSelector';
+import {TimeInput} from '../TimeInput';
+import {Button} from '../Button';
+import {SizeProvider} from '../SizeContext/SizeContext';
 
 const fruits: SearchableItem[] = [
   {id: '1', label: 'Apple'},
@@ -276,6 +280,124 @@ describe('InputGroup', () => {
     ).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('propagates disabled state to all compatible inputs and Button addons', () => {
+    const onChange = () => {};
+    render(
+      <>
+        <InputGroup label="Group" isDisabled>
+          <TextInput label="Text" value="" onChange={onChange} />
+          <Button label="Save" tooltip="Save" />
+        </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <NumberInput label="Amount" value={2} onChange={onChange} />
+        </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <Selector label="Single fruit" options={['Apple', 'Banana']} />
+        </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <MultiSelector
+            label="Multiple fruits"
+            options={['Apple', 'Banana']}
+            value={[]}
+            onChange={onChange}
+          />
+        </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <DateInput label="Date" presentation="popover" onChange={onChange} />
+        </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <TimeInput
+            label="Time"
+            presentation="text-input"
+            onChange={onChange}
+          />
+        </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <Typeahead
+            label="Fruit"
+            value={null}
+            searchSource={fruitSource}
+            onChange={onChange}
+            disabledMessage="Unavailable"
+          />
+        </InputGroup>
+      </>,
+    );
+
+    for (const group of screen.getAllByRole('group', {name: 'Group'})) {
+      expect(group).toHaveAttribute('aria-disabled', 'true');
+    }
+    for (const name of [
+      'Group Text',
+      'Group Amount',
+      'Group Single fruit',
+      'Group Multiple fruits',
+      'Group Date',
+      'Group Time',
+      'Group Fruit',
+    ]) {
+      expect(screen.getByLabelText(name)).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+    }
+    expect(screen.getByRole('button', {name: 'Save'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('does not let nested groups or children opt out of ancestor disablement', () => {
+    render(
+      <InputGroup label="Outer" isDisabled>
+        <InputGroup label="Inner" isDisabled={false}>
+          <TextInput
+            label="Text"
+            value=""
+            isDisabled={false}
+            onChange={() => {}}
+          />
+        </InputGroup>
+      </InputGroup>,
+    );
+
+    expect(screen.getByRole('group', {name: 'Inner'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(screen.getByRole('textbox', {name: 'Inner Text'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('re-enables inherited children without re-enabling explicitly disabled children', () => {
+    function Example({disabled}: {disabled: boolean}) {
+      return (
+        <InputGroup label="Group" isDisabled={disabled}>
+          <TextInput label="Text" value="" onChange={() => {}} />
+          <TextInput label="Explicit" value="" isDisabled />
+        </InputGroup>
+      );
+    }
+    const {rerender} = render(<Example disabled />);
+    expect(screen.getByRole('textbox', {name: 'Group Text'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+
+    rerender(<Example disabled={false} />);
+    expect(screen.getByRole('group', {name: 'Group'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
+    expect(
+      screen.getByRole('textbox', {name: 'Group Text'}),
+    ).not.toHaveAttribute('aria-disabled');
+    expect(
+      screen.getByRole('textbox', {name: 'Group Explicit'}),
+    ).toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('renders the visible label', () => {
     render(
       <InputGroup label="Price">
@@ -353,30 +475,145 @@ describe('InputGroup', () => {
     expect(screen.getByText('Price is required')).toBeInTheDocument();
   });
 
-  it('renders with hidden label', () => {
+  it('keeps a hidden label as the group name (FR1, AR1)', () => {
     render(
       <InputGroup label="Price" isLabelHidden>
         <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
       </InputGroup>,
     );
 
-    expect(screen.getByText('Price')).toBeInTheDocument();
-    expect(screen.getByRole('group')).toBeInTheDocument();
+    const group = screen.getByRole('group', {name: 'Price'});
+    expect(group.getAttribute('aria-labelledby')).toBe(
+      screen.getByText('Price').id,
+    );
+    expect(screen.getByRole('textbox', {name: 'Price Amount'})).toBe(
+      screen.getByRole('textbox'),
+    );
   });
 
-  it('renders with different sizes', () => {
+  it('shows the optional or required marker and the label tooltip on the group label (FR1)', () => {
     const {rerender} = render(
-      <InputGroup label="Price" size="sm">
+      <InputGroup label="Price" isOptional labelTooltip="Before tax">
         <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
       </InputGroup>,
     );
-    expect(screen.getByRole('textbox')).toBeInTheDocument();
+    const label = () =>
+      document.getElementById(
+        screen.getByRole('group').getAttribute('aria-labelledby') ?? '',
+      );
+    expect(label()).toHaveTextContent('Optional');
+    const tooltipTrigger = label()?.querySelector('.astryx-icon');
+    expect(tooltipTrigger).not.toBeNull();
+    expect(
+      document.getElementById(
+        tooltipTrigger?.getAttribute('aria-describedby') ?? '',
+      ),
+    ).toHaveTextContent('Before tax');
+
+    rerender(
+      <InputGroup label="Price" isRequired>
+        <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
+      </InputGroup>,
+    );
+    expect(label()).toHaveTextContent('Required');
+    expect(label()).not.toHaveTextContent('Optional');
+    expect(label()?.querySelector('.astryx-icon')).toBeNull();
+  });
+
+  it('describes the group by its description, then its status message (ORD2)', () => {
+    render(
+      <InputGroup
+        label="Price"
+        description="Enter the amount in USD"
+        status={{type: 'warning', message: 'Price looks high'}}>
+        <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
+      </InputGroup>,
+    );
+
+    const ids =
+      screen.getByRole('group').getAttribute('aria-describedby')?.split(' ') ??
+      [];
+    expect(ids).toHaveLength(2);
+    expect(document.getElementById(ids[0])).toHaveTextContent(
+      'Enter the amount in USD',
+    );
+    expect(document.getElementById(ids[1])).toHaveTextContent(
+      'Price looks high',
+    );
+  });
+
+  it('reflects size and status on the input-group row and forwards its ref (FR5)', () => {
+    const ref = createRef<HTMLDivElement>();
+    render(
+      <InputGroup
+        ref={ref}
+        label="Price"
+        size="lg"
+        status={{type: 'error', message: 'Price is required'}}>
+        <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
+      </InputGroup>,
+    );
+
+    const group = screen.getByRole('group', {name: 'Price'});
+    expect(ref.current).toBe(group);
+    expect(group).toHaveClass('astryx-input-group');
+    expect(group).toHaveAttribute('data-size', 'lg');
+    expect(group).toHaveAttribute('data-status', 'error');
+  });
+
+  it('takes its size from its prop, then an outer provider, then md, and passes it to its inputs (FR3, ORD1)', () => {
+    const textInput = () =>
+      screen.getByRole('textbox').closest('.astryx-text-input');
+    const {rerender} = render(
+      <InputGroup label="Price">
+        <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
+      </InputGroup>,
+    );
+    expect(screen.getByRole('group')).toHaveAttribute('data-size', 'md');
+    expect(textInput()).toHaveAttribute('data-size', 'md');
+
+    rerender(
+      <SizeProvider value="sm">
+        <InputGroup label="Price">
+          <TextInput
+            label="Amount"
+            isLabelHidden
+            value=""
+            onChange={() => {}}
+          />
+        </InputGroup>
+      </SizeProvider>,
+    );
+    expect(screen.getByRole('group')).toHaveAttribute('data-size', 'sm');
+    expect(textInput()).toHaveAttribute('data-size', 'sm');
+
+    rerender(
+      <SizeProvider value="sm">
+        <InputGroup label="Price" size="lg">
+          <TextInput
+            label="Amount"
+            isLabelHidden
+            value=""
+            onChange={() => {}}
+          />
+        </InputGroup>
+      </SizeProvider>,
+    );
+    expect(screen.getByRole('group')).toHaveAttribute('data-size', 'lg');
+    expect(textInput()).toHaveAttribute('data-size', 'lg');
 
     rerender(
       <InputGroup label="Price" size="lg">
-        <TextInput label="Amount" isLabelHidden value="" onChange={() => {}} />
+        <TextInput
+          label="Amount"
+          isLabelHidden
+          size="sm"
+          value=""
+          onChange={() => {}}
+        />
       </InputGroup>,
     );
-    expect(screen.getByRole('textbox')).toBeInTheDocument();
+    expect(screen.getByRole('group')).toHaveAttribute('data-size', 'lg');
+    expect(textInput()).toHaveAttribute('data-size', 'sm');
   });
 });

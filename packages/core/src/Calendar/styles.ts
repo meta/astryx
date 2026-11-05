@@ -259,12 +259,6 @@ export const dayCellTheme = stylex.create({
   day: {
     color: colorVars['--color-text-primary'],
     backgroundColor: 'transparent',
-    backgroundImage: {
-      default: null,
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-        '@media (hover: hover)': `linear-gradient(${colorVars['--color-overlay-hover']}, ${colorVars['--color-overlay-hover']})`,
-      },
-    },
   },
 
   // Outside days (adjacent months)
@@ -299,12 +293,6 @@ export const dayCellTheme = stylex.create({
     color: {
       default: colorVars['--color-on-accent'],
       '@media (forced-colors: active)': 'HighlightText',
-    },
-    backgroundImage: {
-      default: null,
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-        '@media (hover: hover)': `linear-gradient(${colorVars['--color-overlay-hover']}, ${colorVars['--color-overlay-hover']})`,
-      },
     },
   },
 

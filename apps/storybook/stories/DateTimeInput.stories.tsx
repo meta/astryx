@@ -2,14 +2,28 @@
 
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import {expect, userEvent, waitFor, within} from 'storybook/test';
 import {DateTimeInput} from '@astryxdesign/core/DateTimeInput';
+import {FormLayout} from '@astryxdesign/core/FormLayout';
+import {Text} from '@astryxdesign/core/Text';
 import type {ISODateTimeString} from '@astryxdesign/core/DateTimeInput';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
+import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 
 const meta: Meta<typeof DateTimeInput> = {
   title: 'Core/DateTimeInput',
   component: DateTimeInput,
   tags: ['autodocs'],
+  parameters: {
+    docs: {
+      description: {
+        component:
+          'A date-time field that fits the pointer it is used with. On a mouse or trackpad it renders the existing side-by-side date and time inputs: the date half opens a calendar popover, and the time half accepts typed entry plus optional preset times.\n\n' +
+          "Where the primary pointer is a finger (`pointer: coarse`), the closed control still renders separate Date and Time segments; tapping either segment opens a bottom sheet directly to the matching section. A segmented Date/Time pill stays at the top of the sheet for switching; Date reuses Astryx's custom swipable month picker and month/year wheels, its Save date action advances to Time, and Time uses accessible hour/minute/second wheels with the final Save action. The public props are the same on both surfaces.\n\n" +
+          '**Seeing the touch surface:** open any story on a phone/tablet or in device emulation reporting a coarse pointer. No separate story is needed because the same component chooses the surface at runtime.',
+      },
+    },
+  },
   argTypes: {
     label: {
       control: 'text',
@@ -45,7 +59,7 @@ const meta: Meta<typeof DateTimeInput> = {
     disabledMessage: {
       control: 'text',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled DateTimeInput in Tooltip.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and describes the fields (activation stays blocked). Use this instead of wrapping a disabled DateTimeInput in Tooltip.',
     },
     size: {
       control: 'radio',
@@ -64,6 +78,24 @@ const meta: Meta<typeof DateTimeInput> = {
       control: 'boolean',
       description: 'Whether to show a clear button',
     },
+    presentation: {
+      control: 'select',
+      options: [
+        'popover',
+        'bottom-sheet',
+        'native',
+        'adaptive-bottom-sheet',
+        'adaptive-native',
+      ],
+      description:
+        'Which surfaces draw the pickers (spec:AST-043); nativePicker is deprecated',
+    },
+    nativePicker: {
+      control: 'radio',
+      options: ['touch', 'always', 'never'],
+      description:
+        "Deprecated — use presentation ('touch' → 'adaptive-native', 'always' → 'native', 'never' → 'adaptive-bottom-sheet'); presentation wins when both are set",
+    },
     numberOfMonths: {
       control: 'radio',
       options: [1, 2],
@@ -71,7 +103,8 @@ const meta: Meta<typeof DateTimeInput> = {
     },
     timeIncrement: {
       control: 'number',
-      description: 'Minutes to increment/decrement with arrow keys',
+      description:
+        'Desktop only: minutes to increment/decrement with arrow keys. Mobile touch uses wheels.',
     },
   },
 };
@@ -92,6 +125,23 @@ export const Default: Story = {
   },
 };
 
+export const NarrowContainer: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISODateTimeString | undefined>(
+      '2026-03-15T14:30' as ISODateTimeString,
+    );
+    return (
+      <div style={{width: '320px', maxWidth: '100%'}}>
+        <DateTimeInput {...args} value={value} onChange={setValue} />
+      </div>
+    );
+  },
+  args: {
+    label: 'Meeting time',
+    hasClear: true,
+  },
+};
+
 export const WithValue: Story = {
   render: args => {
     const [value, setValue] = useState<ISODateTimeString | undefined>(
@@ -101,6 +151,39 @@ export const WithValue: Story = {
   },
   args: {
     label: 'Event time',
+  },
+};
+
+export const NativePickerModes: Story = {
+  render: () => {
+    const [value, setValue] = useState<ISODateTimeString | undefined>(
+      '2026-03-15T14:30' as ISODateTimeString,
+    );
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+        <DateTimeInput
+          label="presentation='adaptive-native' (default)"
+          description="Native date and compatible time controls on a coarse primary pointer"
+          value={value}
+          onChange={setValue}
+          presentation="adaptive-native"
+        />
+        <DateTimeInput
+          label="presentation='native'"
+          description="Native date and compatible time controls on every pointer type"
+          value={value}
+          onChange={setValue}
+          presentation="native"
+        />
+        <DateTimeInput
+          label="presentation='adaptive-bottom-sheet'"
+          description="Astryx bottom sheet on coarse pointers; calendar popover on fine pointers"
+          value={value}
+          onChange={setValue}
+          presentation="adaptive-bottom-sheet"
+        />
+      </div>
+    );
   },
 };
 
@@ -154,6 +237,43 @@ export const WithClearButton: Story = {
   args: {
     label: 'Start time',
     hasClear: true,
+  },
+};
+
+/**
+ * Selects a date, clears the controlled value, and reopens the calendar. The
+ * final frame is the regression endpoint: an empty field with no selected day.
+ */
+export const ClearedCalendarSelection: Story = {
+  tags: ['visual-baseline'],
+  render: args => {
+    const [value, setValue] = useState<ISODateTimeString | undefined>(
+      '2026-03-15T09:00' as ISODateTimeString,
+    );
+    return <DateTimeInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Meeting time',
+    hasClear: true,
+    min: '2026-03-01T00:00' as ISODateTimeString,
+    max: '2026-03-31T23:59' as ISODateTimeString,
+    presentation: 'popover',
+  },
+  play: async ({canvasElement}) => {
+    const canvas = within(canvasElement);
+
+    await userEvent.click(canvas.getByRole('button', {name: 'Open calendar'}));
+    await userEvent.click(canvas.getByRole('button', {name: /March 20, 2026/}));
+    await userEvent.click(
+      canvas.getByRole('button', {name: 'Clear Meeting time'}),
+    );
+    await userEvent.click(canvas.getByRole('button', {name: 'Open calendar'}));
+
+    await waitFor(() => {
+      expect(
+        canvas.queryAllByRole('gridcell', {selected: true, hidden: true}),
+      ).toHaveLength(0);
+    });
   },
 };
 
@@ -272,9 +392,9 @@ export const Disabled: Story = {
 
 // Disabled with an explanation tooltip. Hover or keyboard-focus the field to
 // see why it's disabled — the reason is announced to assistive tech via
-// aria-describedby, and the field stays focusable (activation is still
-// blocked). Use disabledMessage instead of wrapping a disabled DateTimeInput in Tooltip:
-// disabled controls swallow the pointer events a Tooltip wrapper needs.
+// aria-describedby on the fields (activation is still blocked). Use
+// disabledMessage instead of wrapping a disabled DateTimeInput in Tooltip, so
+// the reason is tied to the field.
 export const DisabledWithMessage: Story = {
   render: args => {
     const [value, setValue] = useState<ISODateTimeString | undefined>(
@@ -338,6 +458,7 @@ export const TwoMonthCalendar: Story = {
   args: {
     label: 'Travel departure',
     numberOfMonths: 2,
+    presentation: 'adaptive-bottom-sheet',
   },
 };
 
@@ -501,4 +622,127 @@ export const ThemedSegments: Story = {
       </Theme>
     );
   },
+};
+
+// The StylingParts fields are uncontrolled demos; nothing reads their value.
+const noop = () => {};
+const CONTROL_STYLE = {outline: '2px dashed #c800ff', outlineOffset: 3};
+const CONTAINER_STYLE = {
+  backgroundColor: 'rgba(0, 150, 255, 0.16)',
+  padding: 8,
+  borderRadius: 8,
+};
+
+/**
+ * Where each styling part lands (family:input-fields FR10). The dashed outline
+ * is `controlStyle` on the visual control box. The blue tint is
+ * `containerStyle` on the Field box; in a `horizontal-labels` FormLayout and
+ * inside InputGroup no Field box renders, so there it has no effect (and warns
+ * in development).
+ */
+export const StylingParts: Story = {
+  render: () => (
+    <div style={{display: 'grid', gap: 24, maxWidth: 360}}>
+      <div style={{display: 'grid', gap: 12}}>
+        <Text type="label">controlStyle</Text>
+        <div data-parts-row="control-popover" style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">presentation="popover"</Text>
+          <DateTimeInput
+            onChange={noop}
+            label="Starts"
+            presentation="popover"
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div data-parts-row="control-native" style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">presentation="native"</Text>
+          <DateTimeInput
+            onChange={noop}
+            label="Starts"
+            presentation="native"
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div
+          data-parts-row="control-bottom-sheet"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">presentation="bottom-sheet"</Text>
+          <DateTimeInput
+            onChange={noop}
+            label="Starts"
+            presentation="bottom-sheet"
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div
+          data-parts-row="control-form-layout"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">horizontal-labels FormLayout</Text>
+          <FormLayout direction="horizontal-labels">
+            <DateTimeInput
+              onChange={noop}
+              label="Starts"
+              controlStyle={CONTROL_STYLE}
+            />
+          </FormLayout>
+        </div>
+      </div>
+      <div style={{display: 'grid', gap: 12}}>
+        <Text type="label">containerStyle and controlStyle</Text>
+        <div
+          data-parts-row="container-popover"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">presentation="popover"</Text>
+          <DateTimeInput
+            onChange={noop}
+            label="Starts"
+            presentation="popover"
+            containerStyle={CONTAINER_STYLE}
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div
+          data-parts-row="container-form-layout"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">horizontal-labels FormLayout</Text>
+          <FormLayout direction="horizontal-labels">
+            <DateTimeInput
+              onChange={noop}
+              label="Starts"
+              containerStyle={CONTAINER_STYLE}
+              controlStyle={CONTROL_STYLE}
+            />
+          </FormLayout>
+        </div>
+      </div>
+    </div>
+  ),
+};
+
+function PersianDateTimeField() {
+  const [value, setValue] = useState<ISODateTimeString | undefined>(
+    '2026-11-02T09:30' as ISODateTimeString,
+  );
+  return (
+    <InternationalizationProvider locale="en" calendar="persian">
+      <div
+        data-calendar-field="en-persian"
+        style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+        <DateTimeInput label="Appointment" value={value} onChange={setValue} />
+        <Text type="supporting" color="secondary">
+          <code data-value>{`value: ${value ?? '—'}`}</code>
+        </Text>
+      </div>
+    </InternationalizationProvider>
+  );
+}
+
+/**
+ * In a calendar other than Gregorian, DateTimeInput never shows native date
+ * and time controls: it opens the popovers on a mouse and the bottom sheet on
+ * a touch screen, whose Date panel shows months of the calendar. The value
+ * stays a Gregorian ISO date-time.
+ */
+export const CalendarSystems: Story = {
+  render: () => <PersianDateTimeField />,
 };

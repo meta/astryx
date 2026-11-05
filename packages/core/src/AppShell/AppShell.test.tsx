@@ -2,8 +2,8 @@
 
 /**
  * @file AppShell.test.tsx
- * @input Uses vitest, @testing-library/react, AppShell component
- * @output Unit tests for AppShell component behavior
+ * @input Uses vitest, React server rendering, @testing-library/react, AppShell component
+ * @output Unit tests for AppShell client behavior and SSR breakpoint semantics
  * @position Testing; validates AppShell.tsx implementation
  *
  * SYNC: When AppShell.tsx changes, update tests to match new behavior
@@ -18,14 +18,27 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {use} from 'react';
+import {renderToString} from 'react-dom/server';
+import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {AppShell} from './AppShell';
+import {Card} from '../Card/Card';
+import {Section} from '../Section/Section';
+import {LayoutAreaContext} from '../Layout/LayoutAreaContext';
+import {
+  DEFAULT_LAYOUT_SLOTS,
+  LayoutSlotsContext,
+} from '../Layout/LayoutSlotsContext';
+import {Layout} from '../Layout/Layout';
+import {LayoutHeader} from '../Layout/LayoutHeader';
 import {InternationalizationProvider} from '../i18n';
 import {MobileNav} from '../MobileNav';
 import {SideNav, SideNavItem, SideNavSection} from '../SideNav';
 import {TopNav, TopNavHeading, TopNavItem} from '../TopNav';
+import {TextInput} from '../TextInput';
 import {useAppShellMobile} from './AppShellMobileContext';
+import {Theme, defineTheme} from '../theme';
 
 // jsdom doesn't implement showModal/close on <dialog>, so we mock them
 beforeAll(() => {
@@ -109,6 +122,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  act(() => {
+    document.documentElement.removeAttribute('data-astryx-theme');
+  });
 });
 
 describe('AppShell', () => {
@@ -296,15 +312,164 @@ describe('AppShell', () => {
   // Responsive breakpoint
   // ===========================================================================
 
-  it('tracks breakpoint changes', () => {
+  it('preserves input value and focus across mobile breakpoints.', async () => {
+    const user = userEvent.setup();
+    render(
+      <AppShell
+        variant="elevated"
+        topNav="Top navigation"
+        sideNav="Side navigation"
+        mobileNav={{breakpoint: 'md'}}>
+        <input aria-label="Page draft" />
+      </AppShell>,
+    );
+    await user.type(
+      screen.getByRole('textbox', {name: 'Page draft'}),
+      'Keep this draft',
+    );
+
+    for (const isMobile of [true, false]) {
+      act(() => mockMql._setMatches(isMobile));
+      const input = screen.getByRole('textbox', {name: 'Page draft'});
+      expect(input).toHaveValue('Keep this draft');
+      expect(input).toHaveFocus();
+    }
+  });
+
+  it('uses the default named breakpoint with an exclusive upper edge', () => {
     render(
       <AppShell sideNav={<TestSideNav />} mobileNav={{breakpoint: 'md'}}>
         <div>Content</div>
       </AppShell>,
     );
 
-    // matchMedia should have been called for the breakpoint
-    expect(window.matchMedia).toHaveBeenCalled();
+    expect(window.matchMedia).toHaveBeenCalledWith('(width < 768px)');
+  });
+
+  it('resolves all named points through the nearest Theme', () => {
+    const theme = {
+      ...defineTheme({
+        name: 'app-shell-points',
+        adaptations: {widthBreakpoints: {xl: 1400, '2xl': 1800}},
+      }),
+      __built: true as const,
+    };
+
+    render(
+      <Theme theme={theme}>
+        <AppShell sideNav={<TestSideNav />} mobileNav={{breakpoint: '2xl'}}>
+          <div>Content</div>
+        </AppShell>
+      </Theme>,
+    );
+
+    expect(window.matchMedia).toHaveBeenCalledWith('(width < 1800px)');
+  });
+
+  it('uses the provider object when another theme shares its name', () => {
+    const outer = {
+      ...defineTheme({
+        name: 'same-name',
+        adaptations: {widthBreakpoints: {md: 700}},
+      }),
+      __built: true as const,
+    };
+    const inner = {
+      ...defineTheme({
+        name: 'same-name',
+        adaptations: {widthBreakpoints: {md: 900}},
+      }),
+      __built: true as const,
+    };
+
+    render(
+      <Theme theme={outer}>
+        <Theme theme={inner}>
+          <div>Nested</div>
+        </Theme>
+        <AppShell sideNav={<TestSideNav />} mobileNav={{breakpoint: 'md'}}>
+          <div>Content</div>
+        </AppShell>
+      </Theme>,
+    );
+
+    expect(window.matchMedia).toHaveBeenCalledWith('(width < 700px)');
+  });
+
+  it('uses a built theme object from provider context', () => {
+    const builtTheme = {
+      ...defineTheme({
+        name: 'built-app-shell-points',
+        adaptations: {widthBreakpoints: {'2xl': 1700}},
+      }),
+      __built: true as const,
+      __adaptationRules: undefined,
+    };
+
+    render(
+      <Theme theme={builtTheme}>
+        <AppShell sideNav={<TestSideNav />} mobileNav={{breakpoint: '2xl'}}>
+          <div>Content</div>
+        </AppShell>
+      </Theme>,
+    );
+
+    expect(window.matchMedia).toHaveBeenCalledWith('(width < 1700px)');
+  });
+
+  it('falls back per key when built metadata has a partial width map', () => {
+    const partialBuiltTheme = {
+      ...defineTheme({name: 'partial-built-app-shell-points'}),
+      __built: true as const,
+      __adaptations: {
+        widthBreakpoints: {md: 700},
+        rules: [],
+      },
+    } as unknown as ReturnType<typeof defineTheme>;
+
+    render(
+      <Theme theme={partialBuiltTheme}>
+        <AppShell sideNav={<TestSideNav />} mobileNav={{breakpoint: 'xl'}}>
+          <div>Content</div>
+        </AppShell>
+      </Theme>,
+    );
+
+    expect(window.matchMedia).toHaveBeenCalledWith('(width < 1280px)');
+  });
+
+  it('follows the registered root theme without provider context', () => {
+    defineTheme({
+      name: 'root-app-shell-points',
+      adaptations: {widthBreakpoints: {lg: 1111}},
+    });
+    const originalGetAttribute = document.documentElement.getAttribute.bind(
+      document.documentElement,
+    );
+    vi.spyOn(document.documentElement, 'getAttribute').mockImplementation(
+      name =>
+        name === 'data-astryx-theme'
+          ? 'root-app-shell-points'
+          : originalGetAttribute(name),
+    );
+
+    render(
+      <AppShell sideNav={<TestSideNav />} mobileNav={{breakpoint: 'lg'}}>
+        <div>Content</div>
+      </AppShell>,
+    );
+
+    expect(window.matchMedia).toHaveBeenCalledWith('(width < 1111px)');
+  });
+
+  it('supports the added xl breakpoint without a Theme provider', () => {
+    render(
+      <AppShell sideNav={<TestSideNav />} mobileNav={{breakpoint: 'xl'}}>
+        <div>Content</div>
+      </AppShell>,
+    );
+
+    expect(window.matchMedia).toHaveBeenCalledWith('(width < 1280px)');
   });
 
   it('does not enter mobile mode when mobileNav breakpoint is none', () => {
@@ -314,12 +479,29 @@ describe('AppShell', () => {
       </AppShell>,
     );
 
-    // breakpoint 'none' uses (max-width: 0px) which never matches,
+    // breakpoint 'none' uses (width < 0px), which never matches,
     // so sideNav stays inline and no mobile nav toggle appears
     expect(screen.getByText('Nav')).toBeInTheDocument();
     expect(
       screen.queryByRole('button', {name: /menu/i}),
     ).not.toBeInTheDocument();
+  });
+
+  it('renders breakpoint none as non-mobile on the server regardless of the SSR hint', () => {
+    const host = document.createElement('div');
+    host.innerHTML = renderToString(
+      <AppShell
+        sideNav={<TestSideNav />}
+        mobileNav={{breakpoint: 'none', defaultIsMobile: true}}>
+        <div>Content</div>
+      </AppShell>,
+    );
+
+    expect(
+      host.querySelector(
+        '.astryx-app-shell > .astryx-layout .astryx-layout-panel',
+      ),
+    ).not.toBeNull();
   });
 
   // ===========================================================================
@@ -559,6 +741,41 @@ describe('AppShell', () => {
   // Sticky navigation in auto mode
   // ===========================================================================
 
+  // A Field input wrapper carries a local z-index (it paints above the
+  // attached status message box via a negative-margin overlap), so without a
+  // component-owned isolation boundary it competes with page-level stacking —
+  // a field scrolled underneath the sticky header then paints over it (#5689).
+  // The fix is local containment: the Field root isolates the wrapper's local
+  // layer, so the header needs no escalated z-index to stay above it. This
+  // asserts that ownership boundary — the field's painted surface is an
+  // isolated stacking context — not a comparison between two page-level
+  // z-index values.
+  it('contains Field input stacking locally so the sticky header needs no escalated z-index in auto mode', () => {
+    render(
+      <AppShell height="auto" topNav={<div>Nav</div>}>
+        <TextInput
+          label="Name"
+          statusVariant="detached"
+          value=""
+          onChange={() => {}}
+        />
+      </AppShell>,
+    );
+    const header = screen.getByRole('banner');
+    const inputWrapper = screen.getByRole('textbox').parentElement!;
+    // The detached variant renders the input wrapper outside Field's isolated
+    // attached-status wrapper, so the Field root must own the boundary.
+    const fieldRoot = inputWrapper.parentElement!;
+    expect(inputWrapper).toBeTruthy();
+    expect(getComputedStyle(header).position).toBe('sticky');
+    // The header stays at its normal local stacking level — no escalation.
+    expect(Number(getComputedStyle(header).zIndex)).toBe(1);
+    expect(getComputedStyle(inputWrapper).position).toBe('relative');
+    // Field's local layers cannot escape into page-level stacking: the root
+    // establishes an isolation boundary around the input wrapper's z-index.
+    expect(getComputedStyle(fieldRoot).isolation).toBe('isolate');
+  });
+
   it('wraps header in sticky container in auto mode', () => {
     render(
       <AppShell
@@ -577,6 +794,27 @@ describe('AppShell', () => {
       headerWrapper?.style.position ||
         getComputedStyle(headerWrapper!).position,
     ).toBeDefined();
+  });
+
+  it('renders an opaque section header only in auto mode', () => {
+    const {rerender} = render(
+      <AppShell height="auto" variant="section" topNav={<div>Nav</div>}>
+        <div>Content</div>
+      </AppShell>,
+    );
+
+    expect(
+      getComputedStyle(screen.getByRole('banner')).backgroundColor,
+    ).not.toBe('rgba(0, 0, 0, 0)');
+
+    rerender(
+      <AppShell height="fill" variant="section" topNav={<div>Nav</div>}>
+        <div>Content</div>
+      </AppShell>,
+    );
+    expect(getComputedStyle(screen.getByRole('banner')).backgroundColor).toBe(
+      'rgba(0, 0, 0, 0)',
+    );
   });
 
   it('does not apply sticky wrapper in fill mode', () => {
@@ -632,7 +870,7 @@ describe('AppShell', () => {
     expect(observeSpy).toHaveBeenCalled();
   });
 
-  it('does not set up ResizeObserver in fill mode', () => {
+  it('does not observe the header in fill mode', () => {
     const observeSpy = vi.fn();
     vi.stubGlobal(
       'ResizeObserver',
@@ -650,7 +888,13 @@ describe('AppShell', () => {
       </AppShell>,
     );
 
-    expect(observeSpy).not.toHaveBeenCalled();
+    // Only the header offset needs measuring for sticky positioning, which
+    // fill mode does not use. (Main is measured for keyboard access.)
+    const observed = new Set<unknown>();
+    for (const call of observeSpy.mock.calls) {
+      observed.add(call[0]);
+    }
+    expect(observed.has(screen.getByRole('banner'))).toBe(false);
   });
 
   // ===========================================================================
@@ -916,5 +1160,355 @@ describe('AppShell', () => {
     expect(
       JSON.parse(screen.getByTestId('probe').textContent).isMobileNavOpen,
     ).toBe(true);
+  });
+});
+
+describe('AppShell main keyboard access', () => {
+  let frames: FrameRequestCallback[];
+
+  beforeEach(() => {
+    frames = [];
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        frames.push(callback);
+        return frames.length;
+      }),
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    // jsdom does not expand LayoutContent's `overflow` into its longhands.
+    const nativeGetComputedStyle = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      (element, pseudo) => {
+        const computed = nativeGetComputedStyle(element, pseudo);
+        return new Proxy(computed, {
+          // eslint-disable-next-line @typescript-eslint/promise-function-async -- Proxy traps must remain synchronous
+          get(target, property) {
+            if (property === 'overflowX' || property === 'overflowY') {
+              return target.overflow || 'visible';
+            }
+            return Reflect.get(target, property, target);
+          },
+        });
+      },
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+  });
+
+  function setMainGeometry(main: HTMLElement, scrollHeight: number) {
+    for (const [key, value] of [
+      ['clientWidth', 800],
+      ['scrollWidth', 800],
+      ['clientHeight', 300],
+      ['scrollHeight', scrollHeight],
+      ['scrollTop', 0],
+      ['scrollLeft', 0],
+    ] as const) {
+      Object.defineProperty(main, key, {
+        configurable: true,
+        value,
+        writable: true,
+      });
+    }
+  }
+
+  function remeasure() {
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    act(() => {
+      const pending = frames.splice(0);
+      pending.forEach(callback => callback(performance.now()));
+    });
+  }
+
+  it('makes main a keyboard stop while it scrolls overflowing content, and a skip target again once it fits', () => {
+    render(
+      <AppShell topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    const main = screen.getByRole('main');
+    expect(main).toHaveAttribute('tabindex', '-1');
+
+    setMainGeometry(main, 1200);
+    remeasure();
+    expect(main).toHaveAttribute('tabindex', '0');
+
+    setMainGeometry(main, 300);
+    remeasure();
+    expect(main).toHaveAttribute('tabindex', '-1');
+  });
+
+  // Main's ref owns both: React detaches it on unmount, and the detach
+  // releases the overflow observation and the keyboard delegation. Each
+  // listener is matched by its exact handler, so another owner's cleanup
+  // (the focus-ring Effect listens for the same event types) cannot stand in.
+  it('releases the overflow observation and the keyboard delegation on unmount', () => {
+    const windowAdd = vi.spyOn(window, 'addEventListener');
+    const {unmount} = render(
+      <AppShell topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    const overflowListeners = windowAdd.mock.calls.filter(
+      ([type]) => type === 'resize',
+    );
+    expect(overflowListeners.length).toBeGreaterThan(0);
+
+    const main = screen.getByRole('main');
+    const documentAdd = vi.spyOn(document, 'addEventListener');
+    setMainGeometry(main, 1200);
+    remeasure();
+    // Main became a scroll region, so the delegation attached its listeners.
+    expect(main).toHaveAttribute('tabindex', '0');
+    const delegationListeners = [...documentAdd.mock.calls];
+    expect(delegationListeners.map(([type]) => type)).toEqual(
+      expect.arrayContaining(['keydown', 'keyup', 'pointerdown', 'focusin']),
+    );
+
+    const documentRemove = vi.spyOn(document, 'removeEventListener');
+    const windowRemove = vi.spyOn(window, 'removeEventListener');
+    unmount();
+
+    for (const [type, listener, options] of delegationListeners) {
+      expect(documentRemove).toHaveBeenCalledWith(type, listener, options);
+    }
+    for (const [type, listener] of overflowListeners) {
+      expect(windowRemove).toHaveBeenCalledWith(type, listener);
+    }
+  });
+
+  it('observes main only with fill, where it can become a keyboard stop', () => {
+    const observed: Element[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(public callback: ResizeObserverCallback) {}
+        observe(target: Element) {
+          observed.push(target);
+        }
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    const inMain = (main: HTMLElement) =>
+      observed.filter(target => target === main || main.contains(target));
+
+    const {unmount} = render(
+      <AppShell height="auto" topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    expect(inMain(screen.getByRole('main'))).toEqual([]);
+    unmount();
+
+    render(
+      <AppShell topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    expect(inMain(screen.getByRole('main')).length).toBeGreaterThan(0);
+  });
+
+  it('stops observing main when the shell switches to auto, and measures it again back in fill', () => {
+    const {rerender} = render(
+      <AppShell topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    const main = screen.getByRole('main');
+    setMainGeometry(main, 1200);
+    remeasure();
+    expect(main).toHaveAttribute('tabindex', '0');
+
+    rerender(
+      <AppShell height="auto" topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
+    remeasure();
+    expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
+
+    // Back in fill, main is measured as it attaches, with no other signal.
+    rerender(
+      <AppShell topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    expect(screen.getByRole('main')).toHaveAttribute('tabindex', '0');
+  });
+
+  it('never makes main a keyboard stop when the page scrolls instead (auto)', () => {
+    render(
+      <AppShell height="auto" topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    const main = screen.getByRole('main');
+
+    setMainGeometry(main, 1200);
+    remeasure();
+    expect(main).toHaveAttribute('tabindex', '-1');
+  });
+});
+
+describe('AppShell layout root (FR18)', () => {
+  // A custom property set to `initial` reads back as `initial`; an empty
+  // value would mean the root declares nothing.
+  const CLEARED_READBACK = ['initial'];
+
+  function shell(testId: string) {
+    return (
+      <AppShell
+        data-testid={testId}
+        contentPadding={6}
+        topNav={
+          <TopNav label="Main" heading={<TopNavHeading heading="App" />} />
+        }
+        sideNav={
+          <SideNav>
+            <SideNavSection title="Main" isHeaderHidden>
+              <SideNavItem label="Dashboard" href="#" isSelected />
+            </SideNavSection>
+          </SideNav>
+        }>
+        {/* A page Layout of the app's own: its header takes the divider
+            default of the nearest Layout that sets one. */}
+        <Layout
+          header={<LayoutHeader>Page header</LayoutHeader>}
+          content={<p>Page content</p>}
+        />
+      </AppShell>
+    );
+  }
+
+  /** The shell's markup without its generated ids, for comparing two renders. */
+  function markup(testId: string): string {
+    const root = screen.getByTestId(testId);
+    return root.outerHTML
+      .replaceAll(testId, 'shell')
+      .replace(/(id|for|aria-[a-z]+|href)="[^"]*"/g, '$1=""');
+  }
+
+  it('stops the container padding, Layout values and height cap of a padded host at its root', () => {
+    render(<Card padding={3}>{shell('shell')}</Card>);
+    const computed = getComputedStyle(screen.getByTestId('shell'));
+    for (const edge of [
+      'inline-start',
+      'inline-end',
+      'block-start',
+      'block-end',
+    ]) {
+      expect(
+        computed.getPropertyValue(`--container-padding-${edge}`),
+        edge,
+      ).toBe('0px');
+    }
+    for (const name of [
+      '--layout-padding-outer-x',
+      '--layout-padding-outer-y',
+      '--layout-padding-own-outer-x',
+      '--layout-padding-own-outer-y',
+      '--layout-padding-inner-x',
+      '--layout-padding-inner-y',
+      '--layout-content-width',
+      '--layout-alignment-width',
+      '--_layout-flush-block-start',
+      '--_layout-flush-block-end',
+      '--_section-padding-propagated',
+      '--container-max-height',
+    ]) {
+      expect(CLEARED_READBACK, name).toContain(computed.getPropertyValue(name));
+    }
+  });
+
+  it('renders the same shell inside a padded Card and inside a Layout as at the page root', () => {
+    const {unmount} = render(shell('shell'));
+    const atRoot = markup('shell');
+    unmount();
+
+    const inCard = render(<Card padding={3}>{shell('shell')}</Card>);
+    expect(markup('shell')).toBe(atRoot);
+    inCard.unmount();
+
+    render(
+      <Layout
+        padding={4}
+        defaultHasDividers
+        header={<LayoutHeader>Outer header</LayoutHeader>}
+        content={shell('shell')}
+      />,
+    );
+    expect(markup('shell')).toBe(atRoot);
+  });
+
+  it('stops an enclosing divider default for every child of the root, the mobile nav node too', () => {
+    render(
+      <Layout
+        defaultHasDividers
+        content={
+          <AppShell
+            data-testid="shell"
+            mobileNav={
+              <LayoutHeader data-testid="mobile-header">Menu</LayoutHeader>
+            }>
+            <p>Page content</p>
+          </AppShell>
+        }
+      />,
+    );
+    expect(screen.getByTestId('mobile-header')).not.toHaveAttribute(
+      'data-divider',
+    );
+  });
+
+  it('resets the Layout area and slot contexts for every child of the root', () => {
+    let seen: unknown = 'unrendered';
+    function Probe() {
+      seen = {area: use(LayoutAreaContext), slots: use(LayoutSlotsContext)};
+      return null;
+    }
+    render(
+      <Layout
+        header={<p>Outer header</p>}
+        start={<p>Outer start</p>}
+        content={
+          <AppShell mobileNav={<Probe />}>
+            <p>Page content</p>
+          </AppShell>
+        }
+      />,
+    );
+    // Inside the outer Layout's content area the probe would read area
+    // 'content' and the outer header and start slots; at the shell's root
+    // both are back to their defaults.
+    expect(seen).toEqual({area: null, slots: DEFAULT_LAYOUT_SLOTS});
+  });
+
+  it('keeps the caller style and a Section host out of each other', () => {
+    render(
+      <Section padding={6}>
+        <AppShell
+          data-testid="shell"
+          style={{['--container-padding-inline-start' as string]: '8px'}}>
+          <p>Page content</p>
+        </AppShell>
+      </Section>,
+    );
+    const computed = getComputedStyle(screen.getByTestId('shell'));
+    // The Section's propagated padding stops at the root...
+    expect(CLEARED_READBACK).toContain(
+      computed.getPropertyValue('--_section-padding-propagated'),
+    );
+    // ...and the caller's own style still applies after the reset (FR15).
+    expect(computed.getPropertyValue('--container-padding-inline-start')).toBe(
+      '8px',
+    );
   });
 });

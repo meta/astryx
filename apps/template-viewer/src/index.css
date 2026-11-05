@@ -4,3 +4,13 @@
 :root {
   --stylex-injection: 0;
 }
+
+/* `Layout height="fill"` resolves to `height: 100%`, which needs a definite
+   height on every ancestor to mean anything. Without this the chain is auto
+   all the way up, `fill` silently degrades to `auto`, and a pinned footer
+   drifts with the length of whatever step is showing. */
+html,
+body,
+#root {
+  height: 100%;
+}

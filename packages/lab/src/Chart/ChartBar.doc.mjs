@@ -5,7 +5,7 @@
 export const docs = {
   name: 'ChartBar',
   displayName: 'Chart Bar',
-  group: 'Chart',
+  group: 'Charts',
   category: 'Data Visualization',
 
   usage: {

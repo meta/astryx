@@ -1,12 +1,60 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Progress bar',
+    required: true,
+    description: 'Container arranging the label row and progress track.',
+  },
+  {
+    name: 'Label',
+    required: true,
+    description:
+      'Text naming the operation, optionally hidden visually while remaining accessible.',
+  },
+  {
+    name: 'Value text',
+    required: false,
+    description:
+      'Formatted determinate value shown beside the label when requested.',
+  },
+  {
+    name: 'Track',
+    required: true,
+    description:
+      'Remaining-progress rail that carries the progressbar semantics.',
+  },
+  {
+    name: 'Fill',
+    required: true,
+    description:
+      'Painted segment showing completed progress or indeterminate movement.',
+  },
+  {
+    name: 'Mark',
+    required: false,
+    description: 'Labeled target tick positioned on a determinate track.',
+  },
+];
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
 
 export const docs = {
   name: 'ProgressBar',
   displayName: 'Progress Bar',
   category: 'Feedback & Status',
-  keywords: ["progressbar","progress","loader","loading","linear","determinate","indeterminate","meter"],
+  keywords: [
+    'progressbar',
+    'progress',
+    'loader',
+    'loading',
+    'linear',
+    'determinate',
+    'indeterminate',
+    'meter',
+    'linearprogress',
+  ],
   props: [
     {
       name: 'label',
@@ -53,19 +101,21 @@ export const docs = {
     {
       name: 'isIndeterminate',
       type: 'boolean',
-      description: 'Animated loading indicator for unknown progress.',
+      description:
+        'Animated loading indicator for unknown progress. Under reduced motion it pulses in place instead of sliding.',
       default: 'false',
     },
     {
       name: 'marks',
       type: 'ReadonlyArray<{value: number; label: string}>',
       description:
-        'Fixed target marks drawn on the track at values in the same 0..max scale as value (e.g. a goal line). They stay visible whether progress is below or past them, and take their color from what they sit on: a mark inside the filled area uses the fill variant\'s on-color (on-accent, on-warning, on-error, and so on), a mark still out on the bare track uses the primary text color (the secondary one on a disabled bar, which dims everything it draws). Each mark requires a label: it is the mark\'s accessible name and the text revealed via a tooltip on hover/focus. Ignored when indeterminate.',
+        "Fixed target marks drawn on the track at values in the same 0..max scale as value (e.g. a goal line). They stay visible whether progress is below or past them, and take their color from what they sit on: a mark inside the filled area uses the fill variant's on-color (on-accent, on-warning, on-error, and so on), a mark still out on the bare track uses the primary text color (the secondary one on a disabled bar, which dims everything it draws). Each mark requires a label: it is the mark's accessible name and the text revealed via a tooltip on hover/focus. Ignored when indeterminate.",
     },
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Visually disabled state: grays out the fill and text. Use for canceled or inactive operations.',
+      description:
+        'Visually disabled state: grays out the fill and text. Use for canceled or inactive operations.',
       default: 'false',
     },
     {
@@ -84,44 +134,65 @@ export const docs = {
         className: 'astryx-progress-bar-mark',
         visualProps: ['variant', 'placement'],
       },
-      // Still emitted beside the names above, so themes written against
-      // them keep working. Drop in the next major.
-      {
-        className: 'astryx-progressbar',
-        visualProps: ['variant'],
-        deprecatedFor: 'progress-bar',
-      },
-      {
-        className: 'astryx-progressbar-fill',
-        visualProps: ['variant'],
-        deprecatedFor: 'progress-bar-fill',
-      },
-      {className: 'astryx-progressbar-track', deprecatedFor: 'progress-bar-track'},
-      {
-        className: 'astryx-progressbar-mark',
-        visualProps: ['variant', 'placement'],
-        deprecatedFor: 'progress-bar-mark',
-      },
     ],
     vars: [
-      {name: '--_progressbar-mark-width', description: 'Target mark tick width', default: '2px', private: true},
-      {name: '--_progressbar-mark-height', description: 'Target mark tick height', default: '8px', private: true},
+      {
+        name: '--_progressbar-mark-width',
+        description: 'Target mark tick width',
+        default: '2px',
+        private: true,
+      },
+      {
+        name: '--_progressbar-mark-height',
+        description: 'Target mark tick height',
+        default: '8px',
+        private: true,
+      },
     ],
     derived: [
       {property: 'width', vars: ['--_progressbar-mark-width'], replaces: true},
-      {property: 'height', vars: ['--_progressbar-mark-height'], replaces: true},
+      {
+        property: 'height',
+        vars: ['--_progressbar-mark-height'],
+        replaces: true,
+      },
     ],
   },
   usage: {
+    anatomy,
     description:
-      'A horizontal bar showing the completion progress of a task. Use it for operations where the duration is known, or as an animated indicator when progress can\'t be calculated. Supports semantic color variants, value labels, and custom formatting.',
+      "A horizontal bar showing the completion progress of a task. Use it for operations where the duration is known, or as an animated indicator when progress can't be calculated. Supports semantic color variants, value labels, and custom formatting. Under a finger a new value animates as on iOS: linearly, in proportion to how far it moves (a full track takes one second at the theme's default tempo), and the fill keeps a minimum visible length above zero.",
     bestPractices: [
-      { guidance: true, description: "Use a determinate bar when the total amount of work is known, and indeterminate when it's not." },
-      { guidance: true, description: 'Choose a color variant that matches the context: accent for general progress, success for completion, warning or error for alerts.' },
-      { guidance: true, description: "Always provide a label, even if hidden; screen readers need it to announce what's loading." },
-      { guidance: false, description: 'Place icons or labels inside the bar; compose them alongside it using layout components.' },
-      { guidance: false, description: "Use a progress bar for instant actions; it's meant for operations that take noticeable time." },
-      { guidance: false, description: 'Use multiple progress bars stacked together for the same operation; use one bar with a value label instead.' },
+      {
+        guidance: true,
+        description:
+          "Use a determinate bar when the total amount of work is known, and indeterminate when it's not.",
+      },
+      {
+        guidance: true,
+        description:
+          'Choose a color variant that matches the context: accent for general progress, success for completion, warning or error for alerts.',
+      },
+      {
+        guidance: true,
+        description:
+          "Always provide a label, even if hidden; screen readers need it to announce what's loading.",
+      },
+      {
+        guidance: false,
+        description:
+          'Place icons or labels inside the bar; compose them alongside it using layout components.',
+      },
+      {
+        guidance: false,
+        description:
+          "Use a progress bar for instant actions; it's meant for operations that take noticeable time.",
+      },
+      {
+        guidance: false,
+        description:
+          'Use multiple progress bars stacked together for the same operation; use one bar with a value label instead.',
+      },
     ],
   },
 };
@@ -164,8 +235,7 @@ export const docsZh = {
     {
       name: 'formatValueLabel',
       type: '(value: number, max: number) => string',
-      description:
-        '自定义值标签格式化器；默认为百分比字符串。',
+      description: '自定义值标签格式化器；默认为百分比字符串。',
     },
     {
       name: 'variant',
@@ -188,7 +258,8 @@ export const docsZh = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: '视觉禁用状态——使填充条和文本变灰。用于已取消或不活跃的操作。',
+      description:
+        '视觉禁用状态——使填充条和文本变灰。用于已取消或不活跃的操作。',
       default: 'false',
     },
     {
@@ -207,44 +278,65 @@ export const docsZh = {
         className: 'astryx-progress-bar-mark',
         visualProps: ['variant', 'placement'],
       },
-      // Still emitted beside the names above, so themes written against
-      // them keep working. Drop in the next major.
-      {
-        className: 'astryx-progressbar',
-        visualProps: ['variant'],
-        deprecatedFor: 'progress-bar',
-      },
-      {
-        className: 'astryx-progressbar-fill',
-        visualProps: ['variant'],
-        deprecatedFor: 'progress-bar-fill',
-      },
-      {className: 'astryx-progressbar-track', deprecatedFor: 'progress-bar-track'},
-      {
-        className: 'astryx-progressbar-mark',
-        visualProps: ['variant', 'placement'],
-        deprecatedFor: 'progress-bar-mark',
-      },
     ],
     vars: [
-      {name: '--_progressbar-mark-width', description: '目标标记刻度宽度', default: '2px', private: true},
-      {name: '--_progressbar-mark-height', description: '目标标记刻度高度', default: '8px', private: true},
+      {
+        name: '--_progressbar-mark-width',
+        description: '目标标记刻度宽度',
+        default: '2px',
+        private: true,
+      },
+      {
+        name: '--_progressbar-mark-height',
+        description: '目标标记刻度高度',
+        default: '8px',
+        private: true,
+      },
     ],
     derived: [
       {property: 'width', vars: ['--_progressbar-mark-width'], replaces: true},
-      {property: 'height', vars: ['--_progressbar-mark-height'], replaces: true},
+      {
+        property: 'height',
+        vars: ['--_progressbar-mark-height'],
+        replaces: true,
+      },
     ],
   },
   usage: {
+    anatomy,
     description:
-      'A horizontal bar showing the completion progress of a task. Use it for operations where the duration is known, or as an animated indicator when progress can\'t be calculated. Supports semantic color variants, value labels, and custom formatting.',
+      "A horizontal bar showing the completion progress of a task. Use it for operations where the duration is known, or as an animated indicator when progress can't be calculated. Supports semantic color variants, value labels, and custom formatting. Under a finger a new value animates as on iOS: linearly, in proportion to how far it moves (a full track takes one second at the theme's default tempo), and the fill keeps a minimum visible length above zero.",
     bestPractices: [
-      { guidance: true, description: "Use a determinate bar when the total amount of work is known, and indeterminate when it's not." },
-      { guidance: true, description: 'Choose a color variant that matches the context: accent for general progress, success for completion, warning or error for alerts.' },
-      { guidance: true, description: "Always provide a label, even if hidden; screen readers need it to announce what's loading." },
-      { guidance: false, description: 'Place icons or labels inside the bar; compose them alongside it using layout components.' },
-      { guidance: false, description: "Use a progress bar for instant actions; it's meant for operations that take noticeable time." },
-      { guidance: false, description: 'Use multiple progress bars stacked together for the same operation; use one bar with a value label instead.' },
+      {
+        guidance: true,
+        description:
+          "Use a determinate bar when the total amount of work is known, and indeterminate when it's not.",
+      },
+      {
+        guidance: true,
+        description:
+          'Choose a color variant that matches the context: accent for general progress, success for completion, warning or error for alerts.',
+      },
+      {
+        guidance: true,
+        description:
+          "Always provide a label, even if hidden; screen readers need it to announce what's loading.",
+      },
+      {
+        guidance: false,
+        description:
+          'Place icons or labels inside the bar; compose them alongside it using layout components.',
+      },
+      {
+        guidance: false,
+        description:
+          "Use a progress bar for instant actions; it's meant for operations that take noticeable time.",
+      },
+      {
+        guidance: false,
+        description:
+          'Use multiple progress bars stacked together for the same operation; use one bar with a value label instead.',
+      },
     ],
   },
 };
@@ -254,15 +346,40 @@ export const docsDense = {
   description:
     'Progress bar for displaying determinate or indeterminate progress.',
   usage: {
+    anatomy,
     description:
-      'A horizontal bar showing the completion progress of a task. Use it for operations where the duration is known, or as an animated indicator when progress can\'t be calculated. Supports semantic color variants, value labels, and custom formatting.',
+      "A horizontal bar showing the completion progress of a task. Use it for operations where the duration is known, or as an animated indicator when progress can't be calculated. Supports semantic color variants, value labels, and custom formatting. Under a finger a new value animates as on iOS: linearly, in proportion to how far it moves (a full track takes one second at the theme's default tempo), and the fill keeps a minimum visible length above zero.",
     bestPractices: [
-      { guidance: true, description: "Use a determinate bar when the total amount of work is known, and indeterminate when it's not." },
-      { guidance: true, description: 'Choose a color variant that matches the context: accent for general progress, success for completion, warning or error for alerts.' },
-      { guidance: true, description: "Always provide a label, even if hidden; screen readers need it to announce what's loading." },
-      { guidance: false, description: 'Place icons or labels inside the bar; compose them alongside it using layout components.' },
-      { guidance: false, description: "Use a progress bar for instant actions; it's meant for operations that take noticeable time." },
-      { guidance: false, description: 'Use multiple progress bars stacked together for the same operation; use one bar with a value label instead.' },
+      {
+        guidance: true,
+        description:
+          "Use a determinate bar when the total amount of work is known, and indeterminate when it's not.",
+      },
+      {
+        guidance: true,
+        description:
+          'Choose a color variant that matches the context: accent for general progress, success for completion, warning or error for alerts.',
+      },
+      {
+        guidance: true,
+        description:
+          "Always provide a label, even if hidden; screen readers need it to announce what's loading.",
+      },
+      {
+        guidance: false,
+        description:
+          'Place icons or labels inside the bar; compose them alongside it using layout components.',
+      },
+      {
+        guidance: false,
+        description:
+          "Use a progress bar for instant actions; it's meant for operations that take noticeable time.",
+      },
+      {
+        guidance: false,
+        description:
+          'Use multiple progress bars stacked together for the same operation; use one bar with a value label instead.',
+      },
     ],
   },
   propDescriptions: {
@@ -271,11 +388,15 @@ export const docsDense = {
     max: 'Maximum value.',
     isLabelHidden: 'Visually hide label (remains accessible).',
     hasValueLabel: 'Show formatted value text (ignored when indeterminate).',
-    formatValueLabel: 'Custom value label formatter; defaults to percentage string.',
+    formatValueLabel:
+      'Custom value label formatter; defaults to percentage string.',
     variant: 'Semantic color variant.',
-    isIndeterminate: 'Animated loading indicator for unknown progress.',
-    marks: 'Fixed target marks ({value, label?}) drawn on the track in the 0..max scale; stay visible past the fill. Marks inside the fill take the variant on-color; marks on the bare track take the primary text color (secondary when disabled). A label reveals a tooltip on hover/focus. Ignored when indeterminate.',
+    isIndeterminate:
+      'Animated loading indicator for unknown progress. Under reduced motion it pulses in place instead of sliding.',
+    marks:
+      'Fixed target marks ({value, label?}) drawn on the track in the 0..max scale; stay visible past the fill. Marks inside the fill take the variant on-color; marks on the bare track take the primary text color (secondary when disabled). A label reveals a tooltip on hover/focus. Ignored when indeterminate.',
     isDisabled: 'Visually disabled: grays out fill and text.',
-    xstyle: 'StyleX styles for layout customization. Must be stylex.create() value.',
+    xstyle:
+      'StyleX styles for layout customization. Must be stylex.create() value.',
   },
 };

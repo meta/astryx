@@ -129,4 +129,76 @@ describe('component detail wiring', () => {
       }
     }
   });
+  it('carries component accessibility requirements into the registry', () => {
+    const button = Object.values(components)
+      .flat()
+      .find(entry => entry.name === 'Button');
+
+    expect(button?.usage?.accessibility?.length).toBeGreaterThan(0);
+    expect(button?.usage?.accessibility?.[0]).toMatchObject({
+      category: 'Color contrast',
+      requirement: '4.5:1',
+    });
+    expect(button?.usage?.accessibility).toContainEqual(
+      expect.objectContaining({
+        name: 'Badge text',
+        requirement: '4.5:1',
+      }),
+    );
+  });
+
+  it('renders accessibility metadata in a dedicated tab', () => {
+    const source = fs.readFileSync(
+      path.join(DETAIL_DIR, 'ComponentDetailClient.tsx'),
+      'utf8',
+    );
+
+    expect(source).toContain(
+      '<Tab value="accessibility" label="Accessibility" />',
+    );
+    expect(source).toContain('themeCoverage={accessibilityThemeCoverage}');
+    expect(source).toContain('componentName={comp.name}');
+
+    const accessibilitySource = fs.readFileSync(
+      path.join(DETAIL_DIR, 'Accessibility.tsx'),
+      'utf8',
+    );
+    expect(accessibilitySource).toContain(
+      '`${componentName} ${themeName} theme ${mode.mode} mode contrast results`',
+    );
+    expect(accessibilitySource).not.toContain(
+      'Neutral Button contrast results',
+    );
+  });
+
+  it('supports accessibility guidance across button-like components', () => {
+    const entries = Object.values(components).flat();
+    for (const name of [
+      'IconButton',
+      'ToggleButton',
+      'ButtonGroup',
+      'SegmentedControl',
+    ]) {
+      const component = entries.find(entry => entry.name === name);
+      expect(component?.usage?.accessibility?.length).toBeGreaterThan(0);
+      expect(component?.usage?.accessibility).toContainEqual(
+        expect.objectContaining({category: 'Color contrast'}),
+      );
+    }
+  });
+
+  it('uses clear button-family contrast terminology', () => {
+    const entries = Object.values(components).flat();
+    for (const name of [
+      'Button',
+      'IconButton',
+      'ToggleButton',
+      'ButtonGroup',
+    ]) {
+      const component = entries.find(entry => entry.name === name);
+      expect(component?.usage?.accessibility).toContainEqual(
+        expect.objectContaining({name: 'Essential icon or spinner arc'}),
+      );
+    }
+  });
 });

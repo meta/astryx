@@ -6,8 +6,9 @@ export const doc = {
   exampleFor: 'Collapsible',
   name: 'Collapsible — Multiple Mode',
   displayName: 'Collapsible — Multiple Mode',
-  description: 'Several sections open at once. Use when users need to compare content across sections, like feature lists or pricing tiers.',
+  description:
+    'Several sections open at once, for comparing across them — feature lists, pricing tiers. One Collapsible per Card, so each trigger keeps its own large type: it is the heading of its surface, not a row in a list.',
   isReady: true,
   aspectRatio: 4 / 3,
-  componentsUsed: ['Collapsible', 'Card', 'Text', 'Layout'],
+  componentsUsed: ['Collapsible', 'CollapsibleGroup', 'Card', 'Text', 'Stack'],
 };

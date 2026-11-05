@@ -43,9 +43,18 @@ import type {LinkComponentType} from './types';
 import {mergeProps} from '../utils';
 import {computeTargetAndRel} from './computeTargetAndRel';
 import {useInteractiveRole} from '../hooks/useInteractiveRole';
-import {themeProps} from '../utils/themeProps';
+import {themeDataAttributes, themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
+import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {usePressFeedback} from '../hooks/usePressFeedback';
+import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Link/Link.generated';
+
+registerEnglishFallback(english);
 
 /**
  * Base link styles
@@ -73,6 +82,14 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
   },
+  // A truncating label needs a box that stops at its container: an
+  // inline-flex root otherwise grows to its whole text, so its Text never
+  // overflows and draws no ellipsis (`component:Link` FR6, `component:Text`
+  // FR4).
+  truncating: {
+    maxWidth: '100%',
+    minWidth: 0,
+  },
   /**
    * Reset styles for rendering as a <button> when href is undefined.
    * Strips all native button chrome so it looks identical to a link.
@@ -81,6 +98,9 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     borderStyle: 'none',
     padding: 0,
+    // Browsers centre a button's text; a wrapped label lines up as an
+    // anchor's does.
+    textAlign: 'inherit',
     pointerEvents: 'auto',
     position: 'relative',
   },
@@ -172,9 +192,8 @@ export interface LinkProps extends BaseProps<
   /**
    * Whether the link is disabled.
    * A disabled link renders as a plain anchor without an href (and without
-   * target/rel/onClick), so it cannot be focused or activated — no
-   * navigation and no onClick, even via programmatic focus or assistive
-   * technology activation.
+   * target/rel/onClick), so it cannot navigate or run onClick. It keeps a tab
+   * stop and is announced as a disabled link.
    * @default false
    */
   isDisabled?: boolean;
@@ -263,15 +282,6 @@ export interface LinkProps extends BaseProps<
 }
 
 /**
- * Click handler for disabled links. The disabled anchor renders without an
- * href, so there is no navigation to block in practice; preventDefault is a
- * defensive guard against synthetic/programmatic clicks.
- */
-function preventDefaultClick(event: React.MouseEvent<HTMLAnchorElement>): void {
-  event.preventDefault();
-}
-
-/**
  * A styled anchor link component.
  *
  * Uses Text internally for typography styling.
@@ -315,7 +325,11 @@ export function Link({
   ref,
   ...props
 }: LinkProps) {
-  const t = useTranslator();
+  // Constant marker props; the hook's only effect is installing the shared
+  // document controller once, so the link's output stays a pure function of
+  // its props.
+  const pressable = usePressFeedback();
+  const t = useComponentTranslator();
   const newTabLabel = newTabLabelFromProps ?? t('@astryx.link.newTab');
   const LinkComponent = useLinkComponent(as);
   const role = useInteractiveRole({href, onClick, isDisabled});
@@ -329,6 +343,10 @@ export function Link({
   // render as a <button> with link styling for semantic correctness.
   const renderAsButton =
     role === 'button' || (role === 'inert' && href == null);
+
+  // The reflected theme attributes win over a caller's same-named `data-*`, so
+  // theme targeting always sees the real value (public-component-api INV5).
+  const reflectedAttributes = themeDataAttributes({color});
 
   const sharedContent = (
     <>
@@ -358,42 +376,48 @@ export function Link({
         ref={ref as React.Ref<HTMLButtonElement>}
         type="button"
         onClick={onClick}
+        {...(isDisabled ? undefined : pressable)}
         aria-label={label || undefined}
         aria-disabled={isDisabled || undefined}
-        tabIndex={isDisabled ? -1 : undefined}
-        disabled={isDisabled}
         {...mergeProps(
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
             styles.base,
             styles.buttonReset,
             linkColorStyles[color],
+            // The system's pressed overlay behind the text; the hover stays the
+            // colour change above, so a press is the one background it paints.
+            !isDisabled && interactionOverlayStyles.pressedBackgroundColor,
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             isDisabled && styles.disabled,
+            maxLines > 0 && styles.truncating,
             xstyle,
           ),
           className,
           style,
         )}
-        {...props}>
+        {...props}
+        {...reflectedAttributes}
+        // Focusable while disabled (spec:AST-085 FR1), but inert (FR2).
+        {...(isDisabled ? disabledInteractionProps(props.onKeyDown) : null)}>
         {sharedContent}
       </button>
     );
   } else if (isDisabled) {
-    // A disabled link renders as a plain <a> with no href: an href-less
-    // anchor is not focusable and exposes no link affordance, so programmatic
-    // focus + Enter, AT activation commands, and middle-click cannot navigate
-    // or fire the consumer onClick. The router LinkComponent is deliberately
-    // skipped — a disabled link performs no navigation, and custom router
-    // links may require a live href. target/rel are omitted with the href.
+    // A disabled link renders as an <a> with no href, so nothing can navigate
+    // and the consumer onClick never fires. It keeps a Tab stop and the link
+    // role so keyboard and screen-reader users still find it (spec:AST-085
+    // FR1, FR5). The router LinkComponent is deliberately skipped — a disabled
+    // link performs no navigation, and custom router links may require a live
+    // href. target/rel are omitted with the href.
     linkElement = (
       <a
         ref={ref as React.Ref<HTMLAnchorElement>}
-        onClick={preventDefaultClick}
+        role="link"
         aria-label={label || undefined}
         aria-disabled={true}
-        tabIndex={-1}
+        tabIndex={0}
         {...mergeProps(
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
@@ -402,12 +426,15 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             styles.disabled,
+            maxLines > 0 && styles.truncating,
             xstyle,
           ),
           className,
           style,
         )}
-        {...props}>
+        {...props}
+        {...reflectedAttributes}
+        {...disabledInteractionProps(props.onKeyDown)}>
         {sharedContent}
       </a>
     );
@@ -419,6 +446,7 @@ export function Link({
         target={target}
         rel={rel}
         onClick={onClick}
+        {...(isDisabled ? undefined : pressable)}
         aria-label={label || undefined}
         aria-disabled={isDisabled || undefined}
         tabIndex={isDisabled ? -1 : undefined}
@@ -427,15 +455,18 @@ export function Link({
           focusOutlineProps.focusVisible(
             styles.base,
             linkColorStyles[color],
+            !isDisabled && interactionOverlayStyles.pressedBackgroundColor,
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             isDisabled && styles.disabled,
+            maxLines > 0 && styles.truncating,
             xstyle,
           ),
           className,
           style,
         )}
-        {...props}>
+        {...props}
+        {...reflectedAttributes}>
         {sharedContent}
       </LinkComponent>
     );

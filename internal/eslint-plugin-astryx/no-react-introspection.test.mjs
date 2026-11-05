@@ -30,6 +30,13 @@ tester.run('no-react-introspection', noReactIntrospectionRule, {
       options: [{allowFiles: ['test-utils']}],
       filename: '/packages/test-utils/src/helpers.tsx',
     },
+    // allowFiles escape hatch on Windows, where ESLint reports filename with
+    // backslash separators against a forward-slash pattern.
+    {
+      code: `import { Children } from 'react'; Children.map(children, c => c);`,
+      options: [{allowFiles: ['test-utils']}],
+      filename: 'D:\\repo\\packages\\test-utils\\src\\helpers.tsx',
+    },
   ],
   invalid: [
     // Children.toArray

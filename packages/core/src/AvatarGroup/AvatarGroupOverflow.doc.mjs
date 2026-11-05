@@ -37,7 +37,7 @@ export const docs = {
     {
       name: 'xstyle',
       type: 'StyleXStyles',
-      description: 'StyleX styles for layout customization.',
+      description: 'stylex.create() value — not an inline style object.',
     },
   ],
   playground: {
@@ -53,6 +53,7 @@ export const docs = {
       {guidance: true, description: 'Pass the real hidden count to `count` so the accessible label matches the visible indicator.'},
       {guidance: true, description: 'Use short custom text such as `+12` or `99+`. The indicator is circular for short counts and grows into a pill for wider counts so the number always fits.'},
       {guidance: true, description: 'Provide `onClick` when the overflow opens a member list, popover, or detail view.'},
+      {guidance: false, description: 'Do not pass custom text that disagrees with `count`; `count` continues to provide the accessible label.'},
       {guidance: false, description: 'Do not use long labels inside the indicator; place longer participant details next to the group instead.'},
     ],
     anatomy: [
@@ -106,6 +107,7 @@ export const docsZh = {
       {guidance: true, description: '向 `count` 传入真实隐藏数量，确保无障碍标签与可见指示器一致。'},
       {guidance: true, description: '使用 `+12` 或 `99+` 等短文本；指示器在计数较短时为圆形，计数较宽时会拉伸为胶囊形，确保数字始终完整显示。'},
       {guidance: true, description: '当溢出项会打开成员列表、弹出层或详情视图时提供 `onClick`。'},
+      {guidance: false, description: '不要让自定义文本与 `count` 不一致；`count` 仍用于无障碍标签。'},
       {guidance: false, description: '不要在指示器内使用长标签；更长的参与者详情应放在头像组旁边。'},
     ],
   },
@@ -121,7 +123,7 @@ export const docsDense = {
     children: 'optional custom short count text, e.g. +12 or 99+',
     onClick: 'click handler; renders focusable button when set',
     ref: 'forwarded ref',
-    xstyle: 'StyleX layout customization',
+    xstyle: 'stylex.create() value — not an inline style object',
   },
   usage: {
     description:
@@ -130,6 +132,7 @@ export const docsDense = {
       {guidance: true, description: 'Pass real hidden count to `count` for a11y.'},
       {guidance: true, description: 'Keep custom text short: `+12`, `99+`.'},
       {guidance: true, description: 'Use `onClick` to open member list/popover/details.'},
+      {guidance: false, description: "Don't let custom text disagree with `count`; `count` still labels the indicator for accessibility."},
       {guidance: false, description: "Don't use long labels inside avatar-sized circle."},
     ],
   },

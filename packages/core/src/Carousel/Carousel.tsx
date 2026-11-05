@@ -14,7 +14,9 @@
  *   scroll control. Exposes APG
  *   carousel semantics: the root is a labelled region with
  *   aria-roledescription="carousel" and each item wrapper is a group with
- *   aria-roledescription="slide" named "Slide N of M".
+ *   aria-roledescription="slide" named "Slide N of M". The scroll area is a
+ *   group named like the carousel and a tab stop only while its content
+ *   overflows (AST-025 FR12).
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Carousel/index.ts (exports)
@@ -49,9 +51,15 @@ import type {BaseProps} from '../BaseProps';
 import {mergeProps, rtlStyles} from '../utils';
 import type {SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Carousel/Carousel.generated';
+
+registerEnglishFallback(english);
 /**
  * Imperative control surface for the Carousel, accessed via the `handleRef`
  * prop. Methods drive the same native-scroll machinery as the built-in
@@ -176,18 +184,18 @@ const styles = stylex.create({
     },
     scrollbarWidth: 'none',
     maskImage: 'none',
-    transitionProperty: 'mask-image',
-    transitionDuration: {
-      default: durationVars['--duration-medium'],
-      '@media (prefers-reduced-motion: reduce)': '0ms',
-    },
-    transitionTimingFunction: easeVars['--ease-standard'],
   },
   fadeStart: {
-    maskImage: `linear-gradient(to right, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']})`,
+    maskImage: {
+      default: `linear-gradient(to right, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']})`,
+      ':is([dir="rtl"] *)': `linear-gradient(to left, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']})`,
+    },
   },
   fadeEnd: {
-    maskImage: `linear-gradient(to left, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']})`,
+    maskImage: {
+      default: `linear-gradient(to left, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']})`,
+      ':is([dir="rtl"] *)': `linear-gradient(to right, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']})`,
+    },
   },
   fadeBoth: {
     maskImage: `linear-gradient(to right, transparent 0%, rgba(0,0,0,0.3) 2px, black ${spacingVars['--spacing-1']}, black calc(100% - ${spacingVars['--spacing-1']}), rgba(0,0,0,0.3) calc(100% - 2px), transparent 100%)`,
@@ -338,9 +346,16 @@ export function Carousel({
   'data-testid': testId,
   ...htmlProps
 }: CarouselProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.carousel.label');
   const scrollElRef = useRef<HTMLElement | null>(null);
+  const startButtonRef = useRef<HTMLButtonElement>(null);
+  const endButtonRef = useRef<HTMLButtonElement>(null);
+  // Which nav button last held focus, and what the overflow state was on the
+  // previous render. Together they are how the Effect below recognises the one
+  // transition it is allowed to act on.
+  const focusedNavRef = useRef<'start' | 'end' | null>(null);
+  const prevCanScrollRef = useRef<{start: boolean; end: boolean} | null>(null);
   const {scrollRef, overflowStart, overflowEnd, hasOverflow} =
     useScrollOverflow();
 
@@ -354,6 +369,7 @@ export function Carousel({
     lightDismiss: false,
   });
 
+  // Syncs the layer with `hasButtons`.
   useEffect(() => {
     if (hasButtons) {
       layer.show();
@@ -487,6 +503,69 @@ export function Carousel({
   const canScrollStart = hasLoop && hasOverflow ? true : overflowStart;
   const canScrollEnd = hasLoop && hasOverflow ? true : overflowEnd;
 
+  // Keep the keyboard user where they are when a nav button disables under
+  // them. The browser drops focus off a control it disables, so reaching an
+  // edge used to land the user on <body> and cost them their place in the page.
+  //
+  // This is an Effect on purpose, and the exception is narrow. The thing that
+  // disables the button IS this state transition, so it is the only correct
+  // trigger: three attempts to predict it from the press -- the position after
+  // the scroll, the position before it plus the step, and the settled position
+  // reported by `scrollend` -- were each wrong somewhere, under reduced motion,
+  // under mandatory scroll-snap, and on a browser that never fires the event.
+  // Ruled acceptable by the
+  // maintainer, 2026-08-27, on the conditions encoded below: it acts only on
+  // the transition that newly disables the focused button, it moves focus and
+  // nothing else, and it cannot fire twice for one transition.
+  //
+  // Which button the person is on is tracked by the buttons' own focus and blur
+  // handlers, and the blur has to ignore the one the commit itself causes: a
+  // tracker that outlived the person let a later edge -- a swipe, a resize, no
+  // press at all -- pull their focus back onto a control they never chose.
+  useEffect(() => {
+    const previous = prevCanScrollRef.current;
+    prevCanScrollRef.current = {start: canScrollStart, end: canScrollEnd};
+    const side = focusedNavRef.current;
+    if (previous == null || side == null) {
+      return;
+    }
+
+    // Only the edge that just ran out, and only while it held focus. An edge
+    // that was already disabled, or one the user was not on, is not ours.
+    const wasEnabled = side === 'start' ? previous.start : previous.end;
+    const isEnabled = side === 'start' ? canScrollStart : canScrollEnd;
+    if (!wasEnabled || isEnabled) {
+      return;
+    }
+
+    const pressed =
+      side === 'start' ? startButtonRef.current : endButtonRef.current;
+    if (pressed == null) {
+      return;
+    }
+    // The browser has already blurred it, so focus reads as the body. Anything
+    // else means the user moved on themselves and this is not ours to redirect.
+    const active = pressed.ownerDocument.activeElement;
+    if (active !== pressed && active !== pressed.ownerDocument.body) {
+      return;
+    }
+
+    // The scroll area is the receiver (component:Carousel FR2). It takes focus
+    // programmatically even when it is out of the tab order.
+    const receiver = scrollElRef.current;
+    if (receiver == null) {
+      return;
+    }
+
+    // One move per transition: clearing the tracker first means a re-render or
+    // a StrictMode double-invoke re-runs this and returns at the `side == null`
+    // guard above.
+    focusedNavRef.current = null;
+    // preventScroll: a plain focus() scrolls its element into view, which on
+    // the scroll container cancels the scroll the press just started.
+    receiver.focus({preventScroll: true});
+  }, [canScrollStart, canScrollEnd]);
+
   const fadeStyle = hasEdgeFade
     ? (hasLoop && hasOverflow) || (overflowStart && overflowEnd)
       ? styles.fadeBoth
@@ -521,14 +600,28 @@ export function Carousel({
       aria-roledescription="carousel">
       <div
         ref={composedRef}
-        tabIndex={0}
+        // The scroll area takes keyboard scrolling (spec:AST-025 FR12): a
+        // group named like the carousel, in the tab order only while its
+        // content overflows. While it fits it still takes focus
+        // programmatically, for the edge buttons' hand-off (FR2).
+        role="group"
+        aria-label={ariaLabel}
+        tabIndex={hasOverflow ? 0 : -1}
         onWheel={handleWheel}
-        {...stylex.props(
-          styles.scroller,
-          gapStyles[gap],
-          padding != null && paddingStyles[padding],
-          hasSnap && styles.snap,
-          fadeStyle,
+        {...mergeProps(
+          themeProps('carousel-scroller', {
+            gap,
+            padding,
+            snap: hasSnap ? 'snap' : null,
+            edgeFade: hasEdgeFade ? 'edge-fade' : null,
+          }),
+          stylex.props(
+            styles.scroller,
+            gapStyles[gap],
+            padding != null && paddingStyles[padding],
+            hasSnap && styles.snap,
+            fadeStyle,
+          ),
         )}>
         {slides.map((child, index) => (
           // APG carousel pattern: each slide container is a group with
@@ -560,6 +653,7 @@ export function Carousel({
                 !canScrollStart && styles.buttonHidden,
               )}>
               <Button
+                ref={startButtonRef}
                 icon={
                   <Icon
                     icon="chevronLeft"
@@ -572,10 +666,21 @@ export function Carousel({
                 size="sm"
                 isIconOnly
                 // Disabled when there's nothing to scroll toward. Keeps the
-                // button mounted (stable layout/focus) but removes it from the
-                // tab order and a11y tree while it's visually hidden, so
-                // keyboard users don't land on an invisible control.
+                // button mounted (stable layout) but removes it from the tab
+                // order and a11y tree while it's visually hidden, so keyboard
+                // users don't land on an invisible control. The Effect above
+                // hands focus to the scroll area when the state behind this
+                // one flips it disabled.
                 isDisabled={!canScrollStart}
+                onFocus={() => {
+                  focusedNavRef.current = 'start';
+                }}
+                onBlur={event => {
+                  // A disabled button was blurred by the commit, not the person.
+                  if (!event.currentTarget.disabled) {
+                    focusedNavRef.current = null;
+                  }
+                }}
                 onClick={() => scrollBy(-1)}
                 xstyle={styles.buttonRadiusOverride}
               />
@@ -587,6 +692,7 @@ export function Carousel({
                 !canScrollEnd && styles.buttonHidden,
               )}>
               <Button
+                ref={endButtonRef}
                 icon={
                   <Icon
                     icon="chevronRight"
@@ -601,6 +707,15 @@ export function Carousel({
                 // See "Scroll left" — disabled while visually hidden so the
                 // button stays mounted but out of the tab order / a11y tree.
                 isDisabled={!canScrollEnd}
+                onFocus={() => {
+                  focusedNavRef.current = 'end';
+                }}
+                onBlur={event => {
+                  // A disabled button was blurred by the commit, not the person.
+                  if (!event.currentTarget.disabled) {
+                    focusedNavRef.current = null;
+                  }
+                }}
                 onClick={() => scrollBy(1)}
                 xstyle={styles.buttonRadiusOverride}
               />

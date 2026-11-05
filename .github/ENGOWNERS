@@ -1,19 +1,17 @@
 # Engineering owners for the Astryx repository
 #
-# The Astryx engineering team. The Copilot reviewer reads this list to frame its
-# review as assistance to the author's own judgment (see
-# .github/copilot-instructions.md, "Review buckets").
+# This checked-in list defines engineering owners for spec-owner reconciliation.
+# Any ENGOWNER may approve every current knowledge-record kind; an approval binds
+# the pull request's spec content (architecture:knowledge-contracts DEC-14). The
+# review-signal workflows read the matching ENGOWNERS repository
+# variable instead; keep that variable synchronized with this file when membership
+# changes.
 #
 # Distinct from CODEOWNERS on purpose: CODEOWNERS is the review-duty subset that
 # GitHub auto-requests as default reviewers on every PR; being here does NOT put
-# you on that rotation. This list is meant to grow with the eng team.
-#
-# This only shapes the TONE of Copilot's comment. It does NOT change merge rights
-# or exempt anyone from review: the auto-merge gate is decided by high-risk AREA
-# (new package/component/API), not by who authored the PR — see
-# .github/workflows/review-signal.yml. Anyone not in this list or DESIGNOWNERS is
-# framed as a contributor (initial-pass review). No author is exempt from the
-# high-risk gate.
+# you on that rotation. Engineering owners self-serve code changes; design-
+# affecting changes still receive the advisory design-review signal unless the
+# author is also a DESIGNOWNER.
 #
 # Uses the same @handle format as CODEOWNERS. Keep this list current.
 

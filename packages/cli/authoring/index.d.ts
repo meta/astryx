@@ -23,17 +23,41 @@
 // ═══════════════════════════════════════════════════════════════════════
 // AUTHOR THESE — each is the default export of one authored file.
 // ═══════════════════════════════════════════════════════════════════════
-export type {ComponentDoc} from './doctypes/types'; //   Button.doc.{ts,mjs}
-export type {HookDoc} from './doctypes/types'; //         useToast.doc.{ts,mjs}
-export type {FunctionDoc} from './doctypes/types'; //     search.doc.mjs (hook | api)
-export type {ReferenceDoc} from './doctypes/types'; //    theming.doc.{ts,mjs}
-export type {TemplateDoc} from './doctypes/types'; //     Foo.template.{ts,mjs}
-export type {SchemaDoc} from './doctypes/types'; //       config.doc.mjs (object shape)
-export type {CommandDoc} from './doctypes/types'; //      search.doc.mjs (CLI command)
-export type {EnumDoc} from './doctypes/types'; //         error-codes.doc.mjs (vocabulary)
-export type {AstryxConfig} from './config/type'; //       astryx.config.{ts,mjs}
-export type {AstryxIntegration} from './integration/type'; // astryx.integration.{ts,mjs}
-export type {AstryxCodemod, AstryxConfigCodemod} from './codemod/type'; // codemods/*
+export type {ComponentDoc} from './doctypes/types.js'; //   Button.doc.mjs
+export type {HookDoc} from './doctypes/types.js'; //         useToast.doc.mjs
+export type {FunctionDoc} from './doctypes/types.js'; //     search.doc.mjs (hook | api)
+export type {ReferenceDoc} from './doctypes/types.js'; //    theming.doc.mjs
+export type {TemplateDoc} from './doctypes/types.js'; //     Foo.doc.mjs
+export type {IntegrationTemplateDoc} from './doctypes/types.js'; // an integration's Foo.doc.mjs
+export type {SchemaDoc} from './doctypes/types.js'; //       config.doc.mjs (object shape)
+export type {CommandDoc} from './doctypes/types.js'; //      search.doc.mjs (CLI command)
+export type {EnumDoc} from './doctypes/types.js'; //         error-codes.doc.mjs (vocabulary)
+export type {NamespaceDoc} from './doctypes/types.js'; //    cli.doc.mjs (hierarchy)
+export type {ThemeDoc} from './doctypes/types.js'; //        oceanTheme.doc.mjs
+export type {IconSetDoc} from './doctypes/types.js'; //      outline.doc.mjs
+export type {IconSetData} from './doctypes/types.js'; //     outline.icons.json
+export type {IconDefinitionDoc} from './doctypes/types.js'; //  delete.doc.mjs
+export type {AstryxConfig} from './config/type.js'; //       astryx.config.{ts,mjs}
+export type {DebugEvent} from './debug/type.js'; //          one recorded CLI run
+export type {AstryxIntegration} from './integration/type.js'; // astryx.integration.{ts,mjs}
+export type {
+  GapReportHandler,
+  GapReportHandlerContext,
+  GapReport,
+  GapReportCategory,
+  GapReportTarget,
+  GapReportHandlerReceipt,
+} from './gap-report/type.js'; // gap-report handler contract
+export type {
+  DiscoverSource,
+  DiscoverSourceContext,
+  DiscoverCatalog,
+  DiscoverPackage,
+  DiscoverVersion,
+  DiscoverContribution,
+  DiscoverKind,
+} from './discover/type.js'; // discover source contract
+export type {AstryxCodemod, AstryxConfigCodemod} from './codemod/type.js'; // codemods/*
 
 // ═══════════════════════════════════════════════════════════════════════
 // PARSERS — the CLI's load boundary (types come from each parser's JSDoc).
@@ -47,10 +71,22 @@ export {parseTemplate} from './doctypes/template/parse.mjs';
 export {parseSchema} from './doctypes/schema/parse.mjs';
 export {parseCommand} from './doctypes/command/parse.mjs';
 export {parseEnum} from './doctypes/enum/parse.mjs';
+export {parseNamespace} from './doctypes/namespace/parse.mjs';
+export {parseTheme} from './doctypes/theme/parse.mjs';
+/** @experimental Icon sets may change or be removed in a patch release. */
+export {parseIconSet, parseIconSetData} from './doctypes/icon-set/parse.mjs';
+/** @experimental Icon definitions may change or be removed in a patch release. */
+export {parseIconDefinition} from './doctypes/icon-definition/parse.mjs';
 export {parseLegacyDoc} from './doctypes/legacy.mjs';
 export {parseConfig} from './config/parse.mjs';
 export {parseIntegration} from './integration/parse.mjs';
+export {
+  parseGapReportHandler,
+  parseGapReportReceipt,
+} from './gap-report/parse.mjs';
+export {parseDiscoverCatalog} from './discover/parse.mjs';
 export {parseCodemod} from './codemod/parse.mjs';
+export {parseDebugEvent} from './debug/parse.mjs';
 
 // ═══════════════════════════════════════════════════════════════════════
 // FIELD & SUB-TYPES — the building blocks of the docs above. Import these
@@ -58,15 +94,44 @@ export {parseCodemod} from './codemod/parse.mjs';
 // need them to author. Names carry the doc kind they belong to.
 // ═══════════════════════════════════════════════════════════════════════
 export type {
+  ProviderId,
+  ArtifactId,
+  DocId,
+  ProviderInstanceId,
+  ContentDigest,
+  ContributionKind,
+  ArtifactIdentity,
+  ProviderInstance,
+  AuthoredDoc,
+  AuthoredDocKindOf,
+  AuthoredDocSnapshot,
+  AuthoredDocSource,
+  AuthoredDocEntry,
+} from './identity/type.js';
+export type {
+  // shared graph
+  AuthoredDocKind,
+  DocAudience,
+  DocPlacement,
+  AuthoredDocGraphFields,
   // component
   SingleComponentDoc,
   MultiComponentDoc,
   ComponentEntry,
+  ComponentDeprecation,
   ComponentGroupDoc,
   ComponentTranslationDoc,
   ComponentPropDoc,
   ComponentExampleDoc,
   ComponentAnatomyElement,
+  ComponentAccessibilityRequirement,
+  ComponentAccessibilityThemeStatus,
+  ComponentAccessibilityThemeApplicability,
+  ComponentAccessibilityThemeMeasurement,
+  ComponentAccessibilityThemeResult,
+  ComponentAccessibilityThemeMode,
+  ComponentAccessibilityThemeTable,
+  ComponentAccessibilityThemeCoverage,
   ComponentBestPractice,
   ComponentSlotElement,
   ComponentPlaygroundConfig,
@@ -85,8 +150,19 @@ export type {
   // reference
   ReferenceSection,
   ReferenceContentBlock,
+  GraphContentBlock,
   ReferenceTokenPreviewType,
   ReferenceTranslationDoc,
+  WorkflowStep,
+  WorkflowDocBlock,
+  CollectionDocBlock,
+  ReferenceDocBlock,
+  // namespace
+  NamespaceProviderScope,
+  NamespaceSlotAcceptance,
+  NamespaceSlot,
+  NamespaceAdoptionSource,
+  NamespaceAdoptionRule,
   // template
   TemplateCategory,
   // schema
@@ -95,14 +171,36 @@ export type {
   CommandArgDoc,
   CommandOptionDoc,
   CommandExampleDoc,
+  CommandOutsideProject,
   // enum
   EnumMemberDoc,
-} from './doctypes/types';
-export type {PostCodemodHook} from './config/type';
+  // icon set
+  IconSetDefault,
+  IconSetIcon,
+  IconSetMatch,
+  IconSetMatchConfidence,
+  IconSetSource,
+  IconSetVariant,
+  IconSetAdapter,
+} from './doctypes/types.js';
+export type {PostCodemodHook, DebugConfig} from './config/type.js';
+export type {
+  // debug
+  DebugSchemaVersion,
+  DebugOutcome,
+  DebugOptionSource,
+  DebugResultKind,
+  DebugInvocationSource,
+  DebugEventError,
+  DebugEventOutput,
+  DebugEventEnv,
+  DebugEventProject,
+  DebugEventHandler,
+} from './debug/type.js';
 export type {
   AstryxCodemodDef,
   AstryxConfigCodemodDef,
   AstryxCodemodFile,
   AstryxCodemodApi,
   AstryxCodemodTransform,
-} from './codemod/type';
+} from './codemod/type.js';

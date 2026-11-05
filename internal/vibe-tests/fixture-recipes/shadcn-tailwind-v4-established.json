@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "fixture": "shadcn-tailwind-v4-established",
+  "synthetic": false,
+  "source": "https://github.com/shadcn-ui/ui",
+  "generator": "shadcn",
+  "version": "4.19.0",
+  "commit": "ee628d75dea87325735fafa7c54f5d7d7edb8774",
+  "license": "MIT",
+  "commands": [
+    {
+      "command": "pnpm dlx shadcn@4.19.0 init --template vite --base radix --yes --css-variables --no-monorepo",
+      "flags": [
+        "--template",
+        "vite",
+        "--base",
+        "radix",
+        "--yes",
+        "--css-variables",
+        "--no-monorepo"
+      ]
+    }
+  ],
+  "authoredPatches": [
+    "Authored a minimal Vite structure rather than copying a generated application wholesale.",
+    "Kept the standard Tailwind v4 @theme inline mapping and light/dark semantic vocabulary.",
+    "Added only the utilities, button, card, form, table, status, and controlled portal surfaces needed by the fixture.",
+    "Added a dialog containing independently controlled tooltip and popover portals so layering remains observable after setup.",
+    "Pinned every dependency, pnpm, and the Node 24 range."
+  ],
+  "refresh": {
+    "command": "pnpm -F @astryxdesign/vibe-tests fixtures:refresh -- shadcn-tailwind-v4-established",
+    "notes": "Compare a fresh pinned generator run, apply only intentional structural updates, regenerate the lockfile, then refresh this manifest."
+  },
+  "manifest": {
+    "algorithm": "sha256",
+    "files": {
+      "components.json": "27e08414c8f0ffc12ab6f8f07256972e880e83237cfa386edcf096f90e4b099a",
+      "index.html": "b86ce1a6b448761d8e76df200b6d9e7e49eac94e4cf1e31d89b09ac1f27d81dd",
+      "package.json": "7b011c4c37a7dff9f824562f53cbd5a0a75349ed051ad855fbaa9c8936c92863",
+      "pnpm-lock.yaml": "7507bfc1d716f179916d4e551ad46f1f9ba57c3b8fbe33fd22f03b3d3fa624e4",
+      "src/App.tsx": "1721f8ac051579b94ca182e8aec4ce5979fd744f3e79f78c74d669fd4e5d1ab7",
+      "src/components/ui/button.tsx": "614113bbe9fbc62d68ee3e945db21a8b08b5cc01d36099b1b6036c8cbd7fa9f9",
+      "src/components/ui/card.tsx": "7de658f3074fd050902de9a3e38d0bc88b2db22847f415d747b960eb76267c62",
+      "src/index.css": "eb1b20830fa4d8d46558ea8c92643619dfd8f86c4368a656e24f0f0c263af977",
+      "src/lib/utils.ts": "a0e8b51c4b589071e7490780e8a314dffbcfecf122e6afdd08dc70d3a85758b7",
+      "src/main.tsx": "47cc0b4b1cc9e21351c3a37b160d7f64277f59cd57937659022cdae97608a6a5",
+      "tsconfig.json": "72aab8b5cea94fcd1f58d1add78bf7755f4442f4c8e190c93b5435c63d1550aa",
+      "vite.config.ts": "b8d5ada26e919016d1992c3a03ffa2d21c237879e0582db4f662986869ca30a4"
+    }
+  }
+}

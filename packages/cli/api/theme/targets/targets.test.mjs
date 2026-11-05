@@ -16,14 +16,24 @@ describe('themeTargets (api/theme/targets)', () => {
     expect(result.data.filter).toBeNull();
     expect(result.data.targets.length).toBeGreaterThan(100);
     expect(result.data.componentCount).toBeGreaterThan(50);
-    for (const t of result.data.targets) {
-      expect(Object.keys(t).sort()).toEqual([
-        'className',
-        'component',
-        'key',
-        'props',
-        'states',
-      ]);
+    const allowedKeys = new Set([
+      'className',
+      'component',
+      'key',
+      'props',
+      'states',
+    ]);
+    for (const target of result.data.targets) {
+      expect(target).toMatchObject({
+        className: expect.any(String),
+        component: expect.any(String),
+        key: expect.any(String),
+        props: expect.any(Array),
+        states: expect.any(Array),
+      });
+      expect(Object.keys(target).filter(key => !allowedKeys.has(key))).toEqual(
+        [],
+      );
     }
   }, 60_000);
 
@@ -38,6 +48,21 @@ describe('themeTargets (api/theme/targets)', () => {
       'switch-thumb',
     ]);
   }, 60_000);
+
+  it.each(['table-header', 'table-body', 'table-footer'])(
+    '%s appears once under the Table owner',
+    async target => {
+      const {data} = await themeTargets('Table');
+      const matches = data.targets.filter(entry => entry.key === target);
+      expect(data.componentCount).toBe(1);
+      expect(matches).toHaveLength(1);
+      expect(matches[0]).toMatchObject({
+        key: target,
+        component: 'Table',
+      });
+    },
+    60_000,
+  );
 
   // Half the system's keys contain "button" (chat-send-button, toggle-button,
   // …). A component name has to mean the component, or `theme targets Button`

@@ -1,17 +1,25 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
+import * as stylex from '@stylexjs/stylex';
 import {Badge} from '@astryxdesign/core/Badge';
+import {IconButton} from '@astryxdesign/core/IconButton';
 import {useState} from 'react';
 import {
   DropdownMenu,
   DropdownMenuItem,
   DropdownMenuDivider,
+  DropdownMenuGroup,
   DropdownMenuCheckboxItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSubMenu,
+  type DropdownMenuProps,
 } from '@astryxdesign/core/DropdownMenu';
+import {Button} from '@astryxdesign/core/Button';
+import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
+import {TextInput} from '@astryxdesign/core/TextInput';
+import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {
   PencilIcon,
   TrashIcon,
@@ -41,13 +49,19 @@ const meta: Meta<typeof DropdownMenu> = {
     items: {
       description: 'Menu items (items, dividers, or sections)',
     },
+    presentation: {
+      control: 'select',
+      options: ['popover', 'bottom-sheet'],
+      description: 'Surface used to present data-driven menu actions',
+    },
     isMenuOpen: {
       control: 'boolean',
       description: 'Controlled open state',
     },
     menuWidth: {
       control: 'text',
-      description: 'Custom menu width (number for px or CSS string)',
+      description:
+        'Minimum menu width for lengths, or preferred width for intrinsic keywords; capped to the available viewport space',
     },
     placement: {
       control: 'select',
@@ -68,12 +82,90 @@ const meta: Meta<typeof DropdownMenu> = {
 
 export default meta;
 type Story = StoryObj<typeof DropdownMenu>;
+// Story args the tooltip regression spec drives through the URL.
+type StoryArgs = Omit<DropdownMenuProps, 'items' | 'children'>;
+
+const readinessStyles = stylex.create({
+  viewportStoryCanvas: {
+    boxSizing: 'border-box',
+    inlineSize: '100%',
+    minBlockSize: '100dvh',
+    paddingBlockStart: spacingVars['--spacing-4'],
+    paddingBlockEnd: spacingVars['--spacing-4'],
+    paddingInlineStart: spacingVars['--spacing-4'],
+    paddingInlineEnd: spacingVars['--spacing-4'],
+    overflow: 'clip',
+  },
+  edgeAnchorRow: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+  },
+});
+
+const PROJECT_ACTIONS = [
+  {
+    label: 'Edit project',
+    description: 'Update the project details.',
+    icon: PencilIcon,
+  },
+  {
+    label: 'Duplicate project',
+    description: 'Create a copy of this project.',
+    icon: DocumentDuplicateIcon,
+  },
+  {
+    label: 'Share project',
+    description: 'Invite people to collaborate.',
+    icon: ShareIcon,
+  },
+  {
+    label: 'Archive project',
+    description: 'Move this project out of active work.',
+    icon: ArchiveBoxIcon,
+  },
+] as const;
+
+function CompactDrillInActionSheet() {
+  return (
+    <DropdownMenu
+      button={{label: 'Project actions'}}
+      presentation="bottom-sheet"
+      items={[
+        {label: 'Rename project', icon: PencilIcon},
+        {
+          label: 'Move to project',
+          icon: FolderPlusIcon,
+          items: PROJECT_DESTINATIONS.slice(0, 4).map(([label, team]) => ({
+            label,
+            description: team,
+            icon: FolderPlusIcon,
+          })),
+        },
+        {label: 'Archive project', icon: ArchiveBoxIcon},
+      ]}
+    />
+  );
+}
+
+const PROJECT_DESTINATIONS = [
+  ['Apollo launch', 'Marketing'],
+  ['Customer insights', 'Research'],
+  ['Design systems', 'Platform'],
+  ['Growth experiments', 'Product'],
+  ['Incident review', 'Operations'],
+  ['Mobile quality', 'Engineering'],
+  ['Quarterly planning', 'Strategy'],
+  ['Recruiting plan', 'People'],
+  ['Security follow-up', 'Trust'],
+  ['Website refresh', 'Brand'],
+] as const;
 
 // Basic usage
 export const Default: Story = {
-  render: () => (
+  render: (args: StoryArgs) => (
     <DropdownMenu
       button={{label: 'Actions'}}
+      {...args}
       items={[
         {label: 'Edit', onClick: () => console.log('Edit clicked')},
         {label: 'Duplicate', onClick: () => console.log('Duplicate clicked')},
@@ -231,6 +323,32 @@ export const Controlled: Story = {
         />
       </div>
     );
+  },
+};
+
+// Mounted already open: the menu is visible on first render, but focus stays
+// where it was. Only an open the user initiates moves focus into the first
+// item; from the focused trigger, ArrowDown walks into the open menu (#5976).
+export const MountedOpen: Story = {
+  render: function MountedOpenStory() {
+    const [isOpen, setIsOpen] = useState(true);
+    return (
+      <DropdownMenu
+        button={{label: 'Sort'}}
+        isMenuOpen={isOpen}
+        onOpenChange={setIsOpen}>
+        <DropdownMenuItem label="Newest" />
+        <DropdownMenuItem label="Oldest" />
+      </DropdownMenu>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A controlled menu mounted with `isMenuOpen` true renders open without taking focus; `document.activeElement` stays on the page until the user opens the menu themselves. Tab to the trigger, then ArrowDown enters the already-open menu at the first item.',
+      },
+    },
   },
 };
 
@@ -447,8 +565,8 @@ export const NoChevron: Story = {
 
 // Compound-component mode — JSX children with interactive items
 export const CompoundBasic: Story = {
-  render: () => (
-    <DropdownMenu button={{label: 'Actions'}}>
+  render: ({presentation: _, ...args}: StoryArgs) => (
+    <DropdownMenu button={{label: 'Actions'}} {...args}>
       <DropdownMenuItem
         icon={PencilIcon}
         label="Edit"
@@ -566,6 +684,38 @@ export const CompoundWithDescriptions: Story = {
   ),
 };
 
+export const CompoundWithGroups: Story = {
+  render: () => (
+    <DropdownMenu button={{label: 'Version'}}>
+      <DropdownMenuGroup title="Version history">
+        <DropdownMenuItem
+          icon={ArrowDownTrayIcon}
+          label="Restore this version"
+          onClick={() => console.log('Restore')}
+        />
+        <DropdownMenuItem
+          icon={DocumentDuplicateIcon}
+          label="Compare with current"
+          onClick={() => console.log('Compare')}
+        />
+      </DropdownMenuGroup>
+      <DropdownMenuDivider />
+      <DropdownMenuGroup title="Add to message">
+        <DropdownMenuItem
+          icon={ShareIcon}
+          label="As a link"
+          onClick={() => console.log('Link')}
+        />
+        <DropdownMenuItem
+          icon={DocumentPlusIcon}
+          label="As a snippet"
+          onClick={() => console.log('Snippet')}
+        />
+      </DropdownMenuGroup>
+    </DropdownMenu>
+  ),
+};
+
 export const PlacementAbove: Story = {
   render: () => (
     <DropdownMenu
@@ -646,6 +796,7 @@ export const LabCheckboxItems: Story = {
   render: function LabCheckboxItemsStory() {
     const [showArchived, setShowArchived] = useState(false);
     const [showDrafts, setShowDrafts] = useState(true);
+    const [syncFolders, setSyncFolders] = useState(true);
     return (
       <DropdownMenu button={{label: 'View'}}>
         <DropdownMenuCheckboxItem
@@ -659,8 +810,31 @@ export const LabCheckboxItems: Story = {
           value={showDrafts}
           onChange={setShowDrafts}
         />
+        <DropdownMenuCheckboxItem
+          label="Sync folders"
+          icon={ArchiveBoxIcon}
+          endContent={
+            <span data-testid="dropdown-menu-checkbox-item-end-content">
+              <Badge label="Beta" />
+            </span>
+          }
+          value={syncFolders}
+          onChange={setSyncFolders}
+        />
+        <DropdownMenuCheckboxItem
+          label="Managed by your organization"
+          value={true}
+          isDisabled
+        />
       </DropdownMenu>
     );
+  },
+  tags: ['visual-theme-matrix'],
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector('button');
+    if (trigger instanceof HTMLElement) {
+      trigger.click();
+    }
   },
   parameters: {
     docs: {
@@ -868,4 +1042,619 @@ export const ModeParity: Story = {
       </DropdownMenu>
     </div>
   ),
+};
+
+// =============================================================================
+// Responsive and Interaction Readiness Evidence
+// =============================================================================
+
+export const ActionSheetPresentation: Story = {
+  name: 'Presentation / action sheet',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '560px'},
+      description: {
+        story:
+          'Forces DropdownMenu’s bottom-sheet presentation for a short, flat set of actions. It uses BottomSheet behavior including dialog focus, a scrim, Escape, and swipe dismissal.',
+      },
+    },
+  },
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
+      <DropdownMenu
+        presentation="bottom-sheet"
+        button={{label: 'Project actions'}}
+        items={PROJECT_ACTIONS.map(action => ({
+          ...action,
+          onClick: () => console.log(`${action.label} selected`),
+        }))}
+      />
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector('button');
+    if (trigger instanceof HTMLElement) {
+      trigger.click();
+    }
+  },
+};
+
+export const ActionSheetCustomTrigger: Story = {
+  name: 'Presentation / action sheet, custom trigger',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '560px'},
+      description: {
+        story:
+          'A control the caller renders opens the bottom-sheet presentation. When the sheet closes, focus returns to that control, with a focus ring only after keyboard input.',
+      },
+    },
+  },
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
+      <DropdownMenu
+        presentation="bottom-sheet"
+        renderTrigger={props => (
+          <IconButton
+            icon={<EllipsisHorizontalIcon />}
+            label="Project actions"
+            variant="ghost"
+            {...props}
+          />
+        )}
+        items={PROJECT_ACTIONS.map(action => ({
+          ...action,
+          onClick: () => console.log(`${action.label} selected`),
+        }))}
+      />
+    </div>
+  ),
+};
+
+export const SectionedActionSheetPresentation: Story = {
+  name: 'Presentation / sectioned action sheet',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '560px'},
+      description: {
+        story:
+          'Shows titled sections in the bottom-sheet presentation. Section headings and spacious action rows share the same inline content edge.',
+      },
+    },
+  },
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
+      <DropdownMenu
+        presentation="bottom-sheet"
+        button={{label: 'File actions'}}
+        items={[
+          {
+            type: 'section',
+            title: 'Create',
+            items: [{label: 'New file'}, {label: 'New folder'}],
+          },
+          {
+            type: 'section',
+            title: 'Manage',
+            items: [{label: 'Share file'}, {label: 'Archive file'}],
+          },
+        ]}
+      />
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector('button');
+    if (trigger instanceof HTMLElement) {
+      trigger.click();
+    }
+  },
+};
+
+export const AdaptiveActionPresentation: Story = {
+  name: 'Presentation / adaptive action menu',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '560px'},
+      description: {
+        story:
+          'Uses DropdownMenu’s adaptive presentation: a BottomSheet on compact coarse-pointer layouts and an anchored popover elsewhere.',
+      },
+    },
+  },
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
+      <DropdownMenu
+        presentation="adaptive"
+        button={{label: 'Project actions'}}
+        items={PROJECT_ACTIONS.map(action => ({
+          ...action,
+          onClick: () => console.log(`${action.label} selected`),
+        }))}
+      />
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector('button');
+    if (trigger instanceof HTMLElement) {
+      trigger.click();
+    }
+  },
+};
+
+export const CompactDrillInPresentation: Story = {
+  name: 'Presentation / compact drill-in hierarchy',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '560px'},
+      description: {
+        story:
+          'Uses DropdownMenu’s bottom-sheet presentation for a hierarchy that cannot fit as adjacent flyouts. Move to project drills into a second list with a Back action while BottomSheet owns the modal contract.',
+      },
+    },
+  },
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
+      <CompactDrillInActionSheet />
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector('button');
+    if (trigger instanceof HTMLElement) {
+      trigger.click();
+      await new Promise<void>(resolve =>
+        requestAnimationFrame(() => resolve()),
+      );
+      const submenuRow = Array.from(canvasElement.querySelectorAll('li')).find(
+        item => item.textContent?.includes('Move to project'),
+      );
+      submenuRow?.querySelector('button')?.click();
+    }
+  },
+};
+
+export const CompactDrillInPresentationRTL: Story = {
+  ...CompactDrillInPresentation,
+  name: 'Presentation / compact drill-in hierarchy / RTL',
+  globals: {
+    viewport: {value: 'mobile1', isRotated: false},
+    direction: 'rtl',
+  },
+};
+
+export const ViewportFit: Story = {
+  name: 'Readiness / viewport fit',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        story:
+          'Uses the actual Storybook viewport. The menu requests a 640px minimum width near the inline edge and must keep 16px safe-area-aware gutters instead of widening the page.',
+      },
+    },
+  },
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
+      <div {...stylex.props(readinessStyles.edgeAnchorRow)}>
+        <DropdownMenu
+          button={{label: 'Project actions'}}
+          alignment="end"
+          menuWidth={640}
+          items={[
+            {label: 'Rename project', onClick: () => {}},
+            {label: 'Duplicate project', onClick: () => {}},
+            {
+              label: 'Share with external collaborators and reviewers',
+              onClick: () => {},
+            },
+            {type: 'divider'},
+            {label: 'Archive project', onClick: () => {}},
+          ]}
+        />
+      </div>
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector('button');
+    if (trigger instanceof HTMLElement) {
+      trigger.click();
+    }
+  },
+};
+
+export const TallContentOverflow: Story = {
+  name: 'Readiness / tall content overflow',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        story:
+          'Uses the actual Storybook viewport and a realistic project list. The anchored menu stays at or below 300px and scrolls internally, so its actions remain reachable without scrolling the page.',
+      },
+    },
+  },
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
+      <DropdownMenu button={{label: 'Move to project'}} menuWidth={280}>
+        {PROJECT_DESTINATIONS.map(([label, team]) => (
+          <DropdownMenuItem
+            key={label}
+            label={label}
+            description={team}
+            onClick={() => {}}
+          />
+        ))}
+      </DropdownMenu>
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector('button');
+    if (trigger instanceof HTMLElement) {
+      trigger.click();
+    }
+  },
+};
+
+export const SubmenuViewportFit: Story = {
+  name: 'Readiness / submenu edge fit',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        story:
+          'Uses the actual Storybook viewport with concise parent and child menus that can fit side by side. The submenu flips toward the available side, remains separated from its parent, and stays within viewport gutters. Use the compact drill-in example when the hierarchy cannot fit this contract.',
+      },
+    },
+  },
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
+      <div {...stylex.props(readinessStyles.edgeAnchorRow)}>
+        <DropdownMenu
+          button={{label: 'Project actions'}}
+          alignment="end"
+          menuWidth={140}>
+          <DropdownMenuItem label="Rename" onClick={() => {}} />
+          <DropdownMenuSubMenu label="Move to" menuWidth={140}>
+            <DropdownMenuItem label="Research" onClick={() => {}} />
+            <DropdownMenuItem label="Platform" onClick={() => {}} />
+            <DropdownMenuItem label="Engineering" onClick={() => {}} />
+          </DropdownMenuSubMenu>
+          <DropdownMenuItem label="Archive" onClick={() => {}} />
+        </DropdownMenu>
+      </div>
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const trigger = canvasElement.querySelector('button');
+    if (!(trigger instanceof HTMLElement)) {
+      return;
+    }
+    trigger.click();
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    const submenuTrigger = canvasElement.querySelector(
+      '[role="menuitem"][aria-haspopup="menu"]',
+    );
+    if (submenuTrigger instanceof HTMLElement) {
+      submenuTrigger.click();
+      await new Promise<void>(resolve =>
+        requestAnimationFrame(() => resolve()),
+      );
+
+      const openMenus = Array.from(
+        canvasElement.querySelectorAll<HTMLElement>('[role="menu"]'),
+      ).filter(menu => menu.getClientRects().length > 0);
+      const [parentMenu, submenu] = openMenus;
+      if (parentMenu && submenu) {
+        const parentRect = parentMenu.getBoundingClientRect();
+        const submenuRect = submenu.getBoundingClientRect();
+        const isSeparated =
+          submenuRect.right <= parentRect.left ||
+          submenuRect.left >= parentRect.right;
+        if (!isSeparated) {
+          throw new Error('Submenu must not overlap its parent menu');
+        }
+      }
+    }
+  },
+};
+
+export const CustomTrigger: Story = {
+  name: 'Custom trigger (any control)',
+  render: () => (
+    <DropdownMenu
+      renderTrigger={props => (
+        <IconButton
+          icon={<EllipsisHorizontalIcon />}
+          label="More actions"
+          variant="ghost"
+          {...props}
+        />
+      )}>
+      <DropdownMenuItem icon={PencilIcon} label="Rename" onClick={() => {}} />
+      <DropdownMenuItem
+        icon={DocumentDuplicateIcon}
+        label="Duplicate"
+        onClick={() => {}}
+      />
+      <DropdownMenuItem
+        icon={TrashIcon}
+        label="Delete"
+        variant="destructive"
+        onClick={() => {}}
+      />
+    </DropdownMenu>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Any control can open a menu: `trigger` renders it and receives the props to spread — the press model (a mouse opens on press-down, a held finger opens with the finger down), the keyboard opens, the toggle click, and the ARIA wiring. The menu is named by that control through `aria-labelledby`.',
+      },
+    },
+  },
+};
+
+export const LinkRows: Story = {
+  name: 'Rows that navigate (href)',
+  render: () => (
+    <DropdownMenu button={{label: 'Places'}}>
+      <DropdownMenuItem icon={UserIcon} label="Profile" href="/profile" />
+      <DropdownMenuItem
+        icon={Cog6ToothIcon}
+        label="Settings"
+        href="/settings"
+        onClick={() => console.log('leaving for settings')}
+      />
+      <DropdownMenuItem
+        icon={ShareIcon}
+        label="Help center"
+        description="Opens in a new tab"
+        href="https://example.com/help"
+        target="_blank"
+      />
+      <DropdownMenuDivider />
+      <DropdownMenuItem
+        icon={TrashIcon}
+        label="Delete"
+        variant="destructive"
+        onClick={() => {}}
+      />
+    </DropdownMenu>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A row whose act is navigation takes an `href` and renders as a real anchor with role="menuitem", routed through LinkProvider. A ⌘-click, Ctrl-click or middle click keeps the browser\'s meaning (a new tab) and skips `onClick`; a plain click runs `onClick`, closes the menu and navigates. Enter and Space synthesize a click that keeps the key\'s modifiers.',
+      },
+    },
+  },
+};
+
+export const SubmenuDrillIn: Story = {
+  name: 'Submenu / drill-in on a phone',
+  parameters: {
+    viewport: {defaultViewport: 'mobile1'},
+    docs: {
+      description: {
+        story:
+          'On a phone (a coarse pointer, decided when the menu opened) a sub-menu row drills in: its rows replace the menu\'s rows in the same box, led by a "Back to <parent>" row; Back, Escape or ArrowLeft return to the row. `presentation="drill-in"` forces it, `"flyout"` keeps the flyout; the default `"adaptive"` follows the pointer.',
+      },
+    },
+  },
+  render: () => (
+    <DropdownMenu button={{label: 'Actions'}}>
+      <DropdownMenuItem icon={PencilIcon} label="Rename" onClick={() => {}} />
+      <DropdownMenuSubMenu
+        icon={FolderPlusIcon}
+        label="Move to"
+        presentation="drill-in">
+        <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        <DropdownMenuItem label="Folder B" onClick={() => {}} />
+        <DropdownMenuSubMenu icon={ArchiveBoxIcon} label="Archive">
+          <DropdownMenuItem label="2025" onClick={() => {}} />
+          <DropdownMenuItem label="2024" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenuSubMenu>
+      <DropdownMenuItem icon={TrashIcon} label="Delete" onClick={() => {}} />
+    </DropdownMenu>
+  ),
+};
+
+export const SubmenuAdaptiveFixture: Story = {
+  name: 'Submenu / adaptive fixture',
+  parameters: {docs: {disable: true}},
+  render: () => (
+    <div data-testid="drill-in-fixture" style={{padding: 16}}>
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem icon={PencilIcon} label="Rename" onClick={() => {}} />
+        <DropdownMenuSubMenu icon={FolderPlusIcon} label="Move to">
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+          <DropdownMenuItem label="Folder B" onClick={() => {}} />
+          <DropdownMenuSubMenu icon={ArchiveBoxIcon} label="Archive">
+            <DropdownMenuItem label="2025" onClick={() => {}} />
+          </DropdownMenuSubMenu>
+        </DropdownMenuSubMenu>
+        <DropdownMenuItem icon={TrashIcon} label="Delete" onClick={() => {}} />
+      </DropdownMenu>
+    </div>
+  ),
+};
+
+const LABELS = ['Bug', 'Feature', 'Documentation', 'Design', 'Performance'];
+
+/**
+ * A filter field above the rows and a "Create" button below them. Both sit in
+ * the popover beside the menu, never inside it: the menu holds only its rows,
+ * so it stays a valid menu to a screen reader, and the field and button keep
+ * their own keys and presses. The popover is a modal dialog around the menu:
+ * Tab walks field, menu, button and wraps at either end; Escape closes.
+ */
+export const HeaderAndFooter: Story = {
+  render: () => {
+    const [query, setQuery] = useState('');
+    const [created, setCreated] = useState(0);
+    const visible = LABELS.filter(label =>
+      label.toLowerCase().includes(query.trim().toLowerCase()),
+    );
+    return (
+      <>
+        <DropdownMenu
+          button={{label: 'Labels'}}
+          header={
+            <TextInput
+              label="Filter labels"
+              isLabelHidden
+              placeholder="Filter labels"
+              value={query}
+              onChange={setQuery}
+            />
+          }
+          footer={
+            <Button
+              label="Create label"
+              variant="ghost"
+              onClick={() => setCreated(count => count + 1)}
+            />
+          }>
+          {visible.map(label => (
+            <DropdownMenuItem key={label} label={label} onClick={() => {}} />
+          ))}
+          <DropdownMenuSubMenu label="Move to">
+            <DropdownMenuItem label="Archive" onClick={() => {}} />
+            <DropdownMenuItem label="Backlog" onClick={() => {}} />
+          </DropdownMenuSubMenu>
+        </DropdownMenu>
+        <output data-testid="created">{created}</output>
+      </>
+    );
+  },
+};
+
+/**
+ * A sub-menu with its own filter field and "Create" button: the Labels level
+ * of a session menu. Its surface (the flyout, or the drilled-in view on a
+ * phone) is a modal dialog named by its row, beside the menu rather than
+ * inside it: Tab walks field, rows, button and wraps; Escape returns to the
+ * row. The picks are checkbox rows, so the sub-menu stays open while several
+ * are chosen.
+ */
+export const SubMenuHeaderAndFooter: Story = {
+  name: 'Submenu / header and footer',
+  render: () => {
+    const [query, setQuery] = useState('');
+    const [picked, setPicked] = useState<ReadonlyArray<string>>(['Bug']);
+    const [created, setCreated] = useState(0);
+    const visible = LABELS.filter(label =>
+      label.toLowerCase().includes(query.trim().toLowerCase()),
+    );
+    return (
+      <div data-testid="submenu-regions-fixture" style={{padding: 16}}>
+        <DropdownMenu button={{label: 'Session'}}>
+          <DropdownMenuItem
+            icon={PencilIcon}
+            label="Rename"
+            onClick={() => {}}
+          />
+          <DropdownMenuSubMenu
+            label="Labels"
+            header={
+              <TextInput
+                label="Filter labels"
+                isLabelHidden
+                placeholder="Filter labels"
+                value={query}
+                onChange={setQuery}
+              />
+            }
+            footer={
+              <Button
+                label="Create label"
+                variant="ghost"
+                onClick={() => setCreated(count => count + 1)}
+              />
+            }>
+            {visible.map(label => (
+              <DropdownMenuCheckboxItem
+                key={label}
+                label={label}
+                value={picked.includes(label)}
+                onChange={isChecked =>
+                  setPicked(current =>
+                    isChecked
+                      ? [...current, label]
+                      : current.filter(item => item !== label),
+                  )
+                }
+              />
+            ))}
+          </DropdownMenuSubMenu>
+          <DropdownMenuItem
+            icon={TrashIcon}
+            label="Delete"
+            onClick={() => {}}
+          />
+        </DropdownMenu>
+        <output data-testid="picked">{picked.join(', ')}</output>
+        <output data-testid="created">{created}</output>
+      </div>
+    );
+  },
+};
+
+/**
+ * A sub-menu whose header holds a choice rather than a field: whether the
+ * picked labels must all match. The radio group keeps its own arrow keys, and
+ * a flyout the pointer has left stays open while focus is inside it, so the
+ * choice can still be changed from the keyboard.
+ */
+export const SubMenuHeaderChoice: Story = {
+  name: 'Submenu / header with a choice',
+  render: () => {
+    const [match, setMatch] = useState('any');
+    const [picked, setPicked] = useState<ReadonlyArray<string>>(['Bug']);
+    return (
+      <div data-testid="submenu-choice-fixture" style={{padding: 16}}>
+        <DropdownMenu button={{label: 'Filters'}}>
+          <DropdownMenuItem label="Reset" onClick={() => {}} />
+          <DropdownMenuSubMenu
+            label="Labels"
+            header={
+              <RadioList label="Match" value={match} onChange={setMatch}>
+                <RadioListItem label="Any label" value="any" />
+                <RadioListItem label="All labels" value="all" />
+              </RadioList>
+            }>
+            {LABELS.map(label => (
+              <DropdownMenuCheckboxItem
+                key={label}
+                label={label}
+                value={picked.includes(label)}
+                onChange={isChecked =>
+                  setPicked(current =>
+                    isChecked
+                      ? [...current, label]
+                      : current.filter(item => item !== label),
+                  )
+                }
+              />
+            ))}
+          </DropdownMenuSubMenu>
+        </DropdownMenu>
+        <output data-testid="match">{match}</output>
+      </div>
+    );
+  },
 };

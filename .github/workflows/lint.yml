@@ -6,52 +6,287 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
 
 permissions: {}
 
+# A new push to a pull request cancels its superseded run; each push to main
+# keeps its own uncancelled group.
+concurrency:
+  group: 'lint-${{ github.event.pull_request.number || github.run_id }}'
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
-    runs-on: 2-core-ubuntu-arm
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
+      # The public text check reads the current title and description.
+      pull-requests: read
 
     steps:
+      - name: Require a branch in this repository or the ci:run label
+        if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) }}
+        run: |
+          echo "::error::Waiting for a maintainer's ci:run label: an outside contributor's pull request runs CI once a maintainer adds it (spec:AST-030 FR17)."
+          exit 1
+      # Enough history for the merge commit to reach its merge base with the
+      # base branch, as ci.yml's check-scope checks out. At depth 1 the merge
+      # base is never found, and every pull request ran full lint.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 50
 
-      - name: Check for docsite-only changes
+      - name: Classify changed files
         if: github.event_name == 'pull_request'
         id: scope
         run: |
           git fetch origin ${{ github.base_ref }} --depth=50
           MERGE_BASE=$(git merge-base HEAD origin/${{ github.base_ref }} 2>/dev/null || echo "")
           if [ -z "$MERGE_BASE" ]; then
-            echo "docsite_only=false" >> $GITHUB_OUTPUT
+            printf 'docsite_only=false\nspec_only=false\ntooling_only=false\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          CHANGED=$(git diff --name-only "$MERGE_BASE"...HEAD)
-          NON_DOCSITE=$(echo "$CHANGED" | grep -v '^apps/docsite/' | head -1)
-          if [ -z "$NON_DOCSITE" ]; then
-            echo "docsite_only=true" >> $GITHUB_OUTPUT
+          CLASSIFIER_ROOT="$RUNNER_TEMP/change-scope"
+          CLASSIFIER_DIR="$CLASSIFIER_ROOT/.github/scripts"
+          REGISTRY_DIR="$CLASSIFIER_ROOT/scripts"
+          mkdir -p "$CLASSIFIER_DIR" "$REGISTRY_DIR"
+          CLASSIFIER="$CLASSIFIER_DIR/change-scope.cjs"
+          MATCHER="$CLASSIFIER_DIR/knowledge-paths.cjs"
+          REGISTRY="$REGISTRY_DIR/component-packages.cjs"
+          if git show "origin/${{ github.base_ref }}:.github/scripts/change-scope.cjs" > "$CLASSIFIER" 2>/dev/null \
+            && git show "origin/${{ github.base_ref }}:.github/scripts/knowledge-paths.cjs" > "$MATCHER" 2>/dev/null \
+            && git show "origin/${{ github.base_ref }}:scripts/component-packages.cjs" > "$REGISTRY" 2>/dev/null; then
+            git diff --name-status "$MERGE_BASE"...HEAD \
+              | node "$CLASSIFIER" --github-output
           else
-            echo "docsite_only=false" >> $GITHUB_OUTPUT
+            # Missing trusted policy or dependencies cannot grant a specialized
+            # lane. Run full lint until the base branch supplies the classifier.
+            printf 'docsite_only=false\nspec_only=false\ntooling_only=false\n' \
+              >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Skip for docsite-only changes
-        if: steps.scope.outputs.docsite_only == 'true'
-        run: echo "Docsite-only PR — skipping lint"
+      # Public text carries no internal identifier, host or name: each commit
+      # message and added line from the merge base to the head, and the title
+      # and description as they read when the check runs, so a re-run reads an
+      # edit (spec:AST-030 FR27). The base branch's copy of the check runs, so
+      # a pull request cannot change its own check.
+      - name: Check public text
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -u
+          CHECK_DIR="$RUNNER_TEMP/public-text"
+          mkdir -p "$CHECK_DIR/.github/scripts" "$CHECK_DIR/scripts/lib"
+          if ! git show "origin/$BASE_REF:.github/scripts/check-public-text.mjs" > "$CHECK_DIR/.github/scripts/check-public-text.mjs" 2>/dev/null; then
+            echo "::notice::The base branch has no public text check yet. It runs once the check is on the base branch."
+            exit 0
+          fi
+          # Without the shared diff reader or the digests, the check fails.
+          git show "origin/$BASE_REF:scripts/lib/review-diff.mjs" > "$CHECK_DIR/scripts/lib/review-diff.mjs" 2>/dev/null \
+            || rm -f "$CHECK_DIR/scripts/lib/review-diff.mjs"
+          git show "origin/$BASE_REF:.github/public-text-hashes.json" > "$CHECK_DIR/public-text-hashes.json" 2>/dev/null \
+            || rm -f "$CHECK_DIR/public-text-hashes.json"
+          if ! gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" > "$CHECK_DIR/pull-request.json" 2>/dev/null; then
+            echo "::notice::The current title and description could not be read, so the check reads them as of this run's event."
+            cp "$GITHUB_EVENT_PATH" "$CHECK_DIR/pull-request.json"
+          fi
+          HEAD_SHA=$(git rev-parse HEAD^2)
+          BASE_TIP=$(git rev-parse HEAD^1)
+          MERGE_BASE=$(git merge-base "$BASE_TIP" "$HEAD_SHA" 2>/dev/null || true)
+          # A branch far behind its base: deepen only the base branch and the
+          # pull request head, then, rarely, take the whole history.
+          if [ -z "$MERGE_BASE" ]; then
+            git fetch --no-tags --deepen=500 origin "$BASE_REF" "refs/pull/$PR_NUMBER/head" > /dev/null 2>&1 || true
+            MERGE_BASE=$(git merge-base "$BASE_TIP" "$HEAD_SHA" 2>/dev/null || true)
+          fi
+          if [ -z "$MERGE_BASE" ]; then
+            git fetch --no-tags --unshallow origin "$BASE_REF" "refs/pull/$PR_NUMBER/head" > /dev/null 2>&1 || true
+            MERGE_BASE=$(git merge-base "$BASE_TIP" "$HEAD_SHA" 2>/dev/null || true)
+          fi
+          if [ -z "$MERGE_BASE" ]; then
+            echo "::error title=Public text check::The merge base was not found, so the commits cannot be checked."
+            exit 1
+          fi
+          node "$CHECK_DIR/.github/scripts/check-public-text.mjs" \
+            --base "$MERGE_BASE" --head "$HEAD_SHA" \
+            --hashes "$CHECK_DIR/public-text-hashes.json" \
+            --pr-json "$CHECK_DIR/pull-request.json"
+
+      # A change to a workflow, a composite action or this config runs
+      # actionlint over the workflows, with shellcheck on their run: scripts,
+      # so a broken expression, an unknown runner label or a script that cannot
+      # work fails here instead of on every later run. actionlint checks a
+      # local action's metadata and inputs where a workflow uses it, not the
+      # action's own steps; ci-run-scripts-parse.test.mjs parses those.
+      # Any other pull request skips it in a second. The binary is pinned by
+      # version and checksum; shellcheck reports errors only, so its existing
+      # warnings never block (spec:AST-030 FR11).
+      - name: Lint changed workflows (actionlint)
+        if: github.event_name == 'pull_request'
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          MERGE_BASE=$(git merge-base HEAD "origin/$BASE_REF" 2>/dev/null || echo "")
+          if [ -n "$MERGE_BASE" ] && git diff --quiet "$MERGE_BASE"...HEAD -- .github/workflows .github/actions .github/actionlint.yaml; then
+            echo "No workflow or composite action changed; actionlint skipped."
+            exit 0
+          fi
+          if ! command -v shellcheck >/dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends shellcheck >/dev/null
+          fi
+          command -v shellcheck >/dev/null || { echo "::error::shellcheck is not installed."; exit 1; }
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_arm64.tar.gz"
+          echo "$ACTIONLINT_SHA256  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          if ! SHELLCHECK_OPTS=--severity=error "$RUNNER_TEMP/actionlint" -color -shellcheck=shellcheck -pyflakes=; then
+            echo "::error title=actionlint::A workflow or composite action has the problems listed above. To check locally, install actionlint (https://github.com/rhysd/actionlint/blob/main/docs/install.md) and shellcheck, then run SHELLCHECK_OPTS=--severity=error actionlint from the repository root."
+            exit 1
+          fi
+
+      # Merge-back carries exact published release-branch outputs into main under
+      # trusted validation (spec:AST-017 FR50). Detect its branch contract so
+      # required lint can route it to the stronger validator.
+      - name: Detect the release merge-back branch contract
+        if: github.event_name == 'pull_request'
+        id: release-merge-back-scope
+        env:
+          MERGE_BRANCH: ${{ github.head_ref }}
+        run: |
+          required=false
+          case "$MERGE_BRANCH" in
+            chore/merge-v*-to-main)
+              VERSION=${MERGE_BRANCH#chore/merge-v}
+              VERSION=${VERSION%-to-main}
+              if printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+                required=true
+              fi
+              ;;
+          esac
+          echo "required=$required" >> "$GITHUB_OUTPUT"
+
+      - name: Validate release merge-back in required lint
+        if: github.event_name == 'pull_request' && steps.release-merge-back-scope.outputs.required == 'true'
+        env:
+          MERGE_BRANCH: ${{ github.head_ref }}
+        run: |
+          set -eu
+          VERSION=${MERGE_BRANCH#chore/merge-v}
+          VERSION=${VERSION%-to-main}
+          git fetch origin main 'refs/tags/v*:refs/tags/v*' '+refs/heads/release/v*:refs/remotes/origin/release/v*'
+          TRUSTED_POLICY="$RUNNER_TEMP/release-policy"
+          mkdir -p "$TRUSTED_POLICY/scripts/release" "$TRUSTED_POLICY/scripts/lib"
+          git show origin/main:scripts/release/active-release.mjs \
+            > "$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          git show origin/main:scripts/lib/workspace-globs.mjs \
+            > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
+          VALIDATOR="$TRUSTED_POLICY/scripts/release/active-release.mjs"
+          ACTIVE_BRANCHES=$(node "$VALIDATOR" list-active --root "$GITHUB_WORKSPACE")
+          # The merge commit's first parent: the main commit it was built on.
+          # A main that moved since would read its new files as deletions.
+          node "$VALIDATOR" validate-merge-back \
+            --root "$GITHUB_WORKSPACE" \
+            --base HEAD^1 \
+            --release-ref "v$VERSION" \
+            --active-branches "$ACTIVE_BRANCHES"
+
+      # A change that ships to consumers names its package in a Changeset, and a
+      # released CLI JSON id cannot disappear unclassified. The release coverage
+      # audit runs the same classifier over the cut range, so the two agree.
+      - name: Check Changeset coverage
+        if: github.event_name == 'pull_request' && steps.release-merge-back-scope.outputs.required != 'true'
+        env:
+          MERGE_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          # The checked-out merge commit and its first parent (the base branch
+          # tip): exactly what this pull request lands.
+          git fetch --no-tags --depth=2 origin "$MERGE_SHA"
+          RELEASED=$(git ls-remote --tags --refs origin 'v*' \
+            | sed 's#.*refs/tags/##' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -n 1)
+          if [ -z "$RELEASED" ]; then
+            echo 'No vX.Y.Z release tag found to compare CLI JSON ids against.'
+            exit 1
+          fi
+          git fetch --no-tags --depth=1 origin "+refs/tags/${RELEASED}:refs/tags/${RELEASED}"
+          node scripts/release/changeset-coverage.mjs pr \
+            --base "$MERGE_SHA^1" --head "$MERGE_SHA" --released "$RELEASED"
+
+      - name: Skip full lint for lightweight docs
+        if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true'
+        run: echo "Lightweight documentation PR — skipping full lint"
 
       - uses: ./.github/actions/setup
-        if: steps.scope.outputs.docsite_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
 
       - name: Clear ESLint cache
-        if: steps.scope.outputs.docsite_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: rm -rf .eslintcache node_modules/.cache
 
       - name: Check repository guardrails
-        if: steps.scope.outputs.docsite_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: pnpm check:repo
 
+      # The CLI README's generated tables (commands, error codes, response
+      # types) ship to consumers. A merge from main can silently drop a
+      # generated row, so the merged result is checked against its sources.
+      - name: Check generated CLI README
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        run: node packages/cli/scripts/generate-cli-readme.mjs --check
+
+      # The pre-commit hook formats staged files with Prettier, but a commit
+      # made without it can land unformatted source. A later local merge of
+      # main then reformats that file inside the merging pull request, which
+      # fails Changeset coverage there for a change it never meant to make.
+      # Check the files this pull request changes, with the Prettier and the
+      # file patterns the hook uses. The docs and spec lanes skip it with the
+      # rest of full lint, since they install no dependencies.
+      - name: Check formatting of changed files
+        if: github.event_name == 'pull_request' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        env:
+          MERGE_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          git diff --name-only --diff-filter=ACMR -z "$MERGE_SHA^1" "$MERGE_SHA" -- '*.ts' '*.tsx' '*.md' \
+            > "$RUNNER_TEMP/changed-files"
+          status=0
+          xargs -0 -r ./node_modules/.bin/prettier --list-different --ignore-unknown \
+            < "$RUNNER_TEMP/changed-files" > "$RUNNER_TEMP/unformatted" || status=$?
+          if [ -s "$RUNNER_TEMP/unformatted" ]; then
+            # Quote each path so the printed command pastes into a shell even
+            # for a path with parentheses, such as a Next.js route group.
+            fix="pnpm exec prettier --write $(sed "s/'/'\\\\''/g; s/.*/'&'/" "$RUNNER_TEMP/unformatted" | tr '\n' ' ')"
+            echo 'These changed files are not formatted with the repository'"'"'s Prettier settings:'
+            sed 's/^/  /' "$RUNNER_TEMP/unformatted"
+            echo 'Format them, commit, and push again:'
+            echo "  $fix"
+            echo "::error title=Unformatted files::Run: $fix"
+            exit 1
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=Prettier failed::Prettier failed (xargs exited with $status); see the error above."
+            exit "$status"
+          fi
+          echo 'Every changed file is formatted.'
+
+      # The full pass, type-aware rules over packages/core/src included, needs
+      # about 1.9 GB of heap on main. Node's default limit on this 16 GB runner
+      # is about 2 GB, so a pull request that adds a few percent of source can
+      # run it out of memory. 4 GB keeps the pass under half the runner's RAM
+      # (3.3 GB peak RSS measured) and spends less time in GC.
       - name: Run ESLint
-        if: steps.scope.outputs.docsite_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
         run: pnpm lint

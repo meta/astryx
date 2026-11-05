@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The report a human (or the release cron) actually looks at.
+ * @file The visual report a pull-request reviewer actually looks at.
  *
  * @input  a verdict and the three image sets it refers to
  * @output one self-contained index.html
@@ -80,6 +80,21 @@ function keyList(keys, title, note) {
 </section>`;
 }
 
+/** @param {string[]} keys @param {'added' | 'removed'} kind */
+function oneSidedEvidence(keys, kind) {
+  if (keys.length === 0) return '';
+  const imageKind = kind === 'added' ? 'after' : 'before';
+  const title = kind === 'added' ? 'Added' : 'Removed';
+  return `
+<h2>${title} (${keys.length})</h2>
+${keys
+  .map(key => {
+    const safe = escapeHtml(key);
+    return `<section class="change"><h3><code>${safe}</code></h3><p class="muted">${imageKind}</p><div class="stage"><img src="${imageKind}/${safe}.png" alt="${imageKind}"></div></section>`;
+  })
+  .join('')}`;
+}
+
 /** @param {object} targeting */
 function targetingSection(targeting) {
   const rows = [
@@ -120,11 +135,27 @@ function targetingSection(targeting) {
 
 /**
  * @param {object} verdict
- * @param {{acceptHint?: string}} [options]
+ * @param {{acceptHint?: string, oneSidedEvidence?: boolean}} [options]
  * @returns {string}
  */
 export function renderReport(verdict, options = {}) {
   const {counts, status} = verdict;
+  if (status === 'skipped') {
+    return `<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visual gate — skipped</title>
+<style>
+  body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 24px; max-width: 720px; }
+  .status { color: #0969da; }
+</style>
+<h1>Visual gate <span class="status">skipped</span></h1>
+<p><b>Capture deferred.</b> ${escapeHtml(verdict.reason)}</p>
+<p>${counts.total} planned shot(s) were not compared. This is not passing visual evidence.</p>
+</html>
+`;
+  }
   const acceptHint =
     options.acceptHint ??
     'node .github/scripts/visual-gate/gate.mjs accept --keys <key,key> --reason "<why the after is correct>"';
@@ -200,8 +231,8 @@ ${verdict.failures?.length ? `<section class="list"><h2>Failed to capture <span 
     .join('')}</ul></section>` : ''}
 ${verdict.changes.length ? `<h2>Changed (${verdict.changes.length})</h2>` : '<p class="ok">No shot changed against the baseline.</p>'}
 ${verdict.changes.map(changeSection).join('')}
-${keyList(verdict.added ?? [], 'Added', 'New shots with no baseline to regress against — adopted on the next promotion.')}
-${keyList(verdict.removed ?? [], 'Removed', 'Baseline shots whose story no longer exists.')}
+${options.oneSidedEvidence ? oneSidedEvidence(verdict.added ?? [], 'added') : keyList(verdict.added ?? [], 'Added', 'New shots with no baseline to regress against — adopted on the next promotion.')}
+${options.oneSidedEvidence ? oneSidedEvidence(verdict.removed ?? [], 'removed') : keyList(verdict.removed ?? [], 'Removed', 'Baseline shots whose story no longer exists.')}
 ${targetingSection(verdict.targeting ?? {})}
 <script>
   for (const views of document.querySelectorAll('.views')) {

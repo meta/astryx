@@ -4,6 +4,10 @@
  * Astryx community page — channels + contribution paths + live
  * contributors.
  *
+ * @input Static community content plus an hourly-cached GitHub contributor list
+ * @output Community landing page with contribution paths and contributor wall
+ * @position Public docsite page at /community
+ *
  * Three roles in one page (modeled after how Astro, Svelte, and
  * GitHub Primer balance the same trio):
  *
@@ -22,6 +26,7 @@
 
 import type {ReactNode} from 'react';
 import type {Metadata} from 'next';
+import {cacheLife} from 'next/cache';
 import {FileText, Scale} from 'lucide-react';
 import {NavSurfaceMode} from './NavSurfaceMode';
 import {TemplatesPreview} from '../_landing/TemplatesPreview';
@@ -731,10 +736,12 @@ interface Contributor {
 // Astryx contributor set. Falls back to Unsplash placeholders if the
 // request fails.
 async function fetchContributors(): Promise<Contributor[]> {
+  'use cache';
+  cacheLife('hours');
+
   try {
     const res = await fetch(
       'https://api.github.com/repos/facebook/stylex/contributors?per_page=50',
-      {next: {revalidate: 3600}},
     );
     if (!res.ok) {
       return [];

@@ -1,5 +1,45 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Trigger button',
+    required: true,
+    description:
+      'Icon-only Button that provides the visible overflow-menu entry point.',
+  },
+  {
+    name: 'Icon-resolved trigger icon',
+    required: false,
+    description:
+      'Default semantic three-dot artwork resolved from the active Icon registry.',
+  },
+  {
+    name: 'Caller-rendered trigger content',
+    required: false,
+    description:
+      'Arbitrary React content supplied directly as the trigger icon override.',
+  },
+  {
+    name: 'Menu surface',
+    required: true,
+    description:
+      'DropdownMenu panel that also carries MoreMenu’s current public target.',
+  },
+  {
+    name: 'Pointer action row',
+    required: false,
+    description:
+      'Action or nested-action trigger row rendered by DropdownMenu in the anchored presentation.',
+  },
+  {
+    name: 'Touch action row',
+    required: false,
+    description:
+      'ListItem button rendered by DropdownMenu in the BottomSheet presentation.',
+  },
+];
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
 
 export const docs = {
@@ -62,6 +102,11 @@ export const docs = {
       default: "'start'",
     },
     {
+      name: 'presentation',
+      type: "'popover' | 'bottom-sheet' | 'adaptive'",
+      description: 'Presentation policy forwarded to DropdownMenu. `adaptive` keeps the anchored popover on pointer-based layouts and uses a BottomSheet on a compact touch screen: a coarse primary pointer, and a viewport narrower than the theme `md` breakpoint (768px by default) or shorter than 500px. Omitted, the menu is the anchored popover, and under a finger, on every device, the finger that opened it picks a row only after moving 10 px. Pass \'popover\' to keep the pointer behavior on every device, the settle rule included.',
+    },
+    {
       name: 'onOpenChange',
       type: '(isOpen: boolean) => void',
       description: 'Callback fired when the menu opens or closes.',
@@ -88,11 +133,13 @@ export const docs = {
     ],
   },
   usage: {
+    anatomy,
     description:
       'MoreMenu is a three-dot button that opens a list of actions. Use it for secondary actions that don\'t need to be always visible, like in table rows, card headers, or toolbars.',
     bestPractices: [
       { guidance: true, description: 'Use for overflow or secondary actions; keep primary actions visible outside the menu.' },
       { guidance: true, description: 'Use dividers or sections to group related actions when the menu has many items.' },
+      { guidance: true, description: 'Use `presentation="adaptive"` when the visible overflow trigger should open a thumb-reachable BottomSheet on compact touch devices.' },
       { guidance: false, description: 'Hide primary actions inside a MoreMenu; they should be directly visible.' },
     ],
   },
@@ -154,6 +201,11 @@ export const docsZh = {
       default: "'start'",
     },
     {
+      name: 'presentation',
+      type: "'popover' | 'bottom-sheet' | 'adaptive'",
+      description: '菜单呈现策略。`adaptive` 在指针布局中使用锚定浮层，在主指针为粗略指针且视口宽度小于主题的 `md` 断点（默认 768px）或高度小于 500px 时使用 BottomSheet。省略时，菜单为锚定浮层；在任何设备上用手指操作时，打开菜单的手指移动 10 px 后才会选择菜单项。传入 \'popover\' 可在所有设备上保持指针行为，包括稳定规则。',
+    },
+    {
       name: 'xstyle',
       type: 'StyleXStyles',
       description:
@@ -171,6 +223,7 @@ export const docsZh = {
     bestPractices: [
       { guidance: true, description: 'Use for overflow or secondary actions; keep primary actions visible outside the menu.' },
       { guidance: true, description: 'Use dividers or sections to group related actions when the menu has many items.' },
+      { guidance: true, description: 'Use `presentation="adaptive"` when the visible overflow trigger should open a thumb-reachable BottomSheet on compact touch devices.' },
       { guidance: false, description: 'Hide primary actions inside a MoreMenu; they should be directly visible.' },
     ],
   },
@@ -181,11 +234,13 @@ export const docsDense = {
   description:
     'Overflow menu w/ three-dot icon trigger. Convenience wrapper composing icon-only Button w/ dropdown menu, eliminating boilerplate for state management, positioning, accessibility.',
   usage: {
+    anatomy,
     description:
       'MoreMenu is a three-dot button that opens a list of actions. Use it for secondary actions that don\'t need to be always visible, like in table rows, card headers, or toolbars.',
     bestPractices: [
       { guidance: true, description: 'Use for overflow or secondary actions; keep primary actions visible outside the menu.' },
       { guidance: true, description: 'Use dividers or sections to group related actions when the menu has many items.' },
+      { guidance: true, description: 'Use `presentation="adaptive"` when the visible overflow trigger should open a thumb-reachable BottomSheet on compact touch devices.' },
       { guidance: false, description: 'Hide primary actions inside a MoreMenu; they should be directly visible.' },
     ],
   },
@@ -199,6 +254,8 @@ export const docsDense = {
     placement: 'Menu position relative to trigger. Logical (RTL mirrors).',
     alignment:
       "Alignment along the placement axis. 'end' aligns with the trigger's trailing edge.",
+    presentation:
+      'Popover, BottomSheet, or adaptive compact-touch presentation.',
     xstyle:
       'StyleX styles for layout customization (margins, positioning, sizing). Must be stylex.create() value.',
   },

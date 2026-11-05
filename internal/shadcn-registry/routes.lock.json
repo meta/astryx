@@ -1,0 +1,5375 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "name": "component-alert-dialog",
+      "path": "components/alert-dialog",
+      "aliases": []
+    },
+    {
+      "name": "component-app-shell",
+      "path": "components/app-shell",
+      "aliases": []
+    },
+    {
+      "name": "component-aspect-ratio",
+      "path": "components/aspect-ratio",
+      "aliases": []
+    },
+    {
+      "name": "component-avatar",
+      "path": "components/avatar",
+      "aliases": []
+    },
+    {
+      "name": "component-avatar-group",
+      "path": "components/avatar-group",
+      "aliases": []
+    },
+    {
+      "name": "component-avatar-group-overflow",
+      "path": "components/avatar-group-overflow",
+      "aliases": []
+    },
+    {
+      "name": "component-avatar-status-dot",
+      "path": "components/avatar-status-dot",
+      "aliases": []
+    },
+    {
+      "name": "component-badge",
+      "path": "components/badge",
+      "aliases": []
+    },
+    {
+      "name": "component-banner",
+      "path": "components/banner",
+      "aliases": []
+    },
+    {
+      "name": "component-base-typeahead",
+      "path": "components/base-typeahead",
+      "aliases": []
+    },
+    {
+      "name": "component-blockquote",
+      "path": "components/blockquote",
+      "aliases": []
+    },
+    {
+      "name": "component-bottom-sheet",
+      "path": "components/bottom-sheet",
+      "aliases": []
+    },
+    {
+      "name": "component-bottom-sheet-switcher",
+      "path": "components/bottom-sheet-switcher",
+      "aliases": []
+    },
+    {
+      "name": "component-breadcrumb-item",
+      "path": "components/breadcrumb-item",
+      "aliases": []
+    },
+    {
+      "name": "component-breadcrumbs",
+      "path": "components/breadcrumbs",
+      "aliases": []
+    },
+    {
+      "name": "component-button",
+      "path": "components/button",
+      "aliases": []
+    },
+    {
+      "name": "component-button-group",
+      "path": "components/button-group",
+      "aliases": []
+    },
+    {
+      "name": "component-calendar",
+      "path": "components/calendar",
+      "aliases": []
+    },
+    {
+      "name": "component-card",
+      "path": "components/card",
+      "aliases": []
+    },
+    {
+      "name": "component-carousel",
+      "path": "components/carousel",
+      "aliases": []
+    },
+    {
+      "name": "component-center",
+      "path": "components/center",
+      "aliases": []
+    },
+    {
+      "name": "component-charts-chart",
+      "path": "components/charts/chart",
+      "aliases": []
+    },
+    {
+      "name": "component-charts-chart-axis",
+      "path": "components/charts/chart-axis",
+      "aliases": []
+    },
+    {
+      "name": "component-charts-chart-grid",
+      "path": "components/charts/chart-grid",
+      "aliases": []
+    },
+    {
+      "name": "component-charts-chart-legend",
+      "path": "components/charts/chart-legend",
+      "aliases": []
+    },
+    {
+      "name": "component-charts-chart-swatch",
+      "path": "components/charts/chart-swatch",
+      "aliases": []
+    },
+    {
+      "name": "component-charts-chart-tooltip",
+      "path": "components/charts/chart-tooltip",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-composer",
+      "path": "components/chat-composer",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-composer-drawer",
+      "path": "components/chat-composer-drawer",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-composer-input",
+      "path": "components/chat-composer-input",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-composer-token-element",
+      "path": "components/chat-composer-token-element",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-dictation-button",
+      "path": "components/chat-dictation-button",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-layout",
+      "path": "components/chat-layout",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-layout-scroll-button",
+      "path": "components/chat-layout-scroll-button",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-message",
+      "path": "components/chat-message",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-message-bubble",
+      "path": "components/chat-message-bubble",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-message-list",
+      "path": "components/chat-message-list",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-message-metadata",
+      "path": "components/chat-message-metadata",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-send-button",
+      "path": "components/chat-send-button",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-system-message",
+      "path": "components/chat-system-message",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-tokenized-text",
+      "path": "components/chat-tokenized-text",
+      "aliases": []
+    },
+    {
+      "name": "component-chat-tool-calls",
+      "path": "components/chat-tool-calls",
+      "aliases": []
+    },
+    {
+      "name": "component-check-indicator",
+      "path": "components/check-indicator",
+      "aliases": []
+    },
+    {
+      "name": "component-checkbox-indicator",
+      "path": "components/checkbox-indicator",
+      "aliases": []
+    },
+    {
+      "name": "component-checkbox-input",
+      "path": "components/checkbox-input",
+      "aliases": []
+    },
+    {
+      "name": "component-checkbox-list",
+      "path": "components/checkbox-list",
+      "aliases": []
+    },
+    {
+      "name": "component-checkbox-list-item",
+      "path": "components/checkbox-list-item",
+      "aliases": []
+    },
+    {
+      "name": "component-citation",
+      "path": "components/citation",
+      "aliases": []
+    },
+    {
+      "name": "component-clickable-card",
+      "path": "components/clickable-card",
+      "aliases": []
+    },
+    {
+      "name": "component-code",
+      "path": "components/code",
+      "aliases": []
+    },
+    {
+      "name": "component-code-block",
+      "path": "components/code-block",
+      "aliases": []
+    },
+    {
+      "name": "component-collapsible",
+      "path": "components/collapsible",
+      "aliases": []
+    },
+    {
+      "name": "component-collapsible-group",
+      "path": "components/collapsible-group",
+      "aliases": []
+    },
+    {
+      "name": "component-command-palette",
+      "path": "components/command-palette",
+      "aliases": []
+    },
+    {
+      "name": "component-command-palette-empty",
+      "path": "components/command-palette-empty",
+      "aliases": []
+    },
+    {
+      "name": "component-command-palette-footer",
+      "path": "components/command-palette-footer",
+      "aliases": []
+    },
+    {
+      "name": "component-command-palette-group",
+      "path": "components/command-palette-group",
+      "aliases": []
+    },
+    {
+      "name": "component-command-palette-input",
+      "path": "components/command-palette-input",
+      "aliases": []
+    },
+    {
+      "name": "component-command-palette-item",
+      "path": "components/command-palette-item",
+      "aliases": []
+    },
+    {
+      "name": "component-command-palette-list",
+      "path": "components/command-palette-list",
+      "aliases": []
+    },
+    {
+      "name": "component-complex-selector",
+      "path": "components/complex-selector",
+      "aliases": []
+    },
+    {
+      "name": "component-context-menu",
+      "path": "components/context-menu",
+      "aliases": []
+    },
+    {
+      "name": "component-context-menu-item",
+      "path": "components/context-menu-item",
+      "aliases": []
+    },
+    {
+      "name": "component-date-input",
+      "path": "components/date-input",
+      "aliases": []
+    },
+    {
+      "name": "component-date-range-input",
+      "path": "components/date-range-input",
+      "aliases": []
+    },
+    {
+      "name": "component-date-time-input",
+      "path": "components/date-time-input",
+      "aliases": []
+    },
+    {
+      "name": "component-dialog",
+      "path": "components/dialog",
+      "aliases": []
+    },
+    {
+      "name": "component-dialog-header",
+      "path": "components/dialog-header",
+      "aliases": []
+    },
+    {
+      "name": "component-divider",
+      "path": "components/divider",
+      "aliases": []
+    },
+    {
+      "name": "component-drawer",
+      "path": "components/drawer",
+      "aliases": [
+        "components/lab/drawer"
+      ]
+    },
+    {
+      "name": "component-drawer-header",
+      "path": "components/drawer-header",
+      "aliases": [
+        "components/lab/drawer-header"
+      ]
+    },
+    {
+      "name": "component-dropdown-menu",
+      "path": "components/dropdown-menu",
+      "aliases": []
+    },
+    {
+      "name": "component-dropdown-menu-checkbox-item",
+      "path": "components/dropdown-menu-checkbox-item",
+      "aliases": []
+    },
+    {
+      "name": "component-dropdown-menu-divider",
+      "path": "components/dropdown-menu-divider",
+      "aliases": []
+    },
+    {
+      "name": "component-dropdown-menu-group",
+      "path": "components/dropdown-menu-group",
+      "aliases": []
+    },
+    {
+      "name": "component-dropdown-menu-item",
+      "path": "components/dropdown-menu-item",
+      "aliases": []
+    },
+    {
+      "name": "component-dropdown-menu-radio-group",
+      "path": "components/dropdown-menu-radio-group",
+      "aliases": []
+    },
+    {
+      "name": "component-dropdown-menu-radio-item",
+      "path": "components/dropdown-menu-radio-item",
+      "aliases": []
+    },
+    {
+      "name": "component-dropdown-menu-sub-menu",
+      "path": "components/dropdown-menu-sub-menu",
+      "aliases": []
+    },
+    {
+      "name": "component-empty-state",
+      "path": "components/empty-state",
+      "aliases": []
+    },
+    {
+      "name": "component-field",
+      "path": "components/field",
+      "aliases": []
+    },
+    {
+      "name": "component-field-label",
+      "path": "components/field-label",
+      "aliases": []
+    },
+    {
+      "name": "component-field-status",
+      "path": "components/field-status",
+      "aliases": []
+    },
+    {
+      "name": "component-file-input",
+      "path": "components/file-input",
+      "aliases": []
+    },
+    {
+      "name": "component-form-layout",
+      "path": "components/form-layout",
+      "aliases": []
+    },
+    {
+      "name": "component-grid",
+      "path": "components/grid",
+      "aliases": []
+    },
+    {
+      "name": "component-grid-span",
+      "path": "components/grid-span",
+      "aliases": []
+    },
+    {
+      "name": "component-h-stack",
+      "path": "components/h-stack",
+      "aliases": []
+    },
+    {
+      "name": "component-heading",
+      "path": "components/heading",
+      "aliases": []
+    },
+    {
+      "name": "component-hover-card",
+      "path": "components/hover-card",
+      "aliases": []
+    },
+    {
+      "name": "component-icon",
+      "path": "components/icon",
+      "aliases": []
+    },
+    {
+      "name": "component-icon-button",
+      "path": "components/icon-button",
+      "aliases": []
+    },
+    {
+      "name": "component-info-tip",
+      "path": "components/info-tip",
+      "aliases": [
+        "components/lab/info-tip"
+      ]
+    },
+    {
+      "name": "component-input-group",
+      "path": "components/input-group",
+      "aliases": []
+    },
+    {
+      "name": "component-input-group-text",
+      "path": "components/input-group-text",
+      "aliases": []
+    },
+    {
+      "name": "component-internationalization-provider",
+      "path": "components/internationalization-provider",
+      "aliases": []
+    },
+    {
+      "name": "component-item",
+      "path": "components/item",
+      "aliases": []
+    },
+    {
+      "name": "component-kbd",
+      "path": "components/kbd",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chart-area",
+      "path": "components/lab/chart-area",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chart-bar",
+      "path": "components/lab/chart-bar",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chart-candlestick",
+      "path": "components/lab/chart-candlestick",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chart-dot",
+      "path": "components/lab/chart-dot",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chart-dot-gl",
+      "path": "components/lab/chart-dot-gl",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chart-dot-gl-interactive",
+      "path": "components/lab/chart-dot-gl-interactive",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chart-heatmap-gl",
+      "path": "components/lab/chart-heatmap-gl",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chart-line",
+      "path": "components/lab/chart-line",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chart-stream-gl",
+      "path": "components/lab/chart-stream-gl",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chat-emoji-picker",
+      "path": "components/lab/chat-emoji-picker",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chat-reaction-bar",
+      "path": "components/lab/chat-reaction-bar",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chat-reasoning",
+      "path": "components/lab/chat-reasoning",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chat-typing-indicator",
+      "path": "components/lab/chat-typing-indicator",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-chat-unread-divider",
+      "path": "components/lab/chat-unread-divider",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-circle-check-indicator",
+      "path": "components/lab/circle-check-indicator",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-circular-progress",
+      "path": "components/lab/circular-progress",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-code-editor",
+      "path": "components/lab/code-editor",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-comment-composer",
+      "path": "components/lab/comment-composer",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-comment-pin",
+      "path": "components/lab/comment-pin",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-comment-thread",
+      "path": "components/lab/comment-thread",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-comments",
+      "path": "components/lab/comments",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-diff-viewer",
+      "path": "components/lab/diff-viewer",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-emoji-picker",
+      "path": "components/lab/emoji-picker",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-list-input",
+      "path": "components/lab/list-input",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-log-stream",
+      "path": "components/lab/log-stream",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-radial-chart",
+      "path": "components/lab/radial-chart",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-sankey-chart",
+      "path": "components/lab/sankey-chart",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-schedule",
+      "path": "components/lab/schedule",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-selectable-card-group",
+      "path": "components/lab/selectable-card-group",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-stat",
+      "path": "components/lab/stat",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-svg-icon",
+      "path": "components/lab/svg-icon",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-three-d-bar",
+      "path": "components/lab/three-d-bar",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-three-d-chart",
+      "path": "components/lab/three-d-chart",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-three-d-scatter",
+      "path": "components/lab/three-d-scatter",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-three-d-scatter-gl",
+      "path": "components/lab/three-d-scatter-gl",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-three-d-surface",
+      "path": "components/lab/three-d-surface",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tour",
+      "path": "components/lab/tour",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tour-step",
+      "path": "components/lab/tour-step",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-transfer-list",
+      "path": "components/lab/transfer-list",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-transfer-list-selector",
+      "path": "components/lab/transfer-list-selector",
+      "aliases": []
+    },
+    {
+      "name": "component-layer-provider",
+      "path": "components/layer-provider",
+      "aliases": []
+    },
+    {
+      "name": "component-layout",
+      "path": "components/layout",
+      "aliases": []
+    },
+    {
+      "name": "component-layout-content",
+      "path": "components/layout-content",
+      "aliases": []
+    },
+    {
+      "name": "component-layout-footer",
+      "path": "components/layout-footer",
+      "aliases": []
+    },
+    {
+      "name": "component-layout-header",
+      "path": "components/layout-header",
+      "aliases": []
+    },
+    {
+      "name": "component-layout-panel",
+      "path": "components/layout-panel",
+      "aliases": []
+    },
+    {
+      "name": "component-lightbox",
+      "path": "components/lightbox",
+      "aliases": []
+    },
+    {
+      "name": "component-link",
+      "path": "components/link",
+      "aliases": []
+    },
+    {
+      "name": "component-link-provider",
+      "path": "components/link-provider",
+      "aliases": []
+    },
+    {
+      "name": "component-list",
+      "path": "components/list",
+      "aliases": []
+    },
+    {
+      "name": "component-list-item",
+      "path": "components/list-item",
+      "aliases": []
+    },
+    {
+      "name": "component-markdown",
+      "path": "components/markdown",
+      "aliases": []
+    },
+    {
+      "name": "component-media-theme",
+      "path": "components/media-theme",
+      "aliases": []
+    },
+    {
+      "name": "component-metadata-list",
+      "path": "components/metadata-list",
+      "aliases": []
+    },
+    {
+      "name": "component-metadata-list-item",
+      "path": "components/metadata-list-item",
+      "aliases": []
+    },
+    {
+      "name": "component-mobile-nav",
+      "path": "components/mobile-nav",
+      "aliases": []
+    },
+    {
+      "name": "component-mobile-nav-toggle",
+      "path": "components/mobile-nav-toggle",
+      "aliases": []
+    },
+    {
+      "name": "component-more-menu",
+      "path": "components/more-menu",
+      "aliases": []
+    },
+    {
+      "name": "component-multi-selector",
+      "path": "components/multi-selector",
+      "aliases": []
+    },
+    {
+      "name": "component-nav-heading-menu",
+      "path": "components/nav-heading-menu",
+      "aliases": []
+    },
+    {
+      "name": "component-nav-icon",
+      "path": "components/nav-icon",
+      "aliases": []
+    },
+    {
+      "name": "component-number-input",
+      "path": "components/number-input",
+      "aliases": []
+    },
+    {
+      "name": "component-outline",
+      "path": "components/outline",
+      "aliases": []
+    },
+    {
+      "name": "component-overflow-list",
+      "path": "components/overflow-list",
+      "aliases": []
+    },
+    {
+      "name": "component-overlay",
+      "path": "components/overlay",
+      "aliases": []
+    },
+    {
+      "name": "component-pagination",
+      "path": "components/pagination",
+      "aliases": []
+    },
+    {
+      "name": "component-popover",
+      "path": "components/popover",
+      "aliases": []
+    },
+    {
+      "name": "component-power-search",
+      "path": "components/power-search",
+      "aliases": []
+    },
+    {
+      "name": "component-progress-bar",
+      "path": "components/progress-bar",
+      "aliases": []
+    },
+    {
+      "name": "component-radio-indicator",
+      "path": "components/radio-indicator",
+      "aliases": []
+    },
+    {
+      "name": "component-radio-list",
+      "path": "components/radio-list",
+      "aliases": []
+    },
+    {
+      "name": "component-radio-list-item",
+      "path": "components/radio-list-item",
+      "aliases": []
+    },
+    {
+      "name": "component-resize-handle",
+      "path": "components/resize-handle",
+      "aliases": []
+    },
+    {
+      "name": "component-richtext-rich-text-editor",
+      "path": "components/richtext/rich-text-editor",
+      "aliases": []
+    },
+    {
+      "name": "component-scrollable-area",
+      "path": "components/scrollable-area",
+      "aliases": []
+    },
+    {
+      "name": "component-section",
+      "path": "components/section",
+      "aliases": []
+    },
+    {
+      "name": "component-segmented-control",
+      "path": "components/segmented-control",
+      "aliases": []
+    },
+    {
+      "name": "component-segmented-control-item",
+      "path": "components/segmented-control-item",
+      "aliases": []
+    },
+    {
+      "name": "component-selectable-card",
+      "path": "components/selectable-card",
+      "aliases": []
+    },
+    {
+      "name": "component-selector",
+      "path": "components/selector",
+      "aliases": []
+    },
+    {
+      "name": "component-selector-option",
+      "path": "components/selector-option",
+      "aliases": []
+    },
+    {
+      "name": "component-side-nav",
+      "path": "components/side-nav",
+      "aliases": []
+    },
+    {
+      "name": "component-side-nav-collapse-button",
+      "path": "components/side-nav-collapse-button",
+      "aliases": []
+    },
+    {
+      "name": "component-side-nav-heading",
+      "path": "components/side-nav-heading",
+      "aliases": []
+    },
+    {
+      "name": "component-side-nav-item",
+      "path": "components/side-nav-item",
+      "aliases": []
+    },
+    {
+      "name": "component-side-nav-section",
+      "path": "components/side-nav-section",
+      "aliases": []
+    },
+    {
+      "name": "component-skeleton",
+      "path": "components/skeleton",
+      "aliases": []
+    },
+    {
+      "name": "component-slider",
+      "path": "components/slider",
+      "aliases": []
+    },
+    {
+      "name": "component-spinner",
+      "path": "components/spinner",
+      "aliases": []
+    },
+    {
+      "name": "component-stack",
+      "path": "components/stack",
+      "aliases": []
+    },
+    {
+      "name": "component-stack-item",
+      "path": "components/stack-item",
+      "aliases": []
+    },
+    {
+      "name": "component-status-dot",
+      "path": "components/status-dot",
+      "aliases": []
+    },
+    {
+      "name": "component-step",
+      "path": "components/step",
+      "aliases": []
+    },
+    {
+      "name": "component-stepper",
+      "path": "components/stepper",
+      "aliases": []
+    },
+    {
+      "name": "component-switch",
+      "path": "components/switch",
+      "aliases": []
+    },
+    {
+      "name": "component-syntax-theme",
+      "path": "components/syntax-theme",
+      "aliases": []
+    },
+    {
+      "name": "component-tab",
+      "path": "components/tab",
+      "aliases": []
+    },
+    {
+      "name": "component-tab-list",
+      "path": "components/tab-list",
+      "aliases": []
+    },
+    {
+      "name": "component-tab-menu",
+      "path": "components/tab-menu",
+      "aliases": []
+    },
+    {
+      "name": "component-table",
+      "path": "components/table",
+      "aliases": []
+    },
+    {
+      "name": "component-table-body",
+      "path": "components/table-body",
+      "aliases": []
+    },
+    {
+      "name": "component-table-cell",
+      "path": "components/table-cell",
+      "aliases": []
+    },
+    {
+      "name": "component-table-footer",
+      "path": "components/table-footer",
+      "aliases": []
+    },
+    {
+      "name": "component-table-header",
+      "path": "components/table-header",
+      "aliases": []
+    },
+    {
+      "name": "component-table-header-cell",
+      "path": "components/table-header-cell",
+      "aliases": []
+    },
+    {
+      "name": "component-table-row",
+      "path": "components/table-row",
+      "aliases": []
+    },
+    {
+      "name": "component-table-selection-toolbar",
+      "path": "components/table-selection-toolbar",
+      "aliases": []
+    },
+    {
+      "name": "component-text",
+      "path": "components/text",
+      "aliases": []
+    },
+    {
+      "name": "component-text-area",
+      "path": "components/text-area",
+      "aliases": []
+    },
+    {
+      "name": "component-text-input",
+      "path": "components/text-input",
+      "aliases": []
+    },
+    {
+      "name": "component-theme",
+      "path": "components/theme",
+      "aliases": []
+    },
+    {
+      "name": "component-thumbnail",
+      "path": "components/thumbnail",
+      "aliases": []
+    },
+    {
+      "name": "component-time-input",
+      "path": "components/time-input",
+      "aliases": []
+    },
+    {
+      "name": "component-timer",
+      "path": "components/timer",
+      "aliases": []
+    },
+    {
+      "name": "component-timestamp",
+      "path": "components/timestamp",
+      "aliases": []
+    },
+    {
+      "name": "component-toast",
+      "path": "components/toast",
+      "aliases": []
+    },
+    {
+      "name": "component-toggle-button",
+      "path": "components/toggle-button",
+      "aliases": []
+    },
+    {
+      "name": "component-toggle-button-group",
+      "path": "components/toggle-button-group",
+      "aliases": []
+    },
+    {
+      "name": "component-token",
+      "path": "components/token",
+      "aliases": []
+    },
+    {
+      "name": "component-tokenizer",
+      "path": "components/tokenizer",
+      "aliases": []
+    },
+    {
+      "name": "component-toolbar",
+      "path": "components/toolbar",
+      "aliases": []
+    },
+    {
+      "name": "component-tooltip",
+      "path": "components/tooltip",
+      "aliases": []
+    },
+    {
+      "name": "component-top-nav",
+      "path": "components/top-nav",
+      "aliases": []
+    },
+    {
+      "name": "component-top-nav-heading",
+      "path": "components/top-nav-heading",
+      "aliases": []
+    },
+    {
+      "name": "component-top-nav-item",
+      "path": "components/top-nav-item",
+      "aliases": []
+    },
+    {
+      "name": "component-top-nav-mega-menu",
+      "path": "components/top-nav-mega-menu",
+      "aliases": []
+    },
+    {
+      "name": "component-top-nav-mega-menu-featured-card",
+      "path": "components/top-nav-mega-menu-featured-card",
+      "aliases": []
+    },
+    {
+      "name": "component-top-nav-mega-menu-item",
+      "path": "components/top-nav-mega-menu-item",
+      "aliases": []
+    },
+    {
+      "name": "component-top-nav-menu",
+      "path": "components/top-nav-menu",
+      "aliases": []
+    },
+    {
+      "name": "component-tree-list",
+      "path": "components/tree-list",
+      "aliases": []
+    },
+    {
+      "name": "component-typeahead",
+      "path": "components/typeahead",
+      "aliases": []
+    },
+    {
+      "name": "component-typeahead-item",
+      "path": "components/typeahead-item",
+      "aliases": []
+    },
+    {
+      "name": "component-v-stack",
+      "path": "components/v-stack",
+      "aliases": []
+    },
+    {
+      "name": "component-vega-vega-chart",
+      "path": "components/vega/vega-chart",
+      "aliases": []
+    },
+    {
+      "name": "component-visually-hidden",
+      "path": "components/visually-hidden",
+      "aliases": []
+    },
+    {
+      "name": "example-alert-dialog-loading",
+      "path": "examples/alert-dialog/loading",
+      "aliases": []
+    },
+    {
+      "name": "example-app-shell-content-only",
+      "path": "examples/app-shell/content-only",
+      "aliases": []
+    },
+    {
+      "name": "example-app-shell-side-nav-only",
+      "path": "examples/app-shell/side-nav-only",
+      "aliases": []
+    },
+    {
+      "name": "example-app-shell-top-nav-only",
+      "path": "examples/app-shell/top-nav-only",
+      "aliases": []
+    },
+    {
+      "name": "example-app-shell-top-nav-with-side-nav",
+      "path": "examples/app-shell/top-nav-with-side-nav",
+      "aliases": []
+    },
+    {
+      "name": "example-app-shell-with-banner",
+      "path": "examples/app-shell/with-banner",
+      "aliases": []
+    },
+    {
+      "name": "example-aspect-ratio-16-9-widescreen-image",
+      "path": "examples/aspect-ratio/16-9-widescreen-image",
+      "aliases": []
+    },
+    {
+      "name": "example-aspect-ratio-circle-image",
+      "path": "examples/aspect-ratio/circle-image",
+      "aliases": []
+    },
+    {
+      "name": "example-aspect-ratio-image-gallery",
+      "path": "examples/aspect-ratio/image-gallery",
+      "aliases": []
+    },
+    {
+      "name": "example-aspect-ratio-loading-skeleton",
+      "path": "examples/aspect-ratio/loading-skeleton",
+      "aliases": []
+    },
+    {
+      "name": "example-aspect-ratio-square-image",
+      "path": "examples/aspect-ratio/square-image",
+      "aliases": []
+    },
+    {
+      "name": "example-avatar-group-overflow-custom-text",
+      "path": "examples/avatar-group-overflow/custom-text",
+      "aliases": []
+    },
+    {
+      "name": "example-avatar-group-overflow-default-count",
+      "path": "examples/avatar-group-overflow/default-count",
+      "aliases": []
+    },
+    {
+      "name": "example-avatar-group-default",
+      "path": "examples/avatar-group/default",
+      "aliases": []
+    },
+    {
+      "name": "example-avatar-group-interactive",
+      "path": "examples/avatar-group/interactive",
+      "aliases": []
+    },
+    {
+      "name": "example-avatar-status-dot-variants",
+      "path": "examples/avatar-status-dot/variants",
+      "aliases": []
+    },
+    {
+      "name": "example-avatar-fallback-chain",
+      "path": "examples/avatar/fallback-chain",
+      "aliases": []
+    },
+    {
+      "name": "example-avatar-initials",
+      "path": "examples/avatar/initials",
+      "aliases": []
+    },
+    {
+      "name": "example-avatar-interactive",
+      "path": "examples/avatar/interactive",
+      "aliases": []
+    },
+    {
+      "name": "example-avatar-photo",
+      "path": "examples/avatar/photo",
+      "aliases": []
+    },
+    {
+      "name": "example-avatar-status-dot",
+      "path": "examples/avatar/status-dot",
+      "aliases": []
+    },
+    {
+      "name": "example-avatar-tooltip",
+      "path": "examples/avatar/tooltip",
+      "aliases": []
+    },
+    {
+      "name": "example-avatar-user-card",
+      "path": "examples/avatar/user-card",
+      "aliases": []
+    },
+    {
+      "name": "example-badge-colors",
+      "path": "examples/badge/colors",
+      "aliases": []
+    },
+    {
+      "name": "example-badge-counts",
+      "path": "examples/badge/counts",
+      "aliases": []
+    },
+    {
+      "name": "example-badge-status",
+      "path": "examples/badge/status",
+      "aliases": []
+    },
+    {
+      "name": "example-banner-action",
+      "path": "examples/banner/action",
+      "aliases": []
+    },
+    {
+      "name": "example-banner-collapsible",
+      "path": "examples/banner/collapsible",
+      "aliases": []
+    },
+    {
+      "name": "example-banner-dismiss",
+      "path": "examples/banner/dismiss",
+      "aliases": []
+    },
+    {
+      "name": "example-banner-floating",
+      "path": "examples/banner/floating",
+      "aliases": []
+    },
+    {
+      "name": "example-banner-full-width",
+      "path": "examples/banner/full-width",
+      "aliases": []
+    },
+    {
+      "name": "example-banner-statuses",
+      "path": "examples/banner/statuses",
+      "aliases": []
+    },
+    {
+      "name": "example-base-typeahead-custom-search-bar",
+      "path": "examples/base-typeahead/custom-search-bar",
+      "aliases": []
+    },
+    {
+      "name": "example-blockquote-testimonials",
+      "path": "examples/blockquote/testimonials",
+      "aliases": []
+    },
+    {
+      "name": "example-blockquote-with-attribution",
+      "path": "examples/blockquote/with-attribution",
+      "aliases": []
+    },
+    {
+      "name": "example-bottom-sheet-switcher-review-flow",
+      "path": "examples/bottom-sheet-switcher/review-flow",
+      "aliases": []
+    },
+    {
+      "name": "example-bottom-sheet-height-variants",
+      "path": "examples/bottom-sheet/height-variants",
+      "aliases": []
+    },
+    {
+      "name": "example-bottom-sheet-mobile-keyboard",
+      "path": "examples/bottom-sheet/mobile-keyboard",
+      "aliases": []
+    },
+    {
+      "name": "example-bottom-sheet-no-scrim",
+      "path": "examples/bottom-sheet/no-scrim",
+      "aliases": []
+    },
+    {
+      "name": "example-bottom-sheet-snap-points",
+      "path": "examples/bottom-sheet/snap-points",
+      "aliases": []
+    },
+    {
+      "name": "example-breadcrumb-item-basic",
+      "path": "examples/breadcrumb-item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-breadcrumbs-deep-path",
+      "path": "examples/breadcrumbs/deep-path",
+      "aliases": []
+    },
+    {
+      "name": "example-breadcrumbs-icons",
+      "path": "examples/breadcrumbs/icons",
+      "aliases": []
+    },
+    {
+      "name": "example-breadcrumbs-menu-item",
+      "path": "examples/breadcrumbs/menu-item",
+      "aliases": []
+    },
+    {
+      "name": "example-breadcrumbs-separators",
+      "path": "examples/breadcrumbs/separators",
+      "aliases": []
+    },
+    {
+      "name": "example-breadcrumbs-variants",
+      "path": "examples/breadcrumbs/variants",
+      "aliases": []
+    },
+    {
+      "name": "example-button-group-basic",
+      "path": "examples/button-group/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-button-group-floating",
+      "path": "examples/button-group/floating",
+      "aliases": []
+    },
+    {
+      "name": "example-button-end-slot",
+      "path": "examples/button/end-slot",
+      "aliases": []
+    },
+    {
+      "name": "example-button-floating",
+      "path": "examples/button/floating",
+      "aliases": []
+    },
+    {
+      "name": "example-button-icon",
+      "path": "examples/button/icon",
+      "aliases": []
+    },
+    {
+      "name": "example-button-sizes",
+      "path": "examples/button/sizes",
+      "aliases": []
+    },
+    {
+      "name": "example-button-variants",
+      "path": "examples/button/variants",
+      "aliases": []
+    },
+    {
+      "name": "example-calendar-constraints",
+      "path": "examples/calendar/constraints",
+      "aliases": []
+    },
+    {
+      "name": "example-calendar-range",
+      "path": "examples/calendar/range",
+      "aliases": []
+    },
+    {
+      "name": "example-calendar-single",
+      "path": "examples/calendar/single",
+      "aliases": []
+    },
+    {
+      "name": "example-calendar-two-months",
+      "path": "examples/calendar/two-months",
+      "aliases": []
+    },
+    {
+      "name": "example-card-callout",
+      "path": "examples/card/callout",
+      "aliases": []
+    },
+    {
+      "name": "example-card-elevations",
+      "path": "examples/card/elevations",
+      "aliases": []
+    },
+    {
+      "name": "example-card-layout",
+      "path": "examples/card/layout",
+      "aliases": []
+    },
+    {
+      "name": "example-card-simple",
+      "path": "examples/card/simple",
+      "aliases": []
+    },
+    {
+      "name": "example-card-variants",
+      "path": "examples/card/variants",
+      "aliases": []
+    },
+    {
+      "name": "example-carousel-cards",
+      "path": "examples/carousel/cards",
+      "aliases": []
+    },
+    {
+      "name": "example-carousel-snap",
+      "path": "examples/carousel/snap",
+      "aliases": []
+    },
+    {
+      "name": "example-center-horizontal-center",
+      "path": "examples/center/horizontal-center",
+      "aliases": []
+    },
+    {
+      "name": "example-center-vertical-horizontal-center",
+      "path": "examples/center/vertical-horizontal-center",
+      "aliases": []
+    },
+    {
+      "name": "example-chart-trend-comparison",
+      "path": "examples/chart/trend-comparison",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-drawer-attachments",
+      "path": "examples/chat-composer-drawer/attachments",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-drawer-collapsible",
+      "path": "examples/chat-composer-drawer/collapsible",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-drawer-feedback",
+      "path": "examples/chat-composer-drawer/feedback",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-drawer-with-progress",
+      "path": "examples/chat-composer-drawer/with-progress",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-input-controlled",
+      "path": "examples/chat-composer-input/controlled",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-input-disabled",
+      "path": "examples/chat-composer-input/disabled",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-input-mentions",
+      "path": "examples/chat-composer-input/mentions",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-input-multiple-triggers",
+      "path": "examples/chat-composer-input/multiple-triggers",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-input-slash-commands",
+      "path": "examples/chat-composer-input/slash-commands",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-attachments",
+      "path": "examples/chat-composer/attachments",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-flat",
+      "path": "examples/chat-composer/flat",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-footer-actions",
+      "path": "examples/chat-composer/footer-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-full-featured",
+      "path": "examples/chat-composer/full-featured",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-simple",
+      "path": "examples/chat-composer/simple",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-streaming",
+      "path": "examples/chat-composer/streaming",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-composer-validation",
+      "path": "examples/chat-composer/validation",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-dictation-button-basic",
+      "path": "examples/chat-dictation-button/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-dictation-button-in-composer",
+      "path": "examples/chat-dictation/button-in-composer",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-dictation-button-sizes",
+      "path": "examples/chat-dictation/button-sizes",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-dictation-button-states",
+      "path": "examples/chat-dictation/button-states",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-layout-scroll-button-labels",
+      "path": "examples/chat-layout-scroll-button/labels",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-layout-panel-view",
+      "path": "examples/chat-layout/panel-view",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-message-bubble-custom-content",
+      "path": "examples/chat-message-bubble/custom-content",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-message-bubble-density",
+      "path": "examples/chat-message-bubble/density",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-message-bubble-grouping",
+      "path": "examples/chat-message-bubble/grouping",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-message-bubble-metadata",
+      "path": "examples/chat-message-bubble/metadata",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-message-bubble-variants",
+      "path": "examples/chat-message-bubble/variants",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-message-list-density",
+      "path": "examples/chat-message-list/density",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-message-list-full-featured",
+      "path": "examples/chat-message-list/full-featured",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-message-metadata-footer-actions",
+      "path": "examples/chat-message-metadata/footer-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-message-metadata-status",
+      "path": "examples/chat-message-metadata/status",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-message-metadata-timestamps",
+      "path": "examples/chat-message-metadata/timestamps",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-message-avatar-name",
+      "path": "examples/chat-message/avatar-name",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-message-ghost",
+      "path": "examples/chat-message/ghost",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-message-multi-bubble",
+      "path": "examples/chat-message/multi-bubble",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-send-button-custom-icon",
+      "path": "examples/chat-send-button/custom-icon",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-send-button-in-composer",
+      "path": "examples/chat-send-button/in-composer",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-send-button-states",
+      "path": "examples/chat-send-button/states",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-system-message-icon",
+      "path": "examples/chat-system-message/icon",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-system-message-status-updates",
+      "path": "examples/chat-system-message/status-updates",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-system-message-variants",
+      "path": "examples/chat-system-message/variants",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-tokenized-text-basic",
+      "path": "examples/chat-tokenized-text/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-tokenized-text-colors",
+      "path": "examples/chat-tokenized-text/colors",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-tool-calls-expandable",
+      "path": "examples/chat-tool-calls/expandable",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-tool-calls-simple",
+      "path": "examples/chat-tool-calls/simple",
+      "aliases": []
+    },
+    {
+      "name": "example-chat-tool-calls-statuses",
+      "path": "examples/chat-tool-calls/statuses",
+      "aliases": []
+    },
+    {
+      "name": "example-checkbox-input-indeterminate",
+      "path": "examples/checkbox-input/indeterminate",
+      "aliases": []
+    },
+    {
+      "name": "example-checkbox-input-states",
+      "path": "examples/checkbox-input/states",
+      "aliases": []
+    },
+    {
+      "name": "example-checkbox-input-status",
+      "path": "examples/checkbox-input/status",
+      "aliases": []
+    },
+    {
+      "name": "example-checkbox-list-item-basic",
+      "path": "examples/checkbox-list-item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-checkbox-list-select-all-with-indeterminate",
+      "path": "examples/checkbox-list/select-all-with-indeterminate",
+      "aliases": []
+    },
+    {
+      "name": "example-checkbox-list-with-end-content",
+      "path": "examples/checkbox-list/with-end-content",
+      "aliases": []
+    },
+    {
+      "name": "example-citation-inline-text",
+      "path": "examples/citation/inline-text",
+      "aliases": []
+    },
+    {
+      "name": "example-citation-source-list",
+      "path": "examples/citation/source-list",
+      "aliases": []
+    },
+    {
+      "name": "example-clickable-card-elevated",
+      "path": "examples/clickable-card/elevated",
+      "aliases": []
+    },
+    {
+      "name": "example-clickable-card-with-nested-button",
+      "path": "examples/clickable-card/with-nested-button",
+      "aliases": []
+    },
+    {
+      "name": "example-code-block-code-config",
+      "path": "examples/code-block/code-config",
+      "aliases": []
+    },
+    {
+      "name": "example-code-block-code-highlighted",
+      "path": "examples/code-block/code-highlighted",
+      "aliases": []
+    },
+    {
+      "name": "example-code-block-code-scrollable",
+      "path": "examples/code-block/code-scrollable",
+      "aliases": []
+    },
+    {
+      "name": "example-code-block-code-snippet",
+      "path": "examples/code-block/code-snippet",
+      "aliases": []
+    },
+    {
+      "name": "example-code-block-code-terminal",
+      "path": "examples/code-block/code-terminal",
+      "aliases": []
+    },
+    {
+      "name": "example-code-content-types",
+      "path": "examples/code/content-types",
+      "aliases": []
+    },
+    {
+      "name": "example-code-inline",
+      "path": "examples/code/inline",
+      "aliases": []
+    },
+    {
+      "name": "example-code-text-sizes",
+      "path": "examples/code/text-sizes",
+      "aliases": []
+    },
+    {
+      "name": "example-collapsible-group-density",
+      "path": "examples/collapsible-group/density",
+      "aliases": [
+        "examples/collapsible-group/accordion"
+      ]
+    },
+    {
+      "name": "example-collapsible-controlled",
+      "path": "examples/collapsible/controlled",
+      "aliases": []
+    },
+    {
+      "name": "example-collapsible-faq",
+      "path": "examples/collapsible/faq",
+      "aliases": [
+        "examples/collapsible/divided-accordion"
+      ]
+    },
+    {
+      "name": "example-collapsible-multiple-mode",
+      "path": "examples/collapsible/multiple-mode",
+      "aliases": []
+    },
+    {
+      "name": "example-collapsible-single-mode",
+      "path": "examples/collapsible/single-mode",
+      "aliases": []
+    },
+    {
+      "name": "example-collapsible-with-dividers",
+      "path": "examples/collapsible/with-dividers",
+      "aliases": []
+    },
+    {
+      "name": "example-command-palette-empty-basic",
+      "path": "examples/command-palette-empty/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-command-palette-footer-basic",
+      "path": "examples/command-palette-footer/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-command-palette-group-basic",
+      "path": "examples/command-palette-group/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-command-palette-input-with-end-content",
+      "path": "examples/command-palette-input/with-end-content",
+      "aliases": []
+    },
+    {
+      "name": "example-command-palette-item-basic",
+      "path": "examples/command-palette-item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-command-palette-list-item-states",
+      "path": "examples/command-palette-list/item-states",
+      "aliases": []
+    },
+    {
+      "name": "example-command-palette-async-search",
+      "path": "examples/command-palette/async-search",
+      "aliases": []
+    },
+    {
+      "name": "example-command-palette-custom-footer",
+      "path": "examples/command-palette/custom-footer",
+      "aliases": []
+    },
+    {
+      "name": "example-command-palette-grouped",
+      "path": "examples/command-palette/grouped",
+      "aliases": []
+    },
+    {
+      "name": "example-command-palette-picker-mode",
+      "path": "examples/command-palette/picker-mode",
+      "aliases": []
+    },
+    {
+      "name": "example-command-palette-rich-items",
+      "path": "examples/command-palette/rich-items",
+      "aliases": []
+    },
+    {
+      "name": "example-comment-pin-host-owned-placement",
+      "path": "examples/comment-pin/host-owned-placement",
+      "aliases": []
+    },
+    {
+      "name": "example-comment-thread-in-a-popover",
+      "path": "examples/comment-thread/in-a-popover",
+      "aliases": []
+    },
+    {
+      "name": "example-comments-inline-comments",
+      "path": "examples/comments/inline-comments",
+      "aliases": []
+    },
+    {
+      "name": "example-comments-inside-a-card",
+      "path": "examples/comments/inside-a-card",
+      "aliases": []
+    },
+    {
+      "name": "example-complex-selector-deadline-picker",
+      "path": "examples/complex-selector/deadline-picker",
+      "aliases": []
+    },
+    {
+      "name": "example-complex-selector-tree-search",
+      "path": "examples/complex-selector/tree-search",
+      "aliases": []
+    },
+    {
+      "name": "example-context-menu-item-basic",
+      "path": "examples/context-menu-item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-context-menu-basic",
+      "path": "examples/context-menu/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-context-menu-bottom-sheet",
+      "path": "examples/context-menu/bottom-sheet",
+      "aliases": []
+    },
+    {
+      "name": "example-create-animator-playing-cards-in-plain-java-script",
+      "path": "examples/create-animator/playing-cards-in-plain-java-script",
+      "aliases": []
+    },
+    {
+      "name": "example-create-pan-gesture-a-playing-card-without-react",
+      "path": "examples/create-pan-gesture/a-playing-card-without-react",
+      "aliases": []
+    },
+    {
+      "name": "example-date-input-clearable",
+      "path": "examples/date-input/clearable",
+      "aliases": []
+    },
+    {
+      "name": "example-date-input-description",
+      "path": "examples/date-input/description",
+      "aliases": []
+    },
+    {
+      "name": "example-date-input-formats",
+      "path": "examples/date-input/formats",
+      "aliases": []
+    },
+    {
+      "name": "example-date-input-min-max-constraints",
+      "path": "examples/date-input/min-max-constraints",
+      "aliases": []
+    },
+    {
+      "name": "example-date-input-validation",
+      "path": "examples/date-input/validation",
+      "aliases": []
+    },
+    {
+      "name": "example-date-range-input-validation",
+      "path": "examples/date-range-input/validation",
+      "aliases": []
+    },
+    {
+      "name": "example-date-range-input-with-presets",
+      "path": "examples/date-range-input/with-presets",
+      "aliases": []
+    },
+    {
+      "name": "example-date-time-input-validation",
+      "path": "examples/date-time-input/validation",
+      "aliases": []
+    },
+    {
+      "name": "example-dialog-header-basic",
+      "path": "examples/dialog-header/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-dialog-adaptive-presentation",
+      "path": "examples/dialog/adaptive-presentation",
+      "aliases": []
+    },
+    {
+      "name": "example-dialog-confirmation",
+      "path": "examples/dialog/confirmation",
+      "aliases": []
+    },
+    {
+      "name": "example-dialog-form",
+      "path": "examples/dialog/form",
+      "aliases": []
+    },
+    {
+      "name": "example-dialog-fullscreen",
+      "path": "examples/dialog/fullscreen",
+      "aliases": []
+    },
+    {
+      "name": "example-dialog-required",
+      "path": "examples/dialog/required",
+      "aliases": []
+    },
+    {
+      "name": "example-dialog-scrollable",
+      "path": "examples/dialog/scrollable",
+      "aliases": []
+    },
+    {
+      "name": "example-divider-full-bleed",
+      "path": "examples/divider/full-bleed",
+      "aliases": []
+    },
+    {
+      "name": "example-divider-variants",
+      "path": "examples/divider/variants",
+      "aliases": []
+    },
+    {
+      "name": "example-divider-vertical",
+      "path": "examples/divider/vertical",
+      "aliases": []
+    },
+    {
+      "name": "example-drawer-header-with-close-button",
+      "path": "examples/drawer-header/with-close-button",
+      "aliases": []
+    },
+    {
+      "name": "example-drawer-header-with-subtitle-and-end-content",
+      "path": "examples/drawer-header/with-subtitle-and-end-content",
+      "aliases": []
+    },
+    {
+      "name": "example-drawer-edit-form-with-footer-actions",
+      "path": "examples/drawer/edit-form-with-footer-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-drawer-modal-or-non-modal-has-scrim",
+      "path": "examples/drawer/modal-or-non-modal-has-scrim",
+      "aliases": []
+    },
+    {
+      "name": "example-drawer-slide-in-from-the-start-edge",
+      "path": "examples/drawer/slide-in-from-the-start-edge",
+      "aliases": []
+    },
+    {
+      "name": "example-drawer-width-budget-pixels-or-any-css-length",
+      "path": "examples/drawer/width-budget-pixels-or-any-css-length",
+      "aliases": []
+    },
+    {
+      "name": "example-dropdown-menu-group-selectable-rows",
+      "path": "examples/dropdown-menu-group/selectable-rows",
+      "aliases": []
+    },
+    {
+      "name": "example-dropdown-menu-item-basic",
+      "path": "examples/dropdown-menu-item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-dropdown-menu-actions",
+      "path": "examples/dropdown-menu/actions",
+      "aliases": []
+    },
+    {
+      "name": "example-dropdown-menu-adaptive-presentation",
+      "path": "examples/dropdown-menu/adaptive-presentation",
+      "aliases": []
+    },
+    {
+      "name": "example-dropdown-menu-disabled",
+      "path": "examples/dropdown-menu/disabled",
+      "aliases": []
+    },
+    {
+      "name": "example-dropdown-menu-icon-trigger",
+      "path": "examples/dropdown-menu/icon-trigger",
+      "aliases": []
+    },
+    {
+      "name": "example-dropdown-menu-sections",
+      "path": "examples/dropdown-menu/sections",
+      "aliases": []
+    },
+    {
+      "name": "example-dropdown-menu-submenu",
+      "path": "examples/dropdown-menu/submenu",
+      "aliases": []
+    },
+    {
+      "name": "example-emoji-picker-in-a-popover",
+      "path": "examples/emoji-picker/in-a-popover",
+      "aliases": []
+    },
+    {
+      "name": "example-empty-state-actions",
+      "path": "examples/empty-state/actions",
+      "aliases": []
+    },
+    {
+      "name": "example-empty-state-compact",
+      "path": "examples/empty-state/compact",
+      "aliases": []
+    },
+    {
+      "name": "example-empty-state-container",
+      "path": "examples/empty-state/container",
+      "aliases": []
+    },
+    {
+      "name": "example-field-label-basic",
+      "path": "examples/field-label/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-field-status-basic",
+      "path": "examples/field-status/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-field-description",
+      "path": "examples/field/description",
+      "aliases": []
+    },
+    {
+      "name": "example-field-required-optional",
+      "path": "examples/field/required-optional",
+      "aliases": []
+    },
+    {
+      "name": "example-field-validation-states",
+      "path": "examples/field/validation-states",
+      "aliases": []
+    },
+    {
+      "name": "example-file-input-basic",
+      "path": "examples/file-input/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-form-layout-horizontal",
+      "path": "examples/form-layout/horizontal",
+      "aliases": []
+    },
+    {
+      "name": "example-form-layout-mixed-controls",
+      "path": "examples/form-layout/mixed-controls",
+      "aliases": []
+    },
+    {
+      "name": "example-form-layout-nested-address-form",
+      "path": "examples/form-layout/nested-address-form",
+      "aliases": []
+    },
+    {
+      "name": "example-form-layout-settings-form",
+      "path": "examples/form-layout/settings-form",
+      "aliases": []
+    },
+    {
+      "name": "example-grid-span-columns",
+      "path": "examples/grid-span/columns",
+      "aliases": []
+    },
+    {
+      "name": "example-grid-card-gallery",
+      "path": "examples/grid/card-gallery",
+      "aliases": []
+    },
+    {
+      "name": "example-grid-column-spanning",
+      "path": "examples/grid/column-spanning",
+      "aliases": []
+    },
+    {
+      "name": "example-grid-dashboard-layout",
+      "path": "examples/grid/dashboard-layout",
+      "aliases": []
+    },
+    {
+      "name": "example-grid-responsive-auto-fit",
+      "path": "examples/grid/responsive-auto-fit",
+      "aliases": []
+    },
+    {
+      "name": "example-h-stack-basic",
+      "path": "examples/h-stack/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-heading-card-grid",
+      "path": "examples/heading/card-grid",
+      "aliases": []
+    },
+    {
+      "name": "example-heading-page-hierarchy",
+      "path": "examples/heading/page-hierarchy",
+      "aliases": []
+    },
+    {
+      "name": "example-heading-truncation",
+      "path": "examples/heading/truncation",
+      "aliases": []
+    },
+    {
+      "name": "example-hover-card-definition",
+      "path": "examples/hover-card/definition",
+      "aliases": []
+    },
+    {
+      "name": "example-hover-card-link-preview",
+      "path": "examples/hover-card/link-preview",
+      "aliases": []
+    },
+    {
+      "name": "example-hover-card-profile-preview",
+      "path": "examples/hover-card/profile-preview",
+      "aliases": []
+    },
+    {
+      "name": "example-icon-button-action-bar",
+      "path": "examples/icon-button/action-bar",
+      "aliases": []
+    },
+    {
+      "name": "example-icon-button-floating",
+      "path": "examples/icon-button/floating",
+      "aliases": []
+    },
+    {
+      "name": "example-icon-button-loading-state",
+      "path": "examples/icon-button/loading-state",
+      "aliases": []
+    },
+    {
+      "name": "example-icon-button-with-tooltips",
+      "path": "examples/icon-button/with-tooltips",
+      "aliases": []
+    },
+    {
+      "name": "example-icon-non-semantic-colors",
+      "path": "examples/icon/non-semantic-colors",
+      "aliases": []
+    },
+    {
+      "name": "example-icon-semantic-colors",
+      "path": "examples/icon/semantic-colors",
+      "aliases": []
+    },
+    {
+      "name": "example-icon-size-variants",
+      "path": "examples/icon/size-variants",
+      "aliases": []
+    },
+    {
+      "name": "example-icon-status-indicators",
+      "path": "examples/icon/status-indicators",
+      "aliases": []
+    },
+    {
+      "name": "example-info-tip-metric-definitions",
+      "path": "examples/info-tip/metric-definitions",
+      "aliases": []
+    },
+    {
+      "name": "example-info-tip-permission-notes",
+      "path": "examples/info-tip/permission-notes",
+      "aliases": []
+    },
+    {
+      "name": "example-input-group-basic",
+      "path": "examples/input-group/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-internationalization-provider-overrides",
+      "path": "examples/internationalization-provider/overrides",
+      "aliases": []
+    },
+    {
+      "name": "example-internationalization-provider-rtl-direction",
+      "path": "examples/internationalization-provider/rtl-direction",
+      "aliases": []
+    },
+    {
+      "name": "example-internationalization-provider-shipped-locale",
+      "path": "examples/internationalization-provider/shipped-locale",
+      "aliases": []
+    },
+    {
+      "name": "example-item-basic",
+      "path": "examples/item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-item-document-tabs",
+      "path": "examples/item/document-tabs",
+      "aliases": []
+    },
+    {
+      "name": "example-item-metadata",
+      "path": "examples/item/metadata",
+      "aliases": []
+    },
+    {
+      "name": "example-item-start-content",
+      "path": "examples/item/start-content",
+      "aliases": []
+    },
+    {
+      "name": "example-kbd-inline-instructions",
+      "path": "examples/kbd/inline-instructions",
+      "aliases": []
+    },
+    {
+      "name": "example-kbd-menu-shortcuts",
+      "path": "examples/kbd/menu-shortcuts",
+      "aliases": []
+    },
+    {
+      "name": "example-kbd-modifier-combinations",
+      "path": "examples/kbd/modifier-combinations",
+      "aliases": []
+    },
+    {
+      "name": "example-layout-content-basic",
+      "path": "examples/layout-content/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-layout-footer-actions",
+      "path": "examples/layout-footer/actions",
+      "aliases": []
+    },
+    {
+      "name": "example-layout-header-with-actions",
+      "path": "examples/layout-header/with-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-layout-panel-navigation",
+      "path": "examples/layout-panel/navigation",
+      "aliases": []
+    },
+    {
+      "name": "example-layout-basic-card",
+      "path": "examples/layout/basic-card",
+      "aliases": []
+    },
+    {
+      "name": "example-layout-content-only",
+      "path": "examples/layout/content-only",
+      "aliases": []
+    },
+    {
+      "name": "example-layout-content-width",
+      "path": "examples/layout/content-width",
+      "aliases": []
+    },
+    {
+      "name": "example-layout-dual-panel",
+      "path": "examples/layout/dual-panel",
+      "aliases": []
+    },
+    {
+      "name": "example-layout-full-bleed-content",
+      "path": "examples/layout/full-bleed-content",
+      "aliases": []
+    },
+    {
+      "name": "example-layout-sidebar-navigation",
+      "path": "examples/layout/sidebar-navigation",
+      "aliases": []
+    },
+    {
+      "name": "example-lightbox-gallery",
+      "path": "examples/lightbox/gallery",
+      "aliases": []
+    },
+    {
+      "name": "example-lightbox-video",
+      "path": "examples/lightbox/video",
+      "aliases": []
+    },
+    {
+      "name": "example-lightbox-zoom",
+      "path": "examples/lightbox/zoom",
+      "aliases": []
+    },
+    {
+      "name": "example-link-provider-custom-link-component",
+      "path": "examples/link-provider/custom-link-component",
+      "aliases": []
+    },
+    {
+      "name": "example-link-external-links",
+      "path": "examples/link/external-links",
+      "aliases": []
+    },
+    {
+      "name": "example-link-inline-text",
+      "path": "examples/link/inline-text",
+      "aliases": []
+    },
+    {
+      "name": "example-link-with-tooltips",
+      "path": "examples/link/with-tooltips",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-budget-allocation",
+      "path": "examples/list-input/budget-allocation",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-family-member-declaration",
+      "path": "examples/list-input/family-member-declaration",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-mailing-list",
+      "path": "examples/list-input/mailing-list",
+      "aliases": []
+    },
+    {
+      "name": "example-list-item-basic",
+      "path": "examples/list-item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-list-item-media",
+      "path": "examples/list-item/media",
+      "aliases": []
+    },
+    {
+      "name": "example-list-item-metadata",
+      "path": "examples/list-item/metadata",
+      "aliases": []
+    },
+    {
+      "name": "example-list-basic",
+      "path": "examples/list/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-list-bulleted-features",
+      "path": "examples/list/bulleted-features",
+      "aliases": []
+    },
+    {
+      "name": "example-list-message-list",
+      "path": "examples/list/message-list",
+      "aliases": []
+    },
+    {
+      "name": "example-list-ordered-steps",
+      "path": "examples/list/ordered-steps",
+      "aliases": []
+    },
+    {
+      "name": "example-markdown-cited-content",
+      "path": "examples/markdown/cited-content",
+      "aliases": []
+    },
+    {
+      "name": "example-markdown-compact-ai-response",
+      "path": "examples/markdown/compact-ai-response",
+      "aliases": []
+    },
+    {
+      "name": "example-markdown-data-table",
+      "path": "examples/markdown/data-table",
+      "aliases": []
+    },
+    {
+      "name": "example-markdown-rich-content",
+      "path": "examples/markdown/rich-content",
+      "aliases": []
+    },
+    {
+      "name": "example-media-theme-image-overlay",
+      "path": "examples/media-theme/image-overlay",
+      "aliases": []
+    },
+    {
+      "name": "example-media-theme-light-scrim",
+      "path": "examples/media-theme/light-scrim",
+      "aliases": []
+    },
+    {
+      "name": "example-metadata-list-item-basic",
+      "path": "examples/metadata-list-item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-metadata-list-basic",
+      "path": "examples/metadata-list/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-metadata-list-collapsible",
+      "path": "examples/metadata-list/collapsible",
+      "aliases": []
+    },
+    {
+      "name": "example-metadata-list-horizontal",
+      "path": "examples/metadata-list/horizontal",
+      "aliases": []
+    },
+    {
+      "name": "example-metadata-list-multi-column",
+      "path": "examples/metadata-list/multi-column",
+      "aliases": []
+    },
+    {
+      "name": "example-mobile-nav-toggle-basic",
+      "path": "examples/mobile-nav-toggle/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-mobile-nav-basic-drawer",
+      "path": "examples/mobile-nav/basic-drawer",
+      "aliases": []
+    },
+    {
+      "name": "example-mobile-nav-end-side-drawer",
+      "path": "examples/mobile-nav/end-side-drawer",
+      "aliases": []
+    },
+    {
+      "name": "example-mobile-nav-without-title",
+      "path": "examples/mobile-nav/without-title",
+      "aliases": []
+    },
+    {
+      "name": "example-more-menu-bottom-sheet",
+      "path": "examples/more-menu/bottom-sheet",
+      "aliases": []
+    },
+    {
+      "name": "example-more-menu-default",
+      "path": "examples/more-menu/default",
+      "aliases": []
+    },
+    {
+      "name": "example-more-menu-with-dividers",
+      "path": "examples/more-menu/with-dividers",
+      "aliases": []
+    },
+    {
+      "name": "example-more-menu-with-sections",
+      "path": "examples/more-menu/with-sections",
+      "aliases": []
+    },
+    {
+      "name": "example-multi-selector-bottom-sheet",
+      "path": "examples/multi-selector/bottom-sheet",
+      "aliases": []
+    },
+    {
+      "name": "example-multi-selector-column-visibility",
+      "path": "examples/multi-selector/column-visibility",
+      "aliases": []
+    },
+    {
+      "name": "example-multi-selector-form-composition",
+      "path": "examples/multi-selector/form-composition",
+      "aliases": []
+    },
+    {
+      "name": "example-multi-selector-ghost-toolbar",
+      "path": "examples/multi-selector/ghost-toolbar",
+      "aliases": []
+    },
+    {
+      "name": "example-multi-selector-searchable",
+      "path": "examples/multi-selector/searchable",
+      "aliases": []
+    },
+    {
+      "name": "example-multi-selector-sectioned-permissions",
+      "path": "examples/multi-selector/sectioned-permissions",
+      "aliases": []
+    },
+    {
+      "name": "example-nav-icon-basic",
+      "path": "examples/nav-icon/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-number-input-clearable",
+      "path": "examples/number-input/clearable",
+      "aliases": []
+    },
+    {
+      "name": "example-number-input-range-constrained",
+      "path": "examples/number-input/range-constrained",
+      "aliases": []
+    },
+    {
+      "name": "example-number-input-status-variants",
+      "path": "examples/number-input/status-variants",
+      "aliases": []
+    },
+    {
+      "name": "example-number-input-with-units",
+      "path": "examples/number-input/with-units",
+      "aliases": []
+    },
+    {
+      "name": "example-outline-controlled",
+      "path": "examples/outline/controlled",
+      "aliases": []
+    },
+    {
+      "name": "example-outline-deep-nesting",
+      "path": "examples/outline/deep-nesting",
+      "aliases": []
+    },
+    {
+      "name": "example-outline-density",
+      "path": "examples/outline/density",
+      "aliases": []
+    },
+    {
+      "name": "example-overflow-list-badge-tags",
+      "path": "examples/overflow-list/badge-tags",
+      "aliases": []
+    },
+    {
+      "name": "example-overflow-list-capped-toolbar",
+      "path": "examples/overflow-list/capped-toolbar",
+      "aliases": []
+    },
+    {
+      "name": "example-overflow-list-collapse-from-start",
+      "path": "examples/overflow-list/collapse-from-start",
+      "aliases": []
+    },
+    {
+      "name": "example-overflow-list-dropdown-actions",
+      "path": "examples/overflow-list/dropdown-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-overflow-list-multi-row-tags",
+      "path": "examples/overflow-list/multi-row-tags",
+      "aliases": []
+    },
+    {
+      "name": "example-overlay-bottom-strip",
+      "path": "examples/overlay/bottom-strip",
+      "aliases": []
+    },
+    {
+      "name": "example-overlay-hover-reveal",
+      "path": "examples/overlay/hover-reveal",
+      "aliases": []
+    },
+    {
+      "name": "example-pagination-dots-carousel",
+      "path": "examples/pagination/dots-carousel",
+      "aliases": []
+    },
+    {
+      "name": "example-pagination-page-size-selector",
+      "path": "examples/pagination/page-size-selector",
+      "aliases": []
+    },
+    {
+      "name": "example-pagination-with-table",
+      "path": "examples/pagination/with-table",
+      "aliases": []
+    },
+    {
+      "name": "example-popover-bottom-sheet-alternative",
+      "path": "examples/popover/bottom-sheet-alternative",
+      "aliases": []
+    },
+    {
+      "name": "example-popover-confirm-action",
+      "path": "examples/popover/confirm-action",
+      "aliases": []
+    },
+    {
+      "name": "example-popover-filter-panel",
+      "path": "examples/popover/filter-panel",
+      "aliases": []
+    },
+    {
+      "name": "example-popover-keyboard-shortcuts",
+      "path": "examples/popover/keyboard-shortcuts",
+      "aliases": []
+    },
+    {
+      "name": "example-popover-settings-panel",
+      "path": "examples/popover/settings-panel",
+      "aliases": []
+    },
+    {
+      "name": "example-power-search-content-search",
+      "path": "examples/power-search/content-search",
+      "aliases": []
+    },
+    {
+      "name": "example-power-search-full-featured",
+      "path": "examples/power-search/full-featured",
+      "aliases": []
+    },
+    {
+      "name": "example-power-search-preset-filters",
+      "path": "examples/power-search/preset-filters",
+      "aliases": []
+    },
+    {
+      "name": "example-power-search-search-with-table",
+      "path": "examples/power-search/search-with-table",
+      "aliases": []
+    },
+    {
+      "name": "example-progress-bar-custom-format",
+      "path": "examples/progress-bar/custom-format",
+      "aliases": []
+    },
+    {
+      "name": "example-progress-bar-indeterminate",
+      "path": "examples/progress-bar/indeterminate",
+      "aliases": []
+    },
+    {
+      "name": "example-progress-bar-semantic-variants",
+      "path": "examples/progress-bar/semantic-variants",
+      "aliases": []
+    },
+    {
+      "name": "example-progress-bar-with-value-label",
+      "path": "examples/progress-bar/with-value-label",
+      "aliases": []
+    },
+    {
+      "name": "example-radio-list-item-basic",
+      "path": "examples/radio-list-item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-radio-list-horizontal-layout",
+      "path": "examples/radio-list/horizontal-layout",
+      "aliases": []
+    },
+    {
+      "name": "example-radio-list-pricing-tier",
+      "path": "examples/radio-list/pricing-tier",
+      "aliases": []
+    },
+    {
+      "name": "example-radio-list-with-descriptions",
+      "path": "examples/radio-list/with-descriptions",
+      "aliases": []
+    },
+    {
+      "name": "example-radio-list-with-validation",
+      "path": "examples/radio-list/with-validation",
+      "aliases": []
+    },
+    {
+      "name": "example-resize-handle-resizable-collapsible-with-snap-points",
+      "path": "examples/resize-handle/resizable-collapsible-with-snap-points",
+      "aliases": []
+    },
+    {
+      "name": "example-scrollable-area-inline-rail",
+      "path": "examples/scrollable-area/inline-rail",
+      "aliases": []
+    },
+    {
+      "name": "example-scrollable-area-overscroll",
+      "path": "examples/scrollable-area/overscroll",
+      "aliases": []
+    },
+    {
+      "name": "example-scrollable-area-sticky-passthrough",
+      "path": "examples/scrollable-area/sticky-passthrough",
+      "aliases": []
+    },
+    {
+      "name": "example-scrollable-area-sticky-section-labels",
+      "path": "examples/scrollable-area/sticky-section-labels",
+      "aliases": []
+    },
+    {
+      "name": "example-scrollable-area-two-axis-board",
+      "path": "examples/scrollable-area/two-axis-board",
+      "aliases": []
+    },
+    {
+      "name": "example-section-default-with-wash",
+      "path": "examples/section/default-with-wash",
+      "aliases": []
+    },
+    {
+      "name": "example-section-with-dividers",
+      "path": "examples/section/with-dividers",
+      "aliases": []
+    },
+    {
+      "name": "example-segmented-control-item-basic",
+      "path": "examples/segmented-control-item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-segmented-control-disabled-item",
+      "path": "examples/segmented-control/disabled-item",
+      "aliases": []
+    },
+    {
+      "name": "example-segmented-control-fill-layout",
+      "path": "examples/segmented-control/fill-layout",
+      "aliases": []
+    },
+    {
+      "name": "example-segmented-control-icon-only",
+      "path": "examples/segmented-control/icon-only",
+      "aliases": []
+    },
+    {
+      "name": "example-segmented-control-with-icons",
+      "path": "examples/segmented-control/with-icons",
+      "aliases": []
+    },
+    {
+      "name": "example-selectable-card-elevated",
+      "path": "examples/selectable-card/elevated",
+      "aliases": []
+    },
+    {
+      "name": "example-selectable-card-multi",
+      "path": "examples/selectable-card/multi",
+      "aliases": []
+    },
+    {
+      "name": "example-selector-option-basic",
+      "path": "examples/selector-option/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-selector-bottom-sheet",
+      "path": "examples/selector/bottom-sheet",
+      "aliases": []
+    },
+    {
+      "name": "example-selector-clearable",
+      "path": "examples/selector/clearable",
+      "aliases": []
+    },
+    {
+      "name": "example-selector-ghost-toolbar",
+      "path": "examples/selector/ghost-toolbar",
+      "aliases": []
+    },
+    {
+      "name": "example-selector-grouped-sections",
+      "path": "examples/selector/grouped-sections",
+      "aliases": []
+    },
+    {
+      "name": "example-selector-option-descriptions",
+      "path": "examples/selector/option-descriptions",
+      "aliases": []
+    },
+    {
+      "name": "example-selector-validation-states",
+      "path": "examples/selector/validation-states",
+      "aliases": []
+    },
+    {
+      "name": "example-side-nav-collapse-button-basic",
+      "path": "examples/side-nav-collapse-button/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-side-nav-heading-basic",
+      "path": "examples/side-nav-heading/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-side-nav-item-basic",
+      "path": "examples/side-nav-item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-side-nav-section-basic",
+      "path": "examples/side-nav-section/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-side-nav-end-content",
+      "path": "examples/side-nav/end-content",
+      "aliases": []
+    },
+    {
+      "name": "example-side-nav-header-with-menu",
+      "path": "examples/side-nav/header-with-menu",
+      "aliases": []
+    },
+    {
+      "name": "example-side-nav-nested-items",
+      "path": "examples/side-nav/nested-items",
+      "aliases": []
+    },
+    {
+      "name": "example-skeleton-card-loading",
+      "path": "examples/skeleton/card-loading",
+      "aliases": []
+    },
+    {
+      "name": "example-skeleton-staggered-list",
+      "path": "examples/skeleton/staggered-list",
+      "aliases": []
+    },
+    {
+      "name": "example-skeleton-table-rows",
+      "path": "examples/skeleton/table-rows",
+      "aliases": []
+    },
+    {
+      "name": "example-slider-formatted-value",
+      "path": "examples/slider/formatted-value",
+      "aliases": []
+    },
+    {
+      "name": "example-slider-range",
+      "path": "examples/slider/range",
+      "aliases": []
+    },
+    {
+      "name": "example-slider-validation-states",
+      "path": "examples/slider/validation-states",
+      "aliases": []
+    },
+    {
+      "name": "example-slider-with-marks",
+      "path": "examples/slider/with-marks",
+      "aliases": []
+    },
+    {
+      "name": "example-spinner-on-media-shade",
+      "path": "examples/spinner/on-media-shade",
+      "aliases": []
+    },
+    {
+      "name": "example-spinner-sizes",
+      "path": "examples/spinner/sizes",
+      "aliases": []
+    },
+    {
+      "name": "example-spinner-with-label",
+      "path": "examples/spinner/with-label",
+      "aliases": []
+    },
+    {
+      "name": "example-stack-item-fill",
+      "path": "examples/stack-item/fill",
+      "aliases": []
+    },
+    {
+      "name": "example-stack-alignment",
+      "path": "examples/stack/alignment",
+      "aliases": []
+    },
+    {
+      "name": "example-stack-fill-item",
+      "path": "examples/stack/fill-item",
+      "aliases": []
+    },
+    {
+      "name": "example-status-dot-pulsing",
+      "path": "examples/status-dot/pulsing",
+      "aliases": []
+    },
+    {
+      "name": "example-status-dot-status-indicators",
+      "path": "examples/status-dot/status-indicators",
+      "aliases": []
+    },
+    {
+      "name": "example-status-dot-variants",
+      "path": "examples/status-dot/variants",
+      "aliases": []
+    },
+    {
+      "name": "example-step-content-slot",
+      "path": "examples/step/content-slot",
+      "aliases": []
+    },
+    {
+      "name": "example-step-indicator",
+      "path": "examples/step/indicator",
+      "aliases": []
+    },
+    {
+      "name": "example-step-states",
+      "path": "examples/step/states",
+      "aliases": []
+    },
+    {
+      "name": "example-stepper-custom-content",
+      "path": "examples/stepper/custom-content",
+      "aliases": []
+    },
+    {
+      "name": "example-stepper-horizontal-narrow-collapsed",
+      "path": "examples/stepper/horizontal-narrow-collapsed",
+      "aliases": []
+    },
+    {
+      "name": "example-stepper-indicator-modes",
+      "path": "examples/stepper/indicator-modes",
+      "aliases": []
+    },
+    {
+      "name": "example-stepper-on-track-horizontal",
+      "path": "examples/stepper/on-track-horizontal",
+      "aliases": []
+    },
+    {
+      "name": "example-stepper-on-track-vertical",
+      "path": "examples/stepper/on-track-vertical",
+      "aliases": []
+    },
+    {
+      "name": "example-stepper-validation-status",
+      "path": "examples/stepper/validation-status",
+      "aliases": []
+    },
+    {
+      "name": "example-switch-disabled",
+      "path": "examples/switch/disabled",
+      "aliases": []
+    },
+    {
+      "name": "example-switch-settings-panel",
+      "path": "examples/switch/settings-panel",
+      "aliases": []
+    },
+    {
+      "name": "example-switch-with-description",
+      "path": "examples/switch/with-description",
+      "aliases": []
+    },
+    {
+      "name": "example-switch-with-status",
+      "path": "examples/switch/with-status",
+      "aliases": []
+    },
+    {
+      "name": "example-syntax-theme-dark-preset",
+      "path": "examples/syntax-theme/dark-preset",
+      "aliases": []
+    },
+    {
+      "name": "example-syntax-theme-light-preset",
+      "path": "examples/syntax-theme/light-preset",
+      "aliases": []
+    },
+    {
+      "name": "example-tab-list-fill-layout",
+      "path": "examples/tab-list/fill-layout",
+      "aliases": []
+    },
+    {
+      "name": "example-tab-list-with-actions",
+      "path": "examples/tab-list/with-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-tab-list-with-badge",
+      "path": "examples/tab-list/with-badge",
+      "aliases": []
+    },
+    {
+      "name": "example-tab-list-with-icons",
+      "path": "examples/tab-list/with-icons",
+      "aliases": []
+    },
+    {
+      "name": "example-tab-list-with-overflow-menu",
+      "path": "examples/tab-list/with-overflow-menu",
+      "aliases": []
+    },
+    {
+      "name": "example-tab-list-with-status-dot",
+      "path": "examples/tab-list/with-status-dot",
+      "aliases": []
+    },
+    {
+      "name": "example-tab-menu-basic",
+      "path": "examples/tab-menu/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-tab-selected-icon",
+      "path": "examples/tab/selected-icon",
+      "aliases": []
+    },
+    {
+      "name": "example-table-column-settings",
+      "path": "examples/table/column-settings",
+      "aliases": []
+    },
+    {
+      "name": "example-table-grid-dividers",
+      "path": "examples/table/grid-dividers",
+      "aliases": []
+    },
+    {
+      "name": "example-table-in-card",
+      "path": "examples/table/in-card",
+      "aliases": []
+    },
+    {
+      "name": "example-table-inline-filters",
+      "path": "examples/table/inline-filters",
+      "aliases": []
+    },
+    {
+      "name": "example-table-paginated-data",
+      "path": "examples/table/paginated-data",
+      "aliases": []
+    },
+    {
+      "name": "example-table-popover-filters",
+      "path": "examples/table/popover-filters",
+      "aliases": []
+    },
+    {
+      "name": "example-table-resizable-columns",
+      "path": "examples/table/resizable-columns",
+      "aliases": []
+    },
+    {
+      "name": "example-table-rich-cell-content",
+      "path": "examples/table/rich-cell-content",
+      "aliases": []
+    },
+    {
+      "name": "example-table-row-selection",
+      "path": "examples/table/row-selection",
+      "aliases": []
+    },
+    {
+      "name": "example-table-sortable-columns",
+      "path": "examples/table/sortable-columns",
+      "aliases": []
+    },
+    {
+      "name": "example-table-striped-rows",
+      "path": "examples/table/striped-rows",
+      "aliases": []
+    },
+    {
+      "name": "example-text-area-character-count",
+      "path": "examples/text-area/character-count",
+      "aliases": []
+    },
+    {
+      "name": "example-text-area-icon",
+      "path": "examples/text-area/icon",
+      "aliases": []
+    },
+    {
+      "name": "example-text-area-states",
+      "path": "examples/text-area/states",
+      "aliases": []
+    },
+    {
+      "name": "example-text-area-validation",
+      "path": "examples/text-area/validation",
+      "aliases": []
+    },
+    {
+      "name": "example-text-input-icon",
+      "path": "examples/text-input/icon",
+      "aliases": []
+    },
+    {
+      "name": "example-text-input-search",
+      "path": "examples/text-input/search",
+      "aliases": []
+    },
+    {
+      "name": "example-text-input-sizes",
+      "path": "examples/text-input/sizes",
+      "aliases": []
+    },
+    {
+      "name": "example-text-input-states",
+      "path": "examples/text-input/states",
+      "aliases": []
+    },
+    {
+      "name": "example-text-input-status-variant",
+      "path": "examples/text-input/status-variant",
+      "aliases": []
+    },
+    {
+      "name": "example-text-input-types",
+      "path": "examples/text-input/types",
+      "aliases": []
+    },
+    {
+      "name": "example-text-colors",
+      "path": "examples/text/colors",
+      "aliases": []
+    },
+    {
+      "name": "example-text-heading-levels",
+      "path": "examples/text/heading-levels",
+      "aliases": []
+    },
+    {
+      "name": "example-text-inline",
+      "path": "examples/text/inline",
+      "aliases": []
+    },
+    {
+      "name": "example-text-truncation",
+      "path": "examples/text/truncation",
+      "aliases": []
+    },
+    {
+      "name": "example-text-types",
+      "path": "examples/text/types",
+      "aliases": []
+    },
+    {
+      "name": "example-text-weight",
+      "path": "examples/text/weight",
+      "aliases": []
+    },
+    {
+      "name": "example-text-word-break",
+      "path": "examples/text/word-break",
+      "aliases": []
+    },
+    {
+      "name": "example-text-wrap",
+      "path": "examples/text/wrap",
+      "aliases": []
+    },
+    {
+      "name": "example-theme-apply-theme",
+      "path": "examples/theme/apply-theme",
+      "aliases": []
+    },
+    {
+      "name": "example-theme-nested-theme",
+      "path": "examples/theme/nested-theme",
+      "aliases": []
+    },
+    {
+      "name": "example-theme-switch-themes",
+      "path": "examples/theme/switch-themes",
+      "aliases": []
+    },
+    {
+      "name": "example-thumbnail-disabled",
+      "path": "examples/thumbnail/disabled",
+      "aliases": []
+    },
+    {
+      "name": "example-thumbnail-gallery",
+      "path": "examples/thumbnail/gallery",
+      "aliases": []
+    },
+    {
+      "name": "example-thumbnail-removable",
+      "path": "examples/thumbnail/removable",
+      "aliases": []
+    },
+    {
+      "name": "example-thumbnail-states",
+      "path": "examples/thumbnail/states",
+      "aliases": []
+    },
+    {
+      "name": "example-time-input-constrained",
+      "path": "examples/time-input/constrained",
+      "aliases": []
+    },
+    {
+      "name": "example-time-input-formats",
+      "path": "examples/time-input/formats",
+      "aliases": []
+    },
+    {
+      "name": "example-time-input-increment",
+      "path": "examples/time-input/increment",
+      "aliases": []
+    },
+    {
+      "name": "example-time-input-states",
+      "path": "examples/time-input/states",
+      "aliases": []
+    },
+    {
+      "name": "example-timer-formats",
+      "path": "examples/timer/formats",
+      "aliases": []
+    },
+    {
+      "name": "example-timer-inline",
+      "path": "examples/timer/inline",
+      "aliases": []
+    },
+    {
+      "name": "example-timer-typography",
+      "path": "examples/timer/typography",
+      "aliases": []
+    },
+    {
+      "name": "example-timestamp-auto",
+      "path": "examples/timestamp/auto",
+      "aliases": []
+    },
+    {
+      "name": "example-timestamp-colors",
+      "path": "examples/timestamp/colors",
+      "aliases": []
+    },
+    {
+      "name": "example-timestamp-formats",
+      "path": "examples/timestamp/formats",
+      "aliases": []
+    },
+    {
+      "name": "example-timestamp-relative",
+      "path": "examples/timestamp/relative",
+      "aliases": []
+    },
+    {
+      "name": "example-timestamp-timezone",
+      "path": "examples/timestamp/timezone",
+      "aliases": []
+    },
+    {
+      "name": "example-timestamp-tooltip-time-zones",
+      "path": "examples/timestamp/tooltip-time-zones",
+      "aliases": []
+    },
+    {
+      "name": "example-toast-action",
+      "path": "examples/toast/action",
+      "aliases": []
+    },
+    {
+      "name": "example-toast-deduplication",
+      "path": "examples/toast/deduplication",
+      "aliases": []
+    },
+    {
+      "name": "example-toast-dismiss",
+      "path": "examples/toast/dismiss",
+      "aliases": []
+    },
+    {
+      "name": "example-toast-stacking",
+      "path": "examples/toast/stacking",
+      "aliases": []
+    },
+    {
+      "name": "example-toast-types",
+      "path": "examples/toast/types",
+      "aliases": []
+    },
+    {
+      "name": "example-toggle-button-group-default",
+      "path": "examples/toggle-button-group/default",
+      "aliases": []
+    },
+    {
+      "name": "example-toggle-button-group-vertical",
+      "path": "examples/toggle-button-group/vertical",
+      "aliases": []
+    },
+    {
+      "name": "example-toggle-button-color",
+      "path": "examples/toggle-button/color",
+      "aliases": []
+    },
+    {
+      "name": "example-toggle-button-icon-swap",
+      "path": "examples/toggle-button/icon-swap",
+      "aliases": []
+    },
+    {
+      "name": "example-toggle-button-label",
+      "path": "examples/toggle-button/label",
+      "aliases": []
+    },
+    {
+      "name": "example-toggle-button-states",
+      "path": "examples/toggle-button/states",
+      "aliases": []
+    },
+    {
+      "name": "example-token-clickable",
+      "path": "examples/token/clickable",
+      "aliases": []
+    },
+    {
+      "name": "example-token-colors",
+      "path": "examples/token/colors",
+      "aliases": []
+    },
+    {
+      "name": "example-token-end-content",
+      "path": "examples/token/end-content",
+      "aliases": []
+    },
+    {
+      "name": "example-token-icon",
+      "path": "examples/token/icon",
+      "aliases": []
+    },
+    {
+      "name": "example-token-removable",
+      "path": "examples/token/removable",
+      "aliases": []
+    },
+    {
+      "name": "example-tokenizer-clear",
+      "path": "examples/tokenizer/clear",
+      "aliases": []
+    },
+    {
+      "name": "example-tokenizer-creatable",
+      "path": "examples/tokenizer/creatable",
+      "aliases": []
+    },
+    {
+      "name": "example-tokenizer-end-content",
+      "path": "examples/tokenizer/end-content",
+      "aliases": []
+    },
+    {
+      "name": "example-tokenizer-icon",
+      "path": "examples/tokenizer/icon",
+      "aliases": []
+    },
+    {
+      "name": "example-tokenizer-max-entries",
+      "path": "examples/tokenizer/max-entries",
+      "aliases": []
+    },
+    {
+      "name": "example-tokenizer-overflow",
+      "path": "examples/tokenizer/overflow",
+      "aliases": []
+    },
+    {
+      "name": "example-tokenizer-states",
+      "path": "examples/tokenizer/states",
+      "aliases": []
+    },
+    {
+      "name": "example-toolbar-bulk-actions",
+      "path": "examples/toolbar/bulk-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-toolbar-card-header",
+      "path": "examples/toolbar/card-header",
+      "aliases": []
+    },
+    {
+      "name": "example-toolbar-sizes",
+      "path": "examples/toolbar/sizes",
+      "aliases": []
+    },
+    {
+      "name": "example-toolbar-tab-navigation",
+      "path": "examples/toolbar/tab-navigation",
+      "aliases": []
+    },
+    {
+      "name": "example-toolbar-table-filter",
+      "path": "examples/toolbar/table-filter",
+      "aliases": []
+    },
+    {
+      "name": "example-tooltip-action-bar",
+      "path": "examples/tooltip/action-bar",
+      "aliases": []
+    },
+    {
+      "name": "example-tooltip-hook-usage",
+      "path": "examples/tooltip/hook-usage",
+      "aliases": []
+    },
+    {
+      "name": "example-tooltip-inline-text",
+      "path": "examples/tooltip/inline-text",
+      "aliases": []
+    },
+    {
+      "name": "example-top-nav-heading-basic",
+      "path": "examples/top-nav-heading/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-top-nav-item-basic",
+      "path": "examples/top-nav-item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-top-nav-mega-menu-featured-card-basic",
+      "path": "examples/top-nav-mega-menu-featured-card/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-top-nav-mega-menu-item-basic",
+      "path": "examples/top-nav-mega-menu-item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-top-nav-mega-menu-basic",
+      "path": "examples/top-nav-mega-menu/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-top-nav-menu-basic",
+      "path": "examples/top-nav-menu/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-top-nav-centered-navigation",
+      "path": "examples/top-nav/centered-navigation",
+      "aliases": []
+    },
+    {
+      "name": "example-top-nav-enterprise-dashboard",
+      "path": "examples/top-nav/enterprise-dashboard",
+      "aliases": []
+    },
+    {
+      "name": "example-top-nav-hover-menu",
+      "path": "examples/top-nav/hover-menu",
+      "aliases": []
+    },
+    {
+      "name": "example-top-nav-mega-menu",
+      "path": "examples/top-nav/mega-menu",
+      "aliases": []
+    },
+    {
+      "name": "example-top-nav-multiple-dropdowns",
+      "path": "examples/top-nav/multiple-dropdowns",
+      "aliases": []
+    },
+    {
+      "name": "example-top-nav-with-logo",
+      "path": "examples/top-nav/with-logo",
+      "aliases": []
+    },
+    {
+      "name": "example-tree-list-file-tree-with-icons",
+      "path": "examples/tree-list/file-tree-with-icons",
+      "aliases": []
+    },
+    {
+      "name": "example-tree-list-interactive-settings",
+      "path": "examples/tree-list/interactive-settings",
+      "aliases": []
+    },
+    {
+      "name": "example-tree-list-mailbox-tree",
+      "path": "examples/tree-list/mailbox-tree",
+      "aliases": []
+    },
+    {
+      "name": "example-tree-list-navigation-tree",
+      "path": "examples/tree-list/navigation-tree",
+      "aliases": []
+    },
+    {
+      "name": "example-tree-list-variants",
+      "path": "examples/tree-list/variants",
+      "aliases": []
+    },
+    {
+      "name": "example-typeahead-item-basic",
+      "path": "examples/typeahead-item/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-typeahead-limited-results",
+      "path": "examples/typeahead/limited-results",
+      "aliases": []
+    },
+    {
+      "name": "example-typeahead-search-field",
+      "path": "examples/typeahead/search-field",
+      "aliases": []
+    },
+    {
+      "name": "example-typeahead-with-helper-text",
+      "path": "examples/typeahead/with-helper-text",
+      "aliases": []
+    },
+    {
+      "name": "example-typeahead-with-validation",
+      "path": "examples/typeahead/with-validation",
+      "aliases": []
+    },
+    {
+      "name": "example-use-animator-playing-cards",
+      "path": "examples/use-animator/playing-cards",
+      "aliases": []
+    },
+    {
+      "name": "example-use-announce-filter-result-count",
+      "path": "examples/use-announce/filter-result-count",
+      "aliases": []
+    },
+    {
+      "name": "example-use-app-shell-mobile-custom-mobile-trigger",
+      "path": "examples/use-app-shell-mobile/custom-mobile-trigger",
+      "aliases": []
+    },
+    {
+      "name": "example-use-clickable-container-clickable-project-card",
+      "path": "examples/use-clickable-container/clickable-project-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-clipboard-share-link",
+      "path": "examples/use-clipboard/share-link",
+      "aliases": []
+    },
+    {
+      "name": "example-use-collapsible-custom-disclosure",
+      "path": "examples/use-collapsible/custom-disclosure",
+      "aliases": []
+    },
+    {
+      "name": "example-use-collator-locale-aware-name-sort",
+      "path": "examples/use-collator/locale-aware-name-sort",
+      "aliases": []
+    },
+    {
+      "name": "example-use-combobox-assign-to-field",
+      "path": "examples/use-combobox/assign-to-field",
+      "aliases": []
+    },
+    {
+      "name": "example-use-container-reveal-reveal-on-hover-row-actions",
+      "path": "examples/use-container-reveal/reveal-on-hover-row-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-focus-trap-quick-edit-panel",
+      "path": "examples/use-focus-trap/quick-edit-panel",
+      "aliases": []
+    },
+    {
+      "name": "example-use-grid-focus-color-swatch-grid",
+      "path": "examples/use-grid-focus/color-swatch-grid",
+      "aliases": []
+    },
+    {
+      "name": "example-use-hotkeys-search-and-help-shortcuts",
+      "path": "examples/use-hotkeys/search-and-help-shortcuts",
+      "aliases": []
+    },
+    {
+      "name": "example-use-hover-card-profile-preview",
+      "path": "examples/use-hover-card/profile-preview",
+      "aliases": []
+    },
+    {
+      "name": "example-use-icon-status-row",
+      "path": "examples/use-icon/status-row",
+      "aliases": []
+    },
+    {
+      "name": "example-use-image-mode-photo-caption",
+      "path": "examples/use-image-mode/photo-caption",
+      "aliases": []
+    },
+    {
+      "name": "example-use-input-status-icon-coupon-code-status",
+      "path": "examples/use-input-status-icon/coupon-code-status",
+      "aliases": []
+    },
+    {
+      "name": "example-use-keyboard-hint-arrow-key-hint",
+      "path": "examples/use-keyboard-hint/arrow-key-hint",
+      "aliases": []
+    },
+    {
+      "name": "example-use-layer-anchored-layer",
+      "path": "examples/use-layer/anchored-layer",
+      "aliases": []
+    },
+    {
+      "name": "example-use-lightbox-gallery-grid",
+      "path": "examples/use-lightbox/gallery-grid",
+      "aliases": []
+    },
+    {
+      "name": "example-use-list-focus-recent-files",
+      "path": "examples/use-list-focus/recent-files",
+      "aliases": []
+    },
+    {
+      "name": "example-use-locale-invoice-summary",
+      "path": "examples/use-locale/invoice-summary",
+      "aliases": []
+    },
+    {
+      "name": "example-use-outline-from-markdown-docs-article",
+      "path": "examples/use-outline-from-markdown/docs-article",
+      "aliases": []
+    },
+    {
+      "name": "example-use-overflow-editor-toolbar",
+      "path": "examples/use-overflow/editor-toolbar",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-playing-card",
+      "path": "examples/use-pan-gesture/a-playing-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-popover-quick-actions",
+      "path": "examples/use-popover/quick-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-press-feedback-pressable-card",
+      "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scrollable-area-activity-log-panel",
+      "path": "examples/use-scrollable-area/activity-log-panel",
+      "aliases": []
+    },
+    {
+      "name": "example-use-streaming-text-streaming-response",
+      "path": "examples/use-streaming-text/streaming-response",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-column-resize-draggable-columns",
+      "path": "examples/use-table-column-resize/draggable-columns",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-grouped-rows-collapsible-groups",
+      "path": "examples/use-table-grouped-rows/collapsible-groups",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-row-expansion-tree-table",
+      "path": "examples/use-table-row-expansion/tree-table",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-row-index-numbered-rows",
+      "path": "examples/use-table-row-index/numbered-rows",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-row-status-semantic-and-custom-markers",
+      "path": "examples/use-table-row-status/semantic-and-custom-markers",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-selection-table-bulk-actions",
+      "path": "examples/use-table-selection/table-bulk-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-selection-table-floating-bulk-actions",
+      "path": "examples/use-table-selection/table-floating-bulk-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-sticky-columns-pinned-columns",
+      "path": "examples/use-table-sticky-columns/pinned-columns",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-tree-data-tree-table",
+      "path": "examples/use-table-tree-data/tree-table",
+      "aliases": []
+    },
+    {
+      "name": "example-use-theme-token-values",
+      "path": "examples/use-theme/token-values",
+      "aliases": []
+    },
+    {
+      "name": "example-use-toast-settings-saved",
+      "path": "examples/use-toast/settings-saved",
+      "aliases": []
+    },
+    {
+      "name": "example-use-translator-load-more-footer",
+      "path": "examples/use-translator/load-more-footer",
+      "aliases": []
+    },
+    {
+      "name": "example-use-tree-focus-keyboard-file-tree",
+      "path": "examples/use-tree-focus/keyboard-file-tree",
+      "aliases": []
+    },
+    {
+      "name": "example-use-typeahead-type-to-focus-a-country",
+      "path": "examples/use-typeahead/type-to-focus-a-country",
+      "aliases": []
+    },
+    {
+      "name": "example-v-stack-basic",
+      "path": "examples/v-stack/basic",
+      "aliases": []
+    },
+    {
+      "name": "example-visually-hidden-live-region",
+      "path": "examples/visually-hidden/live-region",
+      "aliases": []
+    },
+    {
+      "name": "example-visually-hidden-structural-heading",
+      "path": "examples/visually-hidden/structural-heading",
+      "aliases": []
+    },
+    {
+      "name": "example-visually-hidden-supplementary-context",
+      "path": "examples/visually-hidden/supplementary-context",
+      "aliases": []
+    },
+    {
+      "name": "hook-create-animator",
+      "path": "hooks/create-animator",
+      "aliases": []
+    },
+    {
+      "name": "hook-create-pan-gesture",
+      "path": "hooks/create-pan-gesture",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-animated-layout",
+      "path": "hooks/use-animated-layout",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-animator",
+      "path": "hooks/use-animator",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-announce",
+      "path": "hooks/use-announce",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-app-shell-mobile",
+      "path": "hooks/use-app-shell-mobile",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-clickable-container",
+      "path": "hooks/use-clickable-container",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-clipboard",
+      "path": "hooks/use-clipboard",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-collapsible",
+      "path": "hooks/use-collapsible",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-collator",
+      "path": "hooks/use-collator",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-combobox",
+      "path": "hooks/use-combobox",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-container-reveal",
+      "path": "hooks/use-container-reveal",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-dev-warning",
+      "path": "hooks/use-dev-warning",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-entry-animation",
+      "path": "hooks/use-entry-animation",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-focus-trap",
+      "path": "hooks/use-focus-trap",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-grid-focus",
+      "path": "hooks/use-grid-focus",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-hotkeys",
+      "path": "hooks/use-hotkeys",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-hover-card",
+      "path": "hooks/use-hover-card",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-icon",
+      "path": "hooks/use-icon",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-image-mode",
+      "path": "hooks/use-image-mode",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-imperative-alert-dialog",
+      "path": "hooks/use-imperative-alert-dialog",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-imperative-dialog",
+      "path": "hooks/use-imperative-dialog",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-indicator-focus-ring",
+      "path": "hooks/use-indicator-focus-ring",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-input-container",
+      "path": "hooks/use-input-container",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-input-status-icon",
+      "path": "hooks/use-input-status-icon",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-interactive-role",
+      "path": "hooks/use-interactive-role",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-keyboard-hint",
+      "path": "hooks/use-keyboard-hint",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-layer",
+      "path": "hooks/use-layer",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-lightbox",
+      "path": "hooks/use-lightbox",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-list-focus",
+      "path": "hooks/use-list-focus",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-locale",
+      "path": "hooks/use-locale",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-long-press",
+      "path": "hooks/use-long-press",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-media-query",
+      "path": "hooks/use-media-query",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-menu-press",
+      "path": "hooks/use-menu-press",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-merged-refs",
+      "path": "hooks/use-merged-refs",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-multi-combobox",
+      "path": "hooks/use-multi-combobox",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-outline-from-markdown",
+      "path": "hooks/use-outline-from-markdown",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-overflow",
+      "path": "hooks/use-overflow",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-pan-gesture",
+      "path": "hooks/use-pan-gesture",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-popover",
+      "path": "hooks/use-popover",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-press-feedback",
+      "path": "hooks/use-press-feedback",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-resizable",
+      "path": "hooks/use-resizable",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-scroll-lock",
+      "path": "hooks/use-scroll-lock",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-scroll-overflow",
+      "path": "hooks/use-scroll-overflow",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-scrollable-area",
+      "path": "hooks/use-scrollable-area",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-streaming-text",
+      "path": "hooks/use-streaming-text",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-column-resize",
+      "path": "hooks/use-table-column-resize",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-column-settings",
+      "path": "hooks/use-table-column-settings",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-filter-state",
+      "path": "hooks/use-table-filter-state",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-filtering",
+      "path": "hooks/use-table-filtering",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-grouped-rows",
+      "path": "hooks/use-table-grouped-rows",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-pagination",
+      "path": "hooks/use-table-pagination",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-row-expansion",
+      "path": "hooks/use-table-row-expansion",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-row-index",
+      "path": "hooks/use-table-row-index",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-row-status",
+      "path": "hooks/use-table-row-status",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-selection",
+      "path": "hooks/use-table-selection",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-selection-state",
+      "path": "hooks/use-table-selection-state",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-sortable",
+      "path": "hooks/use-table-sortable",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-sticky-columns",
+      "path": "hooks/use-table-sticky-columns",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-tree-data",
+      "path": "hooks/use-table-tree-data",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-tree-state",
+      "path": "hooks/use-table-tree-state",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-theme",
+      "path": "hooks/use-theme",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-toast",
+      "path": "hooks/use-toast",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-tooltip",
+      "path": "hooks/use-tooltip",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-translator",
+      "path": "hooks/use-translator",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-tree-focus",
+      "path": "hooks/use-tree-focus",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-typeahead",
+      "path": "hooks/use-typeahead",
+      "aliases": []
+    },
+    {
+      "name": "showcase-alert-dialog-delete",
+      "path": "showcases/alert-dialog/delete",
+      "aliases": []
+    },
+    {
+      "name": "showcase-app-shell-default",
+      "path": "showcases/app-shell/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-aspect-ratio-default",
+      "path": "showcases/aspect-ratio/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-avatar-group-overflow-default",
+      "path": "showcases/avatar-group-overflow/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-avatar-group-default",
+      "path": "showcases/avatar-group/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-avatar-status-dot-default",
+      "path": "showcases/avatar-status-dot/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-avatar-default",
+      "path": "showcases/avatar/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-badge-variants",
+      "path": "showcases/badge/variants",
+      "aliases": []
+    },
+    {
+      "name": "showcase-banner-statuses",
+      "path": "showcases/banner/statuses",
+      "aliases": []
+    },
+    {
+      "name": "showcase-base-typeahead-custom-search-bar",
+      "path": "showcases/base-typeahead/custom-search-bar",
+      "aliases": []
+    },
+    {
+      "name": "showcase-blockquote-default",
+      "path": "showcases/blockquote/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-bottom-sheet-switcher-default",
+      "path": "showcases/bottom-sheet-switcher/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-bottom-sheet-default",
+      "path": "showcases/bottom-sheet/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-breadcrumb-item-default",
+      "path": "showcases/breadcrumb-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-breadcrumbs-default",
+      "path": "showcases/breadcrumbs/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-button-group-default",
+      "path": "showcases/button-group/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-button-variants",
+      "path": "showcases/button/variants",
+      "aliases": []
+    },
+    {
+      "name": "showcase-calendar-default",
+      "path": "showcases/calendar/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-card-default",
+      "path": "showcases/card/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-carousel-default",
+      "path": "showcases/carousel/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-center-default",
+      "path": "showcases/center/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chart-default",
+      "path": "showcases/chart/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-composer-drawer-default",
+      "path": "showcases/chat-composer-drawer/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-composer-input-default",
+      "path": "showcases/chat-composer-input/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-composer-default",
+      "path": "showcases/chat-composer/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-dictation-button-default",
+      "path": "showcases/chat-dictation-button/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-layout-scroll-button-default",
+      "path": "showcases/chat-layout-scroll-button/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-layout-default",
+      "path": "showcases/chat-layout/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-message-bubble-default",
+      "path": "showcases/chat-message-bubble/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-message-list-default",
+      "path": "showcases/chat-message-list/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-message-metadata-default",
+      "path": "showcases/chat-message-metadata/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-message-default",
+      "path": "showcases/chat-message/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-send-button-default",
+      "path": "showcases/chat-send-button/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-system-message-default",
+      "path": "showcases/chat-system-message/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-tokenized-text-default",
+      "path": "showcases/chat-tokenized-text/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-chat-tool-calls-default",
+      "path": "showcases/chat-tool-calls/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-checkbox-input-default",
+      "path": "showcases/checkbox-input/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-checkbox-list-item-default",
+      "path": "showcases/checkbox-list-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-checkbox-list-default",
+      "path": "showcases/checkbox-list/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-citation-default",
+      "path": "showcases/citation/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-clickable-card-default",
+      "path": "showcases/clickable-card/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-code-block-default",
+      "path": "showcases/code-block/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-code-default",
+      "path": "showcases/code/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-collapsible-group-default",
+      "path": "showcases/collapsible-group/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-collapsible-default",
+      "path": "showcases/collapsible/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-command-palette-empty-default",
+      "path": "showcases/command-palette-empty/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-command-palette-footer-default",
+      "path": "showcases/command-palette-footer/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-command-palette-group-default",
+      "path": "showcases/command-palette-group/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-command-palette-input-default",
+      "path": "showcases/command-palette-input/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-command-palette-item-default",
+      "path": "showcases/command-palette-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-command-palette-list-default",
+      "path": "showcases/command-palette-list/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-command-palette-default",
+      "path": "showcases/command-palette/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-comment-composer-new-comment",
+      "path": "showcases/comment-composer/new-comment",
+      "aliases": []
+    },
+    {
+      "name": "showcase-comment-pin-avatar-first-annotations",
+      "path": "showcases/comment-pin/avatar-first-annotations",
+      "aliases": []
+    },
+    {
+      "name": "showcase-comment-thread-margin-comment",
+      "path": "showcases/comment-thread/margin-comment",
+      "aliases": []
+    },
+    {
+      "name": "showcase-comments-panel",
+      "path": "showcases/comments/panel",
+      "aliases": []
+    },
+    {
+      "name": "showcase-complex-selector-default",
+      "path": "showcases/complex-selector/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-context-menu-item-default",
+      "path": "showcases/context-menu-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-context-menu-default",
+      "path": "showcases/context-menu/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-date-input-default",
+      "path": "showcases/date-input/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-date-range-input-default",
+      "path": "showcases/date-range-input/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-date-time-input-default",
+      "path": "showcases/date-time-input/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-dialog-header-default",
+      "path": "showcases/dialog-header/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-dialog-default",
+      "path": "showcases/dialog/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-diff-viewer-unified-diff-from-a-patch",
+      "path": "showcases/diff-viewer/unified-diff-from-a-patch",
+      "aliases": []
+    },
+    {
+      "name": "showcase-divider-variants",
+      "path": "showcases/divider/variants",
+      "aliases": []
+    },
+    {
+      "name": "showcase-drawer-header-default",
+      "path": "showcases/drawer-header/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-drawer-basic",
+      "path": "showcases/drawer/basic",
+      "aliases": []
+    },
+    {
+      "name": "showcase-dropdown-menu-group-default",
+      "path": "showcases/dropdown-menu-group/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-dropdown-menu-item-default",
+      "path": "showcases/dropdown-menu-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-dropdown-menu-default",
+      "path": "showcases/dropdown-menu/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-emoji-picker-inline-picker",
+      "path": "showcases/emoji-picker/inline-picker",
+      "aliases": []
+    },
+    {
+      "name": "showcase-empty-state-default",
+      "path": "showcases/empty-state/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-field-label-default",
+      "path": "showcases/field-label/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-field-status-default",
+      "path": "showcases/field-status/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-field-default",
+      "path": "showcases/field/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-file-input-default",
+      "path": "showcases/file-input/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-form-layout-default",
+      "path": "showcases/form-layout/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-grid-span-default",
+      "path": "showcases/grid-span/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-grid-default",
+      "path": "showcases/grid/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-h-stack-default",
+      "path": "showcases/h-stack/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-heading-default",
+      "path": "showcases/heading/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-hover-card-default",
+      "path": "showcases/hover-card/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-icon-button-default",
+      "path": "showcases/icon-button/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-icon-default",
+      "path": "showcases/icon/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-info-tip-default",
+      "path": "showcases/info-tip/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-input-group-default",
+      "path": "showcases/input-group/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-item-default",
+      "path": "showcases/item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-kbd-default",
+      "path": "showcases/kbd/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-layout-content-default",
+      "path": "showcases/layout-content/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-layout-footer-default",
+      "path": "showcases/layout-footer/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-layout-header-default",
+      "path": "showcases/layout-header/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-layout-panel-default",
+      "path": "showcases/layout-panel/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-layout-default",
+      "path": "showcases/layout/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-lightbox-default",
+      "path": "showcases/lightbox/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-link-default",
+      "path": "showcases/link/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-list-input-tag-options",
+      "path": "showcases/list-input/tag-options",
+      "aliases": []
+    },
+    {
+      "name": "showcase-list-item-default",
+      "path": "showcases/list-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-list-default",
+      "path": "showcases/list/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-markdown-default",
+      "path": "showcases/markdown/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-media-theme-media-overlay",
+      "path": "showcases/media-theme/media-overlay",
+      "aliases": []
+    },
+    {
+      "name": "showcase-metadata-list-item-default",
+      "path": "showcases/metadata-list-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-metadata-list-default",
+      "path": "showcases/metadata-list/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-mobile-nav-toggle-default",
+      "path": "showcases/mobile-nav-toggle/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-mobile-nav-default",
+      "path": "showcases/mobile-nav/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-more-menu-default",
+      "path": "showcases/more-menu/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-multi-selector-default",
+      "path": "showcases/multi-selector/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-nav-heading-menu-default",
+      "path": "showcases/nav-heading-menu/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-nav-icon-default",
+      "path": "showcases/nav-icon/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-number-input-default",
+      "path": "showcases/number-input/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-outline-default",
+      "path": "showcases/outline/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-overflow-list-default",
+      "path": "showcases/overflow-list/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-overlay-default",
+      "path": "showcases/overlay/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-pagination-variants",
+      "path": "showcases/pagination/variants",
+      "aliases": []
+    },
+    {
+      "name": "showcase-popover-default",
+      "path": "showcases/popover/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-power-search-default",
+      "path": "showcases/power-search/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-progress-bar-default",
+      "path": "showcases/progress-bar/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-radio-list-item-default",
+      "path": "showcases/radio-list-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-radio-list-default",
+      "path": "showcases/radio-list/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-resizable-default",
+      "path": "showcases/resizable/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-rich-text-editor-default",
+      "path": "showcases/rich-text-editor/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-scrollable-area-default",
+      "path": "showcases/scrollable-area/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-section-variants",
+      "path": "showcases/section/variants",
+      "aliases": []
+    },
+    {
+      "name": "showcase-segmented-control-item-default",
+      "path": "showcases/segmented-control-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-segmented-control-default",
+      "path": "showcases/segmented-control/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-selectable-card-default",
+      "path": "showcases/selectable-card/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-selector-option-default",
+      "path": "showcases/selector-option/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-selector-default",
+      "path": "showcases/selector/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-side-nav-collapse-button-default",
+      "path": "showcases/side-nav-collapse-button/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-side-nav-heading-default",
+      "path": "showcases/side-nav-heading/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-side-nav-item-default",
+      "path": "showcases/side-nav-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-side-nav-section-default",
+      "path": "showcases/side-nav-section/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-side-nav-default",
+      "path": "showcases/side-nav/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-skeleton-default",
+      "path": "showcases/skeleton/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-slider-default",
+      "path": "showcases/slider/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-spinner-default",
+      "path": "showcases/spinner/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-stack-item-default",
+      "path": "showcases/stack-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-stack-directions",
+      "path": "showcases/stack/directions",
+      "aliases": []
+    },
+    {
+      "name": "showcase-status-dot-default",
+      "path": "showcases/status-dot/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-step-default",
+      "path": "showcases/step/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-stepper-checkout-progress",
+      "path": "showcases/stepper/checkout-progress",
+      "aliases": []
+    },
+    {
+      "name": "showcase-switch-default",
+      "path": "showcases/switch/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-syntax-theme-compact-preset",
+      "path": "showcases/syntax-theme/compact-preset",
+      "aliases": []
+    },
+    {
+      "name": "showcase-tab-list-default",
+      "path": "showcases/tab-list/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-tab-menu-default",
+      "path": "showcases/tab-menu/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-tab-default",
+      "path": "showcases/tab/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-table-default",
+      "path": "showcases/table/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-text-area-default",
+      "path": "showcases/text-area/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-text-input-default",
+      "path": "showcases/text-input/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-text-default",
+      "path": "showcases/text/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-theme-distinct-themes",
+      "path": "showcases/theme/distinct-themes",
+      "aliases": []
+    },
+    {
+      "name": "showcase-thumbnail-default",
+      "path": "showcases/thumbnail/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-time-input-default",
+      "path": "showcases/time-input/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-timer-default",
+      "path": "showcases/timer/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-timestamp-default",
+      "path": "showcases/timestamp/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-toast-default",
+      "path": "showcases/toast/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-toggle-button-group-default",
+      "path": "showcases/toggle-button-group/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-toggle-button-default",
+      "path": "showcases/toggle-button/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-token-default",
+      "path": "showcases/token/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-tokenizer-default",
+      "path": "showcases/tokenizer/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-toolbar-three-slot",
+      "path": "showcases/toolbar/three-slot",
+      "aliases": []
+    },
+    {
+      "name": "showcase-tooltip-default",
+      "path": "showcases/tooltip/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-top-nav-heading-default",
+      "path": "showcases/top-nav-heading/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-top-nav-item-default",
+      "path": "showcases/top-nav-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-top-nav-mega-menu-featured-card-default",
+      "path": "showcases/top-nav-mega-menu-featured-card/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-top-nav-mega-menu-item-default",
+      "path": "showcases/top-nav-mega-menu-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-top-nav-mega-menu-default",
+      "path": "showcases/top-nav-mega-menu/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-top-nav-menu-default",
+      "path": "showcases/top-nav-menu/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-top-nav-default",
+      "path": "showcases/top-nav/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-tree-list-default",
+      "path": "showcases/tree-list/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-typeahead-item-default",
+      "path": "showcases/typeahead-item/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-typeahead-default",
+      "path": "showcases/typeahead/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-v-stack-default",
+      "path": "showcases/v-stack/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-visually-hidden-default",
+      "path": "showcases/visually-hidden/default",
+      "aliases": []
+    },
+    {
+      "name": "template-ai-chat",
+      "path": "templates/ai-chat",
+      "aliases": []
+    },
+    {
+      "name": "template-ai-chat-landing",
+      "path": "templates/ai-chat-landing",
+      "aliases": []
+    },
+    {
+      "name": "template-canvas-editor",
+      "path": "templates/canvas-editor",
+      "aliases": []
+    },
+    {
+      "name": "template-centered-hero",
+      "path": "templates/centered-hero",
+      "aliases": []
+    },
+    {
+      "name": "template-checkout-wizard",
+      "path": "templates/checkout-wizard",
+      "aliases": []
+    },
+    {
+      "name": "template-classic-gallery",
+      "path": "templates/classic-gallery",
+      "aliases": []
+    },
+    {
+      "name": "template-contact-form",
+      "path": "templates/contact-form",
+      "aliases": []
+    },
+    {
+      "name": "template-dashboard",
+      "path": "templates/dashboard",
+      "aliases": []
+    },
+    {
+      "name": "template-dashboard-alert-rail",
+      "path": "templates/dashboard-alert-rail",
+      "aliases": []
+    },
+    {
+      "name": "template-dashboard-cohort-funnel",
+      "path": "templates/dashboard-cohort-funnel",
+      "aliases": []
+    },
+    {
+      "name": "template-dashboard-comparison",
+      "path": "templates/dashboard-comparison",
+      "aliases": []
+    },
+    {
+      "name": "template-dashboard-composition",
+      "path": "templates/dashboard-composition",
+      "aliases": []
+    },
+    {
+      "name": "template-dashboard-progress",
+      "path": "templates/dashboard-progress",
+      "aliases": []
+    },
+    {
+      "name": "template-dashboard-scorecard",
+      "path": "templates/dashboard-scorecard",
+      "aliases": []
+    },
+    {
+      "name": "template-detail-page",
+      "path": "templates/detail-page",
+      "aliases": []
+    },
+    {
+      "name": "template-documentation",
+      "path": "templates/documentation",
+      "aliases": []
+    },
+    {
+      "name": "template-documentation-design",
+      "path": "templates/documentation-design",
+      "aliases": []
+    },
+    {
+      "name": "template-documentation-technical",
+      "path": "templates/documentation-technical",
+      "aliases": []
+    },
+    {
+      "name": "template-editor",
+      "path": "templates/editor",
+      "aliases": []
+    },
+    {
+      "name": "template-file-explorer",
+      "path": "templates/file-explorer",
+      "aliases": []
+    },
+    {
+      "name": "template-form-two-column",
+      "path": "templates/form-two-column",
+      "aliases": []
+    },
+    {
+      "name": "template-form-wizard",
+      "path": "templates/form-wizard",
+      "aliases": []
+    },
+    {
+      "name": "template-form-wizard-dialog",
+      "path": "templates/form-wizard-dialog",
+      "aliases": []
+    },
+    {
+      "name": "template-form-wizard-inline",
+      "path": "templates/form-wizard-inline",
+      "aliases": []
+    },
+    {
+      "name": "template-form-wizard-vertical",
+      "path": "templates/form-wizard-vertical",
+      "aliases": []
+    },
+    {
+      "name": "template-gallery-hero",
+      "path": "templates/gallery-hero",
+      "aliases": []
+    },
+    {
+      "name": "template-ide",
+      "path": "templates/ide",
+      "aliases": []
+    },
+    {
+      "name": "template-incident-console",
+      "path": "templates/incident-console",
+      "aliases": []
+    },
+    {
+      "name": "template-kanban-board",
+      "path": "templates/kanban-board",
+      "aliases": []
+    },
+    {
+      "name": "template-library",
+      "path": "templates/library",
+      "aliases": []
+    },
+    {
+      "name": "template-login",
+      "path": "templates/login",
+      "aliases": []
+    },
+    {
+      "name": "template-login-card",
+      "path": "templates/login-card",
+      "aliases": []
+    },
+    {
+      "name": "template-login-split",
+      "path": "templates/login-split",
+      "aliases": []
+    },
+    {
+      "name": "template-login-sso",
+      "path": "templates/login-sso",
+      "aliases": []
+    },
+    {
+      "name": "template-messaging-shell",
+      "path": "templates/messaging-shell",
+      "aliases": []
+    },
+    {
+      "name": "template-mixed-gallery",
+      "path": "templates/mixed-gallery",
+      "aliases": []
+    },
+    {
+      "name": "template-payment-form",
+      "path": "templates/payment-form",
+      "aliases": []
+    },
+    {
+      "name": "template-product-detail",
+      "path": "templates/product-detail",
+      "aliases": []
+    },
+    {
+      "name": "template-product-gallery",
+      "path": "templates/product-gallery",
+      "aliases": []
+    },
+    {
+      "name": "template-settings",
+      "path": "templates/settings",
+      "aliases": []
+    },
+    {
+      "name": "template-settings-dialog",
+      "path": "templates/settings-dialog",
+      "aliases": []
+    },
+    {
+      "name": "template-settings-sidebar",
+      "path": "templates/settings-sidebar",
+      "aliases": []
+    },
+    {
+      "name": "template-shell-nav",
+      "path": "templates/shell-nav",
+      "aliases": []
+    },
+    {
+      "name": "template-shell-side-nav",
+      "path": "templates/shell-side-nav",
+      "aliases": []
+    },
+    {
+      "name": "template-shell-top-nav",
+      "path": "templates/shell-top-nav",
+      "aliases": []
+    },
+    {
+      "name": "template-side-gallery",
+      "path": "templates/side-gallery",
+      "aliases": []
+    },
+    {
+      "name": "template-table",
+      "path": "templates/table",
+      "aliases": []
+    },
+    {
+      "name": "template-table-collapsible",
+      "path": "templates/table-collapsible",
+      "aliases": []
+    },
+    {
+      "name": "template-table-comparison",
+      "path": "templates/table-comparison",
+      "aliases": []
+    },
+    {
+      "name": "template-table-filter",
+      "path": "templates/table-filter",
+      "aliases": []
+    },
+    {
+      "name": "template-table-grouped",
+      "path": "templates/table-grouped",
+      "aliases": []
+    },
+    {
+      "name": "template-table-inbox",
+      "path": "templates/table-inbox",
+      "aliases": []
+    },
+    {
+      "name": "template-table-page",
+      "path": "templates/table-page",
+      "aliases": []
+    },
+    {
+      "name": "template-table-tree",
+      "path": "templates/table-tree",
+      "aliases": []
+    },
+    {
+      "name": "template-theme-showcase",
+      "path": "templates/theme-showcase",
+      "aliases": []
+    },
+    {
+      "name": "template-work-item-detail",
+      "path": "templates/work-item-detail",
+      "aliases": []
+    }
+  ]
+}

@@ -655,7 +655,7 @@ function TableColumnSettingsExample() {
           onChange={setAppliedColumns}
           triggerLabel="View Options"
           placement="below"
-          xstyle={styles.viewOptionsTrigger}
+          controlXstyle={styles.viewOptionsTrigger}
           contentXstyle={styles.viewOptionsContent}>
           {(_currentColumns, commit, close, state) => (
             <div {...stylex.props(styles.viewOptionsSurface)}>

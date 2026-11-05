@@ -7,9 +7,9 @@
  * @position Test file; validates disabled/selectable filtering in select-all
  */
 
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi} from 'vitest';
 import {useState} from 'react';
-import {render, screen} from '@testing-library/react';
+import {act, render, renderHook, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Table} from '../../Table';
 import {useTableSelection} from './useTableSelection';
@@ -80,6 +80,32 @@ function StateHelperTable({
 // =============================================================================
 // Tests
 // =============================================================================
+
+describe('useTableSelectionState selection state output', () => {
+  it('exposes selected keys, count, presence, and a complete clear command', () => {
+    const selectedKeys = new Set(['2', '4']);
+    const setSelectedKeys = vi.fn();
+    const {result} = renderHook(() =>
+      useTableSelectionState<TestItem>({
+        data: testData,
+        idKey: 'id',
+        selectedKeys,
+        setSelectedKeys,
+      }),
+    );
+
+    const selectionState = result.current.selectionState;
+
+    expect(selectionState).toMatchObject({
+      selectedKeys,
+      selectedCount: 2,
+      hasSelection: true,
+    });
+
+    act(() => selectionState.clearSelection());
+    expect(setSelectedKeys).toHaveBeenCalledWith(new Set());
+  });
+});
 
 describe('useTableSelectionState', () => {
   it('select-all selects only enabled items', async () => {

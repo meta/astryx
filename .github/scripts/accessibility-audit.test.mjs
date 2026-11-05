@@ -2,74 +2,109 @@
 
 /**
  * @file accessibility-audit.test.mjs
- * Pins the --components contract of the a11y audit CLI. The pr-a11y job
- * derives its component list from the PR analysis and passes it as
- * `--components "$COMPONENTS"`; when a core/src change maps to no component
- * (a shared test file, docs-types.ts, …) that list is EMPTY, and the audit
- * must skip and pass rather than fan out into a full-repo audit that fails
- * on violations the PR never touched. An ABSENT --components flag keeps the
- * a11y-weekly contract: audit all stories.
+ * Pins the --components and Storybook-index contracts of the a11y audit CLI.
+ * An explicitly empty component set is the only zero-work success. Missing or
+ * malformed Storybook input must fail without leaving a success-shaped report.
  */
 
-import {execFileSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {describe, it, expect} from 'vitest';
+import {describe, expect, it} from 'vitest';
 
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(SCRIPTS_DIR, 'accessibility-audit.js');
 const BASELINE = path.resolve(SCRIPTS_DIR, '..', 'a11y-baseline.json');
 
-/** Run the audit CLI in an empty temp cwd; return {stdout, report}. */
-function runAudit(args) {
+function runAudit(args, setup) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'a11y-audit-'));
+  const output = path.join(dir, 'report.json');
   try {
-    const stdout = execFileSync(
+    setup?.(dir, output);
+    const result = spawnSync(
       process.execPath,
-      [SCRIPT, '--output', 'report.json', ...args],
+      [SCRIPT, '--output', output, ...args],
       {cwd: dir, encoding: 'utf8'},
     );
-    const report = JSON.parse(
-      fs.readFileSync(path.join(dir, 'report.json'), 'utf8'),
-    );
-    return {stdout, report};
+    const report = fs.existsSync(output)
+      ? JSON.parse(fs.readFileSync(output, 'utf8'))
+      : null;
+    return {...result, report};
   } finally {
     fs.rmSync(dir, {recursive: true, force: true});
   }
 }
 
 describe('accessibility-audit --components contract', () => {
-  it('audits nothing and passes when --components is explicitly empty', () => {
-    // The exact pr-a11y invocation shape for a PR whose analysis found no
-    // new or modified components. execFileSync throws on a non-zero exit,
-    // so reaching the assertions proves the gate passed.
-    const {stdout, report} = runAudit([
+  it('audits nothing only when --components is explicitly empty', () => {
+    const result = runAudit([
       '--components',
       '',
       '--baseline',
       BASELINE,
       '--fail-on-new',
     ]);
-    expect(stdout).toContain('No components to audit');
-    expect(report.components).toEqual({});
-    expect(report.summary.totalViolations).toBe(0);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('No components to audit');
+    expect(result.report.components).toEqual({});
+    expect(result.report.summary.totalViolations).toBe(0);
   });
 
-  it('still audits all stories when the flag is absent (a11y-weekly)', () => {
-    // No storybook build exists in the temp cwd, so the all-stories path
-    // reports the missing build instead of skipping — absent ≠ empty.
-    const {stdout, report} = runAudit([]);
-    expect(stdout).not.toContain('No components to audit');
-    expect(stdout).toContain('all affected');
-    expect(report.error).toBe('Storybook not built');
+  it('fails closed when the all-stories audit has no Storybook build', () => {
+    const result = runAudit([], (_dir, output) => {
+      fs.writeFileSync(output, '{"summary":{"totalViolations":0}}');
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('Storybook build not found');
+    expect(result.report).toBeNull();
   });
 
-  it('proceeds to audit when --components names components', () => {
-    const {stdout, report} = runAudit(['--components', 'Text,Heading']);
-    expect(stdout).not.toContain('No components to audit');
-    expect(stdout).toContain('Text, Heading');
-    expect(report.error).toBe('Storybook not built');
+  it('fails closed when selected components have no Storybook build', () => {
+    const result = runAudit(['--components', 'Text,Heading']);
+    expect(result.status).not.toBe(0);
+    expect(result.stdout).toContain('Text, Heading');
+    expect(result.stderr).toContain('Storybook build not found');
+    expect(result.report).toBeNull();
+  });
+
+  it.each([
+    ['empty', {entries: {}}],
+    [
+      'docs-only',
+      {
+        entries: {
+          'core-button--docs': {
+            id: 'core-button--docs',
+            title: 'Core/Button',
+            type: 'docs',
+          },
+        },
+      },
+    ],
+  ])('fails closed when the Storybook index is %s', (_name, index) => {
+    const result = runAudit([], dir => {
+      const storybook = path.join(dir, 'apps/storybook/dist');
+      fs.mkdirSync(storybook, {recursive: true});
+      fs.writeFileSync(path.join(storybook, 'index.json'), JSON.stringify(index));
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      'Storybook index contains no runnable story entries',
+    );
+    expect(result.report).toBeNull();
+  });
+
+  it('fails closed before routing when the Storybook index is invalid', () => {
+    const result = runAudit(['--components', 'core/Button'], dir => {
+      const storybook = path.join(dir, 'apps/storybook/dist');
+      fs.mkdirSync(storybook, {recursive: true});
+      fs.writeFileSync(path.join(storybook, 'index.json'), '{not json');
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('Could not read Storybook index');
+    expect(result.stderr).not.toContain('No owned Storybook stories resolved');
+    expect(result.report).toBeNull();
   });
 });

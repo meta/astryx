@@ -7,7 +7,7 @@ export const doc = {
   name: 'DateTimeInput',
   displayName: 'Date Time Input',
   description:
-    'A combined date and time picker. Click to open a calendar popover with a time input below.',
+    'A combined date and time picker. Desktop opens a calendar popover with a time input; touch devices open a Date/Time bottom sheet.',
   isReady: true,
   isShowcase: true,
   aspectRatio: 1,

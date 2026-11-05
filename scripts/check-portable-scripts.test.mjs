@@ -39,8 +39,7 @@ describe('findOffences — POSIX-only commands', () => {
   });
 
   it('does not flag a command that merely starts with those letters', () => {
-    // `rimraf` — the prescribed fix — starts with "rm"'s letters, and
-    // `concat` with "cat"'s.
+    // `rimraf` starts with "rm"'s letters, and `concat` with "cat"'s.
     expect(
       findOffences({build: 'rimraf dist', gen: 'concat a b'}, {rimraf: '^6'}),
     ).toEqual([]);
@@ -124,8 +123,10 @@ describe('the repo itself (#3637)', () => {
    * cleanup (#5125); lab and charts are the two that regressed in #3637.
    */
   const cleansDist = () => [
+    'packages/core',
     'packages/lab',
     'packages/charts',
+    'packages/richtext',
     ...trackedPackageJsonFiles()
       .filter(file => /^packages\/themes\/[^/]+\/package\.json$/.test(file))
       .map(file => path.posix.dirname(file)),
@@ -137,18 +138,15 @@ describe('the repo itself (#3637)', () => {
     expect(cleansDist()).toContain('packages/themes/neutral');
   });
 
-  it.each(cleansDist())(
-    '%s clears dist with the same portable rimraf as packages/core',
-    dir => {
-      // Default the block: a package with no devDependencies should fail this
-      // assertion by name, not throw on a property of undefined.
-      const {scripts, devDependencies = {}} = read(`${dir}/package.json`);
-      const core = read('packages/core/package.json');
+  it.each(cleansDist())('%s uses the shared portable dist cleaner', dir => {
+    const {scripts, devDependencies = {}} = read(`${dir}/package.json`);
+    const helper = dir.startsWith('packages/themes/')
+      ? '../../../scripts/clean-dist.mjs'
+      : '../../scripts/clean-dist.mjs';
 
-      expect(scripts.build).toMatch(/^rimraf dist && /);
-      expect(devDependencies.rimraf).toBe(core.devDependencies.rimraf);
-    },
-  );
+    expect(scripts.build.startsWith(`node ${helper} && `)).toBe(true);
+    expect(devDependencies.rimraf).toBeUndefined();
+  });
 
   it.each(['packages/lab', 'packages/charts'])(
     '%s runs babel with the same flags and quoting as packages/core',

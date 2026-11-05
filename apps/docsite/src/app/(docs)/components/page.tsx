@@ -7,6 +7,7 @@
 'use client';
 
 import {Fragment, useMemo} from 'react';
+import {FlaskConical} from 'lucide-react';
 import * as stylex from '@stylexjs/stylex';
 import {Text} from '@astryxdesign/core/Text';
 import {Heading} from '@astryxdesign/core/Text';
@@ -14,14 +15,21 @@ import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Section} from '@astryxdesign/core/Section';
 import {Grid} from '@astryxdesign/core/Grid';
 import {ClickableCard} from '@astryxdesign/core/ClickableCard';
+import {Icon} from '@astryxdesign/core/Icon';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Button} from '@astryxdesign/core/Button';
 import {Popover} from '@astryxdesign/core/Popover';
 import {Card} from '@astryxdesign/core/Card';
 import {CodeExampleBlock} from '../../../components/CodeExampleBlock';
 import {components as componentRegistry} from '../../../generated/componentRegistry';
+import {packages} from '../../../generated/packageRegistry';
 import {showcaseRegistry} from '../../../generated/showcaseRegistry';
 import {ShowcaseThumbnail} from '../../../components/ShowcaseThumbnail';
+import {
+  DEPRECATED_LABEL,
+  DeprecatedBadge,
+} from '../../../components/Deprecation';
+import {normalizeComponentCategory} from '../../../lib/componentCategories';
 import {layout} from '../../../layout.stylex';
 
 const FIGMA_LIBRARY_URL =
@@ -36,9 +44,9 @@ const CATEGORIES = [
   'Chat',
   'Container',
   'Content',
-  'Data Input',
   'Data Visualization',
   'Feedback & Status',
+  'Form Controls',
   'Layout',
   'Navigation',
   'Overlay',
@@ -53,6 +61,10 @@ const CATEGORIES = [
  * nothing — none of the showcase chunks are pulled in by this.
  */
 const SHOWCASE_NAMES = new Set(Object.keys(showcaseRegistry));
+
+const packageDisplayNames = new Map(
+  packages.map(pkg => [pkg.name, pkg.displayName]),
+);
 
 const styles = stylex.create({
   heroTitle: {
@@ -78,62 +90,119 @@ interface CategoryItem {
   category: string;
   /** Whether a showcase block exists to render in this component's tile */
   hasShowcase: boolean;
+  packageName: string;
+  isReady: boolean;
+  /** Whether the component's doc marks it deprecated. */
+  isDeprecated: boolean;
+}
+
+function ComponentGrid({items}: {items: CategoryItem[]}) {
+  return (
+    <Grid columns={{minWidth: 300, repeat: 'fill'}} gap={3} rowGap={4}>
+      {items.map(item => (
+        <VStack key={`${item.packageName}:${item.name}`} gap={1}>
+          <ClickableCard
+            label={
+              item.isDeprecated
+                ? `${item.displayName} (${DEPRECATED_LABEL})`
+                : item.displayName
+            }
+            href={item.href}
+            padding={0}
+            variant="transparent">
+            {item.hasShowcase ? (
+              <ShowcaseThumbnail name={item.name} />
+            ) : (
+              <div {...stylex.props(styles.cardImage)} />
+            )}
+          </ClickableCard>
+          <HStack gap={2} vAlign="center">
+            <Text type="supporting">{item.displayName}</Text>
+            {item.isDeprecated && <DeprecatedBadge />}
+          </HStack>
+        </VStack>
+      ))}
+    </Grid>
+  );
 }
 
 export default function ComponentsGalleryPage() {
   /** All categorized components (excluding hidden, hooks, and utilities) */
   const categorizedItems = useMemo(() => {
-    const coreComponents = componentRegistry['@astryxdesign/core'] ?? [];
     const items: CategoryItem[] = [];
 
-    for (const comp of coreComponents) {
-      // Skip components explicitly hidden from overview
-      if (comp.isHiddenFromOverview) {
-        continue;
-      }
-      // Skip hidden components
-      if (comp.hidden) {
-        continue;
-      }
-      // Skip hooks (they appear in the Utilities section)
-      if (comp.name.startsWith('use')) {
-        continue;
-      }
-      // Skip components without a category
-      if (!comp.category) {
-        continue;
-      }
-      // Skip utilities group
-      if (comp.group === 'Utilities') {
-        continue;
-      }
+    for (const [packageName, packageComponents] of Object.entries(
+      componentRegistry,
+    )) {
+      for (const comp of packageComponents) {
+        // Skip components explicitly hidden from overview
+        if (comp.isHiddenFromOverview) {
+          continue;
+        }
+        // Skip hidden components
+        if (comp.hidden) {
+          continue;
+        }
+        // Skip hooks (they appear in the Utilities section)
+        if (comp.name.startsWith('use')) {
+          continue;
+        }
+        // Skip components without a category
+        if (!comp.category) {
+          continue;
+        }
+        // Skip utilities group
+        if (comp.group === 'Utilities') {
+          continue;
+        }
 
-      items.push({
-        name: comp.name,
-        displayName: comp.displayName,
-        description: comp.description,
-        href: `/components/${comp.name}`,
-        category: comp.category,
-        hasShowcase: SHOWCASE_NAMES.has(comp.name),
-      });
+        items.push({
+          name: comp.name,
+          displayName: comp.displayName,
+          description: comp.description,
+          href: `/components/${comp.name}`,
+          category: normalizeComponentCategory(comp.category),
+          hasShowcase: SHOWCASE_NAMES.has(comp.name),
+          packageName,
+          isReady: comp.isReady,
+          isDeprecated: comp.deprecated != null,
+        });
+      }
     }
 
     return items;
   }, []);
 
-  /** Group items by category */
+  /** Group ready items by functional category. */
   const groupedByCategory = useMemo(() => {
     const map = new Map<string, CategoryItem[]>();
     for (const cat of CATEGORIES) {
       map.set(cat, []);
     }
-    for (const item of categorizedItems) {
+    for (const item of categorizedItems.filter(item => item.isReady)) {
       const list = map.get(item.category);
       if (list) {
         list.push(item);
       }
     }
     return map;
+  }, [categorizedItems]);
+
+  /** Group canary items by owning package; readiness appears on the category. */
+  const canaryCategories = useMemo(() => {
+    const map = new Map<string, CategoryItem[]>();
+    for (const item of categorizedItems.filter(item => !item.isReady)) {
+      const list = map.get(item.packageName) ?? [];
+      list.push(item);
+      map.set(item.packageName, list);
+    }
+    return [...map.entries()]
+      .map(([packageName, items]) => ({
+        packageName,
+        displayName: packageDisplayNames.get(packageName) ?? packageName,
+        items: items.sort((a, b) => a.displayName.localeCompare(b.displayName)),
+      }))
+      .sort((a, b) => a.displayName.localeCompare(b.displayName));
   }, [categorizedItems]);
 
   return (
@@ -211,31 +280,24 @@ export default function ComponentsGalleryPage() {
               <Divider />
               <VStack gap={4}>
                 <Heading level={2}>{cat}</Heading>
-                <Grid
-                  columns={{minWidth: 300, repeat: 'fill'}}
-                  gap={3}
-                  rowGap={4}>
-                  {items.map(item => (
-                    <VStack key={item.name} gap={1}>
-                      <ClickableCard
-                        label={item.displayName}
-                        href={item.href}
-                        padding={0}
-                        variant="transparent">
-                        {item.hasShowcase ? (
-                          <ShowcaseThumbnail name={item.name} />
-                        ) : (
-                          <div {...stylex.props(styles.cardImage)} />
-                        )}
-                      </ClickableCard>
-                      <Text type="supporting">{item.displayName}</Text>
-                    </VStack>
-                  ))}
-                </Grid>
+                <ComponentGrid items={items} />
               </VStack>
             </Fragment>
           );
         })}
+
+        {canaryCategories.map(category => (
+          <Fragment key={category.packageName}>
+            <Divider />
+            <VStack gap={4}>
+              <HStack gap={2} vAlign="center">
+                <Heading level={2}>{category.displayName}</Heading>
+                <Icon icon={FlaskConical} label="Canary" size="sm" />
+              </HStack>
+              <ComponentGrid items={category.items} />
+            </VStack>
+          </Fragment>
+        ))}
       </VStack>
     </Section>
   );

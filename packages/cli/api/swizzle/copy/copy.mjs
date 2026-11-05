@@ -15,20 +15,25 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {resolveCore} from '../_adapter.mjs';
+import {
+  checkGhCli,
+  resolveComponentReplacement,
+  resolveCore,
+} from '../_adapter.mjs';
 import {assertWithin, sanitizeName, PathSafetyError} from '../../../foundation/fs/path-safety.mjs';
-import {checkGhCli} from '../_github.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {
   CORE_PACKAGE,
-  findIntegrationComponentDoc,
-  findIntegrationComponentSource,
+  docStem,
+  findComponentReadme,
+  findIntegrationComponent,
+  unscopedComponentOwners,
 } from '../../../foundation/discovery/component-discovery.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
-import {AstryxError} from '../../error.mjs';
+import {AstryxError, writeFailed} from '../../error.mjs';
 
 /** Default issue tracker for maintainer feedback after swizzling. */
-const DEFAULT_ISSUES_URL = 'https://github.com/facebook/astryx/issues/new';
+const DEFAULT_ISSUES_URL = 'https://github.com/meta/astryx/issues/new';
 
 /**
  * Rewrite relative imports that point outside the component directory to use
@@ -46,12 +51,11 @@ const DEFAULT_ISSUES_URL = 'https://github.com/facebook/astryx/issues/new';
  *   - Asset files (`.json`, `.css`): exported by full subpath (e.g.
  *     `./locales/*.json`, `./reset.css`), and collapsing a two-levels-up
  *     `../../locales/x.json` would emit the invalid `<pkg>/..`.
- *   - The theme StyleX token module (`../theme/tokens.stylex`): the StyleX
- *     compiler needs the real module, which core ships as the dedicated
- *     `./theme/tokens.stylex` export (the in-repo charts consumer imports it
- *     by that exact subpath). Other `.stylex` files (e.g. a component-local
- *     `../Layer/layerAnimations.stylex`) are NOT exported by subpath, so they
- *     keep the barrel collapse.
+ *   - StyleX modules (`*.stylex`): the StyleX compiler needs the real module
+ *     path so it can resolve the styles at compile time. The barrel re-export
+ *     loses the module identity. Core exports every `.stylex` file by its
+ *     deep subpath (e.g. `./utils/focusOutline.stylex`,
+ *     `./theme/tokens.stylex`).
  *
  * @param {string} content
  * @param {string} [ownerPackage]
@@ -67,8 +71,8 @@ export function rewriteImports(content, ownerPackage = CORE_PACKAGE) {
     if (/\.(?:json|css)$/.test(last)) {
       return `${ownerPackage}/${rest}`;
     }
-    // The theme token module is a dedicated deep StyleX export.
-    if (parts[0] === 'theme' && /\.stylex(?:\.[cm]?[jt]sx?)?$/.test(last)) {
+    // StyleX modules need the deep path so the compiler can resolve them.
+    if (/\.stylex(?:\.[cm]?[jt]sx?)?$/.test(last)) {
       return `${ownerPackage}/${rest}`;
     }
     return `${ownerPackage}/${parts[0]}`;
@@ -114,7 +118,7 @@ function buildFeedback(component, issuesUrl) {
  */
 async function loadConfigSafely(cwd) {
   try {
-    const project = await Project.load(cwd);
+    const project = await Project.load(cwd, {core: 'project'});
     return {
       loadedIntegrations: project.loadedIntegrations,
       issuesUrl: project.config.issuesUrl,
@@ -127,36 +131,59 @@ async function loadConfigSafely(cwd) {
 
 /**
  * Build the set of OWNER packages that provide a component named `name` across
- * core + every loaded integration.
+ * core + every loaded integration. Core holds every name it documents, but has
+ * source to copy (`sourceDir`) only for a name with its own folder.
  * @param {string} coreDir
  * @param {Array<{name: string, components?: string, issuesUrl?: string}>} loadedIntegrations
  * @param {string} name
  * @param {string|undefined} coreIssuesUrl
- * @returns {Array<{package: string, sourceDir: string|null, ownerPackage: string, issuesUrl: string|undefined}>}
+ * @returns {Array<{package: string, sourceDir: string|null, docPath: string|null, ownerPackage: string, issuesUrl: string|undefined, hold: string}>}
  */
 function resolveOwners(coreDir, loadedIntegrations, name, coreIssuesUrl) {
   const owners = [];
   const coreComponentDir = path.join(coreDir, 'src', name);
-  if (fs.existsSync(coreComponentDir)) {
+  const coreFolder = fs.existsSync(coreComponentDir);
+  if (coreFolder || findComponentReadme(coreDir, name)) {
     owners.push({
       package: CORE_PACKAGE,
-      sourceDir: coreComponentDir,
+      sourceDir: coreFolder ? coreComponentDir : null,
+      docPath: null,
       ownerPackage: CORE_PACKAGE,
       issuesUrl: coreIssuesUrl || DEFAULT_ISSUES_URL,
+      hold: 'core',
     });
   }
   for (const integration of loadedIntegrations) {
-    const docPath = findIntegrationComponentDoc(integration, name);
-    if (!docPath) continue;
-    const sourcePath = findIntegrationComponentSource(integration, name);
+    const found = findIntegrationComponent(integration, name);
+    if (!found) continue;
     owners.push({
       package: integration.name,
-      sourceDir: sourcePath ? path.dirname(sourcePath) : null,
+      sourceDir: found.sourcePath ? path.dirname(found.sourcePath) : null,
+      docPath: found.docPath,
       ownerPackage: integration.name,
       issuesUrl: integration.issuesUrl,
+      hold: found.hold,
     });
   }
   return owners;
+}
+
+/**
+ * `assertWithin`, with an escape reported as ERR_PATH_TRAVERSAL.
+ * @param {string} target
+ * @param {string} cwd
+ * @param {{allowAbsolute?: boolean, label: string}} options
+ * @returns {string}
+ */
+function confineWrite(target, cwd, options) {
+  try {
+    return assertWithin(target, cwd, options);
+  } catch (err) {
+    if (err instanceof PathSafetyError) {
+      throw new AstryxError(err.message, [], ERROR_CODES.ERR_PATH_TRAVERSAL);
+    }
+    throw err;
+  }
 }
 
 /** @param {string} file */
@@ -203,7 +230,34 @@ export async function swizzleCopy(component, options = {}) {
   const coreIssuesUrl = project
     ? project.issuesUrl({package: CORE_PACKAGE})
     : undefined;
-  const allOwners = resolveOwners(coreDir, loadedIntegrations, dirName, coreIssuesUrl);
+  // An active integration replacement answers to the Core name it replaces,
+  // bare or qualified by its own package (spec:AST-035 FR11): copy it under its
+  // doc's file name, the folder it has always gone to. `--package
+  // @astryxdesign/core` still copies the Core original.
+  if (pkg !== CORE_PACKAGE) {
+    const replacement = await resolveComponentReplacement(
+      coreDir,
+      loadedIntegrations,
+      dirName,
+    );
+    const copyName = replacement ? docStem(replacement.docPath) : null;
+    if (
+      replacement &&
+      copyName &&
+      (!pkg || (pkg === replacement.package && copyName !== dirName))
+    ) {
+      return swizzleCopy(copyName, {
+        ...options,
+        package: replacement.package,
+      });
+    }
+  }
+
+  const found = resolveOwners(coreDir, loadedIntegrations, dirName, coreIssuesUrl);
+  // The owner rule, then a Core name without its own folder drops out.
+  const allOwners = (pkg ? found : unscopedComponentOwners(found)).filter(
+    owner => owner.package !== CORE_PACKAGE || owner.sourceDir != null,
+  );
 
   if (allOwners.length === 0) {
     throw new AstryxError(
@@ -243,23 +297,26 @@ export async function swizzleCopy(component, options = {}) {
 
   const componentDir = owner.sourceDir;
 
-  // Path-safety: --output must resolve inside cwd.
-  let outputBase;
-  try {
-    outputBase = assertWithin(output, cwd, {label: 'output directory'});
-  } catch (err) {
-    if (err instanceof PathSafetyError) {
-      throw new AstryxError(err.message, [], ERROR_CODES.ERR_PATH_TRAVERSAL);
-    }
-    throw err;
-  }
+  // Path-safety: every write target resolves inside cwd, not just --output. An
+  // existing component directory or file may be a symlink out of cwd.
+  const outputBase = confineWrite(output, cwd, {label: 'output directory'});
   const outputDir = path.join(outputBase, dirName);
 
-  // Pre-flight overwrite check before any mkdir/writeFile.
+  // The receipt's feedback first: a swizzle that fails must fail before it
+  // writes anything.
+  const feedback = buildFeedback(dirName, owner.issuesUrl);
+
+  // Pre-flight path and overwrite checks before any mkdir/writeFile.
   const sourceFiles = fs.readdirSync(componentDir).filter(file => {
     if (isExcludedFromCopy(file)) return false;
     return fs.statSync(path.join(componentDir, file)).isFile();
   });
+  for (const file of sourceFiles) {
+    confineWrite(path.join(outputDir, file), cwd, {
+      allowAbsolute: true,
+      label: 'output file',
+    });
+  }
   const existingFiles = sourceFiles.filter(f =>
     fs.existsSync(path.join(outputDir, f)),
   );
@@ -273,11 +330,21 @@ export async function swizzleCopy(component, options = {}) {
     );
   }
 
-  fs.mkdirSync(outputDir, {recursive: true});
+  const outputDirExisted = fs.existsSync(outputDir);
+  try {
+    fs.mkdirSync(outputDir, {recursive: true});
+  } catch (err) {
+    throw writeFailed(outputDir, cwd, err);
+  }
 
   const files = fs.readdirSync(componentDir);
   let copied = 0;
   let usesStyleX = false;
+  // A copy that fails part-way undoes what it already wrote, so the report is
+  // true and a retry does not trip over half a component. Each entry keeps
+  // the bytes the file had before this run (null when the copy created it).
+  /** @type {Array<{dest: string, original: Buffer|null}>} */
+  const written = [];
   for (const file of files) {
     if (isExcludedFromCopy(file)) continue;
     const srcPath = path.join(componentDir, file);
@@ -292,7 +359,25 @@ export async function swizzleCopy(component, options = {}) {
     ) {
       usesStyleX = true;
     }
-    fs.writeFileSync(path.join(outputDir, file), content);
+    const dest = path.join(outputDir, file);
+    try {
+      // The snapshot read is guarded too: a destination that cannot be read
+      // back (no permission, or a directory with this name) must still undo
+      // the earlier writes and report ERR_WRITE_FAILED.
+      const original = fs.existsSync(dest) ? fs.readFileSync(dest) : null;
+      written.push({dest, original});
+      fs.writeFileSync(dest, content);
+    } catch (err) {
+      const unrestored = undoCopy(written);
+      if (!outputDirExisted) {
+        try {
+          fs.rmdirSync(outputDir);
+        } catch {
+          // Not empty (something could not be undone), or already gone.
+        }
+      }
+      throw writeFailed(dest, cwd, err, unrestored);
+    }
     copied++;
   }
 
@@ -302,8 +387,6 @@ export async function swizzleCopy(component, options = {}) {
       !isExcludedFromCopy(f) &&
       fs.statSync(path.join(componentDir, f)).isFile(),
   );
-  const feedback = buildFeedback(dirName, owner.issuesUrl);
-
   /** @type {import('../swizzle.type.mjs').SwizzleCopyResponse['data']} */
   const data = {
     component: dirName,
@@ -314,5 +397,40 @@ export async function swizzleCopy(component, options = {}) {
     usesStyleX,
   };
   if (feedback) data.feedback = feedback;
-  return {type: 'swizzle.copy', data};
+  return {type: 'swizzle.copy', package: data.package, data};
+}
+
+/**
+ * Undo the writes of a copy that failed part-way, newest first: delete the
+ * files the copy created and put back the bytes of the files it replaced. A
+ * file whose bytes are already the original ones is left alone, so a write
+ * that failed before changing anything is not reported as unrestored.
+ *
+ * @param {Array<{dest: string, original: Buffer|null}>} written
+ * @returns {string[]} the files it could not restore
+ */
+function undoCopy(written) {
+  /** @type {string[]} */
+  const unrestored = [];
+  for (const {dest, original} of [...written].reverse()) {
+    try {
+      if (original == null) {
+        fs.rmSync(dest, {force: true});
+        continue;
+      }
+      /** @type {Buffer|null} */
+      let current = null;
+      try {
+        current = fs.readFileSync(dest);
+      } catch {
+        current = null;
+      }
+      if (current == null || !current.equals(original)) {
+        fs.writeFileSync(dest, original);
+      }
+    } catch {
+      unrestored.push(dest);
+    }
+  }
+  return unrestored;
 }

@@ -10,22 +10,41 @@
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {useState} from 'react';
+import {act, useState} from 'react';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../theme/tokens.stylex';
 import {TestIcon} from '../__tests__/TestIcon';
 import {InternationalizationProvider} from '../i18n';
+import {registerIcons, resetIcons} from '../Icon';
 import {InputGroup} from '../InputGroup';
 import {NumberInput} from './NumberInput';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 
+// jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
+const RING = stylex
+  .props(
+    stylex.create({
+      ring: {
+        boxShadow: {
+          default: null,
+          ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+        },
+      },
+    }).ring,
+  )
+  .className!.split(' ')
+  .pop()!;
+
 // FieldStatus announces status messages through the persistent useAnnounce
 // singletons; remove them between tests so role/aria-live queries in this
 // file never match a leftover region.
 afterEach(() => {
   __resetLiveRegionsForTest();
+  resetIcons();
 });
 
 // Mock showPopover/hidePopover since jsdom does not implement them. Used by the
@@ -147,7 +166,7 @@ describe('NumberInput', () => {
     expect(screen.getByRole('spinbutton')).not.toHaveAttribute('aria-required');
   });
 
-  it('sets disabled attribute when isDisabled is true', () => {
+  it('exposes aria-disabled, not native disabled, when isDisabled is true (spec:AST-085)', () => {
     render(
       <NumberInput
         label="Quantity"
@@ -156,7 +175,76 @@ describe('NumberInput', () => {
         onChange={() => {}}
       />,
     );
-    expect(screen.getByRole('spinbutton')).toBeDisabled();
+    expect(screen.getByRole('spinbutton')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('keeps a disabled input in the tab order and rings it (spec:AST-085 FR1, FR6)', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <NumberInput label="First" value={1} onChange={() => {}} />
+        <NumberInput label="Second" value={2} onChange={() => {}} isDisabled />
+      </>,
+    );
+    await user.tab();
+    await user.tab();
+    const input = screen.getByRole('spinbutton', {name: 'Second'});
+    expect(input).toHaveFocus();
+    expect(input.parentElement).toHaveClass(RING);
+  });
+
+  it('runs no caller handler, steps nothing and submits no form while disabled (spec:AST-085 FR2)', async () => {
+    const user = userEvent.setup();
+    const handlers = {
+      onChange: vi.fn(),
+      onEnter: vi.fn(),
+      onKeyDown: vi.fn(),
+      onPaste: vi.fn(),
+    };
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <NumberInput
+          label="Quantity"
+          value={5}
+          isDisabled
+          hasNumberSteppers
+          {...handlers}
+        />
+      </form>,
+    );
+    await user.click(screen.getByRole('spinbutton'));
+    await user.keyboard('{ArrowUp}{ArrowDown}{Enter}');
+    await user.paste('9');
+    await user.click(screen.getByRole('button', {name: 'Increment Quantity'}));
+    for (const handler of [...Object.values(handlers), onSubmit]) {
+      expect(handler).not.toHaveBeenCalled();
+    }
+  });
+
+  it('commits nothing when a field disabled mid-entry loses focus (spec:AST-085 FR2)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const field = (isDisabled: boolean) => (
+      <NumberInput
+        label="Quantity"
+        value={5}
+        onChange={onChange}
+        isDisabled={isDisabled}
+      />
+    );
+    const {rerender} = render(field(false));
+    const input = screen.getByRole('spinbutton');
+    await user.clear(input);
+    await user.type(input, '8');
+    onChange.mockClear();
+    rerender(field(true));
+    await user.tab();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input).toHaveValue('5');
   });
 
   it('does not fire onChange when disabled', async () => {
@@ -268,6 +356,95 @@ describe('NumberInput', () => {
       expect(input).toHaveValue('$1,234');
       expect(input).toHaveAttribute('aria-valuetext', '$1,234');
       expect(input).toHaveAttribute('aria-valuenow', '1234');
+    });
+
+    it('keeps the whole text selected when focus arrives with it selected, as Tab does', () => {
+      render(
+        <NumberInput
+          label="Amount"
+          value={1500000}
+          onChange={() => {}}
+          formatValue={number => number.toLocaleString('en-US')}
+        />,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      expect(input).toHaveValue('1,500,000');
+
+      // Tab into a text field selects its text before the focus event.
+      input.focus();
+      input.setSelectionRange(0, input.value.length);
+      fireEvent.focus(input);
+
+      // The editable text replaces the formatted text, and stays selected.
+      expect(input).toHaveValue('1500000');
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe('1500000'.length);
+    });
+
+    it('selects the editable text when Tab moves focus into the field', async () => {
+      const user = userEvent.setup();
+      const onFocus = vi.fn();
+      render(
+        <>
+          <button type="button">Before</button>
+          <NumberInput
+            label="Amount"
+            value={1500000}
+            onChange={() => {}}
+            onFocus={onFocus}
+            formatValue={number => number.toLocaleString('en-US')}
+          />
+        </>,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      await user.click(screen.getByRole('button', {name: 'Before'}));
+      await user.tab();
+      expect(input).toHaveFocus();
+      expect(input).toHaveValue('1500000');
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe('1500000'.length);
+      expect(onFocus).toHaveBeenCalledTimes(1);
+      // Typing replaces the whole number.
+      await user.keyboard('42');
+      expect(input).toHaveValue('42');
+    });
+
+    it('does not swallow keystrokes when focus swaps no text', async () => {
+      const user = userEvent.setup();
+      function Controlled() {
+        const [value, setValue] = useState<number | null>(1);
+        return <NumberInput label="Amount" value={value} onChange={setValue} />;
+      }
+      render(
+        <>
+          <button type="button">Before</button>
+          <Controlled />
+        </>,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      // Tab into the field with its text selected, as a browser does. The
+      // text is the same at rest and focused, so nothing is swapped.
+      input.focus();
+      input.setSelectionRange(0, input.value.length);
+      fireEvent.focus(input);
+      await user.keyboard('75');
+      expect(input).toHaveValue('75');
+    });
+
+    it('leaves the caret where a click put it', () => {
+      render(
+        <NumberInput
+          label="Amount"
+          value={1500000}
+          onChange={() => {}}
+          formatValue={number => number.toLocaleString('en-US')}
+        />,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      input.focus();
+      input.setSelectionRange(3, 3);
+      fireEvent.focus(input);
+      expect(input.selectionStart).toBe(input.selectionEnd);
     });
 
     it('keeps ARIA value text on the committed value while an edit is pending', () => {
@@ -992,6 +1169,49 @@ describe('NumberInput', () => {
       }
     });
 
+    it('names the input by its label and a caller aria-labelledby', () => {
+      render(
+        <>
+          <span id="shipping-heading">Shipping</span>
+          <NumberInput
+            label="Amount"
+            value={null}
+            onChange={() => {}}
+            aria-labelledby="shipping-heading"
+          />
+        </>,
+      );
+      const input = screen.getByRole('spinbutton', {name: 'Amount Shipping'});
+      expect(input.getAttribute('aria-labelledby')?.split(' ')).toContain(
+        'shipping-heading',
+      );
+    });
+
+    it('names a grouped input by the group, its label, and a caller aria-labelledby', () => {
+      render(
+        <>
+          <span id="shipping-heading">Shipping</span>
+          <InputGroup label="Price">
+            <NumberInput
+              label="Amount"
+              value={null}
+              onChange={() => {}}
+              aria-labelledby="shipping-heading"
+            />
+          </InputGroup>
+        </>,
+      );
+      expect(
+        screen.getByRole('spinbutton', {name: 'Price Amount Shipping'}),
+      ).toBeInTheDocument();
+    });
+
+    it('leaves a standalone input named by its label element without a caller aria-labelledby', () => {
+      render(<NumberInput label="Amount" value={null} onChange={() => {}} />);
+      const input = screen.getByRole('spinbutton', {name: 'Amount'});
+      expect(input).not.toHaveAttribute('aria-labelledby');
+    });
+
     it('does not render status message when not provided', () => {
       render(
         <NumberInput
@@ -1095,6 +1315,30 @@ describe('NumberInput', () => {
       await user.type(input, '3.5');
 
       expect(screen.getByRole('alert')).toHaveTextContent('Invalid number');
+    });
+
+    it('resolves the invalid-number announcement from the i18n catalog', async () => {
+      const user = userEvent.setup();
+      render(
+        <InternationalizationProvider
+          locale="ar-SA"
+          overrides={{
+            'ar-SA': {'@astryx.numberInput.invalidNumber': 'رقم غير صالح'},
+          }}>
+          <NumberInput
+            label="Count"
+            value={null}
+            onChange={() => {}}
+            isIntegerOnly
+          />
+        </InternationalizationProvider>,
+      );
+
+      const input = screen.getByRole('spinbutton');
+      await user.click(input);
+      await user.type(input, '3.5');
+
+      expect(screen.getByRole('alert')).toHaveTextContent('رقم غير صالح');
     });
 
     it('does not announce an alert message when input is valid', async () => {
@@ -1350,7 +1594,7 @@ describe('NumberInput', () => {
           isReadOnly
         />,
       );
-      const input = screen.getByRole('spinbutton');
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
       input.focus();
       await user.keyboard('{ArrowUp}{ArrowDown}');
       expect(handleChange).not.toHaveBeenCalled();
@@ -1370,7 +1614,7 @@ describe('NumberInput', () => {
           />
         </div>,
       );
-      const input = screen.getByRole('spinbutton');
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
       input.focus();
       const event = new WheelEvent('wheel', {
         bubbles: true,
@@ -1398,10 +1642,10 @@ describe('NumberInput', () => {
       const increment = screen.getByRole('button', {
         name: 'Increment Quantity',
       });
-      expect(increment).toBeDisabled();
+      expect(increment).toHaveAttribute('aria-disabled', 'true');
       expect(
         screen.getByRole('button', {name: 'Decrement Quantity'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
 
       fireEvent.click(increment);
       expect(handleChange).not.toHaveBeenCalled();
@@ -1420,7 +1664,10 @@ describe('NumberInput', () => {
           />
         </form>,
       );
-      expect(screen.getByRole('spinbutton')).toBeDisabled();
+      expect(screen.getByRole('spinbutton')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
       expect([
         ...new FormData(container.querySelector('form')!).keys(),
       ]).toEqual([]);
@@ -1452,6 +1699,24 @@ describe('NumberInput', () => {
       expect(
         screen.getByRole('button', {name: 'Clear Qty'}),
       ).toBeInTheDocument();
+    });
+
+    it('focuses the field inside the tap that clears it, without scrolling', () => {
+      // iOS Safari brings up its keyboard only for a focus made while
+      // handling the touch.
+      const onChange = vi.fn();
+      const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
+      render(
+        <NumberInput label="Qty" value={5} onChange={onChange} hasClear />,
+      );
+      const input = screen.getByRole('spinbutton');
+      fireEvent.click(screen.getByRole('button', {name: 'Clear Qty'}), {
+        detail: 1,
+      });
+      expect(onChange).toHaveBeenCalledWith(null);
+      expect(document.activeElement).toBe(input);
+      expect(focusSpy).toHaveBeenLastCalledWith({preventScroll: true});
+      focusSpy.mockRestore();
     });
 
     it('does not show clear button when value is null', () => {
@@ -1667,7 +1932,7 @@ describe('NumberInput', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('remains natively disabled when disabled without a reason', () => {
+    it('stays focusable when disabled without a reason', () => {
       render(
         <NumberInput
           label="Quantity"
@@ -1677,8 +1942,8 @@ describe('NumberInput', () => {
         />,
       );
       const input = screen.getByRole('spinbutton');
-      expect(input).toBeDisabled();
-      expect(input).not.toHaveAttribute('aria-disabled');
+      expect(input).not.toBeDisabled();
+      expect(input).toHaveAttribute('aria-disabled', 'true');
     });
   });
 });
@@ -1758,6 +2023,34 @@ describe('NumberInput statusVariant forwarding', () => {
 });
 
 describe('NumberInput stepping', () => {
+  const stepInteractions = [
+    [
+      'keyboard',
+      (input: HTMLElement, direction: 'up' | 'down') =>
+        fireEvent.keyDown(input, {
+          key: direction === 'up' ? 'ArrowUp' : 'ArrowDown',
+        }),
+    ],
+    [
+      'wheel',
+      (input: HTMLElement, direction: 'up' | 'down') => {
+        input.focus();
+        act(() => {
+          fireEvent.wheel(input, {deltaY: direction === 'up' ? -100 : 100});
+        });
+      },
+    ],
+    [
+      'number stepper',
+      (_input: HTMLElement, direction: 'up' | 'down') =>
+        fireEvent.click(
+          screen.getByRole('button', {
+            name: direction === 'up' ? 'Increment Amount' : 'Decrement Amount',
+          }),
+        ),
+    ],
+  ] as const;
+
   it('increments with ArrowUp and decrements with ArrowDown', () => {
     const onChange = vi.fn();
     render(<NumberInput label="Amount" value={5} onChange={onChange} />);
@@ -1892,6 +2185,76 @@ describe('NumberInput stepping', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it.each(stepInteractions)(
+    'clamps at a fractional max after rounding via the %s',
+    (_name, interact) => {
+      const onChange = vi.fn();
+      render(
+        <NumberInput
+          label="Amount"
+          value={99}
+          onChange={onChange}
+          max={99.99}
+          hasNumberSteppers
+        />,
+      );
+
+      interact(screen.getByRole('spinbutton'), 'up');
+
+      expect(onChange).toHaveBeenCalledWith(99.99);
+      expect(onChange).not.toHaveBeenCalledWith(100);
+    },
+  );
+
+  it.each(stepInteractions)(
+    'clamps at a fractional min after rounding via the %s',
+    (_name, interact) => {
+      const onChange = vi.fn();
+      const min = 4e-13;
+      render(
+        <NumberInput
+          label="Amount"
+          value={0.5}
+          onChange={onChange}
+          min={min}
+          hasNumberSteppers
+        />,
+      );
+
+      interact(screen.getByRole('spinbutton'), 'down');
+
+      expect(onChange).toHaveBeenCalledWith(min);
+      expect(onChange).not.toHaveBeenCalledWith(0);
+    },
+  );
+
+  it('reflects a reached fractional max in the spinbutton and stepper state', () => {
+    function ControlledNumberInput() {
+      const [value, setValue] = useState(99);
+      return (
+        <NumberInput
+          label="Amount"
+          value={value}
+          onChange={setValue}
+          max={99.99}
+          hasNumberSteppers
+        />
+      );
+    }
+    render(<ControlledNumberInput />);
+
+    const input = screen.getByRole('spinbutton');
+    const increment = screen.getByRole('button', {name: 'Increment Amount'});
+    expect(increment).not.toHaveAttribute('aria-disabled');
+
+    fireEvent.click(increment);
+
+    expect(input).toHaveValue('99.99');
+    expect(input).toHaveAttribute('aria-valuenow', '99.99');
+    expect(input).not.toHaveAttribute('aria-invalid');
+    expect(increment).toHaveAttribute('aria-disabled', 'true');
+  });
+
   it('allows wheel stepping by default and consumes the focused gesture', () => {
     const onScrollableWheel = vi.fn();
     const onChange = vi.fn();
@@ -1900,7 +2263,7 @@ describe('NumberInput stepping', () => {
         <NumberInput label="Amount" value={5} onChange={onChange} />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
     const event = new WheelEvent('wheel', {
       bubbles: true,
@@ -1927,7 +2290,7 @@ describe('NumberInput stepping', () => {
         />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
     const event = new WheelEvent('wheel', {
       bubbles: true,
@@ -1954,7 +2317,7 @@ describe('NumberInput stepping', () => {
         />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
 
     rerender(
@@ -2016,7 +2379,7 @@ describe('NumberInput stepping', () => {
         <NumberInput label="Amount" value={5} onChange={onChange} />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
     fireEvent.wheel(input, {deltaY: -100, ctrlKey: true});
 
@@ -2038,7 +2401,7 @@ describe('NumberInput stepping', () => {
         />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
     fireEvent.wheel(input, {deltaY: -100});
 
@@ -2072,6 +2435,33 @@ describe('NumberInput stepping', () => {
       expect(
         screen.getByRole('button', {name: 'Decrement Quantity'}),
       ).toHaveAttribute('tabindex', '-1');
+    });
+
+    it('uses the NumberInput extension icon for both stepper buttons', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      registerIcons({
+        chevronDown: <svg data-testid="generic-chevron-down" />,
+        'numberInput:stepperDown': <svg data-testid="number-stepper-down" />,
+      });
+
+      render(
+        <NumberInput
+          label="Quantity"
+          value={5}
+          onChange={() => {}}
+          hasNumberSteppers
+        />,
+      );
+
+      const stepperIcons = screen.getAllByTestId('number-stepper-down');
+      expect(stepperIcons).toHaveLength(2);
+      for (const icon of stepperIcons) {
+        expect(icon.parentElement).toHaveAttribute('data-size', 'xsm');
+      }
+      expect(
+        screen.queryByTestId('generic-chevron-down'),
+      ).not.toBeInTheDocument();
+      warnSpy.mockRestore();
     });
 
     it('steps the value and returns focus to the input', () => {
@@ -2108,10 +2498,508 @@ describe('NumberInput stepping', () => {
       );
       expect(
         screen.getByRole('button', {name: 'Increment Quantity'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
       expect(
         screen.getByRole('button', {name: 'Decrement Quantity'}),
-      ).not.toBeDisabled();
+      ).not.toHaveAttribute('aria-disabled');
+    });
+
+    it('commits nothing from a click on the stepper at the reached boundary (spec:AST-085 FR2)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <NumberInput
+          label="Quantity"
+          value={5}
+          onChange={onChange}
+          min={0}
+          max={10}
+          hasNumberSteppers
+        />,
+      );
+      const input = screen.getByRole('spinbutton');
+      await user.clear(input);
+      await user.type(input, '10');
+      onChange.mockClear();
+      await user.click(
+        screen.getByRole('button', {name: 'Increment Quantity'}),
+      );
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    describe('a held stepper', () => {
+      const mousePress = {button: 0, pointerId: 1, pointerType: 'mouse'};
+
+      beforeEach(() => {
+        vi.useFakeTimers();
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      function Controlled({
+        onChange,
+        initial = 5,
+        isReadOnly,
+        isDisabled,
+        hasNumberSteppers = true,
+      }: {
+        onChange: (value: number | null) => void;
+        initial?: number;
+        isReadOnly?: boolean;
+        isDisabled?: boolean;
+        hasNumberSteppers?: boolean;
+      }) {
+        const [value, setValue] = useState<number | null>(initial);
+        return (
+          <NumberInput
+            label="Quantity"
+            value={value}
+            max={10}
+            isReadOnly={isReadOnly}
+            isDisabled={isDisabled}
+            hasNumberSteppers={hasNumberSteppers}
+            onChange={next => {
+              onChange(next);
+              setValue(next);
+            }}
+          />
+        );
+      }
+
+      it('repeats into the draft and commits once, on release', () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} />);
+        const input = screen.getByRole('spinbutton');
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+
+        fireEvent.pointerDown(increment, mousePress);
+        act(() => {
+          vi.advanceTimersByTime(499);
+        });
+        expect(input).toHaveValue('5');
+        // The first repeat comes at 0.5 s, the next two 250 ms and 225 ms
+        // later.
+        act(() => {
+          vi.advanceTimersByTime(1 + 250 + 225);
+        });
+        expect(input).toHaveValue('8');
+        expect(onChange).not.toHaveBeenCalled();
+
+        fireEvent.pointerUp(increment, mousePress);
+        fireEvent.click(increment, {detail: 1});
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenCalledWith(8);
+        expect(input).toHaveValue('8');
+        expect(input).toHaveFocus();
+      });
+
+      it('commits once when the pointer is canceled', () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} />);
+        const decrement = screen.getByRole('button', {
+          name: 'Decrement Quantity',
+        });
+
+        fireEvent.pointerDown(decrement, mousePress);
+        act(() => {
+          vi.advanceTimersByTime(500 + 250);
+        });
+        fireEvent.pointerCancel(decrement, mousePress);
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenCalledWith(3);
+        expect(screen.getByRole('spinbutton')).toHaveValue('3');
+      });
+
+      it('stops repeating at a bound and commits the bound once', () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} initial={9} />);
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+
+        fireEvent.pointerDown(increment, mousePress);
+        act(() => {
+          vi.advanceTimersByTime(3000);
+        });
+        expect(screen.getByRole('spinbutton')).toHaveValue('10');
+        fireEvent.pointerUp(increment, mousePress);
+        fireEvent.click(increment, {detail: 1});
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenCalledWith(10);
+      });
+
+      it('steps and commits at once for each click', () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} />);
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+
+        for (const expected of [6, 7]) {
+          fireEvent.pointerDown(increment, mousePress);
+          act(() => {
+            vi.advanceTimersByTime(100);
+          });
+          fireEvent.pointerUp(increment, mousePress);
+          fireEvent.click(increment, {detail: 1});
+          expect(onChange).toHaveBeenLastCalledWith(expected);
+        }
+        expect(onChange).toHaveBeenCalledTimes(2);
+        act(() => {
+          vi.advanceTimersByTime(3000);
+        });
+        expect(onChange).toHaveBeenCalledTimes(2);
+        expect(screen.getByRole('spinbutton')).toHaveValue('7');
+      });
+
+      it('steps for a click with no pointer after a hold, such as a screen reader activation', () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} />);
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+
+        fireEvent.pointerDown(increment, mousePress);
+        act(() => {
+          vi.advanceTimersByTime(500);
+        });
+        // The release's click lands elsewhere, so the button gets none.
+        fireEvent.pointerUp(increment, mousePress);
+        expect(onChange).toHaveBeenLastCalledWith(6);
+        fireEvent.click(increment, {detail: 0});
+        expect(onChange).toHaveBeenLastCalledWith(7);
+        expect(onChange).toHaveBeenCalledTimes(2);
+      });
+
+      it.each([
+        ['read-only', {isReadOnly: true}],
+        ['disabled', {isDisabled: true}],
+      ])(
+        'commits nothing when the field becomes %s during the hold',
+        (_state, props) => {
+          const onChange = vi.fn();
+          const {rerender} = render(<Controlled onChange={onChange} />);
+          const increment = screen.getByRole('button', {
+            name: 'Increment Quantity',
+          });
+
+          fireEvent.pointerDown(increment, mousePress);
+          act(() => {
+            vi.advanceTimersByTime(500 + 250);
+          });
+          expect(screen.getByRole('spinbutton')).toHaveValue('7');
+          rerender(<Controlled onChange={onChange} {...props} />);
+          // The hold ends at once: the draft drops and stops moving.
+          expect(screen.getByRole('spinbutton')).toHaveValue('5');
+          act(() => {
+            vi.advanceTimersByTime(2000);
+          });
+          expect(screen.getByRole('spinbutton')).toHaveValue('5');
+          fireEvent.pointerUp(increment, mousePress);
+          fireEvent.click(increment, {detail: 1});
+          expect(onChange).not.toHaveBeenCalled();
+          expect(screen.getByRole('spinbutton')).toHaveValue('5');
+        },
+      );
+
+      it('ends the hold with no commit when the steppers go away', () => {
+        const onChange = vi.fn();
+        const {rerender} = render(<Controlled onChange={onChange} />);
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+        const input = screen.getByRole('spinbutton');
+
+        fireEvent.pointerDown(increment, mousePress);
+        act(() => {
+          vi.advanceTimersByTime(500 + 250);
+        });
+        expect(input).toHaveValue('7');
+        rerender(<Controlled onChange={onChange} hasNumberSteppers={false} />);
+        expect(input).toHaveValue('5');
+        act(() => {
+          vi.advanceTimersByTime(10_000);
+        });
+        expect(input).toHaveValue('5');
+        fireEvent.blur(input);
+        expect(onChange).not.toHaveBeenCalled();
+      });
+
+      it('holds a pen press with no text selection or callout, until it ends', () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} />);
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+        const penPress = {...mousePress, pointerType: 'pen'};
+        const refused = (type: string) =>
+          !increment.dispatchEvent(
+            new Event(type, {bubbles: true, cancelable: true}),
+          );
+
+        fireEvent.pointerDown(increment, penPress);
+        act(() => {
+          vi.advanceTimersByTime(500 + 250);
+        });
+        expect(screen.getByRole('spinbutton')).toHaveValue('7');
+        expect(refused('selectstart')).toBe(true);
+        expect(refused('contextmenu')).toBe(true);
+        fireEvent.pointerUp(increment, penPress);
+        fireEvent.click(increment, {detail: 1});
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenCalledWith(7);
+        expect(refused('selectstart')).toBe(false);
+        expect(refused('contextmenu')).toBe(false);
+      });
+
+      it("lets a second pointer's press replace a running hold", () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} />);
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+        const decrement = screen.getByRole('button', {
+          name: 'Decrement Quantity',
+        });
+        const penPress = {...mousePress, pointerId: 2, pointerType: 'pen'};
+
+        fireEvent.pointerDown(increment, mousePress);
+        act(() => {
+          vi.advanceTimersByTime(500 + 250);
+        });
+        fireEvent.pointerDown(decrement, penPress);
+        fireEvent.pointerUp(decrement, penPress);
+        fireEvent.click(decrement, {detail: 1});
+        fireEvent.pointerUp(increment, mousePress);
+        fireEvent.click(increment, {detail: 1});
+        const shown = screen.getByRole<HTMLInputElement>('spinbutton').value;
+        act(() => {
+          vi.advanceTimersByTime(5000);
+        });
+        // Nothing keeps stepping once both pointers are up.
+        expect(screen.getByRole('spinbutton')).toHaveValue(shown);
+      });
+
+      it('lets only the holding pointer end a replaced hold', () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} />);
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+        const decrement = screen.getByRole('button', {
+          name: 'Decrement Quantity',
+        });
+        const input = screen.getByRole('spinbutton');
+        const penPress = {...mousePress, pointerId: 2, pointerType: 'pen'};
+
+        fireEvent.pointerDown(increment, mousePress);
+        act(() => {
+          vi.advanceTimersByTime(500 + 250);
+        });
+        fireEvent.pointerDown(decrement, penPress);
+        // The mouse lifts first; the pen's hold goes on.
+        fireEvent.pointerUp(increment, mousePress);
+        fireEvent.click(increment, {detail: 1});
+        act(() => {
+          vi.advanceTimersByTime(500 + 250);
+        });
+        expect(input).toHaveValue('3');
+        fireEvent.pointerUp(decrement, penPress);
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenLastCalledWith(3);
+        act(() => {
+          vi.advanceTimersByTime(5000);
+        });
+        expect(input).toHaveValue('3');
+      });
+
+      it('ends a mouse hold with no commit when a finger taps a stepper', () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} />);
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+        const decrement = screen.getByRole('button', {
+          name: 'Decrement Quantity',
+        });
+        const fingerPress = {...mousePress, pointerId: 3, pointerType: 'touch'};
+
+        fireEvent.pointerDown(increment, mousePress);
+        act(() => {
+          vi.advanceTimersByTime(500 + 250);
+        });
+        expect(screen.getByRole('spinbutton')).toHaveValue('7');
+        fireEvent.pointerDown(decrement, fingerPress);
+        fireEvent.pointerUp(decrement, fingerPress);
+        fireEvent.click(decrement, {detail: 1});
+        // The tap steps from the committed value; the hold's line is gone.
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenLastCalledWith(4);
+        fireEvent.pointerUp(increment, mousePress);
+        fireEvent.click(increment, {detail: 1});
+        act(() => {
+          vi.advanceTimersByTime(5000);
+        });
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('spinbutton')).toHaveValue('4');
+      });
+
+      it('shows no held value again when the field turns editable mid-hold', () => {
+        const onChange = vi.fn();
+        const {rerender} = render(<Controlled onChange={onChange} />);
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+        const input = screen.getByRole('spinbutton');
+
+        fireEvent.pointerDown(increment, mousePress);
+        act(() => {
+          vi.advanceTimersByTime(500 + 250);
+        });
+        expect(input).toHaveValue('7');
+        rerender(<Controlled onChange={onChange} isReadOnly />);
+        rerender(<Controlled onChange={onChange} />);
+        expect(input).toHaveValue('5');
+        fireEvent.pointerUp(increment, mousePress);
+        fireEvent.click(increment, {detail: 1});
+        expect(onChange).not.toHaveBeenCalled();
+        expect(input).toHaveValue('5');
+      });
+
+      it('keeps a typed draft when the field turns read-only mid-hold', () => {
+        const onChange = vi.fn();
+        const {rerender} = render(<Controlled onChange={onChange} />);
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+        const input = screen.getByRole('spinbutton');
+
+        fireEvent.change(input, {target: {value: '6'}});
+        fireEvent.pointerDown(increment, mousePress);
+        act(() => {
+          vi.advanceTimersByTime(500 + 250);
+        });
+        expect(input).toHaveValue('8');
+        rerender(<Controlled onChange={onChange} isReadOnly />);
+        fireEvent.pointerUp(increment, mousePress);
+        fireEvent.click(increment, {detail: 1});
+        expect(onChange).not.toHaveBeenCalled();
+        expect(input).toHaveValue('6');
+      });
+
+      it('ends a mouse hold with no commit at a context request, and opens the menu', () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} />);
+        const decrement = screen.getByRole('button', {
+          name: 'Decrement Quantity',
+        });
+        const input = screen.getByRole('spinbutton');
+
+        // A macOS Control-click is a primary-button press.
+        fireEvent.pointerDown(decrement, mousePress);
+        act(() => {
+          vi.advanceTimersByTime(500 + 250);
+        });
+        expect(input).toHaveValue('3');
+        // fireEvent returns false when a handler refuses the event.
+        expect(fireEvent.contextMenu(decrement)).toBe(true);
+        expect(input).toHaveValue('5');
+        act(() => {
+          vi.advanceTimersByTime(5000);
+        });
+        fireEvent.pointerUp(decrement, mousePress);
+        fireEvent.click(decrement, {detail: 1});
+        expect(onChange).not.toHaveBeenCalled();
+        expect(input).toHaveValue('5');
+      });
+
+      it('steps nothing on a click after a context request ends a hold', () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} />);
+        const decrement = screen.getByRole('button', {
+          name: 'Decrement Quantity',
+        });
+
+        fireEvent.pointerDown(decrement, mousePress);
+        expect(fireEvent.contextMenu(decrement)).toBe(true);
+        fireEvent.click(decrement, {detail: 1});
+        fireEvent.pointerUp(decrement, mousePress);
+        fireEvent.click(decrement, {detail: 1});
+        // The menu may take the pointer's capture before its click.
+        fireEvent.pointerDown(decrement, mousePress);
+        expect(fireEvent.contextMenu(decrement)).toBe(true);
+        fireEvent.lostPointerCapture(decrement, mousePress);
+        fireEvent.click(decrement, {detail: 1});
+        act(() => {
+          vi.advanceTimersByTime(5000);
+        });
+        expect(onChange).not.toHaveBeenCalled();
+        expect(screen.getByRole('spinbutton')).toHaveValue('5');
+      });
+
+      it('shows a held value as valid after an invalid typed draft', () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} />);
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+        const input = screen.getByRole('spinbutton');
+
+        fireEvent.change(input, {target: {value: 'abc'}});
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        fireEvent.pointerDown(increment, mousePress);
+        act(() => {
+          vi.advanceTimersByTime(500);
+        });
+        expect(input).toHaveValue('6');
+        expect(input).not.toHaveAttribute('aria-invalid');
+        fireEvent.pointerUp(increment, mousePress);
+        expect(onChange).toHaveBeenCalledWith(6);
+      });
+
+      it('enables the other stepper as a hold leaves a bound', () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} initial={10} />);
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+        const decrement = screen.getByRole('button', {
+          name: 'Decrement Quantity',
+        });
+
+        expect(increment).toHaveAttribute('aria-disabled', 'true');
+        fireEvent.pointerDown(decrement, mousePress);
+        act(() => {
+          vi.advanceTimersByTime(500 + 250);
+        });
+        expect(screen.getByRole('spinbutton')).toHaveValue('8');
+        expect(increment).not.toHaveAttribute('aria-disabled');
+        fireEvent.pointerUp(decrement, mousePress);
+        expect(onChange).toHaveBeenCalledWith(8);
+      });
+
+      it('keeps the single step of a finger press', () => {
+        const onChange = vi.fn();
+        render(<Controlled onChange={onChange} />);
+        const increment = screen.getByRole('button', {
+          name: 'Increment Quantity',
+        });
+        const fingerPress = {...mousePress, pointerType: 'touch'};
+
+        fireEvent.pointerDown(increment, fingerPress);
+        act(() => {
+          vi.advanceTimersByTime(3000);
+        });
+        expect(screen.getByRole('spinbutton')).toHaveValue('5');
+        fireEvent.pointerUp(increment, fingerPress);
+        fireEvent.click(increment, {detail: 1});
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenCalledWith(6);
+      });
     });
 
     it('disables both steppers with the input', () => {
@@ -2126,10 +3014,10 @@ describe('NumberInput stepping', () => {
       );
       expect(
         screen.getByRole('button', {name: 'Increment Quantity'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
       expect(
         screen.getByRole('button', {name: 'Decrement Quantity'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
     });
   });
 });
@@ -2146,7 +3034,6 @@ describe('NumberInput disabled theme state', () => {
     );
     const root = container.querySelector('.astryx-number-input');
     expect(root).toHaveAttribute('data-disabled', 'disabled');
-    expect(root).toHaveClass('disabled');
   });
 
   it('omits data-disabled when enabled, like status does', () => {

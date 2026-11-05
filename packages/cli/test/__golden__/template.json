@@ -1,0 +1,21 @@
+{
+  "apiVersion": 1,
+  "type": "template.show",
+  "package": "@acme/kit",
+  "data": {
+    "template": "hero",
+    "description": "A zorblax hero block.",
+    "type": "block",
+    "components": [],
+    "source": "export default function Hero() { return <section>zorblax</section>; }\n",
+    "demoMediaReplaced": 0,
+    "demoContentReplaced": 0
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
+  }
+}

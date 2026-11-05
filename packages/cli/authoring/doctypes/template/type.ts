@@ -4,7 +4,12 @@
  * @file Template doc types.
  */
 
-export interface BaseTemplateDoc {
+import type {
+  AuthoredDocGraphFields,
+  RegistryDocIdentity,
+} from '../base/type.js';
+
+export interface BaseTemplateDoc extends AuthoredDocGraphFields {
   /** Identifier name for the template. For block templates this matches
    *  the React component import name (e.g. `"ChatMessageMetadata"`); for
    *  page templates it's a human-readable label that doubles as the
@@ -21,9 +26,41 @@ export interface BaseTemplateDoc {
   /** One-sentence description of what the template provides. */
   description?: string;
 
+  /** Search keywords for CLI discovery: the ideas, domains, and other names a
+   *  builder might use for what this template serves (e.g. `['monitoring',
+   *  'uptime', 'on-call']` for a service-health dashboard). Lowercase.
+   *  `astryx search` matches them as it matches the description, and
+   *  `astryx build` ranks page templates on them, so the `description` can
+   *  stay a description of the layout. Integration templates need
+   *  `@astryxdesign/cli` 0.6.6 or later: earlier CLIs reject the field and
+   *  drop that template, and CLIs before 0.6.4 also hide the package's doc
+   *  topics. */
+  keywords?: string[];
+
+  /** Optional stable slug override and prior aliases for registry output. */
+  registry?: RegistryDocIdentity;
+
+  /** Integration templates only: the exact id of the Core template this one
+   *  replaces for unqualified lookup (find it with
+   *  `astryx --json template --list --package @astryxdesign/core`). The Core
+   *  original stays selectable with `--package @astryxdesign/core`. Needs
+   *  `@astryxdesign/cli` 0.6.4 or later: earlier CLIs reject the field,
+   *  drop that template, and hide the package's doc topics. */
+  replaces?: string;
   /** Whether this template is ready for use. Templates with
    *  isReady: false show as "(WIP)" in the gallery and CLI. */
   isReady?: boolean;
+
+  /** The icon definition each icon the source imports draws
+   *  (`{TrashIcon: 'delete'}`), keyed by the name a named import reads
+   *  (`{Trash as TrashIcon}` is `Trash`) or a default import's local name
+   *  (`import DeleteIcon from …` is `DeleteIcon`). When the project has an
+   *  icon set, each declared icon is replaced by the set's icon for that
+   *  definition (`astryx docs cli/experimental/icon-definitions`), and every
+   *  key is reported as mapped or kept. A name imported from two modules
+   *  (`TrashIcon` from an outline and a solid module) needs one key.
+   *  @experimental May change or be removed in a patch release. */
+  icons?: Record<string, string>;
 
   /** Whether this template is a scaffolding tool only (e.g. blank page).
    *  Scaffold templates are available via the CLI but hidden from
@@ -45,10 +82,9 @@ export interface BaseTemplateDoc {
 
 export interface BlockTemplateDoc extends BaseTemplateDoc {
   type: 'block';
-  /** The component this block is an example of.
-   *  Matches the component's doc name (e.g. 'Button', 'Dialog', 'Stack').
-   *  Used by the docsite to show relevant examples on component detail pages. */
-  exampleFor: string;
+  /** The component this block is an example of. When omitted, the block is a
+   *  standalone composition and is not owned by any component doc page. */
+  exampleFor?: string;
   /** Additional component or hook doc pages whose Examples section should
    *  include this block. Use when a component example is also the canonical
    *  usage example for one of that component's hooks. */
@@ -64,7 +100,8 @@ export interface BlockTemplateDoc extends BaseTemplateDoc {
   /** Component names this block uses, for cross-referencing.
    *  Powers "See also" and "Used in" sections — not for primary attribution. */
   componentsUsed?: string[];
-  /** When true this block is the canonical "hero" showcase for a component. */
+  /** When true this block is the canonical hero showcase for `exampleFor`.
+   *  Requires `exampleFor`; standalone blocks cannot be component showcases. */
   isShowcase?: boolean;
 }
 
@@ -86,9 +123,11 @@ export interface PageTemplateDoc extends BaseTemplateDoc {
 export type TemplateCategory =
   // Dashboard
   | 'Dashboard - Analytics'
+  | 'Dashboard - Comparison'
   | 'Dashboard - KPI Summary'
   | 'Dashboard - Monitoring'
   | 'Dashboard - Executive Summary'
+  | 'Dashboard - Scorecard'
   | 'Dashboard - Widget Grid'
   | 'Dashboard - Split'
   | 'Dashboard - Tabbed'
@@ -105,6 +144,7 @@ export type TemplateCategory =
   | 'Table - Filtering'
   | 'Table - Tree/Hierarchical List'
   | 'Table - Frozen Column'
+  | 'Table - Comparison'
   | 'Table - Chart'
   | 'Table - Heatmap'
   // Form
@@ -113,6 +153,9 @@ export type TemplateCategory =
   | 'Form - Checkout'
   | 'Form - Two-column'
   | 'Form - Wizard'
+  | 'Form - Wizard Dialog'
+  | 'Form - Wizard Inline'
+  | 'Form - Wizard Vertical'
   | 'Form - Modal Overlay'
   | 'Form - Side Sheet'
   | 'Form - Inline Edits'
@@ -129,6 +172,7 @@ export type TemplateCategory =
   | 'Login - SSO'
   | 'Login - Split'
   // Tools
+  | 'Tools - Canvas Editor'
   | 'Tools - File Explorer'
   | 'Tools - Page Editor'
   | 'Tools - IDE'
@@ -141,6 +185,7 @@ export type TemplateCategory =
   | 'Content - Card Grid'
   | 'Content - Order Detail'
   | 'Content - Product Detail'
+  | 'Content - Work Item Detail'
   | 'Content - Product List'
   | 'Content - Documentation Catalog'
   | 'Content - Documentation Design'
@@ -167,3 +212,25 @@ export type TemplateCategory =
   | 'Shell - Blank';
 
 export type TemplateDoc = PageTemplateDoc | BlockTemplateDoc;
+
+/** A page template an integration package ships, with its own `category`. */
+export interface IntegrationPageTemplateDoc extends Omit<
+  PageTemplateDoc,
+  'category'
+> {
+  category?: string;
+}
+
+/** A block template an integration package ships, with its own `category`. */
+export interface IntegrationBlockTemplateDoc extends Omit<
+  BlockTemplateDoc,
+  'category'
+> {
+  category?: string;
+}
+
+/** The doc-type for an integration package's template metadata: TemplateDoc,
+ *  with `category` the package's own string (bare `astryx template` groups
+ *  the package's templates by it) instead of a TemplateCategory value. */
+export type IntegrationTemplateDoc =
+  IntegrationPageTemplateDoc | IntegrationBlockTemplateDoc;

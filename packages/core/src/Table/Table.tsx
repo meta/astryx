@@ -11,17 +11,19 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Table/Table.doc.mjs (props table, features, usage examples)
  * - /packages/core/src/Table/Table.test.tsx (tests for new/changed behavior)
+ * - /packages/core/src/Table/__tests__/TableScroll.a11y.chromium.spec.ts (browser scroll behavior)
  * - /packages/core/src/Table/index.ts (exports if types change)
  * - /apps/storybook/stories/Table.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/Table/ (showcase blocks)
  */
 
-import {useMemo, type ReactElement, type Ref} from 'react';
+import {createContext, use, useMemo, type ReactElement, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import {BaseTable} from './BaseTable';
 import {TableContext} from './TableContext';
 import {useBaseTablePlugins} from './useBaseTablePlugins';
+import {useScrollableArea} from '../hooks/useScrollableArea';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 import type {
@@ -31,7 +33,13 @@ import type {
   TableRenderProps,
 } from './types';
 import type {StyleXStyles} from '../theme/types';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Table/Table.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Table Types
@@ -133,6 +141,17 @@ const scrollWrapperStyles = stylex.create({
   },
 });
 
+/**
+ * The Table's own name, for the scroll region that names itself after it.
+ * Internal to Table: the scroll wrapper is not given it as a prop, so it adds
+ * nothing to the public table types.
+ */
+const TableNameContext = createContext<{
+  label?: string;
+  labelledBy?: string;
+} | null>(null);
+TableNameContext.displayName = 'TableNameContext';
+
 function TableScrollWrapper({
   children,
   htmlProps,
@@ -148,31 +167,50 @@ function TableScrollWrapper({
   beforeTable?: React.ReactNode;
   afterTable?: React.ReactNode;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
+  const tableName = use(TableNameContext);
+  // The focusable scroll region takes the table's own name (spec:AST-025
+  // FR12), so two tables are not two groups both named "Table". It is named
+  // the way the table is: `aria-labelledby` wins over `aria-label`, as it does
+  // in accessible-name computation; the generic name is the fallback for an
+  // unnamed table.
+  const labelledBy = tableName?.labelledBy;
+  const label =
+    labelledBy != null
+      ? undefined
+      : (tableName?.label ?? t('@astryx.table.label'));
+  const {getViewportProps, getContentProps, state} = useScrollableArea({
+    axis: 'inline',
+    keyboardAccess: {owner: 'content'},
+    overscroll: 'contain',
+  });
   const {ref, ...restHtmlProps} = htmlProps ?? {};
+  const viewportProps = getViewportProps<HTMLDivElement>({
+    role: 'group',
+    'aria-label': label,
+    // A plugin's explicit name stays authoritative (Table FR1).
+    'aria-labelledby':
+      restHtmlProps['aria-label'] == null ? labelledBy : undefined,
+    ...(state.inline.isScrollable ? {tabIndex: 0} : {}),
+    ...restHtmlProps,
+    ref,
+    ...mergeProps(
+      themeProps('table-scroll-wrapper'),
+      stylex.props(
+        scrollWrapperStyles.base,
+        scrollWrapperStyles.containerBleed,
+        ...(pluginStyles ?? []),
+      ),
+    ),
+  });
+
   return (
-    <div
-      ref={ref}
-      // Keyboard-focusable so keyboard users can scroll a horizontally
-      // overflowing table. Uses role="group" (not "region") so multiple
-      // tables on a page don't create duplicate same-named landmarks
-      // (axe: landmark-unique). Callers may override role/aria-label via
-      // htmlProps.
-      tabIndex={0}
-      role="group"
-      aria-label={t('@astryx.table.label')}
-      {...restHtmlProps}
-      {...mergeProps(
-        themeProps('table-scroll-wrapper'),
-        stylex.props(
-          scrollWrapperStyles.base,
-          scrollWrapperStyles.containerBleed,
-          ...(pluginStyles ?? []),
-        ),
-      )}>
-      {beforeTable}
-      {children}
-      {afterTable}
+    <div {...viewportProps}>
+      <div {...getContentProps<HTMLDivElement>()}>
+        {beforeTable}
+        {children}
+        {afterTable}
+      </div>
     </div>
   );
 }
@@ -187,8 +225,8 @@ function buildTableStylePlugin<
   return {
     transformTable(props: TableRenderProps): TableRenderProps {
       // The `astryx-table` class itself comes from BaseTable, which renders
-      // the <table> element and now names it `table` (with `base-table` as its
-      // legacy name). Adding it here too would put the token on twice.
+      // the <table> element and names it with the canonical `table` target.
+      // Adding it here too would put the token on twice.
       return {
         ...props,
         xstyle: [...props.xstyle, tableStyles.base],
@@ -232,18 +270,26 @@ function TableInner<T extends Record<string, unknown>>({
     }),
     [density, dividers, isStriped, hasHover, verticalAlign, textOverflow],
   );
+  const tableLabel = rest['aria-label'];
+  const tableLabelledBy = rest['aria-labelledby'];
+  const tableName = useMemo(
+    () => ({label: tableLabel, labelledBy: tableLabelledBy}),
+    [tableLabel, tableLabelledBy],
+  );
 
   return (
     <TableContext value={contextValue}>
-      <BaseTable<T>
-        ref={ref}
-        data={data}
-        columns={columns}
-        plugins={mergedPlugins}
-        textOverflow={textOverflow}
-        scrollWrapper={TableScrollWrapper}
-        {...rest}
-      />
+      <TableNameContext value={tableName}>
+        <BaseTable<T>
+          ref={ref}
+          data={data}
+          columns={columns}
+          plugins={mergedPlugins}
+          textOverflow={textOverflow}
+          scrollWrapper={TableScrollWrapper}
+          {...rest}
+        />
+      </TableNameContext>
     </TableContext>
   );
 }
@@ -260,8 +306,9 @@ function TableInner<T extends Record<string, unknown>>({
  * Combine with Badge (status labels), StatusDot (colored indicators),
  * Text (formatted values), Avatar (user cells), and HStack/VStack
  * (multi-element cell layouts). Without renderCell, cells render as plain text.
- * Always set explicit width on columns using proportional() or pixel() — omitting
- * width skips the minimum width floor, which can cause columns to collapse on mobile.
+ * Columns without width remain equally flexible with a compact 60px readability
+ * floor. Set one column's floor with proportional(1, { minWidth }), weight
+ * columns with proportional(n), and fix widths with pixel().
  *
  * @example
  * ```

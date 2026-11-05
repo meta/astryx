@@ -12,7 +12,8 @@
     "@astryxdesign/core": "*",
     "@astryxdesign/theme-neutral": "*",
     "@heroicons/react": "^2.2.0",
-    "@stylexjs/stylex": "^0.19.0",
+    "@stylexjs/stylex": "catalog:",
+    "lucide-react": "^1.18.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

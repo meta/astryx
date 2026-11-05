@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
+import {expect, userEvent, within} from 'storybook/test';
 import {
   ChatComposer,
   ChatComposerDrawer,
@@ -68,7 +69,13 @@ const meta: Meta<typeof ChatComposer> = {
   },
   decorators: [
     Story => (
-      <div style={{width: 600, padding: 40}}>
+      <div
+        style={{
+          boxSizing: 'border-box',
+          maxWidth: '100%',
+          padding: 40,
+          width: 680,
+        }}>
         <Story />
       </div>
     ),
@@ -101,7 +108,9 @@ export const Simplest: Story = {
  * soft-keyboard Return inserts a newline instead of sending (and never strands
  * a multi-line prompt); on a pointer device Enter sends as usual. The same
  * seam covers shortcuts like Cmd/Ctrl+Enter — just call submit yourself.
- * IME composition is always respected regardless.
+ * `enterKeyHint` keeps the touch keyboard's Return key honest: Send where
+ * Enter sends, Return where it inserts a line break. IME composition is
+ * always respected regardless.
  */
 export const EnterBehavior: Story = {
   render: () => {
@@ -118,6 +127,9 @@ export const EnterBehavior: Story = {
                 ? 'Enter inserts a newline on touch — use Send'
                 : 'Enter sends; Shift+Enter for a newline'
             }
+            // The Return key says what Enter does: Send where Enter sends,
+            // Return where it inserts a line break.
+            enterKeyHint={isCoarsePointer ? 'enter' : 'send'}
             onKeyDown={e => {
               if (isCoarsePointer && e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -436,4 +448,59 @@ export const Flat: Story = {
       }}
     />
   ),
+};
+
+/**
+ * Exact-browser evidence for the critical intersection where message editing is
+ * disabled but an in-flight response remains interruptible. The mobile viewport
+ * also keeps a reusable narrow-layout check without multiplying the whole story
+ * matrix.
+ */
+function DisabledStreamingFixture() {
+  const [stopRequests, setStopRequests] = useState(0);
+  return (
+    <div
+      data-testid="disabled-streaming-fixture"
+      data-stop-requests={stopRequests}>
+      <ChatComposer
+        data-testid="disabled-streaming-composer"
+        onSubmit={() => {}}
+        onStop={() => setStopRequests(count => count + 1)}
+        isDisabled
+        isStopShown
+        placeholder=""
+      />
+    </div>
+  );
+}
+
+export const DisabledStreamingNarrow: Story = {
+  name: 'Readiness / disabled streaming on narrow viewport',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      description: {
+        story:
+          'At a mobile viewport, editing is disabled while the explicit Stop action stays reachable. The play assertion clicks the real button and rejects horizontal overflow.',
+      },
+    },
+  },
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => <DisabledStreamingFixture />,
+  play: async ({canvasElement}) => {
+    const canvas = within(canvasElement);
+    const composer = canvas.getByTestId('disabled-streaming-composer');
+    const bounds = composer.getBoundingClientRect();
+
+    expect(bounds.left).toBeGreaterThanOrEqual(0);
+    expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
+    expect(composer.scrollWidth).toBeLessThanOrEqual(composer.clientWidth);
+
+    await userEvent.click(canvas.getByRole('button', {name: 'Stop'}));
+
+    expect(canvas.getByTestId('disabled-streaming-fixture')).toHaveAttribute(
+      'data-stop-requests',
+      '1',
+    );
+  },
 };

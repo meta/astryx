@@ -17,6 +17,7 @@ Renders [Vega](https://vega.github.io/vega/) and [Vega-Lite](https://vega.github
 | `tsup.config.ts`    | Config    | Build config: CJS + ESM + `.d.ts` outputs                    |
 | `src/index.ts`      | Barrel    | Public API surface                                           |
 | `src/VegaChart.tsx` | Component | Inspects `$schema`, compiles or renders, owns View lifecycle |
+| `src/viewInputs.ts` | Utility   | Detects value changes in the props that own the View         |
 | `src/schema.ts`     | Utility   | Parses and validates Vega/Vega-Lite `$schema` URLs           |
 | `src/types.ts`      | Types     | Shared TypeScript types for this package                     |
 
@@ -133,9 +134,51 @@ import {VegaChart} from '@astryxdesign/vega';
 | -------------------- | --------- | --------------------------------------------------------- |
 | `ast`                | `boolean` | Retain expression AST in the runtime (useful for tooling) |
 
+### View lifecycle
+
+`<VegaChart>` builds a Vega `View` on mount and finalizes it on unmount. In
+between, it rebuilds the View only when `spec`, `compileOptions`,
+`parseConfig`, `parseOptions`, or `viewOptions` **changes value** — these props
+are compared by value against the values the live View was built from, not by
+reference. Two consequences, and you need neither `useMemo` nor a discipline
+about object identity for either:
+
+- an object literal rebuilt inline on every render does **not** tear the chart
+  down;
+- a spec you edit **in place** — held in a ref, a module constant, or shared
+  between renders — **is** picked up, because the comparison is against a copy
+  taken when the View was built, not against the previous props.
+
+Functions inside those props (a `tooltip` handler, `logger`, `loader`, `expr`,
+or `fieldTitle`) and class instances are compared by reference, since their
+behavior lives in methods a copy cannot capture: replace the value rather than
+mutating it.
+
+Two shapes cannot be copied for comparison: a subtree that re-enters an object
+already on its own path (a reference cycle), and one nested deeper than 100
+levels. Those parts are compared **by reference**, so passing the **same**
+object again is stable — a chart built from a cyclic spec is not rebuilt on
+every render — while passing a **new** object rebuilds the View even when it
+holds equal values.
+
+What that costs differs between the two:
+
+- **A cycle hides nothing.** Its re-entry edge points back at an object the
+  copy already walked, so an in-place edit anywhere in a cyclic spec is still
+  detected normally.
+- **Past 100 levels, an in-place edit is invisible** — the reference did not
+  change and the values below were never copied. Replace the object, or drive
+  the View through `onReady`, to update from down there.
+
+Everything the copy did reach is compared by value either way, so a mutation
+elsewhere in the spec is picked up even when part of it is opaque.
+
+Everything else is inert to the lifecycle: `data`, `className`, `style`,
+`onReady`, and `onError` never rebuild the View.
+
 ### Data loading
 
-`data` maps dataset names to tuple arrays and is applied via `view.data(name, tuples)` during View initialization, before the first render. It is _not reactive_; changes after mount are ignored.
+`data` maps dataset names to tuple arrays and is applied via `view.data(name, tuples)` during View initialization, before the first render. It is _not reactive_; changes after mount are ignored, and a new `data` object never rebuilds the View by itself. (When something else rebuilds the View, the new View loads whatever `data` holds at that moment.)
 
 To update data dynamically after render, use `onReady` to get the live View and drive it yourself:
 
@@ -225,16 +268,7 @@ pnpm -F @astryxdesign/vega build
 
 The committed `private: true` is npm's hard guarantee that no stable publish can ever happen — **do not remove it until the graduation steps below are intentionally taken.**
 
-> **First canary won't publish until the package name is claimed on npm.** npm cannot register OIDC trust for a name that does not yet exist on the registry. An `@astryxdesign` npm org owner must bootstrap it once (this also applies before the first stable publish):
->
-> ```bash
-> npm i -g npm@latest
-> npm login --registry https://registry.npmjs.org   # must be an @astryxdesign org owner
-> pnpm run setup-trusted-publishing                  # audit — shows what needs bootstrap/trust
-> pnpm run setup-trusted-publishing --bootstrap --setup-trust --workflow release.yml
-> ```
->
-> This publishes a deprecated `0.0.0-bootstrap.0` stub to claim the name and registers `release.yml` as the trusted publisher. Until this is done, CI's canary publish for this package will fail.
+> **First canary won't publish until the package name is claimed on npm.** npm cannot register OIDC trust for a name that does not yet exist on the registry. An `@astryxdesign` npm org owner must claim the name and register `release.yml` as its trusted publisher once, following [Trusted-publisher setup](https://github.com/meta/astryx/blob/main/docs/release.md#trusted-publisher-setup) (this also applies before the first stable publish). Until this is done, CI's canary publish for this package will fail.
 
 ### Graduating to a public stable (`latest`) release
 

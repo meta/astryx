@@ -4,7 +4,7 @@
 
 /**
  * @file LayerDepthContext.tsx
- * @input React context
+ * @input React depth context
  * @output Exports LayerDepthContext, useLayerDepth, LayerDepthProvider
  * @position Layer system; how the dismissal stack learns which layer is nested
  *   inside which.

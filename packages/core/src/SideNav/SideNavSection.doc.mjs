@@ -8,6 +8,16 @@ export const docs = {
   displayName: 'Side Nav Section',
   isHiddenFromOverview: true,
   description: 'Section grouping with an optional title, subtitle, and end content.',
+  playground: {
+    defaults: {
+      title: 'Workspace',
+      children: [
+        {__element: 'SideNavItem', props: {label: 'Dashboard', isSelected: true}},
+        {__element: 'SideNavItem', props: {label: 'Projects'}},
+        {__element: 'SideNavItem', props: {label: 'Settings'}},
+      ],
+    },
+  },
   props: [
     {
       name: 'title',

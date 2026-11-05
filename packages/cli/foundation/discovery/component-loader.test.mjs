@@ -9,7 +9,8 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import {mergeTranslation} from './component-loader.mjs';
+import * as path from 'node:path';
+import {loadComponentDoc, loadDocs, mergeTranslation} from './component-loader.mjs';
 
 /** Minimal HookDoc-shaped fixture with params + returns. */
 function hookDocs() {
@@ -103,5 +104,87 @@ describe('mergeTranslation — component prop descriptions (regression)', () => 
     expect(merged.usage.description).toBe('Dense.');
     expect(merged.props.find(p => p.name === 'variant').description).toBe('Vrnt.');
     expect(merged.props.find(p => p.name === 'disabled').description).toBe('Disabled state.');
+  });
+});
+
+describe('loadDocs — default vs named export resolution', () => {
+  const fixtureDir = path.join(import.meta.dirname, '__fixtures__');
+
+  it('reads a default-export .doc.mjs (the shape integration add component writes)', async () => {
+    const docs = await loadDocs(path.join(fixtureDir, 'component-default-export.doc.mjs'));
+    expect(docs).toBeDefined();
+    expect(docs.name).toBe('DefaultExportCard');
+    expect(docs.description).toBe('A card written with default export.');
+    expect(docs.props).toHaveLength(1);
+    expect(docs.props[0].name).toBe('title');
+  });
+
+  it('still reads a named-export .doc.mjs (legacy shape)', async () => {
+    const docs = await loadDocs(path.join(fixtureDir, 'component-named-export.doc.mjs'));
+    expect(docs).toBeDefined();
+    expect(docs.name).toBe('NamedExportCard');
+    expect(docs.props).toHaveLength(1);
+  });
+
+  it('default export agrees with loadComponentDoc', async () => {
+    const docPath = path.join(fixtureDir, 'component-default-export.doc.mjs');
+    const fromLoadDocs = await loadDocs(docPath);
+    const fromLoadComponentDoc = await loadComponentDoc(docPath);
+    expect(fromLoadDocs).toEqual(fromLoadComponentDoc);
+  });
+
+  it('named export agrees with loadComponentDoc', async () => {
+    const docPath = path.join(fixtureDir, 'component-named-export.doc.mjs');
+    const fromLoadDocs = await loadDocs(docPath);
+    const fromLoadComponentDoc = await loadComponentDoc(docPath);
+    expect(fromLoadDocs).toEqual(fromLoadComponentDoc);
+  });
+
+  it('default export wins when both default and named exports are present', async () => {
+    const docPath = path.join(fixtureDir, 'component-both-exports.doc.mjs');
+    const fromLoadDocs = await loadDocs(docPath);
+    const fromLoadComponentDoc = await loadComponentDoc(docPath);
+
+    // Default export must win at both loaders
+    expect(fromLoadDocs.name).toBe('DefaultWinsCard');
+    expect(fromLoadDocs.description).toBe('From the default export.');
+    expect(fromLoadDocs.props).toHaveLength(1);
+    expect(fromLoadComponentDoc.name).toBe('DefaultWinsCard');
+    // And the two must agree
+    expect(fromLoadDocs).toEqual(fromLoadComponentDoc);
+  });
+});
+
+describe('loadComponentDoc — full localized doc overlays', () => {
+  it('inherits canonical anatomy when docsZh omits it and matches loadDocs', async () => {
+    const docPath = path.join(
+      import.meta.dirname,
+      '__fixtures__',
+      'component-accessibility-overlay.doc.mjs',
+    );
+
+    const direct = await loadComponentDoc(docPath, {zh: true});
+    const cli = await loadDocs(docPath, {zh: true});
+
+    expect(direct).toEqual(cli);
+    expect(direct.usage.description).toBe('Translated full-doc description.');
+    expect(direct.usage.anatomy).toEqual((await loadComponentDoc(docPath)).usage.anatomy);
+    expect(direct.usage.bestPractices).toBeUndefined();
+  });
+
+  it('keeps explicit localized anatomy and matches loadDocs', async () => {
+    const docPath = path.join(
+      import.meta.dirname,
+      '__fixtures__',
+      'component-anatomy-override.doc.mjs',
+    );
+
+    const direct = await loadComponentDoc(docPath, {zh: true});
+    const cli = await loadDocs(docPath, {zh: true});
+    const canonical = await loadComponentDoc(docPath);
+
+    expect(direct).toEqual(cli);
+    expect(direct.usage.anatomy).not.toEqual(canonical.usage.anatomy);
+    expect(direct.usage.anatomy[0].name).toBe('文本区域');
   });
 });

@@ -82,4 +82,16 @@ describe('astryx theme template', () => {
     expect(stderr).toMatch(/outside the project root/);
     expect(fs.existsSync(path.join(path.dirname(tmpDir), 'escaped.ts'))).toBe(false);
   });
+
+  it('fails a write with ERR_WRITE_FAILED under --json', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'blocker'), '');
+
+    const {status, stdout} = await runCli(
+      ['--json', 'theme', 'template', 'blocker/theme.ts'],
+      {cwd: tmpDir},
+    );
+
+    expect(status).toBe(1);
+    expect(JSON.parse(stdout).code).toBe('ERR_WRITE_FAILED');
+  });
 });

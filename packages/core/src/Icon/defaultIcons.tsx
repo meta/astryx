@@ -23,7 +23,8 @@
  * - /packages/core/src/Icon/Icon.doc.mjs (fallback icon documentation)
  */
 
-import type {IconRegistry} from './globalIconRegistry';
+import type {ReactNode} from 'react';
+import type {IconName, NamespacedIconName} from './globalIconRegistry';
 
 const svgProps = {
   xmlns: 'http://www.w3.org/2000/svg',
@@ -53,7 +54,8 @@ const solidSvgProps = {
   'aria-hidden': true as const,
 };
 
-export const defaultIcons: IconRegistry = {
+export const defaultIcons: Record<IconName, ReactNode> &
+  Partial<Record<NamespacedIconName, ReactNode>> = {
   /** ✕ — two diagonal lines */
   close: (
     <svg {...svgProps}>
@@ -65,6 +67,13 @@ export const defaultIcons: IconRegistry = {
   chevronDown: (
     <svg {...svgProps}>
       <path d="M6 9l6 6 6-6" />
+    </svg>
+  ),
+
+  /** ⌄ — compact NumberInput stepper chevron */
+  'numberInput:stepperDown': (
+    <svg {...svgProps}>
+      <path d="M7.5 9.75l4.5 4.5 4.5-4.5" />
     </svg>
   ),
 
@@ -193,6 +202,13 @@ export const defaultIcons: IconRegistry = {
     <svg {...svgProps}>
       <circle cx="11" cy="11" r="8" />
       <path d="M21 21l-4.35-4.35" />
+    </svg>
+  ),
+
+  /** ⇧ — upload into a tray */
+  upload: (
+    <svg {...svgProps}>
+      <path d="M12 16V4m0 0L7 9m5-5l5 5M4 15v4a2 2 0 002 2h12a2 2 0 002-2v-4" />
     </svg>
   ),
 

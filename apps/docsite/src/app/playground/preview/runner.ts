@@ -36,11 +36,45 @@ for (const [key, value] of Object.entries(scope)) {
   scopeLookup.set(key.toLowerCase(), value as Record<string, unknown>);
 }
 
+const warnedModules = new Set<string>();
+
+/**
+ * The placeholder proxy below is deliberately forgiving — user code in the
+ * playground may import anything, and a hard failure on every stray import
+ * would make the editor unusable. The cost is that a module missing from the
+ * generated scope is indistinguishable from one that renders nothing: Recharts
+ * went unnoticed this way, with every chart in the dashboard templates
+ * resolving to `() => null` while the legends around it painted normally. Say
+ * so once per module, so the next gap is one console line rather than a
+ * silently empty preview.
+ */
+function warnUnresolved(id: string): void {
+  if (warnedModules.has(id)) {
+    return;
+  }
+  warnedModules.add(id);
+  console.warn(
+    `[playground] "${id}" is not in the preview scope — its exports will ` +
+      `render nothing. Add it in apps/docsite/scripts/generate-scope.mjs.`,
+  );
+}
+
+/**
+ * Modules a blog post's live example may import by relative path (`./Name`):
+ * the post-local example assets beside that post's Markdown file
+ * (spec:AST-033 FR22). Only the post's own frame receives them.
+ */
+export type LocalModules = Readonly<Record<string, Record<string, unknown>>>;
+
 /** A CommonJS-style require resolving against the preview scope. */
-function makeRequire(): (id: string) => unknown {
+function makeRequire(localModules?: LocalModules): (id: string) => unknown {
   return (id: string) => {
     if (ASSET_RE.test(id)) {
       return {default: '', __esModule: true};
+    }
+    const local = localModules?.[id];
+    if (local) {
+      return local.__esModule ? local : {...local, __esModule: true};
     }
     const mod = scopeLookup.get(id.toLowerCase());
     if (mod) {
@@ -49,6 +83,7 @@ function makeRequire(): (id: string) => unknown {
         ? mod
         : {...mod, __esModule: true};
     }
+    warnUnresolved(id);
     // Unknown module — return placeholders that render nothing.
     return new Proxy(
       {__esModule: true},
@@ -181,7 +216,10 @@ function findDeclaredIdentifiers(compiled: string): Set<string> {
   return names;
 }
 
-function evaluate(compiled: string): React.ComponentType {
+function evaluate(
+  compiled: string,
+  localModules?: LocalModules,
+): React.ComponentType {
   const exportsObj: Record<string, unknown> = {};
   const moduleObj = {exports: exportsObj};
   const globals = getGlobalScope();
@@ -201,7 +239,7 @@ function evaluate(compiled: string): React.ComponentType {
   const values = [
     moduleObj,
     exportsObj,
-    sharedRequire,
+    localModules == null ? sharedRequire : makeRequire(localModules),
     ...globalNames.map(name => globals[name]),
   ];
 
@@ -221,7 +259,7 @@ function evaluate(compiled: string): React.ComponentType {
   return defaultExport as React.ComponentType;
 }
 
-export function runCode(code: string): RunResult {
+export function runCode(code: string, localModules?: LocalModules): RunResult {
   if (!ts) {
     return {error: 'TypeScript compiler not loaded yet', phase: 'compile'};
   }
@@ -237,7 +275,7 @@ export function runCode(code: string): RunResult {
   }
 
   try {
-    const Component = evaluate(compiled);
+    const Component = evaluate(compiled, localModules);
     return {Component};
   } catch (e: unknown) {
     return {

@@ -10,8 +10,8 @@
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import * as os from 'node:os';
+import * as path from 'node:path';
 import {init, getNextSteps} from './init.mjs';
 import {logger} from '../logger.mjs';
 import {AstryxError} from '../error.mjs';
@@ -22,6 +22,7 @@ const MARKER_START = '<!-- ASTRYX:START -->';
 let tmpDir;
 
 beforeEach(() => {
+  // Outside any package: init writes agent docs at the nearest package.json.
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-init-api-'));
 });
 
@@ -31,11 +32,47 @@ afterEach(() => {
 
 /** @param {string} rel */
 const read = rel => fs.readFileSync(path.join(tmpDir, rel), 'utf8');
+
+/**
+ * Make tmpDir a project that declares Astryx: a folder that declares nothing
+ * is outside a project, where init prints no getting-started steps (spec
+ * AST-081 FR3).
+ */
+function asProject() {
+  fs.writeFileSync(
+    path.join(tmpDir, 'package.json'),
+    JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '*'}}),
+  );
+}
 /** @param {string} rel */
 const exists = rel => fs.existsSync(path.join(tmpDir, rel));
 
+function writeIntegration() {
+  fs.writeFileSync(
+    path.join(tmpDir, 'package.json'),
+    JSON.stringify({name: 'consumer'}),
+  );
+  fs.writeFileSync(
+    path.join(tmpDir, 'astryx.config.mjs'),
+    `export default {integrations: ['@acme/widgets']};\n`,
+  );
+  const packageDir = path.join(tmpDir, 'node_modules', '@acme', 'widgets');
+  fs.mkdirSync(packageDir, {recursive: true});
+  fs.writeFileSync(
+    path.join(packageDir, 'package.json'),
+    JSON.stringify({name: '@acme/widgets'}),
+  );
+  fs.writeFileSync(
+    path.join(packageDir, 'astryx.integration.mjs'),
+    `export default {agentDocs: {
+      append: ['Run acme verify before finishing.'],
+    }};\n`,
+  );
+}
+
 describe('init() — receipts + side effects', () => {
   it('default mode installs AGENTS.md and returns an init.run receipt', async () => {
+    asProject();
     const res = await init({}, {cwd: tmpDir});
     expect(res.type).toBe('init.run');
     if (res.type !== 'init.run') return;
@@ -45,6 +82,47 @@ describe('init() — receipts + side effects', () => {
     expect(res.data.docsError).toBeNull();
     expect(exists('AGENTS.md')).toBe(true);
     expect(read('AGENTS.md')).toContain(MARKER_START);
+  });
+
+  it('renders configured integration guidance into the real init block', async () => {
+    writeIntegration();
+
+    const res = await init({features: 'agents'}, {cwd: tmpDir});
+
+    expect(res.type).toBe('init.run');
+    if (res.type !== 'init.run') return;
+    expect(res.data.docsError).toBeNull();
+    const content = read('AGENTS.md');
+    expect(content).toContain(
+      '- `@acme/widgets`: Run acme verify before finishing.',
+    );
+    expect(
+      content.indexOf('Run acme verify before finishing.'),
+    ).toBeGreaterThan(content.indexOf('MORE CLI:'));
+  });
+
+  it('leaves existing agent docs unchanged when integration agentDocs is invalid', async () => {
+    writeIntegration();
+    fs.writeFileSync(
+      path.join(
+        tmpDir,
+        'node_modules',
+        '@acme',
+        'widgets',
+        'astryx.integration.mjs',
+      ),
+      `export default {agentDocs: {append: [' invalid']}};\n`,
+    );
+    const before = '# Agents\n\nKeep this byte-for-byte.\n';
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), before);
+
+    const res = await init({features: 'agents'}, {cwd: tmpDir});
+
+    expect(res.type).toBe('init.run');
+    if (res.type !== 'init.run') return;
+    expect(res.data.docsWritten).toEqual([]);
+    expect(res.data.docsError).toMatchObject({kind: 'install-failed'});
+    expect(read('AGENTS.md')).toBe(before);
   });
 
   it('writes to the cwd param, not process.cwd() (no chdir)', async () => {
@@ -154,6 +232,7 @@ describe('init() — logger', () => {
   });
 
   it('emits the install line + full next-steps through the shared logger', async () => {
+    asProject();
     /** @type {string[]} */
     const lines = [];
     const logSpy = vi.spyOn(console, 'log').mockImplementation((...a) => lines.push(a.join(' ')));
@@ -167,10 +246,37 @@ describe('init() — logger', () => {
       errSpy.mockRestore();
     }
     const text = lines.join('\n');
-    expect(text).toContain('✓ AI agent docs installed → AGENTS.md');
+    expect(text).toContain('[ok] AI agent docs installed -> AGENTS.md');
     expect(text).toContain('  Next steps:');
     // The exact next-steps block the CLI prints comes from getNextSteps().
     expect(text).toContain(getNextSteps('npx astryx')[2].slice(0, 20));
+  });
+});
+
+describe('init() — ASCII output', () => {
+  it('prints only ASCII on the default, all-features, re-run, template, and remove paths', async () => {
+    /** @type {string[]} */
+    const lines = [];
+    const logSpy = vi.spyOn(console, 'log').mockImplementation((...a) => lines.push(a.join(' ')));
+    const errSpy = vi.spyOn(console, 'error').mockImplementation((...a) => lines.push(a.join(' ')));
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-init-remove-'));
+    logger.setSilent(false);
+    try {
+      await init({}, {cwd: tmpDir});
+      await init({all: true}, {cwd: tmpDir});
+      await init({all: true}, {cwd: tmpDir});
+      await init({features: 'template', templateName: 'blank'}, {cwd: tmpDir});
+      await init({removeAgents: true}, {cwd: tmpDir});
+      await init({removeAgents: true}, {cwd: empty});
+    } finally {
+      logger.setSilent(true);
+      logSpy.mockRestore();
+      errSpy.mockRestore();
+      fs.rmSync(empty, {recursive: true, force: true});
+    }
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.some(line => line.startsWith('[ok] Removed'))).toBe(true);
+    expect(lines.filter(line => /[\u0080-\uFFFF]/.test(line))).toEqual([]);
   });
 });
 
@@ -196,5 +302,18 @@ describe('init() — write-path safety', () => {
     await expect(
       init({features: 'template', templateName: '../../etc/evil'}, {cwd: tmpDir}),
     ).rejects.toMatchObject({code: ERROR_CODES.ERR_UNKNOWN_TEMPLATE});
+  });
+
+  it('refuses a template write that a symlinked src would carry outside cwd (ERR_PATH_TRAVERSAL)', async () => {
+    const outside = fs.mkdtempSync(path.join(process.cwd(), '.astryx-init-outside-'));
+    try {
+      fs.symlinkSync(outside, path.join(tmpDir, 'src'), 'dir');
+      await expect(
+        init({features: 'template', templateName: 'blank'}, {cwd: tmpDir}),
+      ).rejects.toMatchObject({code: ERROR_CODES.ERR_PATH_TRAVERSAL});
+      expect(fs.readdirSync(outside)).toEqual([]);
+    } finally {
+      fs.rmSync(outside, {recursive: true, force: true});
+    }
   });
 });

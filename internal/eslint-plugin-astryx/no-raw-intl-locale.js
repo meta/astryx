@@ -13,17 +13,19 @@
  * Shipped component code must read it through the public provider-aware
  * locale utilities (`useLocale()`, `useCollator()` from
  * `@astryxdesign/core/i18n`, or an existing formatting helper such as
- * `plainDateFormat`/`formatInstant`/`formatFilterValue`) — never construct an
+ * `plainDateFormat`/`formatInstant`/`formatRelativeTime`/`formatFilterValue`) —
+ * never construct an
  * `Intl` formatter or call a locale-sensitive prototype method directly.
+ * Calls to the public date helpers are tracked through named imports, aliases,
+ * and namespace imports and must pass their locale argument explicitly.
  * Passing an explicit locale expression does not satisfy this rule: a
  * hardcoded literal, `navigator.language`, or an arbitrary variable are all
  * still raw Intl access from the policy's point of view.
  *
  * Raw `Intl` is confined to two short, explicit lists below. Approved
  * implementations may call Intl directly but still require an explicit locale;
- * named test-oracle files may construct independent expected values. The only
- * ambient implementation exceptions are the two named legacy helper bodies
- * pending #5120. No ESLint option can widen these boundaries.
+ * named test-oracle files may construct independent expected values. No ESLint
+ * option can widen these boundaries.
  *
  * `navigator.language`/`navigator.languages` are rejected everywhere,
  * including inside an approved infrastructure file — the provider is the
@@ -102,19 +104,28 @@ const LOCALE_FIRST_METHODS = new Set([
  * every added file requires a rule-source change and focused rule test.
  */
 const APPROVED_IMPLEMENTATION_FILES = [
-  // Date formatting/parsing core. The two pre-existing ambient call sites are
-  // separately constrained by LEGACY_AMBIENT_CALLS below until #5120 lands.
+  // Date formatting/parsing core.
   'packages/core/src/utils/plainDate.ts',
   'packages/core/src/utils/dateParser.ts',
-  // Timestamp's shared instant formatter and its tooltip zone resolution
-  // (the latter's fixed en-US locale only probes identifier validity).
+  // Timestamp's absolute/relative formatters and tooltip zone resolution (the
+  // latter's fixed en-US locale only probes identifier validity).
   'packages/core/src/Timestamp/formatInstant.ts',
+  'packages/core/src/Timestamp/formatRelativeTime.ts',
   'packages/core/src/Timestamp/tooltipEntries.ts',
   'packages/core/src/PowerSearch/formatFilterValue.ts',
   // NumberInput's locale-aware read of typed and pasted text: it derives the
   // grouping/decimal separators and group sizes from Intl rather than a table.
   'packages/core/src/NumberInput/numberParser.ts',
+  // DateInput/DateTimeInput typed dates in any calendar: month, era and
+  // weekday names, field order and digits read off Intl and parsed back, the
+  // committed text, and the calendar's display name.
+  'packages/core/src/utils/calendarDateParser.ts',
+  // TimeInput/DateTimeInput time text: the locale's hour cycle, digits,
+  // separator and day-period words, read off Intl and parsed back.
+  'packages/core/src/utils/timeFormat.ts',
   'packages/core/src/i18n/useCollator.ts',
+  // Joins several catalog messages into one locale-correct list (INV8).
+  'packages/core/src/i18n/useListFormatter.ts',
   'packages/charts/src/formatters.ts',
 ];
 
@@ -131,14 +142,33 @@ const APPROVED_TEST_ORACLE_FILES = [
   'packages/core/src/Timestamp/tooltipEntries.test.ts',
   'packages/core/src/PowerSearch/formatFilterValue.test.ts',
   'packages/core/src/Timestamp/Timestamp.test.tsx',
+  'packages/core/src/i18n/__tests__/useListFormatter.test.tsx',
 ];
 
-// Temporary compatibility exceptions for the two public helpers whose locale
-// parameters are still pending in #5120. Scope by file + enclosing function,
-// not by file, so a second ambient formatter in either module is rejected.
-const LEGACY_AMBIENT_CALLS = new Map([
-  ['packages/core/src/utils/plainDate.ts', new Set(['plainDateFormat'])],
-  ['packages/core/src/utils/dateParser.ts', new Set(['isLocaleDayFirst'])],
+// These exact helper suites are the public default-behavior oracles. Production
+// callers must pass locale explicitly even though the public APIs retain their
+// deterministic defaults for backward compatibility.
+const DATE_HELPER_DEFAULT_TEST_FILES = [
+  'packages/core/src/utils/plainDate.test.ts',
+  'packages/core/src/utils/dateParser.test.ts',
+];
+
+const DATE_HELPER_LOCALE_ARGUMENTS = new Map([
+  ['plainDateFormat', 2],
+  ['formatSharedDate', 2],
+  ['parseDateInput', 1],
+  ['isLocaleDayFirst', 0],
+]);
+
+const DATE_HELPER_IMPLEMENTATION_FILES = new Map([
+  [
+    'packages/core/src/utils/plainDate.ts',
+    new Set(['plainDateFormat', 'formatSharedDate']),
+  ],
+  [
+    'packages/core/src/utils/dateParser.ts',
+    new Set(['parseDateInput', 'isLocaleDayFirst']),
+  ],
 ]);
 
 function unwrap(node) {
@@ -278,25 +308,115 @@ function isListedFile(filename, approvedFiles) {
   return approvedFiles.some(approved => normalized.endsWith(approved));
 }
 
-function enclosingFunctionName(node) {
-  let current = node.parent;
-  while (current != null) {
-    if (current.type === 'FunctionDeclaration') {
-      return current.id?.name ?? null;
+function findVariable(sourceCode, identifier) {
+  let scope = sourceCode.getScope(identifier);
+  while (scope) {
+    const variable = scope.set?.get(identifier.name);
+    if (variable) {
+      return variable;
     }
-    current = current.parent;
+    scope = scope.upper;
   }
   return null;
 }
 
-function isLegacyAmbientCall(filename, node) {
+function importSourceForSpecifier(specifier) {
+  const declaration = specifier?.parent;
+  return declaration?.type === 'ImportDeclaration' ? declaration.source : null;
+}
+
+function isDateHelperModule(source) {
+  if (typeof source?.value !== 'string') {
+    return false;
+  }
+  const value = source.value.replace(/\\/g, '/');
+  if (
+    value === '@astryxdesign/core' ||
+    value === '@astryxdesign/core/utils' ||
+    value.startsWith('@astryxdesign/core/utils/')
+  ) {
+    return true;
+  }
+  if (!value.startsWith('.')) {
+    return false;
+  }
+  return (
+    /(?:^|\/)(?:utils\/)?(?:plainDate|dateParser)$/.test(value) ||
+    /(?:^|\/)utils$/.test(value)
+  );
+}
+
+function importedName(specifier) {
+  const imported = specifier?.imported;
+  if (imported?.type === 'Identifier') {
+    return imported.name;
+  }
+  return typeof imported?.value === 'string' ? imported.value : null;
+}
+
+function importedDateHelperName(sourceCode, callee) {
+  if (callee?.type === 'Identifier') {
+    const variable = findVariable(sourceCode, callee);
+    const definition = variable?.defs.find(
+      def =>
+        def.type === 'ImportBinding' && def.node?.type === 'ImportSpecifier',
+    );
+    if (
+      definition &&
+      isDateHelperModule(importSourceForSpecifier(definition.node))
+    ) {
+      const name = importedName(definition.node);
+      return DATE_HELPER_LOCALE_ARGUMENTS.has(name) ? name : null;
+    }
+    return null;
+  }
+
+  if (callee?.type !== 'MemberExpression') {
+    return null;
+  }
+  const object = unwrap(callee.object);
+  if (object?.type !== 'Identifier') {
+    return null;
+  }
+  const variable = findVariable(sourceCode, object);
+  const definition = variable?.defs.find(
+    def =>
+      def.type === 'ImportBinding' &&
+      def.node?.type === 'ImportNamespaceSpecifier',
+  );
+  if (
+    !definition ||
+    !isDateHelperModule(importSourceForSpecifier(definition.node))
+  ) {
+    return null;
+  }
+  const name = staticPropertyName(callee);
+  return DATE_HELPER_LOCALE_ARGUMENTS.has(name) ? name : null;
+}
+
+function localDateHelperName(sourceCode, filename, callee) {
+  if (callee?.type !== 'Identifier') {
+    return null;
+  }
   const normalized = normalizeFilename(filename);
-  for (const [approved, functionNames] of LEGACY_AMBIENT_CALLS) {
-    if (normalized.endsWith(approved)) {
-      return functionNames.has(enclosingFunctionName(node));
+  let allowedNames = null;
+  for (const [implementationFile, names] of DATE_HELPER_IMPLEMENTATION_FILES) {
+    if (normalized.endsWith(implementationFile)) {
+      allowedNames = names;
+      break;
     }
   }
-  return false;
+  if (!allowedNames?.has(callee.name)) {
+    return null;
+  }
+  const variable = findVariable(sourceCode, callee);
+  const isFunctionDeclaration = variable?.defs.some(
+    def =>
+      def.type === 'FunctionName' &&
+      def.node?.type === 'FunctionDeclaration' &&
+      def.node.id?.name === callee.name,
+  );
+  return isFunctionDeclaration ? callee.name : null;
 }
 
 /**
@@ -313,10 +433,7 @@ function isNonReferencePosition(identifier) {
   if (!parent) {
     return false;
   }
-  if (
-    parent.type === 'TSQualifiedName' &&
-    parent.left === identifier
-  ) {
+  if (parent.type === 'TSQualifiedName' && parent.left === identifier) {
     // Type-only reference such as `collator: Intl.Collator`; it emits no
     // runtime Intl access and is part of the public TypeScript contract.
     return true;
@@ -359,7 +476,7 @@ const rule = {
     type: 'problem',
     docs: {
       description:
-        'Forbid raw Intl access (calls, aliasing, destructuring, computed indexing) outside the approved i18n infrastructure boundary; forbid navigator.language(s) as a locale source anywhere',
+        'Forbid raw Intl access outside approved infrastructure, navigator.language(s) as a locale source, and date-helper calls that omit provider locale',
       category: 'Best Practices',
       recommended: true,
     },
@@ -368,7 +485,8 @@ const rule = {
         'Do not call Intl directly. Use a public provider-aware locale ' +
         'utility instead (useLocale()/useCollator() from ' +
         '@astryxdesign/core/i18n, or an existing formatting helper such as ' +
-        'plainDateFormat/formatInstant/formatFilterValue) so the locale ' +
+        'plainDateFormat/formatInstant/formatRelativeTime/formatFilterValue) ' +
+        'so the locale ' +
         'always traces back to InternationalizationProvider. An explicit ' +
         'locale argument does not satisfy this rule — literals, variables, ' +
         'and navigator.language are all still raw Intl access here. Raw ' +
@@ -385,9 +503,12 @@ const rule = {
         '(useLocale()/useCollator() from @astryxdesign/core/i18n) instead.',
       ambientIntlInImplementation:
         'Approved Intl implementation files must still pass an explicit locale. ' +
-        'A missing, undefined, or void locale would reintroduce host-dependent ' +
-        'behavior; only the two named legacy helper call sites are temporarily ' +
-        'exempt until #5120 lands.',
+        'A missing, undefined, or void locale would reintroduce host-dependent behavior.',
+      dateHelperLocale:
+        'Pass the provider locale explicitly to {{helper}}. Read it with ' +
+        'useLocale() in React code and thread it into pure helpers; omitted or ' +
+        'undefined locale arguments fall back deterministically but do not ' +
+        'follow InternationalizationProvider.',
       navigatorLocale:
         'Do not source a locale from navigator.language/navigator.languages, ' +
         'in any position — not only as an argument to Intl or a locale ' +
@@ -451,10 +572,7 @@ const rule = {
         // Named tests may build independent Intl oracles, including the host
         // default where that is the behavior under test.
       } else if (implementationFile) {
-        if (
-          isUndefinedExpression(localeArg) &&
-          !isLegacyAmbientCall(filename, node)
-        ) {
+        if (isUndefinedExpression(localeArg)) {
           report(node, 'ambientIntlInImplementation');
         }
       } else {
@@ -492,6 +610,31 @@ const rule = {
       }
     }
 
+    function checkDateHelperCall(node) {
+      if (isListedFile(filename, DATE_HELPER_DEFAULT_TEST_FILES)) {
+        return;
+      }
+      const callee = unwrap(node.callee);
+      const helper =
+        importedDateHelperName(sourceCode, callee) ??
+        localDateHelperName(sourceCode, filename, callee);
+      if (!helper) {
+        return;
+      }
+      const localeArgumentIndex = DATE_HELPER_LOCALE_ARGUMENTS.get(helper);
+      const localeArgument = node.arguments[localeArgumentIndex];
+      if (
+        isUndefinedExpression(localeArgument) ||
+        localeArgument?.type === 'SpreadElement'
+      ) {
+        context.report({
+          node,
+          messageId: 'dateHelperLocale',
+          data: {helper},
+        });
+      }
+    }
+
     return {
       NewExpression(node) {
         checkIntlFormatter(node);
@@ -500,6 +643,7 @@ const rule = {
         if (!checkIntlFormatter(node)) {
           checkLocaleMethod(node);
         }
+        checkDateHelperCall(node);
       },
 
       // Unconditional: navigator.language/languages is never an acceptable

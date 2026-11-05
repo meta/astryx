@@ -7,7 +7,7 @@ export const doc = {
   name: 'ContextMenu — Basic',
   displayName: 'ContextMenu — Basic',
   description:
-    'A right-click area with action items and a divider separating a destructive action. Use to provide contextual actions for a specific element or region.',
+    'An adaptive context area: long-press opens a BottomSheet on compact touch screens, while right-click opens a cursor-positioned menu elsewhere.',
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['ContextMenu'],

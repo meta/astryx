@@ -4,7 +4,7 @@
 
 /**
  * @file FieldLabel.tsx
- * @input Uses React, Icon, IconType, useTranslator, FormLayoutContext
+ * @input Uses React, Icon, IconType, useComponentTranslator, FormLayoutContext
  * @output Exports FieldLabel component, FieldLabelProps
  * @position Core label implementation; used by Field, CheckboxInput, Switch
  *
@@ -19,7 +19,7 @@
 import {use, useMemo, useRef, type ReactNode, type RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 
 import {
   colorVars,
@@ -28,14 +28,38 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import {Icon, renderIconSlot, type IconType} from '../Icon';
-import {Tooltip} from '../Tooltip';
-import {useTranslator} from '../i18n';
+import {Icon, renderIconSlot} from '../Icon/Icon';
+import type {IconType} from '../Icon';
+import {Tooltip} from '../Tooltip/Tooltip';
+import {useTapStop} from '../Layer/useTouchTrigger';
 import {themeProps} from '../utils/themeProps';
-import {useInputContainer} from '../hooks';
+import {useInputContainer} from '../hooks/useInputContainer';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Field/FieldLabel.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
+  // The label and its description read as a single block, with no space
+  // between them. They need a wrapper of their own to get that: as bare
+  // siblings they pick up the column gap of whichever caller holds them
+  // (Field, CheckboxInput, Switch), which is the spacing meant to separate
+  // the label group from the control below it.
+  labelGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  // A hidden label group must not take a slot in the caller's layout, or an
+  // empty box would draw the caller's gap around nothing. Dropping the
+  // wrapper box leaves the sr-only children out of flow directly under the
+  // caller, so the group occupies no space at all.
+  labelGroupHidden: {
+    display: 'contents',
+  },
   label: {
     display: 'flex',
     alignItems: 'center',
@@ -195,7 +219,7 @@ export function FieldLabel({
   ref,
   ...rest
 }: FieldLabelProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {defaultOptionality} = use(FormLayoutContext);
 
   // A form-level `defaultOptionality` means "only the exception is marked": a
@@ -239,6 +263,12 @@ export function FieldLabel({
   // a ref-shaped object, since FieldLabel points at the control by id rather
   // than holding a ref to it.
   const descriptionRef = useRef<HTMLSpanElement>(null);
+  // A tap on the info icon asks for the help, so it stops there: it does not
+  // go on to activate the label's control, as a press anywhere else on the
+  // label would (focus the field, toggle a switch). A mouse click on the icon
+  // keeps that native activation, and hover shows the help.
+  const {onPointerDown: handleIconPointerDown, onClick: handleIconClick} =
+    useTapStop('click');
   const controlRef = useMemo<RefObject<HTMLElement | null>>(
     () => ({
       get current() {
@@ -268,56 +298,77 @@ export function FieldLabel({
         </span>
       )}
       {labelTooltip && (
-        <Tooltip content={labelTooltip} placement="above">
-          <Icon icon="info" size="sm" color="inherit" />
+        // The icon's one job is to reveal the help, so a tap on it opens or
+        // closes the help (`touchTrigger="tap"`), although it sits inside a
+        // `<label>`.
+        <Tooltip content={labelTooltip} placement="above" touchTrigger="tap">
+          <Icon
+            icon="info"
+            size="sm"
+            color="inherit"
+            onPointerDown={handleIconPointerDown}
+            onClick={handleIconClick}
+          />
         </Tooltip>
       )}
     </>
   );
 
+  const labelElement = (
+    <LabelElement
+      ref={ref}
+      id={labelID}
+      // `htmlFor` only applies to a real `<label>` associating with a single
+      // control; a group label (span) has no `htmlFor`.
+      htmlFor={isGroupLabel ? undefined : inputID}
+      {...rest}
+      {...mergeProps(
+        // A control that knows what kind of label this is passes its own
+        // target down (CheckboxInput's `checkbox-label`, Switch's
+        // `switch-label`); it arrives as `className` and composes onto this
+        // one. The label itself does not describe its own placement — it
+        // cannot know it, and any encoding it guessed would be wrong for a
+        // caller that arranges labels differently (Field's
+        // `horizontal-labels`).
+        themeProps('field-label'),
+        stylex.props(
+          styles.label,
+          isDisabled && styles.labelDisabled,
+          isLabelHidden && styles.srOnly,
+          xstyle,
+        ),
+        className,
+        style,
+      )}>
+      {labelContent}
+    </LabelElement>
+  );
+
+  // Without a description, preserve the original public DOM: the label itself
+  // remains the caller's flex/grid item and its layout overrides apply there.
+  if (!description) {
+    return labelElement;
+  }
+
   return (
-    <>
-      <LabelElement
-        ref={ref}
-        id={labelID}
-        // `htmlFor` only applies to a real `<label>` associating with a single
-        // control; a group label (span) has no `htmlFor`.
-        htmlFor={isGroupLabel ? undefined : inputID}
-        {...rest}
-        {...mergeProps(
-          // A control that knows what kind of label this is passes its own
-          // target down (CheckboxInput's `checkbox-label`, Switch's
-          // `switch-label`); it arrives as `className` and composes onto this
-          // one. The label itself does not describe its own placement — it
-          // cannot know it, and any encoding it guessed would be wrong for a
-          // caller that arranges labels differently (Field's
-          // `horizontal-labels`).
-          themeProps('field-label'),
-          stylex.props(
-            styles.label,
-            isDisabled && styles.labelDisabled,
-            isLabelHidden && styles.srOnly,
-            xstyle,
-          ),
-          className,
-          style,
+    <div
+      {...stylex.props(
+        styles.labelGroup,
+        isLabelHidden && styles.labelGroupHidden,
+      )}>
+      {labelElement}
+      <span
+        ref={forwardsDescriptionClick ? descriptionRef : undefined}
+        id={descriptionID}
+        {...(forwardsDescriptionClick ? descriptionClickProps : undefined)}
+        {...stylex.props(
+          styles.description,
+          forwardsDescriptionClick && styles.descriptionClickable,
+          isLabelHidden && styles.srOnly,
         )}>
-        {labelContent}
-      </LabelElement>
-      {description && (
-        <span
-          ref={forwardsDescriptionClick ? descriptionRef : undefined}
-          id={descriptionID}
-          {...(forwardsDescriptionClick ? descriptionClickProps : undefined)}
-          {...stylex.props(
-            styles.description,
-            forwardsDescriptionClick && styles.descriptionClickable,
-            isLabelHidden && styles.srOnly,
-          )}>
-          {description}
-        </span>
-      )}
-    </>
+        {description}
+      </span>
+    </div>
   );
 }
 

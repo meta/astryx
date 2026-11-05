@@ -7,7 +7,7 @@
  * @position Testing; validates usePowerSearchConfig.ts
  */
 
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi} from 'vitest';
 import {createPowerSearchConfig} from './usePowerSearchConfig';
 import type {InferData} from './usePowerSearchConfig';
 import type {PowerSearchFilter} from './types';
@@ -475,6 +475,31 @@ describe('applyFilters', () => {
         data,
       );
       expect(result).toHaveLength(4);
+    });
+
+    it('resolves both endpoints against one evaluation instant', () => {
+      const nowSpy = vi
+        .spyOn(Date, 'now')
+        .mockReturnValue(1_700_100_000 * 1000);
+      try {
+        const result = applyFilters(
+          [
+            filter('createdAt', 'between', {
+              type: 'date_range',
+              value: {
+                start: {type: 'RELATIVE', backValue: 2, unit: 'day'},
+                end: {type: 'NOW'},
+              },
+            }),
+          ],
+          data.slice(0, 1),
+        );
+
+        expect(result).toHaveLength(1);
+        expect(nowSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        nowSpy.mockRestore();
+      }
     });
   });
 

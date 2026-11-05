@@ -1,0 +1,242 @@
+{
+  "$comment": "Fixture-specific probes for existing host UI. Every selector uses a unique fixture-owned marker, never position or text. Missing probes are failures rather than skips.",
+  "properties": [
+    "color",
+    "backgroundColor",
+    "borderTopColor",
+    "borderRightColor",
+    "borderBottomColor",
+    "borderLeftColor",
+    "borderTopWidth",
+    "borderRightWidth",
+    "borderBottomWidth",
+    "borderLeftWidth",
+    "borderTopStyle",
+    "borderRightStyle",
+    "borderBottomStyle",
+    "borderLeftStyle",
+    "borderTopLeftRadius",
+    "borderTopRightRadius",
+    "borderBottomRightRadius",
+    "borderBottomLeftRadius",
+    "boxShadow",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "lineHeight",
+    "letterSpacing",
+    "paddingTop",
+    "paddingRight",
+    "paddingBottom",
+    "paddingLeft",
+    "marginTop",
+    "marginRight",
+    "marginBottom",
+    "marginLeft",
+    "gap",
+    "rowGap",
+    "columnGap",
+    "width",
+    "height",
+    "minWidth",
+    "minHeight",
+    "maxWidth",
+    "maxHeight",
+    "position",
+    "top",
+    "right",
+    "bottom",
+    "left",
+    "transform"
+  ],
+  "fixtures": {
+    "tailwind-v4-control": {
+      "probes": [
+        {
+          "name": "page-title",
+          "selector": "[data-vibe-probe=\"page-title\"]",
+          "role": "host text"
+        },
+        {
+          "name": "primary-action",
+          "selector": "[data-vibe-probe=\"primary-action\"]",
+          "role": "host control"
+        },
+        {
+          "name": "table-header",
+          "selector": "[data-vibe-probe=\"table-header\"]",
+          "role": "host text"
+        },
+        {
+          "name": "table-cell",
+          "selector": "[data-vibe-probe=\"table-cell\"]",
+          "role": "host text"
+        },
+        {
+          "name": "status",
+          "selector": "[data-vibe-probe=\"status\"]",
+          "role": "host status"
+        },
+        {
+          "name": "form-control",
+          "selector": "[data-vibe-probe=\"form-control\"]",
+          "role": "host control"
+        },
+        {
+          "name": "host-shell",
+          "selector": "[data-vibe-probe=\"host-shell\"]",
+          "role": "host surface"
+        }
+      ],
+      "rootVariables": [
+        "--color-background",
+        "--color-foreground",
+        "--color-border",
+        "--color-accent",
+        "--spacing",
+        "--text-sm",
+        "--font-sans"
+      ],
+      "hostTokenScopes": []
+    },
+    "shadcn-tailwind-v4-established": {
+      "probes": [
+        {
+          "name": "page-title",
+          "selector": "[data-vibe-probe=\"page-title\"]",
+          "role": "host text"
+        },
+        {
+          "name": "primary-action",
+          "selector": "[data-vibe-probe=\"primary-action\"]",
+          "role": "host control"
+        },
+        {
+          "name": "table-header",
+          "selector": "[data-vibe-probe=\"table-header\"]",
+          "role": "host text"
+        },
+        {
+          "name": "status",
+          "selector": "[data-vibe-probe=\"status\"]",
+          "role": "host status"
+        },
+        {
+          "name": "form-control",
+          "selector": "[data-vibe-probe=\"form-control\"]",
+          "role": "host control"
+        },
+        {
+          "name": "host-shell",
+          "selector": "[data-vibe-probe=\"host-shell\"]",
+          "role": "host surface"
+        }
+      ],
+      "rootVariables": [
+        "--color-card",
+        "--color-muted",
+        "--color-border",
+        "--color-accent",
+        "--color-background",
+        "--color-foreground",
+        "--radius-md",
+        "--spacing",
+        "--text-sm",
+        "--font-sans"
+      ],
+      "hostTokenScopes": [],
+      "interaction": {
+        "open": ["primary-action", "tooltip-trigger", "popover-trigger"],
+        "surfaces": [
+          {
+            "name": "dialog-backdrop",
+            "kind": "backdrop"
+          },
+          {
+            "name": "dialog-surface",
+            "kind": "dialog"
+          },
+          {
+            "name": "tooltip-surface",
+            "kind": "tooltip"
+          },
+          {
+            "name": "popover-surface",
+            "kind": "popover"
+          }
+        ]
+      }
+    },
+    "enterprise-scoped-synthetic": {
+      "probes": [
+        {
+          "name": "page-title",
+          "selector": "[data-vibe-probe=\"page-title\"]",
+          "role": "host text"
+        },
+        {
+          "name": "mode-control",
+          "selector": "[data-vibe-probe=\"mode-control\"]",
+          "role": "host control"
+        },
+        {
+          "name": "table-header",
+          "selector": "[data-vibe-probe=\"table-header\"]",
+          "role": "host text"
+        },
+        {
+          "name": "status",
+          "selector": "[data-vibe-probe=\"status\"]",
+          "role": "host status"
+        },
+        {
+          "name": "settings-control",
+          "selector": "[data-vibe-probe=\"settings-control\"]",
+          "role": "host control"
+        },
+        {
+          "name": "guest-boundary",
+          "selector": "[data-vibe-probe=\"guest-boundary\"]",
+          "role": "guest surface"
+        },
+        {
+          "name": "host-shell",
+          "selector": "[data-vibe-probe=\"host-shell\"]",
+          "role": "host surface"
+        }
+      ],
+      "rootVariables": [
+        "--color-border",
+        "--color-accent",
+        "--color-background",
+        "--color-foreground",
+        "--color-success",
+        "--color-warning",
+        "--color-error",
+        "--spacing",
+        "--text-sm",
+        "--font-sans"
+      ],
+      "hostTokenScopes": ["[data-guest-design-system]"],
+      "interaction": {
+        "open": ["dialog-trigger", "popover-trigger"],
+        "surfaces": [
+          {
+            "name": "dialog-backdrop",
+            "kind": "backdrop"
+          },
+          {
+            "name": "dialog-surface",
+            "kind": "dialog"
+          },
+          {
+            "name": "popover-surface",
+            "kind": "popover"
+          }
+        ]
+      }
+    }
+  },
+  "geometryNormalization": "DOMRect values are rounded to the Chromium 1/64 CSS pixel serialization grid, then compared exactly.",
+  "hostTokenScopesComment": "A host token scope is a selector the FIXTURE's own stylesheet uses to redefine the host's design tokens for a region of the DOM, rather than globally. It is declared per fixture because it is a fact about that host's CSS, not about the design system: an established app names its regions whatever it likes. An executor is not told these selectors -- the guidance tells it to find what scopes the surface it is moving, and this is how the measurement checks that it did. Only two of the three fixtures scope anything: tailwind-v4-control defines its tokens only at :root, and shadcn's .dark is a mode scope rather than a region, so both declare an empty list."
+}

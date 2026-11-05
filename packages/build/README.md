@@ -1,28 +1,33 @@
 # @astryxdesign/build
 
-Build plugins for XDS source builds. Provides babel, PostCSS, and Vite integrations that compile XDS library and product code with separate class name prefixes, which enables independent CSS layers:
+Build plugins for Astryx source builds. In the webpack and Vite setups, its babel, PostCSS, and Vite integrations compile Astryx library and product code with separate class name prefixes, which enables independent CSS layers:
 
 ```
 reset < astryx-base (library, astryx prefix) < astryx-theme < product (app, x prefix)
 ```
 
+Under Turbopack, `withAstryx()` and `@astryxdesign/build/next/postcss` compile Astryx the way its prebuilt stylesheets are compiled: the same class names, in `@layer astryx-base`.
+
 ## Why?
 
 StyleX generates atomic CSS: same declaration = same class name. Without separate prefixes, library and product classes collide and can't be placed in independent CSS layers, which breaks theme overrides.
 
-`@astryxdesign/build` solves this by:
+In the webpack and Vite setups, `@astryxdesign/build` solves this by:
 
-1. Compiling XDS library code with `astryx` prefix (`.astryx78zum5`)
+1. Compiling Astryx library code with `astryx` prefix (`.astryx78zum5`)
 2. Compiling product code with default `x` prefix (`.x78zum5`)
 3. Placing each group in its own CSS `@layer`
+4. Rejecting unsupported StyleX declarations instead of silently omitting them
 
 ## Packages
 
-| Export               | Purpose                                       | Platform                    |
-| -------------------- | --------------------------------------------- | --------------------------- |
-| `@astryxdesign/build/babel`   | Babel plugin: splits class prefixes per file  | Next.js, any babel pipeline |
-| `@astryxdesign/build/postcss` | PostCSS plugin: compiles + splits CSS layers  | Next.js                     |
-| `@astryxdesign/build/vite`    | Vite plugin: wraps unplugin + splits layers   | Vite, Storybook             |
+| Export                             | Purpose                                      | Platform                     |
+| ---------------------------------- | -------------------------------------------- | ---------------------------- |
+| `@astryxdesign/build/babel`        | Babel plugin: splits class prefixes per file | Next.js, any babel pipeline  |
+| `@astryxdesign/build/postcss`      | PostCSS plugin: compiles + splits CSS layers | Next.js (webpack)            |
+| `@astryxdesign/build/next`         | `withAstryx()`: the Next.js config helper    | Next.js (webpack, Turbopack) |
+| `@astryxdesign/build/next/postcss` | PostCSS plugin: `@astryx;`                   | Next.js (Turbopack)          |
+| `@astryxdesign/build/vite`         | Vite plugin: wraps unplugin + splits layers  | Vite, Storybook              |
 
 ## Install
 
@@ -38,7 +43,49 @@ npm install -D @stylexjs/unplugin
 
 ---
 
-## Next.js Setup
+## Next.js Setup (Turbopack)
+
+Under Turbopack, the default bundler since Next.js 16, `withAstryx()` compiles the
+Astryx modules your app imports from source as the prebuilt stylesheets are compiled,
+and `@astryxdesign/build/next/postcss` emits each source-built package's prebuilt
+stylesheet from that source: the same rules and selectors, in the same order, inside
+`@layer astryx-base`. Installed and workspace-linked packages both work; Astryx needs
+no Babel config.
+
+1. `next.config.mjs`, around your config and its own `turbopack.rules`:
+
+   ```js
+   import {withAstryx} from '@astryxdesign/build/next';
+   export default withAstryx({/* your Next.js config */});
+   ```
+
+2. `postcss.config.js`, beside any plugin your app already uses:
+
+   ```js
+   module.exports = {plugins: {'@astryxdesign/build/next/postcss': {}}};
+   ```
+
+3. Your global stylesheet, with `@astryx;` in place of `astryx.css`, `lab.css`, `charts.css` and `richtext.css` (every installed package with a prebuilt stylesheet builds from source, so import none of them: the build fails on one):
+
+   ```css
+   @import '@astryxdesign/core/reset.css';
+   @import '@astryxdesign/theme-neutral/theme.css';
+
+   @astryx;
+   ```
+
+   Each package's rules start with the `reset, astryx-base, astryx-theme` layer
+   order, as `reset.css` and the theme do, so the order holds in any chunk order
+   without a line of your own.
+
+Your own Turbopack rules are kept off Astryx source. Your Babel config file is not,
+and Babel's `ignore` cannot exclude Astryx: to keep it off, set
+`experimental.turbopackUseBuiltinBabel: false` and run `babel-loader` from a
+`turbopack.rules` entry, which `withAstryx()` keeps off Astryx source like any rule.
+
+## Next.js Setup (webpack)
+
+These steps run under `next dev --webpack` and `next build --webpack`.
 
 ### 1. babel.config.js
 
@@ -53,11 +100,16 @@ module.exports = {
       {
         dev: process.env.NODE_ENV !== 'production',
         runtimeInjection: false,
+        propertyValidationMode: 'throw',
         treeshakeCompensation: true,
         enableInlinedConditionalMerge: true,
         aliases: {
-          '@astryxdesign/core/*': [path.join(__dirname, 'node_modules/@astryxdesign/core/*')],
-          '@astryxdesign/core': [path.join(__dirname, 'node_modules/@astryxdesign/core')],
+          '@astryxdesign/core/*': [
+            path.join(__dirname, 'node_modules/@astryxdesign/core/*'),
+          ],
+          '@astryxdesign/core': [
+            path.join(__dirname, 'node_modules/@astryxdesign/core'),
+          ],
         },
         unstable_moduleResolution: {type: 'commonJS'},
       },
@@ -65,6 +117,8 @@ module.exports = {
   ],
 };
 ```
+
+A custom Babel config turns off Next.js's SWC compiler, and `next/font` needs SWC. Remove `next/font` from your layout (a fresh `create-next-app` layout imports `next/font/google`), or the build fails with `"next/font" requires SWC although Babel is being used`.
 
 ### 2. postcss.config.js
 
@@ -84,8 +138,12 @@ module.exports = {
             treeshakeCompensation: true,
             enableInlinedConditionalMerge: true,
             aliases: {
-              '@astryxdesign/core/*': [path.join(__dirname, 'node_modules/@astryxdesign/core/*')],
-              '@astryxdesign/core': [path.join(__dirname, 'node_modules/@astryxdesign/core')],
+              '@astryxdesign/core/*': [
+                path.join(__dirname, 'node_modules/@astryxdesign/core/*'),
+              ],
+              '@astryxdesign/core': [
+                path.join(__dirname, 'node_modules/@astryxdesign/core'),
+              ],
             },
             unstable_moduleResolution: {type: 'commonJS'},
           },
@@ -97,6 +155,10 @@ module.exports = {
 ```
 
 ### 3. next.config.mjs
+
+Or `withAstryx()` from `@astryxdesign/build/next`, which sets both of these for you.
+Either way the work happens in the `webpack` hook, so the build has to run with
+`--webpack` — see the note at the top of this section.
 
 ```js
 const nextConfig = {
@@ -153,6 +215,7 @@ export default defineConfig({
       stylexOptions: {
         dev: process.env.NODE_ENV === 'development',
         runtimeInjection: false,
+        propertyValidationMode: 'throw',
         treeshakeCompensation: true,
         unstable_moduleResolution: {
           type: 'commonJS',
@@ -164,7 +227,10 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@astryxdesign/core': path.resolve(__dirname, 'node_modules/@astryxdesign/core/src'),
+      '@astryxdesign/core': path.resolve(
+        __dirname,
+        'node_modules/@astryxdesign/core/src',
+      ),
     },
   },
   optimizeDeps: {
@@ -196,7 +262,11 @@ Compiles StyleX from both library and product source files in two separate passe
 
 ### Vite plugin (`@astryxdesign/build/vite`)
 
-Wraps `@stylexjs/unplugin` and intercepts the dev CSS endpoint (`/virtual:stylex.css`). Partitions the collected rules by file path and serves split-layer CSS.
+Wraps `@stylexjs/unplugin` and intercepts the dev CSS endpoint (`/virtual:stylex.css`). Partitions the collected rules by file path and serves split-layer CSS. Production builds write those rules to one cache-safe shared stylesheet and link it from every emitted HTML entry, without cross-loading entry-owned CSS.
+
+Unsupported declarations fail the build by default with StyleX's replacement guidance. Set `propertyValidationMode` explicitly in `stylexOverrides` (modern API) or `stylexOptions` (legacy API) only when a migration needs the upstream `warn` or `silent` behavior.
+
+A production build also checks the StyleX stylesheet for generated custom properties (`--<prefix><hash>`) that it reads but no stylesheet in the build declares, which browsers drop: a `.stylex.ts` export read in a style that is not a `defineVars`/`defineConsts` value, or one whose module never reached the build. It warns, naming the variable and the rule that reads it. Only stylesheets count as declarations, so a property the app sets at runtime (an inline style) is reported too: give it a name outside the StyleX class-name prefixes.
 
 ---
 

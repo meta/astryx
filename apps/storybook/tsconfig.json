@@ -1,6 +1,10 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    // `.storybook/main.ts` imports the Astryx Vite plugin from package source
+    // by path, because Storybook's config loader cannot resolve the package's
+    // dist-only `./vite` export in an unbuilt worktree (#5128).
+    "allowImportingTsExtensions": true,
     "paths": {
       "@astryxdesign/core": [
         "../../packages/core/src/index.ts"
@@ -26,9 +30,6 @@
       "@astryxdesign/richtext/*": [
         "../../packages/richtext/src/*/index.ts",
         "../../packages/richtext/src/*"
-      ],
-      "@astryxdesign/build/vite": [
-        "../../packages/build/src/vite.ts"
       ]
     }
   },

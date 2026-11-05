@@ -133,6 +133,13 @@ describe('cliError — JSON mode', () => {
     expect(env.suggestions).toEqual([{name: 'Button', reason: 'closest match'}]);
   });
 
+  it('replaces an unregistered code with ERR_UNKNOWN', () => {
+    expect(() =>
+      cliError('EACCES: permission denied', {code: 'EACCES'}),
+    ).toThrow('__exit_1__');
+    expect(JSON.parse(stdout[0]).code).toBe('ERR_UNKNOWN');
+  });
+
   it('always exits 1 in JSON mode (custom exitCode is ignored — contract)', () => {
     expect(() => cliError('msg', {exitCode: 2})).toThrow('__exit_1__');
     expect(exitCode).toBe(1);

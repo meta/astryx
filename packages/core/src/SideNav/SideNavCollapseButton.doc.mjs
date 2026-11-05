@@ -8,6 +8,14 @@ export const docs = {
   displayName: 'Side Nav Collapse Button',
   isHiddenFromOverview: true,
   description: 'Toggle button for sidenav collapse. Place inside SideNav (reads context automatically) or outside it (hand the same controlled collapsible config to both). Renders as an icon-only ghost button by default.',
+  playground: {
+    defaults: {
+      collapsible: {
+        isCollapsed: false,
+        onCollapsedChange: undefined,
+      },
+    },
+  },
   props: [
     {
       name: 'collapsible',

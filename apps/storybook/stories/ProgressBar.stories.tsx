@@ -314,7 +314,7 @@ export const MarksAcrossVariants: Story = {
 };
 
 export const ThemedMarks: Story = {
-  // Marks are themeable directly via the `progressbar-mark` target: a theme sets
+  // Marks are themeable directly via the `progress-bar-mark` target: a theme sets
   // `backgroundColor`, `width`, and `height` on it with `defineTheme`. A taller
   // height overhangs the bar symmetrically above and below. The style block below
   // stands in for a full theme, in the shape `astryx theme build` emits — the

@@ -15,7 +15,9 @@ const styles = stylex.create({
     height: 28,
     borderRadius: 'var(--radius-element)',
     flexShrink: 0,
-    border: '1px solid var(--color-border)',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: 'var(--color-border)',
   },
   contextLight: {
     width: 28,
@@ -26,7 +28,9 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    border: '1px solid var(--color-border)',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: 'var(--color-border)',
   },
   contextDark: {
     width: 28,
@@ -37,7 +41,9 @@ const styles = stylex.create({
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    border: '1px solid var(--color-border)',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: 'var(--color-border)',
   },
   swatchInner: {
     width: 20,

@@ -1,0 +1,19 @@
+{
+  "palette-anchor-exact": {"anchorPolicy": "exact"},
+  "palette-anchor-bounded": {"anchorPolicy": "bounded", "maxDeltaE": 2},
+  "palette-anchor-flexible": {"anchorPolicy": "flexible"},
+  "palette-vibrancy-muted": {"vibrancyDirection": "decrease"},
+  "palette-accent-absent": {"accent": "omit"},
+  "palette-accent-ambiguous": {
+    "action": "clarify",
+    "question": "Should this remain one theme accent color, or become a light and dark accent ramp?"
+  },
+  "palette-accent-ramp": {
+    "accent": "family",
+    "familyId": "accent",
+    "modeStrategy": "light-and-dark"
+  },
+  "palette-custom-stop": {"stopsInclude": 12.5},
+  "palette-custom-layout": {"customLayout": true, "stopCount": 5},
+  "palette-omit-endpoints": {"stopsOmit": [0, 100]}
+}

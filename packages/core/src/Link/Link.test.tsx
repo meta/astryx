@@ -12,6 +12,7 @@
 import {describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {hasPressedArm} from '../__tests__/pressState';
 import {Link} from './Link';
 import {LinkProvider} from './LinkProvider';
 
@@ -57,10 +58,25 @@ describe('Link', () => {
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
-  it('button fallback supports isDisabled', () => {
-    render(<Link isDisabled>Disabled Action</Link>);
+  it('button fallback stays focusable and inert when isDisabled', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <Link isDisabled onClick={onClick}>
+        Disabled Action
+      </Link>,
+    );
     const button = screen.getByRole('button');
-    expect(button).toBeDisabled();
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    const nativeClick = vi.fn();
+    button.addEventListener('click', nativeClick);
+    await user.tab();
+    expect(button).toHaveFocus();
+    await user.keyboard('{Enter} ');
+    expect(nativeClick).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it('button fallback has type="button"', () => {
@@ -122,7 +138,8 @@ describe('Link', () => {
 
   it('defaults the inner text type to body', () => {
     render(<Link href="/test">Body link</Link>);
-    expect(screen.getByText('Body link')).toHaveClass('astryx-text', 'body');
+    expect(screen.getByText('Body link')).toHaveClass('astryx-text');
+    expect(screen.getByText('Body link')).toHaveAttribute('data-type', 'body');
   });
 
   it('forwards type="inherit" so the link adopts the surrounding text type', () => {
@@ -134,8 +151,9 @@ describe('Link', () => {
     // The inner Text renders with the `inherit` type, so font-size/line-height
     // inherit from the surrounding text rather than imposing the body type.
     const text = screen.getByText('Inline link');
-    expect(text).toHaveClass('astryx-text', 'inherit');
-    expect(text).not.toHaveClass('body');
+    expect(text).toHaveClass('astryx-text');
+    expect(text).toHaveAttribute('data-type', 'inherit');
+    expect(text).not.toHaveAttribute('data-type', 'body');
   });
 
   it('applies hasUnderline style when true', () => {
@@ -153,11 +171,10 @@ describe('Link', () => {
         Disabled Link
       </Link>,
     );
-    // An href-less anchor has no implicit `link` role, so query by text.
-    const link = screen.getByText('Disabled Link').closest('a');
-    expect(link).not.toBeNull();
+    // The href-less anchor keeps a Tab stop and an explicit link role.
+    const link = screen.getByRole('link', {name: 'Disabled Link'});
     expect(link).toHaveAttribute('aria-disabled', 'true');
-    expect(link).toHaveAttribute('tabIndex', '-1');
+    expect(link).toHaveAttribute('tabIndex', '0');
     // Visual classes are preserved in the disabled state.
     expect(link?.className).toContain('astryx-link');
   });
@@ -412,6 +429,58 @@ describe('Link', () => {
     );
     const link = screen.getByRole('link', {name: 'Themed Link'});
     expect(link.className).toContain('astryx-link');
-    expect(link.className).toContain('secondary');
+    expect(link).toHaveAttribute('data-color', 'secondary');
+  });
+
+  it('keeps the reflected data-color when a caller passes its own', () => {
+    const callerProps = {'data-color': 'danger'};
+    render(
+      <>
+        <Link href="/test" color="secondary" {...callerProps}>
+          Anchor Link
+        </Link>
+        <Link color="secondary" onClick={() => {}} {...callerProps}>
+          Button Link
+        </Link>
+        <Link href="/test" color="secondary" isDisabled {...callerProps}>
+          Disabled Link
+        </Link>
+      </>,
+    );
+    expect(screen.getByRole('link', {name: 'Anchor Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+    expect(screen.getByRole('button', {name: 'Button Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+    expect(screen.getByRole('link', {name: 'Disabled Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+  });
+});
+
+describe('pressed state', () => {
+  it('paints the pressed overlay behind a link while it is pressed', () => {
+    render(<Link href="/docs">Docs</Link>);
+    expect(hasPressedArm(screen.getByRole('link', {name: 'Docs'}))).toBe(true);
+  });
+
+  it('paints it on the button form too', () => {
+    render(<Link onClick={() => {}}>Open</Link>);
+    expect(hasPressedArm(screen.getByRole('button', {name: 'Open'}))).toBe(
+      true,
+    );
+  });
+
+  it('does not press a disabled link', () => {
+    render(
+      <Link href="/docs" isDisabled>
+        Docs
+      </Link>,
+    );
+    expect(hasPressedArm(screen.getByText('Docs').closest('a')!)).toBe(false);
   });
 });

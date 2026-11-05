@@ -3,6 +3,9 @@
 /**
  * defineTheme — Create an Astryx theme from a flat token map.
  *
+ * Adaptations resolve against the effective root axes and components, retaining
+ * authored component pins without repeating root typography defaults.
+ *
  * Two distribution modes:
  * - Unbuilt: Theme generates CSS and injects a <style> tag at runtime
  * - Built: `astryx theme build` pre-compiles to a CSS file; Theme just
@@ -13,7 +16,7 @@
  * - A [light, dark] tuple: converted to light-dark(light, dark)
  *
  * @example
- * ```tsx
+ * ```
  * const oceanTheme = defineTheme({
  *   name: 'ocean',
  *   tokens: {
@@ -36,9 +39,64 @@
  * - /packages/cli/assets/docs/theme.doc.mjs (`astryx docs theme`)
  */
 
-import type {IconRegistry} from '../Icon/globalIconRegistry';
+import type {ReactNode} from 'react';
+import type {
+  IconEntry,
+  IconName,
+  NamespacedIconName,
+} from '../Icon/globalIconRegistry';
+
+/**
+ * Icon overrides a theme may declare: any built-in semantic name, plus the
+ * namespaced keys components and libraries own (`'richtext:bold'`). Each entry
+ * is a React node or a pure synchronous function of `{size, variant}`, where
+ * `variant` is one of `Variant` or `undefined`.
+ */
+type ThemeIconEntries<Variant extends string> = Partial<
+  Record<IconName | NamespacedIconName, IconEntry<Variant>>
+>;
+
+/**
+ * The variant names a base theme lists: exact for a theme from `defineTheme`,
+ * any string for another `DefinedTheme`, none without a base.
+ */
+type BaseThemeIconVariant<Base> = Base extends DefinedTheme
+  ? '__iconVariant' extends keyof Base
+    ? Base extends {name: string; __iconVariant?(variant: infer Variant): void}
+      ? Extract<Variant, string>
+      : string
+    : string
+  : never;
+
+/**
+ * The variant names a theme lists: its own `iconVariants` when it sets the
+ * field, otherwise the list it inherits from `extends`.
+ */
+type ThemeIconVariant<
+  IconVariants extends ReadonlyArray<string> | undefined,
+  Base,
+> = [IconVariants] extends [ReadonlyArray<infer Variant extends string>]
+  ? Variant
+  : BaseThemeIconVariant<Base>;
+
+/**
+ * The same names, as a type `defineTheme` does not infer from: only
+ * `iconVariants` and `extends` decide a theme's names, never the parameter
+ * types of its icon entry functions.
+ */
+type ThemeIconEntryVariant<
+  IconVariants extends ReadonlyArray<string> | undefined,
+  Base,
+> = [ThemeIconVariant<IconVariants, Base>][IconVariants extends unknown
+  ? 0
+  : never];
+
+/** The node-valued view of a theme's icons that public reads return. */
+type ThemeIconOverrides = Partial<
+  Record<IconName | NamespacedIconName, ReactNode>
+>;
 import type {IndicatorRegistry} from '../Indicator/types';
-import type {TypographyConfig, FontWeight} from './types';
+import type {TypographyConfig} from './types';
 import {
   resolveOnMedia,
   type OnMediaOverrides,
@@ -59,20 +117,26 @@ import {
   fontWeightDefaults,
   typeScaleDefaults,
 } from './tokens.stylex';
+import type {MotionScaleConfig} from './expandMotionScale';
+import type {ThemeMotionConfig} from './themeMotion';
+import type {RadiusScaleConfig} from './expandRadiusScale';
+import type {ColorScaleConfig} from './expandColorScale';
+import {resolveThemeValues, type ThemeValuesInput} from './resolveThemeValues';
 import {
-  expandTypeScale,
-  generateTypeScaleComponents,
-  type TypeScaleConfig,
-} from './expandTypeScale';
-import {expandMotionScale, type MotionScaleConfig} from './expandMotionScale';
-import {expandRadiusScale, type RadiusScaleConfig} from './expandRadiusScale';
-import {expandColorScale, type ColorScaleConfig} from './expandColorScale';
+  normalizeThemeAdaptations,
+  resolveThemeAdaptationRules,
+  resolveThemeGenerativeAxes,
+  type NormalizedThemeAdaptations,
+  type ResolvedThemeAdaptationRule,
+  type ThemeAdaptations,
+  type ThemeGenerativeAxes,
+} from './themeAdaptations';
 
 import type {DomainTokenName} from './domainTokens';
-import {domainTokenDefaults} from './domainTokens';
+import {domainTokenDefaults} from './domainTokens/domainTokenDefaults';
 import type {SyntaxThemeDefinition} from './syntax';
 import {registerTheme} from './themeRegistry';
-import {deepMergeComponents} from './mergeComponents';
+import {resolveLocalTokenContract} from './localTokens';
 
 // =============================================================================
 // Types
@@ -144,7 +208,7 @@ export type StyleOverrides = Record<string, string | Record<string, string>>;
  * to override interaction states without CSS custom property escape hatches.
  *
  * @example
- * ```tsx
+ * ```
  * components: {
  *   button: {
  *     base: { fontWeight: '600' },
@@ -154,7 +218,7 @@ export type StyleOverrides = Record<string, string | Record<string, string>>;
  *   badge: {
  *     'variant:ghost': { border: '1px solid var(--color-border)' },
  *   },
- *   radio: {
+ *   'radio-indicator': {
  *     base: {
  *       borderColor: '#8F9296',
  *       ':hover': { borderColor: 'color-mix(in srgb, #8F9296, black 20%)' },
@@ -165,8 +229,18 @@ export type StyleOverrides = Record<string, string | Record<string, string>>;
  */
 export type ComponentStyleMap = Record<string, Record<string, StyleOverrides>>;
 
-/** Input to defineTheme */
-export interface DefineThemeInput {
+/**
+ * Input to defineTheme.
+ *
+ * `IconVariants` is the theme's own `iconVariants` list and `Base` its
+ * `extends` theme; together they type the `variant` an icon entry function
+ * receives. `defineTheme` infers both.
+ */
+export interface DefineThemeInput<
+  IconVariants extends ReadonlyArray<string> | undefined =
+    ReadonlyArray<string> | undefined,
+  Base extends DefinedTheme | undefined = DefinedTheme | undefined,
+> {
   /** Theme name — used for data-astryx-theme attribute and identification */
   name: string;
 
@@ -184,7 +258,7 @@ export interface DefineThemeInput {
    * (e.g. icons, accent color) without re-specifying the full theme.
    *
    * @example
-   * ```tsx
+   * ```
    * import {neutralTheme} from '@astryxdesign/theme-neutral';
    *
    * const myTheme = defineTheme({
@@ -195,7 +269,7 @@ export interface DefineThemeInput {
    * });
    * ```
    */
-  extends?: DefinedTheme;
+  extends?: Base;
   /**
    * Unified typography configuration — fonts, scale, and weights.
    *
@@ -206,7 +280,7 @@ export interface DefineThemeInput {
    * @import for your fonts before rendering the theme.
    *
    * @example
-   * ```tsx
+   * ```
    * typography: {
    *   scale: { base: 14, ratio: 1.2 },
    *   body: { family: 'Geist', fallbacks: '-apple-system, sans-serif' },
@@ -217,13 +291,27 @@ export interface DefineThemeInput {
    */
   typography?: TypographyConfig;
   /**
-   * Motion configuration. Computes duration min/max variants from
-   * base values and a scaling ratio: min = base × ratio, max = base / ratio.
+   * Motion configuration: two knobs (spec:AST-108), a motion scale, or both.
    *
-   * Explicit `tokens` overrides take precedence over motion-generated values.
+   * - `tempo` (default 1, clamped to 0.75–1.5) scales every motion duration
+   *   token; touch motion's springs don't read it yet.
+   * - `character` (`'crisp'`, `'standard'` or `'expressive'`) sets the
+   *   entrance and move curves; exits and fades never overshoot.
+   *
+   * Every theme follows each person's Reduce Motion setting; nothing loosens it.
+   *
+   * A motion scale computes duration min/max variants from base values and a
+   * ratio (min = base × ratio, max = base / ratio); its durations win over
+   * `tempo`, and explicit `tokens` overrides win over both. Finger tracking,
+   * momentum, the keyboard, hover, the press's onset delay and tap flash, and
+   * busy loops never follow the knobs; the press release fade follows
+   * `tempo`.
    *
    * @example
    * ```
+   * motion: { tempo: 1.2, character: 'crisp' }
+   *
+   * // A motion scale, as before:
    * motion: { fast: 175, medium: 410, slow: 975, ratio: 0.75 }
    *
    * // Suggested starting points:
@@ -232,7 +320,7 @@ export interface DefineThemeInput {
    * //   Cinematic: { fast: 200, medium: 500, slow: 1200, ratio: 0.7 }
    * ```
    */
-  motion?: MotionScaleConfig;
+  motion?: ThemeMotionConfig;
   /**
    * Radius configuration. Generates radius token overrides
    * from a base unit and multiplier.
@@ -244,7 +332,7 @@ export interface DefineThemeInput {
    * Explicit `tokens` overrides take precedence over radius-generated values.
    *
    * @example
-   * ```tsx
+   * ```
    * radius: { base: 4, multiplier: 1 }
    *
    * // Sharp/brutalist — all radii become 0
@@ -294,6 +382,9 @@ export interface DefineThemeInput {
    *  Values can be a string or [light, dark] tuple.
    *  Only include tokens you want to override; defaults fill the rest. */
   tokens?: Partial<Record<TokenName, TokenValue>>;
+  /** Theme-family-local values keyed by any valid CSS custom-property name;
+   *  prefixes do not establish ownership. */
+  localTokens?: Record<string, TokenValue>;
   /**
    * Component style overrides — keyed by component name (lowercase).
    * Each entry maps style keys to CSS property overrides, scoped under
@@ -304,7 +395,7 @@ export interface DefineThemeInput {
    * and generate TypeScript module augmentations for type-safe extensibility.
    *
    * @example
-   * ```tsx
+   * ```
    * components: {
    *   button: {
    *     base: { fontWeight: '600' },
@@ -318,8 +409,45 @@ export interface DefineThemeInput {
    * ```
    */
   components?: ComponentStyleMap;
-  /** Icon registry — maps semantic icon names to React nodes */
-  icons?: Partial<IconRegistry>;
+  /**
+   * Icon registry — maps semantic icon names and namespaced keys to artwork.
+   *
+   * An entry is a React node, or a pure synchronous function of
+   * `{size, variant}` that returns one. `Icon` passes the size it renders at
+   * (`'xsm' | 'sm' | 'md' | 'lg'`), so the theme can map it to its icon
+   * library's own props. A function must not use hooks, measure the DOM, read
+   * browser globals or mutable state, or have side effects. Its result is
+   * final: returning `null` draws nothing instead of falling back to a
+   * registered or built-in icon. A `null` or `undefined` node entry falls back.
+   *
+   * @example
+   * ```
+   * icons: {
+   *   close: <XMarkIcon />,
+   *   info: ({size}) => <InfoIcon weight={size === 'sm' ? 'bold' : 'regular'} />,
+   * }
+   * ```
+   *
+   * `variant` is typed as the names in `iconVariants` (or the inherited list).
+   */
+  icons?: ThemeIconEntries<ThemeIconEntryVariant<IconVariants, Base>>;
+  /**
+   * The icon variant names this theme supports, listed once for the whole
+   * theme — never per icon. Icon entry functions receive `variant` typed as
+   * these names.
+   *
+   * A theme that sets `iconVariants` replaces the list it would inherit from
+   * `extends`; a theme that omits it inherits the base's list.
+   *
+   * @example
+   * ```
+   * iconVariants: ['outline', 'filled'],
+   * icons: {
+   *   info: ({variant}) => (variant === 'filled' ? <InfoFilled /> : <InfoOutline />),
+   * },
+   * ```
+   */
+  iconVariants?: IconVariants;
   /**
    * Indicator overrides — replaces the components that draw stateful control
    * visuals with the theme's own, by name.
@@ -339,7 +467,7 @@ export interface DefineThemeInput {
    * per-region (or per-instance) by wrapping in SyntaxTheme.
    *
    * @example
-   * ```tsx
+   * ```
    * import {dracula} from '@astryxdesign/core/theme/syntax';
    * defineTheme({ name: 'my-theme', syntax: dracula, ... })
    * ```
@@ -355,7 +483,7 @@ export interface DefineThemeInput {
    * background.
    *
    * @example
-   * ```tsx
+   * ```
    * onDark: {
    *   tokens: { '--color-accent': '#90CAF9' },
    *   components: {
@@ -370,6 +498,33 @@ export interface DefineThemeInput {
    * but for the inverse case (e.g. dark-mode page with a light popover).
    */
   onLight?: OnMediaOverrides;
+  /**
+   * Ordered environment-conditioned token and component adaptations.
+   *
+   * Width points use the fixed names `sm`, `md`, `lg`, `xl`, and `2xl` and
+   * default to 640, 768, 1024, 1280, and 1536 CSS pixels. Breakpoint
+   * configuration alone emits no CSS. Rules are emitted in declaration order;
+   * fields inside `when` are ANDed and later matching writes win.
+   *
+   * @example
+   * ```
+   * adaptations: {
+   *   widthBreakpoints: {lg: 1024, xl: 1280},
+   *   rules: [
+   *     {
+   *       when: {
+   *         width: {from: 'lg', below: 'xl'},
+   *         pointer: 'coarse',
+   *       },
+   *       value: {
+   *         tokens: {'--size-element-md': '44px'},
+   *       },
+   *     },
+   *   ],
+   * }
+   * ```
+   */
+  adaptations?: ThemeAdaptations;
 }
 
 /** A defined theme — ready to pass to <Theme> */
@@ -378,10 +533,33 @@ export interface DefinedTheme {
   name: string;
   /** Token overrides — only the tokens the consumer specified */
   tokens: Record<string, string>;
+  /** Resolved theme-family-local token declarations. */
+  localTokens?: Record<string, string>;
   /** Component style overrides */
   components?: ComponentStyleMap;
-  /** Icon registry */
-  icons?: Partial<IconRegistry>;
+  /**
+   * Icon registry as React nodes. A function entry is read at
+   * `{size: 'md'}`; `Icon` resolves the entry at the size it renders.
+   */
+  icons?: ThemeIconOverrides;
+  /**
+   * Icon entries with their functions, present when any entry is a function.
+   * Only Astryx icon resolution reads it.
+   * @internal
+   */
+  __icons?: ThemeIconEntries<never>;
+  /**
+   * The icon variant names this theme supports: its own `iconVariants`, or
+   * the list it inherited. Absent when no theme in its lineage lists any.
+   */
+  iconVariants?: ReadonlyArray<string>;
+  /**
+   * The variant list of the theme that defined each inherited function entry,
+   * kept where it differs from `iconVariants`, so the entry receives only
+   * variants its defining theme lists. Only Astryx icon resolution reads it.
+   * @internal
+   */
+  __iconEntryVariants?: Record<string, ReadonlyArray<string> | undefined>;
   /** Indicator overrides for stateful control visuals, keyed by name */
   indicators?: IndicatorRegistry;
   /** Whether this theme has been pre-compiled by theme build CLI */
@@ -393,6 +571,10 @@ export interface DefinedTheme {
    * @internal
    */
   __inputTokens?: Partial<Record<string, TokenValue>>;
+  /** Exact owner theme for every inherited local-token declaration. @internal */
+  __localTokenOwners?: Record<string, string>;
+  /** Exact enrolled theme lineage; presence marks this theme as enrolled. @internal */
+  __localTokenLineage?: string[];
   /**
    * Resolved on-media token overrides for dark surfaces.
    * Generated by defineTheme from defaults + user onDark overrides.
@@ -405,7 +587,37 @@ export interface DefinedTheme {
    * @internal
    */
   __onLight?: ResolvedOnMedia;
+  /**
+   * Effective breakpoint map and ordered normalized rule inputs retained for
+   * source-equivalent extension, including from a built theme.
+   * @internal
+   */
+  __adaptations?: NormalizedThemeAdaptations;
+  /** Concrete ordered rule writes used by the runtime CSS compiler. @internal */
+  __adaptationRules?: ResolvedThemeAdaptationRule[];
+  /** Effective root generative-axis metadata used to resolve child rules. @internal */
+  __axes?: ThemeGenerativeAxes;
 }
+
+/**
+ * A theme produced by the current defineTheme implementation. `IconVariant`
+ * is the names in its `iconVariants` list.
+ */
+export type ResolvedDefinedTheme<IconVariant extends string = string> =
+  DefinedTheme & {
+    __adaptations: NormalizedThemeAdaptations;
+    __axes: ThemeGenerativeAxes;
+    /**
+     * Type-only: the names in `iconVariants`, so a theme that `extends` this
+     * one types its icon entries by the list it inherits. Never set. Method
+     * syntax keeps resolved themes with different lists assignable to each
+     * other, as they were before the list existed. `astryx theme build` writes
+     * the same marker into a built theme's declaration.
+     * SYNC: packages/cli/api/theme/build/build.mjs (builtThemeType)
+     * @internal
+     */
+    __iconVariant?(variant: IconVariant): void;
+  };
 
 // =============================================================================
 // All defaults merged into a single flat map
@@ -434,50 +646,6 @@ export const tokenDefaults: Record<string, string> = {
 // =============================================================================
 
 /**
- * Resolve a token value to a CSS string.
- * - String values pass through as-is
- * - [light, dark] tuples become light-dark(light, dark)
- */
-function resolveTokenValue(value: TokenValue): string {
-  if (Array.isArray(value)) {
-    return `light-dark(${value[0]}, ${value[1]})`;
-  }
-  return value;
-}
-
-/**
- * Resolve a FontWeight name to a var() reference.
- * Named weights map to var(--font-weight-*); raw values pass through.
- */
-function resolveFontWeight(weight: FontWeight): string {
-  const named: Record<string, string> = {
-    normal: 'var(--font-weight-normal)',
-    medium: 'var(--font-weight-medium)',
-    semibold: 'var(--font-weight-semibold)',
-    bold: 'var(--font-weight-bold)',
-  };
-  return named[weight] ?? weight;
-}
-
-/**
- * Build the full CSS font-family value from family + fallbacks.
- * Quotes the family name if it contains spaces.
- */
-function buildFontFamily(
-  family?: string,
-  fallbacks?: string,
-): string | undefined {
-  if (!family) {
-    return undefined;
-  }
-  const quoted = family.includes(' ') ? `"${family}"` : family;
-  if (fallbacks) {
-    return `${quoted}, ${fallbacks}`;
-  }
-  return quoted;
-}
-
-/**
  * Describe a rejected `extends` value for the error message — enough to tell a
  * missed import (`undefined`) from a module namespace or a plain object.
  */
@@ -495,6 +663,73 @@ function describeBadBase(value: unknown): string {
   return `an object with keys [${keys.slice(0, 4).join(', ')}${keys.length > 4 ? ', …' : ''}]`;
 }
 
+/** The slow band's duration tokens. */
+const SLOW_BAND = [
+  '--duration-slow-min',
+  '--duration-slow',
+  '--duration-slow-max',
+] as const;
+
+/**
+ * The base's tokens for the duration-scale fields a child leaves unset
+ * (spec:AST-108 FR5, field by field): a child that sets no `slow` of its own
+ * regenerates only the fast and medium bands, so an inherited slow band stays
+ * as the base's tokens hold it, at the ratio it was made with; and a child
+ * that sets no `easing` keeps the base's `--ease-standard`, an explicit one
+ * included, however many themes down either is inherited.
+ */
+function inheritedScaleTokens(
+  base: DefinedTheme,
+  baseMotion: ThemeMotionConfig,
+  own: ThemeMotionConfig,
+): Partial<Record<string, TokenValue>> | undefined {
+  const names = [
+    ...('slow' in baseMotion && !('slow' in own) ? SLOW_BAND : []),
+    ...('easing' in baseMotion && !('easing' in own)
+      ? (['--ease-standard'] as const)
+      : []),
+  ];
+  if (names.length === 0) {
+    return undefined;
+  }
+  const tokens = base.tokens as Record<string, string | undefined>;
+  return Object.fromEntries(
+    names.flatMap(name =>
+      tokens[name] !== undefined ? [[name, tokens[name]]] : [],
+    ),
+  );
+}
+
+/**
+ * Refuses a duration scale that is missing `fast`, `medium` or `ratio` after
+ * inheritance. The scale applies only when all three are present, so a partial
+ * one beside a knob (`{fast: 100, tempo: 1.2}`) would otherwise be dropped
+ * silently, though its fields win over `tempo` (spec:AST-108 FR5). Adaptation
+ * rules refuse the same in `completeMotion`.
+ */
+function assertCompleteMotionScale(
+  motion: ThemeMotionConfig,
+  themeName: string,
+): void {
+  const scale = motion as Partial<MotionScaleConfig>;
+  const writesScale =
+    scale.fast !== undefined ||
+    scale.medium !== undefined ||
+    scale.ratio !== undefined ||
+    scale.slow !== undefined ||
+    scale.easing !== undefined;
+  if (
+    writesScale &&
+    (scale.fast === undefined ||
+      scale.medium === undefined ||
+      scale.ratio === undefined)
+  ) {
+    throw new Error(
+      `defineTheme("${themeName}"): \`motion\` sets a duration scale field, so it must supply \`fast\`, \`medium\`, and \`ratio\` unless each missing field is inherited from \`extends\`.`,
+    );
+  }
+}
+
 /**
  * Create an Astryx theme.
  *
@@ -505,10 +740,13 @@ function describeBadBase(value: unknown): string {
  * that are merged into the token map. Explicit `tokens` entries take
  * precedence over generated values.
  */
-export function defineTheme(input: DefineThemeInput): DefinedTheme {
-  const tokens: Record<string, string> = {};
-
-  // 0. Pre-seed from base theme when `extends` is provided (lowest precedence).
+export function defineTheme<
+  const IconVariants extends ReadonlyArray<string> | undefined = undefined,
+  Base extends DefinedTheme | undefined = undefined,
+>(
+  input: DefineThemeInput<IconVariants, Base>,
+): ResolvedDefinedTheme<ThemeIconVariant<IconVariants, Base>> {
+  // Pre-seed from the base theme when `extends` is provided (lowest precedence).
   // A base that is not a theme is refused rather than ignored: `extends` used
   // to inherit nothing when its value was undefined, which is what a named
   // import silently resolving to the wrong module hands over, and the theme
@@ -522,150 +760,113 @@ export function defineTheme(input: DefineThemeInput): DefinedTheme {
     );
   }
   const base = input.extends;
-  if (base) {
-    for (const [key, value] of Object.entries(base.tokens)) {
-      tokens[key] = value;
-    }
-  }
 
-  // Build typeScale config from typography if present
-  const typo = input.typography;
-  let typeScaleConfig: TypeScaleConfig | undefined;
-  if (typo?.scale) {
-    // Collect weight overrides from typography roles
-    const headingWeights: Partial<Record<1 | 2 | 3 | 4 | 5 | 6, string>> = {};
-    const headingRole = typo.heading;
-    if (headingRole?.weights) {
-      for (const [level, w] of Object.entries(headingRole.weights)) {
-        if (w) {
-          headingWeights[Number(level) as 1 | 2 | 3 | 4 | 5 | 6] =
-            resolveFontWeight(w);
-        }
-      }
-    }
-    // Default heading weight from role
-    const defaultHeadingWeight = headingRole?.weight
-      ? resolveFontWeight(headingRole.weight)
+  // The theme's own value axes and the resolved base an `extends` supplies.
+  // The same axis metadata is retained so adaptation rules can complete partial
+  // configs without approximating values from unrelated built-in defaults.
+  //
+  // Motion inherits field by field (spec:AST-108 FR5): a duration-scale field
+  // or knob the child leaves unset keeps its base's value, so the child's
+  // motion tokens come from the merged configuration. They resolve base first,
+  // then generated (`architecture:theme-authoring-contract`): what the child
+  // generates replaces the base's tokens, its explicit ones included. A
+  // child's motion regenerates only what it sets: an inherited slow band and
+  // an inherited easing keep the base's tokens.
+  const baseMotion = base?.__axes?.motion;
+  const motion: ThemeMotionConfig | undefined =
+    input.motion != null && baseMotion != null
+      ? {...baseMotion, ...input.motion}
+      : input.motion;
+  if (motion != null) {
+    assertCompleteMotionScale(motion, input.name);
+  }
+  const inheritedScale =
+    input.motion != null && base != null && baseMotion != null
+      ? inheritedScaleTokens(base, baseMotion, input.motion)
       : undefined;
-    if (defaultHeadingWeight) {
-      for (let i = 1; i <= 6; i++) {
-        if (!(i in headingWeights)) {
-          headingWeights[i as 1 | 2 | 3 | 4 | 5 | 6] = defaultHeadingWeight;
-        }
-      }
-    }
+  const ownValues: ThemeValuesInput = {
+    typography: input.typography,
+    color: input.color,
+    radius: input.radius,
+    motion,
+    syntax: input.syntax,
+    tokens:
+      inheritedScale != null && Object.keys(inheritedScale).length > 0
+        ? {...inheritedScale, ...input.tokens}
+        : input.tokens,
+    components: input.components,
+  };
+  const ownAxes: ThemeGenerativeAxes = {
+    typography: input.typography,
+    color: input.color,
+    radius: input.radius,
+    motion: input.motion,
+  };
+  const seed = base
+    ? {tokens: base.tokens, components: base.components}
+    : undefined;
 
-    // Text weight overrides from roles
-    const textWeights: Partial<Record<string, string>> = {};
-    if (typo.body?.weight) {
-      textWeights.body = resolveFontWeight(typo.body.weight);
-    }
-    if (typo.code?.weight) {
-      textWeights.code = resolveFontWeight(typo.code.weight);
-    }
+  // An explicit --ease-standard follows the character the theme inherits
+  // when it sets no motion of its own (FR2).
+  const {tokens, components} = resolveThemeValues(ownValues, seed, {
+    inheritedCharacter: baseMotion?.character,
+  });
 
-    typeScaleConfig = {
-      base: typo.scale.base,
-      ratio: typo.scale.ratio,
-      weights: {
-        ...(Object.keys(headingWeights).length > 0
-          ? {heading: headingWeights}
-          : {}),
-        ...(Object.keys(textWeights).length > 0 ? {text: textWeights} : {}),
-      },
-    };
-  }
-
-  // 1. Apply color-generated tokens (lowest precedence for colors)
-  if (input.color) {
-    const colorTokens = expandColorScale(input.color);
-    for (const [key, value] of Object.entries(colorTokens)) {
-      tokens[key] = value;
-    }
-  }
-
-  // 1a. Apply typeScale-generated tokens (lowest precedence for type)
-  if (typeScaleConfig) {
-    const typeScaleTokens = expandTypeScale(typeScaleConfig);
-    for (const [key, value] of Object.entries(typeScaleTokens)) {
-      tokens[key] = value;
-    }
-  }
-
-  // 1b. Apply radius-generated tokens (lowest precedence for radius)
-  if (input.radius) {
-    const radiusTokens = expandRadiusScale(input.radius);
-    for (const [key, value] of Object.entries(radiusTokens)) {
-      tokens[key] = value;
-    }
-  }
-
-  // 1c. Apply motion-generated tokens (same precedence as typeScale)
-  if (input.motion) {
-    const motionTokens = expandMotionScale(input.motion);
-    for (const [key, value] of Object.entries(motionTokens)) {
-      tokens[key] = value;
-    }
-  }
-
-  // 1d. Apply typography font family tokens
-  if (typo) {
-    // Heading inherits from body if not specified
-    const bodyFamily = buildFontFamily(typo.body?.family, typo.body?.fallbacks);
-    const headingFamily =
-      buildFontFamily(typo.heading?.family, typo.heading?.fallbacks) ??
-      bodyFamily;
-    const codeFamily = buildFontFamily(typo.code?.family, typo.code?.fallbacks);
-
-    if (bodyFamily) {
-      tokens['--font-family-body'] = bodyFamily;
-    }
-    if (headingFamily) {
-      tokens['--font-family-heading'] = headingFamily;
-    }
-    if (codeFamily) {
-      tokens['--font-family-code'] = codeFamily;
-    }
-  }
-
-  // 1e. Apply syntax theme tokens (before explicit overrides)
-  if (input.syntax) {
-    const syntaxMap = input.syntax.tokens;
-    const prefix = '--color-syntax-';
-    for (const [key, value] of Object.entries(syntaxMap)) {
-      tokens[prefix + key] = value;
-    }
-  }
-
-  // 2. Apply explicit token overrides (highest precedence — overwrites generated tokens)
-  if (input.tokens) {
-    for (const [key, value] of Object.entries(input.tokens)) {
-      if (value !== undefined) {
-        tokens[key] = resolveTokenValue(value);
-      }
-    }
-  }
-
-  // 3. Generate component overrides: base (lowest) → typeScale → explicit (highest)
-  let components = input.components;
-  if (typeScaleConfig) {
-    const generated = generateTypeScaleComponents(typeScaleConfig);
-    components = deepMergeComponents(generated, input.components);
-  }
-  if (base?.components) {
-    components = deepMergeComponents(base.components, components);
-  }
-
-  // 4. Resolve on-media token overrides (base's resolved surface, then
-  // defaults, then this theme's own overrides)
+  // On-media token overrides (base's resolved surface, then defaults, then
+  // this theme's own overrides). They compile after adaptations so the
+  // media-surface value stays more specific in the authored cascade.
   const __onDark = resolveOnMedia('dark', input.onDark, base?.__onDark);
   const __onLight = resolveOnMedia('light', input.onLight, base?.__onLight);
 
-  // 5. Merge icons — input icons override base icons
-  const icons =
-    input.icons && base?.icons
-      ? {...base.icons, ...input.icons}
-      : (input.icons ?? base?.icons);
+  const localTokenContract = resolveLocalTokenContract(
+    input,
+    base,
+    tokens,
+    tokenDefaults,
+  );
+
+  // Adaptations inherit their breakpoint map and ordered rules. Every rule is
+  // re-resolved against this theme's effective root axes, so a child can change
+  // the root scale while preserving the base rule's authored intent.
+  const __axes = resolveThemeGenerativeAxes(base?.__axes, ownAxes);
+  const __adaptations = normalizeThemeAdaptations(
+    input.name,
+    base?.__adaptations,
+    input.adaptations,
+  );
+  const __adaptationRules = resolveThemeAdaptationRules(
+    input.name,
+    __adaptations,
+    __axes,
+    tokens,
+    localTokenContract?.localTokens,
+    components,
+  );
+
+  // Icons — input entries override base entries by key. The base's entries
+  // include its function entries, which its node-valued `icons` does not.
+  const baseIcons = base?.__icons ?? base?.icons;
+  const iconEntries =
+    input.icons && baseIcons
+      ? {...baseIcons, ...input.icons}
+      : (input.icons ?? baseIcons);
+  const icons = readThemeIconNodes(iconEntries);
+
+  // The variant list is theme-level: a list this theme sets replaces the
+  // inherited one; an omitted list is inherited.
+  const iconVariants: ReadonlyArray<string> | undefined =
+    input.iconVariants !== undefined
+      ? [...input.iconVariants]
+      : base?.iconVariants;
+
+  // An inherited function entry keeps the list of the theme that defined it,
+  // so it receives a variant only when both lists contain it.
+  const iconEntryVariants = resolveIconEntryVariants(
+    iconEntries,
+    input.icons,
+    base,
+    iconVariants,
+  );
 
   // Indicator overrides merge by name, like icons: a child theme replacing one
   // indicator keeps the ones its base replaced.
@@ -674,11 +875,23 @@ export function defineTheme(input: DefineThemeInput): DefinedTheme {
       ? {...base.indicators, ...input.indicators}
       : (input.indicators ?? base?.indicators);
 
-  const theme: DefinedTheme = {
+  const theme: ResolvedDefinedTheme = {
     name: input.name,
     tokens,
+    ...(localTokenContract
+      ? {
+          localTokens: localTokenContract.localTokens,
+          __localTokenOwners: localTokenContract.owners,
+          __localTokenLineage: localTokenContract.lineage,
+        }
+      : {}),
     components,
     icons,
+    ...(icons !== iconEntries ? {__icons: iconEntries} : {}),
+    ...(iconVariants !== undefined ? {iconVariants} : {}),
+    ...(iconEntryVariants !== undefined
+      ? {__iconEntryVariants: iconEntryVariants}
+      : {}),
     indicators,
     __inputTokens:
       base?.__inputTokens || input.tokens
@@ -686,10 +899,68 @@ export function defineTheme(input: DefineThemeInput): DefinedTheme {
         : undefined,
     __onDark,
     __onLight,
+    __adaptations,
+    __adaptationRules,
+    __axes,
   };
 
   registerTheme(theme);
   return theme;
+}
+
+/**
+ * For each function entry this theme inherits, the variant list of the theme
+ * that defined it, where that list is not this theme's own. Entries this theme
+ * defines use its own list, so they need no record.
+ */
+function resolveIconEntryVariants(
+  entries: ThemeIconEntries<never> | undefined,
+  ownEntries: Readonly<Record<string, unknown>> | undefined,
+  base: DefinedTheme | undefined,
+  iconVariants: ReadonlyArray<string> | undefined,
+): Record<string, ReadonlyArray<string> | undefined> | undefined {
+  if (entries == null || base == null) {
+    return undefined;
+  }
+  const baseRecord = base.__iconEntryVariants;
+  let record: Record<string, ReadonlyArray<string> | undefined> | undefined;
+  for (const [name, entry] of Object.entries(entries)) {
+    if (
+      typeof entry !== 'function' ||
+      (ownEntries != null && Object.hasOwn(ownEntries, name))
+    ) {
+      continue;
+    }
+    const definingVariants =
+      baseRecord != null && Object.hasOwn(baseRecord, name)
+        ? baseRecord[name]
+        : base.iconVariants;
+    if (definingVariants !== iconVariants) {
+      record ??= {};
+      record[name] = definingVariants;
+    }
+  }
+  return record;
+}
+
+/**
+ * The node-valued view of a theme's icon entries: each function entry read at
+ * `{size: 'md'}`. Entries without a function are returned as the same object.
+ */
+function readThemeIconNodes(
+  entries: ThemeIconEntries<never> | undefined,
+): ThemeIconOverrides | undefined {
+  if (
+    entries == null ||
+    !Object.values(entries).some(entry => typeof entry === 'function')
+  ) {
+    return entries as ThemeIconOverrides | undefined;
+  }
+  const nodes: Record<string, ReactNode> = {};
+  for (const [name, entry] of Object.entries(entries)) {
+    nodes[name] = typeof entry === 'function' ? entry({size: 'md'}) : entry;
+  }
+  return nodes as ThemeIconOverrides;
 }
 
 // =============================================================================
@@ -700,6 +971,7 @@ export {
   generateThemeRules,
   generateThemeRulesSplit,
   generateOnMediaCSS,
+  generateAdaptationCSS,
   generateThemeCSS,
   type ThemeRulesSplit,
   type ThemeCSSOutput,

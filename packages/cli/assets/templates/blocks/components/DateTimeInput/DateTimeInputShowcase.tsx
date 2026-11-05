@@ -13,7 +13,10 @@ export default function DateTimeInputShowcase() {
   );
 
   return (
-    <Stack direction="vertical" width="100%" style={{maxWidth: 400}}>
+    <Stack
+      direction="vertical"
+      width="100%"
+      style={{minWidth: 240, maxWidth: 400}}>
       <DateTimeInput
         label="Meeting time"
         placeholder="Select a date"

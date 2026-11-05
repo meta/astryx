@@ -122,7 +122,7 @@ export default function BottomSheetSnapPoints() {
         label="Directions to the Ferry Building"
         height="tall"
         snapPoints={SNAP_POINTS}>
-        <VStack gap={4} padding={4}>
+        <VStack gap={4}>
           <VStack gap={1}>
             <Heading level={3}>Ferry Building</Heading>
             <HStack gap={2}>

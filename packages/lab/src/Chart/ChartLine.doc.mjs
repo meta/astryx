@@ -5,7 +5,7 @@
 export const docs = {
   name: 'ChartLine',
   displayName: 'Chart Line',
-  group: 'Chart',
+  group: 'Charts',
   category: 'Data Visualization',
 
   usage: {

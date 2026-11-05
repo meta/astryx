@@ -35,6 +35,15 @@ describe('template.copy — overwrite + path safety', () => {
     expect(fs.readFileSync(path.join(dir, 'mine.tsx'), 'utf-8')).toBe('USER CODE');
   }, SLOW);
 
+  it('names the flag that replaces the file, as swizzle and theme add do', async () => {
+    fs.writeFileSync(path.join(dir, 'mine.tsx'), 'USER CODE');
+    await expect(
+      template('blank', {targetPath: './mine.tsx', cwd: dir}),
+    ).rejects.toThrow(
+      'Refusing to overwrite existing file mine.tsx. Re-run with --overwrite (or -f) to replace it.',
+    );
+  }, SLOW);
+
   it('overwrites when overwrite:true is passed', async () => {
     fs.writeFileSync(path.join(dir, 'mine.tsx'), 'USER CODE');
     const res = await template('blank', {targetPath: './mine.tsx', overwrite: true, cwd: dir});
@@ -47,5 +56,22 @@ describe('template.copy — overwrite + path safety', () => {
       template('blank', {targetPath: '../escape.tsx', cwd: dir}),
     ).rejects.toMatchObject({code: 'ERR_PATH_TRAVERSAL'});
     expect(fs.existsSync(path.join(dir, '..', 'escape.tsx'))).toBe(false);
+  }, SLOW);
+
+  it('rejects a directory target whose page.tsx is a symlink leading outside cwd', async () => {
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'tmpl-copy-outside-'));
+    try {
+      const victim = path.join(outside, 'victim.tsx');
+      fs.writeFileSync(victim, 'OUTSIDE');
+      fs.mkdirSync(path.join(dir, 'dest'));
+      fs.symlinkSync(victim, path.join(dir, 'dest', 'page.tsx'));
+
+      await expect(
+        template('blank', {targetPath: './dest', overwrite: true, cwd: dir}),
+      ).rejects.toMatchObject({code: 'ERR_PATH_TRAVERSAL'});
+      expect(fs.readFileSync(victim, 'utf-8')).toBe('OUTSIDE');
+    } finally {
+      fs.rmSync(outside, {recursive: true, force: true});
+    }
   }, SLOW);
 });

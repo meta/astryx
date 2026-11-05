@@ -2,10 +2,10 @@
 
 /**
  * @file ChartSwatch.tsx
+ * @input Caller-owned CSS color and optional square or line shape
  * @output Color swatch primitive for legends, tooltips, and standalone use
- * @position Composable primitive — used by ChartLegend (and future
- *           ChartTooltip), or independently anywhere a series indicator
- *           is needed.
+ * @position Composable primitive — used by ChartLegend and ChartTooltip, or
+ *           independently anywhere a series indicator is needed.
  *
  * @example
  * ```

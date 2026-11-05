@@ -4,10 +4,11 @@
  * @file Center.tsx
  * @input Uses React, StyleX for centering styles, Layout padding.stylex for spacing-scale padding
  * @output Exports Center component and CenterProps
- * @position Center component for centering children horizontally/vertically
+ * @position Center component for one- or two-axis flex centering
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Center/Center.doc.mjs
+ * - /docs/specs/components/Center/Center.spec.md
  * - /packages/core/src/Center/Center.test.tsx
  * - /apps/storybook/stories/Center.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/Center/ (showcase blocks)
@@ -62,10 +63,13 @@ export interface CenterProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLDivElement>;
   /**
-   * Center axis - which direction(s) to center.
-   * - `both`: Center both horizontally and vertically (default)
-   * - `horizontal`: Center horizontally only (justifyContent: center)
-   * - `vertical`: Center vertically only (alignItems: center)
+   * Center mode. In horizontal writing:
+   * - `both`: Center on the flex main and cross axes (default)
+   * - `horizontal`: Center on the flex main/inline axis
+   * - `vertical`: Center on the flex cross/block axis
+   *
+   * In vertical writing, the current single-axis behavior still follows those
+   * logical flex axes rather than the physical names. `both` centers both axes.
    * @default 'both'
    */
   axis?: CenterAxis;
@@ -103,39 +107,41 @@ export interface CenterProps extends BaseProps<HTMLDivElement> {
   padding?: SpacingStep;
 
   /**
-   * Inline (horizontal) padding, using the spacing scale.
+   * Logical inline-axis padding, using the spacing scale.
    * Overrides `padding` on the inline axis when both are set.
    */
   paddingInline?: SpacingStep;
 
   /**
-   * Inline-start padding, using the spacing scale. Logical: the left edge in
-   * LTR, the right edge in RTL.
+   * Logical inline-start padding, using the spacing scale. The resolved
+   * physical edge depends on writing mode and direction.
    * Overrides `paddingInline` and `padding` on that edge only.
    */
   paddingInlineStart?: SpacingStep;
 
   /**
-   * Inline-end padding, using the spacing scale. Logical: the right edge in
-   * LTR, the left edge in RTL.
+   * Logical inline-end padding, using the spacing scale. The resolved
+   * physical edge depends on writing mode and direction.
    * Overrides `paddingInline` and `padding` on that edge only.
    */
   paddingInlineEnd?: SpacingStep;
 
   /**
-   * Block (vertical) padding, using the spacing scale.
+   * Logical block-axis padding, using the spacing scale.
    * Overrides `padding` on the block axis when both are set.
    */
   paddingBlock?: SpacingStep;
 
   /**
-   * Block-start (top) padding, using the spacing scale.
+   * Logical block-start padding, using the spacing scale. The resolved physical
+   * edge depends on writing mode.
    * Overrides `paddingBlock` and `padding` on that edge only.
    */
   paddingBlockStart?: SpacingStep;
 
   /**
-   * Block-end (bottom) padding, using the spacing scale.
+   * Logical block-end padding, using the spacing scale. The resolved physical
+   * edge depends on writing mode.
    * Overrides `paddingBlock` and `padding` on that edge only.
    */
   paddingBlockEnd?: SpacingStep;
@@ -153,10 +159,11 @@ export interface CenterProps extends BaseProps<HTMLDivElement> {
 }
 
 /**
- * Center component for centering children horizontally and/or vertically.
+ * Center component for centering children on one or both flex axes.
  *
- * Uses flexbox for centering. By default, centers on both axes.
- * Use the `axis` prop to center on only one axis.
+ * In horizontal writing, the single-axis names match physical horizontal and
+ * vertical dimensions. In vertical writing, the current single-axis behavior
+ * follows flex main/cross axes; `both` still centers on both axes.
  *
  * @example
  * ```
@@ -222,7 +229,7 @@ export function Center({
   );
 
   return (
-    <div ref={ref} {...stylexProps} {...props}>
+    <div ref={ref} {...props} {...stylexProps}>
       {children}
     </div>
   );

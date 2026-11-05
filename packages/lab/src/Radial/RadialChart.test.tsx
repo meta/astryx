@@ -2,14 +2,19 @@
 
 /**
  * @file RadialChart.test.tsx
- * @input Uses vitest, @testing-library/react, RadialChart component
- * @output Unit tests for RadialChart accessibility (WCAG 1.1.1)
- * @position Testing; validates RadialChart.tsx accessible name + data-table fallback
+ * @input Uses vitest, @testing-library/react, RadialChart + useRadial under a
+ *   stubbed ResizeObserver
+ * @output Unit tests for RadialChart accessibility (WCAG 1.1.1), the
+ *   containerWidth > 0 render gate + svg sizing, and the useRadial
+ *   outside-provider guard
+ * @position Testing; validates RadialChart.tsx accessible name + data-table
+ *   fallback + sizing, and RadialContext.ts
  */
 
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {render, screen, act} from '@testing-library/react';
 import {RadialChart} from './RadialChart';
+import {useRadial} from './RadialContext';
 
 const spiderData = [
   {name: 'modelA', speed: 8, handling: 6, comfort: 7},
@@ -153,5 +158,52 @@ describe('RadialChart data table fallback', () => {
     reportWidth(500);
 
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+});
+
+describe('RadialChart container sizing', () => {
+  it('renders no svg until the container reports a width', () => {
+    render(
+      <RadialChart data={pieData} valueKey="revenue" labelKey="region">
+        <g />
+      </RadialChart>,
+    );
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+
+    reportWidth(600);
+
+    const svg = screen.getByRole('img');
+    expect(svg).toHaveAttribute('width', '600');
+    // Default height is 400.
+    expect(svg).toHaveAttribute('height', '400');
+  });
+
+  it('sizes the svg from the height prop in spider mode', () => {
+    render(
+      <RadialChart
+        data={spiderData}
+        axes={['speed', 'handling', 'comfort']}
+        height={300}>
+        <g />
+      </RadialChart>,
+    );
+    reportWidth(500);
+
+    const svg = screen.getByRole('img');
+    expect(svg).toHaveAttribute('width', '500');
+    expect(svg).toHaveAttribute('height', '300');
+  });
+});
+
+describe('useRadial', () => {
+  it('throws when used outside <RadialChart>', () => {
+    function Probe() {
+      useRadial();
+      return null;
+    }
+
+    expect(() => render(<Probe />)).toThrow(
+      'Radial components must be used inside <RadialChart>',
+    );
   });
 });

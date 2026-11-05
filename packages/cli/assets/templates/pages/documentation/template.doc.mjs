@@ -5,7 +5,16 @@ export const doc = {
   type: 'page',
   name: 'Documentation Catalog',
   displayName: 'Documentation Catalog',
-  description: 'Documentation landing page with hero banner and component category grid organized by Core, Layout, Navigation, and Form.',
+  description:
+    'Reference landing that is pure wayfinding: a banner above a grid of category cards linking into sections, with no article content on the surface itself.',
+  keywords: [
+    'documentation',
+    'docs',
+    'guide',
+    'handbook',
+    'reference',
+    'api index',
+  ],
   isReady: true,
   category: 'Content - Documentation Catalog',
 };

@@ -10,7 +10,8 @@
  * packages/lab and packages/charts, which regressed both (#3637):
  *
  *   1. `rm -rf dist` — cmd.exe has no `rm`, so the build dies at the first
- *      step. Use `rimraf`, the ecosystem's cross-platform recursive delete.
+ *      step. Use the repo's Node cleanup helper, which is portable and does not
+ *      depend on a package-local binary.
  *   2. Single-quoted args (`--extensions '.ts,.tsx'`) — cmd.exe does not strip
  *      single quotes, so babel receives them as LITERAL characters, matches
  *      zero files, exits 0, and leaves dist/ empty. Use double quotes, which
@@ -78,7 +79,7 @@ export function findOffences(scripts = {}, deps = {}) {
       if (binary) {
         offences.push({
           name,
-          detail: `POSIX-only command \`${binary}\` — cmd.exe has no such binary; use rimraf or a node script`,
+          detail: `POSIX-only command \`${binary}\` — cmd.exe has no such binary; use the shared Node cleanup script`,
         });
       }
       if (invokes(command, 'rimraf') && !('rimraf' in deps)) {
@@ -135,7 +136,7 @@ function main() {
       console.error(`    ${detail}`);
     }
     console.error(
-      `\n${errors.length} error(s). Fix: replace \`rm -rf\` with \`rimraf\`, and single quotes with double quotes.`,
+      `\n${errors.length} error(s). Fix: replace \`rm -rf\` with the shared Node cleanup script, and single quotes with double quotes.`,
     );
     process.exit(1);
   }

@@ -7,10 +7,11 @@
  */
 
 /**
- * xds --json swizzle [--list]
+ * astryx --json swizzle [--list]
  *
  * @typedef {object} SwizzleListResponse
  * @property {'swizzle.list'} type
+ * @property {string} package `@astryxdesign/core`, the package the listed components come from.
  * @property {string[]} data
  */
 
@@ -23,10 +24,11 @@
  */
 
 /**
- * xds --json swizzle <component>
+ * astryx --json swizzle <component>
  *
  * @typedef {object} SwizzleCopyResponse
  * @property {'swizzle.copy'} type
+ * @property {string} package Owner package the component source was copied from (as `data.package`).
  * @property {object} data
  * @property {string} data.component
  * @property {string} data.package Owner package the component source was copied from.

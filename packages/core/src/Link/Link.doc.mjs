@@ -38,7 +38,8 @@ export const docs = {
         {
           name: 'href',
           type: 'string',
-          description: 'Link destination URL',
+          description:
+            'Link destination URL. Astryx-owned links and clickable surfaces block javascript:, vbscript:, and data:text/html after control-character removal, outer-whitespace trimming, and case-insensitive scheme inspection. The same rule covers native anchors, custom routers, Markdown links, and every activation method. Relative paths, fragments, protocol-relative URLs, HTTP(S), mailto, tel, safe custom schemes, and accepted downloads keep their existing behavior. A rejected destination renders inertly without invoking a custom router. There is no bypass prop; exceptional behavior requires caller-owned custom rendering outside this guarantee. Images and other resource URLs have separate policies.',
         },
         {
           name: 'hasUnderline',
@@ -151,7 +152,8 @@ export const docs = {
         {
           name: 'component',
           type: 'LinkComponentType',
-          description: 'Component to use for all link elements',
+          description:
+            'Component to use for all link elements. It receives accepted `href` and `to` values under the shared navigation rule described on the Link `href` prop. Supported structured destinations, including their `protocol`, are checked without changing object identity. If either supplied destination is rejected, Astryx renders inert content without invoking this component; it does not pass undefined or fall back to the other destination.',
           required: true,
         },
         {
@@ -164,6 +166,17 @@ export const docs = {
     },
   ],
   usage: {
+    accessibility: [
+      {
+        name: 'Link text',
+        category: 'Color contrast',
+        criterion: '1.4.3 Contrast (Minimum)',
+        requirement: '4.5:1',
+        states: ['Rest', 'Hover', 'Pointer down'],
+        description:
+          'Link text must have at least 4.5:1 contrast with the background behind it. For Pointer down, measure against the pressed overlay the link paints behind its text.',
+      },
+    ],
     description:
       'A styled anchor for inline and standalone text navigation. Supports external links, underline variants, tooltips, and custom link components for router integration. Use it for navigating between pages or to external URLs.',
     bestPractices: [
@@ -344,7 +357,7 @@ export const docsDense = {
       propDescriptions: {
         as: 'Custom component to render instead of <a>',
         label: 'Accessible label (aria-label). Only for non-text content like icon-only links.',
-        href: 'Link destination URL',
+        href: 'Link destination URL. Shared rule blocks javascript:, vbscript:, data:text/html after scheme normalization on every Astryx-owned navigation path. Ordinary URLs, fragments, safe custom schemes, and accepted downloads are preserved. Rejected => inert, no custom router. No bypass prop; exceptional caller-owned rendering is outside the guarantee. Image/resource policy is separate.',
         hasUnderline: 'Always show underline',
         isDisabled: 'Disables link',
         isExternalLink: 'Opens new tab w/ external icon and safe rel tokens',
@@ -365,7 +378,7 @@ export const docsDense = {
       description:
         'Provider setting default link component for all Astryx links in subtree.',
       propDescriptions: {
-        component: 'Component for all link elements',
+        component: 'Component for all link elements. Accepted href/to follow the Link href rule; structured fields including protocol are checked, preserving identity. Either rejected => inert content, no router invocation or fallback.',
         children: 'Subtree',
       },
     },

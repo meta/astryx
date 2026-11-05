@@ -53,12 +53,18 @@ import {isRtlElement} from '../hooks/isRtlElement';
 import {Icon} from '../Icon';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
-import {observeResize, unobserveResize} from '../utils/sharedResizeObserver';
+import {observeResize} from '../utils/sharedResizeObserver';
 import {devWarn} from '../utils/devWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TabList/TabList.generated';
+
+registerEnglishFallback(english);
 /**
  * Selector matching the focusable stops in the tab strip: every Tab
  * (`[data-tab-value]`) and every TabMenu trigger (`[data-tab-menu]`),
@@ -113,6 +119,24 @@ export interface TabListProps extends Omit<BaseProps<HTMLElement>, 'onChange'> {
    */
   hasDivider?: boolean;
   /**
+   * Bleeds the strip out to its container's content edges.
+   *
+   * Both halves are computed from the `--container-padding-*` custom
+   * properties a padded Layout container publishes. The strip's box is pulled
+   * out through the container's inline padding, so a `hasDivider` underline —
+   * or the header's own divider, when the strip is docked on it — spans the
+   * full content width. The strip then pads back in by whatever that bleed
+   * exceeds a stop's own inline padding, so the first and last label still
+   * land on the container's content inset rather than 4px short of it.
+   *
+   * Outside a padded container the properties are unset, the pad-back clamps
+   * to zero, and the strip is left exactly as it was. Block-edge docking stays
+   * with the surrounding layout because it cannot be detected through nested
+   * wrappers without pulling a mid-content strip into its siblings.
+   * @default false
+   */
+  isFullBleed?: boolean;
+  /**
    * ARIA role for the strip.
    *
    * `"tablist"` asks for the WAI-ARIA tabs pattern: `role="tablist"` /
@@ -166,6 +190,17 @@ export interface TabListProps extends Omit<BaseProps<HTMLElement>, 'onChange'> {
 const RING_BLEED = `calc(${focusVars['--focus-outline-width']} + ${focusVars['--focus-outline-offset']})`;
 const BLEED_VAR = '--_tab-strip-bleed';
 const BLEED = `var(${BLEED_VAR})`;
+
+/**
+ * A stop's own inline padding, restated here because a full-bleed strip has to
+ * subtract it: the strip pads back in only the part of the container's padding
+ * the stop does not already supply, so the edge label lands on the content
+ * inset. Kept in step with `Tab`/`TabMenu`'s `paddingInline` by hand — the
+ * import would be circular.
+ */
+const STOP_INLINE_PADDING = spacingVars['--spacing-3'];
+const EDGE_PAD_START = `max(var(--container-padding-inline-start, 0px) - ${STOP_INLINE_PADDING}, 0px)`;
+const EDGE_PAD_END = `max(var(--container-padding-inline-end, 0px) - ${STOP_INLINE_PADDING}, 0px)`;
 const INDICATOR_BLEED = 'calc(-1 * var(--_tab-indicator-bottom, -1px))';
 const BLOCK_END_BLEED = `max(${BLEED}, ${INDICATOR_BLEED})`;
 
@@ -258,6 +293,15 @@ const styles = stylex.create({
     },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
+  // Put back the part of the bleed a stop's own inline padding does not
+  // already supply, so the first and last label land on the container's
+  // content inset while their boxes still hang out over it. Applied after
+  // `stripScroll` because both write the strip's inline padding; the ring
+  // bleed is carried through so the negative margin there still cancels it.
+  fullBleedStrip: {
+    paddingInlineStart: `calc(var(${BLEED_VAR}, 0px) + ${EDGE_PAD_START})`,
+    paddingInlineEnd: `calc(var(${BLEED_VAR}, 0px) + ${EDGE_PAD_END})`,
+  },
   fadeStart: {
     maskImage: {
       default: FADE_FROM_START,
@@ -309,6 +353,16 @@ const styles = stylex.create({
   arrowEnd: {
     insetInlineEnd: 0,
   },
+  fullBleed: {
+    // Cancel the container's inline padding so the strip's box reaches its
+    // content edges. Same spelling as Divider's `isFullBleed`.
+    marginInlineStart: 'calc(-1 * var(--container-padding-inline-start, 0px))',
+    marginInlineEnd: 'calc(-1 * var(--container-padding-inline-end, 0px))',
+    // The `nav` base clamps to 100%, which would pull the widened box back.
+    maxWidth: 'none',
+    width:
+      'calc(100% + var(--container-padding-inline-start, 0px) + var(--container-padding-inline-end, 0px))',
+  },
 });
 
 const arrowSizeStyles = stylex.create({
@@ -349,6 +403,7 @@ export function TabList({
   size: sizeProp,
   layout = 'hug',
   hasDivider = false,
+  isFullBleed = false,
   role,
   overflow = 'auto',
   xstyle,
@@ -364,7 +419,7 @@ export function TabList({
   [EDGE_COMP_ATTR]: _edgeCompAttr,
   ...restProps
 }: TabListProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.tabList.label');
   const size = useSize(sizeProp, 'md');
   const hasScroll = overflow !== 'visible';
@@ -466,6 +521,10 @@ export function TabList({
     revealSelectedTabRef.current = revealSelectedTab;
   }, [revealSelectedTab]);
 
+  // The tab whose focus revealed it (see `handleRootFocus`), while it keeps
+  // focus.
+  const focusRevealedValueRef = useRef<string | null>(null);
+
   // The tab you are on has to be visible. Selection can move without focus —
   // on mount, or when the host sets `value` itself — and neither scrolls the
   // strip the way clicking or arrowing to a tab does. The check is what makes
@@ -476,6 +535,14 @@ export function TabList({
       return;
     }
     revealedValueRef.current = value;
+    if (value != null && focusRevealedValueRef.current === value) {
+      // A press or an arrow focused this tab first, and focusing it revealed
+      // it. Measuring now would force the new selection's style and layout
+      // inside the press, before it can paint. The next frame lays them out
+      // anyway, so finish there: the selected weight can still widen the tab.
+      const frame = requestAnimationFrame(() => revealSelectedTabRef.current());
+      return () => cancelAnimationFrame(frame);
+    }
     revealSelectedTabRef.current();
   }, [value]);
 
@@ -494,8 +561,7 @@ export function TabList({
       return;
     }
     const onResize = () => revealSelectedTabRef.current();
-    observeResize(root, onResize);
-    return () => unobserveResize(root);
+    return observeResize(root, onResize);
   }, [hasScroll, listRef]);
 
   const scrollByPage = useCallback((direction: -1 | 1) => {
@@ -547,7 +613,9 @@ export function TabList({
       // The browser scrolls a focused element into view only when it is
       // entirely outside the scrollport, so arrowing onto a half-visible stop
       // leaves it cut off under the fade. Finish the job it started.
-      revealStop(e.target.closest(TAB_STOP_SELECTOR));
+      const stop = e.target.closest<HTMLElement>(TAB_STOP_SELECTOR);
+      revealStop(stop);
+      focusRevealedValueRef.current = stop?.dataset.tabValue ?? null;
     },
     [onFocusProp, onHintFocus, handleFocus, revealStop],
   );
@@ -555,6 +623,7 @@ export function TabList({
   const handleRootBlur = useCallback(
     (e: React.FocusEvent<HTMLElement>) => {
       onBlurProp?.(e);
+      focusRevealedValueRef.current = null;
       if (e.defaultPrevented) {
         return;
       }
@@ -625,6 +694,7 @@ export function TabList({
             styles.nav,
             layout === 'fill' && styles.fill,
             hasDivider && styles.divider,
+            isFullBleed && styles.fullBleed,
             xstyle,
           ),
           className,
@@ -641,6 +711,7 @@ export function TabList({
             stylex.props(
               styles.strip,
               hasScroll && styles.stripScroll,
+              isFullBleed && styles.fullBleedStrip,
               fadeStyle,
             ),
           )}>

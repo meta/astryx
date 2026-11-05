@@ -2,6 +2,7 @@
 
 /**
  * @file ChartAxis.tsx (v2)
+ * @input Chart context scales, axis presentation props, and grapheme-safe text utilities
  * @output Renders an axis (top, right, bottom, left) using the chart's scales
  * @position Child of Chart v2; reads scales from chart context
  *
@@ -19,6 +20,7 @@
 
 import {useCallback, useMemo} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {characterCount, truncateCharacters} from '@astryxdesign/core/utils';
 import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {useChart} from './ChartContext';
 import {isBandScale} from './utils';
@@ -33,7 +35,7 @@ export interface ChartAxisProps {
   maxTicks?: number;
   /** Custom tick formatter */
   tickFormat?: (value: unknown) => string;
-  /** Truncate labels to this many characters (appends "\u2026"). */
+  /** Truncate labels to this many user-perceived characters (appends "\u2026"). */
   truncate?: number;
   /** Enable smooth transitions for streaming (default: true) */
   animated?: boolean;
@@ -121,19 +123,24 @@ export function ChartAxis({
   const format = useCallback(
     (value: unknown): string => {
       const str = (tickFormat ?? autoFormat ?? String)(value);
-      return truncate && str.length > truncate
-        ? str.slice(0, truncate) + '\u2026'
-        : str;
+      if (!truncate) {
+        return str;
+      }
+      const shortened = truncateCharacters(str, truncate, '');
+      return shortened === str ? str : shortened + '\u2026';
     },
     [tickFormat, autoFormat, truncate],
   );
 
   const ticks = useMemo(() => {
-    let allTicks: {value: unknown; offset: number}[];
+    // Format each generated tick once so density and rendering share the same
+    // grapheme-safe label instead of repeating consumer formatting/segmentation.
+    let allTicks: {value: unknown; offset: number; label: string}[];
     if (isBandScale(scale)) {
       allTicks = scale.domain().map(d => ({
         value: d,
         offset: (scale(d) ?? 0) + scale.bandwidth() / 2,
+        label: format(d),
       }));
     } else {
       const linearScale = scale as
@@ -141,6 +148,7 @@ export function ChartAxis({
       allTicks = linearScale.ticks(safeTickCount).map(d => ({
         value: d,
         offset: linearScale(d as number & Date),
+        label: format(d),
       }));
     }
 
@@ -154,7 +162,7 @@ export function ChartAxis({
     if (cap == null && allTicks.length > 1) {
       if (isHorizontal && width > 0) {
         const widestChars = allTicks.reduce(
-          (m, t) => Math.max(m, format(t.value).length),
+          (m, tick) => Math.max(m, characterCount(tick.label)),
           1,
         );
         const approxLabelPx = widestChars * 7 + 16;
@@ -210,8 +218,7 @@ export function ChartAxis({
           {...stylex.props(styles.axisLine)}
         />
       )}
-      {ticks.map(({value, offset}) => {
-        const label = format(value);
+      {ticks.map(({value, offset, label}) => {
         // Key off the raw tick value, not the formatted label: distinct ticks
         // can format (or truncate) to the same string and would collide as keys.
         const key = String(value);

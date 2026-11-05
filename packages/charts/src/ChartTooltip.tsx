@@ -17,7 +17,11 @@
  *
  * // Composable — drop into the chart's children for full control
  * <Chart>
- *   <ChartTooltip hoverIndicator={false} placement="top" />
+ *   <ChartTooltip
+ *     series={series}
+ *     hoverIndicator={false}
+ *     placement="top"
+ *   />
  * </Chart>
  * ```
  */
@@ -41,8 +45,7 @@ import {
   shadowVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {Text} from '@astryxdesign/core';
-import {VStack, HStack} from '@astryxdesign/core';
+import {HStack, Text, useLayer, VStack} from '@astryxdesign/core';
 import {useChart} from './ChartContext';
 import {ChartSwatch, swatchVariantForType} from './ChartSwatch';
 import {
@@ -90,20 +93,19 @@ export interface ChartTooltipProps {
 }
 
 const styles = stylex.create({
-  // Card chrome — static visual styles. Position (left/top/display) is updated
-  // imperatively via ref to keep pointer-move cost free of React renders.
+  // Visual card chrome is applied to the Layer host. useLayer owns its fixed
+  // positioning and browser top-layer promotion.
   card: {
-    position: 'fixed',
     backgroundColor: colorVars['--color-background-popover'],
-    border: `1px solid ${colorVars['--color-border']}`,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colorVars['--color-border'],
     borderRadius: radiusVars['--radius-container'],
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-3'],
     boxShadow: shadowVars['--shadow-med'],
     pointerEvents: 'none',
     whiteSpace: 'nowrap',
-    zIndex: 9999,
-    display: 'none',
   },
   crosshair: {
     stroke: colorVars['--color-text-primary'],
@@ -150,8 +152,8 @@ const DefaultTooltipContent = memo(function DefaultTooltipContent({
  * Composable grouped tooltip for Chart.
  *
  * Subscribes to the chart's pointer event stream and only re-renders when the
- * hovered data index changes (not on every pointer move). Card position is
- * updated imperatively via a ref to keep pointer-move cost ~free.
+ * hovered data index changes (not on every pointer move). Card coordinates retain
+ * their previous state when the resolved point and browser geometry are unchanged.
  */
 export function ChartTooltip({
   series = [],
@@ -172,20 +174,41 @@ export function ChartTooltip({
     height,
   } = useChart();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [cardPosition, setCardPosition] = useState({x: 0, y: 0});
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
+  const lastPointerEventRef = useRef<ChartPointerEvent | null>(null);
+  const {
+    hide: hideLayer,
+    isOpen: isLayerOpen,
+    render: renderLayer,
+    show: showLayer,
+  } = useLayer({
+    mode: 'fixed',
+  });
   // Whether the card is currently suppressed (no content, or a custom `render`
-  // opted out by returning null). positionCard reads this so a same-index
-  // pointer move — which repositions the card without a React commit — can't
-  // re-reveal a card the visibility effect below has hidden.
-  const cardHiddenRef = useRef(false);
+  // opted out by returning null). Start closed; once present content opens the
+  // Layer, a content-bearing index change keeps it open while React swaps the
+  // content. positionCard also reads this so a same-index pointer move cannot
+  // re-reveal a suppressed card before the visibility effect confirms content.
+  const cardHiddenRef = useRef(true);
+
+  // The Layer host must remain in the chart's nearest HTML subtree so nested
+  // Theme and MediaTheme scopes keep applying. The portal crosses only the SVG
+  // boundary; browser top-layer promotion remains Layer's responsibility.
+  useEffect(() => {
+    const nextTarget = svgRef.current?.parentElement ?? null;
+    setPortalTarget(current => (current === nextTarget ? current : nextTarget));
+  }, [svgRef, width]);
 
   // Stable Set of resolved series keys — used by deriveTooltipSeriesValues.
   // Recomputed only when the resolved map identity changes (per layout pass).
   const resolvedKeys = useMemo(() => new Set(resolved.keys()), [resolved]);
 
   // ─── Card positioning ──────────────────────────────────────────────────
-  // Imperative — the card is portaled, and we don't want pointer-move to
-  // trigger React renders.
+  // Layer owns top-layer promotion. Pointer moves update coordinates only when
+  // the hovered point or browser geometry changes, so moves within one point do
+  // not force a React commit.
   const positionCard = useCallback(
     (e: ChartPointerEvent) => {
       const card = cardRef.current;
@@ -194,14 +217,21 @@ export function ChartTooltip({
         return;
       }
       if (!svg || !e.nearest || cardHiddenRef.current) {
-        card.style.display = 'none';
+        hideLayer();
         return;
       }
+
+      showLayer();
+      const layerHost = card.parentElement;
+      if (!layerHost) {
+        return;
+      }
+
       const svgRect = svg.getBoundingClientRect();
       const screenX = svgRect.left + margin.left + e.nearest.px;
       const screenY = svgRect.top + margin.top;
-      const cardWidth = card.offsetWidth;
-      const cardHeight = card.offsetHeight;
+      const cardWidth = layerHost.offsetWidth;
+      const cardHeight = layerHost.offsetHeight;
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
       const gap = 8;
@@ -229,30 +259,33 @@ export function ChartTooltip({
         }
       }
 
-      // Clamp to the viewport so the card never clips off-screen — it's
-      // portaled and position:fixed, so this keeps it fully visible for every
-      // placement (pinned placements and the near-edge `auto` flip alike).
+      // Clamp the card coordinates to the viewport. Oversized custom content
+      // keeps its caller-owned dimensions and may extend past the far edge.
       x = Math.max(gap, Math.min(x, viewportWidth - cardWidth - gap));
       y = Math.max(gap, Math.min(y, viewportHeight - cardHeight - gap));
 
-      card.style.left = `${x}px`;
-      card.style.top = `${y}px`;
-      card.style.display = 'block';
+      setCardPosition(current =>
+        current.x === x && current.y === y ? current : {x, y},
+      );
     },
-    [svgRef, margin, placement],
+    [svgRef, margin, placement, hideLayer, showLayer],
   );
 
   // ─── Subscribe to pointer events ───────────────────────────────────────
   useEffect(() => {
     let currentIndex: number | null = null;
     const unsub = onPointer((e: ChartPointerEvent) => {
+      lastPointerEventRef.current = e;
       const newIndex = e.nearest?.dataIndex ?? null;
       if (newIndex !== currentIndex) {
         currentIndex = newIndex;
-        // Optimistically treat the new index as showable; the visibility effect
-        // re-hides it after commit if there's no content (e.g. custom `render`
-        // returned null). This keeps the card appearing on the first move.
-        cardHiddenRef.current = false;
+        // Keep a closed/suppressed card closed until React resolves content.
+        // Do not preemptively close an already-visible card for another index:
+        // the visibility effect closes absent content after commit, while
+        // content-bearing transitions keep the same Layer continuously open.
+        if (newIndex == null) {
+          cardHiddenRef.current = true;
+        }
         setHoveredIndex(newIndex);
       }
       positionCard(e);
@@ -372,27 +405,50 @@ export function ChartTooltip({
     margin.top,
   ]);
 
-  // Single source of truth for whether the card has anything to show. It's
-  // hidden when there's no hover, when the hovered index is stale/out-of-range
-  // (e.g. `data` shrank while hovering, so `datum` is undefined), or when a
-  // custom `render` opts out by returning null — the documented contract, which
-  // still shows the band highlight + dots. The decision is stored in a ref so
-  // the imperative positionCard honors it on subsequent same-index moves
-  // (otherwise it would re-reveal an empty bordered box). Runs after commit, so
-  // `render` (which may return null, or throw) never executes on the SSR path.
+  // Render props are ordinary React content. Resolve them once per commit so a
+  // custom renderer is not invoked separately by the visibility synchronizer.
+  // Keep it browser-only: the layer has no portal target during SSR.
+  const cardContent =
+    typeof document === 'undefined' ||
+    hoveredIndex == null ||
+    datum == null ? null : render ? (
+      render(xValue, seriesValues)
+    ) : (
+      <DefaultTooltipContent xValue={xValue} rows={seriesValues} />
+    );
+  const isCardHidden =
+    hoveredIndex == null ||
+    datum == null ||
+    (render != null && cardContent == null);
+  const hasNativePopover =
+    typeof HTMLElement !== 'undefined' &&
+    typeof HTMLElement.prototype.showPopover === 'function';
+  const shouldHideLayerHost =
+    isCardHidden || (!hasNativePopover && !isLayerOpen);
+
+  // Synchronize the shared Layer's native Popover state after React commits the
+  // new card body. The second positioning pass measures that final body; later
+  // moves within the same data point usually resolve to the existing state.
   useEffect(() => {
-    const hidden =
-      hoveredIndex == null ||
-      datum == null ||
-      (render != null && render(xValue, seriesValues) == null);
-    cardHiddenRef.current = hidden;
-    if (hidden) {
-      const card = cardRef.current;
-      if (card) {
-        card.style.display = 'none';
-      }
+    cardHiddenRef.current = isCardHidden;
+    if (isCardHidden) {
+      hideLayer();
+      return;
     }
-  }, [render, hoveredIndex, datum, xValue, seriesValues]);
+
+    const pointerEvent = lastPointerEventRef.current;
+    if (pointerEvent) {
+      positionCard(pointerEvent);
+    }
+  }, [
+    isCardHidden,
+    hoveredIndex,
+    xValue,
+    seriesValues,
+    render,
+    hideLayer,
+    positionCard,
+  ]);
 
   // ─── Render ────────────────────────────────────────────────────────────
   if (typeof document === 'undefined') {
@@ -405,26 +461,29 @@ export function ChartTooltip({
     );
   }
 
-  // Mirrors the visibility effect's first two conditions: no card when there's
-  // no hover or the hovered datum is stale/out-of-range (so `render` and the
-  // default body are never called with an undefined x-value + empty rows).
-  const cardContent =
-    hoveredIndex == null || datum == null ? null : render ? (
-      render(xValue, seriesValues)
-    ) : (
-      <DefaultTooltipContent xValue={xValue} rows={seriesValues} />
-    );
-
   return (
     <>
       {hoverIndicatorElement}
       {dots}
-      {createPortal(
-        <div ref={cardRef} role="tooltip" {...stylex.props(styles.card)}>
-          {cardContent}
-        </div>,
-        document.body,
-      )}
+      {portalTarget
+        ? createPortal(
+            renderLayer(
+              <div ref={cardRef} role="tooltip">
+                {cardContent}
+              </div>,
+              {
+                x: cardPosition.x,
+                y: cardPosition.y,
+                // Native Popover keeps a closed host out of layout itself, so
+                // remove our guard before showPopover() measures it. Layer's
+                // reduced fallback needs the explicit closed display state.
+                style: shouldHideLayerHost ? {display: 'none'} : undefined,
+                xstyle: styles.card,
+              },
+            ),
+            portalTarget,
+          )
+        : null}
     </>
   );
 }

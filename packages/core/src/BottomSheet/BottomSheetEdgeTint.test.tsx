@@ -101,15 +101,13 @@ describe('BottomSheetEdgeTint', () => {
     expect(tints()).toHaveLength(1);
   });
 
-  // A modal sheet's ::backdrop is a case WebKit's sampler handles on its own,
-  // so a second sampling target there would only fight it.
-  it('leaves a modal sheet to its ::backdrop', () => {
+  it('gives a modal sheet the same surface-coloured edge tint', () => {
     render(
       <BottomSheet isOpen onOpenChange={() => {}} label="Place details">
         Content
       </BottomSheet>,
     );
-    expect(tints()).toHaveLength(0);
+    expect(tints()).toHaveLength(1);
   });
 
   it('renders the tint inside the dialog, so it unmounts with the sheet', () => {
@@ -129,8 +127,10 @@ describe('BottomSheetEdgeTint', () => {
     expect(tints()).toHaveLength(0);
   });
 
-  // The switcher owns one shared dialog for the whole flow, so the tint
-  // belongs to that dialog and must not be minted per child sheet.
+  // Each switcher step owns a dialog and tints it while presented: one tint
+  // at rest, one per open dialog through a handoff (the retained dialog's
+  // sits beneath the entering dialog), none for a sheet that is not
+  // presented.
   it('gives a non-modal switcher flow exactly one tint', () => {
     render(
       <BottomSheetSwitcher
@@ -148,15 +148,38 @@ describe('BottomSheetEdgeTint', () => {
     expect(tints()).toHaveLength(1);
   });
 
-  it('leaves a modal switcher flow to its ::backdrop', () => {
-    render(
+  it('gives a modal switcher flow exactly one tint at rest, and one per presented dialog through a handoff', () => {
+    const {rerender} = render(
       <BottomSheetSwitcher activeSheet="comment" onActiveSheetChange={() => {}}>
         <BottomSheet sheetId="comment" label="Add a comment">
           Comment
         </BottomSheet>
+        <BottomSheet sheetId="confirmation" label="Confirmation">
+          Confirmation
+        </BottomSheet>
       </BottomSheetSwitcher>,
     );
-    expect(tints()).toHaveLength(0);
+    expect(tints()).toHaveLength(1);
+    expect(tints()[0]?.closest('dialog')?.getAttribute('aria-label')).toBe(
+      'Add a comment',
+    );
+
+    rerender(
+      <BottomSheetSwitcher
+        activeSheet="confirmation"
+        onActiveSheetChange={() => {}}>
+        <BottomSheet sheetId="comment" label="Add a comment">
+          Comment
+        </BottomSheet>
+        <BottomSheet sheetId="confirmation" label="Confirmation">
+          Confirmation
+        </BottomSheet>
+      </BottomSheetSwitcher>,
+    );
+    // Mid-handoff both dialogs are presented; each carries its own tint.
+    expect(
+      tints().map(tint => tint.closest('dialog')?.getAttribute('aria-label')),
+    ).toEqual(['Add a comment', 'Confirmation']);
   });
 
   it('keeps the tint out of the accessibility tree and out of hit testing', async () => {

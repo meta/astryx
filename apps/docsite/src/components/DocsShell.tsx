@@ -2,28 +2,57 @@
 
 'use client';
 
+/**
+ * @file DocsShell.tsx
+ * @input Route metadata, the server-built docs nav model, and the AppShell header
+ * @output Docs navigation with a stable sidebar offset before hydration
+ * @position Docsite-only shell
+ */
+
 import {useState, useMemo} from 'react';
 import {usePathname} from 'next/navigation';
-import {Search} from 'lucide-react';
+import {Search, FlaskConical} from 'lucide-react';
+import * as stylex from '@stylexjs/stylex';
 import {AppShell} from '@astryxdesign/core/AppShell';
 import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
 import {TextInput} from '@astryxdesign/core/TextInput';
+import {Icon} from '@astryxdesign/core/Icon';
 import {SharedTopNav} from './SharedTopNav';
-import {CanaryBanner} from './CanaryBanner';
-import {CURRENT_TARGET} from '../lib/docsVersions';
-import type {PackageMeta} from '../generated/packageRegistry';
-import type {DocTopic} from '../generated/docsRegistry';
-import type {GroupedEntry} from '../generated/groupedComponentRegistry';
-import {getComponentSidebarData} from './componentSidebarData';
+import {HeaderHeightSeed} from './HeaderHeightSeed';
+import {DocsBanner} from './InternalDocsPrompt';
+import type {
+  DocsNav,
+  DocsNavEntry,
+  DocsNavItem,
+  DocsNavPackage,
+  DocsNavTopic,
+} from './docsNav';
 
 interface DocsShellProps {
   children: React.ReactNode;
-  packages: PackageMeta[];
-  docTopics: DocTopic[];
+  nav: DocsNav;
+}
+
+const styles = stylex.create({
+  canaryMarker: {
+    alignItems: 'center',
+    display: 'inline-flex',
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+});
+
+function CanaryCategoryMarker() {
+  return (
+    <span {...stylex.props(styles.canaryMarker)}>
+      <Icon icon={FlaskConical} label="Canary" size="sm" />
+    </span>
+  );
 }
 
 /** Foundations: tokens first, then alphabetical */
-const foundationsSort = (a: DocTopic, b: DocTopic) => {
+const foundationsSort = (a: DocsNavTopic, b: DocsNavTopic) => {
   if (a.topic === 'tokens') {
     return -1;
   }
@@ -35,47 +64,47 @@ const foundationsSort = (a: DocTopic, b: DocTopic) => {
 
 // ── Shell ──────────────────────────────────────────────────────────────
 
-export function DocsShell({children, packages, docTopics}: DocsShellProps) {
+export function DocsShell({children, nav}: DocsShellProps) {
   const pathname = usePathname();
   const [componentQuery, setComponentQuery] = useState('');
 
-  const {componentItems, utilities} = getComponentSidebarData();
+  const {packages, docTopics, componentItems, utilities, canaryCategories} =
+    nav;
 
   const q = componentQuery.trim().toLowerCase();
 
-  // When searching, flatten groups to individual entries so results are
-  // all at the same level with no nesting.
-  const flatSearchResults = useMemo<GroupedEntry[]>(() => {
+  // When searching, flatten every readiness category to individual entries so
+  // results are all at the same level with no nesting.
+  const flatSearchResults = useMemo<DocsNavEntry[]>(() => {
     if (!q) {
       return [];
     }
-    return componentItems.flatMap(item => {
+    const allItems = [
+      ...componentItems,
+      ...canaryCategories.flatMap(category => category.componentItems),
+    ];
+    return allItems.flatMap(item => {
       if (item.type === 'entry') {
         return item.displayName.toLowerCase().includes(q) ? [item] : [];
       }
-      return item.entries
-        .filter(e => e.displayName.toLowerCase().includes(q))
-        .map(e => ({
-          type: 'entry' as const,
-          name: e.name,
-          displayName: e.displayName,
-          href: e.href,
-          description: '',
-        }));
+      return item.entries.filter(e => e.displayName.toLowerCase().includes(q));
     });
-  }, [componentItems, q]);
+  }, [canaryCategories, componentItems, q]);
 
-  const filteredUtilities = useMemo(
-    () =>
-      q
-        ? utilities.filter(u => u.displayName.toLowerCase().includes(q))
-        : utilities,
-    [utilities, q],
-  );
+  const filteredUtilities = useMemo(() => {
+    const allUtilities = [
+      ...utilities,
+      ...canaryCategories.flatMap(category => category.utilities),
+    ];
+    return q
+      ? allUtilities.filter(u => u.displayName.toLowerCase().includes(q))
+      : utilities;
+  }, [canaryCategories, utilities, q]);
 
   // Classify packages
-  const isTheme = (p: PackageMeta) => p.name.includes('theme-');
-  const libraryPackages = packages.filter(p => !isTheme(p));
+  const isTheme = (p: DocsNavPackage) => p.name.includes('theme-');
+  const libraryPackages = packages.filter(p => !isTheme(p) && !p.canaryOnly);
+  const canaryPackages = packages.filter(p => !isTheme(p) && p.canaryOnly);
 
   // Classify doc topics by category (from data). Getting Started is promoted
   // to a top-level nav item, so it is excluded from the Guide section.
@@ -104,12 +133,46 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
     />
   );
 
+  const renderComponentItems = (items: DocsNavItem[]) =>
+    items.map(item =>
+      item.type === 'entry' ? (
+        <SideNavItem
+          key={`${item.packageName}:${item.name}`}
+          label={item.displayName}
+          href={item.href}
+          isSelected={pathname === item.href}
+        />
+      ) : (
+        <SideNavItem
+          key={`${item.packageName}:${item.label}`}
+          label={item.displayName}
+          collapsible={{
+            defaultIsCollapsed: !item.entries.some(e => pathname === e.href),
+          }}>
+          {item.entries.map(entry => (
+            <SideNavItem
+              key={`${entry.packageName}:${entry.name}`}
+              label={entry.displayName}
+              href={entry.href}
+              isSelected={pathname === entry.href}
+            />
+          ))}
+        </SideNavItem>
+      ),
+    );
+
   return (
     <AppShell
+      className="astryx-docs-shell"
       variant="surface"
       height="auto"
-      banner={CURRENT_TARGET === 'canary' ? <CanaryBanner /> : undefined}
-      topNav={<SharedTopNav />}
+      banner={<DocsBanner />}
+      topNav={
+        <>
+          <SharedTopNav />
+          <HeaderHeightSeed />
+        </>
+      }
       sideNav={
         <SideNav topContent={isOnComponentsRoute ? componentSearch : undefined}>
           {!isOnComponentsRoute && (
@@ -160,7 +223,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                 </SideNavItem>
               </SideNavSection>
 
-              {/* Libraries */}
+              {/* Stable libraries */}
               <SideNavSection title="Libraries" isHeaderHidden>
                 <SideNavItem
                   label="Libraries"
@@ -178,6 +241,23 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                   ))}
                 </SideNavItem>
               </SideNavSection>
+
+              {canaryPackages.length > 0 && (
+                <SideNavSection title="Canary libraries" isHeaderHidden>
+                  {canaryPackages.map(p => (
+                    <SideNavItem
+                      key={p.name}
+                      label={p.displayName}
+                      endContent={<CanaryCategoryMarker />}
+                      href={`/docs/${p.name.replace('@astryxdesign/', '')}`}
+                      isSelected={
+                        pathname ===
+                        `/docs/${p.name.replace('@astryxdesign/', '')}`
+                      }
+                    />
+                  ))}
+                </SideNavSection>
+              )}
             </>
           )}
 
@@ -195,47 +275,20 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                 {q
                   ? flatSearchResults.map(item => (
                       <SideNavItem
-                        key={item.name}
+                        key={`${item.packageName}:${item.name}`}
                         label={item.displayName}
                         href={item.href}
                         isSelected={pathname === item.href}
                       />
                     ))
-                  : componentItems.map(item =>
-                      item.type === 'entry' ? (
-                        <SideNavItem
-                          key={item.name}
-                          label={item.displayName}
-                          href={item.href}
-                          isSelected={pathname === item.href}
-                        />
-                      ) : (
-                        <SideNavItem
-                          key={item.label}
-                          label={item.displayName}
-                          collapsible={{
-                            defaultIsCollapsed: !item.entries.some(
-                              e => pathname === e.href,
-                            ),
-                          }}>
-                          {item.entries.map(entry => (
-                            <SideNavItem
-                              key={entry.name}
-                              label={entry.displayName}
-                              href={entry.href}
-                              isSelected={pathname === entry.href}
-                            />
-                          ))}
-                        </SideNavItem>
-                      ),
-                    )}
+                  : renderComponentItems(componentItems)}
                 {/* Utilities — secondary list rendered below the main Components
                     section. Always starts collapsed; users can expand on demand. */}
                 {filteredUtilities.length > 0 &&
                   (q ? (
                     filteredUtilities.map(comp => (
                       <SideNavItem
-                        key={comp.name}
+                        key={`${comp.packageName}:${comp.name}`}
                         label={comp.displayName}
                         href={comp.href}
                         isSelected={pathname === comp.href}
@@ -247,7 +300,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                       collapsible={{defaultIsCollapsed: true}}>
                       {utilities.map(comp => (
                         <SideNavItem
-                          key={comp.name}
+                          key={`${comp.packageName}:${comp.name}`}
                           label={comp.displayName}
                           href={comp.href}
                           isSelected={pathname === comp.href}
@@ -256,6 +309,41 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
                     </SideNavItem>
                   ))}
               </SideNavSection>
+
+              {!q && canaryCategories.length > 0 && (
+                <SideNavSection title="Canary components" isHeaderHidden>
+                  {canaryCategories.map(category => (
+                    <SideNavItem
+                      key={category.packageName}
+                      label={category.displayName}
+                      endContent={<CanaryCategoryMarker />}
+                      collapsible={{
+                        defaultIsCollapsed: ![
+                          ...category.componentItems.flatMap(item =>
+                            item.type === 'entry' ? [item] : item.entries,
+                          ),
+                          ...category.utilities,
+                        ].some(entry => pathname === entry.href),
+                      }}>
+                      {renderComponentItems(category.componentItems)}
+                      {category.utilities.length > 0 && (
+                        <SideNavItem
+                          label="Utilities"
+                          collapsible={{defaultIsCollapsed: true}}>
+                          {category.utilities.map(comp => (
+                            <SideNavItem
+                              key={`${comp.packageName}:${comp.name}`}
+                              label={comp.displayName}
+                              href={comp.href}
+                              isSelected={pathname === comp.href}
+                            />
+                          ))}
+                        </SideNavItem>
+                      )}
+                    </SideNavItem>
+                  ))}
+                </SideNavSection>
+              )}
             </>
           )}
         </SideNav>

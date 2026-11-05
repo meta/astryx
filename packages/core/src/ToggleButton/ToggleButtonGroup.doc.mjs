@@ -6,12 +6,16 @@ export const docs = {
   name: 'ToggleButtonGroup',
   subComponentOf: 'ToggleButton',
   displayName: 'Toggle Button Group',
+  keywords: [
+    'togglegroup',
+    'buttontogglegroup',
+  ],
   description: 'Groups toggle buttons for exclusive (single) or multi-select behavior. Uses discriminated union on type for type-safe value/onChange.',
   props: [
     {
       name: 'children',
       type: 'ReactNode',
-      description: 'ToggleButton children.',
+      description: 'ToggleButton children. Give each member a value; the group owns its pressed state and ignores its isPressed, onPressedChange, and pressedChangeAction props. Member activation calls the group’s onChange without starting a member Action transition.',
       required: true,
       slotElements: [
         {
@@ -83,7 +87,7 @@ export const docsZh = {
   displayName: 'Toggle Button Group',
   description: '将切换按钮分组，支持单选或多选行为。通过 type 判别联合类型实现类型安全。',
   propDescriptions: {
-    children: 'ToggleButton 子元素。',
+    children: 'ToggleButton 子元素；每个成员都需要 value。分组控制按下状态，并忽略成员的 isPressed、onPressedChange 和 pressedChangeAction。激活成员只调用分组的 onChange，不启动成员的 Action 过渡。',
     label: '分组的无障碍标签 (aria-label)。',
     type: '选择模式。single 允许单个激活，multiple 允许多个。',
     value: '当前选中的值。类型取决于选择模式。',
@@ -101,7 +105,7 @@ export const docsDense = {
   displayName: 'Toggle Button Group',
   description: 'groups toggle btns for exclusive/multi-select; discriminated union on type',
   propDescriptions: {
-    children: 'ToggleButton children',
+    children: 'ToggleButton children; each member needs a value. Group owns pressed state; member isPressed/onPressedChange/pressedChangeAction are ignored. Selection uses group onChange, with no member Action transition.',
     label: 'a11y label (aria-label)',
     type: 'selection mode: single or multiple',
     value: 'selected value(s); type depends on mode',

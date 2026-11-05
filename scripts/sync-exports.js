@@ -43,7 +43,7 @@ const UTILITY_DIRS = new Set(['hooks', 'theme', 'utils']);
  * publicly exported. These are shared implementation details
  * consumed by other components via relative imports.
  */
-const INTERNAL_DIRS = new Set(['NavItem']);
+const INTERNAL_DIRS = new Set(['NavItem', 'gestures', 'keyboard']);
 
 /**
  * Additional exports that can't be auto-discovered from directory structure.
@@ -82,38 +82,166 @@ const STATIC_EXPORTS = {
     types: './dist/theme/tokens.stylex.d.ts',
     default: './dist/theme/tokens.stylex.js',
   },
+  './theme/dataTokens.stylex': {
+    source: './src/theme/dataTokens.stylex.ts',
+    types: './dist/theme/dataTokens.stylex.d.ts',
+    default: './dist/theme/dataTokens.stylex.js',
+  },
   './theme/syntax': {
     source: './src/theme/syntax/index.ts',
     types: './dist/theme/syntax/index.d.ts',
     default: './dist/theme/syntax/index.js',
   },
+  // Cross-directory .stylex modules that swizzled components import. Each is
+  // an explicit public subpath so the StyleX compiler can resolve the deep
+  // import rewriteImports emits (see api/swizzle/copy/copy.mjs). No wildcard —
+  // a future cross-directory .stylex import needs a deliberate entry here.
+  // Precedent: ./theme/tokens.stylex and ./theme/dataTokens.stylex above.
+  './DateInput/tokens.stylex': {
+    source: './src/DateInput/tokens.stylex.ts',
+    types: './dist/DateInput/tokens.stylex.d.ts',
+    default: './dist/DateInput/tokens.stylex.js',
+  },
+  './Icon/IconSize.stylex': {
+    source: './src/Icon/IconSize.stylex.ts',
+    types: './dist/Icon/IconSize.stylex.d.ts',
+    default: './dist/Icon/IconSize.stylex.js',
+  },
+  './Indicator/indicator.markers.stylex': {
+    source: './src/Indicator/indicator.markers.stylex.ts',
+    types: './dist/Indicator/indicator.markers.stylex.d.ts',
+    default: './dist/Indicator/indicator.markers.stylex.js',
+  },
+  './Layer/layerAnimations.stylex': {
+    source: './src/Layer/layerAnimations.stylex.ts',
+    types: './dist/Layer/layerAnimations.stylex.d.ts',
+    default: './dist/Layer/layerAnimations.stylex.js',
+  },
+  './Layer/layerTextReset.stylex': {
+    source: './src/Layer/layerTextReset.stylex.ts',
+    types: './dist/Layer/layerTextReset.stylex.d.ts',
+    default: './dist/Layer/layerTextReset.stylex.js',
+  },
+  './Layer/layerViewportInset.stylex': {
+    source: './src/Layer/layerViewportInset.stylex.ts',
+    types: './dist/Layer/layerViewportInset.stylex.d.ts',
+    default: './dist/Layer/layerViewportInset.stylex.js',
+  },
+  './Layout/container.stylex': {
+    source: './src/Layout/container.stylex.ts',
+    types: './dist/Layout/container.stylex.d.ts',
+    default: './dist/Layout/container.stylex.js',
+  },
+  './Layout/edgeCompensation.stylex': {
+    source: './src/Layout/edgeCompensation.stylex.ts',
+    types: './dist/Layout/edgeCompensation.stylex.d.ts',
+    default: './dist/Layout/edgeCompensation.stylex.js',
+  },
+  './Layout/padding.stylex': {
+    source: './src/Layout/padding.stylex.ts',
+    types: './dist/Layout/padding.stylex.d.ts',
+    default: './dist/Layout/padding.stylex.js',
+  },
+  './NavItem/navItemStyles.stylex': {
+    source: './src/NavItem/navItemStyles.stylex.ts',
+    types: './dist/NavItem/navItemStyles.stylex.d.ts',
+    default: './dist/NavItem/navItemStyles.stylex.js',
+  },
+  './Selector/selectorPresentation.stylex': {
+    source: './src/Selector/selectorPresentation.stylex.ts',
+    types: './dist/Selector/selectorPresentation.stylex.d.ts',
+    default: './dist/Selector/selectorPresentation.stylex.js',
+  },
+  './Stack/stack.stylex': {
+    source: './src/Stack/stack.stylex.ts',
+    types: './dist/Stack/stack.stylex.d.ts',
+    default: './dist/Stack/stack.stylex.js',
+  },
+  './Stack/stackItem.stylex': {
+    source: './src/Stack/stackItem.stylex.ts',
+    types: './dist/Stack/stackItem.stylex.d.ts',
+    default: './dist/Stack/stackItem.stylex.js',
+  },
+  './Text/text.stylex': {
+    source: './src/Text/text.stylex.ts',
+    types: './dist/Text/text.stylex.d.ts',
+    default: './dist/Text/text.stylex.js',
+  },
+  './utils/focusOutline.stylex': {
+    source: './src/utils/focusOutline.stylex.ts',
+    types: './dist/utils/focusOutline.stylex.d.ts',
+    default: './dist/utils/focusOutline.stylex.js',
+  },
+  './utils/interactionOverlay.stylex': {
+    source: './src/utils/interactionOverlay.stylex.ts',
+    types: './dist/utils/interactionOverlay.stylex.d.ts',
+    default: './dist/utils/interactionOverlay.stylex.js',
+  },
   './docs.mjs': './docs.mjs',
   './groups.doc.mjs': './groups.doc.mjs',
-  // i18n message catalogs. Consumers pass these to
-  // <InternationalizationProvider messages={{fr, ...}}> or use them for
-  // custom overrides / pseudoloc smoke-tests. Wildcard export exposes every
-  // JSON file under packages/core/locales/, which ships thanks to the
-  // `locales` entry in the `files` array.
+  // Rich authoring catalogs keep their existing JSON paths. Generated string
+  // maps are additive runtime imports for applications that want no translator
+  // metadata in their bundles.
   './locales/*.json': './locales/*.json',
+  './locales/*.generated.js': {
+    source: './src/i18n/generated-locales/*.generated.ts',
+    types: './dist/i18n/generated-locales/*.generated.d.ts',
+    default: './dist/i18n/generated-locales/*.generated.js',
+  },
 };
 
 /**
- * Server-safe utility subpath exports.
- *
- * These re-export pure functions from component directories without
- * the `'use client'` directive, making them importable from React
- * Server Components. Each entry points to a `utils.ts` file that
- * re-exports only the server-safe subset of a component's utilities.
- *
- * See: https://github.com/facebook/astryx/issues/1977
+ * Nested modules backed by an index.ts entry point. `Markdown/plugin-renderer`
+ * is client-only (its entry starts with 'use client'); the plugin protocol and
+ * parser entries stay server-safe (spec:AST-064 DEC-6).
  */
+const DIRECTORY_MODULE_SUBPATH_EXPORTS = [
+  'Markdown/plugins',
+  'Markdown/plugin-renderer',
+  'Markdown/parser',
+];
+
 const UTIL_SUBPATH_DIRS = [
   'Calendar',
   'Markdown',
   'PowerSearch',
+  'Resizable',
   'Selector',
   'Table',
   'Typeahead',
+];
+
+/**
+ * Optional module subpath exports.
+ *
+ * Separately imported modules that deliberately stay out of their component's
+ * own entry point, so a bundle that never imports the subpath never pulls the
+ * module in. Unlike `UTIL_SUBPATH_DIRS` these are not server-safe re-exports
+ * of an existing component — each one is its own opt-in module.
+ *
+ * `Markdown/remark` is the limited Remark compatibility adapter
+ * (`module:Markdown/remark`, `spec:AST-036` FR24).
+ */
+const FILE_MODULE_SUBPATH_EXPORTS = [
+  // One opt-in module per CodeBlock language (`component:CodeBlock` FR13).
+  'CodeBlock/languages/dockerfile',
+  'CodeBlock/languages/graphql',
+  'CodeBlock/languages/java',
+  'CodeBlock/languages/lua',
+  'CodeBlock/languages/objective-c',
+  'CodeBlock/languages/powershell',
+  'CodeBlock/languages/ruby',
+  'CodeBlock/languages/thrift',
+  'CodeBlock/languages/toml',
+  'Markdown/remark',
+  // Internal entries for Astryx's own packages: undocumented, outside the
+  // public API, and allowed by lint only in Core and Lab
+  // (architecture:react-component-runtime INV13).
+  'internal/indicatorPress.stylex',
+  'internal/touch',
+  'internal/selectable-card',
+  'internal/spinner-rotor',
+  'internal/calendar-system',
 ];
 
 /**
@@ -176,12 +304,30 @@ function buildExports() {
     exports[key] = makeExportEntry(dir);
   }
 
+  // Explicit nested module entry points.
+  for (const modulePath of DIRECTORY_MODULE_SUBPATH_EXPORTS) {
+    exports[`./${modulePath}`] = {
+      source: `./src/${modulePath}/index.ts`,
+      types: `./dist/${modulePath}/index.d.ts`,
+      default: `./dist/${modulePath}/index.js`,
+    };
+  }
+
   // Server-safe utility subpath exports
   for (const dir of UTIL_SUBPATH_DIRS) {
     exports[`./${dir}/utils`] = {
       source: `./src/${dir}/utils.ts`,
       types: `./dist/${dir}/utils.d.ts`,
       default: `./dist/${dir}/utils.js`,
+    };
+  }
+
+  // Optional, separately imported module subpaths
+  for (const subpath of FILE_MODULE_SUBPATH_EXPORTS) {
+    exports[`./${subpath}`] = {
+      source: `./src/${subpath}.ts`,
+      types: `./dist/${subpath}.d.ts`,
+      default: `./dist/${subpath}.js`,
     };
   }
 

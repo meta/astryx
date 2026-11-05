@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useState} from 'react';
+import {useState, type CSSProperties} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Stepper, Step} from '@astryxdesign/core/Stepper';
@@ -9,6 +9,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Text} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Badge} from '@astryxdesign/core/Badge';
+import {Popover} from '@astryxdesign/core/Popover';
 
 const meta: Meta<typeof Stepper> = {
   title: 'Core/Stepper',
@@ -238,19 +239,19 @@ export const StatusAllStates: Story = {
           <Step
             step={1}
             label="Success"
-            description="--color-success"
+            description="--color-icon-success"
             status="success"
           />
           <Step
             step={2}
             label="Warning"
-            description="--color-warning"
+            description="--color-icon-warning"
             status="warning"
           />
           <Step
             step={3}
             label="Error"
-            description="--color-error"
+            description="--color-icon-error"
             status="error"
           />
           <Step
@@ -747,6 +748,47 @@ export const OnTrackVertical: Story = {
   },
 };
 
+// The outer track holds its connectors 6px off each indicator. The popover is
+// a layer opened from a step, so the Stepper inside it starts from its own 0px
+// default: its connectors run into the indicators rather than copying the gap.
+export const OnTrackGapInLayer: Story = {
+  name: 'On-Track — Gap Stops at a Layer',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(true);
+    return (
+      <div
+        style={{maxWidth: 400, '--step-connector-gap': '6px'} as CSSProperties}>
+        <Stepper
+          activeStep={1}
+          orientation="vertical"
+          indicatorPosition="on-track">
+          <Step step={0} label="Create workspace" />
+          <Step step={1} label="Set up integrations">
+            <Popover
+              label="Integration steps"
+              isOpen={isOpen}
+              onOpenChange={setIsOpen}
+              placement="end"
+              content={
+                <Stepper
+                  activeStep={1}
+                  orientation="vertical"
+                  indicatorPosition="on-track">
+                  <Step step={0} label="Connect" />
+                  <Step step={1} label="Map fields" />
+                  <Step step={2} label="Sync" />
+                </Stepper>
+              }>
+              <Button label="Integration steps" variant="secondary" />
+            </Popover>
+          </Step>
+          <Step step={2} label="Launch" />
+        </Stepper>
+      </div>
+    );
+  },
+};
+
 export const OnTrackHorizontal: Story = {
   name: 'On-Track — Horizontal',
   render: () => {
@@ -1108,6 +1150,157 @@ export const StepAdvance: Story = {
             </div>
           ))}
         </div>
+      </div>
+    );
+  },
+};
+
+// ============================================================
+// NARROW CONTAINERS — the stepper collapses itself
+// ============================================================
+
+export const NarrowCollapse: Story = {
+  name: 'Narrow — Collapsed Track',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "A horizontal stepper measures its own width and collapses once a step has less than `horizontalOptions.minimumStepWidth` pixels (112 by default), so the breakpoint follows the step count rather than the viewport. `horizontalOptions.collapsedVariant` selects `'withLabelAndControls'`, `'withLabel'`, or `'hiddenLabel'`; the last renders only the bare progress track with no compact row. The two indicator positions collapse differently on purpose: `separated` drops its indicators with the labels and repeats the active indicator beside the compact label, while `on-track` keeps its indicators as presentational nodes on the rail and does not repeat the active one beside the label. Controls appear only for `withLabelAndControls` when `onStepClick` is set.",
+      },
+    },
+  },
+  render: () => {
+    const [a, setA] = useState(1);
+    const [b, setB] = useState(1);
+    const [c, setC] = useState(1);
+    const steps = ['Cart', 'Shipping', 'Delivery', 'Payment'];
+    return (
+      <div style={{display: 'grid', gap: 40}}>
+        <div style={{maxWidth: 560}}>
+          <Text type="label">560px — four steps still fit</Text>
+          <Stepper activeStep={a} onStepClick={setA} label="Checkout">
+            {steps.map((s, i) => (
+              <Step key={s} step={i} label={s} />
+            ))}
+          </Stepper>
+        </div>
+        <div style={{maxWidth: 320}}>
+          <Text type="label">320px — separated, navigable</Text>
+          <Stepper activeStep={a} onStepClick={setA} label="Checkout">
+            {steps.map((s, i) => (
+              <Step key={s} step={i} label={s} />
+            ))}
+          </Stepper>
+        </div>
+        <div style={{maxWidth: 320}}>
+          <Text type="label">320px — custom 64px threshold stays expanded</Text>
+          <Stepper
+            activeStep={a}
+            onStepClick={setA}
+            horizontalOptions={{
+              minimumStepWidth: 64,
+              collapsedVariant: 'withLabelAndControls',
+            }}
+            label="Checkout">
+            {steps.map((s, i) => (
+              <Step key={s} step={i} label={s} />
+            ))}
+          </Stepper>
+        </div>
+        <div style={{maxWidth: 320}}>
+          <Text type="label">320px — on-track keeps nodes on the rail</Text>
+          <Stepper
+            activeStep={b}
+            onStepClick={setB}
+            indicatorPosition="on-track"
+            label="Checkout">
+            {steps.map((s, i) => (
+              <Step key={s} step={i} label={s} indicator="number" />
+            ))}
+          </Stepper>
+        </div>
+        <div style={{maxWidth: 320}}>
+          <Text type="label">320px — no onStepClick, so no controls</Text>
+          <Stepper activeStep={c} label="Checkout">
+            {steps.map((s, i) => (
+              <Step key={s} step={i} label={s} />
+            ))}
+          </Stepper>
+          <div style={{marginTop: 12, display: 'flex', gap: 8}}>
+            <Button
+              label="Back"
+              variant="secondary"
+              onClick={() => setC(n => Math.max(0, n - 1))}
+            />
+            <Button
+              label="Continue"
+              onClick={() => setC(n => Math.min(3, n + 1))}
+            />
+          </div>
+        </div>
+        <div style={{maxWidth: 320}}>
+          <Text type="label">
+            320px — a description rides along with the current step
+          </Text>
+          <Stepper activeStep={a} onStepClick={setA} label="Checkout">
+            <Step step={0} label="Cart" description="Review your items" />
+            <Step step={1} label="Shipping" description="Where it goes" />
+            <Step step={2} label="Delivery" description="How fast" />
+            <Step step={3} label="Payment" description="How you pay" />
+          </Stepper>
+        </div>
+      </div>
+    );
+  },
+};
+
+export const NarrowCollapsedVariants: Story = {
+  name: 'Narrow — Collapsed Variants',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The same 320px horizontal Stepper with each collapsedVariant. hiddenLabel omits the entire compact row—even though onStepClick is present—so it is shorter and leaves only the progress track.',
+      },
+    },
+  },
+  render: () => {
+    const [active, setActive] = useState(1);
+    const steps = ['Cart', 'Shipping', 'Delivery', 'Payment'];
+    const variants = [
+      {
+        value: 'withLabelAndControls',
+        label: 'withLabelAndControls — label and controls',
+      },
+      {value: 'withLabel', label: 'withLabel — label only'},
+      {value: 'hiddenLabel', label: 'hiddenLabel — bare track'},
+    ] as const;
+
+    return (
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 320px))',
+          alignItems: 'start',
+          gap: 40,
+        }}>
+        {variants.map(variant => (
+          <div key={variant.value} style={{width: '100%', maxWidth: 320}}>
+            <Text type="label">{variant.label}</Text>
+            <Stepper
+              activeStep={active}
+              onStepClick={setActive}
+              label="Checkout"
+              horizontalOptions={{
+                minimumStepWidth: 112,
+                collapsedVariant: variant.value,
+              }}>
+              {steps.map((step, index) => (
+                <Step key={step} step={index} label={step} />
+              ))}
+            </Stepper>
+          </div>
+        ))}
       </div>
     );
   },

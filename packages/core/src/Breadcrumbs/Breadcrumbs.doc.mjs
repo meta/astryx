@@ -21,6 +21,7 @@ export const docs = {
       {guidance: false, description: 'Use breadcrumbs as the primary navigation. They supplement a sidebar or top nav, not replace it.'},
       {guidance: false, description: 'Show breadcrumbs on top-level pages that have no parent; they add clutter without helping the user.'},
       {guidance: false, description: 'Let the trail grow beyond 5 levels. If you need more, consider simplifying the page hierarchy instead.'},
+      {guidance: true, description: 'The built-in slash separator mirrors automatically in RTL. For a custom separator, leave Unicode-mirrored angle quotes such as › alone; mirror arrows and Icon separators once with rtlStyles.mirror.'},
       {guidance: false, description: 'Mirror a separator the bidi algorithm already mirrors. An angle-quote glyph such as › is Bidi_Mirrored, so it flips under RTL on its own and rtlStyles.mirror would flip it back. An arrow glyph such as → and any Icon separator are not, so those do need rtlStyles.mirror through xstyle.'},
     ],
     anatomy: [
@@ -61,7 +62,7 @@ export const docs = {
     {
       name: 'separator',
       type: 'ReactNode',
-      description: 'Separator rendered between breadcrumb items.',
+      description: 'Separator rendered between breadcrumb items. The built-in slash mirrors automatically in RTL.',
       default: "'/'",
       slotElements: [
         {
@@ -116,8 +117,8 @@ export const docs = {
         {
           name: 'isCurrent',
           type: 'boolean',
-          description: 'Marks this item as the current page, applying aria-current="page".',
-          default: 'false',
+          description:
+            'Marks this item as the current page, applying aria-current="page". When omitted, the last item is auto-detected if no item is explicitly current; pass false to opt out.',
         },
         {
           name: 'startIcon',
@@ -161,6 +162,7 @@ export const docsZh = {
       {guidance: false, description: 'Use breadcrumbs as the primary navigation. They supplement a sidebar or top nav, not replace it.'},
       {guidance: false, description: 'Show breadcrumbs on top-level pages that have no parent; they add clutter without helping the user.'},
       {guidance: false, description: 'Let the trail grow beyond 5 levels. If you need more, consider simplifying the page hierarchy instead.'},
+      {guidance: true, description: 'The built-in slash separator mirrors automatically in RTL. For a custom separator, leave Unicode-mirrored angle quotes such as › alone; mirror arrows and Icon separators once with rtlStyles.mirror.'},
       {guidance: false, description: 'Mirror a separator the bidi algorithm already mirrors. An angle-quote glyph such as › is Bidi_Mirrored, so it flips under RTL on its own and rtlStyles.mirror would flip it back. An arrow glyph such as → and any Icon separator are not, so those do need rtlStyles.mirror through xstyle.'},
     ],
   },
@@ -182,6 +184,7 @@ export const docsDense = {
       {guidance: false, description: 'Use as primary navigation; breadcrumbs supplement, not replace, a main nav.'},
       {guidance: false, description: 'Show on top-level pages with no parent.'},
       {guidance: false, description: 'Let the trail exceed 5 levels; simplify the hierarchy instead.'},
+      {guidance: true, description: 'Built-in / mirrors automatically in RTL. Leave bidi-mirrored › alone; mirror custom arrows and Icons once.'},
       {guidance: false, description: 'Mirror a separator that already mirrors itself: › is Bidi_Mirrored and flips under RTL on its own. → and Icon separators are not, so those need rtlStyles.mirror via xstyle.'},
     ],
   },

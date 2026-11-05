@@ -1,0 +1,384 @@
+{
+  "name": "setup",
+  "description": "Setup and cross-system composition tasks. Every request allows changes only to its named insertion or replacement surface; all unrelated host UI must remain unchanged.",
+  "prompts": [
+    {
+      "id": "s0",
+      "tier": "T1",
+      "fixtures": [
+        "tailwind-v4-control",
+        "shadcn-tailwind-v4-established",
+        "enterprise-scoped-synthetic"
+      ],
+      "prompt": "Install and wire the Astryx design system without replacing any existing UI. Add one minimal proof control labelled \"Astryx ready\" beside the existing primary action. Do not change any pre-existing surface.",
+      "measures": "Installation-only coexistence plus one separately marked proof component.",
+      "expected": "The proof component renders while every pre-existing host probe remains identical.",
+      "contract": {
+        "results": [
+          {
+            "name": "astryx-proof",
+            "description": "the new proof control",
+            "exact": 1,
+            "visible": true,
+            "text": "Astryx ready"
+          }
+        ],
+        "interactions": [],
+        "allowedHostChanges": [
+          {
+            "fixture": "tailwind-v4-control",
+            "probe": "primary-action",
+            "fields": ["geometry.x", "geometry.left", "geometry.right"]
+          },
+          {
+            "fixture": "shadcn-tailwind-v4-established",
+            "probe": "primary-action",
+            "fields": ["geometry.x", "geometry.left", "geometry.right"]
+          },
+          {
+            "fixture": "enterprise-scoped-synthetic",
+            "probe": "mode-control",
+            "fields": ["geometry.x", "geometry.left", "geometry.right"]
+          }
+        ],
+        "replacedHostProbes": [],
+        "allowedOverlayChanges": []
+      },
+      "kind": "installation"
+    },
+    {
+      "id": "s1",
+      "tier": "T1",
+      "fixtures": [
+        "tailwind-v4-control",
+        "shadcn-tailwind-v4-established",
+        "enterprise-scoped-synthetic"
+      ],
+      "prompt": "Start using the Astryx design system in this app. Add one of its buttons beside the existing primary action, labelled \"Deploy\", so we can see the installation working.",
+      "measures": "The installation plus one minimal component insertion.",
+      "expected": "The existing app remains intact and gains one correctly styled Astryx button.",
+      "contract": {
+        "results": [
+          {
+            "name": "astryx-button",
+            "description": "the new Deploy button",
+            "exact": 1,
+            "visible": true,
+            "text": "Deploy"
+          }
+        ],
+        "interactions": [],
+        "allowedHostChanges": [
+          {
+            "fixture": "tailwind-v4-control",
+            "probe": "primary-action",
+            "fields": ["geometry.x", "geometry.left", "geometry.right"]
+          },
+          {
+            "fixture": "shadcn-tailwind-v4-established",
+            "probe": "primary-action",
+            "fields": ["geometry.x", "geometry.left", "geometry.right"]
+          },
+          {
+            "fixture": "enterprise-scoped-synthetic",
+            "probe": "mode-control",
+            "fields": ["geometry.x", "geometry.left", "geometry.right"]
+          }
+        ],
+        "replacedHostProbes": [],
+        "allowedOverlayChanges": []
+      },
+      "kind": "addition"
+    },
+    {
+      "id": "s2",
+      "tier": "T2",
+      "kind": "replacement",
+      "fixtures": [
+        "tailwind-v4-control",
+        "shadcn-tailwind-v4-established",
+        "enterprise-scoped-synthetic"
+      ],
+      "prompt": "Start using the Astryx design system here, and replace the status treatment in the existing table with its equivalent while preserving every label and status meaning.",
+      "measures": "Installation plus a substitution that must preserve fixed host data and semantics.",
+      "expected": "Only the requested status surface changes; the table, labels, and unrelated host styling remain unchanged.",
+      "contract": {
+        "results": [
+          {
+            "name": "astryx-status",
+            "description": "the replacement status surface",
+            "exact": 1,
+            "visible": true,
+            "preserveTextFromHostProbe": "status"
+          }
+        ],
+        "interactions": [],
+        "allowedHostChanges": [],
+        "replacedHostProbes": [
+          {
+            "fixture": "tailwind-v4-control",
+            "probe": "status",
+            "result": "astryx-status"
+          },
+          {
+            "fixture": "shadcn-tailwind-v4-established",
+            "probe": "status",
+            "result": "astryx-status"
+          },
+          {
+            "fixture": "enterprise-scoped-synthetic",
+            "probe": "status",
+            "result": "astryx-status"
+          }
+        ],
+        "allowedOverlayChanges": []
+      }
+    },
+    {
+      "id": "s3",
+      "tier": "T2",
+      "kind": "replacement",
+      "fixtures": [
+        "tailwind-v4-control",
+        "shadcn-tailwind-v4-established",
+        "enterprise-scoped-synthetic"
+      ],
+      "prompt": "Adopt the Astryx design system in this app and rebuild its existing select control with the closest accessible Astryx equivalent, preserving the current options and layout.",
+      "measures": "Installation plus an interactive substitution shared by all fixtures.",
+      "expected": "Only the requested select changes; it remains keyboard reachable, keeps its options, and does not disturb the surrounding form or page.",
+      "contract": {
+        "results": [
+          {
+            "name": "astryx-selector",
+            "description": "the replacement selector trigger",
+            "exact": 1,
+            "visible": true,
+            "focusable": true
+          }
+        ],
+        "interactions": [],
+        "allowedHostChanges": [
+          {
+            "fixture": "tailwind-v4-control",
+            "probe": "form-control",
+            "fields": ["geometry.y", "geometry.top", "geometry.bottom"]
+          },
+          {
+            "fixture": "enterprise-scoped-synthetic",
+            "probe": "table-header",
+            "fields": ["geometry.y", "geometry.top", "geometry.bottom"]
+          },
+          {
+            "fixture": "enterprise-scoped-synthetic",
+            "probe": "status",
+            "fields": ["geometry.y", "geometry.top", "geometry.bottom"]
+          },
+          {
+            "fixture": "enterprise-scoped-synthetic",
+            "probe": "settings-control",
+            "fields": ["geometry.y", "geometry.top", "geometry.bottom"]
+          }
+        ],
+        "replacedHostProbes": [],
+        "allowedOverlayChanges": []
+      }
+    },
+    {
+      "id": "s4",
+      "tier": "T3",
+      "kind": "composition",
+      "fixtures": ["shadcn-tailwind-v4-established"],
+      "prompt": "Inside the existing Tailwind/shadcn dialog, add an Astryx tooltip and an Astryx selector with its popup. Both controls must be keyboard reachable, and each opened surface must remain visible, unclipped, and above the existing dialog and backdrop. Preserve the existing dialog and all unrelated host styling.",
+      "measures": "Astryx tooltip and selector surfaces composed inside an existing host dialog.",
+      "expected": "Both Astryx surfaces open from the keyboard above the host dialog stack without changing host styling.",
+      "contract": {
+        "results": [
+          {
+            "name": "astryx-tooltip-trigger",
+            "description": "the Astryx tooltip trigger",
+            "exact": 1
+          },
+          {
+            "name": "astryx-selector-trigger",
+            "description": "the Astryx selector trigger",
+            "exact": 1
+          }
+        ],
+        "interactions": [
+          {
+            "id": "astryx-tooltip-in-host-dialog",
+            "direction": "astryx-in-host",
+            "open": [
+              {
+                "name": "primary-action",
+                "source": "probe",
+                "method": "click"
+              },
+              {
+                "name": "astryx-tooltip-trigger",
+                "source": "result",
+                "method": "keyboard-focus"
+              }
+            ],
+            "surfaces": [
+              {
+                "name": "dialog-backdrop",
+                "source": "probe",
+                "kind": "backdrop"
+              },
+              {
+                "name": "dialog-surface",
+                "source": "probe",
+                "kind": "dialog"
+              },
+              {
+                "name": "astryx-tooltip-surface",
+                "source": "result",
+                "kind": "tooltip"
+              }
+            ]
+          },
+          {
+            "id": "astryx-selector-in-host-dialog",
+            "direction": "astryx-in-host",
+            "open": [
+              {
+                "name": "primary-action",
+                "source": "probe",
+                "method": "click"
+              },
+              {
+                "name": "astryx-selector-trigger",
+                "source": "result",
+                "method": "keyboard-activate",
+                "key": "Enter"
+              }
+            ],
+            "surfaces": [
+              {
+                "name": "dialog-backdrop",
+                "source": "probe",
+                "kind": "backdrop"
+              },
+              {
+                "name": "dialog-surface",
+                "source": "probe",
+                "kind": "dialog"
+              },
+              {
+                "name": "astryx-selector-surface",
+                "source": "result",
+                "kind": "popover"
+              }
+            ]
+          }
+        ],
+        "allowedHostChanges": [],
+        "replacedHostProbes": [],
+        "allowedOverlayChanges": [
+          {
+            "fixture": "shadcn-tailwind-v4-established",
+            "surface": "dialog-surface",
+            "fields": [
+              "geometry.y",
+              "geometry.top",
+              "geometry.bottom",
+              "geometry.height"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "s5",
+      "tier": "T3",
+      "kind": "composition",
+      "fixtures": ["enterprise-scoped-synthetic"],
+      "prompt": "Add an Astryx dialog that contains the app's existing Tailwind menu. The existing host menu must open from the keyboard above the Astryx dialog and backdrop, keep its host token styling, and remain visible and unclipped. Do not change unrelated host UI.",
+      "measures": "An existing host menu surface composed inside an Astryx dialog.",
+      "expected": "The host menu opens from the keyboard above the Astryx dialog stack and retains its baseline host styling.",
+      "contract": {
+        "results": [
+          {
+            "name": "astryx-dialog-trigger",
+            "description": "the Astryx dialog trigger",
+            "exact": 1,
+            "visible": true
+          }
+        ],
+        "interactions": [
+          {
+            "id": "host-menu-in-astryx-dialog",
+            "direction": "host-in-astryx",
+            "open": [
+              {
+                "name": "astryx-dialog-trigger",
+                "source": "result",
+                "method": "keyboard-activate",
+                "key": "Enter"
+              },
+              {
+                "name": "host-menu-trigger",
+                "source": "result",
+                "method": "keyboard-activate",
+                "key": "Enter"
+              }
+            ],
+            "surfaces": [
+              {
+                "name": "astryx-dialog-backdrop",
+                "source": "result",
+                "kind": "backdrop",
+                "marker": "astryx-dialog-surface"
+              },
+              {
+                "name": "astryx-dialog-surface",
+                "source": "result",
+                "kind": "dialog"
+              },
+              {
+                "name": "host-menu-surface",
+                "source": "result",
+                "kind": "popover",
+                "styleReference": "popover-surface"
+              }
+            ]
+          }
+        ],
+        "allowedHostChanges": [
+          {
+            "$comment": "The task mandates adding a dialog trigger to the host shell, so the shell grows by exactly that block and its text gains exactly that block's copy. Height, the height-derived geometry, and added text are permitted on the shell alone; its position, width, every computed style, and every other probe stay strict.",
+            "fixture": "enterprise-scoped-synthetic",
+            "probe": "host-shell",
+            "fields": ["height", "geometry.height", "geometry.bottom"],
+            "textInsertionOnly": true
+          },
+          {
+            "$comment": "The mandated trigger belongs in the guest subtree, which is where this fixture says guest design-system content goes, so the boundary grows by exactly that control and the growth carries into the two geometry fields height moves. The trigger is task-owned, so the boundary's protected text does not change and no text exemption is given. Its position, width, every computed style, and every other probe stay strict.",
+            "fixture": "enterprise-scoped-synthetic",
+            "probe": "guest-boundary",
+            "fields": ["height", "geometry.height", "geometry.bottom"]
+          }
+        ],
+        "replacedHostProbes": [],
+        "allowedOverlayChanges": [
+          {
+            "fixture": "enterprise-scoped-synthetic",
+            "surface": "dialog-surface",
+            "fields": [
+              "geometry.y",
+              "geometry.top",
+              "geometry.bottom",
+              "geometry.height"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "notes": [
+    "Prompt text is identical across conditions, repetitions, and executor bundles for each supported fixture.",
+    "The data-vibe-result values are task-owned measurement hooks, not implementation hints. Existing data-vibe-probe markers must remain in place.",
+    "No prompt tells the executor which files, imports, CSS layers, or component implementation details to use."
+  ]
+}

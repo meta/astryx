@@ -12,7 +12,7 @@ const meta: Meta<typeof Kbd> = {
     keys: {
       control: 'text',
       description:
-        'Keyboard shortcut string. Use "+" to separate keys. Special keys: mod, ctrl, alt, shift, enter, backspace, escape, tab, up, down, left, right.',
+        'Keyboard shortcut string. Use "+" to separate keys. Special keys: mod, ctrl, alt, shift, enter, backspace, escape, tab, up, down, left, right, plus. Aliases: esc for escape and return for enter.',
     },
   },
 };
@@ -76,12 +76,14 @@ export const SpecialKeys: Story = {
           Escape:
         </Text>
         <Kbd keys="escape" />
+        <Kbd keys="esc" />
       </div>
       <div style={{display: 'flex', gap: '16px', alignItems: 'center'}}>
         <Text type="label" style={{width: '100px'}}>
           Enter:
         </Text>
         <Kbd keys="enter" />
+        <Kbd keys="return" />
       </div>
       <div style={{display: 'flex', gap: '16px', alignItems: 'center'}}>
         <Text type="label" style={{width: '100px'}}>
@@ -192,8 +194,8 @@ export const InlineWithText: Story = {
         Press <Kbd keys="escape" /> to close the dialog.
       </Text>
       <Text type="body">
-        Navigate with <Kbd keys="up" /> and <Kbd keys="down" /> arrow
-        keys, then press <Kbd keys="enter" /> to select.
+        Navigate with <Kbd keys="up" /> and <Kbd keys="down" /> arrow keys, then
+        press <Kbd keys="enter" /> to select.
       </Text>
     </div>
   ),

@@ -19,13 +19,16 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import http from 'node:http';
 
-import {describe, it, expect} from 'vitest';
+import {afterAll, beforeAll, describe, it, expect} from 'vitest';
+import {createRepository} from './lib/git-fixture.mjs';
 
 import {
+  AUDIT_PROMPT,
   SCORES_PAGE_URL,
   SECTION_WEIGHTS,
   SECTION_IDS,
   applyScorecard,
+  auditModePolicy,
   blockLink,
   buildQueue,
   buildRoster,
@@ -45,6 +48,22 @@ import {
   weakestSection,
   wikiCommitUrl,
 } from './score-ledger.mjs';
+
+/**
+ * The folder every temporary file of these tests lives in, the CLI's included
+ * (its TMPDIR), removed once they finish, so a run leaves nothing behind in the
+ * system temp directory. It is made in beforeAll, not when the module loads:
+ * Vitest skips both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-score-ledger-test-'),
+  );
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -195,30 +214,33 @@ describe('the ratchet', () => {
 });
 
 describe('a component is a package AND a name', () => {
-  // `Chat` ships in both core and lab. A name-keyed ledger would ratchet one
-  // against the other, which is worse than not measuring either.
+  const duplicateRoster = [
+    {component: 'Shared', package: 'core'},
+    {component: 'Shared', package: 'lab'},
+  ];
+
   it('resolves a name that exists in two packages to both components', () => {
-    const matches = resolveName('Chat', listComponents(REPO_ROOT));
+    const matches = resolveName('Shared', duplicateRoster);
     expect(matches.map(m => m.package).sort()).toEqual(['core', 'lab']);
   });
 
   it('keeps the two apart in the ratchet — a lab score cannot fail a core PR', () => {
     const base = {
       components: [
-        entry({component: 'Chat', package: 'core', score: 80, grade: 'B'}),
-        entry({component: 'Chat', package: 'lab', score: 80, grade: 'B'}),
+        entry({component: 'Shared', package: 'core', score: 80, grade: 'B'}),
+        entry({component: 'Shared', package: 'lab', score: 80, grade: 'B'}),
       ],
     };
     const head = {
       components: [
-        entry({component: 'Chat', package: 'core', score: 80, grade: 'B'}),
-        entry({component: 'Chat', package: 'lab', score: 40, grade: 'F'}),
+        entry({component: 'Shared', package: 'core', score: 80, grade: 'B'}),
+        entry({component: 'Shared', package: 'lab', score: 40, grade: 'F'}),
       ],
     };
-    const {results} = runRatchet(['Chat'], base, head);
-    expect(results.map(r => r.component).sort()).toEqual(['core/Chat', 'lab/Chat']);
-    expect(results.find(r => r.component === 'core/Chat').verdict).toBe('pass');
-    expect(results.find(r => r.component === 'lab/Chat').verdict).toBe('fail');
+    const {results} = runRatchet(['Shared'], base, head, duplicateRoster);
+    expect(results.map(r => r.component).sort()).toEqual(['core/Shared', 'lab/Shared']);
+    expect(results.find(r => r.component === 'core/Shared').verdict).toBe('pass');
+    expect(results.find(r => r.component === 'lab/Shared').verdict).toBe('fail');
   });
 
   it('gives each roster row a package-qualified id', () => {
@@ -238,7 +260,10 @@ describe('loadLedger never throws', () => {
   });
 
   it('rejects JSON that is not a ledger', async () => {
-    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'l.json');
+    const file = path.join(
+      fs.mkdtempSync(path.join(TEMP_ROOT, 'ledger-')),
+      'l.json',
+    );
     fs.writeFileSync(file, JSON.stringify({nope: true}));
     const {ledger, error} = await loadLedger(file);
     expect(ledger).toBeNull();
@@ -246,7 +271,10 @@ describe('loadLedger never throws', () => {
   });
 
   it('reads a real ledger', async () => {
-    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'l.json');
+    const file = path.join(
+      fs.mkdtempSync(path.join(TEMP_ROOT, 'ledger-')),
+      'l.json',
+    );
     fs.writeFileSync(file, JSON.stringify({ledgerVersion: 1, components: [entry()]}));
     const {ledger, error} = await loadLedger(file);
     expect(error).toBeNull();
@@ -327,37 +355,61 @@ describe('the canonical component predicate', () => {
     const names = all.map(c => c.component);
     expect(names).toContain('Button');
     expect(names).toContain('Stepper');
+    expect(names).toContain('ChatComposerTokenElement');
+    expect(names).toContain('ContextMenuItem');
+    expect(names).toContain('TransferListSelector');
+    expect(names).toContain('TourStep');
     expect(names).not.toContain('hooks');
     expect(names).not.toContain('NavItem');
+    expect(names).not.toContain('Chat');
+    expect(names).not.toContain('Indicator');
+    expect(names).not.toContain('Layer');
+    expect(names).not.toContain('NavMenu');
+    expect(names).not.toContain('Resizable');
+    expect(names).not.toContain('ContextMenuItemProps');
     expect([...names].sort((a, b) => a.localeCompare(b))).toEqual(names);
     expect(new Set(all.map(c => c.package))).toEqual(
-      new Set(['core', 'lab', 'richtext']),
+      new Set(['charts', 'core', 'lab', 'richtext', 'vega']),
     );
   });
 
-  it('covers flat packages by their .doc.mjs, not a per-component dir', () => {
-    // richtext was promoted out of lab into its own package with a flat src
-    // (`RichTextEditor.tsx` at the root, no directory per component). It must
-    // still land in the roster or a score recorded for it has no row.
-    const all = listComponents(REPO_ROOT);
-    const richtext = all.filter(c => c.package === 'richtext');
-    expect(richtext).toEqual([{component: 'RichTextEditor', package: 'richtext'}]);
+  it('covers every public component in flat component packages', () => {
+    const byPackage = new Map();
+    for (const item of listComponents(REPO_ROOT)) {
+      const names = byPackage.get(item.package) ?? [];
+      names.push(item.component);
+      byPackage.set(item.package, names);
+    }
+    expect(byPackage.get('charts')).toEqual([
+      'Chart',
+      'ChartAxis',
+      'ChartGrid',
+      'ChartLegend',
+      'ChartSwatch',
+      'ChartTooltip',
+    ]);
+    expect(byPackage.get('richtext')).toEqual([
+      'RichTextEditor',
+      'RichTextEditorAutoLinkPlugin',
+      'RichTextEditorToolbar',
+      'RichTextView',
+    ]);
+    expect(byPackage.get('vega')).toEqual(['VegaChart']);
   });
 });
 
 describe('the flat-package component predicate', () => {
   const richtextSrc = path.join(REPO_ROOT, 'packages/richtext/src');
 
-  it('keeps the documented component', () => {
-    expect(flatPackageComponents(richtextSrc)).toContain('RichTextEditor');
-  });
-
-  it('drops undocumented sub-parts and helpers that still render', () => {
-    // These render but carry no `.doc.mjs`, so they are not audited rows.
+  it('keeps public exported components and drops private helpers', () => {
     const names = flatPackageComponents(richtextSrc);
-    expect(names).not.toContain('RichTextView');
-    expect(names).not.toContain('RichTextEditorToolbar');
-    expect(names).not.toContain('RichTextEditorAutoLinkPlugin');
+    expect(names).toEqual([
+      'RichTextEditor',
+      'RichTextEditorAutoLinkPlugin',
+      'RichTextEditorToolbar',
+      'RichTextView',
+    ]);
+    expect(names).not.toContain('LexicalErrorBoundary');
   });
 
   it('returns nothing for a src dir that does not exist', () => {
@@ -640,10 +692,180 @@ describe('recording a scorecard', () => {
   });
 });
 
+describe('audit mode contract', () => {
+  const modeCard = {
+    score: 74.2,
+    lastAudited: '2026-09-07',
+    rubricVersion: '1.15.3',
+    mode: 'O',
+    commit: 'dccdabea0b',
+    blocks: {count: 0, open: []},
+  };
+
+  it('normalizes canonical and legacy mode spellings', () => {
+    expect(auditModePolicy('N')).toMatchObject({code: 'N', filesBlockIssues: false});
+    expect(auditModePolicy('nightly')).toMatchObject({code: 'N'});
+    expect(auditModePolicy('grading')).toMatchObject({code: 'O', filesBlockIssues: true});
+    expect(auditModePolicy('promotion')).toMatchObject({code: 'P', filesBlockIssues: true});
+    expect(auditModePolicy('review')).toMatchObject({code: 'R', filesBlockIssues: false});
+    expect(auditModePolicy('invented')).toBeNull();
+  });
+
+  it('rejects an unknown scorecard mode and stores aliases canonically', () => {
+    const legacy = applyScorecard(
+      null,
+      {...modeCard, mode: 'nightly'},
+      {component: 'B', pkg: 'core'},
+    );
+    expect(legacy.mode).toBe('N');
+    expect(() =>
+      applyScorecard(
+        null,
+        {...modeCard, mode: 'automatic'},
+        {component: 'B', pkg: 'core'},
+      ),
+    ).toThrow(/mode must be N .* O .* P .* R/);
+  });
+
+  it('starts local, follows linked authority, and applies rubric procedure last', () => {
+    const component = AUDIT_PROMPT.indexOf(
+      '1. start from the nearest current component contract',
+    );
+    const modules = AUDIT_PROMPT.indexOf('applicable current\n   public module contract');
+    const familyDesign = AUDIT_PROMPT.indexOf(
+      '2. follow their applicable links to current family and design requirements',
+    );
+    const architectureSystem = AUDIT_PROMPT.indexOf(
+      '3. follow referenced current architecture and system decisions',
+    );
+    const objective = AUDIT_PROMPT.indexOf('applicable objective standards');
+    const rubric = AUDIT_PROMPT.indexOf('4. apply the rubric procedure last');
+
+    for (const marker of [
+      component,
+      modules,
+      familyDesign,
+      architectureSystem,
+      objective,
+      rubric,
+    ]) {
+      expect(marker).toBeGreaterThan(-1);
+    }
+    expect(component).toBeLessThan(familyDesign);
+    expect(modules).toBeLessThan(familyDesign);
+    expect(familyDesign).toBeLessThan(architectureSystem);
+    expect(architectureSystem).toBeLessThan(objective);
+    expect(objective).toBeLessThan(rubric);
+    expect(AUDIT_PROMPT).toContain('do not scan global authority first');
+    expect(AUDIT_PROMPT).not.toContain(
+      'current global authority and objective standards',
+    );
+    expect(AUDIT_PROMPT).toContain('optional context, never\npolicy');
+  });
+
+  it('preserves all four mode lifecycles without cross-filing issues', () => {
+    expect(AUDIT_PROMPT).toContain('<AuditMode: N|O|P|R>');
+    expect(AUDIT_PROMPT).toContain('record only the post-fix ledger result');
+    expect(AUDIT_PROMPT).toContain('file no ordinary\n  per-finding issues');
+    expect(AUDIT_PROMPT).toContain('one issue per open BLOCK');
+    expect(AUDIT_PROMPT).toContain(
+      'R — review: put findings on the pull request or in its review',
+    );
+    expect(AUDIT_PROMPT).toContain(
+      'File no ordinary\n  per-BLOCK issues and do not apply the whole-component ledger lifecycle',
+    );
+  });
+
+  it('keeps backfills observational and routes unresolved judgment to the owner', () => {
+    expect(AUDIT_PROMPT).toContain('A backfill is observational\nonly');
+    expect(AUDIT_PROMPT).toContain(
+      'must not add, improve,\nremove, reinterpret, or otherwise change product meaning',
+    );
+    expect(AUDIT_PROMPT).toContain('A conflict between current records');
+    for (const boundary of [
+      'new API meaning or\nshape',
+      'defaults',
+      'compatibility or migration promises',
+      'ownership boundaries',
+      'subjective design judgment',
+      'stops remediation and routes to the owning human',
+    ]) {
+      expect(AUDIT_PROMPT).toContain(boundary);
+    }
+  });
+
+  it('keeps audit storage split and invalidates only linked affected scores', () => {
+    const ledger = AUDIT_PROMPT.indexOf(
+      'The wiki ledger stores current post-fix\nscores and unresolved findings',
+    );
+    const pullRequest = AUDIT_PROMPT.indexOf(
+      "The pull request stores the run's reviewable\nevidence",
+    );
+    const report = AUDIT_PROMPT.indexOf(
+      'The trusted exact-head report belongs in trusted PR/check metadata',
+    );
+    const specs = AUDIT_PROMPT.indexOf(
+      'Component and module specs store durable product behavior only',
+    );
+    expect(ledger).toBeGreaterThan(-1);
+    expect(ledger).toBeLessThan(pullRequest);
+    expect(pullRequest).toBeLessThan(report);
+    expect(report).toBeLessThan(specs);
+    expect(AUDIT_PROMPT).toContain(
+      'do not put audit\nscores, run inventories, screenshots, findings, or eligibility data in them',
+    );
+    expect(AUDIT_PROMPT).toContain(
+      'Authority changes invalidate linked affected scores on the existing scale',
+    );
+    expect(AUDIT_PROMPT).toContain(
+      'a\ncomponent or module change invalidates that component',
+    );
+    expect(AUDIT_PROMPT).toContain(
+      'an applicable family\nor global-authority change invalidates every linked component',
+    );
+    expect(AUDIT_PROMPT).toContain(
+      'Do not bump the\nrubric version unless scoring methodology, weights, severities, or evidence\ntreatment changes',
+    );
+  });
+
+  it('pins behavior remediation and emits the agreed fail-closed report fields', () => {
+    expect(AUDIT_PROMPT).toContain(
+      'mattpocock/skills/blob/6654f6b60cd9d5be8b54c6fafe44346dabeb3b76/skills/engineering/tdd/SKILL.md',
+    );
+    expect(AUDIT_PROMPT).toContain('Prove red before production changes');
+    for (const field of [
+      '"schemaVersion"',
+      '"component"',
+      '"package"',
+      '"auditMode"',
+      '"rubricVersion"',
+      '"heads"',
+      '"repository"',
+      '"componentContract"',
+      '"inventory"',
+      '"unresolvedGaps"',
+      '"objective"',
+      '"manual"',
+      '"remediations"',
+      '"beforeEvidence"',
+      '"afterEvidence"',
+      '"approvals"',
+      '"checks"',
+      '"eligibility"',
+      '"reasons"',
+    ]) {
+      expect(AUDIT_PROMPT).toContain(field);
+    }
+    expect(AUDIT_PROMPT).toContain('manual-review-only');
+    expect(AUDIT_PROMPT).toContain('Do not enable auto-merge');
+    expect(AUDIT_PROMPT).toContain('does\nnot activate auto-merge');
+  });
+});
+
 describe('issue plumbing', () => {
   it('links a filed BLOCK and says so when one is not filed', () => {
     expect(blockLink({id: 'A8', summary: 'x', issue: 3885})).toContain(
-      'https://github.com/facebook/astryx/issues/3885',
+      'https://github.com/meta/astryx/issues/3885',
     );
     expect(blockLink({id: 'A8', summary: 'x', issue: null})).toContain('no issue filed');
   });
@@ -694,7 +916,7 @@ function cli(argv, {cwd = REPO_ROOT, input, env} = {}) {
       cwd,
       input,
       encoding: 'utf8',
-      env: {...process.env, ...env},
+      env: {...process.env, TMPDIR: TEMP_ROOT, ...env},
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     return {code: 0, out};
@@ -729,30 +951,17 @@ const scorecard = (over = {}) => ({
  * is shallow and pushes over file://, exactly as `ensureWikiClone` produces.
  */
 function makeWiki(seedLedger) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'score-ledger-wiki-'));
+  const root = fs.mkdtempSync(path.join(TEMP_ROOT, 'score-ledger-wiki-'));
   const bare = path.join(root, 'wiki.git');
-  const seed = path.join(root, 'seed');
   const clone = path.join(root, 'clone');
 
-  git(root, 'init', '--bare', '--initial-branch=master', bare);
-  git(root, 'clone', bare, seed);
-  identify(seed);
-  fs.writeFileSync(
-    path.join(seed, 'component-scores.json'),
-    `${JSON.stringify(seedLedger, null, 2)}\n`,
-  );
-  git(seed, 'add', '-A');
-  git(seed, 'commit', '-m', 'seed');
-  git(seed, 'push', 'origin', 'master');
-
-  git(root, 'clone', '--depth', '1', `file://${bare}`, clone);
-  identify(clone);
+  const ledger = `${JSON.stringify(seedLedger, null, 2)}\n`;
+  const seed = {ref: 'refs/heads/master', message: 'seed', files: {'component-scores.json': ledger}};
+  createRepository(bare, [seed], {bare: true, branch: 'master'});
+  // The clone's own config names who commits there.
+  const identity = ['-c', 'user.name=Ledger Test', '-c', 'user.email=ledger-test@example.com'];
+  git(root, 'clone', ...identity, '--depth', '1', `file://${bare}`, clone);
   return {root, bare, clone, ledger: path.join(clone, 'component-scores.json')};
-}
-
-function identify(dir) {
-  git(dir, 'config', 'user.name', 'Ledger Test');
-  git(dir, 'config', 'user.email', 'ledger-test@example.com');
 }
 
 const readLedger = file => JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -788,15 +997,15 @@ describe('the commit message', () => {
 
 describe('wiki URLs', () => {
   it('reads the repo out of a wiki remote, https or ssh', () => {
-    expect(repoFromWikiRemote('https://github.com/facebook/astryx.wiki.git')).toBe(
-      'facebook/astryx',
+    expect(repoFromWikiRemote('https://github.com/meta/astryx.wiki.git')).toBe(
+      'meta/astryx',
     );
-    expect(repoFromWikiRemote('git@github.com:facebook/astryx.wiki.git')).toBe('facebook/astryx');
+    expect(repoFromWikiRemote('git@github.com:meta/astryx.wiki.git')).toBe('meta/astryx');
   });
 
   it('builds a commit URL GitHub actually serves', () => {
     expect(wikiCommitUrl('deadbeef')).toBe(
-      'https://github.com/facebook/astryx/wiki/_compare/deadbeef',
+      'https://github.com/meta/astryx/wiki/_compare/deadbeef',
     );
   });
 });
@@ -904,6 +1113,79 @@ describe('--record', () => {
     const r = cli(['--record', 'Button', '--from', '-'], {input: JSON.stringify(scorecard())});
     expect(r.code).toBe(1);
     expect(r.out).toContain('--push');
+  });
+
+  it('keeps Night Watch BLOCKs on the ledger without a filing warning', () => {
+    const wiki = makeWiki(ledgerWith());
+    const r = cli(['--record', 'Button', '--from', '-', '--ledger', wiki.ledger], {
+      input: JSON.stringify(
+        scorecard({
+          mode: 'N',
+          blocks: withBlocks({id: 'A8', summary: 'touch path is missing'}),
+        }),
+      ),
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('Night Watch mode keeps 1 unresolved BLOCK');
+    expect(r.out).not.toContain('::warning::');
+    expect(r.out).not.toContain('File them');
+  });
+
+  it.each(['O', 'P'])('warns mode %s to file each unlinked BLOCK', mode => {
+    const wiki = makeWiki(ledgerWith());
+    const r = cli(['--record', 'Button', '--from', '-', '--ledger', wiki.ledger], {
+      input: JSON.stringify(
+        scorecard({
+          mode,
+          blocks: withBlocks({id: 'A8', summary: 'touch path is missing'}),
+        }),
+      ),
+    });
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('::warning::score-ledger');
+    expect(r.out).toContain('--file-issues Button --push');
+  });
+});
+
+describe('--file-issues audit modes', () => {
+  it.each([
+    ['N', 'Night Watch files no ordinary per-finding issues'],
+    ['R', 'Only grading (O) and promotion (P)'],
+  ])('refuses mode %s before filing or changing the ledger', (mode, reason) => {
+    const seeded = ledgerWith(
+      entry({mode, blocks: withBlocks({id: 'A8', summary: 'touch path is missing'})}),
+    );
+    const wiki = makeWiki(seeded);
+    const before = fs.readFileSync(wiki.ledger, 'utf8');
+    const r = cli([
+      '--file-issues',
+      'Button',
+      '--ledger',
+      wiki.ledger,
+      '--dry-run',
+    ]);
+    expect(r.code).toBe(1);
+    expect(r.out).toContain(reason);
+    expect(r.out).not.toContain('would file');
+    expect(fs.readFileSync(wiki.ledger, 'utf8')).toBe(before);
+  });
+
+  it.each(['O', 'P'])('allows mode %s to preview one issue per open BLOCK', mode => {
+    const wiki = makeWiki(
+      ledgerWith(
+        entry({mode, blocks: withBlocks({id: 'A8', summary: 'touch path is missing'})}),
+      ),
+    );
+    const r = cli([
+      '--file-issues',
+      'Button',
+      '--ledger',
+      wiki.ledger,
+      '--dry-run',
+    ]);
+    expect(r.code).toBe(0);
+    expect(r.out).toContain('--- would file ---');
+    expect(r.out).toContain('[audit] Button: touch path is missing');
   });
 });
 

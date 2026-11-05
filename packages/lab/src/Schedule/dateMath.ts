@@ -26,6 +26,17 @@ export function isDayEvent(event: CalendarEvent): event is CalendarDayEvent {
   return typeof event.start !== 'number';
 }
 
+const ALL_DAY_SPAN_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether the week and day views paint an event as a span in the all-day row:
+ * a date-only event, or a timed event lasting 24 hours or more, measured on
+ * its own instants (component:Schedule FR21).
+ */
+export function isAllDaySpan(event: CalendarEvent): boolean {
+  return isDayEvent(event) || event.end - event.start >= ALL_DAY_SPAN_MS;
+}
+
 export function getScheduleRangeFromDates({
   startDate,
   endDate,

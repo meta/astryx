@@ -2,26 +2,33 @@
 
 /**
  * @file layout.tsx
- * @input The Motion Lab provider and shell
+ * @input The Motion Lab provider, the link provider, and the shell
  * @output The /pages/motion-lab section frame
- * @position Next.js segment layout
+ * @position Motion Lab route-group layout (shared by every Vite page in the section)
  *
  * Every lab page reads its durations, curves and springs from one store, so the
- * provider wraps the whole section rather than each page — that is what lets a
- * slider on the tokens page change a demo on the rubric page. It also has to be
- * a layout rather than a per-page wrapper because the sandbox is a static
- * export: each route is prerendered on its own, and a page whose hook has no
- * provider above it fails the build rather than the browser.
+ * provider wraps the whole section rather than each page. The Vite route
+ * manifest preserves this shared layout across navigation.
+ *
+ * LinkProvider routes Astryx Link and ListItem through the Sandbox router,
+ * which applies the configured base path exactly once. Keep authored links
+ * unprefixed for both root-local and /sandbox/ deployments.
  */
 
+'use client';
+
+import NextLink from '../../../../router';
 import type {ReactNode} from 'react';
-import {MotionLabProvider} from '../../../../motion/MotionLabStore';
-import {MotionLabShell} from '../../../../motion/MotionLabShell';
+import {LinkProvider} from '@astryxdesign/core/Link';
+import {MotionLabProvider} from './MotionLabStore';
+import {MotionLabShell} from './MotionLabShell';
 
 export default function MotionLabLayout({children}: {children: ReactNode}) {
   return (
-    <MotionLabProvider>
-      <MotionLabShell>{children}</MotionLabShell>
-    </MotionLabProvider>
+    <LinkProvider component={NextLink}>
+      <MotionLabProvider>
+        <MotionLabShell>{children}</MotionLabShell>
+      </MotionLabProvider>
+    </LinkProvider>
   );
 }

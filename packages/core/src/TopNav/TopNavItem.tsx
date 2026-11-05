@@ -33,9 +33,11 @@ import type {LinkComponentType} from '../Link/types';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {navItemStyles, type NavItemSize} from '../NavItem/navItemStyles.stylex';
 import {mergeProps} from '../utils';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {usePressFeedback} from '../hooks/usePressFeedback';
 
 /**
  * NavItem styles with hover/selected states
@@ -60,13 +62,6 @@ const styles = stylex.create({
     transitionProperty: 'background-color, color',
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
-    backgroundColor: {
-      default: 'transparent',
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-        '@media (hover: hover)': colorVars['--color-overlay-hover'],
-      },
-      ':active': colorVars['--color-overlay-pressed'],
-    },
   },
   selected: {
     color: colorVars['--color-text-primary'],
@@ -77,6 +72,16 @@ const styles = stylex.create({
         '@media (hover: hover)': colorVars['--color-neutral'],
       },
       ':active': colorVars['--color-neutral'],
+      // The touch press model writes these instead of `:active`; the selected
+      // item keeps its fill under a finger the way it does under a mouse, and
+      // paints no overlay at any phase of the press.
+      '[data-astryx-press="on"]': colorVars['--color-neutral'],
+      '[data-astryx-press="fading"]': colorVars['--color-neutral'],
+    },
+    backgroundImage: {
+      default: null,
+      '[data-astryx-press="on"]': 'none',
+      '[data-astryx-press="fading"]': 'none',
     },
   },
   iconOnly: {
@@ -191,9 +196,12 @@ export function TopNavItem({
   ref,
   ...props
 }: TopNavItemProps) {
+  const pressable = usePressFeedback();
   const LinkComponent = useLinkComponent(as);
   const renderMode = useTopNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(
+    renderMode === 'drawer',
+  );
 
   // A disabled item renders as a plain <a> with no href: an href-less anchor
   // is not focusable and exposes no link affordance, so programmatic focus +
@@ -208,14 +216,13 @@ export function TopNavItem({
   // Drawer mode — render as a SideNavItem-style vertical list element
   // =========================================================================
   if (renderMode === 'drawer') {
+    const activate = closeDrawerAfter(onClick);
     const handleDrawerClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
       if (isDisabled) {
         preventDefaultClick(e);
         return;
       }
-      // Forward the original onClick if present
-      onClick?.(e);
-      closeMobileNav();
+      activate?.(e);
     };
 
     return (
@@ -227,6 +234,7 @@ export function TopNavItem({
         aria-current={isSelected ? 'page' : undefined}
         aria-disabled={isDisabled || undefined}
         tabIndex={isDisabled ? -1 : undefined}
+        {...pressable}
         {...mergeProps(
           themeProps('top-nav-item', {
             mode: 'drawer',
@@ -234,6 +242,7 @@ export function TopNavItem({
           }),
           focusOutlineProps.focusVisible(
             navItemStyles.item,
+            interactionOverlayStyles.backgroundColor,
             navItemStyles[size],
             isSelected && navItemStyles.selected,
             isDisabled && navItemStyles.disabled,
@@ -264,12 +273,14 @@ export function TopNavItem({
       aria-current={isSelected ? 'page' : undefined}
       aria-disabled={isDisabled || undefined}
       tabIndex={isDisabled ? -1 : undefined}
+      {...pressable}
       {...mergeProps(
         themeProps('top-nav-item', {
           selected: isSelected ? 'selected' : null,
         }),
         focusOutlineProps.focusVisible(
           styles.base,
+          interactionOverlayStyles.backgroundColor,
           isSelected && styles.selected,
           isDisabled && navItemStyles.disabled,
           isIconOnly && styles.iconOnly,

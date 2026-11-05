@@ -71,6 +71,15 @@ export function unionValues(type, aliases = {}) {
 }
 
 /**
+ * Non-colour properties whose ownership must be visible in the probe capture.
+ * The colours prove that a target is reachable; these values prove that the
+ * target sits on the element that paints the documented property.
+ */
+const PROPERTY_PROBES = {
+  popover: {borderRadius: '32px'},
+};
+
+/**
  * Build the probe theme's `components` map.
  *
  * @param {Array<{key: string, component: string, props: string[], states: string[]}>} targets
@@ -89,12 +98,17 @@ export function buildProbeComponents(targets, propsByComponent, aliases = {}) {
     const styles = (components[target.key] ??= {});
 
     if (!styles.base) {
-      styles.base = paint(`${target.key}`);
+      styles.base = {
+        ...paint(`${target.key}`),
+        ...(PROPERTY_PROBES[target.key] ?? {}),
+      };
       selectors += 1;
     }
 
     for (const prop of target.props) {
-      const declared = propsByComponent[target.component]?.find(entry => entry.name === prop);
+      const declared = propsByComponent[target.component]?.find(
+        entry => entry.name === prop,
+      );
       const values = unionValues(declared?.type, aliases);
       if (values.length === 0) {
         skipped.push({
@@ -121,7 +135,10 @@ export function buildProbeComponents(targets, propsByComponent, aliases = {}) {
     }
   }
 
-  return {components, coverage: {targets: Object.keys(components).length, selectors, skipped}};
+  return {
+    components,
+    coverage: {targets: Object.keys(components).length, selectors, skipped},
+  };
 }
 
 /**

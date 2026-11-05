@@ -1,34 +1,50 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {themeDataAttributeName} from './themeProps';
+
+/** Escape a value for a double-quoted CSS attribute selector string. */
+function escapeAttributeValue(value: string): string {
+  let escaped = '';
+  for (const char of value) {
+    const codePoint = char.codePointAt(0) ?? 0;
+    if (
+      char === '"' ||
+      char === '\\' ||
+      codePoint < 0x20 ||
+      codePoint === 0x7f
+    ) {
+      escaped += `\\${(codePoint === 0 ? 0xfffd : codePoint).toString(16)} `;
+    } else {
+      escaped += char;
+    }
+  }
+  return escaped;
+}
+
 /**
- * Parse a component style key into a CSS selector suffix.
+ * Parse a component style key into a CSS data-attribute selector suffix.
  *
- * Used by both defineTheme (CSS generation) and components (class name rendering)
- * to ensure the same convention is applied consistently.
+ * Used by the shared theme compiler so semantic authoring keys match the
+ * attributes emitted by `themeProps()`:
+ *
+ * - `prop:value` selects `[data-prop="value"]`.
+ * - A bare state selects `[data-state="state"]`.
+ * - `+` combines selectors on the same stable `astryx-*` target.
+ *
+ * Keeping the axis name in the selector prevents collisions between equal
+ * values on different props, such as Grid's `align="center"` and
+ * `justify="center"`.
  *
  * <!-- SYNC: packages/core/src/utils/themeProps.ts -->
- *
- * Emits the legacy class-selector suffix used by defineTheme/component override
- * generation today. Components also reflect the same prop values as data
- * attributes via `themeProps()` (`variant:secondary` renders both `.secondary`
- * and `[data-variant="secondary"]` in the DOM), but generated theme CSS still
- * uses these class selectors until the selector contract migrates fully.
- *
- * Values starting with a digit get prefixed with the prop name since
- * CSS class names can't start with a number.
- *
- * Bare state names (no colon) are used directly as class names.
- * This supports state-based theming targets like 'checked', 'disabled',
- * 'selected' documented in the Theming Infrastructure wiki.
  *
  * @example
  * ```ts
  * parseStyleKey('base')                        // ''
- * parseStyleKey('checked')                      // '.checked'
- * parseStyleKey('checked+disabled')             // '.checked.disabled'
- * parseStyleKey('variant:secondary')            // '.secondary'
- * parseStyleKey('level:1')                      // '.level-1'
- * parseStyleKey('variant:destructive+size:sm')  // '.destructive.sm'
+ * parseStyleKey('checked')                     // '[data-checked="checked"]'
+ * parseStyleKey('checked+disabled')            // '[data-checked="checked"][data-disabled="disabled"]'
+ * parseStyleKey('variant:secondary')           // '[data-variant="secondary"]'
+ * parseStyleKey('level:1')                     // '[data-level="1"]'
+ * parseStyleKey('variant:destructive+size:sm') // '[data-variant="destructive"][data-size="sm"]'
  * ```
  */
 export function parseStyleKey(key: string): string {
@@ -39,16 +55,10 @@ export function parseStyleKey(key: string): string {
   return key
     .split('+')
     .map(part => {
-      const [prop, value] = part.split(':');
-      // Bare state name (no colon) — e.g. 'checked', 'disabled', 'selected'
-      if (value === undefined) {
-        return `.${prop}`;
-      }
-      // CSS classes can't start with a digit — prefix with prop name
-      if (/^\d/.test(value)) {
-        return `.${prop}-${value}`;
-      }
-      return `.${value}`;
+      const separator = part.indexOf(':');
+      const prop = separator === -1 ? part : part.slice(0, separator);
+      const value = separator === -1 ? part : part.slice(separator + 1);
+      return `[${themeDataAttributeName(prop)}="${escapeAttributeValue(value)}"]`;
     })
     .join('');
 }

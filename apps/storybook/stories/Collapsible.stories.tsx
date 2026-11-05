@@ -1,9 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Collapsible, CollapsibleGroup} from '@astryxdesign/core/Collapsible';
+import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {VStack} from '@astryxdesign/core/Layout';
 import {
@@ -61,9 +62,12 @@ export default meta;
 type Story = StoryObj<typeof CollapsibleGroup>;
 
 export const SingleMode: Story = {
-  name: 'Single Mode (default)',
+  name: 'Single Mode — Leading Chevron',
   render: () => (
-    <CollapsibleGroup type="single" defaultValue="general">
+    <CollapsibleGroup
+      type="single"
+      defaultValue="general"
+      chevronPosition="start">
       <VStack gap={2}>
         <Card>
           <Collapsible trigger="General Settings" value="general">
@@ -341,4 +345,67 @@ export const FAQ: Story = {
       </VStack>
     </CollapsibleGroup>
   ),
+};
+
+export const PressedState: Story = {
+  name: 'Pressed state',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Press and hold the enabled trigger to paint the system's `--color-overlay-pressed` layer across its row. The disabled trigger remains visually unchanged and cannot expand or collapse.",
+      },
+    },
+  },
+  render: () => (
+    <VStack gap={2}>
+      <Card>
+        <Collapsible trigger="Details — press and hold">
+          <p {...stylex.props(styles.text)}>
+            The pressed overlay covers the trigger row.
+          </p>
+        </Collapsible>
+      </Card>
+      <Card>
+        <Collapsible trigger="Unavailable — no pressed state" isDisabled>
+          <p {...stylex.props(styles.text)}>Never opens.</p>
+        </Collapsible>
+      </Card>
+    </VStack>
+  ),
+};
+
+// =============================================================================
+// Close with focus inside (AR4)
+// =============================================================================
+
+/**
+ * The app closes the Collapsible from a keyboard shortcut (`[`), which leaves
+ * focus where it was. Focus on "Inside" moves to the trigger; focus elsewhere
+ * stays put.
+ */
+function CloseFocusDemo() {
+  const [isOpen, setIsOpen] = useState(true);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === '[') {
+        setIsOpen(open => !open);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
+  return (
+    <VStack gap={2}>
+      <Collapsible trigger="Details" isOpen={isOpen} onOpenChange={setIsOpen}>
+        <Button label="Inside" variant="secondary" />
+      </Collapsible>
+      <Button label="Elsewhere" variant="secondary" />
+    </VStack>
+  );
+}
+
+export const CloseFocus: Story = {
+  name: 'Close Focus',
+  render: () => <CloseFocusDemo />,
 };

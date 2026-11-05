@@ -3,12 +3,13 @@
 'use client';
 
 /**
- * TemplatePreviewSurface — the live preview "window" for one template.
+ * @file TemplatePreviewSurface.tsx
+ * @input Uses the template slug, shared component registry, and current theme mode.
+ * @output Renders one live page template in a viewport that fills its host.
+ * @position Shared preview surface used by TemplatePreviewDialog.
  *
- * Renders the template's real page.tsx component (shared
- * TEMPLATE_COMPONENTS map) at true scale inside the framed, internally-
- * scrollable surface (see TemplatePreviewSurface.module.css `.frame`).
- * Used by the preview dialog (TemplatePreviewDialog).
+ * The viewport wrapper gives percentage-height templates a definite containing
+ * block and normalizes viewport-sized template roots to the dialog preview.
  */
 
 import {Suspense} from 'react';
@@ -49,7 +50,9 @@ export function TemplatePreviewSurface({slug}: {slug: string}) {
             </div>
           }>
           <Theme theme={neutralTheme} mode={mode}>
-            <Component />
+            <div className={css.viewport}>
+              <Component />
+            </div>
           </Theme>
         </Suspense>
       ) : (

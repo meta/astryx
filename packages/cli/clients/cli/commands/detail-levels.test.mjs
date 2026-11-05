@@ -52,7 +52,7 @@ describe('--detail level ordering: component --list', () => {
 
   it('brief is names-only (no targets, import hints, or prose descriptions)', () => {
     expect(brief).not.toMatch(/Targets:/);
-    expect(brief).not.toMatch(/\u2190 from/);
+    expect(brief).not.toMatch(/<- from/);
     // Names only — should contain XDS component names but no " — " desc separator.
     expect(brief).toMatch(/Button/);
     expect(brief).not.toMatch(/ \u2014 /);
@@ -66,7 +66,7 @@ describe('--detail level ordering: component --list', () => {
 
   it('full has dense per-entry docs (props, targets, and import hints)', () => {
     expect(full).toMatch(/Targets:/);
-    expect(full).toMatch(/\u2190 from/);
+    expect(full).toMatch(/<- from/);
     // Prop name lists appear in the dense brief-all rendering.
     expect(full).toMatch(/children/);
   });

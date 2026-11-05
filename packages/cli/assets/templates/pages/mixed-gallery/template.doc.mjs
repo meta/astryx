@@ -4,7 +4,16 @@
 export const doc = {
   name: 'Mixed Gallery',
   displayName: 'Mixed Gallery',
-  description: 'Masonry-style image gallery with varying image sizes.',
+  description:
+    'Masonry grid of variable-height tiles that pack against each other instead of cropping to a shared ratio, captioned per tile. Irregular rhythm, unlike the uniform gallery.',
+  keywords: [
+    'photos',
+    'images',
+    'pictures',
+    'portfolio',
+    'masonry',
+    'media wall',
+  ],
   type: 'page',
   isReady: true,
   category: 'Gallery - Mixed',

@@ -5,11 +5,14 @@
  */
 
 import type {
+  AuthoredDocGraphFields,
+  ComponentAccessibilityRequirement,
   ComponentBestPractice,
   HookParamDoc,
   HookReturnDoc,
+  RegistryDocIdentity,
   UsageDoc,
-} from '../base/type';
+} from '../base/type.js';
 
 /**
  * Documentation for a standalone hook's .doc.mjs file.
@@ -20,12 +23,12 @@ import type {
  * Standalone hooks (e.g. useMediaQuery, useFocusTrap, useOverflow) get
  * their own {hookName}.doc.mjs file and use this type.
  *
- * Every hook .doc.mjs must export a single `docs` constant:
+ * Every new hook .doc.mjs default-exports a stamped object:
  *
  *   /\*\* @type {import('@astryxdesign/cli/authoring').HookDoc} \*\/
- *   export const docs = { ... };
+ *   export default { type: 'function', ... };
  */
-export interface HookDoc {
+export interface HookDoc extends AuthoredDocGraphFields {
   /** Doc-kind discriminant for the stamped default-export format
    *  (`export default { type: 'function', ... }`). Optional: legacy
    *  `export const docs = {...}` docs omit it. */
@@ -40,6 +43,8 @@ export interface HookDoc {
   group?: string;
   /** Search keywords for CLI discovery. */
   keywords?: string[];
+  /** Optional stable slug override and prior aliases for registry output. */
+  registry?: RegistryDocIdentity;
   /** Hook parameters or options object fields. */
   params: HookParamDoc[];
   /** Return value documentation. For object returns, list each field.
@@ -63,6 +68,10 @@ export interface HookDoc {
  * Translation overlay for hook documentation.
  */
 export interface HookTranslationDoc {
+  /** Optional exact name from the base doc. Ignored at render time. */
+  name?: string;
+  /** Optional translated displayName. Ignored at render time. */
+  displayName?: string;
   /** Compressed/translated description. */
   description?: string;
   /** Param descriptions keyed by param name. */
@@ -73,5 +82,6 @@ export interface HookTranslationDoc {
   usage?: {
     description?: string;
     bestPractices?: ComponentBestPractice[];
+    accessibility?: ComponentAccessibilityRequirement[];
   };
 }

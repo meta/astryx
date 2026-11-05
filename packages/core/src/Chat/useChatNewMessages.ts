@@ -24,7 +24,7 @@
  */
 
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {observeResize, unobserveResize} from '../utils/sharedResizeObserver';
+import {observeResize} from '../utils/sharedResizeObserver';
 
 // =============================================================================
 // Types
@@ -80,7 +80,7 @@ export function useChatNewMessages({
   const cleanupRef = useRef<(() => void) | null>(null);
 
   const attach = useCallback((el: HTMLElement) => {
-    observeResize(el, () => {
+    const unobserve = observeResize(el, () => {
       onResizeRef.current?.();
 
       const messages = el.getElementsByClassName('astryx-chat-message');
@@ -94,7 +94,7 @@ export function useChatNewMessages({
       }
     });
 
-    cleanupRef.current = () => unobserveResize(el);
+    cleanupRef.current = unobserve;
   }, []);
 
   const detach = useCallback(() => {
@@ -121,7 +121,7 @@ export function useChatNewMessages({
     [attach, detach],
   );
 
-  // Cleanup on unmount
+  // Releases the new-message tracking on unmount.
   useEffect(() => {
     return () => detach();
   }, [detach]);

@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
+import {expect, waitFor} from 'storybook/test';
 import * as stylex from '@stylexjs/stylex';
 import {
   Table,
@@ -860,9 +861,10 @@ const mobileColumns: TableColumn<Employee>[] = [
  * minimums) exceeds the container width. Instead of squishing columns
  * to illegible widths, the table scrolls horizontally.
  *
- * Each column — even those without an explicit `width` — gets a default
- * minimum of 120px, so six columns require at least 720px. In a 320px
- * container, the table becomes horizontally scrollable.
+ * Each column without an explicit `width` keeps an equal flexible share and a
+ * compact 60px readability floor. Six columns therefore require at least 360px:
+ * the 320px container scrolls, while the 480px container fits without needless
+ * overflow.
  */
 export const ResponsiveScroll: Story = {
   render: () => (
@@ -889,7 +891,7 @@ export const ResponsiveScroll: Story = {
       </div>
       <div>
         <p style={{margin: '0 0 8px', fontWeight: 600}}>
-          480px container — same table, more visible before scroll
+          480px container — same table, no unnecessary scroll
         </p>
         <div
           style={{
@@ -922,6 +924,34 @@ export const ResponsiveScroll: Story = {
       </div>
     </div>
   ),
+  play: async ({canvasElement}) => {
+    await document.fonts.ready;
+    await new Promise<void>(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+
+    const wrappers = canvasElement.querySelectorAll<HTMLElement>(
+      '.astryx-table-scroll-wrapper',
+    );
+    expect(wrappers).toHaveLength(3);
+    const [narrow, medium, wide] = Array.from(wrappers);
+
+    await waitFor(() => {
+      expect(narrow).toHaveAttribute('data-scrollable-inline', 'true');
+    });
+    expect(narrow.scrollWidth).toBeGreaterThan(narrow.clientWidth);
+    expect(narrow.querySelector('table')?.style.minWidth).toBe('360px');
+    for (const header of narrow.querySelectorAll('th')) {
+      expect(header.getBoundingClientRect().width).toBeGreaterThanOrEqual(59);
+    }
+
+    for (const fitting of [medium, wide]) {
+      await waitFor(() => {
+        expect(fitting).not.toHaveAttribute('data-scrollable-inline');
+      });
+      expect(fitting.scrollWidth).toBeLessThanOrEqual(fitting.clientWidth + 1);
+    }
+  },
 };
 
 /**

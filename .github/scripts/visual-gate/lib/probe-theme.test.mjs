@@ -10,7 +10,10 @@ describe('unionValues', () => {
   });
 
   it('resolves a named alias, so a doc that says `size: AvatarSize` is still probed', () => {
-    expect(unionValues('AvatarSize', {AvatarSize: ['sm', 'lg']})).toEqual(['sm', 'lg']);
+    expect(unionValues('AvatarSize', {AvatarSize: ['sm', 'lg']})).toEqual([
+      'sm',
+      'lg',
+    ]);
   });
 
   it('ignores a single-literal type — that is a constant, not a variant axis', () => {
@@ -29,7 +32,9 @@ describe('probeColor', () => {
   });
 
   it('gives different selectors different colours, so two targets that collapse into one element show it', () => {
-    expect(probeColor('badge.base')).not.toBe(probeColor('badge.variant:error'));
+    expect(probeColor('badge.base')).not.toBe(
+      probeColor('badge.variant:error'),
+    );
   });
 
   it('honours a pinned lightness, so text stays readable against its own fill', () => {
@@ -40,7 +45,12 @@ describe('probeColor', () => {
 describe('buildProbeComponents', () => {
   const targets = [
     {key: 'badge', component: 'Badge', props: ['variant'], states: []},
-    {key: 'switch', component: 'Switch', props: [], states: ['checked', 'disabled']},
+    {
+      key: 'switch',
+      component: 'Switch',
+      props: [],
+      states: ['checked', 'disabled'],
+    },
   ];
   const props = {Badge: [{name: 'variant', type: "'info' | 'error'"}]};
 
@@ -53,17 +63,35 @@ describe('buildProbeComponents', () => {
 
   it('expands a variant prop into one selector per documented value', () => {
     const {components} = buildProbeComponents(targets, props);
-    expect(Object.keys(components.badge).sort()).toEqual(['base', 'variant:error', 'variant:info']);
+    expect(Object.keys(components.badge).sort()).toEqual([
+      'base',
+      'variant:error',
+      'variant:info',
+    ]);
   });
 
   it('covers every declared state', () => {
     const {components} = buildProbeComponents(targets, props);
-    expect(Object.keys(components.switch).sort()).toEqual(['base', 'checked', 'disabled']);
+    expect(Object.keys(components.switch).sort()).toEqual([
+      'base',
+      'checked',
+      'disabled',
+    ]);
   });
 
   it('paints text and background differently, so an invisible-text regression is still visible', () => {
     const {components} = buildProbeComponents(targets, props);
-    expect(components.badge.base.color).not.toBe(components.badge.base.backgroundColor);
+    expect(components.badge.base.color).not.toBe(
+      components.badge.base.backgroundColor,
+    );
+  });
+
+  it('gives Popover a radius probe so the painted surface ownership is visible', () => {
+    const {components} = buildProbeComponents(
+      [{key: 'popover', component: 'Popover', props: [], states: []}],
+      {},
+    );
+    expect(components.popover.base.borderRadius).toBe('32px');
   });
 
   it('reports a visual prop it cannot enumerate instead of dropping it silently', () => {
@@ -72,7 +100,11 @@ describe('buildProbeComponents', () => {
       {Stack: []},
     );
     expect(coverage.skipped).toEqual([
-      {key: 'stack', prop: 'gap', reason: expect.stringContaining('not a documented prop')},
+      {
+        key: 'stack',
+        prop: 'gap',
+        reason: expect.stringContaining('not a documented prop'),
+      },
     ]);
   });
 
@@ -82,6 +114,8 @@ describe('buildProbeComponents', () => {
   });
 
   it('is deterministic — same docs, same theme, so regeneration is a no-op diff', () => {
-    expect(buildProbeComponents(targets, props)).toEqual(buildProbeComponents(targets, props));
+    expect(buildProbeComponents(targets, props)).toEqual(
+      buildProbeComponents(targets, props),
+    );
   });
 });

@@ -4,13 +4,26 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {useState, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Toast, useToast, ToastViewport} from '@astryxdesign/core/Toast';
-import type {ToastOptions, ToastType} from '@astryxdesign/core/Toast';
+import type {
+  ToastContentRenderProps,
+  ToastOptions,
+  ToastType,
+} from '@astryxdesign/core/Toast';
+import {Theme, defineTheme, useTheme} from '@astryxdesign/core/theme';
 import {Button} from '@astryxdesign/core/Button';
 import {Link} from '@astryxdesign/core/Link';
 import {Card} from '@astryxdesign/core/Card';
 import {Stack} from '@astryxdesign/core/Stack';
+import {Heading} from '@astryxdesign/core/Text';
 import {Dialog} from '@astryxdesign/core/Dialog';
+import {BottomSheet} from '@astryxdesign/core/BottomSheet';
+import {Drawer} from '@astryxdesign/core/Drawer';
 import {Text} from '@astryxdesign/core/Text';
+import {
+  colorVars,
+  radiusVars,
+  spacingVars,
+} from '@astryxdesign/core/theme/tokens.stylex';
 
 const styles = stylex.create({
   narrowLayoutReference: {
@@ -481,6 +494,50 @@ export const MobileRtlSafeAreaPlacement: StoryObj = {
   },
 };
 
+export const MobileSwipeToDismiss: StoryObj = {
+  name: 'Mobile situations / Swipe to dismiss',
+  render: () => (
+    <MobileCanvas
+      title="Swipe dismissal"
+      description="Swipe is an enhancement only; the surface fades as it approaches the edge, and the visible close button remains the simple alternative.">
+      <ToastViewport position="topEnd" isTopLayer={false} maxVisible={2}>
+        <MockCard>
+          <Text type="supporting" color="secondary">
+            Use touch or pen input, or browser touch emulation, to swipe the
+            toast toward its configured block edge: up for top placement, down
+            for bottom placement. This matches the direction each Toast enters
+            and exits, keeping one spatial model for the whole interaction. The
+            gesture claims the touch only after dominant travel matches the
+            dismiss edge, so opposite-direction and horizontal page scrolling
+            remain available. Pen is supported as direct-contact input; mouse
+            dragging is ignored to avoid conflicting with desktop text
+            selection, where the close button remains available.
+          </Text>
+          <ToastReplayControls
+            items={[
+              {
+                key: 'mobile-swipe-dismiss',
+                body: 'Swipe or close me',
+                isAutoHide: false,
+              },
+            ]}
+          />
+        </MockCard>
+      </ToastViewport>
+    </MobileCanvas>
+  ),
+  parameters: {
+    ...mobileStoryParameters,
+    docs: {
+      story: {
+        ...mobileStoryParameters.docs.story,
+        description:
+          'Interactive vertical edge swipe-to-dismiss example using real ToastViewport behavior. The vertical axis intentionally matches the Toast placement and motion model: top Toasts leave upward and bottom Toasts leave downward. A non-passive touchmove handoff claims only dominant travel toward that edge; opposite-direction and horizontal page scrolling remain available. Pen is supported as direct-contact input, while mouse drag is excluded to avoid conflicting with desktop selection; the close button and F6 keyboard access remain available.',
+      },
+    },
+  },
+};
+
 export const MobileMotionEdgeAwareEntrance: StoryObj = {
   name: 'Mobile situations / Motion edge-aware entrance',
   render: () => (
@@ -648,14 +705,38 @@ export const ToastOverDialog: StoryObj = {
   },
 };
 
+export const AppToastOverDialog: StoryObj = {
+  render: function AppToastOverDialogStory() {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <ToastViewport>
+        <Stack gap={2}>
+          <Button label="Open dialog" onClick={() => setIsOpen(true)} />
+          <Dialog
+            isOpen={isOpen}
+            onOpenChange={() => setIsOpen(false)}
+            aria-label="Edit item">
+            <DialogToastContent onClose={() => setIsOpen(false)} />
+          </Dialog>
+        </Stack>
+      </ToastViewport>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "The app's own `ToastViewport` and no viewport in the dialog: while the dialog is open the viewport moves into it, so toasts fired from inside paint above the overlay and stay clickable.",
+      },
+    },
+  },
+};
+
 function DialogToastContent({onClose}: {onClose: () => void}) {
   const toast = useToast();
   return (
     <Stack gap={3}>
-      <p>
-        This dialog has its own toast viewport. Toasts fired here render inside
-        the dialog, above its overlay.
-      </p>
+      <p>Toasts fired here render inside the dialog, above its overlay.</p>
       <Stack direction="horizontal" gap={2} wrap="wrap">
         <Button label="Close" variant="secondary" onClick={onClose} />
         <Button
@@ -673,5 +754,505 @@ function DialogToastContent({onClose}: {onClose: () => void}) {
         />
       </Stack>
     </Stack>
+  );
+}
+
+export const AppToastOverBottomSheet: StoryObj = {
+  render: function AppToastOverBottomSheetStory() {
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    return (
+      // Toasts at the top, clear of the sheet rising from the bottom.
+      <ToastViewport position="topEnd">
+        <Stack gap={2}>
+          <SheetToastContent openLabel="Open sheet" />
+          <Button label="Open dialog" onClick={() => setIsDialogOpen(true)} />
+          <Dialog
+            isOpen={isDialogOpen}
+            onOpenChange={() => setIsDialogOpen(false)}
+            aria-label="Edit item">
+            <SheetToastContent openLabel="Open sheet from the dialog" />
+          </Dialog>
+        </Stack>
+      </ToastViewport>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "The app's own `ToastViewport` and a `BottomSheet`, opened on its own or from a dialog: while the sheet is open the viewport moves into it, so a toast fired from the sheet paints above it and its action stays clickable.",
+      },
+    },
+  },
+};
+
+export const AppToastOverDrawer: StoryObj = {
+  render: function AppToastOverDrawerStory() {
+    const [isOpen, setIsOpen] = useState(false);
+    const [status, setStatus] = useState('The candidate is in Screening.');
+    const toast = useToast();
+    return (
+      <ToastViewport>
+        <Button label="Open candidate" onClick={() => setIsOpen(true)} />
+        <Drawer isOpen={isOpen} onOpenChange={setIsOpen} label="Candidate">
+          <Stack gap={3}>
+            <p>{status}</p>
+            <Button
+              label="Move to Interview"
+              onClick={() => {
+                setStatus('The candidate is in Interview.');
+                toast({
+                  body: 'Moved to Interview',
+                  isAutoHide: false,
+                  endContent: (
+                    <Button
+                      label="Undo"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() =>
+                        setStatus('The candidate is back in Screening.')
+                      }
+                    />
+                  ),
+                });
+              }}
+            />
+          </Stack>
+        </Drawer>
+      </ToastViewport>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "The app's own `ToastViewport` and a modal `Drawer`: while the drawer is open the viewport moves into it, so a toast fired from the drawer paints above it and its action stays clickable and reachable with Tab.",
+      },
+    },
+  },
+};
+
+export const AppToastOverNonModalDrawer: StoryObj = {
+  render: function AppToastOverNonModalDrawerStory() {
+    const [isOpen, setIsOpen] = useState(false);
+    const [status, setStatus] = useState('The filters are saved.');
+    const toast = useToast();
+    return (
+      <ToastViewport>
+        <Stack gap={2}>
+          <p>{status}</p>
+          <Button
+            label="Save filters"
+            onClick={() =>
+              toast({
+                body: 'Filters saved',
+                isAutoHide: false,
+                endContent: (
+                  <Button
+                    label="Undo"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setStatus('The save is undone.')}
+                  />
+                ),
+              })
+            }
+          />
+          <Button label="Open filters" onClick={() => setIsOpen(true)} />
+        </Stack>
+        <Drawer
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          hasScrim={false}
+          label="Filters">
+          <p>Filter options</p>
+        </Drawer>
+      </ToastViewport>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "The app's own `ToastViewport` and a `Drawer` without its scrim: a toast shown before the drawer opens stays above it, so its action stays clickable while the drawer covers its corner.",
+      },
+    },
+  },
+};
+
+function SheetToastContent({openLabel}: {openLabel: string}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [status, setStatus] = useState('The item is in your inbox.');
+  const toast = useToast();
+  return (
+    <>
+      <Button label={openLabel} onClick={() => setIsOpen(true)} />
+      <BottomSheet
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        label="Item actions">
+        <Stack gap={3}>
+          <p>{status}</p>
+          <Button
+            label="Archive"
+            onClick={() => {
+              setStatus('The item is archived.');
+              toast({
+                body: 'Item archived',
+                isAutoHide: false,
+                endContent: (
+                  <Button
+                    label="Undo"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setStatus('The item is back in your inbox.')}
+                  />
+                ),
+              });
+            }}
+          />
+        </Stack>
+      </BottomSheet>
+    </>
+  );
+}
+
+// =============================================================================
+// Theming
+// =============================================================================
+
+/**
+ * `toast` is the card — the surface the toast paints. `base` restyles every
+ * toast; `type:error` restyles just the error one, because `type` is the
+ * toast's visual prop and the card renders it as a `.error` class.
+ *
+ * That one target covers more of the toast than it looks like it should:
+ *
+ * - **Inherited properties reach the content.** Font, size and letter-spacing
+ *   set on `toast` cascade into the body and `endContent`. There is no
+ *   `toast-body` target and none is needed.
+ * - **Text colour looks after itself.** A toast measures the surface it just
+ *   painted and picks the side that reads on it, so restyling the background
+ *   is enough — the body, the dismiss glyph and `endContent` follow. Below,
+ *   the cream card gets dark text and the deep red one light text, from
+ *   nothing but the two `backgroundColor` rules.
+ *
+ * `onDark` / `onLight` are for overriding that choice, not for making it. They
+ * apply only when the surface actually resolves to that side, so a toast whose
+ * ambient text already reads gets neither.
+ *
+ * Wrap the viewport, not just the buttons: theme CSS is `@scope`d and the
+ * toast renders inside the viewport.
+ */
+const brandToastTheme = defineTheme({
+  name: 'toast-brand-demo',
+  components: {
+    toast: {
+      base: {
+        backgroundColor: '#FFF4D6',
+        borderRadius: 'var(--radius-full)',
+        paddingInline: 'var(--spacing-6)',
+        boxShadow: 'var(--shadow-high)',
+        fontFamily: 'var(--font-family-code)',
+      },
+      'type:error': {
+        backgroundColor: '#5C0A18',
+      },
+    },
+  },
+});
+
+/**
+ * Default and themed, side by side, in both types. These are inline `Toast`
+ * elements rather than fired ones so both states stay on screen together;
+ * `ThemedToastLive` shows the same theme driving real `useToast()` calls.
+ */
+export const ThemedToast: StoryObj = {
+  render: function ThemedToastStory() {
+    return (
+      <Stack direction="horizontal" gap={4} wrap="wrap">
+        <ToastSpecimens label="Default" />
+        <BrandToastScope>
+          <ToastSpecimens label="brandToastTheme" />
+        </BrandToastScope>
+      </Stack>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Pill radius, wider inline padding, the cream surface and the ' +
+          'monospace body all come from `components.toast.base`; the deep red ' +
+          'is `type:error`. Neither rule sets a text colour.',
+      },
+    },
+  },
+};
+
+/**
+ * The copyable shape: wrap the viewport in the theme and fire toasts normally.
+ */
+export const ThemedToastLive: StoryObj = {
+  render: function ThemedToastLiveStory() {
+    return (
+      <BrandToastScope>
+        <ToastViewport>
+          <ThemedToastTriggers />
+        </ToastViewport>
+      </BrandToastScope>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Same theme, real toasts. The viewport is inside `Theme`, so the ' +
+          'scoped theme CSS reaches the toasts it renders.',
+      },
+    },
+  },
+};
+
+/**
+ * An app names its colour mode once, at its root `Theme`. A nested `Theme`
+ * defaults to `mode="system"`, which follows the OS rather than the mode the
+ * toolbar picked — and Toast reads that mode to choose its inverted-surface
+ * tokens, so an unthreaded nested theme renders dark text on a dark card.
+ */
+function BrandToastScope({children}: {children: ReactNode}) {
+  const {mode} = useTheme();
+  return (
+    <Theme theme={brandToastTheme} mode={mode}>
+      {children}
+    </Theme>
+  );
+}
+
+function ToastSpecimens({label}: {label: string}) {
+  return (
+    <Stack direction="vertical" gap={2}>
+      <Heading level={4}>{label}</Heading>
+      <Toast
+        type="info"
+        body="Your changes have been saved."
+        isAutoHide={false}
+        autoHideDuration={5000}
+        onDismiss={noop}
+      />
+      <Toast
+        type="error"
+        body="Could not reach the server."
+        isAutoHide={false}
+        autoHideDuration={5000}
+        onDismiss={noop}
+      />
+    </Stack>
+  );
+}
+
+function ThemedToastTriggers() {
+  const toast = useToast();
+  return (
+    <Stack direction="horizontal" gap={2}>
+      <Button
+        label="Themed info toast"
+        onClick={() => toast({body: 'Your changes have been saved.'})}
+      />
+      <Button
+        label="Themed error toast"
+        variant="destructive"
+        onClick={() =>
+          toast({body: 'Could not reach the server.', type: 'error'})
+        }
+      />
+    </Stack>
+  );
+}
+
+function noop() {}
+
+// =============================================================================
+// Custom content (renderContent)
+// =============================================================================
+
+const customContentStyles = stylex.create({
+  row: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: spacingVars['--spacing-3'],
+    width: '100%',
+  },
+  stripe: {
+    alignSelf: 'stretch',
+    width: 4,
+    borderRadius: radiusVars['--radius-full'],
+    flexShrink: 0,
+  },
+  stripeInfo: {backgroundColor: colorVars['--color-accent']},
+  stripeError: {backgroundColor: colorVars['--color-text-red']},
+  text: {flex: 1, minWidth: 0},
+});
+
+function ProductToastContent({
+  type,
+  body,
+  endContent,
+  dismiss,
+}: ToastContentRenderProps) {
+  return (
+    <div {...stylex.props(customContentStyles.row)}>
+      <div
+        {...stylex.props(
+          customContentStyles.stripe,
+          type === 'error'
+            ? customContentStyles.stripeError
+            : customContentStyles.stripeInfo,
+        )}
+      />
+      <div {...stylex.props(customContentStyles.text)}>{body}</div>
+      {endContent}
+      <Button
+        label="Dismiss custom toast"
+        variant="ghost"
+        size="sm"
+        onClick={dismiss}
+      />
+    </div>
+  );
+}
+
+function ContentWithoutDismiss({type, body}: ToastContentRenderProps) {
+  return (
+    <div {...stylex.props(customContentStyles.row)}>
+      <div
+        {...stylex.props(
+          customContentStyles.stripe,
+          type === 'error'
+            ? customContentStyles.stripeError
+            : customContentStyles.stripeInfo,
+        )}
+      />
+      <div {...stylex.props(customContentStyles.text)}>{body}</div>
+    </div>
+  );
+}
+
+const renderProductContent = (toast: ToastContentRenderProps) => (
+  <ProductToastContent {...toast} />
+);
+
+export const CustomContent: StoryObj = {
+  name: 'Custom content (renderContent)',
+  render: function CustomContentStory() {
+    const toast = useToast();
+    return (
+      <Stack direction="horizontal" gap={2} wrap="wrap">
+        <Button
+          label="Show"
+          onClick={() => {
+            toast({
+              body: 'Your changes have been saved.',
+              renderContent: renderProductContent,
+            });
+          }}
+        />
+        <Button
+          label="With an action"
+          variant="secondary"
+          onClick={() => {
+            toast({
+              body: 'Row deleted.',
+              endContent: <Button variant="ghost" size="sm" label="Undo" />,
+              renderContent: renderProductContent,
+            });
+          }}
+        />
+        <Button
+          label="Error"
+          variant="destructive"
+          onClick={() => {
+            toast({
+              body: 'Could not reach the server.',
+              type: 'error',
+              renderContent: renderProductContent,
+            });
+          }}
+        />
+        <Button
+          label="Layout without a close"
+          variant="ghost"
+          onClick={() => {
+            toast({
+              body: 'This layout relies on auto-hide.',
+              renderContent: toastProps => (
+                <ContentWithoutDismiss {...toastProps} />
+              ),
+            });
+          }}
+        />
+        <Button
+          label="Without renderContent"
+          variant="ghost"
+          onClick={() => {
+            toast({body: 'A toast from code that knows nothing about it.'});
+          }}
+        />
+      </Stack>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "`renderContent` replaces the content of one toast's card and receives a `dismiss` callback. The custom layout composes its own Astryx `Button`; a layout without a close is left as-is and can rely on auto-hide. The last button omits `renderContent`, showing the ordinary Astryx layout and dismiss control.",
+      },
+    },
+  },
+};
+
+// =============================================================================
+// Logical placement
+// =============================================================================
+
+/**
+ * The viewport is rendered IN THE STORY TREE, not through the provider-less
+ * fallback the other stories use, and `isTopLayer` keeps its default.
+ *
+ * Both details are load-bearing for the RTL audit:
+ *
+ * - the fallback container is appended to `<body>`, outside the decorator that
+ *   sets `dir`, so a toast raised there can never flip and reads as a false
+ *   not-RTL;
+ * - `isTopLayer={false}` drops the `popover` attribute, and with it the UA
+ *   `width: fit-content` this placement has to survive — a story without the
+ *   popover would pass whether or not the viewport can span the inline axis.
+ */
+export const LogicalPlacement: StoryObj = {
+  name: 'Logical placement follows direction',
+  render: function LogicalPlacementStory() {
+    return (
+      <ToastViewport position="bottomEnd" maxVisible={1}>
+        <LogicalPlacementTrigger />
+      </ToastViewport>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          '`bottomEnd` is a logical placement: the toast sits on the inline END edge, which is the right in LTR and the left in RTL. The viewport spans the inline axis and aligns the card within itself, so the card follows the document direction with no per-direction styling.',
+      },
+    },
+  },
+};
+
+function LogicalPlacementTrigger() {
+  const toast = useToast();
+  return (
+    <Button
+      label="Show toast"
+      onClick={() => toast({body: 'Placement follows the document direction.'})}
+    />
   );
 }

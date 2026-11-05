@@ -4,11 +4,12 @@
 
 /**
  * @file Timestamp.tsx
- * @input Uses React, Intl.DateTimeFormat, Text
+ * @input Uses React, Text, provider locale and calendar, and Timestamp formatters
  * @output Exports Timestamp component and related types
  * @position Core implementation; renders formatted timestamps
  *
  * SYNC: When modified, update these files to stay in sync:
+ * - /packages/core/src/Timestamp/formatRelativeTime.ts
  * - /packages/core/src/Timestamp/Timestamp.doc.mjs
  * - /packages/core/src/Timestamp/Timestamp.test.tsx
  * - /packages/core/src/Timestamp/index.ts
@@ -16,17 +17,25 @@
  * - /packages/cli/assets/templates/blocks/components/Timestamp/ (showcase blocks)
  */
 
-import {lazy, Suspense, useEffect, useRef, useState} from 'react';
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Text} from '../Text';
 import type {TextType, TextSize, TextColor, TextWeight} from '../theme/types';
 import {mergeProps} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
-import {useTranslator} from '../i18n';
 import {useLocale} from '../i18n/useLocale';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {formatInstant} from './formatInstant';
+import {formatRelativeTime} from './formatRelativeTime';
 import {formatTooltipLines} from './tooltipEntries';
 import type {
   TimestampTooltipEntry,
@@ -34,6 +43,13 @@ import type {
 } from './tooltipEntries';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Timestamp/Timestamp.generated';
+
+registerEnglishFallback(english);
 // Load the overlay lazily so a card-less Timestamp — the default — never
 // bundles HoverCard or the copy affordance's Icon/IconButton. Mirrors the code
 // split the read-only Tooltip path used before it.
@@ -65,8 +81,8 @@ export interface TimestampProps extends BaseProps<HTMLTimeElement> {
   /**
    * Display format.
    * - `'relative'`: "2 hours ago", "yesterday", "now"
-   * - `'relative_short'`: "2h ago", "1d ago", "now" — the same tiers as
-   *   `'relative'` with abbreviated units (s/m/h/d/mo/y), for compact,
+   * - `'relative_short'`: "2h ago", "1d ago", "now" in English — the
+   *   locale's native narrow relative-time pattern, for compact,
    *   space-constrained surfaces
    * - `'auto'`: Relative for recent times, `date_time` for older
    * - `'date'`: "Mar 21, 2025"
@@ -185,23 +201,9 @@ const styles = stylex.create({
 const MINUTE = 60;
 const HOUR = 3600;
 const DAY = 86400;
-const MONTH = 30 * DAY;
-const YEAR = 365 * DAY;
 
 /** Default auto threshold: 7 days in seconds */
 const DEFAULT_AUTO_THRESHOLD = 7 * DAY;
-
-/**
- * Tolerance (in seconds) for treating a *future* timestamp as the present.
- * A value only a handful of seconds ahead of our reference clock is almost
- * always clock skew — the displayed `now` lagging the real clock, or the value
- * being produced on a slightly faster clock — not a genuine future event, so
- * it reads as "now" rather than a confusing "in a few seconds". The future
- * side gets a wider window than the past (which only needs to absorb the
- * sub-second render-time lag) because future drift is far more likely to be
- * skew than real.
- */
-const FUTURE_SKEW_TOLERANCE = 30;
 
 function parseValue(value: string | number): Date {
   if (typeof value === 'number') {
@@ -210,140 +212,6 @@ function parseValue(value: string | number): Date {
     return new Date(value < 1e12 ? value * 1000 : value);
   }
   return new Date(value);
-}
-
-function getRelativeTimeString(date: Date, now: Date): string {
-  const diffSeconds = Math.round((now.getTime() - date.getTime()) / 1000);
-
-  // Treat values at (or a hair before/after) the present as "now". The
-  // internal `now` reference is captured at render time, so it can lag the
-  // real clock; a value equal to "right now" can land a fraction of a second
-  // in the future and round to a small negative delta. Without this clamp,
-  // such values fall into the future branch and render "in a few seconds".
-  if (Math.abs(diffSeconds) < 10) {
-    return 'now';
-  }
-
-  if (diffSeconds < 0) {
-    // Future dates
-    const absDiff = Math.abs(diffSeconds);
-    // A value only a few seconds ahead of our clock is almost always skew, not
-    // a genuine future event — render it as the present rather than a
-    // confusing "in a few seconds". Wider than the past window above on
-    // purpose (see FUTURE_SKEW_TOLERANCE).
-    if (absDiff <= FUTURE_SKEW_TOLERANCE) {
-      return 'now';
-    }
-    if (absDiff < MINUTE) {
-      return 'in a few seconds';
-    }
-    if (absDiff < HOUR) {
-      const mins = Math.floor(absDiff / MINUTE);
-      return `in ${mins} ${mins === 1 ? 'minute' : 'minutes'}`;
-    }
-    if (absDiff < DAY) {
-      const hours = Math.floor(absDiff / HOUR);
-      return `in ${hours} ${hours === 1 ? 'hour' : 'hours'}`;
-    }
-    if (absDiff < MONTH) {
-      const days = Math.floor(absDiff / DAY);
-      return `in ${days} ${days === 1 ? 'day' : 'days'}`;
-    }
-    if (absDiff < YEAR) {
-      const months = Math.floor(absDiff / MONTH);
-      return `in ${months} ${months === 1 ? 'month' : 'months'}`;
-    }
-    const years = Math.floor(absDiff / YEAR);
-    return `in ${years} ${years === 1 ? 'year' : 'years'}`;
-  }
-
-  if (diffSeconds < MINUTE) {
-    return `${diffSeconds} seconds ago`;
-  }
-  if (diffSeconds < HOUR) {
-    const mins = Math.floor(diffSeconds / MINUTE);
-    return `${mins} ${mins === 1 ? 'minute' : 'minutes'} ago`;
-  }
-  if (diffSeconds < DAY) {
-    const hours = Math.floor(diffSeconds / HOUR);
-    return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
-  }
-  if (diffSeconds < 2 * DAY) {
-    return 'yesterday';
-  }
-  if (diffSeconds < MONTH) {
-    const days = Math.floor(diffSeconds / DAY);
-    return `${days} days ago`;
-  }
-  if (diffSeconds < YEAR) {
-    const months = Math.floor(diffSeconds / MONTH);
-    return `${months} ${months === 1 ? 'month' : 'months'} ago`;
-  }
-  const years = Math.floor(diffSeconds / YEAR);
-  return `${years} ${years === 1 ? 'year' : 'years'} ago`;
-}
-
-/**
- * The compact sibling of `getRelativeTimeString`: the same tier boundaries and
- * present/future-skew handling, rendered with abbreviated units for
- * space-constrained surfaces (chat metadata, dense tables, chips).
- *
- * Units follow the common compact convention (and the Microsoft Style Guide):
- * `s` seconds, `m` minutes, `h` hours, `d` days, `mo` months, `y` years.
- * Months use `mo` — not `m` — because `m` already means minutes; a bare `m`
- * for months would be ambiguous. The value is always numeric (no "yesterday"
- * idiom, which belongs to the long form) so the short form stays predictable
- * and easy to scan. The `ago` / `in` affixes are kept so direction stays
- * unambiguous at a glance.
- */
-function getRelativeTimeShortString(date: Date, now: Date): string {
-  const diffSeconds = Math.round((now.getTime() - date.getTime()) / 1000);
-
-  // Present clamp — identical to the long form (see getRelativeTimeString).
-  if (Math.abs(diffSeconds) < 10) {
-    return 'now';
-  }
-
-  if (diffSeconds < 0) {
-    // Future dates.
-    const absDiff = Math.abs(diffSeconds);
-    if (absDiff <= FUTURE_SKEW_TOLERANCE) {
-      return 'now';
-    }
-    if (absDiff < MINUTE) {
-      return `in ${absDiff}s`;
-    }
-    if (absDiff < HOUR) {
-      return `in ${Math.floor(absDiff / MINUTE)}m`;
-    }
-    if (absDiff < DAY) {
-      return `in ${Math.floor(absDiff / HOUR)}h`;
-    }
-    if (absDiff < MONTH) {
-      return `in ${Math.floor(absDiff / DAY)}d`;
-    }
-    if (absDiff < YEAR) {
-      return `in ${Math.floor(absDiff / MONTH)}mo`;
-    }
-    return `in ${Math.floor(absDiff / YEAR)}y`;
-  }
-
-  if (diffSeconds < MINUTE) {
-    return `${diffSeconds}s ago`;
-  }
-  if (diffSeconds < HOUR) {
-    return `${Math.floor(diffSeconds / MINUTE)}m ago`;
-  }
-  if (diffSeconds < DAY) {
-    return `${Math.floor(diffSeconds / HOUR)}h ago`;
-  }
-  if (diffSeconds < MONTH) {
-    return `${Math.floor(diffSeconds / DAY)}d ago`;
-  }
-  if (diffSeconds < YEAR) {
-    return `${Math.floor(diffSeconds / MONTH)}mo ago`;
-  }
-  return `${Math.floor(diffSeconds / YEAR)}y ago`;
 }
 
 /** Returns the interval (in ms) at which a relative timestamp should update. */
@@ -360,6 +228,13 @@ function getLiveInterval(diffSeconds: number): number {
   } // every minute
   return 300_000; // every 5 minutes
 }
+
+// Whether this render may read the current time. Server renders (including
+// static prerenders) and the hydration pass read `false`, so the markup never
+// depends on when it was rendered; client renders read `true`.
+const subscribeToNothing = () => () => {};
+const canReadClockOnClient = () => true;
+const canReadClockOnServer = () => false;
 
 /** Whether a format is non-relative (i.e. shows a fixed date/time). */
 function isAbsoluteFormat(
@@ -421,11 +296,34 @@ export function Timestamp({
   'data-testid': testId,
   ...rest
 }: TimestampProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'Timestamp');
   const timeRef = useRef<HTMLTimeElement>(null);
   const mergedTimeRef = useMergedRefs(ref, timeRef);
-  const [now, setNow] = useState(() => new Date());
+  // Only relative and auto formats depend on the current time. Absolute
+  // formats never read the clock, so they render identically on the server,
+  // in a static prerender, and on the client. A clock-dependent format reads
+  // it on the client only: server renders and the hydration pass show the
+  // full date and time in UTC, and the client switches to the relative phrase
+  // right after hydration.
+  const needsClock = !isAbsoluteFormat(format);
+  const canReadClock = useSyncExternalStore(
+    subscribeToNothing,
+    canReadClockOnClient,
+    canReadClockOnServer,
+  );
+  const [now, setNow] = useState<Date | null>(() =>
+    needsClock && canReadClock ? new Date() : null,
+  );
+  // Read the clock during render once it may be read: after hydration (the
+  // store re-renders with its client value) and when `format` switches from
+  // an absolute value to a clock-dependent one, so the placeholder never
+  // commits on the client.
+  if (needsClock && canReadClock && now === null) {
+    // eslint-disable-next-line @eslint-react/purity -- seeds clock state once, like the initializer; never runs on the server or while hydrating
+    setNow(new Date());
+  }
 
   const date = parseValue(value);
   // An unparseable value (a malformed date string, or a NaN timestamp from
@@ -435,25 +333,40 @@ export function Timestamp({
   const isValidDate = !Number.isNaN(date.getTime());
   const isoString = isValidDate ? date.toISOString() : '';
 
-  // Determine effective format
-  const diffSeconds = Math.round((now.getTime() - date.getTime()) / 1000);
-  const effectiveFormat: TimestampFormat =
-    format === 'auto'
+  // Determine effective format. Until the clock is read, a clock-dependent
+  // format renders as the full date and time.
+  const isClockPending = needsClock && now === null;
+  const diffSeconds =
+    now === null ? 0 : Math.round((now.getTime() - date.getTime()) / 1000);
+  const effectiveFormat: TimestampFormat = isClockPending
+    ? 'date_time'
+    : format === 'auto'
       ? Math.abs(diffSeconds) <= autoThreshold
         ? 'relative'
         : 'date_time'
       : format;
 
-  // Format the display text. No time zone is passed: the visible text always
-  // reads in the viewer's own zone, and only the tooltip names others.
+  // Format the display text in the viewer's own zone; only the tooltip names
+  // others. The one exception is the pre-hydration placeholder, written in
+  // UTC with its label so every zone produces the same markup.
   const displayText = !isValidDate
     ? ''
     : effectiveFormat === 'relative'
-      ? getRelativeTimeString(date, now)
+      ? formatRelativeTime(date, now ?? date, locale, 'long')
       : effectiveFormat === 'relative_short'
-        ? getRelativeTimeShortString(date, now)
+        ? formatRelativeTime(date, now ?? date, locale, 'narrow')
         : isAbsoluteFormat(effectiveFormat)
-          ? formatInstant(date, effectiveFormat, locale, {isTimezoneShown})
+          ? formatInstant(
+              date,
+              effectiveFormat,
+              locale,
+              // The placeholder before hydration is Gregorian and in UTC, with
+              // its zone. The server and the client then write the same text,
+              // with or without Temporal.
+              isClockPending
+                ? {timeZone: 'UTC', isTimezoneShown: true}
+                : {isTimezoneShown, calendar},
+            )
           : '';
 
   // Full absolute text for the tooltip (visible — keeps the compact timezone
@@ -461,13 +374,16 @@ export function Timestamp({
   // out in full: abbreviations like "PST" or "GMT+2" are unexpanded
   // abbreviations to a screen-reader user (WCAG 3.1.4).
   const fullAbsoluteText = isValidDate
-    ? formatInstant(date, 'full', locale)
+    ? formatInstant(date, 'full', locale, {calendar})
     : '';
   const ariaLabelText = isValidDate
-    ? formatInstant(date, 'full', locale, {timeZoneNameStyle: 'long'})
+    ? formatInstant(date, 'full', locale, {
+        timeZoneNameStyle: 'long',
+        calendar,
+      })
     : '';
 
-  // Live updates
+  // Syncs the relative time with an interval timer while the timestamp is live.
   useEffect(() => {
     if (!isLive || !isValidDate || !isRelativeFormat(effectiveFormat)) {
       return;
@@ -513,7 +429,7 @@ export function Timestamp({
   const lines: ReadonlyArray<TimestampTooltipLine> =
     entries === undefined
       ? [{value: fullAbsoluteText, isCopyable: true}]
-      : formatTooltipLines(date, entries, locale);
+      : formatTooltipLines(date, entries, locale, calendar);
 
   const timestampProps = mergeProps(
     themeProps('timestamp', {format: effectiveFormat}),
@@ -538,7 +454,10 @@ export function Timestamp({
         // before rendering — but keep the guard local: an empty aria-label
         // must be omitted entirely (not rendered as aria-label="") so AT
         // falls back to reading the visible <time> content.
-        {...(isRelativeFormat(effectiveFormat) && ariaLabelText !== ''
+        // A caller's own name wins (`component:Timestamp` FR5).
+        {...(isRelativeFormat(effectiveFormat) &&
+        ariaLabelText !== '' &&
+        rest['aria-label'] == null
           ? {'aria-label': ariaLabelText}
           : {})}
         // The hover card is anchored here with focusTrigger="always", which
@@ -549,7 +468,8 @@ export function Timestamp({
         // gratuitous tab stops otherwise. The card carries its own
         // dashed-underline hover indication as the affordance, so the anchor
         // needs no separate focus outline.
-        {...(showTooltip ? {tabIndex: 0} : {})}>
+        // A caller's own tabIndex wins (`component:Timestamp` FR9).
+        {...(showTooltip && rest.tabIndex == null ? {tabIndex: 0} : {})}>
         {displayText}
       </time>
     </Text>

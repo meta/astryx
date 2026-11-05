@@ -7,10 +7,10 @@
  *
  * Zoom is aspect-ratio-normalized: both axes scale by the same visual
  * factor regardless of their domain ranges. Reset button restores
- * the initial domains captured on mount.
+ * the domains of the first render.
  */
 
-import {type CSSProperties, useCallback, useRef, useEffect} from 'react';
+import {type CSSProperties, useCallback, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {useChart} from './ChartContext';
@@ -19,10 +19,7 @@ import type {ScaleLinear} from 'd3-scale';
 
 /** Toolbar position relative to the chart */
 export type ZoomToolbarPosition =
-  | 'top-right'
-  | 'top-left'
-  | 'bottom-right'
-  | 'bottom-left';
+  'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
 
 export interface ChartZoomProps {
   onXDomainChange?: (domain: [number, number]) => void;
@@ -104,22 +101,15 @@ export function ChartZoom({
 }: ChartZoomProps) {
   const {width, height, xScale, yScale, svgRef} = useChart();
 
-  // Capture initial domains on mount for reset
-  const initialDomainsRef = useRef<{
+  const [initialDomains] = useState<{
     x: [number, number] | null;
     y: [number, number];
-  } | null>(null);
-
-  useEffect(() => {
-    if (initialDomainsRef.current) {
-      return;
-    } // only capture once
-    const xDomain = isBandScale(xScale)
+  }>(() => ({
+    x: isBandScale(xScale)
       ? null
-      : ((xScale as ScaleLinear<number, number>).domain() as [number, number]);
-    const yDomain = yScale.domain() as [number, number];
-    initialDomainsRef.current = {x: xDomain, y: yDomain};
-  }, [xScale, yScale]);
+      : ((xScale as ScaleLinear<number, number>).domain() as [number, number]),
+    y: yScale.domain() as [number, number],
+  }));
 
   const dragRef = useRef<{
     startX: number;
@@ -306,15 +296,11 @@ export function ChartZoom({
   }, []);
 
   const handleReset = useCallback(() => {
-    const init = initialDomainsRef.current;
-    if (!init) {
-      return;
+    if (initialDomains.x) {
+      onXDomainChange?.(initialDomains.x);
     }
-    if (init.x) {
-      onXDomainChange?.(init.x);
-    }
-    onYDomainChange?.(init.y);
-  }, [onXDomainChange, onYDomainChange]);
+    onYDomainChange?.(initialDomains.y);
+  }, [initialDomains, onXDomainChange, onYDomainChange]);
 
   // Toolbar portal target
   const portalTarget = svgRef.current?.parentElement;

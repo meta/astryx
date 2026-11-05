@@ -1,218 +1,162 @@
-# Visual gate
+# Storybook visual regression
 
-Screenshots every theming target the design system claims to support, compares
-them against an accepted baseline, and answers one question before a release
-goes out: **did anything change on screen, and did we mean it?**
+Every visual-regression test uses the shared Storybook framework and
+`.github/workflows/ci.yml` → `pr-visual` (**Stable visual regression**). It runs
+in `release-check`, which `main-heavy-lanes.yml` dispatches after merges to
+`main` (a burst is checked once, at its newest commit) and the release gate dispatches before a cut. A pull request runs its full
+check only with the `ci:run-visual` label; without it, `pr-visual` runs its
+default touched check, which compares only the touched Core components that
+have an accepted baseline shot and never widens (AST-030 FR12, DEC-7).
+[AST-030 FR12](../../../docs/specs/AST-030/spec.md) owns this requirement.
+Add coverage to that owner, not to a new component, package, theme, scheduled,
+post-CI, or post-merge workflow.
 
-Not part of PR CI — it costs minutes, not seconds. It runs once a day
-(`.github/workflows/release-gate.yml`, 06:00 PT) ahead of the 08:00 PT release
-cut, and on demand. The two-hour margin is for the a11y leg, which audits every
-story and has taken ~57 minutes; the visual leg is ~15.
+## Explicit release checks
 
-## Why it exists
+Dispatch **CI** from `main` with `operation=release-check`. The event SHA is
+immutable for the run; the request and final `release-check` join reject a
+non-main ref or a SHA that is not an ancestor of current main. Later fast-forward
+commits do not invalidate an earlier green run; a rewrite or divergence that
+removes the checked SHA requires a new dispatch.
 
-A theme binds to components through theming targets: a stable class plus the
-variant and state data on it. `astryx theme build` validates that an override
-KEY exists, so a renamed target is caught at build time. Nothing catches an
-override that silently stops _painting_ — the element moves behind a wrapper,
-a state stops being reflected, the cascade order shifts. The theme still
-compiles, the component still renders, and the theme quietly stops applying.
-That failure is only visible in pixels.
+The existing Storybook build feeds the same **Stable visual regression**
+(`pr-visual`), `pr-a11y`, and `pr-rtl` owners. Release scope is the closed full
+stable visual plan, unfiltered accessibility roster, and all five unfiltered RTL
+package shards. No changed-file, focused-component, or smoke scope applies.
+`release-check` requires every owner and setup job to succeed; failed, missing,
+cancelled, and skipped work is not release evidence.
 
-## The three outcomes
+This changes when and where release evidence runs, not finding policy: visual
+`changed` still requires review, a11y fails on new baseline violations, and RTL
+findings remain soft while report completeness is mandatory. The dispatch does
+not capture baseline candidates, promote baselines, or publish previews. `visual-release-report` holds
+the visual evidence for that exact run/attempt.
 
-| status    | meaning                                                         | what to do                              |
-| --------- | --------------------------------------------------------------- | --------------------------------------- |
-| `pass`    | nothing moved                                                   | ship                                    |
-| `changed` | pixels moved somewhere                                          | look at the report and decide, per shot |
-| `failed`  | a shot could not be captured, or the baseline is not comparable | fix the gate before trusting it         |
+PR accessibility is intentionally smaller. With `ci:run-a11y` it runs an
+explicit changed-component axe scope (including grouped-folder owners), plus
+the fast modal-close, theme-var, and story-play guards. Without the label, the
+default touched-components check audits only the touched components' stories,
+without the guards, and runs up to four browser accessibility spec files the
+pull request adds or modifies (scoped and `always` specs; `audit` and
+`release-only` specs wait). Empty/shared scope never falls back to all stories, and
+missing or approximate analysis fails rather than granting an empty scope.
+The full axe roster, whole-repository accessibility spec-test contracts and their
+pixel/evidence uploads run only during `release-check`.
 
-`changed` is a question, not a failure. **"The after is correct" is a valid
-answer** — a deliberate restyle _should_ move pixels. Recording that answer is
-what `visual-baseline.yml` does, and it writes who decided, when, against which
-run, and why, into the baseline's decision log.
+Release callers must bind the CI run/attempt and all three job outcomes to its
+exact main SHA, and confirm that SHA remains an ancestor of current main before
+release mutation. The public
+[Release Process](https://github.com/meta/astryx/wiki/Release-Process) uses
+the same checked-SHA boundary; later fast-forward commits are next-release input.
 
-## What gets photographed
+## Coverage and results
 
-Both tiers are derived, never hand-listed, so coverage tracks the system:
+Stable Core components use representative stories and explicitly tagged stories.
+Shipped theme changes use their relevant accepted matrix. Shared stable scope
+uses the full canonical plan in the same CI owner, rather than delegating to a
+daily workflow. Packages with `astryx.canaryOnly: true` have no stable visual
+baseline; their existing unit, Storybook, accessibility, and RTL checks remain.
 
-- **surface** — one story per component in the default theme, light and dark.
-  The broad regression net.
-- **theme-matrix** — for every component override a theme actually authors, a
-  story that _renders that state_. A scout pass loads the candidate stories
-  and reads the DOM first, so `badge` in its `warning` variant is photographed
-  in a story that has one, rather than assuming the default story covers it.
-  On this repo that is the difference between 200 overrides no shot could
-  verify and 49.
+Story tags declare additional coverage next to the example:
 
-`--tiers full` widens `surface` to every story in the index (~1,770 shots).
+```tsx
+export const CustomSeparator: Story = {
+  tags: ['visual-baseline'],
+  render: () => /* ... */,
+};
+```
 
-Anything the matrix still cannot reach is named in the report under **theme
-overrides that bound to nothing** — either the plan cannot get there, or the
-component stopped rendering what the theme aims at. Both are worth knowing.
+The representative story needs no tag. `visual-baseline` adds a default-theme
+contract; `visual-theme-matrix` opts the story into every accepted theme.
+Behavioral/audit-only fixtures need no visual tag. `no-visual` excludes unstable
+stories. Ordinary focused PR plans use existing baseline keys; adding or pruning
+keys requires explicit full-plan baseline maintenance.
 
-## Running it locally
+- `pass`: the compared frames did not change.
+- `changed`: review the before/after/diff report and record whether the rendering
+  is intentional. A change is not automatically a regression.
+- `failed`: capture or comparison failed. Missing evidence is not passing evidence.
+- `skipped`: no comparison was performed; the reason is explicit. It does not
+  imply a separate workflow covered the change.
+
+The `visual-pr-report` artifact belongs to the exact CI run. A rerun of only
+the failed jobs keeps the artifacts of the jobs that passed, so the report can
+come from an earlier attempt of that run, never a later one.
+`pr-comment.yml` only publishes its report: it checks identity, bounds JSON and
+image sizes, re-encodes PNGs, and renders escaped HTML from default-branch code.
+It does not execute artifact HTML, run a browser, compare pixels again, change
+a baseline, or create another visual status. Its only status is `PR Comment` on
+the pull request head, which says whether a report step failed.
+
+Deployment previews and `vibe-screenshots.yml` remain separate because they do
+not run visual regression.
+
+## Explicit baseline maintenance
+
+Maintenance uses **CI**, not another workflow. Dispatch from `main`:
+
+1. Choose `operation=capture`. The same `pr-visual` owner builds Storybook on the
+   pinned Linux runner and captures the full canonical plan: representative and
+   tagged Core stories in Neutral plus generated Probe coverage.
+2. Review that run's report and capture. A browser-version mismatch can make the
+   comparison fail while still producing a complete candidate capture; inspect
+   the rendering rather than accepting it merely to clear a check.
+3. Download that exact run/attempt's validated candidate artifact. In a dedicated
+   branch, run `gate.mjs accept` with the checked-in baseline, candidate directory,
+   reviewed keys (or `all`), and an explicit reason; use `--prune` only when the
+   full-plan removal checks permit it. Open a normal pull request containing only
+   the reviewed baseline delta.
+
+The pull request is the publication and decision record. `gate.mjs accept`
+revalidates the candidate verdict and hashes before writing the compact index and
+selected PNGs. It never recaptures, promotes automatically after merge, or writes
+to GitHub Pages. Partial captures cannot become complete baseline candidates.
+Bootstrap, coverage changes, and browser refreshes use this same path; none is a
+release gate.
+
+The shared promotion boundary accepts `pass` or `changed`. A failed comparison
+is eligible only for the validated browser-only refresh: every baseline and
+captured key is selected, platform and viewport match, every PNG matches its
+manifest hash, and there are no capture failures or removals. Missing, unreadable,
+skipped, unknown, partial, or otherwise failed evidence is refused before writes.
+
+## Local debugging
 
 ```bash
 pnpm build && pnpm -F @astryxdesign/storybook build
-
-# what would be captured, and why
-node .github/scripts/visual-gate/gate.mjs plan
-
-# capture, compare, write .visual-run/{verdict.json,report/index.html}
-node .github/scripts/visual-gate/gate.mjs check \
-  --baseline .visual-baseline --out .visual-run
-
+pnpm visual:plan
+pnpm visual:check --baseline .github/visual-baseline --out .visual-run
 open .visual-run/report/index.html
 ```
 
-Exit codes are the contract: `0` pass, `1` crashed, `2` changed.
+CLI exit codes: `0` clean, `1` crashed, `2` changed. `gate.mjs release` selects the
+closed full canonical plan used by broad PRs, release checks, and maintenance.
+`gate.mjs accept` is an explicit local write. A reviewed baseline refresh is
+committed through a normal pull request; local captures must not overwrite the
+checked-in baseline without that review because platform and browser differences
+can make them incomparable.
 
-### PR scope follows the release channel
+## Determinism and storage
 
-`pr-visual` compares only the stable published visual surface:
+Capture fixes the viewport, scale, clock, timezone, fonts, and animation end
+state, and blocks off-origin requests. Storybook's channel selects theme and
+color mode. Each story starts in the default light theme before switching
+variants. Canonical PNG encoding avoids treating encoding metadata as pixels.
 
-- Core component change → every story of that component, light/dark, in every
-  shipped theme that styles it.
-- Published theme change → that theme's relevant target/story matrix.
-- Shared stable theming/token infrastructure → the full plan, which declines
-  visibly at the 240-shot review budget and defers to the daily gate.
-- A package with `package.json.astryx.canaryOnly: true` → no visual comparison,
-  no visual baseline, no capture-only smoke job. It still typechecks, unit-tests,
-  builds Storybook, and publishes to canary. Experimental pixels are not a
-  stable release decision and should not create a red check people learn to
-  ignore.
+The baseline is versioned at `.github/visual-baseline/`. Its move into the
+repository and removal of the old branch writer belong in one change: splitting
+that ownership transfer would temporarily leave either two authoritative write
+paths or no durable comparison oracle. Pull-request reports, including their
+before/after/diff images, remain GitHub Actions artifacts for 30 days. The
+release check and baseline-candidate artifacts retain their existing independent
+lifetimes. GitHub Pages is not evidence storage.
 
-The daily gate uses the same boundary: `stableStoryPackages` in
-`visual-gate.config.json` is currently `["Core"]`, so Lab/canary stories cannot
-hold a stable release. Pass `--story-packages '*'` only for an explicit
-non-release audit.
+## Drift guard
 
-`.github/scripts/visual-scope.mjs` owns that classification from package
-metadata; workflow YAML does not hard-code today's package names.
-
-`--sample 24` takes an even slice of the plan for a quick smoke test.
-`--observations <file>` caches the scout pass between runs.
-
-**A local baseline is for local work only.** Rendering differs by platform and
-by browser build, so a baseline captured on a Mac and a capture from an Ubuntu
-runner would read as "everything changed". The gate refuses that comparison
-instead of showing you 500 false diffs, and the shared baseline is only ever
-written by CI, from the pinned runner label.
-
-## Two different questions
-
-The gate asks two things, and only one of them is a screenshot.
-
-**Did anything move?** — the shot tiers, compared against an accepted baseline.
-Catches any visual regression, in any theme.
-
-**Did each theming target's override actually reach the pixels?** — `gate.mjs
-reach`, and no baseline is involved. A pixel diff cannot answer this: when an
-override stops applying, the frame is captured broken and promoted as correct,
-and every later run agrees with it forever. The probe theme gives every
-selector a unique deterministic colour, so this is an equality test — compute
-the colour that selector should have produced, read the element, compare. It
-names the target instead of a rectangle, and it cannot flake.
-
-Three outcomes, because the difference matters:
-
-|          | meaning                                                                          |
-| -------- | -------------------------------------------------------------------------------- |
-| reached  | the override painted                                                             |
-| shadowed | another target on the _same element_ won — a fact about the markup, not a defect |
-| missed   | nothing probe-coloured won                                                       |
-
-```bash
-node .github/scripts/visual-gate/gate.mjs reach
-```
-
-It runs in the daily gate and is **reported, not enforced**. Today 50 targets
-miss, from one systemic cause: StyleX emits into `@layer priority1-4`, which
-sort _after_ `astryx-theme`, so wherever a component sets a property the theme
-override loses. Failing the gate on a known systemic issue would only teach
-everyone to ignore it — enforce it once that is fixed and the count is zero.
-
-## How the release cut uses it
-
-The daily cut (08:00 PT) reads the gate's verdict before it merges the version
-bump:
-
-```
-https://facebook.github.io/astryx/visual-gate/latest/release-gate.json
-```
-
-| verdict                                             | the cut does                                                                                                                                                                                                                                         |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| visual `pass`, a11y `clean`                         | cut, no comment                                                                                                                                                                                                                                      |
-| visual `changed`                                    | open the report and judge every change. Intentional → dispatch **Visual Baseline** with those keys and a reason, then cut, naming the accepted changes in the release note. Not intentional → hold the cut, say what regressed in chat, fix it first |
-| a11y `failed` (new violations against the baseline) | hold the cut and fix, or baseline the violation deliberately                                                                                                                                                                                         |
-| either `crashed`                                    | hold. A gate that cannot run is not a green gate                                                                                                                                                                                                     |
-
-The one thing that must not happen is a release going out through a diff nobody
-looked at — including a "changed" nobody read.
-
-## Accepting a change
-
-From the report, note the shot keys, then dispatch **Visual Baseline** with the
-gate run id, the keys (or `all`), and a reason. The promoted PNGs come out of
-that run's capture artifact, so the picture that becomes the baseline is
-exactly the picture that was reviewed.
-
-**Bootstrapping**: the first gate run has nothing to compare against — it
-reports every shot as `added` and passes. Dispatch **Visual Baseline** against
-that run with `keys=all` to make it the reference. Do the same after a
-deliberate system-wide restyle.
-
-A browser bump moves antialiasing everywhere at once; the gate detects it and
-tells you to refresh rather than reporting hundreds of regressions.
-
-## Determinism
-
-Every shot is taken with animations and transitions forced to their end state,
-carets hidden, a fixed viewport at device scale 1, fonts awaited, **the clock
-frozen at a fixed instant in a fixed timezone**, and **all off-origin requests
-blocked** — nothing that renders may depend on a CDN being up.
-
-The frozen clock is why a story built from `new Date()` — Schedule, Calendar,
-DateRangeInput — does not report `changed` every day. Shots of those stories
-show 13 May 2026, not today; that is the capture's clock, not stale data. The
-instant lives in `lib/capture.mjs` and is recorded in every manifest. Changing
-it changes those shots, so it is a deliberate rebaseline, not a tweak.
-
-Theme and colour mode are switched over Storybook's own channel rather than
-by reloading, which is what keeps 514 shots inside a few minutes;
-`--no-fast-globals` forces a reload per shot if a story's state ever turns out
-to survive the re-render.
-
-## Where the images live
-
-| what                                        | where                                          | size / retention     |
-| ------------------------------------------- | ---------------------------------------------- | -------------------- |
-| baseline PNGs                               | `gh-pages:visual-gate/baseline/`               | ~10 MB, permanent    |
-| reports (changed shots only)                | `gh-pages:visual-gate/<run_id>/` and `latest/` | last 20 runs, pruned |
-| full capture (what a promotion copies from) | Actions artifact `visual-capture`              | 14 days              |
-
-Nothing lands in `main`.
-
-**gh-pages is shared, and it is rebuilt as an orphan commit.** `deploy.yml`
-materializes only `storybook`, `sandbox` and `assets`, and carries every other
-path forward by SHA — `visual-gate/` survives by that mechanism, exactly as
-`pr/` and `reports/` do. **Never add `visual-gate` to that sparse-checkout
-set**: paths inside the cone are wiped and republished on every deploy, which
-would destroy the baseline and silently disarm the gate. `cleanup-previews.yml`
-only removes `pr/<number>/` and legacy 7-hex directories, so it does not touch
-it either.
-
-## Files
-
-| file                      | role                                                                     |
-| ------------------------- | ------------------------------------------------------------------------ |
-| `gate.mjs`                | CLI: `plan`, `capture`, `check`, `accept`                                |
-| `lib/plan.mjs`            | which shots exist, and why each one does                                 |
-| `lib/capture.mjs`         | Playwright capture and the scout pass                                    |
-| `lib/compare.mjs`         | pixel comparison, targeting analysis, the verdict                        |
-| `lib/report.mjs`          | the before / after / diff report                                         |
-| `lib/baseline.mjs`        | the baseline store and the one operation that writes it                  |
-| `lib/sources.mjs`         | theming targets and theme overrides, from the product's own enumerations |
-| `visual-gate.config.json` | viewport, tolerances, and story exclusions with reasons                  |
+`pnpm check:visual-owner` runs inside `pnpm check:repo` and the existing lint lane.
+It rejects independent visual-regression commands, known visual runners,
+package-script aliases, named visual-regression jobs, and visual artifact
+producers outside `ci.yml`'s owner. It deliberately permits report-only downloads,
+Storybook deployment artifacts, accessibility/RTL reports, and vibe screenshots.
+This is a narrow ownership tripwire, not a shell interpreter or a blanket ban on
+Playwright, screenshots, or artifact actions.

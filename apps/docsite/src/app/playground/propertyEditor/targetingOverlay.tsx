@@ -28,7 +28,6 @@ import {Theme, MediaTheme} from '@astryxdesign/core/theme';
 import type {ThemeMode} from '@astryxdesign/core/theme';
 import {astryxTheme} from '../../../themes/astryx';
 import {PropertyEditor} from './PropertyEditor';
-import {trustedPreviewOrigin} from '../previewChannel';
 
 const styles = stylex.create({
   badge: {minHeight: 32},
@@ -129,11 +128,20 @@ export function setCleanSource(source: string) {
   cleanSource = source;
 }
 
+/**
+ * The channel back to the playground, set by the preview page once its port
+ * handshake lands (see previewChannel.ts). Module-level like the site-mode and
+ * clean-source setters above, because the popover roots render outside the
+ * page's React tree.
+ */
+let postToParentFn: (msg: Record<string, unknown>) => void = () => {};
+
+export function setPostToParent(fn: (msg: Record<string, unknown>) => void) {
+  postToParentFn = fn;
+}
+
 function postEditToParent(code: string) {
-  window.parent.postMessage(
-    {type: 'preview-edit-code', code},
-    trustedPreviewOrigin(),
-  );
+  postToParentFn({type: 'preview-edit-code', code});
 }
 
 function renderTargetLabel(label: HTMLDivElement) {

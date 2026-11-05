@@ -15,12 +15,45 @@
  * than a red run someone re-runs until it goes away.
  *
  * A new shot has no before, so it cannot regress: it is reported as `added`
- * and adopted the first time it is seen. A shot whose story disappeared is
- * `removed` and pruned. Neither blocks.
+ * and adopted the first time it is seen. Ordinary comparisons never infer removals. Only a capture carrying a validated
+ * canonical stable-release plan may report baseline keys it did not capture.
  */
 
+import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
+import {Worker} from 'node:worker_threads';
+
+const RELEASE_LANE = 'stable-release';
+
+export function validateReleasePlan(plan, currentManifest, failures = []) {
+  const keys = plan?.keys;
+  if (
+    plan?.version !== 1 ||
+    plan?.lane !== RELEASE_LANE ||
+    plan?.authority !== 'report-removals' ||
+    !Array.isArray(keys)
+  ) {
+    throw new Error('Capture has no canonical stable-release plan.');
+  }
+  const sorted = [...keys].sort();
+  if (new Set(sorted).size !== sorted.length || sorted.some((key, index) => key !== keys[index])) {
+    throw new Error('Canonical stable-release keys must be sorted and unique.');
+  }
+  const digest = crypto.createHash('sha256').update(JSON.stringify(keys)).digest('hex');
+  if (digest !== plan.digest) throw new Error('Canonical stable-release plan digest does not match its keys.');
+  const captured = Object.keys(currentManifest.shots ?? {}).sort();
+  if (captured.length !== keys.length || captured.some((key, index) => key !== keys[index])) {
+    throw new Error('Capture does not exactly cover the canonical stable-release plan.');
+  }
+  if (failures.length > 0) throw new Error(`Stable release capture has ${failures.length} failure(s).`);
+  if (captured.some(key => {
+    const shot = currentManifest.shots[key];
+    return shot.stableVisual !== true || shot.stableThemeVisual !== true;
+  })) {
+    throw new Error('Stable release capture contains an ineligible story or theme.');
+  }
+  return plan;
+}
 
 /**
  * @typedef {object} Change
@@ -30,20 +63,33 @@ import * as path from 'node:path';
  * @property {boolean} sizeChanged
  */
 
-/**
- * Widen an image to the given canvas, transparent-padded from the top left, so
- * two shots of different heights can still be diffed pixel for pixel.
- * @param {{width: number, height: number, data: Buffer}} png
- * @param {number} width
- * @param {number} height
- * @param {typeof import('pngjs').PNG} PNG
- */
-function pad(png, width, height, PNG) {
-  if (png.width === width && png.height === height) return png;
-  const padded = new PNG({width, height});
-  padded.data.fill(0);
-  PNG.bitblt(png, padded, 0, 0, Math.min(png.width, width), Math.min(png.height, height), 0, 0);
-  return padded;
+export function partitionComparisonKeys(keys, concurrency) {
+  if (keys.length === 0) return [];
+  const workerCount = Math.max(1, Math.min(Math.floor(concurrency), keys.length));
+  const partitions = Array.from({length: workerCount}, () => []);
+  keys.forEach((key, index) => partitions[index % workerCount].push(key));
+  return partitions;
+}
+
+function comparePartition(workerData) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./compare-worker.mjs', import.meta.url), {
+      workerData,
+      execArgv: [],
+    });
+    let settled = false;
+    worker.once('message', value => {
+      settled = true;
+      resolve(value);
+    });
+    worker.once('error', error => {
+      settled = true;
+      reject(error);
+    });
+    worker.once('exit', code => {
+      if (!settled) reject(new Error(`Visual comparison worker exited ${code} without a result.`));
+    });
+  });
 }
 
 /**
@@ -55,7 +101,7 @@ function pad(png, width, height, PNG) {
  * @param {string} options.diffDir - where diff PNGs are written
  * @param {number} options.threshold - pixelmatch per-pixel colour threshold
  * @param {number} options.maxDiffPixels - pixels allowed to differ before a shot counts as changed
- * @param {boolean} [options.scoped] - the plan covers only part of the baseline
+ * @param {number} [options.concurrency] - bounded CPU workers for PNG decoding and pixel comparison
  * @returns {Promise<{changes: Change[], added: string[], removed: string[], unchanged: string[]}>}
  */
 export async function compareCaptures({
@@ -66,23 +112,16 @@ export async function compareCaptures({
   diffDir,
   threshold,
   maxDiffPixels,
-  scoped = false,
+  concurrency = 2,
 }) {
-  const {PNG} = await import('pngjs');
-  const pixelmatch = (await import('pixelmatch')).default;
-
   const baselineKeys = new Set(Object.keys(baselineManifest.shots ?? {}));
   const currentKeys = Object.keys(currentManifest.shots ?? {});
-
-  /** @type {Change[]} */
-  const changes = [];
-  /** @type {string[]} */
+  const positions = new Map(currentKeys.map((key, index) => [key, index]));
   const added = [];
-  /** @type {string[]} */
   const unchanged = [];
+  const pixelKeys = [];
 
   fs.mkdirSync(diffDir, {recursive: true});
-
   for (const key of currentKeys) {
     if (!baselineKeys.has(key)) {
       added.push(key);
@@ -90,50 +129,52 @@ export async function compareCaptures({
     }
     const current = currentManifest.shots[key];
     const baseline = baselineManifest.shots[key];
-    // The bytes are the cheapest possible comparison and the common case.
-    if (current.sha256 === baseline.sha256) {
-      unchanged.push(key);
-      continue;
-    }
-
-    const baselinePng = PNG.sync.read(fs.readFileSync(path.join(baselineDir, `${key}.png`)));
-    const currentPng = PNG.sync.read(fs.readFileSync(path.join(currentDir, `${key}.png`)));
-    const width = Math.max(baselinePng.width, currentPng.width);
-    const height = Math.max(baselinePng.height, currentPng.height);
-    const sizeChanged = baselinePng.width !== currentPng.width || baselinePng.height !== currentPng.height;
-
-    const a = pad(baselinePng, width, height, PNG);
-    const b = pad(currentPng, width, height, PNG);
-    const diff = new PNG({width, height});
-    const diffPixels = pixelmatch(a.data, b.data, diff.data, width, height, {
-      threshold,
-      includeAA: false,
-      alpha: 0.2,
-      diffMask: false,
-    });
-
-    if (diffPixels <= maxDiffPixels && !sizeChanged) {
-      unchanged.push(key);
-      continue;
-    }
-    fs.writeFileSync(path.join(diffDir, `${key}.png`), PNG.sync.write(diff));
-    changes.push({
-      key,
-      diffPixels,
-      diffRatio: Number((diffPixels / (width * height)).toFixed(6)),
-      sizeChanged,
-    });
+    if (current.sha256 === baseline.sha256) unchanged.push(key);
+    else pixelKeys.push(key);
   }
 
-  // A scoped run (a PR shooting only the components it touched) deliberately
-  // captures a fraction of the baseline, so "in the baseline, not in this run"
-  // means out of scope — not removed. Reporting it as removal would put a
-  // five-hundred-shot deletion on every PR.
-  const removed = scoped
-    ? []
-    : [...baselineKeys].filter(key => !currentManifest.shots[key]);
-  changes.sort((a, b) => b.diffPixels - a.diffPixels);
-  return {changes, added, removed, unchanged};
+  const workerResults = (
+    await Promise.all(
+      partitionComparisonKeys(pixelKeys, concurrency).map(keys =>
+        comparePartition({
+          keys,
+          baselineDir,
+          currentDir,
+          diffDir,
+          threshold,
+          maxDiffPixels,
+        }),
+      ),
+    )
+  ).flat();
+  const changes = [];
+  for (const result of workerResults) {
+    if (result.unchanged) unchanged.push(result.key);
+    else changes.push(result.change);
+  }
+
+  unchanged.sort((a, b) => positions.get(a) - positions.get(b));
+  changes.sort(
+    (a, b) => b.diffPixels - a.diffPixels || positions.get(a.key) - positions.get(b.key),
+  );
+  return {changes, added, removed: [], unchanged};
+}
+
+export async function compareReleaseCaptures(options) {
+  if (options.failures?.length) {
+    return compareCaptures(options);
+  }
+  validateReleasePlan(
+    options.currentManifest.context?.releasePlan,
+    options.currentManifest,
+    options.failures,
+  );
+  const comparison = await compareCaptures(options);
+  const current = new Set(Object.keys(options.currentManifest.shots ?? {}));
+  return {
+    ...comparison,
+    removed: Object.keys(options.baselineManifest.shots ?? {}).filter(key => !current.has(key)),
+  };
 }
 
 /**

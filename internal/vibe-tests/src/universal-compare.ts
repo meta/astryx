@@ -527,13 +527,28 @@ async function main() {
       t => `${t.label} ${t.data.cost?.avgDocsRead ?? 0}`,
     );
     console.log(`   Avg docs read:    ${docsParts.join(' | ')}`);
-    const tokenParts = costTargets.map(t => {
-      const total =
-        (t.data.cost?.estimatedInputTokens ?? 0) +
-        (t.data.cost?.estimatedOutputTokens ?? 0);
-      return `${t.label} ~${total}`;
-    });
-    console.log(`   Est. tokens:      ${tokenParts.join(' | ')}`);
+    const usageComparable = costTargets.every(
+      target => target.data.cost?.usageComplete === true,
+    );
+    if (usageComparable) {
+      const tokenParts = costTargets.map(target => {
+        const total =
+          (target.data.cost?.inputTokens ?? 0) +
+          (target.data.cost?.outputTokens ?? 0);
+        return `${target.label} ${total}`;
+      });
+      console.log(`   Tokens:           ${tokenParts.join(' | ')}`);
+    } else {
+      const coverageParts = costTargets.map(target => {
+        const cost = target.data.cost;
+        const total =
+          (cost?.completeUsageRuns ?? 0) + (cost?.incompleteUsageRuns ?? 0);
+        return `${target.label} ${cost?.completeUsageRuns ?? 0}/${total}`;
+      });
+      console.log(
+        `   Tokens:           not comparable; complete runs ${coverageParts.join(' | ')}`,
+      );
+    }
   }
 
   // Per-prompt wins

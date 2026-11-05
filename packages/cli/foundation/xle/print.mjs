@@ -3,7 +3,7 @@
 /**
  * @file XLE canonical printers — AST → compact (XLE) or outline (XLO) text.
  *
- * Used by `astryx layout check --form …` so either party (agent or human)
+ * Used by the XLE validator so either party (agent or human)
  * can request the other surface, and by round-trip conformance tests.
  * Printing is best-effort canonical: spelling variants the lexer
  * normalized are emitted in canonical form.

@@ -2,22 +2,26 @@
 
 /**
  * @file parseOutlineFromMarkdown.ts
- * @input Uses Markdown parser internals (parseMarkdown + heading slug
- *   helpers) and OutlineItem type
+ * @input Uses Markdown's canonical AST parser and heading slug helpers
  * @output Exports parseOutlineFromMarkdown for extracting heading outlines from Markdown
- * @position Pure utility; consumed by useOutlineFromMarkdown and public exports
+ * @position Pure compatibility utility; consumed by useOutlineFromMarkdown and public exports
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Outline/Outline.doc.mjs
  * - /packages/core/src/Outline/index.ts
  */
 
+import {parseMarkdownAstInternal} from '../Markdown/parser';
+import {projectMarkdownHeadings} from '../Markdown/headingProjection';
 import {
-  parseMarkdown,
-  inlineText,
-  slugify,
-  uniqueSlug,
-} from '../Markdown/parser';
+  prepareMarkdownPlugins,
+  reportMarkdownPluginFailure,
+} from '../Markdown/plugins/protocol';
+import type {
+  MarkdownExtensionNode,
+  MarkdownPluginEntry,
+  PreparedMarkdownPlugins,
+} from '../Markdown/plugins/protocol';
 import type {OutlineItem} from './types';
 
 /**
@@ -28,16 +32,32 @@ import type {OutlineItem} from './types';
  * Ids come from the parser's shared slug helpers, so they always match the
  * `id` attributes Markdown renders on its headings.
  */
-export function parseOutlineFromMarkdown(markdown: string): OutlineItem[] {
-  const counts = new Map<string, number>();
-  return parseMarkdown(markdown)
-    .filter(block => block.type === 'heading')
-    .map(block => {
-      const label = inlineText(block.children).trim();
-      return {
-        id: uniqueSlug(slugify(label), counts),
-        label,
-        level: block.level,
-      };
-    });
+export interface ParseOutlineFromMarkdownOptions<
+  Node extends MarkdownExtensionNode = never,
+> {
+  readonly plugins?: ReadonlyArray<MarkdownPluginEntry<Node>>;
+  /** Match Markdown's transform finality while content is streaming. */
+  readonly isFinal?: boolean;
+}
+
+export function parseOutlineFromMarkdown<
+  Node extends MarkdownExtensionNode = never,
+>(
+  markdown: string,
+  options?: ParseOutlineFromMarkdownOptions<Node>,
+): OutlineItem[] {
+  let plugins = options?.plugins;
+  let prepared: PreparedMarkdownPlugins | undefined;
+  try {
+    prepared = plugins == null ? undefined : prepareMarkdownPlugins(plugins);
+  } catch (error) {
+    reportMarkdownPluginFailure('configuration', 'transform', error);
+    plugins = undefined;
+  }
+  const root = parseMarkdownAstInternal(
+    markdown,
+    {plugins},
+    options?.isFinal ?? true,
+  );
+  return [...projectMarkdownHeadings(root, prepared).outline];
 }

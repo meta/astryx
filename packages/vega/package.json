@@ -5,14 +5,14 @@
   "description": "Astryx Vega wrapper — chart and data visualization components. Published to npm only under the @canary dist-tag for early testing; never released as a stable (latest) version.",
   "author": "Meta Open Source",
   "license": "MIT",
-  "homepage": "https://github.com/facebook/astryx#readme",
+  "homepage": "https://github.com/meta/astryx#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/astryx.git",
+    "url": "git+https://github.com/meta/astryx.git",
     "directory": "packages/vega"
   },
   "bugs": {
-    "url": "https://github.com/facebook/astryx/issues"
+    "url": "https://github.com/meta/astryx/issues"
   },
   "keywords": [
     "astryx",
@@ -37,6 +37,7 @@
     }
   },
   "files": [
+    "astryx.integration.mjs",
     "dist",
     "src",
     "README.md"
@@ -44,7 +45,10 @@
   "scripts": {
     "build": "tsup && tsc --project tsconfig.json --emitDeclarationOnly --declaration --noEmit false --outDir dist",
     "dev": "tsup --watch",
-    "typecheck": "tsc --noEmit"
+    "test": "vitest run --root ../..",
+    "test:watch": "vitest --root ../..",
+    "typecheck:docs": "tsc --project tsconfig.docs.json",
+    "typecheck": "tsc --noEmit && pnpm typecheck:docs"
   },
   "peerDependencies": {
     "react": ">=19.2.0",
@@ -53,6 +57,8 @@
     "vega-lite": ">=6.0.0"
   },
   "devDependencies": {
+    "@astryxdesign/cli": "workspace:*",
+    "@testing-library/react": "catalog:",
     "@types/react": "^19.2.17",
     "tsup": "^8.3.0",
     "typescript": "^6.0.3",

@@ -9,8 +9,8 @@
  * SYNC: When dateParser.ts changes, update tests to match new behavior
  */
 
-import {describe, it, expect} from 'vitest';
-import {parseDateInput} from './dateParser';
+import {describe, it, expect, vi} from 'vitest';
+import {isLocaleDayFirst, parseDateInput} from './dateParser';
 
 describe('parseDateInput', () => {
   describe('ISO format (YYYY-MM-DD)', () => {
@@ -280,6 +280,14 @@ describe('parseDateInput', () => {
   describe('ambiguous numeric formats follow the passed locale (#5074)', () => {
     // Both numbers are <= 12, so the day/month order is genuinely ambiguous
     // and resolved by isLocaleDayFirst(locale) rather than the host locale.
+    it('defaults ambiguous input to English month-first order', () => {
+      expect(parseDateInput('3/4/2026')).toEqual({
+        year: 2026,
+        month: 3,
+        day: 4,
+      });
+    });
+
     it('reads month-first for en-US', () => {
       expect(parseDateInput('3/4/2026', 'en-US')).toEqual({
         year: 2026,
@@ -294,6 +302,30 @@ describe('parseDateInput', () => {
         month: 4,
         day: 3,
       });
+    });
+  });
+
+  describe('isLocaleDayFirst', () => {
+    it('defaults to English month-first order', () => {
+      expect(isLocaleDayFirst()).toBe(false);
+    });
+
+    it('requests Gregorian calendar data for locale ordering', () => {
+      const OriginalDateTimeFormat = globalThis.Intl.DateTimeFormat;
+      const dateTimeFormatSpy = vi
+        .spyOn(globalThis.Intl, 'DateTimeFormat')
+        .mockImplementation(function DateTimeFormat(locale, options) {
+          return new OriginalDateTimeFormat(locale, options);
+        });
+
+      try {
+        isLocaleDayFirst('en-US-u-ca-buddhist');
+        expect(dateTimeFormatSpy).toHaveBeenCalledWith('en-US-u-ca-buddhist', {
+          calendar: 'gregory',
+        });
+      } finally {
+        dateTimeFormatSpy.mockRestore();
+      }
     });
   });
 
@@ -339,6 +371,50 @@ describe('parseDateInput', () => {
 
     it('rejects mixed separators', () => {
       expect(parseDateInput('1/25.2026')).toBeNull();
+    });
+
+    it('in a day-first locale, never reads numeric text month-first outside the locale-ordered forms', () => {
+      // Native Date reads these month-first whatever the locale.
+      for (const text of [
+        '12/0',
+        '12/01/',
+        '12/01/2',
+        '12/01/20',
+        '12/01/202',
+        '12/01/90',
+        '12,01',
+        '12,01,2026',
+        '12;01;2026',
+      ]) {
+        expect(parseDateInput(text, 'en-GB')).toBeNull();
+      }
+      // A month-first locale keeps the browser's reading of a short year.
+      expect(parseDateInput('1/5/25', 'en-US')).toEqual({
+        year: 2025,
+        month: 1,
+        day: 5,
+      });
+      // A four-digit year written first parses in every locale, with any
+      // separator the browser reads.
+      for (const locale of ['en-GB', 'en-US']) {
+        for (const text of ['2026/01/12', '2026 01 12', '2026.1.12.']) {
+          expect(parseDateInput(text, locale)).toEqual({
+            year: 2026,
+            month: 1,
+            day: 12,
+          });
+        }
+      }
+      // The locale-ordered forms still parse in the locale's order.
+      expect(parseDateInput('12/01/2026', 'en-GB')).toEqual({
+        year: 2026,
+        month: 1,
+        day: 12,
+      });
+      expect(parseDateInput('12/01', 'en-GB')).toMatchObject({
+        month: 1,
+        day: 12,
+      });
     });
 
     it('treats a single typed digit as incomplete, not a date', () => {

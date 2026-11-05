@@ -45,8 +45,10 @@ function targetKey(className) {
 
 /**
  * Every theming target declared under a core `src` directory, sorted by key
- * then component. A key can appear more than once: a shared sub-element (the
- * radio indicator, say) is documented by every component that renders it.
+ * then component. When both a parent doc and one of its `subComponentOf`
+ * children declare the same class, the parent is the canonical discovery owner;
+ * the child keeps its direct docs but does not add a second listing row. Shared
+ * targets declared by unrelated components remain separate rows.
  *
  * Unreadable docs are skipped rather than fatal — a single malformed doc must
  * not take out theme validation or the listing.
@@ -57,7 +59,7 @@ function targetKey(className) {
 export async function collectThemingTargets(coreSrc) {
   if (!coreSrc || !fs.existsSync(coreSrc)) return [];
 
-  /** @type {ThemingTarget[]} */
+  /** @type {Array<ThemingTarget & {parent: string|null}>} */
   const targets = [];
 
   /** @param {string} dir */
@@ -93,6 +95,8 @@ export async function collectThemingTargets(coreSrc) {
           key,
           className,
           component,
+          parent:
+            typeof doc?.subComponentOf === 'string' ? doc.subComponentOf : null,
           props: stringList(target.visualProps),
           states: stringList(target.states),
         });
@@ -102,10 +106,55 @@ export async function collectThemingTargets(coreSrc) {
 
   await scan(coreSrc);
 
-  targets.sort(
-    (a, b) => a.key.localeCompare(b.key) || a.component.localeCompare(b.component),
+  const canonical = canonicalizeParentTargets(targets);
+  canonical.sort(
+    (a, b) =>
+      a.key.localeCompare(b.key) || a.component.localeCompare(b.component),
   );
-  return targets;
+  return canonical;
+}
+
+/**
+ * Collapse only an explicit parent/child duplicate. A child target is removed
+ * when its `subComponentOf` parent declares that same class exactly once; its
+ * props and states are merged into the parent's row so no capability is lost.
+ *
+ * Unrelated components sharing a class remain separate. An ambiguous parent
+ * declaration also remains untouched rather than guessing which row is
+ * canonical.
+ *
+ * @param {Array<ThemingTarget & {parent: string|null}>} targets
+ * @returns {ThemingTarget[]}
+ */
+function canonicalizeParentTargets(targets) {
+  /** @type {Map<string, Array<ThemingTarget & {parent: string|null}>>} */
+  const rootsByComponentAndClass = new Map();
+  for (const target of targets) {
+    if (target.parent != null) continue;
+    const identity = `${target.component}\0${target.className}`;
+    const roots = rootsByComponentAndClass.get(identity) ?? [];
+    roots.push(target);
+    rootsByComponentAndClass.set(identity, roots);
+  }
+
+  /** @type {Set<ThemingTarget & {parent: string|null}>} */
+  const duplicates = new Set();
+  for (const target of targets) {
+    if (target.parent == null) continue;
+    const roots =
+      rootsByComponentAndClass.get(`${target.parent}\0${target.className}`) ??
+      [];
+    if (roots.length !== 1) continue;
+
+    const canonical = roots[0];
+    canonical.props = [...new Set([...canonical.props, ...target.props])];
+    canonical.states = [...new Set([...canonical.states, ...target.states])];
+    duplicates.add(target);
+  }
+
+  return targets
+    .filter(target => !duplicates.has(target))
+    .map(({parent: _parent, ...target}) => target);
 }
 
 /**
@@ -186,7 +235,9 @@ export function targetsByKey(targets) {
   /** @type {Record<string, string[]>} */
   const byKey = {};
   for (const t of targets) {
-    byKey[t.key] = [...new Set([...(byKey[t.key] || []), ...t.props, ...t.states])];
+    byKey[t.key] = [
+      ...new Set([...(byKey[t.key] || []), ...t.props, ...t.states]),
+    ];
   }
   return byKey;
 }

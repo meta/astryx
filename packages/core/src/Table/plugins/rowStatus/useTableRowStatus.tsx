@@ -4,25 +4,37 @@
 
 /**
  * @file useTableRowStatus.tsx
- * @input React, StyleX, Icon, i18n, VisuallyHidden, Table types
+ * @input React, StyleX, Icon, i18n, dev warnings, VisuallyHidden, Table types
  * @output Exports useTableRowStatus hook + config type
  * @position Row-status plugin; consumed by Table via plugins prop
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Table/index.ts (exports)
+ * - /packages/core/src/Table/useTableRowStatus.doc.mjs
+ * - /packages/core/src/Table/plugins/rowStatus/useTableRowStatus.test.tsx
+ * - /apps/storybook/stories/TableRowStatus.stories.tsx
+ * - /packages/cli/assets/templates/blocks/components/Table/TableRowStatusTable.tsx
  */
 
 import {useMemo} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Icon, type IconColor, type IconName} from '../../../Icon';
 import {Tooltip} from '../../../Tooltip';
-import {useTranslator} from '../../../i18n';
+import {warnOnce} from '../../../utils/devWarning';
 import {VisuallyHidden} from '../../../VisuallyHidden';
+import type {TableRowStatus, TableSemanticRowStatus} from '../../index';
 import type {TableColumn, TablePlugin} from '../../types';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/rowStatus/useTableRowStatus.generated';
+
+registerEnglishFallback(english);
 
 /**
- * Semantic status colors, resolved to the design system's icon color tokens.
- * Prefer these over raw CSS so status colors stay consistent with the theme.
+ * Named colors supported by the custom row-status marker. These resolve to the
+ * design system's icon color tokens; raw CSS colors remain an escape hatch.
  */
 export type TableRowStatusColor =
   | 'accent'
@@ -36,7 +48,9 @@ export type TableRowStatusColor =
   | 'blue'
   | 'gray';
 
-const SEMANTIC_COLORS: Record<TableRowStatusColor, string> = {
+type TableRowSemanticStatus = TableSemanticRowStatus['status'];
+
+const NAMED_COLORS: Record<TableRowStatusColor, string> = {
   accent: 'var(--color-icon-accent)',
   success: 'var(--color-icon-green)',
   error: 'var(--color-icon-red)',
@@ -49,8 +63,8 @@ const SEMANTIC_COLORS: Record<TableRowStatusColor, string> = {
   gray: 'var(--color-icon-gray)',
 };
 
-/** Icon colors that map cleanly from a semantic status color. */
-const ICON_COLOR_BY_STATUS: Record<TableRowStatusColor, IconColor> = {
+/** Preserve the released Icon color mapping for named custom-marker colors. */
+const ICON_COLOR_BY_NAMED_COLOR: Record<TableRowStatusColor, IconColor> = {
   accent: 'accent',
   success: 'success',
   error: 'error',
@@ -63,28 +77,6 @@ const ICON_COLOR_BY_STATUS: Record<TableRowStatusColor, IconColor> = {
   gray: 'gray',
 };
 
-/**
- * A row's status indicator. `color` accepts a semantic status color
- * (mapped to a theme token) or any raw CSS color string as an escape hatch.
- * By default the plugin renders a colored status dot. Provide `icon` to signal
- * status by shape as well as color, which is more accessible when several
- * statuses coexist. `label` is required so the status is never conveyed by
- * color alone — it names the indicator for assistive technology and shows on
- * hover. Return `null` for rows with no status.
- */
-export interface TableRowStatus {
-  /** Semantic status color (preferred) or a raw CSS color string. */
-  color: TableRowStatusColor | (string & {});
-  /** Optional icon rendered as the signifier instead of the dot (shape as an a11y differentiator). */
-  icon?: IconName;
-  /**
-   * Accessible name for the status, announced to assistive technology and
-   * shown in a tooltip on hover. Required: a status must never be conveyed by
-   * color alone.
-   */
-  label: string;
-}
-
 /** Configuration for {@link useTableRowStatus}. */
 export interface UseTableRowStatusConfig<T extends Record<string, unknown>> {
   /**
@@ -94,28 +86,99 @@ export interface UseTableRowStatusConfig<T extends Record<string, unknown>> {
    * @example
    * ```
    * getStatus: row =>
-   *   row.hasError ? {color: 'error', icon: 'error', label: 'Error'} : null
+   *   row.hasError ? {status: 'error', label: 'Error'} : null
    * ```
    */
-  getStatus: (item: T) => TableRowStatus | null;
+  getStatus: (
+    item: T,
+  ) => (TableRowStatus & {status?: never}) | TableSemanticRowStatus | null;
 }
 
-// The status column holds a small centered dot (or an icon when provided).
-// A fixed narrow width keeps every row's indicator aligned in one gutter.
+type TableRowStatusResult = Exclude<
+  ReturnType<UseTableRowStatusConfig<Record<string, unknown>>['getStatus']>,
+  null
+>;
+
+// The status column holds a small centered dot or icon. A fixed narrow width
+// keeps every row's indicator aligned in one gutter.
 const STATUS_COLUMN_WIDTH = {type: 'pixel' as const, value: 28};
 
-/** Resolve a semantic color name to a token, or pass a raw CSS color through. */
+/** Resolve a named color to a token, or pass a raw CSS color through. */
 function resolveColor(color: string): string {
-  return (SEMANTIC_COLORS as Record<string, string>)[color] ?? color;
+  return (NAMED_COLORS as Record<string, string>)[color] ?? color;
+}
+
+function isTableRowSemanticStatus(
+  value: unknown,
+): value is TableRowSemanticStatus {
+  return value === 'success' || value === 'warning' || value === 'error';
+}
+
+type ResolvedTableRowStatus =
+  | {variant: 'dot'; color: string}
+  | {variant: 'icon'; icon: IconName; iconColor: IconColor}
+  | {variant: 'icon'; icon: IconName; customColor: string};
+
+function resolveTableRowStatus(
+  value: TableRowStatusResult,
+): ResolvedTableRowStatus | null {
+  const untypedValue = value as {
+    status?: unknown;
+    color?: unknown;
+    icon?: unknown;
+  };
+
+  if (isTableRowSemanticStatus(untypedValue.status)) {
+    if (
+      process.env.NODE_ENV !== 'production' &&
+      (Object.prototype.hasOwnProperty.call(untypedValue, 'color') ||
+        Object.prototype.hasOwnProperty.call(untypedValue, 'icon'))
+    ) {
+      warnOnce(
+        'useTableRowStatus:semantic-custom-conflict',
+        'useTableRowStatus',
+        'status cannot be combined with color or icon. The semantic status takes precedence and the custom marker fields are ignored.',
+      );
+    }
+
+    return {
+      variant: 'icon',
+      icon: untypedValue.status,
+      iconColor: untypedValue.status,
+    };
+  }
+
+  if (typeof untypedValue.color !== 'string') {
+    return null;
+  }
+
+  if (typeof untypedValue.icon === 'string') {
+    const namedIconColor = (
+      ICON_COLOR_BY_NAMED_COLOR as Record<string, IconColor | undefined>
+    )[untypedValue.color];
+    return namedIconColor == null
+      ? {
+          variant: 'icon',
+          icon: untypedValue.icon as IconName,
+          customColor: untypedValue.color,
+        }
+      : {
+          variant: 'icon',
+          icon: untypedValue.icon as IconName,
+          iconColor: namedIconColor,
+        };
+  }
+
+  return {variant: 'dot', color: resolveColor(untypedValue.color)};
 }
 
 const styles = stylex.create({
-  // Centers the dot or icon within the narrow status column.
   wrap: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  customIcon: (color: string) => ({color}),
   dot: (color: string) => ({
     width: '8px',
     height: '8px',
@@ -127,16 +190,16 @@ const styles = stylex.create({
 
 /**
  * Returns a {@link TablePlugin} that prepends a narrow column signaling per-row
- * status: a colored status dot by default, or an icon when `icon` is provided
- * (shape + color is more accessible than color alone).
+ * status. A semantic `status` resolves a themed glyph and tone; a custom
+ * `color` renders the stable dot unless the caller also provides an `icon`.
  *
  * @example
  * ```
  * const rowStatus = useTableRowStatus<Row>({
  *   getStatus: row =>
  *     row.state === 'error'
- *       ? {color: 'error', icon: 'error', label: 'Error'}
- *       : null,
+ *       ? {status: 'error', label: 'Error'}
+ *       : {color: 'blue', icon: 'info', label: 'Informational'},
  * });
  * <Table data={data} columns={columns} idKey="id" plugins={{rowStatus}} />;
  * ```
@@ -144,55 +207,69 @@ const styles = stylex.create({
 export function useTableRowStatus<T extends Record<string, unknown>>(
   config: UseTableRowStatusConfig<T>,
 ): TablePlugin<T> {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {getStatus} = config;
 
-  return useMemo(
-    (): TablePlugin<T> => ({
+  return useMemo((): TablePlugin<T> => {
+    const statusColumn: TableColumn<T> = {
+      key: '__rowStatus',
+      // The gutter stays visually blank, but the th needs a discernible
+      // name for assistive technology (axe: empty-table-header).
+      header: (
+        <VisuallyHidden>
+          {t('@astryx.table.rowStatus.columnHeader')}
+        </VisuallyHidden>
+      ),
+      width: STATUS_COLUMN_WIDTH,
+      resizable: false,
+      renderCell: (item: T) => {
+        const status = getStatus(item);
+        if (!status) {
+          return null;
+        }
+
+        const resolvedStatus = resolveTableRowStatus(status);
+        if (!resolvedStatus) {
+          return null;
+        }
+
+        const signifier =
+          resolvedStatus.variant === 'dot' ? (
+            <span {...stylex.props(styles.dot(resolvedStatus.color))} />
+          ) : (
+            <Icon
+              icon={resolvedStatus.icon}
+              size="xsm"
+              color={
+                'iconColor' in resolvedStatus
+                  ? resolvedStatus.iconColor
+                  : 'inherit'
+              }
+            />
+          );
+
+        return (
+          <Tooltip content={status.label}>
+            <span
+              {...stylex.props(
+                styles.wrap,
+                resolvedStatus.variant === 'icon' &&
+                  'customColor' in resolvedStatus &&
+                  styles.customIcon(resolvedStatus.customColor),
+              )}
+              role="img"
+              aria-label={status.label}>
+              {signifier}
+            </span>
+          </Tooltip>
+        );
+      },
+    };
+
+    return {
       transformColumns(columns) {
-        const statusColumn: TableColumn<T> = {
-          key: '__rowStatus',
-          // The gutter stays visually blank, but the th needs a discernible
-          // name for assistive technology (axe: empty-table-header).
-          header: (
-            <VisuallyHidden>
-              {t('@astryx.table.rowStatus.columnHeader')}
-            </VisuallyHidden>
-          ),
-          width: STATUS_COLUMN_WIDTH,
-          resizable: false,
-          renderCell: (item: T) => {
-            const status = getStatus(item);
-            if (!status) {
-              return null;
-            }
-            const signifier = status.icon ? (
-              <Icon
-                icon={status.icon}
-                size="xsm"
-                color={
-                  ICON_COLOR_BY_STATUS[status.color as TableRowStatusColor] ??
-                  'primary'
-                }
-              />
-            ) : (
-              <span {...stylex.props(styles.dot(resolveColor(status.color)))} />
-            );
-            return (
-              <Tooltip content={status.label}>
-                <span
-                  {...stylex.props(styles.wrap)}
-                  role="img"
-                  aria-label={status.label}>
-                  {signifier}
-                </span>
-              </Tooltip>
-            );
-          },
-        };
         return [statusColumn, ...columns];
       },
-    }),
-    [getStatus, t],
-  );
+    };
+  }, [getStatus, t]);
 }

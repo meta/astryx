@@ -1,8 +1,21 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file BottomSheet.stories.tsx
+ * @input BottomSheet, content primitives, and controlled story state
+ * @output BottomSheet examples plus keyboard delegation, nested-layer
+ *   Escape, and exit-focus browser fixtures
+ * @position Storybook coverage for BottomSheet presentation and interaction
+ */
+
 import type {Meta, StoryObj} from '@storybook/react';
-import {useState} from 'react';
+import * as stylex from '@stylexjs/stylex';
+import {expect, waitFor, within} from 'storybook/test';
+import {useState, type ComponentProps} from 'react';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
+import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
+import {useAnnounce} from '@astryxdesign/core/hooks';
+import {ScrollableArea} from '@astryxdesign/core/ScrollableArea';
 import {Button} from '@astryxdesign/core/Button';
 import {Divider} from '@astryxdesign/core/Divider';
 import {Heading} from '@astryxdesign/core/Heading';
@@ -12,6 +25,8 @@ import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';
+import {Popover} from '@astryxdesign/core/Popover';
 
 const meta: Meta<typeof BottomSheet> = {
   title: 'Core/BottomSheet',
@@ -40,6 +55,115 @@ const meta: Meta<typeof BottomSheet> = {
 
 export default meta;
 type Story = StoryObj<typeof BottomSheet>;
+type StandaloneBottomSheetStoryProps = Extract<
+  ComponentProps<typeof BottomSheet>,
+  {sheetId?: never}
+>;
+
+/** Keep this sheet open so the accessibility audit inspects its scroll body. */
+export const TextOnly: Story = {
+  args: {
+    isOpen: true,
+    label: 'Reading details',
+    height: 'capped',
+    children: (
+      <Section>
+        <VStack gap={4}>
+          <Heading level={2}>Reading details</Heading>
+          {Array.from({length: 16}, (_, index) => (
+            <Text key={index}>
+              Paragraph {index + 1}. This sheet contains plain text. Use Tab to
+              reach the scrolling area, then Arrow Down or Page Down to read the
+              remaining content. Escape closes the sheet.
+            </Text>
+          ))}
+        </VStack>
+      </Section>
+    ),
+  },
+  render: args => {
+    const standaloneArgs = args as StandaloneBottomSheetStoryProps;
+    const [isOpen, setIsOpen] = useState(true);
+    return (
+      <BottomSheet
+        padding={0}
+        {...standaloneArgs}
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+      />
+    );
+  },
+  play: async ({canvasElement}) => {
+    const body = within(canvasElement).getByRole('group', {
+      name: 'Reading details',
+    });
+    await waitFor(() => {
+      expect(body).toHaveAttribute('data-scrollable-block', 'true');
+      expect(body).toHaveAttribute('tabindex', '0');
+    });
+  },
+};
+
+export const TextOnlyFitting: Story = {
+  ...TextOnly,
+  args: {
+    ...TextOnly.args,
+    label: 'Short details',
+    children: (
+      <Section>
+        <Text>This content fits without a separate keyboard scroll stop.</Text>
+      </Section>
+    ),
+  },
+  play: async ({canvasElement}) => {
+    const body = within(canvasElement).getByRole('group', {
+      name: 'Short details',
+    });
+    await waitFor(() => {
+      expect(body).not.toHaveAttribute('data-scrollable-block');
+      expect(body).not.toHaveAttribute('tabindex');
+    });
+  },
+};
+
+/**
+ * Content placed directly in a sheet. The sheet pads it like Dialog, by
+ * default or at the `padding` step given here, and a full-bleed Divider
+ * reaches the sheet's edges because the content box publishes its inset.
+ * `padding={0}` restores the unpadded content box.
+ */
+export const ContainerPadding: Story = {
+  args: {
+    isOpen: true,
+    label: 'Order summary',
+    height: 'hug',
+    padding: 4,
+    children: (
+      <VStack gap={4}>
+        <Heading level={2}>Order summary</Heading>
+        <Text>
+          This content has no wrapper of its own. The sheet supplies the inset,
+          exactly as Dialog does.
+        </Text>
+        <Divider isFullBleed />
+        <Text color="secondary">
+          The divider above escapes the inset and spans the sheet.
+        </Text>
+      </VStack>
+    ),
+  },
+  render: args => {
+    const standaloneArgs = args as StandaloneBottomSheetStoryProps;
+    const [isOpen, setIsOpen] = useState(true);
+    return (
+      <BottomSheet
+        {...standaloneArgs}
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+      />
+    );
+  },
+};
 
 interface CommentFormValues {
   title: string;
@@ -154,6 +278,9 @@ function MobileKeyboardCommentForm({onPost}: {onPost: () => void}) {
 export const Showcase: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);
+    const [inStock, setInStock] = useState(false);
+    const [onSale, setOnSale] = useState(false);
+    const [freeShipping, setFreeShipping] = useState(false);
     return (
       <>
         <Button label="Open sheet" onClick={() => setIsOpen(true)} />
@@ -162,15 +289,82 @@ export const Showcase: Story = {
             <VStack gap={4}>
               <Heading level={3}>Filters</Heading>
               <Divider />
-              <VStack gap={2}>
-                <CheckboxInput label="In stock" value={false} />
-                <CheckboxInput label="On sale" value={false} />
-                <CheckboxInput label="Free shipping" value={false} />
-              </VStack>
+              <CheckboxList label="Filters" isLabelHidden>
+                <CheckboxListItem
+                  label="In stock"
+                  isChecked={inStock}
+                  onCheck={setInStock}
+                />
+                <CheckboxListItem
+                  label="On sale"
+                  isChecked={onSale}
+                  onCheck={setOnSale}
+                />
+                <CheckboxListItem
+                  label="Free shipping"
+                  isChecked={freeShipping}
+                  onCheck={setFreeShipping}
+                />
+              </CheckboxList>
               <Button label="Apply" onClick={() => setIsOpen(false)} />
             </VStack>
           </Section>
         </BottomSheet>
+      </>
+    );
+  },
+};
+
+/**
+ * Done announces and closes in one tap. Rendered inside the sheet, so
+ * `useAnnounce` follows the sheet's dialog; while the sheet fades out over
+ * the Dialog it still covers it, so the words wait and reach the Dialog's
+ * own live region at the sheet's real close (spec:AST-086 FR14).
+ */
+function SaveAndDone({onDone}: {onDone: () => void}) {
+  const announce = useAnnounce();
+  return (
+    <Button
+      label="Done"
+      onClick={() => {
+        announce('Saved');
+        onDone();
+      }}
+    />
+  );
+}
+
+export const SheetOverDialog: Story = {
+  name: 'Sheet over a Dialog',
+  render: () => {
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isSheetOpen, setIsSheetOpen] = useState(false);
+    return (
+      <>
+        <Button label="Open dialog" onClick={() => setIsDialogOpen(true)} />
+        <Dialog
+          isOpen={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+          aria-label="Edit item">
+          <Section padding={4}>
+            <VStack gap={4}>
+              <DialogHeader title="Edit item" onOpenChange={setIsDialogOpen} />
+              <Button label="Open sheet" onClick={() => setIsSheetOpen(true)} />
+              <BottomSheet
+                isOpen={isSheetOpen}
+                onOpenChange={setIsSheetOpen}
+                label="Options">
+                <Section padding={4}>
+                  <VStack gap={4}>
+                    <Heading level={3}>Options</Heading>
+                    <CheckboxInput label="Notify me" value={false} />
+                    <SaveAndDone onDone={() => setIsSheetOpen(false)} />
+                  </VStack>
+                </Section>
+              </BottomSheet>
+            </VStack>
+          </Section>
+        </Dialog>
       </>
     );
   },
@@ -396,6 +590,71 @@ export const HugHeight: Story = {
   },
 };
 
+/**
+ * A sheet whose height the caller sets. It keeps a 48 px surface below the
+ * screen, so a pull past the top stretches it at most that far.
+ */
+export const CallerHeight: Story = {
+  name: 'Caller height (500 px)',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <Button label="Open 500 px sheet" onClick={() => setIsOpen(true)} />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Caller height"
+          style={{height: 500}}>
+          <Section padding={4}>
+            <VStack gap={4}>
+              <Heading level={3}>Caller height</Heading>
+              <Text type="supporting" color="secondary">
+                The caller sets this sheet's height to 500 px.
+              </Text>
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
+const callerHeightStyles = stylex.create({
+  sheet: {height: 500},
+});
+
+export const CallerHeightXstyle: Story = {
+  name: 'Caller height through xstyle (500 px)',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <Button
+          label="Open 500 px xstyle sheet"
+          onClick={() => setIsOpen(true)}
+        />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Caller height through xstyle"
+          xstyle={callerHeightStyles.sheet}>
+          <Section padding={4}>
+            <VStack gap={4}>
+              <Heading level={3}>Caller height through xstyle</Heading>
+              <Text type="supporting" color="secondary">
+                The caller sets this sheet's height to 500 px through xstyle.
+              </Text>
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
 export const HugHeightWithLongContent: Story = {
   name: 'Hug height — Long content',
   render: () => {
@@ -492,6 +751,329 @@ export const MobileKeyboard: Story = {
           </Section>
         </BottomSheet>
       </>
+    );
+  },
+};
+
+const keyboardFixtureStyles = stylex.create({
+  nestedViewport: {overflow: 'auto', height: 100},
+  nestedContent: {height: 200},
+});
+
+/** Native content variants deliberately exercise the hook's delegation boundary. */
+export const KeyboardDelegation: Story = {
+  render: () => {
+    const [variant, setVariant] = useState('button');
+    const [isOpen, setIsOpen] = useState(true);
+    const [hasScrim, setHasScrim] = useState(false);
+    const action = <Button label="First action" onClick={() => {}} />;
+    let first;
+    switch (variant) {
+      case 'text':
+        first = <Text>Read the details below.</Text>;
+        break;
+      case 'link':
+        first = <Button label="First link" href="#reading-end" />;
+        break;
+      case 'input':
+        first = <TextInput label="First input" value="" onChange={() => {}} />;
+        break;
+      case 'nested':
+        first = (
+          <ScrollableArea label="Nested reading" height={100}>
+            {action}
+            <div {...stylex.props(keyboardFixtureStyles.nestedContent)}>
+              Nested content
+            </div>
+          </ScrollableArea>
+        );
+        break;
+      case 'native-scroll':
+        first = (
+          <div {...stylex.props(keyboardFixtureStyles.nestedViewport)}>
+            {action}
+            <div {...stylex.props(keyboardFixtureStyles.nestedContent)}>
+              Nested content
+            </div>
+          </div>
+        );
+        break;
+      case 'disabled':
+        first = <Button label="First action" isDisabled />;
+        break;
+      case 'button':
+        first = action;
+        break;
+      default:
+        first = <div role={variant}>{action}</div>;
+    }
+    return (
+      <>
+        <label>
+          Content case
+          <select
+            value={variant}
+            onChange={event => setVariant(event.target.value)}>
+            {[
+              'button',
+              'link',
+              'text',
+              'input',
+              'disabled',
+              'nested',
+              'native-scroll',
+              'radiogroup',
+              'slider',
+              'combobox',
+              'listbox',
+              'menu',
+              'grid',
+              'tree',
+              'tablist',
+              'toolbar',
+            ].map(value => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button label="Before sheet" onClick={() => setIsOpen(true)} />
+        <Button
+          label="Toggle modal"
+          onClick={() => setHasScrim(value => !value)}
+        />
+        <BottomSheet
+          key={hasScrim ? 'modal' : 'nonmodal'}
+          label="Keyboard reading"
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          hasScrim={hasScrim}
+          height="capped">
+          <Section>
+            <VStack gap={4}>
+              <Heading level={2}>Keyboard reading</Heading>
+              {first}
+              {Array.from({length: 24}, (_, index) => (
+                <Text key={index}>
+                  Paragraph {index + 1}. Use Arrow or Page keys to read the full
+                  content. The sheet keeps native scrolling after keyboard
+                  entry.
+                </Text>
+              ))}
+              {variant !== 'text' && variant !== 'disabled' && (
+                <Button label="Last action" onClick={() => {}} />
+              )}
+              <Text id="reading-end">End of reading</Text>
+            </VStack>
+          </Section>
+        </BottomSheet>
+        <Button label="After sheet" onClick={() => {}} />
+      </>
+    );
+  },
+};
+
+/** Escape closes only the top-most layer: a Popover opened inside the sheet first. */
+export const NestedPopover: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [hasScrim, setHasScrim] = useState(false);
+    const [purpose, setPurpose] = useState<'info' | 'form' | 'required'>(
+      'info',
+    );
+    return (
+      <>
+        <label>
+          Sheet purpose
+          <select
+            value={purpose}
+            onChange={event =>
+              setPurpose(event.target.value as 'info' | 'form' | 'required')
+            }>
+            {['info', 'form', 'required'].map(value => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+        <CheckboxInput
+          label="Show scrim"
+          value={hasScrim}
+          onChange={setHasScrim}
+        />
+        <Button label="Open sheet" onClick={() => setIsOpen(true)} />
+        <BottomSheet
+          label="Reference"
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          hasScrim={hasScrim}
+          purpose={purpose}
+          height="tall"
+          snapPoints={['96px', '50%']}
+          padding={6}>
+          <Popover
+            label="Details"
+            hasAutoFocus={false}
+            content={<p>Nested information</p>}>
+            <Button label="About" />
+          </Popover>
+          <Button label="Close sheet" onClick={() => setIsOpen(false)} />
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
+/**
+ * A no-scrim sheet with a `data-autofocus` field: focus on open follows the
+ * native host, which lands on the panel; the field is not focused.
+ */
+export const NoScrimAutofocus: Story = {
+  name: 'No scrim with a data-autofocus field',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [value, setValue] = useState('');
+    return (
+      <>
+        <Button label="Open sheet" onClick={() => setIsOpen(true)} />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Filter places"
+          hasScrim={false}
+          height="hug">
+          <Section padding={4}>
+            <VStack gap={3}>
+              <TextInput
+                label="Search"
+                value={value}
+                onChange={setValue}
+                hasAutoFocus
+              />
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
+/**
+ * A modal sheet with a `data-autofocus` field (a TextInput with hasAutoFocus):
+ * what focus lands on when the sheet opens.
+ */
+export const ModalAutofocus: Story = {
+  name: 'Modal with a data-autofocus field',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [value, setValue] = useState('');
+    return (
+      <>
+        <Button label="Open sheet" onClick={() => setIsOpen(true)} />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Edit note"
+          height="hug">
+          <Section padding={4}>
+            <VStack gap={3}>
+              <TextInput
+                label="Note"
+                value={value}
+                onChange={setValue}
+                hasAutoFocus
+              />
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
+type ExitFocusChange = 'remove' | 'disable';
+
+function ExitFocusChangeFixture({change}: {change: ExitFocusChange}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isDoneChanged, setIsDoneChanged] = useState(false);
+  const open = () => {
+    setIsDoneChanged(false);
+    setIsOpen(true);
+  };
+  const close = () => {
+    setIsOpen(false);
+    // The control changes after the close starts, during the exit motion.
+    window.setTimeout(() => setIsDoneChanged(true), 100);
+  };
+  return (
+    <>
+      <Button label="Open sheet" onClick={open} />
+      <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Exit focus">
+        <Section>
+          {change === 'remove' && isDoneChanged ? null : (
+            <Button
+              label="Done"
+              onClick={close}
+              isDisabled={change === 'disable' && isDoneChanged}
+            />
+          )}
+        </Section>
+      </BottomSheet>
+    </>
+  );
+}
+
+/**
+ * Browser fixture: Done closes the sheet, and 100 ms into the exit the Done
+ * control is removed. The sheet goes inert and hidden as focus leaves it.
+ */
+export const ExitFocusControlRemoved: Story = {
+  tags: ['!autodocs'],
+  render: () => <ExitFocusChangeFixture change="remove" />,
+};
+
+/**
+ * Browser fixture: Done closes the sheet, and 100 ms into the exit the Done
+ * control is disabled. The sheet goes inert and hidden as focus leaves it.
+ */
+export const ExitFocusControlDisabled: Story = {
+  tags: ['!autodocs'],
+  render: () => <ExitFocusChangeFixture change="disable" />,
+};
+
+/**
+ * A sheet rendered only while it is open. "Done" removes the sheet while it is
+ * still open; focus returns to "Edit filters" (FR20).
+ */
+export const RenderedWhileOpen: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [hasScrim, setHasScrim] = useState(true);
+    return (
+      <VStack gap={2}>
+        <CheckboxInput
+          label="Modal (scrim)"
+          value={hasScrim}
+          onChange={setHasScrim}
+        />
+        <Button label="Edit filters" onClick={() => setIsOpen(true)} />
+        {isOpen && (
+          <BottomSheet
+            isOpen
+            onOpenChange={setIsOpen}
+            hasScrim={hasScrim}
+            label="Filters">
+            <VStack gap={2}>
+              <Text>Removing this sheet while it is open returns focus.</Text>
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </BottomSheet>
+        )}
+      </VStack>
     );
   },
 };

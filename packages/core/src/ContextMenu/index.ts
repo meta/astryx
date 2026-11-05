@@ -15,6 +15,7 @@ export {
   type ContextMenuSection,
   type ContextMenuOption,
 } from './ContextMenu';
+export type {AdaptivePresentation as MenuPresentation} from '../hooks/useAdaptivePresentation';
 
 export {
   DropdownMenuItem as ContextMenuItem,
@@ -24,6 +25,10 @@ export {
   DropdownMenuDivider as ContextMenuDivider,
   type DropdownMenuDividerProps as ContextMenuDividerProps,
 } from '../DropdownMenu/DropdownMenuDivider';
+export {
+  DropdownMenuGroup as ContextMenuGroup,
+  type DropdownMenuGroupProps as ContextMenuGroupProps,
+} from '../DropdownMenu/DropdownMenuGroup';
 
 // Selectable items work inside a ContextMenu too — re-exported under the
 // ContextMenu name for a coherent API.

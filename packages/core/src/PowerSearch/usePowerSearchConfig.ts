@@ -11,13 +11,17 @@
 
 import {useMemo} from 'react';
 import type {
-  DateTimeRangePart,
   EnumItem,
   PowerSearchConfig,
   PowerSearchField,
   PowerSearchFilter,
   PowerSearchOperator,
 } from './types';
+import {resolveDateTimeRangePart} from './resolveDateTimeRangePart';
+import {registerEnglishFallback} from '../i18n/englishFallback';
+import english from '../i18n/generated-english/PowerSearch/usePowerSearchConfig.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Public Types
@@ -390,28 +394,6 @@ function toStringValues(value: unknown): string[] | null {
   return null;
 }
 
-function resolveRangePart(part: DateTimeRangePart): number {
-  switch (part.type) {
-    case 'NOW':
-      return Math.floor(Date.now() / 1000);
-    case 'ABSOLUTE':
-      return part.unixSeconds;
-    case 'RELATIVE': {
-      const now = Date.now() / 1000;
-      const multipliers: Record<string, number> = {
-        second: 1,
-        minute: 60,
-        hour: 3600,
-        day: 86400,
-        week: 604800,
-        month: 2592000,
-        year: 31536000,
-      };
-      return Math.floor(now - part.backValue * (multipliers[part.unit] ?? 0));
-    }
-  }
-}
-
 function matchesFilter(
   row: Record<string, unknown>,
   filter: PowerSearchFilter,
@@ -481,8 +463,12 @@ function matchesFilter(
       }
       const ts = toUnixSeconds(fieldValue);
       if (operator === DateOps.BETWEEN) {
-        const start = resolveRangePart(filterValue.value.start);
-        const end = resolveRangePart(filterValue.value.end);
+        const nowSeconds = Date.now() / 1000;
+        const start = resolveDateTimeRangePart(
+          filterValue.value.start,
+          nowSeconds,
+        );
+        const end = resolveDateTimeRangePart(filterValue.value.end, nowSeconds);
         return ts >= start && ts <= end;
       }
       return true;

@@ -6,7 +6,21 @@ export const doc = {
   name: 'Shell Nav',
   displayName: 'Shell Nav',
   description:
-    'A top + side nav app shell with a File/Edit/View/Window/Help menu bar plus command-palette search, a resizable file-tree SideNav, and a static grey-card tabbed code editor.',
+    'Application frame combining both navigation axes: a top menu bar with command-palette search over a resizable hierarchy rail, wrapping placeholder content. For when one axis is not enough.',
+  keywords: [
+    'shell',
+    'chrome',
+    'layout frame',
+    'navigation',
+    'sidebar',
+    'menu bar',
+  ],
   isReady: true,
   category: 'Shell - Top Nav + Left Sidebar',
+  icons: {
+    DocumentTextIcon: 'document',
+    FolderIcon: 'folder',
+    MagnifyingGlassIcon: 'search',
+    PlayIcon: 'play',
+  },
 };

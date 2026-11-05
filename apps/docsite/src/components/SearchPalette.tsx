@@ -2,74 +2,59 @@
 
 'use client';
 
+/**
+ * @file Renders CLI-ranked site-search results as readable destination rows.
+ * @input The palette open state and results from createCliSearchSource().
+ * @output Search navigation with concise titles, type/location context, and icons.
+ * @position Mounted by the shared docsite top navigation.
+ */
+
 import {useMemo, useCallback} from 'react';
 import {useRouter} from 'next/navigation';
+import * as stylex from '@stylexjs/stylex';
 import {CommandPalette} from '@astryxdesign/core/CommandPalette';
-import {createStaticSource} from '@astryxdesign/core/Typeahead';
-import type {ComponentEntry} from '../generated/componentRegistry';
-import type {PackageMeta} from '../generated/packageRegistry';
-import type {DocTopic} from '../generated/docsRegistry';
-import type {TemplateEntry} from '../generated/templateRegistry';
+import {Icon} from '@astryxdesign/core/Icon';
+import {HStack, VStack} from '@astryxdesign/core/Layout';
+import {Text} from '@astryxdesign/core/Text';
 import {trackSearch} from '../lib/analytics';
-import {
-  buildSearchPaletteItems,
-  getSearchItemKeywords,
-} from './searchPaletteData';
+import {createCliSearchSource, searchTarget} from '../lib/cliSearchSource';
+import {searchResultPresentation} from '../lib/cliSearchPresentation';
+
+const styles = stylex.create({
+  result: {
+    minWidth: 0,
+  },
+  copy: {
+    flex: 1,
+    minWidth: 0,
+  },
+});
 
 interface SearchPaletteProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  components: Record<string, ComponentEntry[]>;
-  packages: PackageMeta[];
-  docTopics: DocTopic[];
-  templates: TemplateEntry[];
 }
 
-export function SearchPalette({
-  isOpen,
-  onOpenChange,
-  components,
-  packages,
-  docTopics,
-  templates,
-}: SearchPaletteProps) {
+/**
+ * The site's search: `astryx search`, run by the site's search API
+ * (app/api/search/route.ts), so it answers what the CLI answers.
+ */
+export function SearchPalette({isOpen, onOpenChange}: SearchPaletteProps) {
   const router = useRouter();
 
-  // Component items come from the same grouped registry as the sidebar so
-  // sidebar and command palette navigation stay in lockstep.
-  const searchSource = useMemo(() => {
-    const items = buildSearchPaletteItems({
-      components,
-      packages,
-      docTopics,
-      templates,
-    });
-
-    return createStaticSource(items, {
-      keywords: getSearchItemKeywords,
-    });
-  }, [components, packages, docTopics, templates]);
+  const searchSource = useMemo(() => createCliSearchSource(), []);
 
   const handleValueChange = useCallback(
-    (value: string) => {
-      if (value && value.startsWith('/')) {
-        // Determine type from path prefix
-        const type = value.startsWith('/components/')
-          ? 'component'
-          : value.startsWith('/templates/')
-            ? 'template'
-            : value.startsWith('/themes/')
-              ? 'theme'
-              : value.startsWith('/docs/')
-                ? 'doc'
-                : 'page';
-        const item = value.split('/').pop() || value;
-        trackSearch({target: 'select', item, type});
-        router.push(value);
-        onOpenChange(false);
+    (id: string) => {
+      const result = searchSource.item(id)?.auxiliaryData;
+      if (!result) {
+        return;
       }
+      trackSearch({target: 'select', ...searchTarget(result.href)});
+      router.push(result.href);
+      onOpenChange(false);
     },
-    [router, onOpenChange],
+    [searchSource, router, onOpenChange],
   );
 
   return (
@@ -77,6 +62,27 @@ export function SearchPalette({
       isOpen={isOpen}
       onOpenChange={onOpenChange}
       searchSource={searchSource}
+      renderItem={item => {
+        const result = item.auxiliaryData;
+        const {
+          title,
+          context,
+          icon: ResultIcon,
+        } = searchResultPresentation(result);
+        return (
+          <HStack gap={3} vAlign="center" width="100%" xstyle={styles.result}>
+            <Icon icon={ResultIcon} size="sm" color="secondary" />
+            <VStack gap={0} xstyle={styles.copy}>
+              <Text type="label" weight="semibold" maxLines={1}>
+                {title}
+              </Text>
+              <Text type="supporting" color="secondary" maxLines={1}>
+                {context}
+              </Text>
+            </VStack>
+          </HStack>
+        );
+      }}
       label="Search docs, components, and templates"
       value=""
       onValueChange={handleValueChange}

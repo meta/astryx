@@ -23,32 +23,34 @@ export {
  * Detects if the locale uses day-first date format (DD/MM/YYYY).
  * US and a few others use month-first (MM/DD/YYYY).
  */
-export function isLocaleDayFirst(locale?: Locale): boolean {
-  const parts = new Intl.DateTimeFormat(locale).formatToParts(
-    new Date(2000, 0, 15),
-  );
+export function isLocaleDayFirst(locale: Locale = 'en'): boolean {
+  const parts = new Intl.DateTimeFormat(locale, {
+    calendar: 'gregory',
+  }).formatToParts(new Date(2000, 0, 15));
   const dayIndex = parts.findIndex(p => p.type === 'day');
   const monthIndex = parts.findIndex(p => p.type === 'month');
   return dayIndex < monthIndex;
 }
 
+// Built at run time: a Unicode property escape in a literal fails a source
+// build whose Babel lacks the Unicode data.
+const LETTER_FREE = new RegExp('^[^\\p{L}]+$', 'u');
+const YEAR_FIRST = new RegExp('^\\d{4}[^\\p{L}\\d]', 'u');
+
 /**
  * Parses user input into a PlainDate.
  *
- * Supports:
- * - ISO format: "2026-01-25"
- * - Full month names: "January 25, 2026", "25 January 2026"
- * - Full month names without year: "January 25", "25 January" (defaults to current year)
- * - Numeric formats: "1/25/2026", "25/1/2026" (locale-aware with heuristics)
- * - Numeric formats without year: "1/25", "25/1" (defaults to current year)
- *
- * For ambiguous numeric formats (both numbers ≤ 12), uses locale preference.
+ * Supports ISO dates, English month names, and ASCII numeric dates with or
+ * without a year. For ambiguous ASCII numeric input where both fields are at
+ * most 12, `locale` selects month-first versus day-first order. It does not
+ * localize month-name parsing, accept non-ASCII digits, or provide a general
+ * locale-aware parser.
  *
  * @returns PlainDate if valid, null if unparseable
  */
 export function parseDateInput(
   input: string,
-  locale?: Locale,
+  locale: Locale = 'en',
 ): PlainDate | null {
   const trimmed = input.trim();
   if (!trimmed) {
@@ -141,6 +143,17 @@ export function parseDateInput(
   if (/^\d+$/.test(trimmed)) {
     return null;
   }
+  // In a day-first locale, letter-free text that no form above matched is not
+  // a date. Native `Date` reads `a/b/c` month first. It also takes a year of
+  // one to three digits. So "12/01/2" gives a wrong date. A four-digit year
+  // written first is not ambiguous.
+  if (
+    isLocaleDayFirst(locale) &&
+    LETTER_FREE.test(trimmed) &&
+    !YEAR_FIRST.test(trimmed)
+  ) {
+    return null;
+  }
 
   const parsed = new Date(trimmed);
   if (!isNaN(parsed.getTime())) {
@@ -157,7 +170,7 @@ function parseNumericDate(
   first: number,
   second: number,
   year: number,
-  locale?: Locale,
+  locale: Locale,
 ): PlainDate | null {
   let day: number;
   let month: number;

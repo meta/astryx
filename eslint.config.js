@@ -1,13 +1,19 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import { defineConfig } from "eslint/config";
-import { includeIgnoreFile } from "@eslint/compat";
-import path from "node:path";
-import js from "@eslint/js";
-import tseslint from "typescript-eslint";
-import eslintReact from "@eslint-react/eslint-plugin";
-import reactCompiler from "eslint-plugin-react-compiler";
-import astryxPlugin from "./internal/eslint-plugin-astryx/index.js";
+import {defineConfig} from 'eslint/config';
+import {includeIgnoreFile} from '@eslint/compat';
+import path from 'node:path';
+import {readFileSync} from 'node:fs';
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import eslintReact from '@eslint-react/eslint-plugin';
+import reactCompiler from 'eslint-plugin-react-compiler';
+import astryxPlugin from './internal/eslint-plugin-astryx/index.js';
+import {scope as internalBarrelScope} from './internal/eslint-plugin-astryx/no-internal-barrel-import.js';
+import {scope as nullishGuardScope} from './internal/eslint-plugin-astryx/no-nullish-jsx-guard.js';
+import {scope as truthyGuardScope} from './internal/eslint-plugin-astryx/no-truthy-jsx-guard.js';
+import {scope as privateAttributeScope} from './internal/eslint-plugin-astryx/no-raw-private-attribute.js';
+import {scope as commentProvenanceScope} from './internal/eslint-plugin-astryx/no-comment-provenance.js';
 
 /* global process */
 
@@ -24,9 +30,51 @@ import astryxPlugin from "./internal/eslint-plugin-astryx/index.js";
  *   CI=true pnpm lint            # Also triggers strict mode
  */
 
-const isStrictMode = process.env.ASTRYX_STRICT_LINT === '1' || process.env.CI === 'true';
-const astryxConfig = isStrictMode ? astryxPlugin.configs.strict : astryxPlugin.configs.recommended;
+const isStrictMode =
+  process.env.ASTRYX_STRICT_LINT === '1' || process.env.CI === 'true';
+const astryxConfig = isStrictMode
+  ? astryxPlugin.configs.strict
+  : astryxPlugin.configs.recommended;
 const reactSeverity = isStrictMode ? 'error' : 'warn';
+
+// Barrel imports that existed when `@astryx/no-internal-barrel-import` arrived,
+// by repo-relative file. The list only shrinks.
+const internalBarrelBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-internal-barrel-import.baseline.json',
+    ),
+    'utf8',
+  ),
+);
+
+// Private `data-astryx-*` attributes written by hand before
+// `@astryx/no-raw-private-attribute` arrived, by repo-relative file, once per
+// site. The list only shrinks.
+const privateAttributeBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-raw-private-attribute.baseline.json',
+    ),
+    'utf8',
+  ),
+);
+
+// Record ids, claim ids, pull request and issue references, date stamps, and
+// quote blocks in source comments that predate
+// `@astryx/no-comment-provenance`, by repo-relative file, once per site. The
+// list only shrinks.
+const commentProvenanceBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
+    ),
+    'utf8',
+  ),
+);
 
 // The internal plugin is plain untyped JS (kept out of the lint/type surface),
 // so its inferred shape doesn't satisfy ESLint's strict `Plugin` type. One
@@ -48,20 +96,23 @@ const astryxEslintPlugin = /** @type {import('eslint').ESLint.Plugin} */ (
  * needs its directory as `basePath`.
  */
 const gitignoreDirs = [
-  "apps/docsite",
-  "apps/sandbox",
-  "apps/template-viewer",
-  "internal/vibe-tests",
-  "packages/build",
-  "packages/cli",
+  'apps/docsite',
+  'apps/sandbox',
+  'apps/template-viewer',
+  'internal/vibe-tests',
+  'packages/build',
+  'packages/cli',
 ];
 
 const gitignores = [
-  includeIgnoreFile(path.join(import.meta.dirname, ".gitignore"), "root .gitignore"),
-  ...gitignoreDirs.map((dir) => ({
+  includeIgnoreFile(
+    path.join(import.meta.dirname, '.gitignore'),
+    'root .gitignore',
+  ),
+  ...gitignoreDirs.map(dir => ({
     basePath: dir,
     ...includeIgnoreFile(
-      path.join(import.meta.dirname, dir, ".gitignore"),
+      path.join(import.meta.dirname, dir, '.gitignore'),
       `${dir}/.gitignore`,
     ),
   })),
@@ -74,6 +125,59 @@ const tseslintRecommended = /** @type {import('eslint').Linter.Config[]} */ (
   tseslint.configs.recommended
 );
 
+const ZOD_SEALED = {
+  name: 'zod',
+  message:
+    'zod is sealed behind the authoring/ parsers. Validate at the load boundary (parseDoc/parseConfig/parseIntegration) and pass typed data inward.',
+};
+
+// Doc merging, section keys and token-reference linking belong to the doc
+// compiler (packages/cli/foundation/doc-compiler). The import scan in its
+// tests enforces the same list and also catches a dynamic import().
+/** @param {string[]} [allowed] compiler functions the file may call */
+const docCompilerOnly = (allowed = []) =>
+  [
+    {
+      group: ['**/foundation/discovery/docs-discovery.mjs'],
+      importNames: ['mergeTopic'],
+    },
+    {
+      group: ['**/foundation/discovery/docs-section-key.mjs'],
+      importNames: ['withSectionKeys'],
+    },
+    {
+      group: ['**/foundation/doc-compiler/compile.mjs'],
+      importNames: [
+        'lowerReferenceTopic',
+        'linkReferenceTopic',
+        'linkReferenceSection',
+        'lowerDoc',
+      ].filter(name => !allowed.includes(name)),
+    },
+  ]
+    .filter(pattern => pattern.importNames.length > 0)
+    .map(pattern => ({
+      ...pattern,
+      message:
+        'Doc merging, section keys and token-reference linking belong to the doc compiler. Read compiled nodes through api/docs/_adapter.mjs and foundation/doc-compiler/lenses.mjs.',
+    }));
+
+/** api/'s import rules, allowing the compiler functions one docs file calls. */
+const apiImportRules = (/** @type {string[]} */ allowed = []) => [
+  'error',
+  {
+    patterns: [
+      {
+        group: ['**/clients/**'],
+        message:
+          'api/ is the behavior source of truth and must not import clients/ (the CLI presentation layer). Return data in the { type, data } envelope and let the command handler render it.',
+      },
+      ...docCompilerOnly(allowed),
+    ],
+    paths: [ZOD_SEALED],
+  },
+];
+
 export default defineConfig(
   js.configs.recommended,
   tseslintRecommended,
@@ -81,45 +185,48 @@ export default defineConfig(
   {
     ignores: [
       // dist/** and node_modules/** come from the .gitignore imports above.
-      ".claude/**",
-      "**/internal/eslint-plugin-astryx/**",
-      ".github/scripts/**",
-      "scripts/**",
+      '.claude/**',
+      '**/internal/eslint-plugin-astryx/**',
+      '.github/scripts/**',
+      'scripts/**',
+      // Canonical consumer fixtures are validated and built in copied,
+      // standalone sandboxes rather than linted as workspace source.
+      'internal/vibe-tests/fixtures/**',
       // Changesets tooling (custom changelog module + config) is CommonJS
       // build/release glue, not shipped source — keep it out of the TS/ESM
       // lint pass (consistent with scripts/** above).
-      ".changeset/**",
+      '.changeset/**',
       // .mjs is ignored everywhere EXCEPT the CLI package, whose runtime is
       // entirely .mjs. The negations below opt packages/cli back into linting
       // (see the dedicated CLI block lower down). Scoped to packages/cli on
       // purpose — other packages' .mjs stay unlinted (#2468).
-      "**/*.mjs",
-      "!packages/cli/api/**/*.mjs",
-      "!packages/cli/clients/cli/**/*.mjs",
-      "!packages/cli/assets/codemods/**/*.mjs",
-      "!packages/cli/authoring/**/*.mjs",
-      "!packages/cli/lib/**/*.mjs",
-      "!packages/cli/utils/**/*.mjs",
-      "!packages/cli/foundation/**/*.mjs",
-      "!packages/cli/clients/cli/bin/**/*.mjs",
-      "**/*.test-violations.tsx",
-      "apps/example-nextjs/*.js",
+      '**/*.mjs',
+      '!packages/cli/api/**/*.mjs',
+      '!packages/cli/clients/cli/**/*.mjs',
+      '!packages/cli/assets/codemods/**/*.mjs',
+      '!packages/cli/authoring/**/*.mjs',
+      '!packages/cli/lib/**/*.mjs',
+      '!packages/cli/utils/**/*.mjs',
+      '!packages/cli/foundation/**/*.mjs',
+      '!packages/cli/clients/cli/bin/**/*.mjs',
+      '**/*.test-violations.tsx',
+      'apps/example-nextjs/*.js',
       // Generated declaration files (e.g. the CLI's `./api` type surface emitted
       // from JSDoc by `sync:api-types` at prepack). Like `**/*.d.ts`, these are
       // build artifacts — not hand-authored source to lint.
-      "**/*.d.mts",
-      "**/next-env.d.ts",
-      "**/.next/**",
-      "apps/example-nextjs-source/*.js",
-      "apps/docsite/*.js",
-      "apps/docsite/scripts/**",
-      "apps/sandbox/*.js",
-      "apps/sandbox/out/**",
-      "packages/build/**",
+      '**/*.d.mts',
+      '**/next-env.d.ts',
+      '**/.next/**',
+      'apps/example-nextjs-source/*.js',
+      'apps/docsite/*.js',
+      'apps/docsite/scripts/**',
+      'apps/sandbox/*.js',
+      'apps/sandbox/out/**',
+      'packages/build/**',
     ],
   },
   {
-    files: ["**/*.{ts,tsx}"],
+    files: ['**/*.{ts,tsx}'],
     languageOptions: {
       parserOptions: {
         ecmaFeatures: {
@@ -128,22 +235,28 @@ export default defineConfig(
       },
     },
     rules: {
-      "@typescript-eslint/no-unused-vars": ["warn", {
-        argsIgnorePattern: "^_",
-        varsIgnorePattern: "^_",
-        destructuredArrayIgnorePattern: "^_",
-        caughtErrorsIgnorePattern: "^_",
-      }],
-      "no-console": ["warn", { allow: ["warn", "error"] }],
-      "curly": "warn",
-      "@typescript-eslint/no-non-null-assertion": "warn",
-      "@typescript-eslint/consistent-type-assertions": ["warn", {
-        assertionStyle: "as",
-        objectLiteralTypeAssertions: "never",
-      }],
-      "@typescript-eslint/consistent-type-imports": [
-        "warn",
-        {fixStyle: "inline-type-imports"},
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+      'no-console': ['warn', {allow: ['warn', 'error']}],
+      curly: 'warn',
+      '@typescript-eslint/no-non-null-assertion': 'warn',
+      '@typescript-eslint/consistent-type-assertions': [
+        'warn',
+        {
+          assertionStyle: 'as',
+          objectLiteralTypeAssertions: 'never',
+        },
+      ],
+      '@typescript-eslint/consistent-type-imports': [
+        'warn',
+        {fixStyle: 'inline-type-imports'},
       ],
     },
   },
@@ -151,50 +264,62 @@ export default defineConfig(
   // measurable startup cost, but catches async correctness issues syntax-only
   // lint cannot see.
   {
-    files: ["packages/core/src/**/*.{ts,tsx}"],
+    files: ['packages/core/src/**/*.{ts,tsx}'],
     languageOptions: {
       parserOptions: {
         projectService: true,
       },
     },
     rules: {
-      "@typescript-eslint/array-type": [
+      '@typescript-eslint/array-type': [
         reactSeverity,
-        {default: "array", readonly: "generic"},
+        {default: 'array', readonly: 'generic'},
       ],
-      "@typescript-eslint/await-thenable": reactSeverity,
-      "@typescript-eslint/no-array-delete": reactSeverity,
-      "@typescript-eslint/no-base-to-string": reactSeverity,
-      "@typescript-eslint/no-duplicate-type-constituents": reactSeverity,
-      "@typescript-eslint/no-dynamic-delete": reactSeverity,
-      "@typescript-eslint/no-floating-promises": reactSeverity,
-      "@typescript-eslint/no-for-in-array": reactSeverity,
-      "@typescript-eslint/no-implied-eval": reactSeverity,
-      "@typescript-eslint/no-import-type-side-effects": reactSeverity,
-      "@typescript-eslint/no-invalid-void-type": reactSeverity,
-      "@typescript-eslint/no-misused-promises": reactSeverity,
-      "@typescript-eslint/no-unnecessary-type-conversion": reactSeverity,
-      "@typescript-eslint/no-unnecessary-type-assertion": reactSeverity,
-      "@typescript-eslint/no-useless-default-assignment": reactSeverity,
-      "@typescript-eslint/no-redeclare": reactSeverity,
-      "@typescript-eslint/only-throw-error": reactSeverity,
-      "@typescript-eslint/prefer-includes": reactSeverity,
-      "@typescript-eslint/prefer-string-starts-ends-with": reactSeverity,
-      "@typescript-eslint/promise-function-async": [
+      '@typescript-eslint/await-thenable': reactSeverity,
+      '@typescript-eslint/no-array-delete': reactSeverity,
+      '@typescript-eslint/no-base-to-string': reactSeverity,
+      '@typescript-eslint/no-duplicate-type-constituents': reactSeverity,
+      '@typescript-eslint/no-dynamic-delete': reactSeverity,
+      '@typescript-eslint/no-floating-promises': reactSeverity,
+      '@typescript-eslint/no-for-in-array': reactSeverity,
+      '@typescript-eslint/no-implied-eval': reactSeverity,
+      '@typescript-eslint/no-import-type-side-effects': reactSeverity,
+      '@typescript-eslint/no-invalid-void-type': reactSeverity,
+      '@typescript-eslint/no-misused-promises': reactSeverity,
+      '@typescript-eslint/no-unnecessary-type-conversion': reactSeverity,
+      '@typescript-eslint/no-unnecessary-type-assertion': reactSeverity,
+      '@typescript-eslint/no-useless-default-assignment': reactSeverity,
+      '@typescript-eslint/no-redeclare': reactSeverity,
+      '@typescript-eslint/only-throw-error': reactSeverity,
+      '@typescript-eslint/prefer-includes': reactSeverity,
+      '@typescript-eslint/prefer-string-starts-ends-with': reactSeverity,
+      '@typescript-eslint/promise-function-async': [
         reactSeverity,
         {allowAny: false},
       ],
-      "@typescript-eslint/require-array-sort-compare": reactSeverity,
-      "@typescript-eslint/restrict-plus-operands": reactSeverity,
-      "@typescript-eslint/restrict-template-expressions": reactSeverity,
-      "@typescript-eslint/return-await": reactSeverity,
-      "@typescript-eslint/switch-exhaustiveness-check": reactSeverity,
+      '@typescript-eslint/require-array-sort-compare': reactSeverity,
+      '@typescript-eslint/restrict-plus-operands': reactSeverity,
+      '@typescript-eslint/restrict-template-expressions': reactSeverity,
+      '@typescript-eslint/return-await': reactSeverity,
+      '@typescript-eslint/switch-exhaustiveness-check': reactSeverity,
+    },
+  },
+  // Core's internal subpaths (`@astryxdesign/core/internal/*`) and its
+  // gesture, motion and touch-support source are for Core and Lab only.
+  {
+    files: ['**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'],
+    ignores: ['packages/core/**', 'packages/lab/**', '**/dist/**'],
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-core-internal-import': 'error',
     },
   },
   // Copyright header — all source files must have the Meta copyright notice
   {
-    files: ["**/*.{ts,tsx}"],
-    ignores: ["**/*.d.ts", "**/dist/**"],
+    files: ['**/*.{ts,tsx}'],
+    ignores: ['**/*.d.ts', '**/dist/**'],
     plugins: {
       '@astryx': astryxEslintPlugin,
     },
@@ -210,8 +335,8 @@ export default defineConfig(
   // copy into their own apps, and the @eslint-react DOM rules below are scoped
   // to packages/core/src.
   {
-    files: ["**/*.{ts,tsx}"],
-    ignores: ["**/*.d.ts", "**/dist/**"],
+    files: ['**/*.{ts,tsx}'],
+    ignores: ['**/*.d.ts', '**/dist/**'],
     plugins: {
       '@astryx': astryxEslintPlugin,
     },
@@ -225,10 +350,10 @@ export default defineConfig(
   // infrastructure boundary. Lab adopts this gate when a component graduates.
   {
     files: [
-      "packages/core/src/**/*.{ts,tsx}",
-      "packages/charts/src/**/*.{ts,tsx}",
-      "packages/richtext/src/**/*.{ts,tsx}",
-      "packages/vega/src/**/*.{ts,tsx}",
+      'packages/core/src/**/*.{ts,tsx}',
+      'packages/charts/src/**/*.{ts,tsx}',
+      'packages/richtext/src/**/*.{ts,tsx}',
+      'packages/vega/src/**/*.{ts,tsx}',
     ],
     plugins: {
       '@astryx': astryxEslintPlugin,
@@ -239,36 +364,97 @@ export default defineConfig(
   },
   // Astryx design token enforcement - applies to core package (excluding theme files)
   {
-    files: ["packages/core/src/**/*.{ts,tsx}"],
-    ignores: ["packages/core/src/theme/**"],
+    files: [
+      'packages/core/src/**/*.{ts,tsx}',
+      'packages/richtext/src/**/*.{ts,tsx}',
+    ],
+    ignores: ['packages/core/src/theme/**'],
     ...astryxConfig,
     rules: {
       ...astryxConfig.rules,
       // Temporarily allow Children.* in files that need architectural fixes.
       // Tracked: OverflowList, MetadataList, Carousel need data-driven APIs.
-      '@astryx/no-react-introspection': ['error', {
-        allowFiles: [
-          'OverflowList/OverflowList',
-          'MetadataList/MetadataList',
-          'Carousel/Carousel',
-        ],
-      }],
+      '@astryx/no-react-introspection': [
+        'error',
+        {
+          allowFiles: [
+            'OverflowList/OverflowList',
+            'MetadataList/MetadataList',
+            'Carousel/Carousel',
+          ],
+        },
+      ],
       // announce() live-region messages are user-facing text; the rule checks
       // them as call arguments (callees defaults to ['announce']).
-      '@astryx/no-hardcoded-i18n-string': isStrictMode ? 'error' : 'warn',
+      '@astryx/no-hardcoded-i18n-string': [
+        isStrictMode ? 'error' : 'warn',
+        {
+          // Exact reported chunks exempted per file. Remove an entry when its
+          // site moves into the catalog; the list should only shrink.
+          allowedStringsByFile: {
+            // Developer diagnostics, not interface copy.
+            'BottomSheet/BottomSheetPanel.tsx': ['snapPoints ignored '],
+            'Markdown/plugins/protocol.ts': [
+              'plugin "',
+              '" failed in ',
+              '; rendered readable fallback.',
+            ],
+            // Pre-existing hardcoded text awaiting catalog keys.
+            'Chat/useChatPasteAsToken.ts': [' lines, ', ' chars'],
+            'Chat/useTriggerMenu.tsx': ['No results'],
+            'CodeBlock/CodeBlock.tsx': [' diff'],
+            'MultiSelector/MultiSelector.tsx': [' selected'],
+            'PowerSearch/PowerSearch.tsx': [
+              'date range',
+              '1 filter',
+              ' filters',
+              ' items',
+            ],
+            'PowerSearch/PowerSearchValueEditor.tsx': [' ago', ' from now'],
+            'Slider/Slider.tsx': ['Minimum value', 'Maximum value', 'Required'],
+            'Table/plugins/columnResize/useTableColumnResize.tsx': [
+              'Resize column ',
+            ],
+            'TimeInput/TimeInput.tsx': ['e.g., 2:30 PM', 'e.g., 14:30'],
+            'Timer/Timer.tsx': ['m ', 'h '],
+            'Tokenizer/Tokenizer.tsx': ['Create "', ' more'],
+          },
+        },
+      ],
     },
   },
   // What a disabled control says to the pointer is a defect wherever it
   // ships, so these two rules reach past core: lab components are consumed
   // the same way, and lab is where the next core component comes from.
   {
-    files: ["packages/lab/src/**/*.{ts,tsx}"],
+    files: [
+      'packages/lab/src/**/*.{ts,tsx}',
+      'packages/richtext/src/**/*.{ts,tsx}',
+    ],
     plugins: {
       '@astryx': astryxEslintPlugin,
     },
     rules: {
       '@astryx/no-hover-on-disabled': 'error',
       '@astryx/disabled-cursor': 'error',
+    },
+  },
+  // StyleX compiles a `border` shorthand unevenly, and @astryxdesign/build's
+  // strict default refuses it, so a lab or charts component written with one
+  // ships without its border in the prebuilt stylesheet. Core already gets the
+  // rule from its config above; lab and charts get it at the same severity
+  // (error in strict mode, warning otherwise).
+  {
+    files: [
+      'packages/lab/src/**/*.{ts,tsx}',
+      'packages/charts/src/**/*.{ts,tsx}',
+    ],
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-border-shorthand':
+        astryxConfig.rules['@astryx/no-border-shorthand'],
     },
   },
   // `light-dark()` is the theme layer's mechanism, and reaches lab for the
@@ -282,7 +468,10 @@ export default defineConfig(
   // they should read — a token decision, not a mechanical one. Flip to
   // 'error' once that lands.
   {
-    files: ["packages/lab/src/**/*.{ts,tsx}"],
+    files: [
+      'packages/lab/src/**/*.{ts,tsx}',
+      'packages/richtext/src/**/*.{ts,tsx}',
+    ],
     plugins: {
       '@astryx': astryxEslintPlugin,
     },
@@ -301,10 +490,10 @@ export default defineConfig(
   // substitution. Promote to 'error' per package as each reaches zero.
   {
     files: [
-      "packages/lab/src/**/*.{ts,tsx}",
-      "packages/charts/src/**/*.{ts,tsx}",
-      "packages/richtext/src/**/*.{ts,tsx}",
-      "packages/vega/src/**/*.{ts,tsx}",
+      'packages/lab/src/**/*.{ts,tsx}',
+      'packages/charts/src/**/*.{ts,tsx}',
+      'packages/richtext/src/**/*.{ts,tsx}',
+      'packages/vega/src/**/*.{ts,tsx}',
     ],
     plugins: {
       '@astryx': astryxEslintPlugin,
@@ -317,7 +506,7 @@ export default defineConfig(
   // package resolves against; a "hardcoded string" check against it would be
   // circular. Turn off @astryx/no-hardcoded-i18n-string just for this dir.
   {
-    files: ["packages/core/src/i18n/**/*.{ts,tsx}"],
+    files: ['packages/core/src/i18n/**/*.{ts,tsx}'],
     rules: {
       '@astryx/no-hardcoded-i18n-string': 'off',
     },
@@ -326,7 +515,10 @@ export default defineConfig(
   // Uses @eslint-react for bugs that TypeScript alone cannot catch.
   // Children.*/cloneElement are already covered by @astryx/no-react-introspection.
   {
-    files: ["packages/core/src/**/*.{ts,tsx}"],
+    files: [
+      'packages/core/src/**/*.{ts,tsx}',
+      'packages/richtext/src/**/*.{ts,tsx}',
+    ],
     plugins: {
       ...eslintReact.configs.recommended.plugins,
       'react-compiler': reactCompiler,
@@ -361,7 +553,8 @@ export default defineConfig(
       '@eslint-react/dom-no-missing-iframe-sandbox': reactSeverity,
       '@eslint-react/dom-no-void-elements-with-children': reactSeverity,
       '@eslint-react/dom-no-dangerously-set-innerhtml': reactSeverity,
-      '@eslint-react/dom-no-dangerously-set-innerhtml-with-children': reactSeverity,
+      '@eslint-react/dom-no-dangerously-set-innerhtml-with-children':
+        reactSeverity,
       '@eslint-react/dom-no-find-dom-node': reactSeverity,
       '@eslint-react/dom-no-flush-sync': reactSeverity,
       '@eslint-react/dom-no-script-url': reactSeverity,
@@ -399,7 +592,7 @@ export default defineConfig(
   },
   // App preview surfaces may embed local pages, but every iframe must be sandboxed.
   {
-    files: ["apps/docsite/**/*.{ts,tsx}", "apps/sandbox/**/*.{ts,tsx}"],
+    files: ['apps/docsite/**/*.{ts,tsx}', 'apps/sandbox/**/*.{ts,tsx}'],
     plugins: {
       ...eslintReact.configs.recommended.plugins,
     },
@@ -410,9 +603,9 @@ export default defineConfig(
   // Browser documentation/demo surfaces should avoid unsafe new-tab links.
   {
     files: [
-      "apps/docsite/**/*.{ts,tsx}",
-      "apps/sandbox/**/*.{ts,tsx}",
-      "apps/storybook/**/*.{ts,tsx}",
+      'apps/docsite/**/*.{ts,tsx}',
+      'apps/sandbox/**/*.{ts,tsx}',
+      'apps/storybook/**/*.{ts,tsx}',
     ],
     plugins: {
       ...eslintReact.configs.recommended.plugins,
@@ -424,29 +617,34 @@ export default defineConfig(
   // Test files — relax rules for test ergonomics (must be after React rules
   // block so it overrides react-compiler/react-compiler)
   {
-    files: ["**/*.test.{ts,tsx}", "**/*.perf.test.{ts,tsx}"],
+    files: ['**/*.test.{ts,tsx}', '**/*.perf.test.{ts,tsx}'],
     rules: {
-      "no-console": "off",
-      "@typescript-eslint/no-non-null-assertion": "off",
-      "@typescript-eslint/consistent-type-assertions": "off",
-      "react-compiler/react-compiler": "off",
+      'no-console': 'off',
+      '@typescript-eslint/no-non-null-assertion': 'off',
+      '@typescript-eslint/consistent-type-assertions': 'off',
+      'react-compiler/react-compiler': 'off',
       // Test harnesses wrap components in sized/positioned <div>s to set up a
       // scenario; that scaffolding is not shipped DOM.
-      "@astryx/no-style-only-wrapper": "off",
+      '@astryx/no-style-only-wrapper': 'off',
+      // Reading `.type` off a rendered element is how a test asserts which
+      // component a renderer chose. The rule exists to stop *shipped* code
+      // branching on child identity; a test making that assertion is the
+      // point, and has no data-driven API to prefer instead.
+      '@astryx/no-react-introspection': 'off',
     },
   },
   // Non-production code — allow console.log for demos, tools, and examples
   {
     files: [
-      "apps/storybook/stories/**/*.{ts,tsx}",
-      "apps/docsite/src/generated/**/*.{ts,tsx}",
-      "apps/sandbox/**/*.{ts,tsx}",
-      "apps/example-*/**/*.{ts,tsx}",
-      "internal/**/*.{ts,tsx}",
-      "packages/cli/assets/templates/**/*.{ts,tsx}",
+      'apps/storybook/stories/**/*.{ts,tsx}',
+      'apps/docsite/src/generated/**/*.{ts,tsx}',
+      'apps/sandbox/**/*.{ts,tsx}',
+      'apps/example-*/**/*.{ts,tsx}',
+      'internal/**/*.{ts,tsx}',
+      'packages/cli/assets/templates/**/*.{ts,tsx}',
     ],
     rules: {
-      "no-console": "off",
+      'no-console': 'off',
     },
   },
   // CLI runtime (.mjs). The CLI ships as ESM Node modules and was never linted
@@ -455,69 +653,74 @@ export default defineConfig(
   // contract (#2467) at author time via @astryx/no-raw-console-cli.
   {
     files: [
-      "packages/cli/api/**/*.mjs",
-      "packages/cli/clients/cli/**/*.mjs",
-      "packages/cli/assets/codemods/**/*.mjs",
-      "packages/cli/authoring/**/*.mjs",
-      "packages/cli/lib/**/*.mjs",
-      "packages/cli/utils/**/*.mjs",
-      "packages/cli/foundation/**/*.mjs",
-      "packages/cli/clients/cli/bin/**/*.mjs",
+      'packages/cli/api/**/*.mjs',
+      'packages/cli/clients/cli/**/*.mjs',
+      'packages/cli/assets/codemods/**/*.mjs',
+      'packages/cli/authoring/**/*.mjs',
+      'packages/cli/lib/**/*.mjs',
+      'packages/cli/utils/**/*.mjs',
+      'packages/cli/foundation/**/*.mjs',
+      'packages/cli/clients/cli/bin/**/*.mjs',
     ],
     plugins: {
       '@astryx': astryxEslintPlugin,
     },
     languageOptions: {
-      sourceType: "module",
+      sourceType: 'module',
       globals: {
         // Node globals (no `globals` package dependency in this repo).
-        process: "readonly",
-        console: "readonly",
-        Buffer: "readonly",
-        URL: "readonly",
-        URLSearchParams: "readonly",
-        TextEncoder: "readonly",
-        TextDecoder: "readonly",
-        setTimeout: "readonly",
-        clearTimeout: "readonly",
-        setInterval: "readonly",
-        clearInterval: "readonly",
-        setImmediate: "readonly",
-        clearImmediate: "readonly",
-        queueMicrotask: "readonly",
-        __dirname: "readonly",
-        __filename: "readonly",
-        global: "readonly",
-        globalThis: "readonly",
-        structuredClone: "readonly",
-        fetch: "readonly",
-        AbortController: "readonly",
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+        URLSearchParams: 'readonly',
+        TextEncoder: 'readonly',
+        TextDecoder: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        setImmediate: 'readonly',
+        clearImmediate: 'readonly',
+        queueMicrotask: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        global: 'readonly',
+        globalThis: 'readonly',
+        structuredClone: 'readonly',
+        fetch: 'readonly',
+        AbortController: 'readonly',
+        ReadableStream: 'readonly',
+        DOMException: 'readonly',
       },
     },
     rules: {
-      "@typescript-eslint/no-unused-vars": ["error", {
-        argsIgnorePattern: "^_",
-        varsIgnorePattern: "^_",
-        destructuredArrayIgnorePattern: "^_",
-        caughtErrorsIgnorePattern: "^_",
-      }],
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
       // Bare console.log corrupts --json stdout. Route human chatter through
       // humanLog(); console.error/console.warn (stderr) stay allowed.
-      "@astryx/no-raw-console-cli": "error",
+      '@astryx/no-raw-console-cli': 'error',
     },
   },
   // Copyright header for CLI .mjs sources (the main copyright block only
   // covers .ts/.tsx).
   {
     files: [
-      "packages/cli/api/**/*.mjs",
-      "packages/cli/clients/cli/**/*.mjs",
-      "packages/cli/assets/codemods/**/*.mjs",
-      "packages/cli/authoring/**/*.mjs",
-      "packages/cli/lib/**/*.mjs",
-      "packages/cli/utils/**/*.mjs",
-      "packages/cli/foundation/**/*.mjs",
-      "packages/cli/clients/cli/bin/**/*.mjs",
+      'packages/cli/api/**/*.mjs',
+      'packages/cli/clients/cli/**/*.mjs',
+      'packages/cli/assets/codemods/**/*.mjs',
+      'packages/cli/authoring/**/*.mjs',
+      'packages/cli/lib/**/*.mjs',
+      'packages/cli/utils/**/*.mjs',
+      'packages/cli/foundation/**/*.mjs',
+      'packages/cli/clients/cli/bin/**/*.mjs',
     ],
     plugins: {
       '@astryx': astryxEslintPlugin,
@@ -537,48 +740,57 @@ export default defineConfig(
   // authoring/ is pure data contracts + sealed parsers: it sits below every
   // other layer and imports none of them.
   {
-    files: ["packages/cli/authoring/**/*.mjs"],
+    files: ['packages/cli/authoring/**/*.mjs'],
     rules: {
-      "no-restricted-imports": ["error", {
-        patterns: [{
-          group: ["**/api/**", "**/clients/**", "**/foundation/**"],
-          message:
-            "authoring/ is pure data contracts (types + sealed parsers) and must not import api/, clients/, or foundation/. Move shared behavior down into the contract, or invert the dependency.",
-        }],
-      }],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/api/**', '**/clients/**', '**/foundation/**'],
+              message:
+                'authoring/ is pure data contracts (types + sealed parsers) and must not import api/, clients/, or foundation/. Move shared behavior down into the contract, or invert the dependency.',
+            },
+          ],
+        },
+      ],
     },
   },
   // api/ is the behavior source of truth — it must never reach up into the
   // CLI presentation layer (that's what keeps `astryx --json` and the imported
-  // function returning identical data).
+  // function returning identical data). It reads docs only as compiled nodes.
   {
-    files: ["packages/cli/api/**/*.mjs"],
+    files: ['packages/cli/api/**/*.mjs'],
+    rules: {'no-restricted-imports': apiImportRules()},
+  },
+  // The docs adapter and leaves are the only files that drive the doc
+  // compiler. These overlap the api/ block on purpose: each repeats its rules
+  // and allows only the compiler functions that file calls.
+  {
+    files: ['packages/cli/api/docs/_adapter.mjs'],
     rules: {
-      "no-restricted-imports": ["error", {
-        patterns: [{
-          group: ["**/clients/**"],
-          message:
-            "api/ is the behavior source of truth and must not import clients/ (the CLI presentation layer). Return data in the { type, data } envelope and let the command handler render it.",
-        }],
-        paths: [{
-          name: "zod",
-          message:
-            "zod is sealed behind the authoring/ parsers. Validate at the load boundary (parseDoc/parseConfig/parseIntegration) and pass typed data inward.",
-        }],
-      }],
+      'no-restricted-imports': apiImportRules([
+        'lowerReferenceTopic',
+        'linkReferenceTopic',
+      ]),
     },
+  },
+  {
+    files: ['packages/cli/api/docs/detail/detail.mjs'],
+    rules: {'no-restricted-imports': apiImportRules(['linkReferenceTopic'])},
+  },
+  {
+    files: ['packages/cli/api/docs/detail/section/section.mjs'],
+    rules: {'no-restricted-imports': apiImportRules(['linkReferenceSection'])},
   },
   // Everything above the contracts consumes already-parsed, typed data.
   {
-    files: ["packages/cli/clients/**/*.mjs"],
+    files: ['packages/cli/clients/**/*.mjs'],
     rules: {
-      "no-restricted-imports": ["error", {
-        paths: [{
-          name: "zod",
-          message:
-            "zod is sealed behind the authoring/ parsers. Validate at the load boundary (parseDoc/parseConfig/parseIntegration) and pass typed data inward.",
-        }],
-      }],
+      'no-restricted-imports': [
+        'error',
+        {patterns: docCompilerOnly(), paths: [ZOD_SEALED]},
+      ],
     },
   },
   // foundation/ is the bottom layer: cross-cutting infra that the layers above
@@ -587,46 +799,259 @@ export default defineConfig(
   // imported Project back — a cycle across the layer boundary. The adapter and
   // the contribution validators now live in foundation, where their callers are.)
   {
-    files: ["packages/cli/foundation/**/*.mjs"],
+    files: ['packages/cli/foundation/**/*.mjs'],
     rules: {
-      "no-restricted-imports": ["error", {
-        patterns: [{
-          group: ["**/api/**", "**/clients/**"],
-          message:
-            "foundation/ is the bottom layer and must not import api/ or clients/. If foundation needs it, it belongs in foundation — move it down rather than reaching up.",
-        }],
-        paths: [{
-          name: "zod",
-          message:
-            "zod is sealed behind the authoring/ parsers. Validate at the load boundary (parseDoc/parseConfig/parseIntegration) and pass typed data inward.",
-        }],
-      }],
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/api/**', '**/clients/**'],
+              message:
+                'foundation/ is the bottom layer and must not import api/ or clients/. If foundation needs it, it belongs in foundation — move it down rather than reaching up.',
+            },
+          ],
+          paths: [
+            {
+              name: 'zod',
+              message:
+                'zod is sealed behind the authoring/ parsers. Validate at the load boundary (parseDoc/parseConfig/parseIntegration) and pass typed data inward.',
+            },
+          ],
+        },
+      ],
     },
   },
   // A command's --help and its manifest entry are generated from its colocated
   // CommandDoc via defineCommand. Registering straight onto Commander bypasses
   // the doc, so the docs silently stop describing the real CLI.
   {
-    files: ["packages/cli/clients/cli/commands/**/*.mjs"],
+    files: ['packages/cli/clients/cli/commands/**/*.mjs'],
     rules: {
-      "no-restricted-syntax": ["error", {
-        selector:
-          "CallExpression[callee.type='MemberExpression'][callee.property.name='command']",
-        message:
-          "Register commands with defineCommand(parent, doc, {fn, action}) so --help and the manifest come from the colocated CommandDoc. See CONTRIBUTING > Working on the astryx CLI.",
-      }],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.type='MemberExpression'][callee.property.name='command']",
+          message:
+            'Register commands with defineCommand(parent, doc, {fn, action}) so --help and the manifest come from the colocated CommandDoc. See CONTRIBUTING > Working on the astryx CLI.',
+        },
+      ],
+    },
+  },
+  // ── INV23 + FR3: text-layout bans in command handlers ───────────────
+  // Handlers must use the formatter kit (section, text, list, record,
+  // records, code) rather than string padding or manual layout.
+  // Extends the Commander-registration ban to the same file scope.
+  {
+    files: ['packages/cli/clients/cli/commands/**/*.mjs'],
+    ignores: ['**/*.test.mjs', '**/*.doc.mjs'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.type='MemberExpression'][callee.property.name='command']",
+          message:
+            'Register commands with defineCommand(parent, doc, {fn, action}) so --help and the manifest come from the colocated CommandDoc. See CONTRIBUTING > Working on the astryx CLI.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='padEnd']",
+          message:
+            'Use the formatter kit — record(), records({layout: "inline"}), list() — not .padEnd() (INV23, FR3). See architecture:cli-surface.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='padStart']",
+          message:
+            'Use the formatter kit — record(), records({layout: "inline"}), list() — not .padStart() (INV23, FR3). See architecture:cli-surface.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='repeat']",
+          message:
+            'Use the formatter kit — section(), text(), code() — not .repeat() for layout (INV23, FR3). See architecture:cli-surface.',
+        },
+        {
+          selector: "NewExpression[callee.name='Block']",
+          message:
+            'Use the formatter kit constructors — section(), text(), list(), record(), records(), code() — not new Block() (INV23, FR3). See architecture:cli-surface.',
+        },
+      ],
+    },
+  },
+  // Known gaps recorded in AST-042; remove an entry when the file is
+  // fixed; do not add entries. check-cli-structure.mjs enforces the
+  // exact-entry allowlist so a new text-layout violation in these files
+  // still fails there.
+  {
+    files: [
+      'packages/cli/clients/cli/commands/theme.mjs',
+      'packages/cli/clients/cli/commands/docs.mjs',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.type='MemberExpression'][callee.property.name='command']",
+          message:
+            'Register commands with defineCommand(parent, doc, {fn, action}) so --help and the manifest come from the colocated CommandDoc. See CONTRIBUTING > Working on the astryx CLI.',
+        },
+      ],
     },
   },
   // CLI tests — relax author-ergonomics rules (test files emit freely and may
   // keep intentionally-unused fixtures). Must come after the CLI block above.
   {
-    files: ["packages/cli/**/*.test.mjs"],
+    files: ['packages/cli/**/*.test.mjs'],
     rules: {
-      "@astryx/no-raw-console-cli": "off",
-      "@typescript-eslint/no-unused-vars": "off",
+      '@astryx/no-raw-console-cli': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
       // Tests build fixtures directly against zod and Commander.
-      "no-restricted-imports": "off",
-      "no-restricted-syntax": "off",
+      'no-restricted-imports': 'off',
+      'no-restricted-syntax': 'off',
+    },
+  },
+  // Browser specs use the shared base test, whose contexts answer remote
+  // images locally and block other remote requests. A remote host that is
+  // slow then cannot stall a spec.
+  {
+    files: ['**/*.browser.spec.ts', '**/*.chromium.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            '@playwright/test',
+            'playwright/test',
+            'playwright',
+            'playwright-core',
+          ].map(name => ({
+            name,
+            message:
+              "Import from '@astryxdesign/a11y-spec/playwright' instead: its `test` keeps every browser context off remote hosts.",
+          })),
+        },
+      ],
+    },
+  },
+  // Inside a package's own shipped source, import the module that defines a
+  // name, not a folder's index (a barrel): a lazily imported module that goes
+  // through a barrel pulls every sibling export into its graph, which broke
+  // the single-file bundle. Public consumers keep importing from the package
+  // entry. The barrel imports that predate the rule are listed in the
+  // baseline and stay allowed until a codemod removes them; anything new is
+  // reported (an error in strict mode, so a pull request that adds one fails
+  // lint, while main stays green). Type-only imports are erased and allowed.
+  {
+    files: internalBarrelScope.files,
+    ignores: internalBarrelScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-internal-barrel-import': [
+        reactSeverity,
+        {baseline: internalBarrelBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // A slot's presence is decided by `isRenderable`, never a bare `!= null`
+  // guard or a hand-written copy of its checks (an error in strict mode). A
+  // check of a string, number or data value says so with a disable comment
+  // for this rule that gives its reason.
+  {
+    files: nullishGuardScope.files,
+    ignores: nullishGuardScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-nullish-jsx-guard': reactSeverity,
+    },
+  },
+  // A slot value can be `0`. A truthiness guard in front of its JSX then
+  // renders a stray "0" (`&&`) or drops the slot (`? :`), so a slot's
+  // presence is decided by `isRenderable` here too. The rule reads types, so
+  // its scope is core, which the type-aware block above parses with the
+  // project service. Every guard is reported (an error in strict mode).
+  {
+    files: truthyGuardScope.files,
+    ignores: truthyGuardScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-truthy-jsx-guard': reactSeverity,
+    },
+  },
+  // A private `data-astryx-*` attribute is written once, in its owner module
+  // under packages/<package>/src/privateAttributes, which exports ready-made
+  // styles, setter props and readers (`architecture:public-component-api`
+  // INV23, which also lists the public attributes the rule allows). The
+  // hand-written sites that predate this block are listed in the baseline,
+  // once per site, and that many stay allowed until they move into an owner
+  // module; one more is reported (an error in strict mode, so a pull request
+  // that adds one fails lint, while main stays green). Tests are out of scope:
+  // they assert the DOM a component renders.
+  {
+    files: privateAttributeScope.files,
+    ignores: privateAttributeScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-raw-private-attribute': [
+        reactSeverity,
+        {baseline: privateAttributeBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // A source comment explains a reason, a constraint, or a quirk. It does not
+  // cite a record, a claim, a pull request, an issue, or a date, and it does
+  // not quote requirement text: the record links the code, and
+  // `pnpm specs:for <path>` finds it. The sites that predate this block are
+  // listed in the baseline, once per site, and that many stay allowed until
+  // they are removed; one more is reported (an error in strict mode, so a pull
+  // request that adds one fails lint, while main stays green).
+  {
+    files: commentProvenanceScope.files,
+    ignores: commentProvenanceScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-comment-provenance': [
+        reactSeverity,
+        {baseline: commentProvenanceBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // richtext — the pre-existing backlog, held at `warn` while it is worked
+  // off. Must come last so it overrides the blocks above.
+  //
+  // The package was outside these rules until now, so turning them on finds
+  // drift that predates this scope change: four props missing `ref` and six
+  // smaller API-shape items. Failing CI on work nobody has had the chance to
+  // do would mean either reverting the scope or
+  // landing a very large mixed change, so each one stays visible as a warning
+  // and is tracked separately. Everything the package is ALREADY clean on —
+  // the token and DOM rules, `no-classname-clobber`, `no-physical-properties`,
+  // `disabled-cursor`, the rest of the React set — is enforced at full
+  // strength, so new drift is an error from today.
+  //
+  // Remove an entry here as its backlog closes; the file is clean when the
+  // block is empty.
+  {
+    files: ['packages/richtext/src/**/*.{ts,tsx}'],
+    rules: {
+      // React 19 ref-in-props migration for the editor's public props.
+      '@astryx/require-ref-prop': 'warn',
+      '@eslint-react/no-forward-ref': 'warn',
+      '@eslint-react/naming-convention-ref-name': 'warn',
+      // Public API shape, settled with the package's stable-API decision.
+      '@astryx/require-base-props': 'warn',
+      '@astryx/boolean-prop-naming': 'warn',
+      '@eslint-react/no-unstable-default-props': 'warn',
     },
   },
 );

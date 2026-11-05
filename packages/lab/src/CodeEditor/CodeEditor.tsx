@@ -58,7 +58,9 @@ const styles = stylex.create({
     display: 'flex',
     borderRadius: radiusVars['--radius-element'],
     backgroundColor: colorVars['--color-background-muted'],
-    border: `${borderVars['--border-width']} solid ${colorVars['--color-border']}`,
+    borderWidth: borderVars['--border-width'],
+    borderStyle: 'solid',
+    borderColor: colorVars['--color-border'],
     overflow: 'hidden',
   },
   rootFocused: {
@@ -73,7 +75,9 @@ const styles = stylex.create({
     textAlign: 'end',
     userSelect: 'none',
     color: colorVars['--color-text-disabled'],
-    borderRight: `${borderVars['--border-width']} solid ${colorVars['--color-border']}`,
+    borderRightWidth: borderVars['--border-width'],
+    borderRightStyle: 'solid',
+    borderRightColor: colorVars['--color-border'],
   },
   gutterLine: {
     fontFamily: typographyVars['--font-family-code'],
@@ -556,7 +560,13 @@ export function CodeEditor({
         style,
       )}
       {...props}>
-      <div {...stylex.props(styles.editorContainer)} style={containerStyle}>
+      {/* Code, with its line numbers, keeps its own left-to-right direction
+          inside a right-to-left page (design:bidirectionality DR2): lines read
+          and indent correctly, and a long line scrolls from its start. */}
+      <div
+        dir="ltr"
+        {...stylex.props(styles.editorContainer)}
+        style={containerStyle}>
         {hasLineNumbers && (
           <div
             {...stylex.props(styles.gutter, gutterSizeStyle)}
@@ -570,7 +580,9 @@ export function CodeEditor({
         )}
         <div style={{position: 'relative', flex: 1}}>
           {showPlaceholder && (
-            <div {...stylex.props(styles.placeholder, sizeStyle)}>
+            // The placeholder is prose, not code: it takes its own text's
+            // direction, so an Arabic or Hebrew hint still reads correctly.
+            <div dir="auto" {...stylex.props(styles.placeholder, sizeStyle)}>
               {placeholder}
             </div>
           )}

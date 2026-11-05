@@ -11,18 +11,19 @@ import {
   linkifyPRs,
   linkifyContributors,
   linkifyComponents,
+  addEmptyReleasePlaceholders,
   stripTitle,
 } from '../components/changelogLinkify';
 
 describe('linkifyPRs', () => {
   it('links bare PR references', () => {
     expect(linkifyPRs('Fix spinner (#2717)')).toBe(
-      'Fix spinner ([#2717](https://github.com/facebook/astryx/pull/2717))',
+      'Fix spinner ([#2717](https://github.com/meta/astryx/pull/2717))',
     );
   });
 
   it('leaves already-linked references untouched', () => {
-    const already = '[#2717](https://github.com/facebook/astryx/pull/2717)';
+    const already = '[#2717](https://github.com/meta/astryx/pull/2717)';
     expect(linkifyPRs(already)).toBe(already);
   });
 });
@@ -130,6 +131,64 @@ describe('linkifyComponents', () => {
   });
 });
 
+describe('addEmptyReleasePlaceholders', () => {
+  it('labels an empty release without hiding populated releases', () => {
+    const input = [
+      '# 0.4.5',
+      '',
+      '---',
+      '',
+      '# 0.4.4',
+      '',
+      '#### Fixes',
+      '',
+      '- Fixed the CLI.',
+    ].join('\n');
+
+    expect(addEmptyReleasePlaceholders(input)).toBe(
+      [
+        '# 0.4.5',
+        '',
+        '_No changes in this release._',
+        '',
+        '---',
+        '',
+        '# 0.4.4',
+        '',
+        '#### Fixes',
+        '',
+        '- Fixed the CLI.',
+      ].join('\n'),
+    );
+  });
+
+  it('fills the final empty release when there is no trailing separator', () => {
+    expect(addEmptyReleasePlaceholders('# 0.4.2')).toBe(
+      '# 0.4.2\n\n_No changes in this release._',
+    );
+  });
+
+  it('leaves a populated release unchanged', () => {
+    const input = [
+      '# 0.4.3',
+      '',
+      '#### Fixes',
+      '',
+      '- A real fix.',
+      '',
+      '---',
+      '',
+      '# 0.4.2',
+      '',
+      '#### Fixes',
+      '',
+      '- Another real fix.',
+    ].join('\n');
+
+    expect(addEmptyReleasePlaceholders(input)).toBe(input);
+  });
+});
+
 describe('stripTitle', () => {
   it('removes the leading h1 title line', () => {
     expect(stripTitle('# @astryxdesign/core\n\n# 0.1.1\n')).toBe('# 0.1.1\n');
@@ -152,7 +211,7 @@ describe('full changelog pipeline', () => {
 
     const out = linkifyContributors(linkifyPRs(md));
     expect(out).toContain(
-      '[#2717](https://github.com/facebook/astryx/pull/2717)',
+      '[#2717](https://github.com/meta/astryx/pull/2717)',
     );
     expect(out).toContain('[@cixzhang](https://github.com/cixzhang)');
     expect(out).toContain('[@ejhammond](https://github.com/ejhammond)');

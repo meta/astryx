@@ -31,6 +31,7 @@ import {useCallback, useEffect, useId, useMemo, useRef, useState} from 'react';
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
+  ReactNode,
   SVGProps,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -56,7 +57,11 @@ import {
 import {Item} from '@astryxdesign/core/Item';
 import {List} from '@astryxdesign/core/List';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
-import {useAnnounce} from '@astryxdesign/core/hooks';
+import {useAnnounce, useMediaQuery} from '@astryxdesign/core/hooks';
+import {BottomSheet} from '@astryxdesign/core/BottomSheet';
+import {OverflowList} from '@astryxdesign/core/OverflowList';
+import type {OverflowItem} from '@astryxdesign/core/OverflowList';
+import {Tab, TabList} from '@astryxdesign/core/TabList';
 import {MetadataList, MetadataListItem} from '@astryxdesign/core/MetadataList';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {Button} from '@astryxdesign/core/Button';
@@ -1108,6 +1113,53 @@ const INITIAL_SAVED_VIEWS: SavedView[] = [
 // =============================================================================
 
 /**
+ * The surfaces below swap to a bottom sheet on a compact surface.
+ *
+ * Two terms, because there are two ways to be one. The second is the query the
+ * Dialog adaptive-presentation block uses — up to `lg` on a device whose
+ * pointer is a finger — and it is what catches a tablet that has the width for
+ * a popover but no hover to drive one.
+ *
+ * The first is width alone, at any input. A 660px popover and a resizable side
+ * panel need room the window no longer has well before the pointer changes:
+ * below `md` the popover has nowhere to sit, and the panel leaves the table a
+ * couple of columns wide. A mouse does not rescue a layout that does not fit,
+ * so the narrow window gets sheets too.
+ */
+const COMPACT_SURFACE_QUERY =
+  '(max-width: 768px), (max-width: 1024px) and (pointer: coarse) and (hover: none)';
+
+/**
+ * Top padding for whatever opens a BottomSheet, on the spacing scale.
+ *
+ * The panel's grab pill floats over the content instead of reserving layout
+ * space for itself: it is 4px centered in a 24px band, so it covers the top
+ * 10-14px of the sheet. Content that starts at the usual 16px gutter clears it
+ * by 2px, which does not read as a gap — it reads as the sheet being cut off.
+ * Opening at the full 24px band puts real space under the pill, and every
+ * sheet here uses this one value so they all start on the same line.
+ */
+const SHEET_TOP_INSET = 6;
+
+/**
+ * Width the filter row holds back, in px, for the readout that trails the
+ * clauses — the density toggle, the result count and Clear all.
+ *
+ * The readout sits inside the slot the overflow list measures, so without this
+ * the list would count the readout's width as room for another clause and
+ * push it off the end. The slot pays for it as padding, which is the one part
+ * of the slot the measurement already subtracts, and the readout takes the
+ * width back with a matching negative margin so it still lands against the
+ * last clause instead of at the far edge.
+ *
+ * Deliberately a little wider than the readout draws at the counts this page
+ * reaches, because the two failure directions are not symmetric: too wide only
+ * folds a clause marginally early, while too narrow puts the readout over the
+ * edge of the row.
+ */
+const READOUT_RESERVE = 184;
+
+/**
  * Stands in for Relay's `usePaginationFragment` so the table can grow by
  * batches instead of flipping pages. It returns the same
  * `{data, hasNext, isLoadingNext, loadNext}` shape a Relay connection does, so
@@ -1272,10 +1324,57 @@ const styles = stylex.create({
   bar: {
     rowGap: 6,
   },
-  // Wraps rather than collapsing (see the note in filterBar): clauses that no
-  // longer fit move to a second line, keeping the count beside the last one.
+  // Collapses rather than wrapping: clauses that no longer fit fold into the
+  // overflow trigger, so the row is one line at every width.
   filterRow: {
     rowGap: 6,
+  },
+  // This slot is what `observeParent` measures, so its width has to mean "the
+  // room the clauses have" and nothing else. Grow is the part that makes that
+  // true: as the row's only grower it settles at the width left over once the
+  // search box has taken its share, whatever the clauses inside happen to add
+  // up to.
+  //
+  // Left at grow 0 the slot is flex-basis auto, which is to say content-sized,
+  // and that feeds the list its own output: collapse one clause, the content
+  // narrows, the slot narrows with it, the list re-reads the smaller number
+  // and collapses again. It runs all the way down to `minVisibleItems` in one
+  // pass. At 1200px that showed as a single clause and a +6 next to 500px of
+  // empty row. Grow breaks the circuit by sizing the slot from the row instead
+  // of from the clauses.
+  //
+  // The slot is also the readout's container rather than its sibling, which is
+  // what keeps the readout beside the last clause instead of riding the row's
+  // trailing edge — see READOUT_RESERVE for how its width is kept out of the
+  // measurement.
+  filterOverflowSlot: {
+    display: 'flex',
+    alignItems: 'center',
+    flexGrow: 1,
+    // The held-back width, as padding because padding is the one part of the
+    // box the measurement already subtracts.
+    paddingInlineEnd: READOUT_RESERVE,
+    // Weighted far above the search box's 1 so the row gives in an order
+    // rather than proportionally. Flex shares a deficit by shrink factor times
+    // basis, so a 100 here means the clauses fold away to the bare count
+    // before the field gives up its first pixel, and the field only starts
+    // shrinking once there is nothing left to fold.
+    flexShrink: 100,
+    // Where folding stops. StackItem resets min-width to 0, and with a shrink
+    // this aggressive that lets the slot pass the collapsed state and clip the
+    // count itself — the filters are then set, applied, and unreachable, with
+    // nothing on the row to say so. The floor is the trigger's own 44px plus
+    // the reserve, because min-width bounds the border box and the reserve is
+    // padding inside it — 44 on its own would floor a slot with nothing left
+    // to put the trigger in. The last thing the row gives up is the way back
+    // to what it folded.
+    minWidth: 44 + READOUT_RESERVE,
+  },
+  // See the note in FilterOverflow: a flex column stretches its child, which
+  // is what puts the button-backed presets on the same edge as the selectors.
+  overflowItem: {
+    display: 'flex',
+    flexDirection: 'column',
   },
   // Queried rather than @media: opening the detail panel narrows this header
   // without the viewport changing, and that is the width the toolbar actually
@@ -1299,7 +1398,44 @@ const styles = stylex.create({
   toolbarEnd: {
     marginInlineStart: 'auto',
   },
+  // Takes back the width the slot held back for it, so the readout draws over
+  // the reserve rather than after it and lands against the last clause. The
+  // gap to that clause is a margin rather than the slot's `gap`, because a gap
+  // would fall on the measured side of the reserve and cost the clauses the
+  // last few pixels they were measured to have.
   filterMeta: {
+    flexShrink: 0,
+    marginInlineStart: 8,
+    marginInlineEnd: -READOUT_RESERVE,
+  },
+  savedViewsLabel: {
+    flexShrink: 0,
+  },
+  // Basis auto so the slot is exactly as wide as the chips while they fit —
+  // shrinking only once they do not, which is the width the scroller inside
+  // then has to work with.
+  savedViewsSlot: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  savedViewsScroller: {
+    overflowX: 'auto',
+    // The row is one line: without this the block axis picks up a scrollbar of
+    // its own the moment the inline one appears.
+    overflowY: 'hidden',
+    // Keeps a swipe that runs off the end of the chips from turning into a
+    // page scroll, which on a phone reads as the whole view lurching sideways.
+    overscrollBehaviorInline: 'contain',
+    // No scrollbar under a 32px row: it would eat as much height as the chips
+    // and sit there permanently on the platforms that reserve space for it.
+    // The chip cut off at the edge is the affordance instead, and every chip
+    // is a button, so tabbing scrolls the next one into view for a keyboard.
+    scrollbarWidth: 'none',
+  },
+  // In a nowrap row that scrolls, a shrinkable child squeezes to fit rather
+  // than overflowing: without this the chips compress into unreadable stubs
+  // and the scroller never has anything to scroll.
+  savedViewChip: {
     flexShrink: 0,
   },
   // A saved view can carry more clauses than the dialog is wide.
@@ -1347,12 +1483,31 @@ const styles = stylex.create({
     },
   },
   // Sits at the width of the filter selectors beside it so the row reads as
-  // one family of controls, and widens on focus for typing room. `xstyle`
-  // lands on the input's own wrapper, so `:focus-within` is already in scope
-  // and no React state is needed. TextInput's `width` prop is the sanctioned
-  // way to size a field, but it takes one static value and cannot express a
-  // focus variant, so the width lives here instead.
-  searchInput: {
+  // one family of controls, and widens on focus for typing room. TextInput's
+  // `width` prop is the sanctioned way to size a field, but it takes one
+  // static value and cannot express a focus variant, so the width lives here.
+  //
+  // On the slot rather than on the field: TextInput's `xstyle` lands on an
+  // element inside its outer wrapper, and that wrapper is the row's actual
+  // flex item. Sized from within, the wrapper keeps `min-width: auto`, its
+  // min-content becomes the focused 240px, and no shrink factor can move it —
+  // the field stays rigid and pushes the readout off the end of the row. A
+  // StackItem resets that min-width, so the width and the give belong to the
+  // same box and the field can widen into space it actually has.
+  //
+  // `:focus-within` is in scope here for the same reason it was on the field:
+  // the focused input is a descendant either way, so no React state is needed.
+  searchSlot: {
+    // Second in line to give, behind the overflow slot's 100 and ahead of the
+    // readout's 0 (see filterOverflowSlot). The focus width is a request
+    // rather than a reservation: a 393px row cannot seat 240px of search and
+    // still show "Clear all", so the field takes what the folded clauses left
+    // and stops there — full width where the window has it, a little under it
+    // where it does not.
+    flexShrink: 1,
+    // Never narrower than its resting width, so a tight row cannot grind the
+    // field down to a stub. Costs nothing idle: 120 is where it already sits.
+    minWidth: 120,
     width: {
       default: 120,
       ':focus-within': 240,
@@ -1453,6 +1608,18 @@ const styles = stylex.create({
   railItem: {
     width: '100%',
     justifyContent: 'flex-start',
+  },
+  // Starts the strip on the sheet's own 16px gutter instead of the container
+  // edge, so the first tab lines up with the panel below it. Padding rather
+  // than margin: on a scroller the gutter has to be part of the scrollable box
+  // or the strip cannot scroll its last tab clear of the trailing edge.
+  //
+  // Inline only. The sheet's top inset is the wrapper's, not this box's: the
+  // strip's scroll arrow is absolutely positioned against this box at
+  // inset-block-start 0, so block padding here pushes the tabs down and leaves
+  // the arrow hanging above the row it scrolls.
+  viewSheetTabs: {
+    paddingInline: 16,
   },
   // Full height so the transfer panels can reach the popover floor: sized to
   // its content instead, the pane stops short and the rule between the panels
@@ -1850,11 +2017,192 @@ function ViewSummaryList({
   );
 }
 
+/**
+ * The clauses the row could not fit, behind one trigger.
+ *
+ * A DropdownMenu is the usual overflow anchor and is the wrong one here: these
+ * items are selectors that open popovers of their own, and a popover opened
+ * inside a menu fights the menu for the same dismissal. A plain panel holds
+ * them as they already are, so a folded clause is the same control it was on
+ * the row rather than a menu entry that re-states it.
+ *
+ * `child` is rendered straight through rather than rebuilt from `index`: the
+ * element in an OverflowItem is the one the list measured, already bound to
+ * the same filter state, so a clause set here and a clause set on the row are
+ * the same control writing to the same place.
+ */
+function FilterOverflow({
+  items,
+  isCompactSurface,
+}: {
+  items: OverflowItem[];
+  isCompactSurface: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const count = items.length;
+  const label = `${count} more ${count === 1 ? 'filter' : 'filters'}`;
+
+  // Each control fills the panel rather than sizing to its own label the way
+  // it does on the row: a column of content-width triggers reads as a ragged
+  // edge, not a list. The stack stretches its items, but that only reaches the
+  // wrapper — the selectors are block-level and follow it, while the preset
+  // toggles are buttons and stay at their label width. Making each wrapper a
+  // column stretches whatever is inside it, so both kinds land on one edge.
+  const body = (
+    <VStack
+      gap={2}
+      padding={isCompactSurface ? 4 : 0}
+      paddingBlockStart={isCompactSurface ? SHEET_TOP_INSET : 0}>
+      {items.map(({child, index}) => (
+        <StackItem key={index} xstyle={styles.overflowItem}>
+          {child}
+        </StackItem>
+      ))}
+    </VStack>
+  );
+
+  const trigger = (
+    <Button
+      label={`+${count}`}
+      tooltip={label}
+      aria-label={label}
+      variant="ghost"
+      size="sm"
+      xstyle={[styles.filterChrome, styles.filterSurface]}
+      onClick={isCompactSurface ? () => setIsOpen(true) : undefined}
+    />
+  );
+
+  if (isCompactSurface) {
+    return (
+      <>
+        {trigger}
+        {/* `hug` rather than a fixed budget: the folded set is however many
+            clauses did not fit, so the sheet is as tall as it needs to be
+            instead of holding a gap under three controls. */}
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label={label}
+          height="hug"
+          padding={0}>
+          {body}
+        </BottomSheet>
+      </>
+    );
+  }
+
+  return (
+    <Popover
+      placement="below"
+      alignment="end"
+      width={280}
+      label={label}
+      content={body}>
+      {trigger}
+    </Popover>
+  );
+}
+
+/**
+ * The saved-view forms, as a dialog with a pointer and a sheet on a phone.
+ *
+ * Both hosts get `purpose="form"`, which is the same contract in each: the
+ * scrim will not dismiss, and neither will a swipe on the sheet, so a name
+ * half-typed survives a stray touch. That leaves Escape as the only implicit
+ * way out — and a phone has no Escape — so the explicit close is not optional
+ * here the way it is on a Dialog that can fall back to the keyboard. The X
+ * below is the sheet's, matching the one DialogHeader supplies on the other
+ * branch.
+ *
+ * `tall` for the same reason both forms take a name: only a fully expanded
+ * tall sheet moves a focused field clear of the mobile keyboard, and a shorter
+ * budget would leave the caret behind it.
+ */
+function AdaptiveSavedViewForm({
+  isOpen,
+  onOpenChange,
+  title,
+  subtitle,
+  isCompactSurface,
+  children,
+}: {
+  isOpen: boolean;
+  onOpenChange: (isOpen: boolean) => void;
+  title: string;
+  subtitle: string;
+  isCompactSurface: boolean;
+  children: ReactNode;
+}) {
+  if (isCompactSurface) {
+    return (
+      <BottomSheet
+        isOpen={isOpen}
+        onOpenChange={onOpenChange}
+        label={title}
+        purpose="form"
+        height="tall">
+        <Section
+          variant="transparent"
+          padding={4}
+          paddingBlockStart={SHEET_TOP_INSET}>
+          <VStack gap={4}>
+            <HStack gap={2}>
+              <StackItem size="fill">
+                <VStack gap={1}>
+                  <Heading level={3}>{title}</Heading>
+                  <Text type="supporting" color="secondary">
+                    {subtitle}
+                  </Text>
+                </VStack>
+              </StackItem>
+              <IconButton
+                label={`Close ${title.toLowerCase()}`}
+                variant="ghost"
+                size="sm"
+                icon={<Icon icon={X} size="sm" />}
+                onClick={() => onOpenChange(false)}
+              />
+            </HStack>
+            {children}
+          </VStack>
+        </Section>
+      </BottomSheet>
+    );
+  }
+
+  return (
+    <Dialog
+      isOpen={isOpen}
+      onOpenChange={onOpenChange}
+      purpose="form"
+      width={400}>
+      <DialogHeader
+        title={title}
+        subtitle={subtitle}
+        onOpenChange={onOpenChange}
+        xstyle={styles.dialogHeaderBleed}
+      />
+      <Section variant="transparent" padding={4}>
+        <VStack gap={4}>{children}</VStack>
+      </Section>
+    </Dialog>
+  );
+}
+
 // =============================================================================
 // Template
 // =============================================================================
 
 export default function TableFilterTemplate() {
+  // Named for the surface, not the size: `isCompact` further down is the
+  // density setting, which is a different thing entirely.
+  //
+  // Read through useSyncExternalStore, so this is the real match on the first
+  // client render rather than a default that corrects itself afterwards —
+  // which is what lets the auto-open effect below trust it.
+  const isCompactSurface = useMediaQuery(COMPACT_SURFACE_QUERY);
+
   // --- Filtering -------------------------------------------------------------
   const [filters, setFilters] = useState<PowerSearchFilter[]>(INITIAL_FILTERS);
   const [isPowerSearch, setIsPowerSearch] = useState(false);
@@ -1880,8 +2228,8 @@ export default function TableFilterTemplate() {
   // much room that the table loses its sortable columns.
   const detailWidth = useResizable({
     defaultSize: 380,
-    minSizePx: 320,
-    maxSizePx: 560,
+    minSize: 320,
+    maxSize: 560,
   });
 
   // --- Sorting ---------------------------------------------------------------
@@ -1907,6 +2255,13 @@ export default function TableFilterTemplate() {
   const suppressGripClickRef = useRef(false);
   const announce = useAnnounce();
   const columnPanelId = useId();
+  /**
+   * Only the sheet's strip is a tablist, so only its panel carries this id.
+   * The popover renders the same body without one, which is what keeps the id
+   * unique: a closed BottomSheet still renders its children, so both copies of
+   * the panel are in the document at once whenever the popover is open.
+   */
+  const viewPanelId = useId();
   /** Group keys the reader has folded shut. Empty means every section is open. */
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     () => new Set(),
@@ -2254,12 +2609,34 @@ export default function TableFilterTemplate() {
     allowUnsortedState: true,
     isMultiSortEnabled: true,
   });
+  /**
+   * A frozen column is dropped on a compact surface, whichever edge it is on.
+   *
+   * Freezing trades scrollable width for a column that stays put, and that is
+   * a good trade only while there is width left to scroll. The table is around
+   * 1300px; on a 393px screen a pinned Job column takes most of what there is
+   * and leaves a strip too narrow to read a second column in — the reader
+   * scrolls a sliver past a column they were already looking at.
+   *
+   * Derived rather than written back into the view: the setting is the
+   * reader's, and a phone should not silently rewrite it or save it into their
+   * next saved view. The Sticky Columns panel reads these same two values and
+   * disables itself on compact, so the control shows what is in effect instead
+   * of promising a freeze that is not happening.
+   */
+  const effectiveStickyStart: StickyEdge = isCompactSurface
+    ? 'none'
+    : view.stickyStart;
+  const effectiveStickyEnd: StickyEdge = isCompactSurface
+    ? 'none'
+    : view.stickyEnd;
+
   // The checkbox column needs no mention here: the plugin pins the whole
   // contiguous run from the first column through the last key it is given, so
   // naming the first data column carries the selection column with it.
   const stickyPlugin = useTableStickyColumns<ServiceJob>({
-    startKeys: stickyKeys(view.stickyStart, view.columnKeys, false),
-    endKeys: stickyKeys(view.stickyEnd, view.columnKeys, true),
+    startKeys: stickyKeys(effectiveStickyStart, view.columnKeys, false),
+    endKeys: stickyKeys(effectiveStickyEnd, view.columnKeys, true),
   });
 
   // --- Grouping --------------------------------------------------------------
@@ -2305,30 +2682,6 @@ export default function TableFilterTemplate() {
     (item: ServiceJob) => groupRowKey(item).startsWith(GROUP_ROW_KEY_PREFIX),
     [groupRowKey],
   );
-
-  /**
-   * The panel opens on the first row, so the template arrives showing its
-   * detail view instead of a bare rail the reader has to discover. It reads
-   * the grouped order rather than `results` because that is the order on
-   * screen, and skips the synthetic section headers.
-   *
-   * One-shot through a ref: without it, every filter change would reopen the
-   * panel, and closing it would only make the next render open it again.
-   */
-  const hasOpenedFirstRow = useRef(false);
-  useEffect(() => {
-    if (hasOpenedFirstRow.current) {
-      return;
-    }
-    const first = (isGrouped ? groupedRows : rows).find(
-      row => !isGroupHeaderRow(row),
-    );
-    if (first == null) {
-      return;
-    }
-    hasOpenedFirstRow.current = true;
-    setActiveJobId(first.id);
-  }, [groupedRows, isGroupHeaderRow, isGrouped, rows]);
 
   /**
    * A section header is a synthetic row, and the table renders every column's
@@ -2897,7 +3250,7 @@ export default function TableFilterTemplate() {
         renderValue={option =>
           `${field.label} ${field.operatorLabel} ${option.label ?? option.value}`
         }
-        xstyle={active ? styles.filterFill : undefined}
+        controlXstyle={active ? styles.filterFill : undefined}
         onChange={next =>
           setFieldFilter(
             field.key,
@@ -2966,7 +3319,7 @@ export default function TableFilterTemplate() {
         }
         options={[...field.options]}
         value={multiValues[field.key]}
-        xstyle={
+        controlXstyle={
           multiValues[field.key].length > 0 ? styles.filterFill : undefined
         }
         onChange={next => setMultiValues(field.key, next)}
@@ -2989,7 +3342,7 @@ export default function TableFilterTemplate() {
       value={quoteDraft}
       onChange={commitQuote}
       contentXstyle={styles.quotePopover}
-      xstyle={hasQuoteFilter ? styles.filterFill : undefined}>
+      controlXstyle={hasQuoteFilter ? styles.filterFill : undefined}>
       {(range, onChange, close) => (
         <VStack gap={4}>
           <VStack gap={0}>
@@ -3056,58 +3409,86 @@ export default function TableFilterTemplate() {
     <HStack
       gap={2}
       vAlign="center"
-      wrap="wrap"
+      wrap="nowrap"
       minHeight={32}
       xstyle={styles.filterRow}>
       {/* Search leads the row: it is the broadest filter, and anchoring it at
           the start keeps a fixed-width control on the first line. It sits
           outside the overflow list so it is never the clause that collapses —
           a hidden search box reads as a missing feature, not a folded one. */}
-      <TextInput
-        label="Search jobs"
-        isLabelHidden
-        placeholder="Job name"
-        size="sm"
-        value={query}
-        onChange={setQuery}
-        startIcon={Search}
-        xstyle={styles.searchInput}
-      />
+      <StackItem xstyle={styles.searchSlot}>
+        <TextInput
+          label="Search jobs"
+          isLabelHidden
+          placeholder="Job name"
+          size="sm"
+          width="100%"
+          value={query}
+          onChange={setQuery}
+          startIcon={Search}
+        />
+      </StackItem>
 
-      {filterControls}
+      {/* The slot, not the list, is what carries the sizing. A list that reads
+          its own width is reading the thing it just changed — collapse a
+          clause and the measurement shrinks with it — so `observeParent` sends
+          it up here instead, and this wrapper is then the piece that has to be
+          sized right: from the row, never from the clauses inside it. See
+          filterOverflowSlot for what that takes and what it looked like when
+          the wrapper was content-sized too.
 
-      {/* The row's readout, kept as one group directly after the last clause
-          rather than pushed to the far edge. Grouping also stops the separator
-          strandng itself on a line of its own when the row wraps.
+          The readout lives in here with the list for the same reason, so that
+          sizing this wrapper from the row does not drag the readout out to the
+          row's edge with it. */}
+      <StackItem xstyle={styles.filterOverflowSlot}>
+        <OverflowList
+          behavior="observeParent"
+          gap={2}
+          /* One clause stays on the row where there is width for it: a bar
+             that collapses to nothing but a count reads as though the filters
+             are gone rather than folded. A phone has no such width — search,
+             one clause and the readout do not fit across 393px — so there the
+             floor comes off and the whole set folds behind the count. */
+          minVisibleItems={isCompactSurface ? 0 : 1}
+          overflowRenderer={overflowItems => (
+            <FilterOverflow
+              items={overflowItems}
+              isCompactSurface={isCompactSurface}
+            />
+          )}>
+          {filterControls}
+        </OverflowList>
 
-          NOTE: this is why there is no overflow list here. OverflowList reads
-          its own offsetWidth to decide what fits, so it only reports an
-          overflow while it owns the row's leftover width — and owning that
-          width is exactly what pushes this group to the far right. Sized to
-          its content instead, it shrinks as it collapses, so its measurement
-          shrinks with it and it never re-expands: once collapsed at 600px it
-          stayed collapsed all the way back out to 1680px. Wrapping is the
-          behaviour that keeps this group where it belongs. */}
-      <HStack gap={2} vAlign="center" xstyle={styles.filterMeta}>
-        {powerSearchToggle}
+        {/* The row's readout, kept as one group directly after the last clause
+            rather than pushed to the far edge. Grouping also stops the
+            separator stranding itself on a line of its own.
 
-        <Text type="supporting" color="secondary">
-          {results.length} {results.length === 1 ? 'result' : 'results'}
-        </Text>
+            Inside the slot rather than beside it: a sibling would sit after
+            the slot, and the slot spans the row's leftover, so the readout
+            would land at the trailing edge however few clauses were showing.
+            In here it follows the clauses, and the reserve is what stops the
+            list from spending the width it needs. */}
+        <HStack gap={2} vAlign="center" xstyle={styles.filterMeta}>
+          {powerSearchToggle}
 
-        {hasFilters && (
-          <>
-            <Text type="supporting" color="secondary">
-              •
-            </Text>
-            {/* Href-less, so Link renders a <button>: this resets the filter
-                array, it does not navigate. */}
-            <Link type="supporting" onClick={clearAll}>
-              Clear all
-            </Link>
-          </>
-        )}
-      </HStack>
+          <Text type="supporting" color="secondary">
+            {results.length} {results.length === 1 ? 'result' : 'results'}
+          </Text>
+
+          {hasFilters && (
+            <>
+              <Text type="supporting" color="secondary">
+                •
+              </Text>
+              {/* Href-less, so Link renders a <button>: this resets the filter
+                  array, it does not navigate. */}
+              <Link type="supporting" onClick={clearAll}>
+                Clear all
+              </Link>
+            </>
+          )}
+        </HStack>
+      </StackItem>
     </HStack>
   );
 
@@ -3115,66 +3496,87 @@ export default function TableFilterTemplate() {
     <HStack
       gap={2}
       vAlign="center"
-      wrap="wrap"
+      wrap="nowrap"
       minHeight={32}
       xstyle={styles.bar}>
-      <Text type="label">Saved views:</Text>
-      {/* Exactly one of these is engaged at a time, so All is a member of the
-          same group rather than a differently-shaped reset button. It carries
-          no icon because it stands for the absence of a saved view. */}
-      <ToggleButton
-        label="All"
-        size="sm"
-        isPressed={activeSavedViewId == null}
-        xstyle={[
-          styles.filterChrome,
-          activeSavedViewId == null
-            ? styles.filterLabelValue
-            : styles.filterLabelEmpty,
-          activeSavedViewId != null && styles.filterSurface,
-        ]}
-        onPressedChange={() => applySavedView(null)}
-      />
-      {savedViews.map(saved => {
-        const isPressed = activeSavedViewId === saved.id;
-        return (
+      {/* Outside the scroller, so the row keeps saying what it is however far
+          the chips are pushed along. */}
+      <Text type="label" xstyle={styles.savedViewsLabel}>
+        Saved views:
+      </Text>
+      {/* Same slot-and-content split the filter row uses, for the same reason:
+          the slot is the piece that shrinks, and the scroller inside reads the
+          width it is left with. Scrolled rather than folded into a count,
+          unlike the clauses — a saved view is picked by recognising its name,
+          so a set that hides behind "+3" cannot be browsed, only counted. */}
+      <StackItem xstyle={styles.savedViewsSlot}>
+        <HStack
+          gap={2}
+          vAlign="center"
+          wrap="nowrap"
+          xstyle={styles.savedViewsScroller}>
+          {/* Exactly one of these is engaged at a time, so All is a member of
+              the same group rather than a differently-shaped reset button. It
+              carries no icon because it stands for the absence of a saved
+              view. */}
           <ToggleButton
-            key={saved.id}
-            label={saved.name}
+            label="All"
             size="sm"
-            isPressed={isPressed}
-            icon={<Icon icon={Bookmark} size="sm" />}
-            // Same chrome the filter-bar presets wear: a ghost Button has none
-            // unpressed, and the border is what keeps these in the same family
-            // as the unset selectors in the row above.
+            isPressed={activeSavedViewId == null}
             xstyle={[
+              styles.savedViewChip,
               styles.filterChrome,
-              isPressed ? styles.filterLabelValue : styles.filterLabelEmpty,
-              !isPressed && styles.filterSurface,
+              activeSavedViewId == null
+                ? styles.filterLabelValue
+                : styles.filterLabelEmpty,
+              activeSavedViewId != null && styles.filterSurface,
             ]}
-            // Unpressing lands on the state the All chip already models:
-            // applySavedView(null) drops the active id and its filters
-            // together, so the two controls can never disagree about what is
-            // applied.
-            onPressedChange={next => applySavedView(next ? saved : null)}
+            onPressedChange={() => applySavedView(null)}
           />
-        );
-      })}
-      {activeSavedViewId != null && (
-        <IconButton
-          label="Edit saved view"
-          tooltip="Edit saved view"
-          variant="ghost"
-          size="sm"
-          icon={<Icon icon={Pencil} size="sm" />}
-          onClick={() => {
-            const found = savedViews.find(s => s.id === activeSavedViewId);
-            if (found) {
-              setEditing({...found});
-            }
-          }}
-        />
-      )}
+          {savedViews.map(saved => {
+            const isPressed = activeSavedViewId === saved.id;
+            return (
+              <ToggleButton
+                key={saved.id}
+                label={saved.name}
+                size="sm"
+                isPressed={isPressed}
+                icon={<Icon icon={Bookmark} size="sm" />}
+                // Same chrome the filter-bar presets wear: a ghost Button has
+                // none unpressed, and the border is what keeps these in the
+                // same family as the unset selectors in the row above.
+                xstyle={[
+                  styles.savedViewChip,
+                  styles.filterChrome,
+                  isPressed ? styles.filterLabelValue : styles.filterLabelEmpty,
+                  !isPressed && styles.filterSurface,
+                ]}
+                // Unpressing lands on the state the All chip already models:
+                // applySavedView(null) drops the active id and its filters
+                // together, so the two controls can never disagree about what
+                // is applied.
+                onPressedChange={next => applySavedView(next ? saved : null)}
+              />
+            );
+          })}
+          {activeSavedViewId != null && (
+            <IconButton
+              label="Edit saved view"
+              tooltip="Edit saved view"
+              variant="ghost"
+              size="sm"
+              icon={<Icon icon={Pencil} size="sm" />}
+              xstyle={styles.savedViewChip}
+              onClick={() => {
+                const found = savedViews.find(s => s.id === activeSavedViewId);
+                if (found) {
+                  setEditing({...found});
+                }
+              }}
+            />
+          )}
+        </HStack>
+      </StackItem>
     </HStack>
   );
 
@@ -3515,9 +3917,17 @@ export default function TableFilterTemplate() {
       case 'sticky':
         return (
           <VStack gap={4} paddingInline={4} paddingBlockEnd={4}>
+            {/* Both groups read the effective value, not the stored one, and
+                go disabled where the two differ — a radio still sitting on
+                "First column" while nothing is frozen is the control lying
+                about the table. `disabledMessage` is what says why, and it is
+                the sanctioned way to do it here: a disabled control swallows
+                the hover a wrapping Tooltip would need. */}
             <RadioList
               label="First columns"
-              value={view.stickyStart}
+              value={effectiveStickyStart}
+              isDisabled={isCompactSurface}
+              disabledMessage="Freezing is off on a narrow screen: a pinned column would leave too little width to scroll the rest."
               onChange={value =>
                 updateView(v => ({...v, stickyStart: value as StickyEdge}))
               }>
@@ -3531,7 +3941,9 @@ export default function TableFilterTemplate() {
             </RadioList>
             <RadioList
               label="Last columns"
-              value={view.stickyEnd}
+              value={effectiveStickyEnd}
+              isDisabled={isCompactSurface}
+              disabledMessage="Freezing is off on a narrow screen: a pinned column would leave too little width to scroll the rest."
               onChange={value =>
                 updateView(v => ({...v, stickyEnd: value as StickyEdge}))
               }>
@@ -3570,6 +3982,29 @@ export default function TableFilterTemplate() {
   };
 
   const activeSection = VIEW_SECTIONS.find(s => s.key === viewSection);
+
+  /**
+   * Flat rather than outlined: ghost is the borderless variant Button and
+   * Selector share, so this trigger reads as the same family of control as a
+   * ghost Selector — chevron and all — without the local filterChrome the
+   * bordered toggles in the row need.
+   *
+   * Deliberately not a ComplexSelector, unlike the Quote control: this panel
+   * drives a whole ViewState and has no single value to hand a value-shaped
+   * component.
+   *
+   * As a Popover's child the click is the Popover's to handle, so `onClick` is
+   * only wired on the branch where this button owns the open state itself.
+   */
+  const viewOptionsTrigger = (
+    <Button
+      label="View options"
+      variant="ghost"
+      size="sm"
+      endContent={<Icon icon={ChevronDown} size="sm" />}
+      onClick={isCompactSurface ? () => setIsViewOpen(true) : undefined}
+    />
+  );
 
   /**
    * The popover container is flush (see styles.viewPopoverSurface), so the
@@ -3620,12 +4055,236 @@ export default function TableFilterTemplate() {
     </VStack>
   );
 
+  /**
+   * The same four sections on a phone, where the popover's shape is the thing
+   * that fails: 660px of rail-beside-pane squeezed into 393px leaves the
+   * column lists about 75px each, which is narrower than the words in them.
+   *
+   * The rail turns horizontal and becomes a TabList, which is the component
+   * that already owns this: a strip narrower than its tabs scrolls, the
+   * selected one is kept in view, and the edge fade says there is more. That
+   * last part is why this is a strip and not a wrap — a bare scroller would
+   * hide sections behind a gesture with nothing on screen to suggest it, and
+   * the fade is the affordance that answers it. Below it the pane gets the
+   * full width, which is what the column lists needed.
+   *
+   * `overflow` is left at its default rather than pinned to 'scroll': 'auto'
+   * is the component choosing, so a future strip that folds into a menu
+   * instead reaches this template without an edit here.
+   *
+   * `role="tablist"` rather than the default nav landmark: these tabs swap a
+   * panel in place instead of navigating, so each one points at the panel via
+   * panelId and the panel answers to it below.
+   *
+   * `tall` rather than `capped`: Columns is a two-panel transfer list, and the
+   * mid-height budget would spend most of itself on the rail and heading and
+   * leave a few rows visible under them.
+   */
+  const viewOptionsSheet = (
+    <BottomSheet
+      // The popover and the sheet read the same open flag, so the branch has
+      // to be in the condition: without it, opening the panel with a pointer
+      // would raise the sheet behind the popover as well.
+      isOpen={isCompactSurface && isViewOpen}
+      onOpenChange={setIsViewOpen}
+      label="View options"
+      height="tall"
+      // The tab strip compensates against a container inset, so the sheet
+      // publishes none and the wrapper below owns the top band.
+      padding={0}>
+      {/* The inset is the wrapper's, so the strip's own box starts at the tab
+          row and its scroll arrow lands on the tabs rather than above them. */}
+      <VStack gap={0} paddingBlockStart={SHEET_TOP_INSET}>
+        {/* The heading the popover puts above the pane is dropped here: it
+            restates the selected tab word for word, and the strip already
+            marks which one that is. On a phone that is a line of vertical
+            space spent saying it twice. The panel keeps the name for anyone
+            not seeing the strip: its selected tab labels it. */}
+        <TabList
+          value={viewSection}
+          onChange={value => setViewSection(value as ViewSection)}
+          role="tablist"
+          hasDivider
+          xstyle={styles.viewSheetTabs}>
+          {VIEW_SECTIONS.map(section => (
+            <Tab
+              key={section.key}
+              id={`${viewPanelId}-tab-${section.key}`}
+              value={section.key}
+              label={section.label}
+              icon={section.icon}
+              panelId={viewPanelId}
+            />
+          ))}
+        </TabList>
+
+        {/* The panels set their own inline gutter and bottom padding but no
+            top one, because in the popover the dropped heading was the thing
+            separating them from what is above. Here the strip's rule takes
+            that place, so the gap it left is restated at the same 12px the
+            heading gave it. */}
+        <VStack
+          gap={0}
+          id={viewPanelId}
+          role="tabpanel"
+          aria-labelledby={`${viewPanelId}-tab-${viewSection}`}
+          paddingBlockStart={3}>
+          {viewPanelBody()}
+        </VStack>
+      </VStack>
+    </BottomSheet>
+  );
+
   // ---------------------------------------------------------------------------
   // Detail panel
   // ---------------------------------------------------------------------------
 
+  /**
+   * The panel's contents, held apart from the panel itself so the sheet can
+   * show the same thing. Nothing in here is aware of which one it is in: it is
+   * a column of sections against a 16px gutter either way, and both hosts
+   * carry no padding of their own for it to fight.
+   */
+  const detailBody =
+    activeJob == null ? null : (
+      <VStack gap={0} xstyle={styles.detailPanel}>
+        {/* The only part of the body that knows which host it is in: the sheet
+            needs the pill cleared, the docked panel has no pill and would just
+            sit 8px lower than the panels beside it. The two never coexist —
+            Layout drops the panel entirely on a compact surface. */}
+        <Section
+          variant="transparent"
+          padding={4}
+          paddingBlockStart={isCompactSurface ? SHEET_TOP_INSET : 4}>
+          <VStack gap={4}>
+            <HStack gap={2}>
+              <StackItem size="fill">
+                <VStack gap={2}>
+                  <HStack gap={2} vAlign="center">
+                    <Badge
+                      variant={STATUS_META[activeJob.status].badge}
+                      label={STATUS_META[activeJob.status].label}
+                    />
+                    <StatusDot
+                      variant={PRIORITY_META[activeJob.priority].dot}
+                      label={`${PRIORITY_META[activeJob.priority].label} priority`}
+                      isPulsing={activeJob.priority === 'urgent'}
+                    />
+                    <Text type="supporting" color="secondary">
+                      {PRIORITY_META[activeJob.priority].label} · {activeJob.id}
+                    </Text>
+                  </HStack>
+                  <Heading level={2}>{activeJob.summary}</Heading>
+                </VStack>
+              </StackItem>
+              <IconButton
+                label="Close details"
+                variant="ghost"
+                size="sm"
+                icon={<Icon icon={X} size="sm" />}
+                onClick={() => setActiveJobId(null)}
+              />
+            </HStack>
+
+            {/* Both take the full width, so flex shrink splits the row
+                  evenly however wide the panel is dragged. */}
+            <HStack gap={2}>
+              <Button
+                label={NEXT_ACTION[activeJob.status]}
+                size="sm"
+                width="100%"
+              />
+              <Button
+                label="Edit job"
+                variant="secondary"
+                size="sm"
+                width="100%"
+              />
+            </HStack>
+          </VStack>
+        </Section>
+
+        <Divider />
+
+        <Section variant="transparent" padding={4}>
+          <MetadataList
+            columns="single"
+            label={{position: 'start', width: 104}}>
+            <MetadataListItem label="Customer">
+              <Text type="body">{activeJob.customer}</Text>
+            </MetadataListItem>
+            <MetadataListItem label="Site address">
+              <Text type="body">{activeJob.address}</Text>
+            </MetadataListItem>
+            <MetadataListItem label="Technician">
+              <Text type="body">{activeJob.technician}</Text>
+            </MetadataListItem>
+            <MetadataListItem label="Scheduled">
+              <Text type="body">
+                {formatDate(activeJob.scheduledAt, true)},{' '}
+                {formatTime(activeJob.scheduledAt)}
+              </Text>
+            </MetadataListItem>
+            <MetadataListItem label="Equipment">
+              <Text type="body">{activeJob.equipment}</Text>
+            </MetadataListItem>
+            <MetadataListItem label="Quote">
+              <Text type="body">{formatMoney(activeJob.quoted)}</Text>
+            </MetadataListItem>
+          </MetadataList>
+        </Section>
+
+        <Divider />
+
+        <Section variant="transparent" padding={4}>
+          <VStack gap={2}>
+            <Heading level={3}>Site history</Heading>
+            {siteHistory.length === 0 ? (
+              <Text type="supporting" color="secondary">
+                No other visits on file for this site.
+              </Text>
+            ) : (
+              <VStack gap={0}>
+                {siteHistory.map(related => (
+                  <Item
+                    key={related.id}
+                    align="center"
+                    label={related.summary}
+                    labelLines={2}
+                    // The date leads: this is a list of visits to one site,
+                    // so when it happened is what tells them apart. The
+                    // badge takes the end slot the date used to hold —
+                    // a badge is too wide to lead a row this narrow.
+                    description={`${formatDate(related.scheduledAt, true)} · ${related.technician}`}
+                    endContent={
+                      <Badge
+                        variant={STATUS_META[related.status].badge}
+                        label={STATUS_META[related.status].label}
+                      />
+                    }
+                    onClick={() => setActiveJobId(related.id)}
+                  />
+                ))}
+              </VStack>
+            )}
+          </VStack>
+        </Section>
+      </VStack>
+    );
+
+  /**
+   * With a pointer the details are a resizable column beside the table, so the
+   * row and its detail stay on screen together and the reader can widen one
+   * against the other.
+   *
+   * A phone has no width to give: the same panel there would leave the table
+   * as a sliver of checkboxes behind it, which is what it did before this
+   * branch existed. A sheet takes the block axis instead — the axis a phone
+   * has to spare — so the table stays whole underneath and the details come
+   * back down with a swipe.
+   */
   const detailPanel =
-    activeJob == null ? undefined : (
+    detailBody == null ? undefined : (
       <>
         {/* The panel owns the separator, so the handle stays divider-less and
             hides its pill at rest rather than floating a stray stub. */}
@@ -3635,133 +4294,35 @@ export default function TableFilterTemplate() {
           isAlwaysVisible={false}
           label="Resize job details"
         />
+        {/* Panel padding is 0 so the dividers reach both edges; each section
+            inside re-adds the 16px gutter to keep its content on the same
+            line. */}
         <LayoutPanel
           resizable={detailWidth.props}
           hasDivider
           padding={0}
           label="Job details">
-          {/* Panel padding is 0 so the dividers reach both edges; each section
-              re-adds the 16px gutter to keep its content on the same line. */}
-          <VStack gap={0} xstyle={styles.detailPanel}>
-            <Section variant="transparent" padding={4}>
-              <VStack gap={4}>
-                <HStack gap={2}>
-                  <StackItem size="fill">
-                    <VStack gap={2}>
-                      <HStack gap={2} vAlign="center">
-                        <Badge
-                          variant={STATUS_META[activeJob.status].badge}
-                          label={STATUS_META[activeJob.status].label}
-                        />
-                        <StatusDot
-                          variant={PRIORITY_META[activeJob.priority].dot}
-                          label={`${PRIORITY_META[activeJob.priority].label} priority`}
-                          isPulsing={activeJob.priority === 'urgent'}
-                        />
-                        <Text type="supporting" color="secondary">
-                          {PRIORITY_META[activeJob.priority].label} ·{' '}
-                          {activeJob.id}
-                        </Text>
-                      </HStack>
-                      <Heading level={2}>{activeJob.summary}</Heading>
-                    </VStack>
-                  </StackItem>
-                  <IconButton
-                    label="Close details"
-                    variant="ghost"
-                    size="sm"
-                    icon={<Icon icon={X} size="sm" />}
-                    onClick={() => setActiveJobId(null)}
-                  />
-                </HStack>
-
-                {/* Both take the full width, so flex shrink splits the row
-                  evenly however wide the panel is dragged. */}
-                <HStack gap={2}>
-                  <Button
-                    label={NEXT_ACTION[activeJob.status]}
-                    size="sm"
-                    width="100%"
-                  />
-                  <Button
-                    label="Edit job"
-                    variant="secondary"
-                    size="sm"
-                    width="100%"
-                  />
-                </HStack>
-              </VStack>
-            </Section>
-
-            <Divider />
-
-            <Section variant="transparent" padding={4}>
-              <MetadataList
-                columns="single"
-                label={{position: 'start', width: 104}}>
-                <MetadataListItem label="Customer">
-                  <Text type="body">{activeJob.customer}</Text>
-                </MetadataListItem>
-                <MetadataListItem label="Site address">
-                  <Text type="body">{activeJob.address}</Text>
-                </MetadataListItem>
-                <MetadataListItem label="Technician">
-                  <Text type="body">{activeJob.technician}</Text>
-                </MetadataListItem>
-                <MetadataListItem label="Scheduled">
-                  <Text type="body">
-                    {formatDate(activeJob.scheduledAt, true)},{' '}
-                    {formatTime(activeJob.scheduledAt)}
-                  </Text>
-                </MetadataListItem>
-                <MetadataListItem label="Equipment">
-                  <Text type="body">{activeJob.equipment}</Text>
-                </MetadataListItem>
-                <MetadataListItem label="Quote">
-                  <Text type="body">{formatMoney(activeJob.quoted)}</Text>
-                </MetadataListItem>
-              </MetadataList>
-            </Section>
-
-            <Divider />
-
-            <Section variant="transparent" padding={4}>
-              <VStack gap={2}>
-                <Heading level={3}>Site history</Heading>
-                {siteHistory.length === 0 ? (
-                  <Text type="supporting" color="secondary">
-                    No other visits on file for this site.
-                  </Text>
-                ) : (
-                  <VStack gap={0}>
-                    {siteHistory.map(related => (
-                      <Item
-                        key={related.id}
-                        align="center"
-                        label={related.summary}
-                        labelLines={2}
-                        // The date leads: this is a list of visits to one site,
-                        // so when it happened is what tells them apart. The
-                        // badge takes the end slot the date used to hold —
-                        // a badge is too wide to lead a row this narrow.
-                        description={`${formatDate(related.scheduledAt, true)} · ${related.technician}`}
-                        endContent={
-                          <Badge
-                            variant={STATUS_META[related.status].badge}
-                            label={STATUS_META[related.status].label}
-                          />
-                        }
-                        onClick={() => setActiveJobId(related.id)}
-                      />
-                    ))}
-                  </VStack>
-                )}
-              </VStack>
-            </Section>
-          </VStack>
+          {detailBody}
         </LayoutPanel>
       </>
     );
+
+  /**
+   * `tall` because this is the reading surface, not a picker: the metadata
+   * list and the site history below it are what the reader opened the row for,
+   * and a mid-height budget would put the history under a scroll before they
+   * had seen there was any.
+   */
+  const detailSheet = (
+    <BottomSheet
+      isOpen={isCompactSurface && activeJob != null}
+      onOpenChange={open => !open && setActiveJobId(null)}
+      label="Job details"
+      height="tall"
+      padding={0}>
+      {detailBody}
+    </BottomSheet>
+  );
 
   // ---------------------------------------------------------------------------
   // Render
@@ -3773,7 +4334,7 @@ export default function TableFilterTemplate() {
         height="fill"
         padding={0}
         xstyle={styles.pageShell}
-        end={detailPanel}
+        end={isCompactSurface ? undefined : detailPanel}
         header={
           <LayoutHeader hasDivider label="Job filters and table actions">
             <VStack gap={0} xstyle={styles.headerWrap}>
@@ -3849,35 +4410,26 @@ export default function TableFilterTemplate() {
                               of View options when the bar switches. */}
                             {isPowerSearch && powerSearchToggle}
 
-                            <Popover
-                              placement="below"
-                              alignment="end"
-                              width={660}
-                              label="View options"
-                              isOpen={isViewOpen}
-                              onOpenChange={setIsViewOpen}
-                              xstyle={styles.viewPopoverSurface}
-                              content={viewOptionsPopover}>
-                              {/* Flat rather than outlined: ghost is the
-                                borderless variant Button and Selector share, so
-                                this trigger reads as the same family of control
-                                as a ghost Selector — chevron and all — without
-                                the local filterChrome the bordered toggles in
-                                the row need.
-
-                                Deliberately not a ComplexSelector, unlike the
-                                Quote control: this panel drives a whole
-                                ViewState and has no single value to hand a
-                                value-shaped component. */}
-                              <Button
+                            {/* Same trigger either way; only what it opens
+                              changes. On a phone the panel is the sheet
+                              rendered beside the dialogs below, so the button
+                              drives `isViewOpen` directly instead of being a
+                              Popover's child. */}
+                            {isCompactSurface ? (
+                              viewOptionsTrigger
+                            ) : (
+                              <Popover
+                                placement="below"
+                                alignment="end"
+                                width={660}
                                 label="View options"
-                                variant="ghost"
-                                size="sm"
-                                endContent={
-                                  <Icon icon={ChevronDown} size="sm" />
-                                }
-                              />
-                            </Popover>
+                                isOpen={isViewOpen}
+                                onOpenChange={setIsViewOpen}
+                                xstyle={styles.viewPopoverSurface}
+                                content={viewOptionsPopover}>
+                                {viewOptionsTrigger}
+                              </Popover>
+                            )}
 
                             {/* `tooltip` is stated rather than left to
                               isIconOnly: the automatic tooltip the prop
@@ -3988,106 +4540,92 @@ export default function TableFilterTemplate() {
         }
       />
 
+      {/* Mounted at every width rather than behind the branch: a closed
+          BottomSheet is one hidden dialog element, and gating the mount would
+          tear the panel down under a reader who rotates the phone mid-edit.
+          The branch lives in its `isOpen` instead. */}
+      {viewOptionsSheet}
+      {detailSheet}
+
       {/* Create saved view.
 
-          Dialog → DialogHeader + Section: two regions, 16px on each. The
-          Dialog keeps its --spacing-4 default rather than restating
+          On the Dialog branch: DialogHeader + Section are two regions, 16px on
+          each. The Dialog keeps its --spacing-4 default rather than restating
           padding={4}; either way it puts that gutter on its inner wrapper and
           republishes it, and the header would otherwise pad on top of it. The
           Section escapes the wrapper on its own; dialogHeaderBleed does the
           same for the header so both land on one 16px gutter. */}
-      <Dialog
+      <AdaptiveSavedViewForm
         isOpen={creatingName != null}
         onOpenChange={open => setCreatingName(open ? '' : null)}
-        purpose="form"
-        width={400}>
-        <DialogHeader
-          title="Create new saved view"
-          subtitle="Captures the filters and the table configuration as they are now."
-          onOpenChange={open => setCreatingName(open ? '' : null)}
-          xstyle={styles.dialogHeaderBleed}
+        title="Create new saved view"
+        subtitle="Captures the filters and the table configuration as they are now."
+        isCompactSurface={isCompactSurface}>
+        <TextInput
+          label="Name"
+          value={creatingName ?? ''}
+          onChange={setCreatingName}
+          hasAutoFocus
         />
-        <Section variant="transparent" padding={4}>
-          <VStack gap={4}>
-            <TextInput
-              label="Name"
-              value={creatingName ?? ''}
-              onChange={setCreatingName}
-              hasAutoFocus
-            />
-            <VStack gap={1}>
-              <Text type="label">This view saves</Text>
-              <ViewSummaryList view={view} filters={filters} />
-            </VStack>
-            <HStack hAlign="end">
-              <Button
-                label="Create"
-                variant="primary"
-                isDisabled={(creatingName ?? '').trim() === ''}
-                onClick={() => createSavedView(creatingName ?? '')}
-              />
-            </HStack>
-          </VStack>
-        </Section>
-      </Dialog>
+        <VStack gap={1}>
+          <Text type="label">This view saves</Text>
+          <ViewSummaryList view={view} filters={filters} />
+        </VStack>
+        <HStack hAlign="end">
+          <Button
+            label="Create"
+            variant="primary"
+            isDisabled={(creatingName ?? '').trim() === ''}
+            onClick={() => createSavedView(creatingName ?? '')}
+          />
+        </HStack>
+      </AdaptiveSavedViewForm>
 
       {/* Edit saved view */}
-      <Dialog
+      <AdaptiveSavedViewForm
         isOpen={editing != null}
         onOpenChange={open => !open && setEditing(null)}
-        purpose="form"
-        width={400}>
-        <DialogHeader
-          title="Edit saved view"
-          subtitle="Renaming only. The configuration is what was captured when the view was saved."
-          onOpenChange={open => !open && setEditing(null)}
-          xstyle={styles.dialogHeaderBleed}
+        title="Edit saved view"
+        subtitle="Renaming only. The configuration is what was captured when the view was saved."
+        isCompactSurface={isCompactSurface}>
+        <TextInput
+          label="Name"
+          value={editing?.name ?? ''}
+          onChange={value =>
+            setEditing(current =>
+              current ? {...current, name: value} : current,
+            )
+          }
         />
-        <Section variant="transparent" padding={4}>
-          <VStack gap={4}>
-            <TextInput
-              label="Name"
-              value={editing?.name ?? ''}
-              onChange={value =>
-                setEditing(current =>
-                  current ? {...current, name: value} : current,
-                )
-              }
-            />
-            {/* The configuration is captured, not editable here: it is changed
-                by reconfiguring the table and saving a new view. */}
-            <VStack gap={1}>
-              <Text type="label">This view saves</Text>
-              {editing == null ? (
-                <Text type="supporting" color="secondary">
-                  (Empty)
-                </Text>
-              ) : (
-                <ViewSummaryList
-                  view={editing.view}
-                  filters={editing.filters}
-                />
-              )}
-            </VStack>
-            <HStack gap={2} vAlign="center">
+        {/* The configuration is captured, not editable here: it is changed
+            by reconfiguring the table and saving a new view. */}
+        <VStack gap={1}>
+          <Text type="label">This view saves</Text>
+          {editing == null ? (
+            <Text type="supporting" color="secondary">
+              (Empty)
+            </Text>
+          ) : (
+            <ViewSummaryList view={editing.view} filters={editing.filters} />
+          )}
+        </VStack>
+        <HStack gap={2} vAlign="center">
+          <Button
+            label="Delete"
+            variant="destructive"
+            onClick={() => editing && deleteSavedView(editing.id)}
+          />
+          <StackItem size="fill">
+            <HStack hAlign="end">
               <Button
-                label="Delete"
-                variant="destructive"
-                onClick={() => editing && deleteSavedView(editing.id)}
+                label="Save"
+                variant="primary"
+                onClick={() => editing && saveEditedView(editing)}
               />
-              <StackItem size="fill">
-                <HStack hAlign="end">
-                  <Button
-                    label="Save"
-                    variant="primary"
-                    onClick={() => editing && saveEditedView(editing)}
-                  />
-                </HStack>
-              </StackItem>
             </HStack>
-          </VStack>
-        </Section>
-      </Dialog>
+          </StackItem>
+        </HStack>
+      </AdaptiveSavedViewForm>
     </>
   );
 }

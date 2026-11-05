@@ -33,8 +33,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
+import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 
+const require = createRequire(import.meta.url);
+const {
+  COMPONENT_PACKAGES,
+  flatPackageComponentNames,
+  nestedPackageComponentNames,
+} = require('./component-packages.cjs');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /** The one stored form of the ledger, at the root of the wiki repo. */
@@ -42,22 +49,22 @@ export const LEDGER_FILENAME = 'component-scores.json';
 
 /** Where the scores live when no `--ledger` is given. */
 export const DEFAULT_LEDGER_URL =
-  'https://raw.githubusercontent.com/wiki/facebook/astryx/component-scores.json';
+  'https://raw.githubusercontent.com/wiki/meta/astryx/component-scores.json';
 
 /** The wiki repo the ledger lives in — what `--push` clones. */
-export const WIKI_REMOTE = 'https://github.com/facebook/astryx.wiki.git';
+export const WIKI_REMOTE = 'https://github.com/meta/astryx.wiki.git';
 
 /** The wiki's default branch. Not `main`. */
 export const WIKI_BRANCH = 'master';
 
 /**
  * The one place the ledger is readable by a human: the sandbox page, which
- * fetches the JSON at runtime. Deployed from `main` by .github/workflows/
- * deploy.yml to the stable (unversioned) GitHub Pages path — /pr/<n>/ paths
- * are PR previews and must never be linked from anything durable.
+ * fetches the JSON at runtime. The Vercel project deploys current `main` to the
+ * stable unversioned path; `/pr/<n>/` paths are PR previews and must never be
+ * linked from anything durable.
  */
 export const SCORES_PAGE_URL =
-  'https://facebook.github.io/astryx/sandbox/pages/component-scores/';
+  'https://astryx.atmeta.com/sandbox/pages/component-scores/';
 
 const USAGE = `
 Usage: node scripts/score-ledger.mjs <subcommand> [options]
@@ -69,8 +76,9 @@ Subcommands
   --stats                 Distribution summary on the terminal.
   --record <Component>    Write one component's scorecard into the ledger.
   --file-issues <Component>
-                          File one GitHub issue per open BLOCK that has none,
-                          via gh, and write the numbers back into the ledger.
+                          Grading/promotion only: file one GitHub issue per open
+                          BLOCK that has none, via gh, and write the numbers back.
+                          Night Watch and review modes are refused.
 
 Options
   --ledger <path|url>       Ledger source. Default: the wiki raw URL.
@@ -89,7 +97,7 @@ Options
   --dry-run                 --record: print the diff and the commit message and
                             push nothing. --file-issues: print the issues,
                             create nothing.
-  --repo <owner/name>       --file-issues: default facebook/astryx.
+  --repo <owner/name>       --file-issues: default meta/astryx.
   --json                    Machine-readable output where it applies.
 `.trim();
 
@@ -152,6 +160,51 @@ export const SECTION_STATES = Object.freeze([
   'unpublished',
 ]);
 
+/**
+ * Audit modes and the lifecycle each mode owns. Legacy word aliases remain
+ * readable because the wiki ledger already contains them; every new scorecard
+ * is normalized to the one-letter rubric code.
+ */
+export const AUDIT_MODES = Object.freeze({
+  N: Object.freeze({
+    code: 'N',
+    label: 'Night Watch',
+    aliases: Object.freeze(['n', 'nightly', 'night-watch', 'night watch']),
+    filesBlockIssues: false,
+  }),
+  O: Object.freeze({
+    code: 'O',
+    label: 'grading',
+    aliases: Object.freeze(['o', 'grading', 'on-demand', 'on demand']),
+    filesBlockIssues: true,
+  }),
+  P: Object.freeze({
+    code: 'P',
+    label: 'promotion',
+    aliases: Object.freeze(['p', 'promotion']),
+    filesBlockIssues: true,
+  }),
+  R: Object.freeze({
+    code: 'R',
+    label: 'review',
+    aliases: Object.freeze(['r', 'review']),
+    filesBlockIssues: false,
+  }),
+});
+
+const AUDIT_MODE_BY_ALIAS = new Map(
+  Object.values(AUDIT_MODES).flatMap(policy =>
+    policy.aliases.map(alias => [alias, policy]),
+  ),
+);
+
+/** Resolve a scorecard or legacy ledger mode to its lifecycle policy. */
+export function auditModePolicy(mode) {
+  return typeof mode === 'string'
+    ? (AUDIT_MODE_BY_ALIAS.get(mode.trim().toLowerCase()) ?? null)
+    : null;
+}
+
 /** Rubric §2 grade bands. */
 export const GRADE_BANDS = Object.freeze([
   {grade: 'A', min: 90},
@@ -192,9 +245,6 @@ export const NON_COMPONENT_DIRS = Object.freeze(
 /** A file that renders: PascalCase `.tsx`, not a test, story, doc or perf file. */
 const RENDERING_FILE = /^[A-Z][A-Za-z0-9]*\.tsx$/;
 
-/** A documented component in a flat package: PascalCase `<Name>.doc.mjs`. */
-const FLAT_DOC_FILE = /^([A-Z][A-Za-z0-9]*)\.doc\.mjs$/;
-
 /**
  * Packages the ledger covers, with the src dir the predicate sweeps and how
  * that src is laid out.
@@ -202,20 +252,13 @@ const FLAT_DOC_FILE = /^([A-Z][A-Za-z0-9]*)\.doc\.mjs$/;
  *   - `nested` (core, lab): one directory per component, `<Name>/<Name>.tsx`.
  *     The directory is the unit; `isComponentDirectory` filters out the
  *     styles-only and context-only ones.
- *   - `flat` (richtext, promoted out of lab so it can be canaried on its own):
- *     `<Name>.tsx` files at the src root alongside internal helpers, so there
- *     is no directory to key on and the `.doc.mjs` is the component boundary.
+ *   - `flat` (charts, richtext, vega): public component modules live directly
+ *     under `src/` and are identified from matching named exports in `src/index.ts`.
  *
- * A component graduating from lab into its own package (richtext did) must be
- * registered here or it silently drops out of the ledger's denominator — the
- * roster reads only these packages, and a score recorded for it in the wiki
- * has no row to attach to.
+ * Add a component-bearing package to `scripts/component-packages.cjs`; the audit
+ * roster and component-spec path validation consume that one registry.
  */
-export const LEDGER_PACKAGES = Object.freeze([
-  {name: 'core', src: 'packages/core/src', layout: 'nested'},
-  {name: 'lab', src: 'packages/lab/src', layout: 'nested'},
-  {name: 'richtext', src: 'packages/richtext/src', layout: 'flat'},
-]);
+export const LEDGER_PACKAGES = COMPONENT_PACKAGES;
 
 /** The covered package names, for human-facing CLI messages. */
 const LEDGER_PACKAGE_NAMES = LEDGER_PACKAGES.map(p => p.name);
@@ -258,35 +301,21 @@ export function isComponentDirectory(srcDir, dirName) {
 }
 
 /**
- * The component names in a flat package src (richtext), where `<Name>.tsx`
- * files sit at the root alongside internal helpers rather than in a directory
- * each. A `.doc.mjs` is the boundary here: the root also holds sub-parts and
- * plugins (`RichTextEditorToolbar.tsx`, `RichTextEditorAutoLinkPlugin.tsx`)
- * that render but are not audited as components on their own, and the doc file
- * is what distinguishes the public component from them — the same unit the
- * docsite and the wiki ledger already record.
+ * Public component names in a flat package. Matching named exports from
+ * `src/index.ts` define the boundary; private rendering helpers and TSX context
+ * modules that export only hooks stay out.
  *
  * @param {string} srcDir absolute path to `packages/<pkg>/src`
- * @returns {string[]} component names, e.g. `['RichTextEditor']`
+ * @param {string} [repoRoot]
+ * @returns {string[]} public component names
  */
-export function flatPackageComponents(srcDir) {
-  let entries;
-  try {
-    entries = fs.readdirSync(srcDir, {withFileTypes: true});
-  } catch {
-    return [];
-  }
-  const names = [];
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    const match = FLAT_DOC_FILE.exec(entry.name);
-    if (!match) continue;
-    // A doc without the component it documents is a dangling file, not a row.
-    if (fs.existsSync(path.join(srcDir, `${match[1]}.tsx`))) {
-      names.push(match[1]);
-    }
-  }
-  return names;
+export function flatPackageComponents(srcDir, repoRoot = ROOT) {
+  const packageConfig = COMPONENT_PACKAGES.find(
+    pkg => path.resolve(repoRoot, pkg.src) === path.resolve(srcDir),
+  );
+  return packageConfig
+    ? flatPackageComponentNames(repoRoot, packageConfig)
+    : [];
 }
 
 /**
@@ -299,25 +328,19 @@ export function listComponents(repoRoot = ROOT) {
   const out = [];
   for (const pkg of LEDGER_PACKAGES) {
     const srcDir = path.join(repoRoot, pkg.src);
-    if (pkg.layout === 'flat') {
-      for (const component of flatPackageComponents(srcDir)) {
-        out.push({component, package: pkg.name});
-      }
-      continue;
-    }
-    let entries;
-    try {
-      entries = fs.readdirSync(srcDir, {withFileTypes: true});
-    } catch {
-      continue;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      if (!isComponentDirectory(srcDir, entry.name)) continue;
-      out.push({component: entry.name, package: pkg.name});
+    const components =
+      pkg.layout === 'flat'
+        ? flatPackageComponents(srcDir, repoRoot)
+        : nestedPackageComponentNames(repoRoot, pkg);
+    for (const component of components) {
+      out.push({component, package: pkg.name});
     }
   }
-  return out.sort((a, b) => a.component.localeCompare(b.component));
+  return out.sort(
+    (a, b) =>
+      a.component.localeCompare(b.component) ||
+      a.package.localeCompare(b.package),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -345,7 +368,10 @@ export const LEDGER_FETCH_TIMEOUT_MS = 10_000;
  * failing a pull request on network flake or on the wiki being momentarily
  * unavailable.
  */
-export async function loadLedger(source, {timeoutMs = LEDGER_FETCH_TIMEOUT_MS} = {}) {
+export async function loadLedger(
+  source,
+  {timeoutMs = LEDGER_FETCH_TIMEOUT_MS} = {},
+) {
   try {
     let text;
     if (isUrl(source)) {
@@ -434,7 +460,9 @@ export function buildRoster(ledger, components = listComponents()) {
     });
   }
   return roster.sort(
-    (a, b) => a.component.localeCompare(b.component) || a.package.localeCompare(b.package),
+    (a, b) =>
+      a.component.localeCompare(b.component) ||
+      a.package.localeCompare(b.package),
   );
 }
 
@@ -455,12 +483,13 @@ export const openBlockCount = entry =>
     ? entry.blocks.count
     : 0;
 
-export const blockList = entry => (entry && entry.blocks && entry.blocks.open) || [];
+export const blockList = entry =>
+  (entry && entry.blocks && entry.blocks.open) || [];
 
 const isAudited = entry => !!entry && entry.status === 'audited';
 
 /** The repo that carries audit issues. */
-export const DEFAULT_REPO = 'facebook/astryx';
+export const DEFAULT_REPO = 'meta/astryx';
 
 /** `A8` -> ``[`A8`](https://github.com/…/issues/123)`` when the BLOCK is filed. */
 export function blockLink(block, repo = DEFAULT_REPO) {
@@ -571,7 +600,9 @@ export function compareEntry(component, baseEntry, headEntry) {
  * one result per package rather than an arbitrary pick.
  */
 export function runRatchet(components, baseLedger, headLedger, roster = null) {
-  const base = baseLedger ? indexLedger(baseLedger) : {byId: new Map(), byName: new Map()};
+  const base = baseLedger
+    ? indexLedger(baseLedger)
+    : {byId: new Map(), byName: new Map()};
   const head = indexLedger(headLedger);
   const live = roster || listComponents();
 
@@ -589,7 +620,8 @@ export function runRatchet(components, baseLedger, headLedger, roster = null) {
     // Not a live component. It may still have a ledger row (a rename, say);
     // otherwise check it as an unknown, which passes.
     const rows = head.byName.get(item) || [];
-    if (rows.length > 0) targets.push(...rows.map(e => ({component: item, package: e.package})));
+    if (rows.length > 0)
+      targets.push(...rows.map(e => ({component: item, package: e.package})));
     else targets.push({component: item, package: null});
   }
 
@@ -652,7 +684,11 @@ export function buildQueue(roster, limit = Infinity) {
   const unaudited = roster
     .filter(r => r.live && !isAudited(r.entry))
     .sort((a, b) => a.component.localeCompare(b.component))
-    .map(r => ({component: r.component, package: r.package, why: 'never audited'}));
+    .map(r => ({
+      component: r.component,
+      package: r.package,
+      why: 'never audited',
+    }));
 
   const audited = roster
     .filter(r => isAudited(r.entry))
@@ -690,32 +726,47 @@ export function buildStats(roster) {
 
   const sections = {};
   for (const id of SECTION_IDS) {
-    const states = {scored: 0, limited: 0, not_measured: 0, na: 0, unpublished: 0};
+    const states = {
+      scored: 0,
+      limited: 0,
+      not_measured: 0,
+      na: 0,
+      unpublished: 0,
+    };
     const scores = [];
     for (const r of audited) {
       const s = readSection(r.entry, id);
       if (s.state in states) states[s.state]++;
-      if (s.state === 'scored' && typeof s.score === 'number') scores.push(s.score);
+      if (s.state === 'scored' && typeof s.score === 'number')
+        scores.push(s.score);
     }
     sections[id] = {
       weight: SECTION_WEIGHTS[id],
       states,
       mean: scores.length
-        ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 100) / 100
+        ? Math.round(
+            (scores.reduce((a, b) => a + b, 0) / scores.length) * 100,
+          ) / 100
         : null,
       n: scores.length,
     };
   }
 
-  const dates = audited.map(r => r.entry.lastAudited).filter(Boolean).sort();
-  const scores = audited.map(r => r.entry.score).filter(n => typeof n === 'number');
+  const dates = audited
+    .map(r => r.entry.lastAudited)
+    .filter(Boolean)
+    .sort();
+  const scores = audited
+    .map(r => r.entry.score)
+    .filter(n => typeof n === 'number');
 
   return {
     total: live.length,
     audited: audited.length,
     unaudited: live.length - audited.filter(r => r.live).length,
     percentAudited: live.length
-      ? Math.round((audited.filter(r => r.live).length / live.length) * 1000) / 10
+      ? Math.round((audited.filter(r => r.live).length / live.length) * 1000) /
+        10
       : 0,
     byPackage: LEDGER_PACKAGES.reduce((acc, p) => {
       const inPkg = live.filter(r => r.package === p.name);
@@ -727,9 +778,11 @@ export function buildStats(roster) {
     }, {}),
     grades,
     openBlocks: audited.reduce((sum, r) => sum + openBlockCount(r.entry), 0),
-    componentsWithBlocks: audited.filter(r => openBlockCount(r.entry) > 0).length,
+    componentsWithBlocks: audited.filter(r => openBlockCount(r.entry) > 0)
+      .length,
     meanScore: scores.length
-      ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) / 10
+      ? Math.round((scores.reduce((a, b) => a + b, 0) / scores.length) * 10) /
+        10
       : null,
     oldestAudit: dates[0] || null,
     newestAudit: dates[dates.length - 1] || null,
@@ -764,21 +817,108 @@ function fmtScore(n) {
  * The paste-to-an-agent request for an audit. One string, exported so the
  * sandbox page and the CLI cannot drift.
  */
-export const AUDIT_PROMPT = `Audit the Astryx component <Component> against the Component Audit Rubric:
-https://github.com/facebook/astryx/wiki/Component-Audit-Rubric
+export const AUDIT_PROMPT = `Audit the Astryx component <Component> in <AuditMode: N|O|P|R> mode against the Component Audit Rubric:
+https://github.com/meta/astryx/wiki/Component-Audit-Rubric
 
-Grade the whole component, not a diff — follow the rubric's "Grading a whole
-component" section. Work every section, cite the rule id for each finding
-(A8, T6, P2 …), and capture screenshots of every state in light and dark by
-driving a real browser against Storybook. If you skip the screenshots, report
-the rendered-design section as not_measured rather than scoring it — never
-guess, and never score it zero.
+Preserve the selected mode. Assemble the applicable authority before applying
+the rubric procedure, in this order:
 
-Then record the result, per the rubric's "Recording an audit" section. One
-command: it clones the wiki, applies the ratchet, commits and pushes.
+1. start from the nearest current component contract and every applicable current
+   public module contract;
+2. follow their applicable links to current family and design requirements;
+3. follow referenced current architecture and system decisions, and apply
+   applicable objective standards; then
+4. apply the rubric procedure last, mapping each applicable requirement to one
+   section and one evidence result.
+
+Follow only links needed for this component; do not scan global authority first.
+Only records with \`authority: current\` are policy. If a component or module
+contract is missing or incomplete, continue from the other applicable current
+authority and checkable evidence. You may prepare a draft observational contract
+using the existing template and approval flow, but it is optional context, never
+policy, and never clears a finding or blocks grading. A backfill is observational
+only: it may describe verified shipped behavior, but it must not add, improve,
+remove, reinterpret, or otherwise change product meaning.
+
+A conflict between current records, or any question requiring new API meaning or
+shape, defaults, compatibility or migration promises, ownership boundaries, or
+subjective design judgment, stops remediation and routes to the owning human.
+Do not use local implementation or a draft to settle it.
+
+In N, O, and P, grade the whole component, not a diff. Work every section, cite
+the rule id for each finding (A8, T6, P2 …), and build a closed inventory from
+public exports and types, documented concepts and variants, publicly reachable
+states and transitions, and reachable implementation branches. Map each row to
+source, existing tests, consumer docs, rendered evidence, applicable current
+authority or objective standards, and any conflict or gap. Capture every visible
+state in light and dark by driving a real browser against Storybook. If required
+evidence is unavailable, use the rubric's \`not_measured\` behavior; never guess
+or score it zero. In R, judge the pull-request change and report findings on that
+change rather than grading inherited component debt.
+
+Mode lifecycle:
+
+- N — Night Watch: record only the post-fix ledger result and file no ordinary
+  per-finding issues. You may batch only tests, stable visual coverage, doc-drift
+  fixes, and implementation fixes whose required outcome is already settled by
+  current authority or an objective standard. Before any behavior remediation,
+  load and follow Matt Pocock's pinned public TDD skill:
+  https://github.com/mattpocock/skills/blob/6654f6b60cd9d5be8b54c6fafe44346dabeb3b76/skills/engineering/tdd/SKILL.md
+  Prove red before production changes and implement one minimal vertical slice
+  through an established public seam. Every Night Watch PR remains
+  manual-review-only until \`spec:AST-029\` is \`phase: shipped\` and a trusted
+  exact-head eligibility check is active. Do not enable auto-merge.
+- O — grading: record the audit, then file one issue per open BLOCK.
+- P — promotion: apply the promotion rider, record the audit, then file one issue
+  per open BLOCK.
+- R — review: put findings on the pull request or in its review. File no ordinary
+  per-BLOCK issues and do not apply the whole-component ledger lifecycle.
+
+Keep audit data with its existing owner. The wiki ledger stores current post-fix
+scores and unresolved findings. The pull request stores the run's reviewable
+evidence. The trusted exact-head report belongs in trusted PR/check metadata.
+Component and module specs store durable product behavior only; do not put audit
+scores, run inventories, screenshots, findings, or eligibility data in them.
+
+Authority changes invalidate linked affected scores on the existing scale: a
+component or module change invalidates that component, and an applicable family
+or global-authority change invalidates every linked component. Do not bump the
+rubric version unless scoring methodology, weights, severities, or evidence
+treatment changes.
+
+For N, O, and P, record the selected mode per the rubric's "Recording an audit"
+section:
 
   <your scorecard JSON> | node scripts/score-ledger.mjs --record <Component> \\
     --from - --push
+
+For O and P, follow that successful record with:
+
+  node scripts/score-ledger.mjs --file-issues <Component> --push
+
+For N, include this versioned machine-readable eligibility report in the audit
+output even though it is not yet a trusted status input:
+
+  {
+    "schemaVersion": 1,
+    "component": "<Component>",
+    "package": "<package>",
+    "auditMode": "N",
+    "rubricVersion": "<version>",
+    "heads": {"repository": "<sha>", "componentContract": "<sha-or-null>"},
+    "inventory": {"closed": false, "gaps": []},
+    "unresolvedGaps": {"objective": [], "manual": []},
+    "remediations": [
+      {"ruleId": "<id>", "beforeEvidence": [], "afterEvidence": []}
+    ],
+    "approvals": [{"name": "<approval>", "state": "<state>"}],
+    "checks": [{"name": "<check>", "state": "<state>"}],
+    "eligibility": {"eligible": false, "reasons": []}
+  }
+
+Fail closed: missing, stale, inconsistent, or unresolved evidence keeps
+\`eligibility.eligible\` false and the PR open for human review. This report does
+not activate auto-merge or create an \`audit-eligibility\` status.
 
 Only record what you actually measured.`;
 
@@ -792,7 +932,10 @@ Only record what you actually measured.`;
 // ---------------------------------------------------------------------------
 
 /** The reused shallow clone. One per user, not one per run. */
-export const WIKI_CACHE_DIR = path.join(os.tmpdir(), 'astryx-score-ledger-wiki');
+export const WIKI_CACHE_DIR = path.join(
+  os.tmpdir(),
+  'astryx-score-ledger-wiki',
+);
 
 function git(cwd, ...argv) {
   return execFileSync('git', argv, {
@@ -825,7 +968,16 @@ export function ensureWikiClone(dir = WIKI_CACHE_DIR, remote = WIKI_REMOTE) {
     git(dir, 'fetch', '--depth', '1', 'origin', WIKI_BRANCH);
   } else {
     fs.rmSync(dir, {recursive: true, force: true});
-    git(os.tmpdir(), 'clone', '--depth', '1', '--branch', WIKI_BRANCH, remote, dir);
+    git(
+      os.tmpdir(),
+      'clone',
+      '--depth',
+      '1',
+      '--branch',
+      WIKI_BRANCH,
+      remote,
+      dir,
+    );
   }
   git(dir, 'checkout', '-B', WIKI_BRANCH, `origin/${WIKI_BRANCH}`);
   git(dir, 'reset', '--hard', `origin/${WIKI_BRANCH}`);
@@ -849,8 +1001,13 @@ export function wikiCommitUrl(sha, remote = WIKI_REMOTE) {
  * added only when the bare name is ambiguous — `Chat` exists in core and lab,
  * and a message that does not say which one is a message you cannot read back.
  */
-export function commitMessage(entry, {regression = null, ambiguous = false} = {}) {
-  const name = ambiguous ? `${entry.package}/${entry.component}` : entry.component;
+export function commitMessage(
+  entry,
+  {regression = null, ambiguous = false} = {},
+) {
+  const name = ambiguous
+    ? `${entry.package}/${entry.component}`
+    : entry.component;
   const subject =
     `scores: ${name} ${entry.grade} (${fmtScore(entry.score)}), ` +
     `rubric ${entry.rubricVersion}`;
@@ -873,9 +1030,13 @@ function unifiedDiff(before, after, label) {
     fs.writeFileSync(a, before);
     fs.writeFileSync(b, after);
     try {
-      execFileSync('diff', ['-u', '--label', `a/${label}`, '--label', `b/${label}`, a, b], {
-        encoding: 'utf8',
-      });
+      execFileSync(
+        'diff',
+        ['-u', '--label', `a/${label}`, '--label', `b/${label}`, a, b],
+        {
+          encoding: 'utf8',
+        },
+      );
       return '';
     } catch (e) {
       // `diff` exits 1 when the files differ. That is the expected path.
@@ -959,7 +1120,9 @@ function commitAndPush(dir, file, apply, {attempts = 2} = {}) {
       tryGit(root, 'rebase', '--abort');
       lastFailure = pulled.out;
       if (attempt < attempts) {
-        console.log('score-ledger: the wiki moved under us — re-applying onto the new tip.');
+        console.log(
+          'score-ledger: the wiki moved under us — re-applying onto the new tip.',
+        );
         git(root, 'fetch', '--depth', '1', 'origin', WIKI_BRANCH);
         git(root, 'reset', '--hard', `origin/${WIKI_BRANCH}`);
         continue;
@@ -973,9 +1136,13 @@ function commitAndPush(dir, file, apply, {attempts = 2} = {}) {
       return {sha, url: wikiCommitUrl(sha), applied};
     }
     lastFailure = pushed.out;
-    const raced = /non-fast-forward|fetch first|rejected|stale info/i.test(pushed.out);
+    const raced = /non-fast-forward|fetch first|rejected|stale info/i.test(
+      pushed.out,
+    );
     if (!raced || attempt >= attempts) break;
-    console.log('score-ledger: push rejected as non-fast-forward — re-applying and retrying once.');
+    console.log(
+      'score-ledger: push rejected as non-fast-forward — re-applying and retrying once.',
+    );
     git(root, 'fetch', '--depth', '1', 'origin', WIKI_BRANCH);
     git(root, 'reset', '--hard', `origin/${WIKI_BRANCH}`);
   }
@@ -1018,7 +1185,9 @@ export function isEvidenceItem(item) {
   if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
   if (typeof item.label !== 'string') return false;
   return Object.entries(item).every(
-    ([k, v]) => EVIDENCE_FIELDS.has(k) && (v === undefined || v === null || typeof v === 'string'),
+    ([k, v]) =>
+      EVIDENCE_FIELDS.has(k) &&
+      (v === undefined || v === null || typeof v === 'string'),
   );
 }
 
@@ -1029,7 +1198,8 @@ export function isEvidenceItem(item) {
  * the ratchet to every BLOCK in it.
  */
 export function isBlocksShape(blocks) {
-  if (!blocks || typeof blocks !== 'object' || Array.isArray(blocks)) return false;
+  if (!blocks || typeof blocks !== 'object' || Array.isArray(blocks))
+    return false;
   return typeof blocks.count === 'number' && Array.isArray(blocks.open);
 }
 
@@ -1062,13 +1232,14 @@ export function applyScorecard(existing, scorecard, {component, pkg}) {
     ...(existing || {}),
     ...scorecard,
   };
-  if (!next.package) throw new Error(`${component}: no package — pass --package`);
+  if (!next.package)
+    throw new Error(`${component}: no package — pass --package`);
   // Checked before the grade, because a bare array (the shape a scorecard
   // naturally takes if you think of blocks as a list) reads as zero open
   // BLOCKs to `openBlockCount`. Left unchecked it does three things at once:
   // the open-BLOCK grade cap never applies, the ratchet sees no BLOCKs to
-  // compare, and the sandbox inlines a literal tsc rejects, which reds
-  // `build-sandbox` on every open pull request (#5033).
+  // compare, and the sandbox inlines a literal tsc rejects, which breaks
+  // every Sandbox build, each pull request's preview included (#5033).
   if (!isBlocksShape(next.blocks)) {
     throw new Error(
       `${component}: blocks must be {count, open: [...]} — a bare array reads as ` +
@@ -1097,9 +1268,18 @@ export function applyScorecard(existing, scorecard, {component, pkg}) {
         '(any open BLOCK caps the grade at C)',
     );
   }
-  if (!next.rubricVersion) throw new Error(`${component}: rubricVersion is required`);
-  if (!next.lastAudited) throw new Error(`${component}: lastAudited is required`);
-  if (!next.mode) throw new Error(`${component}: mode is required (N/P/O/R)`);
+  if (!next.rubricVersion)
+    throw new Error(`${component}: rubricVersion is required`);
+  if (!next.lastAudited)
+    throw new Error(`${component}: lastAudited is required`);
+  const mode = auditModePolicy(next.mode);
+  if (!mode) {
+    throw new Error(
+      `${component}: mode must be N (Night Watch), O (grading), P (promotion), ` +
+        'or R (review)',
+    );
+  }
+  next.mode = mode.code;
   for (const [id, section] of Object.entries(next.sections || {})) {
     if (!(id in SECTION_WEIGHTS)) {
       throw new Error(`${component}: unknown section id "${id}"`);
@@ -1111,10 +1291,18 @@ export function applyScorecard(existing, scorecard, {component, pkg}) {
   }
   for (const b of blockList(next)) {
     if (!b || typeof b.id !== 'string' || typeof b.summary !== 'string') {
-      throw new Error(`${component}: every BLOCK needs {id, summary} (issue optional)`);
+      throw new Error(
+        `${component}: every BLOCK needs {id, summary} (issue optional)`,
+      );
     }
-    if (b.issue !== undefined && b.issue !== null && !Number.isInteger(b.issue)) {
-      throw new Error(`${component}: BLOCK ${b.id} issue must be an integer or null`);
+    if (
+      b.issue !== undefined &&
+      b.issue !== null &&
+      !Number.isInteger(b.issue)
+    ) {
+      throw new Error(
+        `${component}: BLOCK ${b.id} issue must be an integer or null`,
+      );
     }
     if (b.issue === undefined) b.issue = null;
   }
@@ -1125,8 +1313,8 @@ export function applyScorecard(existing, scorecard, {component, pkg}) {
     );
   }
   // The sandbox inlines this row into a typed literal at build time, so a bad
-  // shape here is not one broken row: it reds `build-sandbox` on every open PR
-  // at once, with no commit responsible (#4924).
+  // shape here is not one broken row: it breaks the Sandbox build for every
+  // open PR at once, with no commit responsible (#4924).
   if (!Array.isArray(next.evidence) || !next.evidence.every(isEvidenceItem)) {
     throw new Error(
       `${component}: evidence must be an array of {label, path?, note?} objects — ` +
@@ -1165,7 +1353,10 @@ const flagValue = v => (typeof v === 'string' ? v : null);
 function componentsFromArgs(args) {
   const known = new Set(listComponents().map(c => c.component));
   if (flagValue(args.components)) {
-    return args.components.split(',').map(s => s.trim()).filter(Boolean);
+    return args.components
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
   }
   if (flagValue(args.analysis)) {
     const analysis = JSON.parse(fs.readFileSync(args.analysis, 'utf8'));
@@ -1191,7 +1382,9 @@ async function cmdCheck(args) {
     return 0;
   }
 
-  const {ledger, error} = await loadLedger(flagValue(args.ledger) || DEFAULT_LEDGER_URL);
+  const {ledger, error} = await loadLedger(
+    flagValue(args.ledger) || DEFAULT_LEDGER_URL,
+  );
   if (!ledger) {
     // Never fail a pull request because the ledger could not be read. The
     // ledger lives in the wiki; a fetch failure is infrastructure, not a
@@ -1256,10 +1449,16 @@ async function cmdCheck(args) {
     const live = listComponents();
     const standings = components.flatMap(name => {
       const matches = resolveName(name, live);
-      const targets = matches.length ? matches : [{component: name, package: null}];
+      const targets = matches.length
+        ? matches
+        : [{component: name, package: null}];
       return targets.map(t => {
-        const label = matches.length > 1 ? `${t.package}/${t.component}` : t.component;
-        return standingFor(label, byId.get(`${t.package}/${t.component}`) || null);
+        const label =
+          matches.length > 1 ? `${t.package}/${t.component}` : t.component;
+        return standingFor(
+          label,
+          byId.get(`${t.package}/${t.component}`) || null,
+        );
       });
     });
     const audited = standings.filter(s => s.status === 'audited');
@@ -1353,7 +1552,9 @@ async function cmdStats(args) {
             `${name} ${stats.byPackage[name].audited}/${stats.byPackage[name].total}`,
         ).join(' · '),
     );
-    console.log(`  Grades:        A ${g.A} · B ${g.B} · C ${g.C} · D ${g.D} · F ${g.F}`);
+    console.log(
+      `  Grades:        A ${g.A} · B ${g.B} · C ${g.C} · D ${g.D} · F ${g.F}`,
+    );
     console.log(`  Mean score:    ${fmtScore(stats.meanScore)} (audited only)`);
     console.log(
       `  Open BLOCKs:   ${stats.openBlocks} across ${stats.componentsWithBlocks} components`,
@@ -1363,7 +1564,9 @@ async function cmdStats(args) {
     );
     console.log(`  Rubric vers.:  ${stats.rubricVersions.join(', ') || '—'}`);
     if (stats.orphanRows.length) {
-      console.log(`  Orphan rows:   ${stats.orphanRows.join(', ')} (no live component)`);
+      console.log(
+        `  Orphan rows:   ${stats.orphanRows.join(', ')} (no live component)`,
+      );
     }
     console.log('');
     console.log('  Sections (audited rows only)');
@@ -1392,7 +1595,9 @@ async function cmdStats(args) {
 async function cmdRecord(args) {
   const component = flagValue(args.record);
   if (!component) {
-    console.error('score-ledger --record <Component>: the component name is required');
+    console.error(
+      'score-ledger --record <Component>: the component name is required',
+    );
     return 1;
   }
 
@@ -1400,12 +1605,15 @@ async function cmdRecord(args) {
   // retry re-applies this same scorecard onto a newer ledger.
   const src = flagValue(args.from);
   if (!src) {
-    console.error('score-ledger --record: --from <scorecard.json|-> is required');
+    console.error(
+      'score-ledger --record: --from <scorecard.json|-> is required',
+    );
     return 1;
   }
   let scorecard;
   try {
-    const text = src === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(src, 'utf8');
+    const text =
+      src === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(src, 'utf8');
     scorecard = JSON.parse(text);
   } catch (e) {
     console.error(
@@ -1471,9 +1679,15 @@ async function cmdRecord(args) {
       }
       repoDir = ensureWikiClone();
       ledgerPath = path.join(repoDir, LEDGER_FILENAME);
-      console.log(`score-ledger: wiki clone at ${repoDir} (${WIKI_REMOTE}, ${WIKI_BRANCH})`);
+      console.log(
+        `score-ledger: wiki clone at ${repoDir} (${WIKI_REMOTE}, ${WIKI_BRANCH})`,
+      );
     } else if (push) {
-      const top = tryGit(path.dirname(path.resolve(ledgerPath)), 'rev-parse', '--show-toplevel');
+      const top = tryGit(
+        path.dirname(path.resolve(ledgerPath)),
+        'rev-parse',
+        '--show-toplevel',
+      );
       if (!top.ok) {
         console.error(
           `score-ledger --record: --push needs ${ledgerPath} to live in a git clone of the wiki ` +
@@ -1484,7 +1698,9 @@ async function cmdRecord(args) {
       repoDir = top.out;
     }
   } catch (e) {
-    console.error(`score-ledger --record: could not prepare the wiki clone — ${e.message}`);
+    console.error(
+      `score-ledger --record: could not prepare the wiki clone — ${e.message}`,
+    );
     return 1;
   }
 
@@ -1579,12 +1795,16 @@ async function cmdRecord(args) {
 
   if (dryRun) {
     const diff = unifiedDiff(applied.raw, applied.text, LEDGER_FILENAME);
-    console.log(diff || `(${LEDGER_FILENAME} is already exactly this — no change)`);
+    console.log(
+      diff || `(${LEDGER_FILENAME} is already exactly this — no change)`,
+    );
     console.log('--- commit message ---');
     console.log(applied.message.subject);
     if (applied.message.body) console.log(`\n${applied.message.body}`);
     console.log('----------------------');
-    console.log('score-ledger: --dry-run — nothing written, nothing committed, nothing pushed.');
+    console.log(
+      'score-ledger: --dry-run — nothing written, nothing committed, nothing pushed.',
+    );
     warnOnRecord(component, applied);
     return 0;
   }
@@ -1625,14 +1845,21 @@ async function cmdRecord(args) {
  * is missing fixes it far more often than one whose write was rejected.
  */
 function warnOnRecord(component, {before, after}) {
-  // Every BLOCK is supposed to carry the issue it was filed as; that is where
-  // the page's links come from.
+  // Grading and promotion own per-BLOCK issues. Night Watch deliberately keeps
+  // ordinary findings on the post-fix ledger row, and review findings belong to
+  // the pull request, so neither mode receives a contradictory filing warning.
+  const mode = auditModePolicy(after.mode);
   const unfiled = blockList(after).filter(b => !b.issue);
-  if (unfiled.length) {
+  if (unfiled.length && mode?.filesBlockIssues) {
     console.log(
       `::warning::score-ledger: ${unfiled.length} BLOCK(s) on ${component} have no issue ` +
         `(${unfiled.map(b => b.id).join(', ')}). File them — ` +
         `node scripts/score-ledger.mjs --file-issues ${component} --push`,
+    );
+  } else if (unfiled.length && mode?.code === 'N') {
+    console.log(
+      `score-ledger: Night Watch mode keeps ${unfiled.length} unresolved BLOCK(s) on the ` +
+        'post-fix ledger row; no ordinary per-finding issues are filed.',
     );
   }
   const unattributed = openBlockCount(after) - blockList(after).length;
@@ -1684,7 +1911,7 @@ export function issueBody(component, entry, block, repo = DEFAULT_REPO) {
     'Resolving this requires:',
     '',
     `1. Re-run the audit for ${component} after the fix — the whole component, ` +
-      "not the diff (the rubric's \"Grading a whole component\" section).",
+      'not the diff (the rubric\'s "Grading a whole component" section).',
     '2. Put the visual results in the PR description — before/after screenshots of the ' +
       'affected states. The rendered-design section is graded from those.',
     '3. Update the ledger with the new score and clear this BLOCK ' +
@@ -1709,14 +1936,18 @@ export function issueBody(component, entry, block, repo = DEFAULT_REPO) {
 async function cmdFileIssues(args) {
   const component = flagValue(args['file-issues']);
   if (!component) {
-    console.error('score-ledger --file-issues <Component>: the component name is required');
+    console.error(
+      'score-ledger --file-issues <Component>: the component name is required',
+    );
     return 1;
   }
   const push = Boolean(args.push);
   let ledgerPath = flagValue(args.ledger);
   let repoDir = null;
   if (ledgerPath && isUrl(ledgerPath)) {
-    console.error('score-ledger --file-issues: --ledger must be a local path — it writes back.');
+    console.error(
+      'score-ledger --file-issues: --ledger must be a local path — it writes back.',
+    );
     return 1;
   }
   try {
@@ -1730,9 +1961,15 @@ async function cmdFileIssues(args) {
       }
       repoDir = ensureWikiClone();
       ledgerPath = path.join(repoDir, LEDGER_FILENAME);
-      console.log(`score-ledger: wiki clone at ${repoDir} (${WIKI_REMOTE}, ${WIKI_BRANCH})`);
+      console.log(
+        `score-ledger: wiki clone at ${repoDir} (${WIKI_REMOTE}, ${WIKI_BRANCH})`,
+      );
     } else if (push) {
-      const top = tryGit(path.dirname(path.resolve(ledgerPath)), 'rev-parse', '--show-toplevel');
+      const top = tryGit(
+        path.dirname(path.resolve(ledgerPath)),
+        'rev-parse',
+        '--show-toplevel',
+      );
       if (!top.ok) {
         console.error(
           `score-ledger --file-issues: --push needs ${ledgerPath} to live in a git clone of the ` +
@@ -1743,7 +1980,9 @@ async function cmdFileIssues(args) {
       repoDir = top.out;
     }
   } catch (e) {
-    console.error(`score-ledger --file-issues: could not prepare the wiki clone — ${e.message}`);
+    console.error(
+      `score-ledger --file-issues: could not prepare the wiki clone — ${e.message}`,
+    );
     return 1;
   }
 
@@ -1754,7 +1993,9 @@ async function cmdFileIssues(args) {
     return 1;
   }
   const matches = resolveName(component);
-  const pkg = flagValue(args.package) || (matches.length === 1 ? matches[0].package : null);
+  const pkg =
+    flagValue(args.package) ||
+    (matches.length === 1 ? matches[0].package : null);
   if (!pkg) {
     console.error(
       `score-ledger --file-issues: pass --package for ${component} (it resolves to ` +
@@ -1764,12 +2005,26 @@ async function cmdFileIssues(args) {
   }
   const entry = indexLedger(ledger).byId.get(`${pkg}/${component}`);
   if (!isAudited(entry)) {
-    console.error(`score-ledger: ${component} has no audited row — record it first.`);
+    console.error(
+      `score-ledger: ${component} has no audited row — record it first.`,
+    );
+    return 1;
+  }
+  const mode = auditModePolicy(entry.mode);
+  if (!mode?.filesBlockIssues) {
+    const detail =
+      mode?.code === 'N'
+        ? 'Night Watch files no ordinary per-finding issues; unresolved findings stay on the post-fix ledger row.'
+        : 'Only grading (O) and promotion (P) audits file ordinary per-BLOCK issues.';
+    console.error(`score-ledger --file-issues: ${detail}`);
     return 1;
   }
 
   const gh = (...argv) =>
-    execFileSync('gh', argv, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}).trim();
+    execFileSync('gh', argv, {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
 
   const filed = [];
   for (const block of blockList(entry)) {
@@ -1777,20 +2032,41 @@ async function cmdFileIssues(args) {
       // Idempotent: never re-file. Reopen if the issue was closed while the
       // BLOCK is still on the row.
       if (args['dry-run']) {
-        console.log(`  ${block.id}: already filed as #${block.issue} — skipping`);
+        console.log(
+          `  ${block.id}: already filed as #${block.issue} — skipping`,
+        );
         continue;
       }
       try {
-        const state = gh('issue', 'view', String(block.issue), '--repo', repo, '--json', 'state', '--jq', '.state');
+        const state = gh(
+          'issue',
+          'view',
+          String(block.issue),
+          '--repo',
+          repo,
+          '--json',
+          'state',
+          '--jq',
+          '.state',
+        );
         if (state === 'CLOSED') {
-          gh('issue', 'reopen', String(block.issue), '--repo', repo, '--comment',
-            `Reopening: \`${block.id}\` is still an open BLOCK on the ${component} ledger row.`);
+          gh(
+            'issue',
+            'reopen',
+            String(block.issue),
+            '--repo',
+            repo,
+            '--comment',
+            `Reopening: \`${block.id}\` is still an open BLOCK on the ${component} ledger row.`,
+          );
           console.log(`  ${block.id}: reopened #${block.issue}`);
         } else {
           console.log(`  ${block.id}: already filed as #${block.issue}`);
         }
       } catch (e) {
-        console.log(`::warning::score-ledger: could not check issue #${block.issue}: ${e.message}`);
+        console.log(
+          `::warning::score-ledger: could not check issue #${block.issue}: ${e.message}`,
+        );
       }
       continue;
     }
@@ -1800,10 +2076,23 @@ async function cmdFileIssues(args) {
       console.log(`\n--- would file ---\n${title}\n\n${body}\n`);
       continue;
     }
-    const url = gh('issue', 'create', '--repo', repo, '--title', title, '--label', 'hardening', '--body', body);
+    const url = gh(
+      'issue',
+      'create',
+      '--repo',
+      repo,
+      '--title',
+      title,
+      '--label',
+      'hardening',
+      '--body',
+      body,
+    );
     const number = Number(url.split('/').pop());
     if (!Number.isInteger(number)) {
-      console.error(`score-ledger: could not parse an issue number out of "${url}"`);
+      console.error(
+        `score-ledger: could not parse an issue number out of "${url}"`,
+      );
       return 1;
     }
     block.issue = number;
@@ -1812,7 +2101,8 @@ async function cmdFileIssues(args) {
   }
 
   if (!filed.length) {
-    if (args['dry-run']) console.log('score-ledger: --dry-run — no issue was created.');
+    if (args['dry-run'])
+      console.log('score-ledger: --dry-run — no issue was created.');
     return 0;
   }
 
@@ -1823,7 +2113,9 @@ async function cmdFileIssues(args) {
 
   if (!push) {
     fs.writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`);
-    console.log(`score-ledger: wrote ${ledgerPath} — commit and push it, or re-run with --push.`);
+    console.log(
+      `score-ledger: wrote ${ledgerPath} — commit and push it, or re-run with --push.`,
+    );
     return 0;
   }
 
@@ -1848,7 +2140,10 @@ async function cmdFileIssues(args) {
       if (n && !block.issue) block.issue = n;
     }
     fresh.updated = new Date().toISOString().slice(0, 10);
-    return {text: `${JSON.stringify(fresh, null, 2)}\n`, message: {subject, body: ''}};
+    return {
+      text: `${JSON.stringify(fresh, null, 2)}\n`,
+      message: {subject, body: ''},
+    };
   };
 
   try {
@@ -1882,7 +2177,10 @@ async function main() {
 }
 
 // Only run when invoked directly, so tests can import the pure functions.
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+if (
+  process.argv[1] &&
+  fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
+) {
   main().then(
     code => process.exit(code),
     err => {

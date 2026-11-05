@@ -4,7 +4,7 @@
 
 /**
  * @file Outline.tsx
- * @input Uses React, StyleX, Astryx link provider integration, Outline hooks/types, useListFocus
+ * @input Uses React, StyleX, Astryx link provider integration, Outline hooks/types
  * @output Exports Outline component and OutlineProps type
  * @position Core implementation; consumed by index.ts
  *
@@ -12,7 +12,7 @@
  * - Sliding indicator track (vertical divider + animated active bar)
  * - Density variant (default/compact)
  * - Scroll-spy active state when uncontrolled
- * - Roving-tabindex keyboard navigation (Arrow/Home/End, Enter/Space activate)
+ * - Each link in the normal Tab order (Enter/Space activate)
  * - onNavigateStart / onNavigateEnd callbacks around the smooth scroll
  * - Scroll scoping (offset, scrollContainerRef, hasScrollOnClick)
  *
@@ -35,17 +35,23 @@ import {
   fontWeightVars,
 } from '../theme/tokens.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
-import {useListFocus} from '../hooks/useListFocus';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useScrollSpy} from './useScrollSpy';
 import type {OutlineItem} from './types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
+import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Outline/Outline.generated';
+
+registerEnglishFallback(english);
 export type {OutlineItem} from './types';
 
 export interface OutlineProps extends BaseProps<HTMLElement> {
@@ -197,7 +203,6 @@ const styles = stylex.create({
     },
     display: 'flex',
     fontWeight: fontWeightVars['--font-weight-normal'],
-    outline: 'none',
     position: 'relative',
     textAlign: 'start',
     textDecoration: 'none',
@@ -209,12 +214,8 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-body-leading'],
     ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
       '@media (hover: hover)': {
-        backgroundColor: colorVars['--color-overlay-hover'],
         color: colorVars['--color-text-primary'],
       },
-    },
-    ':active': {
-      backgroundColor: colorVars['--color-overlay-pressed'],
     },
   },
   activeLink: {
@@ -262,6 +263,28 @@ function getIndentStyle(level: number) {
   }
 }
 
+/**
+ * A followed in-page link moves the sequential focus starting point to its
+ * target, so the next Tab continues inside that section. Outline cancels the
+ * link's default to scroll itself, so it restores that by focusing the target
+ * without scrolling (WCAG 2.4.3). A target that is not focusable becomes
+ * programmatically focusable only.
+ */
+function moveFocusTo(id: string) {
+  const target = document.getElementById(id);
+  if (target == null) {
+    return;
+  }
+  // A target that already takes focus (a link, a button) keeps its place in
+  // the Tab order; only one that refuses focus is made focusable by script.
+  target.focus({preventScroll: true});
+  // A caller's own tabindex is never overwritten.
+  if (document.activeElement !== target && !target.hasAttribute('tabindex')) {
+    target.setAttribute('tabindex', '-1');
+    target.focus({preventScroll: true});
+  }
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -279,10 +302,8 @@ function getIndentStyle(level: number) {
  * scroll root) plus the heading's own `scroll-margin-top`. It defaults to the
  * first item at the top and the last at the bottom.
  *
- * Keyboard: the list is a single tab stop (roving tabindex), seated on the
- * active heading. Arrow keys move between headings, Home/End jump to the ends,
- * and Enter/Space activate — so a long table of contents costs one Tab press,
- * not one per heading.
+ * Keyboard: each link is in the normal Tab order, and Enter/Space activate.
+ * There is no arrow, Home, or End movement between links.
  *
  * @example
  * ```
@@ -327,7 +348,8 @@ export function Outline({
   'data-testid': testId,
   ...props
 }: OutlineProps) {
-  const t = useTranslator();
+  const pressable = usePressFeedback();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.outline.label');
   const rootRef = useRef<HTMLElement | null>(null);
   const LinkComponent = useLinkComponent();
@@ -343,49 +365,6 @@ export function Outline({
     onNavigateEnd,
   });
 
-  // Roving tabindex over the links: the whole outline is one tab stop, and
-  // arrows move between headings. The hook owns `tabindex` on the items.
-  const {
-    listRef,
-    handleKeyDown: handleListKeyDown,
-    handleFocus,
-  } = useListFocus<HTMLUListElement>({
-    itemSelector: 'a[href]',
-    orientation: 'vertical',
-    hasRovingTabIndex: true,
-  });
-
-  // Seat the tab stop on the *active* heading. WAI-ARIA puts the single tab
-  // stop on the current item, so tabbing into a table of contents while
-  // reading section 7 lands on section 7 — not back at section 1, which is
-  // where useListFocus would otherwise leave it (it promotes the first item on
-  // mount and then keeps whichever item already holds the stop).
-  //
-  // Only while focus is outside the list: once the reader has arrowed to an
-  // item, the stop is theirs and scroll-spy must not yank it away. Sets
-  // `tabindex` only — it never steals focus. Registered after useListFocus so
-  // it runs after the hook's own layout effect and wins; on later commits the
-  // hook then finds this item already holding the stop and keeps it.
-  useIsomorphicLayoutEffect(() => {
-    const list = listRef.current;
-    if (list == null || list.contains(document.activeElement)) {
-      return;
-    }
-    const links = Array.from(list.querySelectorAll<HTMLElement>('a[href]'));
-    const active = links.find(
-      link => link.getAttribute('aria-current') === 'location',
-    );
-    if (active == null) {
-      return;
-    }
-    for (const link of links) {
-      const tabIndex = link === active ? '0' : '-1';
-      if (link.getAttribute('tabindex') !== tabIndex) {
-        link.setAttribute('tabindex', tabIndex);
-      }
-    }
-  });
-
   /**
    * The single navigation path, shared by click and keyboard activation:
    * push the hash, then hand off to the scroll-spy's `scrollTo`, which fires
@@ -394,6 +373,7 @@ export function Outline({
   const navigate = (id: string) => {
     if (scrollTo(id)) {
       window.history.pushState(null, '', `#${id}`);
+      moveFocusTo(id);
     }
   };
 
@@ -453,12 +433,7 @@ export function Outline({
         className,
         style,
       )}>
-      <ul
-        {...stylex.props(styles.list)}
-        ref={listRef}
-        role="list"
-        onKeyDown={handleListKeyDown}
-        onFocus={handleFocus}>
+      <ul {...stylex.props(styles.list)} role="list">
         {items.map(item => {
           const isActive = item.id === resolvedActiveId;
 
@@ -469,6 +444,7 @@ export function Outline({
                 aria-current={isActive ? 'location' : undefined}
                 onClick={handleClick(item.id)}
                 onKeyDown={handleKeyDown(item.id)}
+                {...pressable}
                 {...mergeProps(
                   themeProps('outline-item', {
                     active: isActive ? 'active' : null,
@@ -476,6 +452,7 @@ export function Outline({
                   }),
                   focusOutlineProps.focusVisible(
                     styles.link,
+                    interactionOverlayStyles.backgroundColor,
                     densityStyles[density],
                     getIndentStyle(item.level),
                     isActive && styles.activeLink,

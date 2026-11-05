@@ -8,6 +8,9 @@ export const docs = {
   displayName: 'Top Nav Heading',
   isHiddenFromOverview: true,
   description: 'Product/suite/account heading for the TopNav heading slot. Supports smart interaction boundary logic: logo, heading text, superheading/subheading with independent links, and an optional menu popover with automatic chevron indicator.',
+  playground: {
+    defaults: {superheading: 'Acme Suite', heading: 'Acme Console'},
+  },
   props: [
     {
       name: 'logo',

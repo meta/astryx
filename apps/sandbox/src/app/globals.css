@@ -1,15 +1,25 @@
 /* Copyright (c) Meta Platforms, Inc. and affiliates. */
 
-@import "./layers.css";
-@import "@astryxdesign/core/reset.css";
-@import "@astryxdesign/core/astryx.css";
-@import "@astryxdesign/lab/lab.css";
-@import "@astryxdesign/theme-neutral/theme.css";
-@import "@astryxdesign/theme-matcha/theme.css";
-@import "@astryxdesign/theme-stone/theme.css";
-@import "@astryxdesign/theme-gothic/theme.css";
-@import "@astryxdesign/theme-chocolate/theme.css";
-@import "@astryxdesign/theme-y2k/theme.css";
-@import "@astryxdesign/theme-butter/theme.css";
+@import './layers.css';
+@import '@astryxdesign/core/reset.css';
+@import '@astryxdesign/core/astryx.css';
+@import '@astryxdesign/lab/lab.css';
+@import '@astryxdesign/theme-neutral/theme.css';
+@import '@astryxdesign/theme-matcha/theme.css';
+@import '@astryxdesign/theme-stone/theme.css';
+@import '@astryxdesign/theme-gothic/theme.css';
+@import '@astryxdesign/theme-chocolate/theme.css';
+@import '@astryxdesign/theme-y2k/theme.css';
+@import '@astryxdesign/theme-butter/theme.css';
+@import '../themes/theme-family/unrelated-before.css';
+@import '../themes/theme-family/sandbox-ocean-family.css';
 
 @stylex;
+
+/* This equal-specificity rule is after the family import. The scoped family
+   rule must still win through scope proximity. */
+@layer astryx-theme {
+  :where([data-family-order='after']) .astryx-button[data-variant='primary'] {
+    background-color: var(--color-error);
+  }
+}

@@ -1,0 +1,1305 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file Shared RTL coverage and directional-decoration helpers.
+ * @input Rendered DOM decorations, canonical package rosters, Storybook routes
+ *   and source/export metadata, typed story-level applicability, curated targets,
+ *   and D1/D5/D6/curated audit results.
+ * @output Audited package/story routing, stable D1 targets, applicability and
+ *   exclusion disclosure, contextual decoration candidates, component-filter
+ *   reconciliation, and per-component measured / verified-N-A / coverage-gap
+ *   classifications.
+ * @position Pure support layer for rtl-audit.mjs and its unit tests.
+ */
+
+import componentPackages from '../../../scripts/component-packages.cjs';
+
+const {COMPONENT_PACKAGES, COMPONENT_PACKAGE_NAMES} = componentPackages;
+
+export const AUDITED_PACKAGE_NAMES = COMPONENT_PACKAGE_NAMES;
+export const AUDITED_STORY_PREFIXES = Object.freeze([
+  ...new Set(COMPONENT_PACKAGES.flatMap(pkg => pkg.storyPrefixes)),
+]);
+
+function packageForStoryId(storyId, packageNames = AUDITED_PACKAGE_NAMES) {
+  return (
+    COMPONENT_PACKAGES.find(
+      pkg =>
+        packageNames.includes(pkg.name) &&
+        pkg.storyPrefixes.some(prefix => storyId.startsWith(prefix)),
+    )?.name ?? null
+  );
+}
+
+function pascalCase(value) {
+  return (value.match(/[A-Za-z0-9]+/g) ?? [])
+    .map(word => `${word[0]?.toUpperCase() ?? ''}${word.slice(1)}`)
+    .join('');
+}
+
+function singularize(value) {
+  if (value === 'Axes') return 'Axis';
+  return value.endsWith('s') ? value.slice(0, -1) : value;
+}
+
+function componentsFromStoryTitle(
+  title,
+  preferredPackage,
+  publicComponentsByPackage,
+) {
+  const titleSegments = title?.split('/') ?? [];
+  const namespace = titleSegments[0] ?? '';
+  const finalSegment = titleSegments.at(-1) ?? '';
+  const candidates = new Set();
+  for (const part of finalSegment.split(/\s*(?:&|\band\b)\s*/i)) {
+    const name = pascalCase(part);
+    if (!name) continue;
+    const singular = singularize(name);
+    candidates.add(name);
+    candidates.add(singular);
+    candidates.add(`Chart${name}`);
+    candidates.add(`Chart${singular}`);
+  }
+  const matchesIn = packageName =>
+    (publicComponentsByPackage[packageName] ?? [])
+      .filter(component => candidates.has(component))
+      .map(component => `${packageName}/${component}`);
+  const namespacePackages = COMPONENT_PACKAGES.filter(pkg =>
+    pkg.storyNamespaces.includes(namespace),
+  )
+    .map(pkg => pkg.name)
+    .filter(packageName => packageName in publicComponentsByPackage);
+  const eligiblePackages =
+    namespacePackages.length > 0
+      ? namespacePackages
+      : Object.keys(publicComponentsByPackage);
+  const preferred =
+    preferredPackage && eligiblePackages.includes(preferredPackage)
+      ? matchesIn(preferredPackage)
+      : [];
+  if (preferred.length > 0) return preferred;
+  return eligiblePackages
+    .filter(packageName => packageName !== preferredPackage)
+    .flatMap(matchesIn);
+}
+
+/** Resolve the best default package/component route encoded in a story id. */
+export function componentFromStoryId(
+  storyId,
+  packageNames = AUDITED_PACKAGE_NAMES,
+  publicComponentsByPackage = {},
+) {
+  const packageName = packageForStoryId(storyId, packageNames);
+  if (!packageName) {
+    return `unknown/${storyId.split('--')[0]}`;
+  }
+  const segment = storyId.slice(packageName.length + 1).split('--')[0];
+  const normalized = segment.replace(/[^a-z0-9]/gi, '').toLowerCase();
+  const publicComponents = publicComponentsByPackage[packageName] ?? [];
+  const exact = publicComponents.find(
+    component => component.toLowerCase() === normalized,
+  );
+  const fallback =
+    exact ?? (publicComponents.includes('Chart') ? 'Chart' : segment);
+  return `${packageName}/${fallback}`;
+}
+
+/** Resolve a curated target's declared component in the story's package. */
+export function componentFromTarget(
+  target,
+  packageNames = AUDITED_PACKAGE_NAMES,
+  publicComponentsByPackage = {},
+) {
+  const declared = target?.component?.trim();
+  if (!declared) {
+    return componentFromStoryId(
+      target.storyId,
+      packageNames,
+      publicComponentsByPackage,
+    );
+  }
+  if (declared.includes('/')) {
+    return declared;
+  }
+  const packageName = packageForStoryId(target.storyId, packageNames);
+  return packageName ? `${packageName}/${declared}` : `unknown/${declared}`;
+}
+
+/**
+ * Route each story to its public component owner(s). Story titles project onto
+ * the canonical public-component roster; curated targets provide exact aliases
+ * for surfaces whose titles do not name their owner.
+ */
+export function buildStoryComponentRoutes({
+  stories,
+  storyIds,
+  targets = [],
+  packageNames = AUDITED_PACKAGE_NAMES,
+  publicComponentsByPackage = {},
+}) {
+  const normalizedStories = stories ?? storyIds.map(id => ({id, title: ''}));
+  const aliases = new Map();
+  for (const target of targets) {
+    const component = componentFromTarget(
+      target,
+      packageNames,
+      publicComponentsByPackage,
+    );
+    const current = aliases.get(target.storyId) ?? [];
+    current.push(component);
+    aliases.set(target.storyId, current);
+  }
+
+  return normalizedStories.flatMap(story => {
+    const packageName = packageForStoryId(story.id, packageNames);
+    const explicitComponents = aliases.get(story.id) ?? [];
+    const titleComponents =
+      explicitComponents.length === 0
+        ? componentsFromStoryTitle(
+            story.title,
+            packageName,
+            publicComponentsByPackage,
+          )
+        : [];
+    const components = [...explicitComponents, ...titleComponents];
+    if (components.length === 0) {
+      components.push(
+        componentFromStoryId(story.id, packageNames, publicComponentsByPackage),
+      );
+    }
+    return Array.from(
+      new Map(
+        components.map(component => [component.toLowerCase(), component]),
+      ).values(),
+    ).map(component => ({id: story.id, component}));
+  });
+}
+
+export function filterStoryRoutesByPackages(
+  routes,
+  packageNames,
+  packages = COMPONENT_PACKAGES,
+) {
+  return routes.filter(({component, id}) => {
+    const ownerPackage = component.split('/')[0];
+    if (packageNames.includes(ownerPackage)) return true;
+    if (ownerPackage !== 'unknown') return false;
+    const fallbackPackage = packages.find(pkg =>
+      pkg.storyPrefixes.some(prefix => id.startsWith(prefix)),
+    )?.name;
+    return fallbackPackage != null && packageNames.includes(fallbackPackage);
+  });
+}
+
+/** Whether a package-qualified route owns a bare or qualified filter. */
+function routeMatchesComponentFilter(route, filter) {
+  const component = route.component.toLowerCase();
+  const bareComponent = component.split('/').at(-1);
+  const requested = filter.toLowerCase();
+  return component === requested || bareComponent === requested;
+}
+
+/** Package-qualified owner routes selected by bare or qualified filters. */
+export function componentRoutesForFilters(routes, filters) {
+  if (filters.length === 0) return routes;
+  return routes.filter(route =>
+    filters.some(filter => routeMatchesComponentFilter(route, filter)),
+  );
+}
+
+/**
+ * Resolve component filters to story routes through the Storybook index, not
+ * the export name alone. A filter a route names selects that route. A filter
+ * no route names adopts its source folder's orphan stories that render it:
+ * stories whose index `componentPath` lies in that folder, whose title names
+ * no public component, and whose story file uses the component
+ * (ResizeHandle adopts Core/Resizable's; ChatLayoutScrollButton adopts none
+ * of Core/Chat's, which never render it). Adopted stories are routed to the filter's
+ * own component, so it keeps its own coverage entry and verified-N/A record.
+ * A filter with neither selects nothing and stays a coverage gap
+ * (`architecture:rtl-audit-evidence` INV5).
+ *
+ * A run with no filters (the release check's full audit) keeps every route
+ * and applies the same adoption to every known component no route names, so
+ * a full run and a filtered run audit ResizeHandle through the same stories.
+ * @param {{
+ *   routes: {id: string, component: string}[],
+ *   filters: string[],
+ *   knownComponents: string[],
+ *   componentPathOf: (storyId: string) => string | undefined,
+ *   ownerOf: (filter: string) => {component: string, folder: string} | null,
+ *   renders: (storyId: string, component: string) => boolean,
+ * }} input
+ */
+export function resolveFilterRoutes({
+  routes,
+  filters,
+  knownComponents,
+  componentPathOf,
+  ownerOf,
+  renders,
+}) {
+  const known = new Set(knownComponents.map(name => name.toLowerCase()));
+  const selected = new Map();
+  const adopted = {};
+  const keep = route => selected.set(`${route.component}::${route.id}`, route);
+  /** Route a filter's folder's orphan stories that render it to its component. */
+  const adopt = filter => {
+    const owner = ownerOf(filter);
+    if (owner == null) return;
+    const orphans = routes.filter(
+      route =>
+        !known.has(route.component.toLowerCase()) &&
+        (componentPathOf(route.id) ?? '')
+          .replace(/^(\.\.\/)+/, '')
+          .startsWith(`${owner.folder}/`) &&
+        renders(route.id, owner.component),
+    );
+    if (orphans.length === 0) return;
+    adopted[owner.component] = orphans.map(route => route.id).sort();
+    for (const {id} of orphans) keep({id, component: owner.component});
+  };
+  if (filters.length === 0) {
+    routes.forEach(keep);
+    const named = new Set(routes.map(route => route.component.toLowerCase()));
+    for (const component of knownComponents) {
+      const filter = component.toLowerCase();
+      if (!named.has(filter)) adopt(filter);
+    }
+    return {routes: [...selected.values()], adopted};
+  }
+  for (const filter of filters) {
+    const direct = routes.filter(route =>
+      routeMatchesComponentFilter(route, filter),
+    );
+    direct.forEach(keep);
+    if (direct.length === 0) adopt(filter);
+  }
+  return {routes: [...selected.values()], adopted};
+}
+
+/** Story ids owned by any bare or package-qualified component filter. */
+export function storyIdsForComponentFilters(routes, filters) {
+  return [
+    ...new Set(
+      componentRoutesForFilters(routes, filters).map(route => route.id),
+    ),
+  ];
+}
+
+/**
+ * Keep D1 representative selection stable when Storybook changes index order.
+ * Story source-file and export order preserve the repository's existing choice;
+ * the story id is the deterministic fallback.
+ */
+export function orderD1StoryCandidates(candidates) {
+  return [...candidates].sort(
+    (left, right) =>
+      (left.importPath ?? '').localeCompare(right.importPath ?? '') ||
+      (left.sourceOrder ?? Number.MAX_SAFE_INTEGER) -
+        (right.sourceOrder ?? Number.MAX_SAFE_INTEGER) ||
+      left.id.localeCompare(right.id),
+  );
+}
+
+/** Build one stable D1 scan target from a component's ordered candidates. */
+export function buildD1Target(comp, candidates) {
+  const orderedCandidates = orderD1StoryCandidates(candidates);
+  if (orderedCandidates.length === 0) {
+    throw new Error(`${comp} has no D1 story candidates`);
+  }
+  return {
+    comp,
+    id: orderedCandidates[0].id,
+    candidates: orderedCandidates,
+  };
+}
+
+/**
+ * Select the first applicable D1 story while disclosing every explicit
+ * exclusion, including exclusions ordered after the selected representative.
+ */
+export function resolveD1Applicability(
+  component,
+  candidates,
+  parametersByStoryId,
+) {
+  let selectedCandidate = null;
+  const declaredExclusions = [];
+  for (const candidate of orderD1StoryCandidates(candidates)) {
+    if (!parametersByStoryId.has(candidate.id)) {
+      throw new Error(
+        `${candidate.id} resolved rtlAudit metadata was not collected`,
+      );
+    }
+    const parameters = parametersByStoryId.get(candidate.id);
+    if (parameters.D1?.applicable === false) {
+      declaredExclusions.push({
+        component,
+        storyId: candidate.id,
+        dimension: 'D1',
+        reason: parameters.D1.reason,
+      });
+    } else if (selectedCandidate == null) {
+      selectedCandidate = candidate;
+    }
+  }
+  return {selectedCandidate, declaredExclusions};
+}
+
+/**
+ * Preserve the planned D1 identity even when metadata selects another story or
+ * excludes every candidate. Keep the rendered story separately for evidence.
+ */
+export function withD1CompletionIdentity(result, plannedStoryId) {
+  const selectedStoryId = result.storyId;
+  return {
+    ...result,
+    storyId: plannedStoryId,
+    ...(selectedStoryId && selectedStoryId !== plannedStoryId
+      ? {selectedStoryId}
+      : {}),
+  };
+}
+
+const STORY_RTL_AUDIT_DIMENSIONS = new Set(['D1', 'D5']);
+
+/** Validate resolved Storybook RTL-audit applicability metadata. */
+export function validateStoryRtlAuditParameters(value, storyId) {
+  if (value == null) return {};
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${storyId} rtlAudit metadata must be an object`);
+  }
+
+  const result = {};
+  for (const [dimension, applicability] of Object.entries(value)) {
+    if (!STORY_RTL_AUDIT_DIMENSIONS.has(dimension)) {
+      throw new Error(`${storyId} rtlAudit has unknown dimension ${dimension}`);
+    }
+    if (dimension === 'D5') {
+      result.D5 = validatePhysicalPosition(applicability, storyId);
+      continue;
+    }
+    if (
+      applicability == null ||
+      typeof applicability !== 'object' ||
+      Array.isArray(applicability) ||
+      typeof applicability.applicable !== 'boolean'
+    ) {
+      throw new Error(
+        `${storyId} rtlAudit.${dimension} must declare applicable as a boolean`,
+      );
+    }
+    const reason = applicability.reason;
+    if (reason != null && typeof reason !== 'string') {
+      throw new Error(
+        `${storyId} rtlAudit.${dimension}.reason must be a string`,
+      );
+    }
+    const trimmedReason = reason?.trim();
+    if (applicability.applicable === false && !trimmedReason) {
+      throw new Error(
+        `${storyId} rtlAudit.${dimension} applicable=false needs a non-empty reason`,
+      );
+    }
+    result[dimension] = {
+      applicable: applicability.applicable,
+      ...(trimmedReason ? {reason: trimmedReason} : {}),
+    };
+  }
+  return result;
+}
+
+/**
+ * Grade a curated order (D2) or scroll-direction (D3) pair. The relationship
+ * must hold in LTR and reverse in RTL. A relationship that keeps its LTR
+ * physical order in RTL is the RTL defect these checks exist for, so it fails
+ * rather than grading `partial` (INV3); so does one already wrong in LTR.
+ */
+export function gradeDirectionalPair(ltrOk, rtlOk) {
+  return ltrOk && rtlOk ? 'pass' : 'fail';
+}
+
+// rtlAudit.D5 declares a region whose positioned elements stay physical
+// (DR5); it never turns D5 off for the story.
+function validatePhysicalPosition(value, storyId) {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${storyId} rtlAudit.D5 must be an object`);
+  }
+  if (!PHYSICAL_POSITION_MARKERS.includes(value.physical)) {
+    throw new Error(
+      `${storyId} rtlAudit.D5.physical must be one of ${PHYSICAL_POSITION_MARKERS.join(', ')}`,
+    );
+  }
+  if (typeof value.within !== 'string' || !value.within.trim()) {
+    throw new Error(
+      `${storyId} rtlAudit.D5.within must name the plot with a non-empty selector`,
+    );
+  }
+  return {physical: value.physical, within: value.within.trim()};
+}
+
+/**
+ * Canonical order for curated RTL targets: by component, then story id
+ * (case-insensitive), keeping entries with the same key in file order. A sorted
+ * `targets.json` lets parallel pull requests add targets in different places
+ * instead of all appending at the end.
+ */
+export function compareTargets(left, right) {
+  const key = target => [
+    String(target.component).toLowerCase(),
+    String(target.storyId).toLowerCase(),
+  ];
+  const [lc, ls] = key(left);
+  const [rc, rs] = key(right);
+  return lc < rc ? -1 : lc > rc ? 1 : ls < rs ? -1 : ls > rs ? 1 : 0;
+}
+
+/** Index of the first target out of canonical order, or -1 when sorted. */
+export function firstUnsortedTarget(targets) {
+  for (let i = 1; i < targets.length; i++) {
+    if (compareTargets(targets[i - 1], targets[i]) > 0) return i;
+  }
+  return -1;
+}
+
+/** The targets in canonical order (a stable sort). */
+export function sortTargets(targets) {
+  return targets
+    .map((target, index) => ({target, index}))
+    .sort((a, b) => compareTargets(a.target, b.target) || a.index - b.index)
+    .map(({target}) => target);
+}
+
+/** Selected owners for which the canonical Storybook route has no story. */
+export function unresolvedComponentFilters(routes, filters) {
+  return filters.filter(
+    filter => !routes.some(route => routeMatchesComponentFilter(route, filter)),
+  );
+}
+
+const EXPLICIT_GLYPH_PAIRS = new Map([
+  ['/', '\\'],
+  ['\\', '/'],
+  ['→', '←'],
+  ['←', '→'],
+  ['>', '<'],
+  ['<', '>'],
+]);
+
+/**
+ * Find single-glyph, aria-hidden decorations only when the DOM supplies a
+ * directional context. A slash in prose is ignored; a slash attached to one of
+ * several repeated list items is a separator and is measured.
+ *
+ * This function is passed directly to Playwright's page.evaluate(), so every
+ * browser-side helper intentionally lives inside its body.
+ */
+export function collectDirectionalDecorations({
+  root = globalThis.document,
+  requireVisible = true,
+} = {}) {
+  if (!root?.querySelectorAll) {
+    return [];
+  }
+
+  const candidateGlyphs = new Set([
+    '/',
+    '\\',
+    '→',
+    '←',
+    '>',
+    '<',
+    '›',
+    '‹',
+    '»',
+    '«',
+  ]);
+  const autoBidiGlyphs = new Set(['›', '‹', '»', '«']);
+  const view =
+    root.defaultView ?? root.ownerDocument?.defaultView ?? globalThis;
+
+  function multiply(m, n) {
+    return [
+      m[0] * n[0] + m[2] * n[1],
+      m[1] * n[0] + m[3] * n[1],
+      m[0] * n[2] + m[2] * n[3],
+      m[1] * n[2] + m[3] * n[3],
+    ];
+  }
+
+  function composedMatrixFor(start) {
+    let matrix = [1, 0, 0, 1];
+    let element = start;
+    let steps = 0;
+    while (element && steps < 6) {
+      const transform = view.getComputedStyle?.(element)?.transform;
+      const match = transform?.match(/matrix\(([^)]+)\)/);
+      if (match) {
+        const values = match[1]
+          .split(',')
+          .map(value => Number.parseFloat(value.trim()));
+        matrix = multiply([values[0], values[1], values[2], values[3]], matrix);
+      }
+      element = element.parentElement;
+      steps += 1;
+    }
+    return matrix;
+  }
+
+  function repeatedItemContext(element) {
+    const item = element.closest('li,[role="listitem"]');
+    const parent = item?.parentElement;
+    if (!item || !parent) {
+      return null;
+    }
+    const items = Array.from(parent.children).filter(child =>
+      child.matches('li,[role="listitem"]'),
+    );
+    if (items.length < 2) {
+      return null;
+    }
+    return {
+      kind: 'repeated-item',
+      itemIndex: items.indexOf(item),
+      itemCount: items.length,
+    };
+  }
+
+  function betweenSiblingsContext(element) {
+    const parent = element.parentElement;
+    if (!parent) {
+      return null;
+    }
+    const siblings = Array.from(parent.children);
+    const index = siblings.indexOf(element);
+    if (index <= 0 || index >= siblings.length - 1) {
+      return null;
+    }
+    return {
+      kind: 'between-siblings',
+      itemIndex: index,
+      itemCount: siblings.length,
+    };
+  }
+
+  const candidates = [];
+  for (const element of root.querySelectorAll('[aria-hidden="true"]')) {
+    const glyph = element.textContent?.trim() ?? '';
+    if (!candidateGlyphs.has(glyph)) {
+      continue;
+    }
+    const context =
+      repeatedItemContext(element) ?? betweenSiblingsContext(element);
+    if (!context) {
+      continue;
+    }
+    let glyphElement = element;
+    while (
+      glyphElement.children.length === 1 &&
+      glyphElement.children[0].textContent?.trim() === glyph
+    ) {
+      glyphElement = glyphElement.children[0];
+    }
+    if (requireVisible) {
+      const box = glyphElement.getBoundingClientRect();
+      if (box.width < 1 || box.height < 1) {
+        continue;
+      }
+    }
+    candidates.push({
+      index: candidates.length,
+      glyph,
+      policy: autoBidiGlyphs.has(glyph) ? 'auto-bidi' : 'explicit',
+      context,
+      matrix: composedMatrixFor(glyphElement),
+    });
+  }
+  return candidates;
+}
+
+function matricesEqual(left, right) {
+  return (
+    Array.isArray(left) &&
+    Array.isArray(right) &&
+    left.length === 4 &&
+    right.length === 4 &&
+    left.every((value, index) => Math.abs(value - right[index]) < 0.01)
+  );
+}
+
+function isMirrorOf(rtl, ltr) {
+  if (!Array.isArray(rtl) || !Array.isArray(ltr)) {
+    return false;
+  }
+  const expected = [-ltr[0], ltr[1], -ltr[2], ltr[3]];
+  return expected.every((value, index) => Math.abs(value - rtl[index]) < 0.01);
+}
+
+/**
+ * Jump every finite animation in `doc` to its end state and return how many
+ * were finished. The audit's zero-duration style only reaches transitions and
+ * animations that start after it is injected; one a story started on mount (a
+ * drawer sliding in) keeps running, so LTR and RTL would otherwise be sampled
+ * at different points of it. Infinite animations (spinners) are left alone.
+ * Runs in the page: keep it self-contained.
+ */
+export function finishFiniteAnimations(doc) {
+  let finished = 0;
+  for (const animation of doc.getAnimations?.() ?? []) {
+    const endTime = animation.effect?.getComputedTiming?.().endTime;
+    if (!Number.isFinite(endTime)) {
+      continue;
+    }
+    try {
+      animation.finish();
+      finished++;
+    } catch {
+      // A zero-playback-rate or infinite-effect animation cannot finish;
+      // leave it.
+    }
+  }
+  return finished;
+}
+
+/**
+ * Declared position semantics a story's `rtlAudit.D5.physical` may name.
+ * `chart`: elements inside the declared plot sit in chart coordinates, which
+ * stay physical in RTL (`design:bidirectionality` DR5), such as a tooltip that
+ * follows a plotted bar.
+ */
+export const PHYSICAL_POSITION_MARKERS = Object.freeze(['chart']);
+
+/**
+ * Fail closed on a `rtlAudit.D5.within` selector the page cannot parse, so a
+ * typo cannot silently grade every overlay as mirrored. Runs in the page: keep
+ * it self-contained.
+ */
+export function assertSelectorParses(doc, selector) {
+  try {
+    doc.querySelector(selector);
+  } catch {
+    throw new Error(`rtlAudit.D5.within "${selector}" is not a valid selector`);
+  }
+}
+
+/**
+ * Bind a JSON value into an in-page detector's placeholder. A replacer
+ * function is used so `$` sequences in the value (`[data-plot='q$']`) are not
+ * read as replacement patterns.
+ */
+export function bindDetectorValue(source, placeholder, value) {
+  return source.replace(placeholder, () => JSON.stringify(value));
+}
+
+/**
+ * Grade one LTR/RTL pair of D5 positioned elements. By default the RTL center
+ * must mirror the LTR center about the parent's center. Under a declared
+ * `chart` marker it must keep the same physical position instead, and a
+ * mirrored chart overlay fails. An unknown marker fails closed rather than
+ * being guessed at.
+ */
+export function gradePositionedPair(ltr, rtl, tolerance) {
+  const marker = ltr.physical ?? null;
+  if (marker != null && !PHYSICAL_POSITION_MARKERS.includes(marker)) {
+    return {
+      expectation: 'invalid-marker',
+      expected: null,
+      delta: null,
+      pass: false,
+      reason: `unknown rtlAudit.D5 physical kind "${marker}"`,
+    };
+  }
+  const expectation = marker === 'chart' ? 'physical' : 'mirror';
+  const expected =
+    expectation === 'physical' ? ltr.relCenterX : ltr.parentW - ltr.relCenterX;
+  const delta = Math.abs(rtl.relCenterX - expected);
+  return {expectation, expected, delta, pass: delta <= tolerance};
+}
+
+/**
+ * Does a left- or right-pointing glyph render pointing up or down? `matrix` is
+ * the glyph's composed 2x2 transform (CSS `matrix(a, b, c, d)` order). A
+ * chevron rotated a quarter turn (a disclosure's expanded state) points along
+ * the block axis, which is direction-neutral (`design:bidirectionality` DR5),
+ * so its mirroring is not a D1 question even though its path reads as
+ * horizontal (`architecture:rtl-audit-evidence` INV12: applicability follows
+ * the glyph's semantic role, not its source shape).
+ */
+export function glyphRendersOnBlockAxis(dir, matrix) {
+  if ((dir !== 'left' && dir !== 'right') || !Array.isArray(matrix)) {
+    return false;
+  }
+  const sign = dir === 'right' ? 1 : -1;
+  // The tip's direction is the matrix applied to (±1, 0): its first column.
+  const dx = sign * matrix[0];
+  const dy = sign * matrix[1];
+  return Math.abs(dy) > Math.abs(dx);
+}
+
+/**
+ * The key D1's detector dedupes glyphs by: direction, path, and the axis the
+ * glyph renders on. A repeated glyph (many tree rows) is reported once, but an
+ * expanded copy (pointing down) and a collapsed copy (pointing sideways) of
+ * the same chevron stay separate, so an unjudged expanded copy cannot hide a
+ * collapsed one that fails to mirror. Runs in the page: keep it
+ * self-contained apart from glyphRendersOnBlockAxis.
+ */
+export function d1GlyphKey(dir, pathSig, matrix) {
+  const axis = glyphRendersOnBlockAxis(dir, matrix) ? 'block' : 'inline';
+  return dir + '::' + pathSig + '::' + axis;
+}
+
+/**
+ * The key D1 pairs an LTR glyph with its RTL counterpart by: the enclosing
+ * control's accessible label when it has one, else the glyph's position, plus
+ * the axis it renders on. A collapsed and an expanded chevron under one label
+ * (a tree toggle) are then judged as separate pairs, so an unjudged expanded
+ * copy cannot stand in for a collapsed copy that never mirrors.
+ */
+export function d1PairKey(glyph, index) {
+  const axis = glyphRendersOnBlockAxis(glyph.dir, glyph.matrix)
+    ? 'block'
+    : 'inline';
+  const label = glyph.aria && glyph.aria.trim();
+  return (label ? 'aria:' + label : 'idx:' + index) + '::' + axis;
+}
+
+/**
+ * Is this LTR/RTL pair one D1 leaves unjudged: a horizontal glyph that renders
+ * pointing the SAME way along the block axis in both directions (an expanded
+ * disclosure, down in both)? A glyph that points down in LTR and up in RTL
+ * changed direction, which DR5 forbids, so it stays judged.
+ */
+export function isUnchangedBlockAxisPair(ltr, rtl) {
+  if (
+    !ltr ||
+    !rtl ||
+    !glyphRendersOnBlockAxis(ltr.dir, ltr.matrix) ||
+    !glyphRendersOnBlockAxis(rtl.dir, rtl.matrix)
+  ) {
+    return false;
+  }
+  // The vertical component of each tip: positive is down in CSS.
+  const tipY = glyph => (glyph.dir === 'right' ? 1 : -1) * glyph.matrix[1];
+  return Math.sign(tipY(ltr)) === Math.sign(tipY(rtl));
+}
+
+/** Classify one stable LTR/RTL contextual-decoration pair. */
+export function classifyDirectionalDecorationPair(ltr, rtl) {
+  if (!ltr || !rtl) {
+    return {verdict: 'fail', reason: 'decoration is missing in one direction'};
+  }
+
+  const mirrored = isMirrorOf(rtl.matrix, ltr.matrix);
+  const sameMatrix = matricesEqual(ltr.matrix, rtl.matrix);
+  const swapped = EXPLICIT_GLYPH_PAIRS.get(ltr.glyph) === rtl.glyph;
+
+  if (ltr.policy === 'auto-bidi') {
+    if (ltr.glyph !== rtl.glyph) {
+      return {
+        verdict: 'fail',
+        reason:
+          'Unicode-mirrored glyph was swapped in the DOM (double handling)',
+      };
+    }
+    if (mirrored) {
+      return {
+        verdict: 'fail',
+        reason:
+          'Unicode-mirrored glyph also has an RTL transform (double handling)',
+      };
+    }
+    if (!sameMatrix) {
+      return {
+        verdict: 'fail',
+        reason:
+          'Unicode-mirrored glyph has an unexpected direction-only transform',
+      };
+    }
+    return {
+      verdict: 'pass',
+      reason: 'Unicode bidi mirroring handles the unchanged glyph',
+    };
+  }
+
+  if (mirrored && swapped) {
+    return {
+      verdict: 'fail',
+      reason: 'glyph is both swapped and transformed (double handling)',
+    };
+  }
+  if (mirrored) {
+    return {
+      verdict: 'pass',
+      reason: 'decoration mirrors through its transform',
+    };
+  }
+  if (swapped && sameMatrix) {
+    return {verdict: 'pass', reason: 'decoration swaps to its opposite glyph'};
+  }
+  return {
+    verdict: 'fail',
+    reason: 'contextual directional decoration neither mirrors nor swaps',
+  };
+}
+
+/** Roll up all contextual decorations found in one story. */
+export function evaluateDirectionalDecorations(ltr, rtl) {
+  if (ltr.length === 0 && rtl.length === 0) {
+    return {
+      verdict: 'N-A',
+      results: [],
+      notes: ['no contextual directional decorations'],
+    };
+  }
+
+  const count = Math.max(ltr.length, rtl.length);
+  const results = [];
+  for (let index = 0; index < count; index += 1) {
+    const result = classifyDirectionalDecorationPair(ltr[index], rtl[index]);
+    results.push({
+      index,
+      glyph: ltr[index]?.glyph ?? rtl[index]?.glyph,
+      ...result,
+    });
+  }
+  const failures = results.filter(result => result.verdict === 'fail');
+  return {
+    verdict: failures.length > 0 ? 'fail' : 'pass',
+    results,
+    notes:
+      failures.length > 0
+        ? failures.map(failure => `${failure.glyph ?? '?'}: ${failure.reason}`)
+        : ['every contextual directional decoration mirrors exactly once'],
+  };
+}
+
+/**
+ * Classify one asymmetric inline-edge pair across LTR and RTL.
+ *
+ * Logical start/end values must stay stable while the physical edges for the
+ * computed inline axis swap: left/right in horizontal writing and top/bottom
+ * in vertical or sideways writing. A symmetric fixture cannot prove this
+ * relationship, so it fails closed instead of producing a vacuous pass.
+ */
+export function classifyLogicalInlinePair(ltr, rtl, tolerancePx = 0.5) {
+  const close = (left, right) => Math.abs(left - right) <= tolerancePx;
+  const boxes = [ltr, rtl];
+  if (
+    !boxes.every(
+      measurement =>
+        measurement?.count === 1 &&
+        measurement.visible === true &&
+        Number.isFinite(measurement.width) &&
+        Number.isFinite(measurement.height) &&
+        measurement.width > 0 &&
+        measurement.height > 0,
+    )
+  ) {
+    return {
+      verdict: 'fail',
+      reason: 'logical inline-edge subject is not one visible non-zero box',
+    };
+  }
+
+  const values = boxes.flatMap(measurement => [
+    measurement.inlineStart,
+    measurement.inlineEnd,
+    measurement.top,
+    measurement.right,
+    measurement.bottom,
+    measurement.left,
+  ]);
+  if (!values.every(Number.isFinite)) {
+    return {
+      verdict: 'fail',
+      reason: 'logical inline-edge measurements are incomplete',
+    };
+  }
+  if (ltr.direction !== 'ltr' || rtl.direction !== 'rtl') {
+    return {
+      verdict: 'fail',
+      reason:
+        'logical inline-edge measurements did not use LTR and RTL directions',
+    };
+  }
+  if (
+    typeof ltr.writingMode !== 'string' ||
+    ltr.writingMode !== rtl.writingMode
+  ) {
+    return {
+      verdict: 'fail',
+      reason:
+        'logical inline-edge writing mode is missing or changed between directions',
+    };
+  }
+
+  const writingMode = ltr.writingMode.toLowerCase();
+  const inlineEdges = writingMode.startsWith('horizontal')
+    ? ['left', 'right']
+    : writingMode.startsWith('vertical') || writingMode.startsWith('sideways')
+      ? ['top', 'bottom']
+      : null;
+  if (inlineEdges == null) {
+    return {
+      verdict: 'fail',
+      reason: `unsupported writing mode: ${ltr.writingMode}`,
+    };
+  }
+  if (close(ltr.inlineStart, ltr.inlineEnd)) {
+    return {
+      verdict: 'fail',
+      reason: 'fixture is symmetric and cannot prove inline-edge mirroring',
+    };
+  }
+
+  const [physicalStart, physicalEnd] = inlineEdges;
+  const orthogonalEdges =
+    physicalStart === 'left' ? ['top', 'bottom'] : ['left', 'right'];
+  const logicalStable =
+    close(ltr.inlineStart, rtl.inlineStart) &&
+    close(ltr.inlineEnd, rtl.inlineEnd);
+  const physicalMirrored =
+    close(ltr[physicalStart], rtl[physicalEnd]) &&
+    close(ltr[physicalEnd], rtl[physicalStart]);
+  const orthogonalStable = orthogonalEdges.every(edge =>
+    close(ltr[edge], rtl[edge]),
+  );
+
+  return logicalStable && physicalMirrored && orthogonalStable
+    ? {
+        verdict: 'pass',
+        reason:
+          `logical start/end stay stable and resolved ${physicalStart}/${physicalEnd} ` +
+          `sides swap for ${writingMode}`,
+      }
+    : {
+        verdict: 'fail',
+        reason:
+          `logical start/end did not mirror on the ${physicalStart}/${physicalEnd} ` +
+          `inline axis for ${writingMode}`,
+      };
+}
+
+/**
+ * Classify a first/middle/last group whose tightened corners belong to one
+ * logical inline side. The contracted corner sequence must be end/both/start,
+ * its opposite corners must stay full, and the physical side must mirror.
+ */
+export function classifyLogicalGroupedCorners(
+  ltr,
+  rtl,
+  logicalSide,
+  tolerancePx = 0.5,
+) {
+  const close = (left, right) => Math.abs(left - right) <= tolerancePx;
+  if (!['inline-start', 'inline-end'].includes(logicalSide)) {
+    return {verdict: 'fail', reason: 'grouped corners need a logical side'};
+  }
+
+  const measurements = [ltr, rtl];
+  if (
+    !measurements.every(
+      measurement =>
+        measurement?.boxes?.length === 3 &&
+        measurement.writingMode === 'horizontal-tb' &&
+        measurement.boxes.every(
+          box =>
+            box?.visible === true &&
+            Number.isFinite(box.width) &&
+            Number.isFinite(box.height) &&
+            box.width > 0 &&
+            box.height > 0 &&
+            ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'].every(corner =>
+              Number.isFinite(box.corners?.[corner]),
+            ),
+        ),
+    ) ||
+    ltr.direction !== 'ltr' ||
+    rtl.direction !== 'rtl'
+  ) {
+    return {
+      verdict: 'fail',
+      reason:
+        'grouped-corner subjects must be three visible horizontal LTR/RTL boxes',
+    };
+  }
+
+  const evaluateDirection = measurement => {
+    const physicalSide =
+      (logicalSide === 'inline-start') === (measurement.direction === 'ltr')
+        ? 'left'
+        : 'right';
+    const oppositeSide = physicalSide === 'left' ? 'right' : 'left';
+    const sideTop = physicalSide === 'left' ? 'topLeft' : 'topRight';
+    const sideBottom = physicalSide === 'left' ? 'bottomLeft' : 'bottomRight';
+    const oppositeTop = oppositeSide === 'left' ? 'topLeft' : 'topRight';
+    const oppositeBottom =
+      oppositeSide === 'left' ? 'bottomLeft' : 'bottomRight';
+    const [first, middle, last] = measurement.boxes;
+    const inset = [
+      first.corners[sideBottom],
+      middle.corners[sideTop],
+      middle.corners[sideBottom],
+      last.corners[sideTop],
+    ];
+    const full = [
+      first.corners[sideTop],
+      last.corners[sideBottom],
+      ...measurement.boxes.flatMap(box => [
+        box.corners[oppositeTop],
+        box.corners[oppositeBottom],
+      ]),
+    ];
+    const insetConsistent = inset.every(value => close(value, inset[0]));
+    const fullConsistent = full.every(value => close(value, full[0]));
+    const distinct = full[0] > inset[0] + tolerancePx;
+    return {
+      pass: insetConsistent && fullConsistent && distinct,
+      physicalSide,
+      insetRadius: inset[0],
+      fullRadius: full[0],
+    };
+  };
+
+  const ltrResult = evaluateDirection(ltr);
+  const rtlResult = evaluateDirection(rtl);
+  const mirrored = ltr.boxes.every((box, index) => {
+    const other = rtl.boxes[index];
+    return (
+      close(box.corners.topLeft, other.corners.topRight) &&
+      close(box.corners.topRight, other.corners.topLeft) &&
+      close(box.corners.bottomRight, other.corners.bottomLeft) &&
+      close(box.corners.bottomLeft, other.corners.bottomRight)
+    );
+  });
+
+  if (!ltrResult.pass || !rtlResult.pass) {
+    return {
+      verdict: 'fail',
+      reason:
+        'first/middle/last corners do not preserve the contracted/full sequence',
+      ltr: ltrResult,
+      rtl: rtlResult,
+    };
+  }
+  if (!mirrored || ltrResult.physicalSide === rtlResult.physicalSide) {
+    return {
+      verdict: 'fail',
+      reason: 'grouped corners stay on a physical side instead of mirroring',
+      ltr: ltrResult,
+      rtl: rtlResult,
+    };
+  }
+  return {
+    verdict: 'pass',
+    reason:
+      `${logicalSide} grouped corners mirror ${ltrResult.physicalSide}→` +
+      `${rtlResult.physicalSide} with ${ltrResult.insetRadius}px inset and ` +
+      `${ltrResult.fullRadius}px full radii`,
+    ltr: ltrResult,
+    rtl: rtlResult,
+  };
+}
+
+function resultIsApplicable(result) {
+  return result?.verdict === 'pass' || result?.verdict === 'fail';
+}
+
+function componentName(component) {
+  return component.split('/').at(-1)?.toLowerCase() ?? component.toLowerCase();
+}
+
+/**
+ * Story-title identities that name no public component, such as
+ * `core/hooks-useclipboard` or `core/tablesortable`. The roster is the public
+ * components (`architecture:rtl-audit-evidence` INV5), so these are not roster
+ * entries and cannot be coverage gaps; the audit reports them, typed, rather
+ * than dropping them silently.
+ *
+ * Public components are `sourceComponents`, package-qualified. The caller
+ * includes documented exports that directory discovery misses (Core's `Theme`
+ * and `MediaTheme`), so they stay roster entries whatever their stories are
+ * titled. It fails closed. An identity stays a roster entry when:
+ * - a filter names it explicitly (an umbrella surface such as `Core/Chat`);
+ * - its package has no discovered public component at all, so a discovery
+ *   failure cannot hide that package's gaps.
+ */
+export function ignoredStoryIdentities({
+  sourceComponents = [],
+  storyComponents = [],
+  filters = [],
+}) {
+  const publicKeys = new Set(sourceComponents.map(c => c.toLowerCase()));
+  const packagesWithPublic = new Set(
+    sourceComponents.map(c => c.split('/')[0].toLowerCase()),
+  );
+  const normalizedFilters = filters.map(filter => filter.toLowerCase());
+  const named = component =>
+    normalizedFilters.some(
+      filter =>
+        component.toLowerCase() === filter ||
+        componentName(component) === filter,
+    );
+  const ignorable = component =>
+    !publicKeys.has(component.toLowerCase()) &&
+    packagesWithPublic.has(component.split('/')[0].toLowerCase()) &&
+    !named(component);
+  return Array.from(
+    new Map(
+      storyComponents.filter(ignorable).map(c => [c.toLowerCase(), c]),
+    ).values(),
+  )
+    .sort((left, right) => left.localeCompare(right))
+    .map(component => ({component, reason: 'no-public-component'}));
+}
+
+/**
+ * Build the component roster for a scoped audit: the public components, plus
+ * any story identity a filter names explicitly.
+ *
+ * Storybook can expose an umbrella story whose name matches the PR analyzer's
+ * module name even when no source component has that exact name. Chat is the
+ * canonical example: the source directory contains ChatComposer, ChatMessage,
+ * and related components, while Storybook also has a `Core/Chat` surface. A
+ * matching story must satisfy the filter so the roster does not invent a
+ * second `unknown/chat` coverage entry for the same surface. Story identities
+ * with no public component and no filter naming them are left out (see
+ * `ignoredStoryIdentities`).
+ */
+export function buildAuditedComponentRoster({
+  sourceComponents = [],
+  storyComponents = [],
+  filters = [],
+}) {
+  const normalizedFilters = filters.map(filter => filter.toLowerCase());
+  const knownComponents = [...sourceComponents, ...storyComponents];
+  const matchesFilter = (component, filter) =>
+    component.toLowerCase() === filter || componentName(component) === filter;
+  const unmatchedFilters = normalizedFilters
+    .filter(
+      filter =>
+        !knownComponents.some(component => matchesFilter(component, filter)),
+    )
+    .map(filter => `unknown/${filter}`);
+  const ignored = new Set(
+    ignoredStoryIdentities({
+      sourceComponents,
+      storyComponents,
+      filters,
+    }).map(entry => entry.component.toLowerCase()),
+  );
+
+  return Array.from(
+    new Map(
+      [...knownComponents, ...unmatchedFilters]
+        .filter(component => !ignored.has(component.toLowerCase()))
+        .map(component => [component.toLowerCase(), component]),
+    ).values(),
+  ).filter(
+    component =>
+      normalizedFilters.length === 0 ||
+      normalizedFilters.some(filter => matchesFilter(component, filter)),
+  );
+}
+
+/**
+ * Classify every component in the audited roster. An unexplained all-N/A result
+ * is a coverage gap; a verified-N/A declaration is stale if a detector later
+ * finds applicable behavior.
+ */
+export function buildComponentCoverage({
+  components,
+  autoResults = [],
+  positionalResults = [],
+  decorationResults = [],
+  curatedResults = [],
+  verifiedNa = [],
+  enforced = true,
+}) {
+  const byName = new Map();
+  for (const component of components) {
+    const key = component.toLowerCase();
+    if (!byName.has(key)) {
+      byName.set(key, {component, applicable: []});
+    }
+  }
+
+  const addApplicable = (result, dimension, isApplicable) => {
+    if (!isApplicable) {
+      return;
+    }
+    const key = result.component.toLowerCase();
+    const entry = byName.get(key) ?? {
+      component: result.component,
+      applicable: [],
+    };
+    entry.applicable.push({dimension, storyId: result.storyId});
+    byName.set(key, entry);
+  };
+
+  for (const result of autoResults) {
+    addApplicable(result, 'D1', resultIsApplicable(result));
+  }
+  for (const result of positionalResults) {
+    addApplicable(result, 'D5', resultIsApplicable(result));
+  }
+  for (const result of decorationResults) {
+    addApplicable(result, 'D6', resultIsApplicable(result));
+  }
+  for (const result of curatedResults) {
+    addApplicable(
+      result,
+      'curated',
+      ['RTL-ready', 'not-RTL', 'partial'].includes(result.rollup),
+    );
+  }
+
+  const verified = new Map();
+  for (const declaration of verifiedNa) {
+    if (declaration?.component && declaration?.reason?.trim()) {
+      verified.set(
+        declaration.component.toLowerCase(),
+        declaration.reason.trim(),
+      );
+    }
+  }
+
+  const results = Array.from(byName.values())
+    .sort((left, right) => left.component.localeCompare(right.component))
+    .map(entry => {
+      const reason = verified.get(entry.component.toLowerCase());
+      if (entry.applicable.length > 0 && reason) {
+        return {
+          ...entry,
+          status: 'stale-verified-na',
+          reason,
+          note: 'verified-N/A declaration conflicts with applicable RTL behavior',
+        };
+      }
+      if (entry.applicable.length > 0) {
+        return {...entry, status: 'measured'};
+      }
+      if (reason) {
+        return {...entry, status: 'verified-na', reason};
+      }
+      return {
+        ...entry,
+        status: 'coverage-gap',
+        note: 'all dimensions are N-A and no verified-N/A reason is recorded',
+      };
+    });
+
+  const count = status =>
+    results.filter(result => result.status === status).length;
+  return {
+    enforced,
+    total: results.length,
+    measured: count('measured'),
+    verifiedNa: count('verified-na'),
+    gaps: count('coverage-gap'),
+    staleVerifiedNa: count('stale-verified-na'),
+    results,
+  };
+}

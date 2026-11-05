@@ -2,8 +2,11 @@
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 /**
- * @file Guards the EXTENSIBLE prop axes — the `*Map` interfaces a theme
- *   augments — against the theming surface that has to carry them.
+ * @file Guards the STRUCTURAL wiring of extensible prop axes — the `*Map`
+ *   interfaces a theme augments — against the theming surface that has to carry
+ *   them. Whether an axis may be open, and whether an unavailable custom value
+ *   has a safe theme-independent fallback, remain component-contract and review
+ *   decisions with focused fallback tests; source syntax cannot prove either.
  * @input Component sources (*.tsx/*.ts) and their `{Name}.doc.mjs` files.
  * @output Vitest failures naming each map whose axis a theme cannot reach.
  * @position Third sibling of derivedVarRegistry.test.ts (`vars`, `derived`) and
@@ -29,10 +32,15 @@
  * `TreeListVariantMap`, with a module-augmentation example in its own JSDoc,
  * while `themeProps('tree-list', {density})` never passed `variant` — so an
  * augmented variant type-checked, rendered, and could not be themed.
+ *
+ * An artwork-request axis (`ARTWORK_REQUEST_MAPS`) keeps (1) but has no
+ * styling wiring: it selects theme-supplied artwork, so its target reflects
+ * nothing and documents no visual prop (architecture:component-theming-surface
+ * INV6, INV14).
  */
 
 import {describe, it, expect} from 'vitest';
-import {readdirSync, readFileSync, existsSync} from 'node:fs';
+import {readdirSync, readFileSync} from 'node:fs';
 import {join, relative} from 'node:path';
 import ts from 'typescript';
 import {stableClassName} from '../naming';
@@ -65,7 +73,9 @@ function sourceFilesUnder(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, {withFileTypes: true})) {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === 'node_modules' || entry.name === '__tests__') {continue;}
+      if (entry.name === 'node_modules' || entry.name === '__tests__') {
+        continue;
+      }
       sourceFilesUnder(full, out);
     } else if (/\.tsx?$/.test(entry.name) && !entry.name.includes('.test.')) {
       out.push(full);
@@ -97,7 +107,9 @@ function collectKeyofAliases(files: string[]): Map<string, string> {
     if (ts.isIntersectionTypeNode(type)) {
       for (const member of type.types) {
         const found = mapBehind(member);
-        if (found != null) {return found;}
+        if (found != null) {
+          return found;
+        }
       }
       return null;
     }
@@ -117,7 +129,9 @@ function collectKeyofAliases(files: string[]): Map<string, string> {
     const visit = (node: ts.Node): void => {
       if (ts.isTypeAliasDeclaration(node)) {
         const map = mapBehind(node.type);
-        if (map != null) {aliases.set(node.name.text, map);}
+        if (map != null) {
+          aliases.set(node.name.text, map);
+        }
       }
       ts.forEachChild(node, visit);
     };
@@ -146,7 +160,9 @@ function mapsTypingAProp(
     const visit = (node: ts.Node): void => {
       if (ts.isInterfaceDeclaration(node) && node.name.text.endsWith('Props')) {
         for (const member of node.members) {
-          if (!ts.isPropertySignature(member) || member.type == null) {continue;}
+          if (!ts.isPropertySignature(member) || member.type == null) {
+            continue;
+          }
           const typeNode = ts.isArrayTypeNode(member.type)
             ? member.type.elementType
             : member.type;
@@ -155,7 +171,9 @@ function mapsTypingAProp(
             ts.isIdentifier(typeNode.typeName)
           ) {
             const map = aliases.get(typeNode.typeName.text);
-            if (map != null) {used.add(map);}
+            if (map != null) {
+              used.add(map);
+            }
           }
         }
       }
@@ -183,7 +201,9 @@ function collectExtensibleAxes(
   const open = propMaps;
   const axes: ExtensibleAxis[] = [];
   for (const file of files) {
-    if (!/\/index\.tsx?$/.test(file)) {continue;}
+    if (!/\/index\.tsx?$/.test(file)) {
+      continue;
+    }
     const dir = relative(SRC_DIR, file).split('/')[0];
     const visit = (node: ts.Node): void => {
       if (
@@ -194,7 +214,9 @@ function collectExtensibleAxes(
         const bare = node.name.text.slice(0, -'Map'.length);
         // The trailing PascalCase word is the prop.
         const match = /([A-Z][a-z0-9]*)$/.exec(bare);
-        if (match == null) {return;}
+        if (match == null) {
+          return;
+        }
         const prop = match[1].charAt(0).toLowerCase() + match[1].slice(1);
         axes.push({dir, mapName: node.name.text, prop});
       }
@@ -260,13 +282,18 @@ function collectDocTargets(dir: string): Map<string, DocTarget[]> {
         }
         walk(full);
       } else if (entry.name.endsWith('.doc.mjs')) {
-        const componentDir = relative(SRC_DIR, full).split('/')[0];
+        const fallbackDir = relative(SRC_DIR, full).split('/')[0];
         let doc;
         try {
           doc = require(full).docs;
         } catch {
           continue;
         }
+        // Subcomponent docs can live in their parent's directory (for example,
+        // Text/Heading.doc.mjs). Attribute them to the component they document,
+        // not merely the first path segment.
+        const componentDir =
+          typeof doc?.name === 'string' ? doc.name : fallbackDir;
         const targets = (doc?.theming?.targets ?? [])
           .filter(
             (t: unknown): t is {className: string} =>
@@ -295,6 +322,20 @@ const propMaps = mapsTypingAProp(files, aliases);
 const axes = collectExtensibleAxes(files, aliases, propMaps);
 const themePropsSites = collectThemePropsSites(files);
 const docTargets = collectDocTargets(SRC_DIR);
+
+/**
+ * Maps whose axis is an artwork request, not a styling selector. Each keeps the
+ * public-map check above and is exempt from the themeProps() reflection and
+ * visualProps checks only — and must stay unreflected and undocumented as a
+ * visual prop. `Icon.variant` selects a theme's artwork; an unlisted name
+ * renders the request without a variant. `astryx theme build` keeps the same
+ * list out of component-value enrollment
+ * (packages/cli/api/theme/build/build.mjs).
+ */
+const ARTWORK_REQUEST_MAPS: ReadonlySet<string> = new Set(['IconVariantMap']);
+
+const stylingAxes = axes.filter(a => !ARTWORK_REQUEST_MAPS.has(a.mapName));
+const artworkAxes = axes.filter(a => ARTWORK_REQUEST_MAPS.has(a.mapName));
 
 /** The target a component's own name maps to, e.g. TreeList -> astryx-tree-list. */
 function ownTargets(axis: ExtensibleAxis): DocTarget[] {
@@ -327,39 +368,65 @@ describe('extensible prop axes are reachable by a theme', () => {
     ).toEqual([]);
   });
 
-  it.each(axes.map(a => [`${a.dir}.${a.prop} (${a.mapName})`, a] as const))(
-    '%s reaches the DOM through themeProps',
-    (_label, axis) => {
-      // The axis is extensible, so a consumer can add a value we have never
-      // seen. The only way their CSS can select it is if the component
-      // reflects the prop.
-      const targets = ownTargets(axis);
-      const reflected = targets.some(t =>
-        themePropsSites.get(t.className)?.has(axis.prop),
-      );
-      expect(
-        reflected,
-        `${axis.dir} lets a theme add \`${axis.prop}\` values via ${axis.mapName}, but no ` +
-          `themeProps() call passes \`${axis.prop}\` — a custom value renders no selector, ` +
-          `so it cannot be styled. Pass it: themeProps('<target>', {${axis.prop}}).`,
-      ).toBe(true);
-    },
-  );
+  it.each(
+    stylingAxes.map(a => [`${a.dir}.${a.prop} (${a.mapName})`, a] as const),
+  )('%s reaches the DOM through themeProps', (_label, axis) => {
+    // The axis is extensible, so a consumer can add a value we have never
+    // seen. The only way their CSS can select it is if the component
+    // reflects the prop.
+    const targets = ownTargets(axis);
+    const reflected = targets.some(t =>
+      themePropsSites.get(t.className)?.has(axis.prop),
+    );
+    expect(
+      reflected,
+      `${axis.dir} lets a theme add \`${axis.prop}\` values via ${axis.mapName}, but no ` +
+        `themeProps() call passes \`${axis.prop}\` — a custom value renders no selector, ` +
+        `so it cannot be styled. Pass it: themeProps('<target>', {${axis.prop}}).`,
+    ).toBe(true);
+  });
 
-  it.each(axes.map(a => [`${a.dir}.${a.prop} (${a.mapName})`, a] as const))(
-    '%s is documented as a visual prop',
+  it.each(
+    stylingAxes.map(a => [`${a.dir}.${a.prop} (${a.mapName})`, a] as const),
+  )('%s is documented as a visual prop', (_label, axis) => {
+    // Undocumented, it is undiscoverable — and `theme build` rejects
+    // `'<target>': {'<prop>:custom': …}` as an unknown prop, because its
+    // known-prop set is built from exactly this field.
+    const targets = ownTargets(axis);
+    const documented = targets.some(t => t.visualProps.includes(axis.prop));
+    expect(
+      documented,
+      `${axis.dir} lets a theme add \`${axis.prop}\` values via ${axis.mapName}, but no ` +
+        `theming target documents \`${axis.prop}\` in visualProps — a theme author cannot ` +
+        `discover the axis, and \`astryx theme build\` warns "Unknown prop" on it.`,
+    ).toBe(true);
+  });
+});
+
+describe('artwork-request axes are exempt from styling wiring only', () => {
+  it('lists only maps that are extensible axes', () => {
+    // A stale entry would silently exempt nothing; a renamed map would leave
+    // its axis held to styling wiring it must not have.
+    expect(artworkAxes.map(a => a.mapName).sort()).toEqual(
+      [...ARTWORK_REQUEST_MAPS].sort(),
+    );
+  });
+
+  it.each(
+    artworkAxes.map(a => [`${a.dir}.${a.prop} (${a.mapName})`, a] as const),
+  )(
+    '%s is neither reflected nor documented as a visual prop',
     (_label, axis) => {
-      // Undocumented, it is undiscoverable — and `theme build` rejects
-      // `'<target>': {'<prop>:custom': …}` as an unknown prop, because its
-      // known-prop set is built from exactly this field.
+      // The axis selects artwork, so it has no styling selector.
       const targets = ownTargets(axis);
-      const documented = targets.some(t => t.visualProps.includes(axis.prop));
       expect(
-        documented,
-        `${axis.dir} lets a theme add \`${axis.prop}\` values via ${axis.mapName}, but no ` +
-          `theming target documents \`${axis.prop}\` in visualProps — a theme author cannot ` +
-          `discover the axis, and \`astryx theme build\` warns "Unknown prop" on it.`,
-      ).toBe(true);
+        targets.some(t => themePropsSites.get(t.className)?.has(axis.prop)),
+        `${axis.dir}.${axis.prop} selects artwork; no themeProps() call may reflect it.`,
+      ).toBe(false);
+      expect(
+        targets.some(t => t.visualProps.includes(axis.prop)),
+        `${axis.dir}.${axis.prop} selects artwork; no theming target may list it in visualProps.`,
+      ).toBe(false);
     },
   );
 });

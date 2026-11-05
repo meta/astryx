@@ -2,11 +2,15 @@
 
 import {describe, it, expect} from 'vitest';
 import {
+  parseInline,
   parseMarkdown,
   parseMarkdownIncremental,
   createIncrementalState,
+  getIncrementalParseWork,
 } from './parser';
 import type {BlockNode, ParseOptions} from './parser';
+
+type PerfParseOptions = ParseOptions;
 
 function generateAIResponse(paragraphs: number): string {
   const sections: string[] = [];
@@ -80,7 +84,7 @@ function simulateStreamingIncremental(
 function blocksBuiltPerChunk(
   fullText: string,
   chunkSize: number,
-  options?: ParseOptions,
+  options?: PerfParseOptions,
 ): number[] {
   const state = createIncrementalState();
   let previous: ReadonlySet<BlockNode> = new Set();
@@ -247,6 +251,100 @@ describe('parseMarkdown performance', () => {
 // integers that come out the same on a loaded CI box as on an idle laptop,
 // unlike the wall-clock budgets above.
 describe('parseMarkdownIncremental cache', () => {
+  it('bounds the four measured parser operations by the unsettled tail', () => {
+    const section =
+      'Fixed-length paragraph with enough text to cross a stream boundary.\n\n';
+    const worstWork = (sections: number) => {
+      const state = createIncrementalState();
+      const worst = {
+        splitCharacters: 0,
+        boundaryLines: 0,
+        definitionCharacters: 0,
+        renderedBlocks: 0,
+      };
+      let input = '';
+      for (let i = 0; i < sections; i++) {
+        input += section;
+        parseMarkdownIncremental(input, state);
+        const work = getIncrementalParseWork(state);
+        worst.splitCharacters = Math.max(
+          worst.splitCharacters,
+          work.splitCharacters,
+        );
+        worst.boundaryLines = Math.max(worst.boundaryLines, work.boundaryLines);
+        worst.definitionCharacters = Math.max(
+          worst.definitionCharacters,
+          work.definitionCharacters,
+        );
+        worst.renderedBlocks = Math.max(
+          worst.renderedBlocks,
+          work.renderedBlocks,
+        );
+      }
+      return worst;
+    };
+
+    const short = worstWork(20);
+    const long = worstWork(200);
+    console.log(
+      `  worst tail work (20/200 sections): ${JSON.stringify(short)} / ${JSON.stringify(long)}`,
+    );
+    // Ten times the document length does not change the four operations this
+    // cache bounds: splitting (splitCharacters), boundary/fence scanning
+    // (boundaryLines), definition collection (definitionCharacters), and
+    // per-chunk block construction (renderedBlocks). This is deliberately NOT
+    // a claim about every whole-input operation. Two costs stay linear in the
+    // whole input on every call, by design, and are outside these counters:
+    // the settled-prefix `startsWith` comparison that detects a replaced
+    // document (replacement correctness cannot be decided without reading the
+    // prefix), and the one-pointer-per-block copy that assembles each
+    // returned array (snapshot semantics require a fresh array per call).
+    // Both are tracked — not bounded — by the next test.
+    expect(long).toEqual(short);
+  });
+
+  it('tracks the two whole-prefix costs kept linear by the public contract', () => {
+    // Tracked, not bounded. These two operations intentionally remain
+    // proportional to the settled prefix on each call and are OUT of the
+    // scope of the tail-bounding above (see #5406 for the broader issue):
+    //
+    // 1. `prefixCharacters` — the memcmp-speed `startsWith` scan over the
+    //    settled prefix that detects a replaced document. When the check
+    //    passes it inspects exactly the settled prefix, so sampling
+    //    `state.settledText.length` before each call counts it.
+    // 2. `copiedEntries` — one pointer per returned block, copied so every
+    //    call hands back a fresh array that later calls never mutate. The
+    //    returned array's length counts it.
+    //
+    // The totals below grow quadratically across a stream because each call
+    // pays a cost linear in the document parsed so far. They are asserted
+    // exactly so that any change to either cost — bounding it, or accidentally
+    // making it heavier — shows up here and updates this record.
+    const section =
+      'Fixed-length paragraph with enough text to cross a stream boundary.\n\n';
+    const trackedWork = (sections: number) => {
+      const state = createIncrementalState();
+      const tracked = {prefixCharacters: 0, copiedEntries: 0};
+      let input = '';
+      for (let i = 0; i < sections; i++) {
+        input += section;
+        tracked.prefixCharacters += state.settledText.length;
+        tracked.copiedEntries += parseMarkdownIncremental(input, state).length;
+      }
+      return tracked;
+    };
+
+    const short = trackedWork(20);
+    const long = trackedWork(200);
+    console.log(
+      `  tracked whole-prefix work (20/200 sections): ${JSON.stringify(short)} / ${JSON.stringify(long)}`,
+    );
+    // A blank line settles what precedes it once the next line shows it
+    // starts at the margin, so the last section settles one call later.
+    expect(short).toEqual({prefixCharacters: 11763, copiedEntries: 210});
+    expect(long).toEqual({prefixCharacters: 1358973, copiedEntries: 20100});
+  });
+
   it('builds a bounded number of blocks per chunk however long the document is', () => {
     const chunkSize = 50;
     const medians = [50, 200, 500].map(paragraphs =>
@@ -297,5 +395,30 @@ describe('parseMarkdownIncremental cache', () => {
     // tracked positions by invalidating the settled cache each chunk would
     // still pass any time budget generous enough not to flake; it fails here.
     expect(withRanges).toBe(without);
+  });
+});
+
+describe('GFM autolink scanning is linear in the input length (Markdown Performance)', () => {
+  // A scan that restarts at every character of a long run grows with the
+  // square of the run: 100,000 characters took seconds. A linear scan takes
+  // milliseconds, so this budget holds on a loaded machine.
+  const BUDGET_MS = 1000;
+
+  it.each([
+    ['a long plain word', 'a'.repeat(100_000)],
+    [
+      'a long word with an @ and no dotted domain',
+      `${'a'.repeat(50_000)}@${'b'.repeat(50_000)}`,
+    ],
+    [
+      'a long word, then an email and a URL',
+      `${'a'.repeat(100_000)} me@example.com https://example.com`,
+    ],
+    ['a URL closed by a long run of )', `https://a${')'.repeat(100_000)}`],
+  ])('parses %s with autolink within the budget', (_label, text) => {
+    const startedAt = performance.now();
+    const nodes = parseInline(text, {autolink: 'gfm'});
+    expect(performance.now() - startedAt).toBeLessThan(BUDGET_MS);
+    expect(nodes.length).toBeGreaterThan(0);
   });
 });

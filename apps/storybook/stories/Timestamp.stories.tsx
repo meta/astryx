@@ -2,6 +2,7 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import {Timestamp} from '@astryxdesign/core/Timestamp';
+import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {Text} from '@astryxdesign/core/Text';
 
 const meta: Meta<typeof Timestamp> = {
@@ -142,6 +143,66 @@ export const RelativeShortFormat: Story = {
       />
     </div>
   ),
+};
+
+const relativeThresholds = [
+  {label: 'Present clamp · 5 seconds ago', offsetSeconds: -5},
+  {label: 'Past seconds begin · 10 seconds ago', offsetSeconds: -10},
+  {label: 'Past minutes begin · 60 seconds ago', offsetSeconds: -60},
+  {label: 'Past hours begin · 1 hour ago', offsetSeconds: -3600},
+  {label: 'Past days begin · 1 day ago', offsetSeconds: -86400},
+  {label: 'Past months begin · 30 days ago', offsetSeconds: -30 * 86400},
+  {label: 'Past years begin · 365 days ago', offsetSeconds: -365 * 86400},
+  {label: 'Future skew clamp · 30 seconds', offsetSeconds: 30},
+  {label: 'Future seconds begin · 31 seconds', offsetSeconds: 31},
+  {label: 'Future minutes begin · 60 seconds', offsetSeconds: 60},
+  {label: 'Future hours begin · 1 hour', offsetSeconds: 3600},
+  {label: 'Future days begin · 1 day', offsetSeconds: 86400},
+  {label: 'Future months begin · 30 days', offsetSeconds: 30 * 86400},
+  {label: 'Future years begin · 365 days', offsetSeconds: 365 * 86400},
+] as const;
+
+function RelativeThresholds({locale}: {locale: string}) {
+  const now = Date.now() / 1000;
+  return (
+    <InternationalizationProvider locale={locale}>
+      <div style={{width: 680}}>
+        <Text type="large" weight="bold">
+          Relative-time transition points
+        </Text>
+        <Text type="supporting" color="secondary" display="block">
+          Provider locale: {locale}
+        </Text>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(280px, 1fr) minmax(160px, auto)',
+            gap: '10px 32px',
+            marginTop: 20,
+          }}>
+          {relativeThresholds.map(({label, offsetSeconds}) => (
+            <div key={label} style={{display: 'contents'}}>
+              <Text type="supporting" color="secondary">
+                {label}
+              </Text>
+              <Timestamp
+                value={now + offsetSeconds}
+                format="relative"
+                hasTooltip={false}
+                type="body"
+                color="primary"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </InternationalizationProvider>
+  );
+}
+
+export const RelativeThresholdsEnglish: Story = {
+  name: 'Relative thresholds · English',
+  render: () => <RelativeThresholds locale="en-US" />,
 };
 
 export const DateFormat: Story = {

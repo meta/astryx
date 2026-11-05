@@ -13,16 +13,33 @@ export const doc = {
   type: 'command',
   name: 'theme list',
   displayName: 'astryx theme list',
-  namespace: 'cli',
+  namespace: 'cli/commands',
   summary: 'List themes available to add',
   description:
-    'Lists the themes bundled with this CLI build (the ones theme add can scaffold), ' +
-    'each with its slug, display name, description, and maintained flag.',
-  fn: 'themeList',
-  examples: [{label: 'List bundled themes', cli: 'astryx theme list --json'}],
+    'Lists bundled, package, and local themes with their owner, source, added state, and default state. ' +
+    'Earlier descriptor-less copies are not listed as themes; the receipt names them with the upgrade command.',
+  fn: 'themeListAvailable',
+  options: [
+    {
+      flag: '--package <package>',
+      param: 'options.package',
+      description: 'Show only themes owned by this package',
+    },
+  ],
+  examples: [
+    {label: 'List available themes', cli: 'astryx theme list --json'},
+    {
+      label: 'List one integration package',
+      cli: 'astryx theme list --package @acme/themes',
+    },
+  ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success'},
-    {code: 1, when: 'the bundled-theme manifest cannot be read'},
+    {
+      code: 1,
+      when: 'a bundled or installed theme descriptor cannot be read',
+    },
   ],
   related: ['theme add', 'theme build'],
 };

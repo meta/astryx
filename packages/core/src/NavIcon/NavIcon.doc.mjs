@@ -1,5 +1,20 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Container',
+    required: true,
+    description: 'Circular painted container for the supplied icon.',
+  },
+  {
+    name: 'Icon',
+    required: true,
+    description:
+      'Caller-supplied visual content rendered inside the container.',
+  },
+];
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
 
 export const docs = {
@@ -9,7 +24,13 @@ export const docs = {
   category: 'Navigation',
   isHiddenFromOverview: true,
   hidden: false,
-  keywords: ["navicon","iconbutton","toolbar icon","appbar icon","nav button"],
+  keywords: [
+    'navicon',
+    'iconbutton',
+    'toolbar icon',
+    'appbar icon',
+    'nav button',
+  ],
   props: [
     {
       name: 'icon',
@@ -21,20 +42,28 @@ export const docs = {
     },
   ],
   theming: {
-    targets: [
-      {className: 'astryx-nav-icon'},
-      // Still emitted beside the names above, so themes written against
-      // them keep working. Drop in the next major.
-      {className: 'astryx-navicon', deprecatedFor: 'nav-icon'},
-    ],
+    targets: [{className: 'astryx-nav-icon'}],
   },
   usage: {
+    anatomy,
     description:
       'NavIcon is a circular icon container with an accent-colored background. Use it in navigation headers such as TopNavHeading and PageNavHeader to visually identify a section or application.',
     bestPractices: [
-      { guidance: true, description: 'Use in navigation headers to provide a recognizable visual anchor for the section.' },
-      { guidance: true, description: 'Pass an Icon or similarly sized icon component to ensure proper proportions.' },
-      { guidance: false, description: 'Use NavIcon for interactive purposes; it is a display-only container, not a button.' },
+      {
+        guidance: true,
+        description:
+          'Use in navigation headers to provide a recognizable visual anchor for the section.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pass an Icon or similarly sized icon component to ensure proper proportions.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use NavIcon for interactive purposes; it is a display-only container, not a button.',
+      },
     ],
   },
 };
@@ -47,26 +76,33 @@ export const docsZh = {
     {
       name: 'icon',
       type: 'ReactNode',
-      description:
-        '在圆形背景内渲染的图标元素。应为 Icon 或类似的图标组件。',
+      description: '在圆形背景内渲染的图标元素。应为 Icon 或类似的图标组件。',
       required: true,
     },
   ],
   theming: {
-    targets: [
-      {className: 'astryx-nav-icon'},
-      // Still emitted beside the names above, so themes written against
-      // them keep working. Drop in the next major.
-      {className: 'astryx-navicon', deprecatedFor: 'nav-icon'},
-    ],
+    targets: [{className: 'astryx-nav-icon'}],
   },
   usage: {
+    anatomy,
     description:
       'NavIcon is a circular icon container with an accent-colored background. Use it in navigation headers such as TopNavHeading and PageNavHeader to visually identify a section or application.',
     bestPractices: [
-      { guidance: true, description: 'Use in navigation headers to provide a recognizable visual anchor for the section.' },
-      { guidance: true, description: 'Pass an Icon or similarly sized icon component to ensure proper proportions.' },
-      { guidance: false, description: 'Use NavIcon for interactive purposes; it is a display-only container, not a button.' },
+      {
+        guidance: true,
+        description:
+          'Use in navigation headers to provide a recognizable visual anchor for the section.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pass an Icon or similarly sized icon component to ensure proper proportions.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use NavIcon for interactive purposes; it is a display-only container, not a button.',
+      },
     ],
   },
 };
@@ -76,12 +112,25 @@ export const docsDense = {
   description:
     'Circular icon container w/ accent background for navigation headers.',
   usage: {
+    anatomy,
     description:
       'NavIcon is a circular icon container with an accent-colored background. Use it in navigation headers such as TopNavHeading and PageNavHeader to visually identify a section or application.',
     bestPractices: [
-      { guidance: true, description: 'Use in navigation headers to provide a recognizable visual anchor for the section.' },
-      { guidance: true, description: 'Pass an Icon or similarly sized icon component to ensure proper proportions.' },
-      { guidance: false, description: 'Use NavIcon for interactive purposes; it is a display-only container, not a button.' },
+      {
+        guidance: true,
+        description:
+          'Use in navigation headers to provide a recognizable visual anchor for the section.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pass an Icon or similarly sized icon component to ensure proper proportions.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use NavIcon for interactive purposes; it is a display-only container, not a button.',
+      },
     ],
   },
   propDescriptions: {

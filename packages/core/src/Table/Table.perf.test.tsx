@@ -14,9 +14,12 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, act} from '@testing-library/react';
-import {useState} from 'react';
+import {useMemo, useState} from 'react';
 import {Table} from './Table';
-import type {TableColumn} from './types';
+import {useTableRowStatus} from './plugins/rowStatus';
+import {useTableRowIndex} from './plugins/rowIndex';
+import type {UseTableRowStatusConfig} from './index';
+import type {TableColumn, TablePlugin} from './types';
 
 // =============================================================================
 // Test Data
@@ -42,6 +45,16 @@ const testColumns: TableColumn<TestRow>[] = [
 ];
 
 const ciBudgetMultiplier = process.env.CI === 'true' ? 1.5 : 1;
+
+/**
+ * Milliseconds of CPU that this thread has used since `started`. The render
+ * budgets below are this thread's CPU time, not elapsed time. Other work on a
+ * busy machine stretches elapsed time, but not the CPU that the render uses.
+ */
+function cpuMsSince(started: NodeJS.CpuUsage): number {
+  const used = process.threadCpuUsage(started);
+  return (used.user + used.system) / 1000;
+}
 
 // =============================================================================
 // Test: Table doesn't re-render when unrelated state changes
@@ -440,12 +453,10 @@ describe('Table render performance', () => {
     it('should render 100 rows within performance budget', () => {
       const data = createTestData(100);
 
-      const startTime = performance.now();
+      const started = process.threadCpuUsage();
       render(<Table data={data} columns={testColumns} idKey="id" />);
-      const endTime = performance.now();
-
-      const renderTime = endTime - startTime;
-      console.log(`100 rows initial render: ${renderTime.toFixed(2)}ms`);
+      const renderTime = cpuMsSince(started);
+      console.log(`100 rows initial render: ${renderTime.toFixed(2)}ms CPU`);
 
       // Should render within 200ms (generous budget for CI variance)
       expect(renderTime).toBeLessThan(200);
@@ -454,20 +465,67 @@ describe('Table render performance', () => {
     it('should render 500 rows within performance budget', () => {
       const data = createTestData(500);
 
-      const startTime = performance.now();
+      const started = process.threadCpuUsage();
       render(<Table data={data} columns={testColumns} idKey="id" />);
-      const endTime = performance.now();
-
-      const renderTime = endTime - startTime;
-      console.log(`500 rows initial render: ${renderTime.toFixed(2)}ms`);
+      const renderTime = cpuMsSince(started);
+      console.log(`500 rows initial render: ${renderTime.toFixed(2)}ms CPU`);
 
       // CI runners vary more than local machines, so keep the local budget
       // strict while allowing headroom for shared-runner noise.
       expect(renderTime).toBeLessThan(500 * ciBudgetMultiplier);
     });
 
+    it('keeps mixed row-status rendering and no-op updates within budget', async () => {
+      const data = createTestData(6);
+      const getStatus = vi.fn<UseTableRowStatusConfig<TestRow>['getStatus']>(
+        row =>
+          row.value % 30 === 0
+            ? {status: 'success', label: 'Complete'}
+            : row.value % 20 === 0
+              ? {color: 'warning', icon: 'clock', label: 'Running'}
+              : {color: 'gray', label: 'Queued'},
+      );
+
+      function TestComponent() {
+        const [items, setItems] = useState(data);
+        const rowStatus = useTableRowStatus<TestRow>({getStatus});
+        const plugins = useMemo(() => ({rowStatus}), [rowStatus]);
+
+        return (
+          <div>
+            <button type="button" onClick={() => setItems(prev => [...prev])}>
+              No-op update
+            </button>
+            <Table
+              data={items}
+              columns={testColumns}
+              idKey="id"
+              plugins={plugins}
+            />
+          </div>
+        );
+      }
+
+      const renderStart = process.threadCpuUsage();
+      render(<TestComponent />);
+      const renderTime = cpuMsSince(renderStart);
+
+      expect(getStatus).toHaveBeenCalledTimes(6);
+      expect(renderTime).toBeLessThan(1500 * ciBudgetMultiplier);
+
+      const updateStart = process.threadCpuUsage();
+      await act(async () => {
+        screen.getByRole('button', {name: 'No-op update'}).click();
+      });
+      const updateTime = cpuMsSince(updateStart);
+
+      expect(getStatus).toHaveBeenCalledTimes(6);
+      expect(updateTime).toBeLessThan(1000 * ciBudgetMultiplier);
+    });
+
     it('should measure update performance', async () => {
       const data = createTestData(100);
+      let updates = 0;
 
       function TestComponent() {
         const [items, setItems] = useState(data);
@@ -476,13 +534,13 @@ describe('Table render performance', () => {
           <div>
             <button
               type="button"
-              onClick={() =>
+              onClick={() => {
+                updates++;
+                const name = `Updated ${updates}`;
                 setItems(prev =>
-                  prev.map((item, i) =>
-                    i === 50 ? {...item, name: 'Updated'} : item,
-                  ),
-                )
-              }>
+                  prev.map((item, i) => (i === 50 ? {...item, name} : item)),
+                );
+              }}>
               Update Row 50
             </button>
             <Table data={items} columns={testColumns} idKey="id" />
@@ -492,17 +550,120 @@ describe('Table render performance', () => {
 
       render(<TestComponent />);
 
-      const startTime = performance.now();
-      await act(async () => {
-        screen.getByRole('button').click();
-      });
-      const endTime = performance.now();
+      // CPU time, not elapsed time: on a loaded runner other work stretches
+      // elapsed time but not the time spent rendering. Each click renames the
+      // row again, so every round is a real update; the least of five after a
+      // warm-up is the update's own cost.
+      const updateCpuTime = async () => {
+        const started = process.cpuUsage();
+        await act(async () => {
+          screen.getByRole('button').click();
+        });
+        const used = process.cpuUsage(started);
+        return (used.user + used.system) / 1000;
+      };
+      await updateCpuTime();
+      let updateTime = Number.POSITIVE_INFINITY;
+      for (let round = 0; round < 5; round++) {
+        updateTime = Math.min(updateTime, await updateCpuTime());
+      }
+      console.log(`100 rows single update: ${updateTime.toFixed(2)}ms CPU`);
 
-      const updateTime = endTime - startTime;
-      console.log(`100 rows single update: ${updateTime.toFixed(2)}ms`);
-
-      // Update should be fast
+      expect(screen.getByText(`Updated ${updates}`)).toBeInTheDocument();
       expect(updateTime).toBeLessThan(100);
     });
+  });
+});
+
+// =============================================================================
+// Test: a re-sort moves rows without re-rendering them
+// =============================================================================
+
+describe('re-sort', () => {
+  const sortedRows = createTestData(1000);
+  const reversedRows = [...sortedRows].reverse();
+  // By default, a role query reads each row's computed style to check that
+  // the row is not hidden. Over 1,000 rows in jsdom that costs seconds. These
+  // cases assert which rows come first, so they skip that check.
+  const rows = () => screen.getAllByRole('row', {hidden: true});
+
+  function renderSortable(
+    renderCell: (row: TestRow) => string,
+    plugins?: Record<string, TablePlugin<TestRow>>,
+  ) {
+    const columns: TableColumn<TestRow>[] = [
+      {key: 'name', header: 'Name', renderCell},
+      {key: 'value', header: 'Value'},
+    ];
+    const view = render(
+      <Table
+        data={sortedRows}
+        columns={columns}
+        idKey="id"
+        plugins={plugins}
+      />,
+    );
+    return () =>
+      view.rerender(
+        <Table
+          data={reversedRows}
+          columns={columns}
+          idKey="id"
+          plugins={plugins}
+        />,
+      );
+  }
+
+  it('re-renders no cell of 1,000 rows when no plugin reads the row index', () => {
+    const renderCell = vi.fn((row: TestRow) => row.name);
+    const resort = renderSortable(renderCell);
+    renderCell.mockClear();
+
+    resort();
+
+    expect(renderCell).not.toHaveBeenCalled();
+    expect(rows()[1]).toHaveTextContent('Item 999');
+  });
+
+  it('re-renders the rows when a plugin reads the row index', () => {
+    const renderCell = vi.fn((row: TestRow) => row.name);
+    const stripe: TablePlugin<TestRow> = {
+      transformBodyRow: (props, _item, index) => ({
+        ...props,
+        htmlProps: {...props.htmlProps, 'data-odd': index % 2 === 1},
+      }),
+    };
+    const resort = renderSortable(renderCell, {stripe});
+    renderCell.mockClear();
+
+    resort();
+
+    expect(renderCell).toHaveBeenCalledTimes(1000);
+    const [, first, second] = rows();
+    expect(first).toHaveTextContent('Item 999');
+    expect(first).toHaveAttribute('data-odd', 'false');
+    expect(second).toHaveAttribute('data-odd', 'true');
+  });
+
+  it('keeps row numbers in step with the new order', () => {
+    function Numbered({data}: {data: TestRow[]}) {
+      const rowIndex = useTableRowIndex({data});
+      return (
+        <Table
+          data={data}
+          columns={testColumns}
+          idKey="id"
+          plugins={{rowIndex}}
+        />
+      );
+    }
+    const small = createTestData(3);
+    const view = render(<Numbered data={small} />);
+
+    view.rerender(<Numbered data={[...small].reverse()} />);
+
+    const [, first, , last] = screen.getAllByRole('row');
+    expect(first).toHaveTextContent(/^1row-2/);
+    expect(last).toHaveTextContent(/^3row-0/);
   });
 });
