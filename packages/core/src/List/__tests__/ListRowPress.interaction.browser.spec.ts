@@ -53,6 +53,7 @@ import {
   touchDriver,
   traceRendering,
   waitForAnimation,
+  watchAnimations,
   withStorybook,
   writeEvidence,
   type CastFrame,
@@ -302,10 +303,16 @@ for (const story of [LIST_ROW, SCROLLER_ROW, TREE_ROW]) {
     );
     const {driver, row, center, probe} = await openRow(page, story);
     const cast = await startScreencast(page);
+    // The page starts the block itself, a frame into the release. A block the
+    // test sends after the release starts lands later on a busy machine. The
+    // short release can then end with too few frames left to judge.
+    const watch = await watchAnimations(row);
     // Strength 0 is the row at rest; strength 1 the believed press.
-    await driver.play(tap(center, {holdMs: HOLD_MS}));
-    const [release] = await waitForAnimation(row, {minProgressMs: 16});
-    const block = await blockMainThread(page, 700);
+    const [block] = await Promise.all([
+      blockMainThread(page, 700, {during: row}),
+      driver.play(tap(center, {holdMs: HOLD_MS})),
+    ]);
+    const [release] = await watch.started({minProgressMs: 16});
     await page.waitForTimeout(150);
     const frames = await cast.stop();
     const pixels = await samplePixel(page, frames, probe);
