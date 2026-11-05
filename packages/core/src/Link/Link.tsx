@@ -129,9 +129,9 @@ const labelHoverStyles = stylex.create({
   followsRoot: {
     color: {
       default: null,
-      [stylex.when.ancestor(':hover', linkScope)]: {
-        '@media (hover: hover)': 'inherit',
-      },
+      // Without a hover pointer the root keeps its resting color, which is
+      // the label's own, so inheriting there changes nothing.
+      [stylex.when.ancestor(':hover', linkScope)]: 'inherit',
     },
   },
 });
@@ -374,7 +374,7 @@ export function Link({
         color={color}
         display={display}
         maxLines={maxLines}
-        xstyle={hasHoverTint && labelHoverStyles.followsRoot}>
+        xstyle={hasHoverTint ? labelHoverStyles.followsRoot : undefined}>
         {children}
       </Text>
       {isExternalLink && !renderAsButton && (
