@@ -11,7 +11,16 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {warmIntegrationChecks} from '../../../test-utils/warm-integration-checks.mjs';
 import {discoverCoreTemplates} from '../../../foundation/discovery/template-adapter.mjs';
+
+// The checks' one-time start in this file runs here, while the file is
+// collected, so no test carries it. That start is TypeScript and its lib
+// files, and the Core template docs.
+await warmIntegrationChecks();
+
+// The working folder this file starts in, which each case returns to.
+const ORIGIN = process.cwd();
 
 /** @type {string} */
 let tmpDir;
@@ -24,6 +33,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // A run that outlives its case (a timeout) can still hold its fixture as
+  // the working folder. Leaving it first lets the later cases run.
+  process.chdir(ORIGIN);
   fs.rmSync(tmpDir, {recursive: true, force: true});
 });
 
@@ -518,5 +530,18 @@ describe('a command written with a runner', () => {
     expect(validate.notes.map((/** @type {any} */ note) => note.code)).toEqual([
       'runner_command',
     ]);
+  });
+});
+
+describe('after a case whose run outlives it', () => {
+  it('leaves the working folder in its fixture, as a timed-out run does', () => {
+    process.chdir(tmpDir);
+    expect(process.cwd()).toBe(fs.realpathSync(tmpDir));
+  });
+
+  it('still makes its fixture and runs the CLI in it', async () => {
+    expect(process.cwd()).toBe(ORIGIN);
+    const run = await runCli(['integration', 'check', '--help'], tmpDir);
+    expect(run.status).toBe(0);
   });
 });
