@@ -78,7 +78,8 @@ and the repository proves it before a change that could break it merges.
   file is reused; a different file is never overwritten, even with
   `--overwrite`, which replaces only the component's own files: the new helper
   is written alongside under a version-suffixed name, and only the new copy's
-  imports point at it.
+  imports point at it, except a private attribute owner module and the
+  unexported style modules it imports, which FR4 governs.
 - **FR3 — Shared runtime state stays single.** A module whose state coordinates
   components with each other (the layer stack, the modal outlet, interaction
   modality, the bottom-sheet stack, the announcement channel of `spec:AST-086`
@@ -101,8 +102,13 @@ and the repository proves it before a change that could break it merges.
   by a copy.
 - **FR4 — Private attributes stay contained.** Each private data attribute's
   owner module (`architecture:public-component-api` INV23) that the component
-  imports is copied whole and unedited, so callers, the copy included, still
-  never write the attribute by hand.
+  imports travels with the copy, so callers, the copy included, still never
+  write the attribute by hand. Swizzle copies an imported owner module, and any
+  unexported style module it imports, whole: the copy is unedited except that
+  imports of modules the package exports are rewritten to their package
+  subpaths, as the component's own files are; unexported dependencies keep
+  their relative imports in the same layout. Re-swizzling skips an identical
+  existing copy and refuses a changed one without `--overwrite`.
 - **FR5 — Theme targets and class names are unchanged.** The copy answers to the
   same theme targets and emits the same documented class names, data attributes,
   and custom properties as the package component of that version, so a theme,
@@ -162,7 +168,9 @@ and the repository proves it before a change that could break it merges.
   dependency the copy imports with the owner package's declared range (FR1).
   An existing component file still fails with `ERR_FILE_EXISTS` unless
   `--overwrite` is passed; an existing helper never fails the command and is
-  never replaced, with or without `--overwrite` (FR2).
+  never replaced, with or without `--overwrite` (FR2), except an owner module
+  and its unexported style modules, which a changed copy refuses without
+  `--overwrite` and replaces with it (FR4).
 - `@astryxdesign/build`'s Vite, PostCSS, Babel, and Next integrations compile
   modules under an `astryx-swizzle.json` directory in the library pass (FR5).
 - The styling overview states that a copy's rules land in `astryx-base` with
@@ -188,6 +196,9 @@ and the repository proves it before a change that could break it merges.
   overlay do not see its layer boundary or modal: a package picker announces
   outside the copied modal (`spec:AST-086` FR14), and package group context
   crosses into it (`spec:AST-038` FR7) (FR3).
+- The result does not yet report whether each shared module was written,
+  reused or replaced (FR2's impact bullet); adding that receipt field is the CLI
+  owner's call.
 - Core's private type additions, such as `focusVisible`, do not travel with a
   copy, and a unique symbol splits identity between a copied and a package
   AppShell (FR1, FR3).
@@ -196,7 +207,6 @@ and the repository proves it before a change that could break it merges.
   (FR1).
 - Some names `swizzle --list` offers differ from their folder's export names
   (Chat, NavMenu, Indicator, Resizable) (`spec:AST-035` FR12).
-- No private data-attribute owner module exists yet (FR4).
 - Products on the stock StyleX plugins have no library-pass setting, so a
   copy's rules land above `astryx-theme` there and theme component overrides do
   not reach it (FR5).
@@ -211,7 +221,7 @@ and the repository proves it before a change that could break it merges.
 | Contract | Verification                                                                                                                                             | Representative states                                                                                                                                                                                                                                                                                                                                               | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | FR1      | Eject every offered component into a clean project; type-check and bundle                                                                                | Every component in `swizzle --list`; Core, Lab, Charts, RichText, Vega; a component that imports an npm dependency                                                                                                                                                                                                                                                  | A type or resolve error, or an import of a path the owner's `exports` lacks or of `./internal/*`, fails, or a dependency the copy imports goes unreported                                                                                                                                                                                                                                                                                                   |
-| FR2      | Import graph of each output                                                                                                                              | Helpers in `utils`, `hooks`, `Layer`; nested folders; colocated tests and docs; a helper an earlier swizzle wrote, identical and different                                                                                                                                                                                                                          | A copied file imports a module that is neither in the output nor a public export, or a test, story, spec, or doc is copied, or an existing helper is overwritten                                                                                                                                                                                                                                                                                            |
+| FR2      | Import graph of each output                                                                                                                              | Helpers in `utils`, `hooks`, `Layer`; nested folders; colocated tests and docs; a helper an earlier swizzle wrote, identical and different                                                                                                                                                                                                                          | A copied file imports a module that is neither in the output nor a public export, or a test, story, spec, or doc is copied, or an existing helper other than an owner module (FR4) is overwritten                                                                                                                                                                                                                                                           |
 | FR3      | Render a copied and a package layer component together; inspect stores; open, stack, and Escape                                                          | Dialog over package Popover; BottomSheet over package Dialog; modality; a copied `useToast` under the package `LayerProvider`; a symbol-branded object passed between copy and package; a copied Dialog announcing beside a package component; a package picker inside a copied Dialog announcing a result count; a package grouped control inside a copied overlay | In either direction (copy under package, package under copy): two stores of one protocol version exist in a document, Escape and focus return differ from the package alone, a copied consumer misses the package provider, a brand check fails, a second live region appears instead of one announcer (`spec:AST-086` FR9), an announcement escapes the open modal (`spec:AST-086` FR14), or group context crosses the layer boundary (`spec:AST-038` FR7) |
 | FR4      | Scan each output for private data-attribute names and selectors; compare copied owner modules with the package's                                         | Components that reach an owner module                                                                                                                                                                                                                                                                                                                               | A hand-written private attribute name or selector, or an edited owner module, in the output                                                                                                                                                                                                                                                                                                                                                                 |
 | FR5      | Render package and copy side by side under a theme with component overrides; compare                                                                     | Default; each variant; a theme component override; a copy built by `@astryxdesign/build`                                                                                                                                                                                                                                                                            | A theme override, documented class name, data attribute, or theme target reaches one and not the other                                                                                                                                                                                                                                                                                                                                                      |
