@@ -25,6 +25,7 @@ import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {PRESS_FADE_MS} from '../utils/pressGesture';
 import {
   createActionGroupTracker,
+  measureActions,
   type ActionGroupTarget,
   type ActionGroupTrackerOptions,
 } from './actionGroupTracker';
@@ -495,5 +496,29 @@ describe('createActionGroupTracker: options for other trackers', () => {
     owned.end();
     expect(onActivate).toHaveBeenCalledWith(left.button);
     expect(isClickGuardArmed(document)).toBe(true);
+  });
+});
+
+describe('measureActions', () => {
+  it('measures the enabled actions the filter keeps, in document order, and reads each box once', () => {
+    const group = document.createElement('div');
+    const kept = action('Kept', {left: 0, top: 0, width: 40, height: 20});
+    const off = action('Off', {left: 40, top: 0, width: 40, height: 20});
+    off.button.disabled = true;
+    const other = action('Other', {left: 80, top: 0, width: 40, height: 20});
+    const last = action('Last', {left: 120, top: 0, width: 40, height: 20});
+    group.append(kept.button, off.button, other.button, last.button);
+    const targets = measureActions(
+      [null, group],
+      '[data-action]',
+      element => element !== other.button,
+    );
+    expect(targets).toEqual([
+      {element: kept.button, left: 0, top: 0, right: 40, bottom: 20},
+      {element: last.button, left: 120, top: 0, right: 160, bottom: 20},
+    ]);
+    expect(
+      [kept, off, other, last].map(({rectSpy}) => rectSpy.mock.calls.length),
+    ).toEqual([1, 0, 0, 1]);
   });
 });

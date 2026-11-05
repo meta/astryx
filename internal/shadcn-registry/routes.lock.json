@@ -3742,6 +3742,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-input-container-search-field-wrapper",
+      "path": "examples/use-input-container/search-field-wrapper",
+      "aliases": []
+    },
+    {
       "name": "example-use-input-status-icon-coupon-code-status",
       "path": "examples/use-input-status-icon/coupon-code-status",
       "aliases": []
@@ -3817,6 +3822,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-scroll-lock-full-screen-mobile-menu",
+      "path": "examples/use-scroll-lock/full-screen-mobile-menu",
+      "aliases": []
+    },
+    {
       "name": "example-use-scroll-overflow-filter-strip-edge-fades",
       "path": "examples/use-scroll-overflow/filter-strip-edge-fades",
       "aliases": []
@@ -3864,6 +3874,11 @@
     {
       "name": "example-use-table-selection-table-floating-bulk-actions",
       "path": "examples/use-table-selection/table-floating-bulk-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-sortable-state-multi-sort-orders",
+      "path": "examples/use-table-sortable-state/multi-sort-orders",
       "aliases": []
     },
     {
@@ -4224,6 +4239,11 @@
     {
       "name": "hook-use-table-sortable",
       "path": "hooks/use-table-sortable",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-sortable-state",
+      "path": "hooks/use-table-sortable-state",
       "aliases": []
     },
     {
