@@ -49,6 +49,7 @@ import {Spinner} from '../Spinner/Spinner';
 import {useTooltip} from '../Tooltip/useTooltip';
 import {mergeProps} from '../utils/mergeProps';
 import {rtlStyles} from '../utils/rtlStyles';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
 import {indicatorPressScope} from '../internal/indicatorPress.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
@@ -569,7 +570,10 @@ export function CheckboxInput({
           )}
           {...focusProps}>
           <input
-            {...rest}
+            // A disabled checkbox stays focusable, so it still receives key and
+            // pointer events. It runs no caller handler except `onFocus` and
+            // `onBlur`.
+            {...withholdCallerHandlers(rest, isDisabled)}
             ref={useMergedRefs(
               ref,
               indeterminateRef,

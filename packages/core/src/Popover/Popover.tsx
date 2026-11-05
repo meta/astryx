@@ -440,6 +440,11 @@ const styles = stylex.create({
       `calc(${layerViewportInset.maxBlockSize})`,
       `calc(${layerViewportInset.maxBlockSizeFallback})`,
     ),
+    // A scroll container from the commit in which the software keyboard caps
+    // the layer, a frame before the overflow measure sees the shorter box.
+    // Otherwise `visible`. The type names the two values the property takes.
+    // SYNC: LAYER_KEYBOARD_OVERFLOW_PROPERTY (Layer/useLayerKeyboardClearance.ts).
+    overflow: 'var(--_layer-keyboard-overflow, visible)' as 'auto' | 'visible',
   },
   surfaceScrollable: {
     overflow: 'auto',

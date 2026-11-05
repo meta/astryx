@@ -2,11 +2,17 @@
 
 /**
  * @file settledBox.ts
- * @input A layer element and its computed transforms
- * @output settledBox, the layer's box without the transform an entry
- *   animation applies, with fractions
- * @position Layer runtime helper; useLayer.tsx reads it for the anchor
- *   check, and layerExitCopy.ts for the copy's box
+ * @input A layer element
+ * @output Exports `settledBox`: the layer's box where its position option put
+ *   it, without the transform an entrance (or anything else) applies to it
+ * @position Layer runtime: the one box read the fallback order, the software
+ *   keyboard's cap and the exit copy measure with. Its readers are listed
+ *   below.
+ *
+ * SYNC: When modified, update:
+ * - /packages/core/src/Layer/useLayer.tsx
+ * - /packages/core/src/Layer/useLayerKeyboardClearance.ts
+ * - /packages/core/src/Layer/layerExitCopy.ts
  */
 
 const TRANSFORM_PROPERTIES = ['transform', 'translate', 'scale', 'rotate'];
@@ -20,8 +26,8 @@ function hasTransform(style: CSSStyleDeclaration): boolean {
 
 /**
  * `rect`, the box of an element whose computed style still carries a 2D
- * transform, with that transform undone: the transformed box's centre is the
- * image of the element's centre, so undoing the transform about its origin on
+ * transform, with that transform undone. The transformed box's centre is the
+ * image of the element's centre. So undoing the transform about its origin on
  * that centre gives the untransformed box, at the element's layout size. A
  * transform this cannot undo (3D, or a rotation in another unit) leaves `rect`
  * as it is.
@@ -79,16 +85,17 @@ function untransform(
 
 /**
  * The layer's box where its position option put it, without the transform an
- * entry animation (or anything else) applies to it: a Tooltip enters from a
- * few pixels toward its trigger, scaled down, so the transformed box of a
+ * entry animation (or anything else) applies to it. A Tooltip enters from a
+ * few pixels toward its trigger, scaled down. So the transformed box of a
  * tooltip that fits beside its trigger can read as covering it while it
- * enters. The layer's transforms are overridden with `none !important`, which
- * outranks an animation, for this one read and then restored, in the same
- * task: no frame paints in between and the animation keeps running. Where the
- * engine still applies an animated transform under that override (WebKit),
- * the read box has that transform undone instead (`untransform`). A layer
- * that transitions a transform property is not overridden, since restoring the
- * value would start that transition; its box has its transform undone.
+ * enters. For this one read, the layer's transforms are overridden with
+ * `none !important`, which outranks an animation. They are restored in the
+ * same task, so no frame paints in between and the animation keeps running.
+ * Where the engine still applies an animated transform under that override
+ * (WebKit), the read box has that transform undone instead (`untransform`). A
+ * layer that transitions a transform property is not overridden, since
+ * restoring the value would start that transition. Its box has its transform
+ * undone.
  */
 export function settledBox(layer: HTMLElement): DOMRect {
   const view = layer.ownerDocument.defaultView;
