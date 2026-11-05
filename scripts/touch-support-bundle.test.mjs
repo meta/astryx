@@ -218,6 +218,8 @@ const GESTURE_USERS = new Set([
   'SideNav',
   'TimeInput',
   'TopNav',
+  // The public pan, which the root's createPanGesture shares.
+  'hooks: usePanGesture',
 ]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
