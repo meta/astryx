@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import 'temporal-polyfill/full/global';
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it} from 'vitest';
 import {
   CALENDAR_SYSTEMS,
   type CalendarMonth,
@@ -14,6 +14,8 @@ import {
   calendarShiftMonths,
   calendarShiftYears,
   formatCalendarDate,
+  formatCalendarInstant,
+  formatCalendarInstantRange,
   formatCalendarMonthLabel,
   isCalendarSystemAvailable,
   isGregorianAligned,
@@ -21,12 +23,15 @@ import {
 } from './calendarSystem';
 import {
   DATE_FORMAT_WITH_WEEKDAY,
+  formatSharedDate,
   type PlainDate,
   plainDateAddDays,
+  plainDateFormat,
   plainDateFromISO,
   plainDateIsAfter,
   plainDateToISO,
 } from './plainDate';
+import {withChineseTemporalAheadOfIntl} from '../__tests__/temporalAheadOfIntl';
 import type {ISODateString} from './dateTypes';
 
 const iso = plainDateFromISO;
@@ -276,6 +281,105 @@ describe('calendar labels', () => {
         'en',
       ),
     ).toBe('Friday, Aban 8, 1405 AP');
+  });
+});
+
+describe('labels where Intl and Temporal disagree', () => {
+  const day = iso('2027-02-06');
+  const noon = new Date('2027-02-06T12:00:00Z');
+  const longDate = {year: 'numeric', month: 'long', day: 'numeric'} as const;
+
+  it('names the Temporal day in plainDateFormat and formatSharedDate', () => {
+    withChineseTemporalAheadOfIntl(() => {
+      const options = {
+        month: 'long',
+        day: 'numeric',
+        calendar: 'chinese',
+      } as const;
+      expect(plainDateFormat(day, options, 'en')).toBe('First Month 1');
+      expect(formatSharedDate(day, 'date_long', 'en', 'chinese')).toMatch(
+        /^First Month 1, 2027/,
+      );
+    });
+  });
+
+  it('names the Temporal day of an instant and keeps its time', () => {
+    const value = withChineseTemporalAheadOfIntl(() =>
+      formatCalendarInstant(
+        'chinese',
+        noon,
+        {...longDate, hour: 'numeric', minute: '2-digit'},
+        'en',
+        'UTC',
+      ),
+    );
+    expect(value).toMatch(/^First Month 1, 2027\(ding-wei\) at 12:00\sPM$/);
+  });
+
+  it('writes each end of a range in full', () => {
+    const value = withChineseTemporalAheadOfIntl(() =>
+      formatCalendarInstantRange(
+        'chinese',
+        new Date('2027-02-01T12:00:00Z'),
+        noon,
+        longDate,
+        'en',
+        'UTC',
+      ),
+    );
+    expect(value).toMatch(
+      /^Twelfth Month 26, 2026\(bing-wu\)\s–\sFirst Month 1, 2027\(ding-wei\)$/,
+    );
+  });
+});
+
+describe('iso8601 labels', () => {
+  const start = new Date('2027-02-01T12:00:00Z');
+  const end = new Date('2027-02-06T12:00:00Z');
+  const longDate = {year: 'numeric', month: 'long', day: 'numeric'} as const;
+
+  it('writes dates, instants, and ranges as gregory does', () => {
+    const day = iso('2027-02-06');
+    expect(formatSharedDate(day, 'date', 'en', 'iso8601')).toBe(
+      formatSharedDate(day, 'date', 'en'),
+    );
+    const dateTime = {...longDate, hour: 'numeric', minute: '2-digit'} as const;
+    expect(formatCalendarInstant('iso8601', end, dateTime, 'en', 'UTC')).toBe(
+      formatCalendarInstant('gregory', end, dateTime, 'en', 'UTC'),
+    );
+    expect(
+      formatCalendarInstantRange('iso8601', start, end, longDate, 'en', 'UTC'),
+    ).toMatch(/^February 1\s–\s6, 2027$/);
+  });
+});
+
+describe('instants in the host zone', () => {
+  const originalTZ = process.env.TZ;
+  afterEach(() => {
+    if (originalTZ === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = originalTZ;
+    }
+  });
+
+  it('follows a host zone change between calls', () => {
+    const instant = new Date('2026-10-30T20:00:00Z');
+    const options = {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    } as const;
+    process.env.TZ = 'UTC';
+    expect(formatCalendarInstant('persian', instant, options, 'en')).toMatch(
+      /^Aban 8, 1405 AP.* 8:00\sPM$/,
+    );
+    process.env.TZ = 'Asia/Tokyo';
+    expect(formatCalendarInstant('persian', instant, options, 'en')).toMatch(
+      /^Aban 9, 1405 AP.* 5:00\sAM$/,
+    );
   });
 });
 

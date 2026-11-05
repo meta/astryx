@@ -481,6 +481,7 @@ describe('ci.yml RTL package sharding', () => {
         'pr-a11y-guards',
         'pr-a11y-specs',
         'pr-component-a11y-contracts',
+        'pr-interaction-webkit',
         'pr-rtl',
         'pr-rtl-merge',
         'pr-rtl-shard',
@@ -1044,8 +1045,8 @@ describe('heavy lanes outside their component scope (spec:AST-030 FR9)', () => {
     }
   });
 
-  it('validates spec records whenever docsite-test cannot decide its scope', () => {
-    const validate = workflow.jobs['docsite-test'].steps.find(
+  it('validates spec records whenever docsite-build cannot decide its scope', () => {
+    const validate = workflow.jobs['docsite-build'].steps.find(
       step => step.name === 'Validate spec records',
     );
     expect(validate.if).toBe(

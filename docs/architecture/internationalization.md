@@ -366,6 +366,7 @@ inferred from an implementation pull request.
 - `packages/core/src/i18n/` — provider, context, public hooks, locale-direction
   derivation, catalog types, and lookup/formatting runtime.
 - `packages/core/src/utils/plainDate.ts`, `packages/core/src/utils/dateParser.ts`,
+  `packages/core/src/utils/calendarDateParser.ts`,
   `packages/core/src/Timestamp/formatInstant.ts`,
   `packages/core/src/Timestamp/formatRelativeTime.ts`,
   `packages/core/src/PowerSearch/formatFilterValue.ts`,

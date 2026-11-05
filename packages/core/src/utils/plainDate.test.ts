@@ -32,11 +32,13 @@ import {
   plainDateWeekdayNames,
   plainDateFormatDayNumber,
   formatSharedDate,
+  SHARED_DATE_FORMAT_OPTIONS,
   DATE_FORMAT_LONG,
   DATE_FORMAT_WITH_WEEKDAY,
   DATE_FORMAT_MONTH_YEAR,
   plainDateWeekFieldName,
   plainDateFormatToParts,
+  nearestAcceptedDate,
 } from './plainDate';
 import type {ISODateString} from './dateTypes';
 
@@ -962,6 +964,47 @@ describe('formatSharedDate', () => {
     expect(formatSharedDate(pd, 'system_date')).toBe('2026-01-25');
   });
 
+  describe.each([
+    {calendar: 'persian', locale: 'en', year: '1405'},
+    {calendar: 'persian', locale: 'fa', year: '۱۴۰۵'},
+    {calendar: 'hebrew', locale: 'en', year: '5787'},
+    {calendar: 'hebrew', locale: 'he', year: '5787'},
+    {calendar: 'buddhist', locale: 'en', year: '2569'},
+    {calendar: 'buddhist', locale: 'th', year: '2569'},
+  ] as const)('in $calendar under $locale', ({calendar, locale, year}) => {
+    const day: PlainDate = {year: 2026, month: 10, day: 30};
+
+    it.each(['date', 'date_long', 'date_weekday'] as const)(
+      'writes %s in the calendar',
+      format => {
+        const value = formatSharedDate(day, format, locale, calendar);
+        expect(value).toBe(
+          plainDateFormat(
+            day,
+            {...SHARED_DATE_FORMAT_OPTIONS[format], calendar},
+            locale,
+          ),
+        );
+        expect(value).toContain(year);
+        expect(value).not.toContain('2026');
+      },
+    );
+
+    it('keeps system_date Gregorian ISO', () => {
+      expect(formatSharedDate(day, 'system_date', locale, calendar)).toBe(
+        '2026-10-30',
+      );
+    });
+  });
+
+  it('defaults to the Gregorian calendar', () => {
+    const day: PlainDate = {year: 2026, month: 10, day: 30};
+    expect(formatSharedDate(day, 'date_long', 'fa')).toBe(
+      formatSharedDate(day, 'date_long', 'fa', 'gregory'),
+    );
+    expect(formatSharedDate(day, 'date_long', 'en')).toBe('October 30, 2026');
+  });
+
   it('follows the passed locale rather than the host locale (#5074)', () => {
     expect(formatSharedDate(pd, 'date_long', 'es-ES')).toBe(
       '25 de enero de 2026',
@@ -1043,5 +1086,71 @@ describe('plainDateWeekdayNames', () => {
 
   it('returns null for a language the platform has no data for', () => {
     expect(plainDateWeekdayNames('xx-ZZ')).toBeNull();
+  });
+});
+
+describe('nearestAcceptedDate', () => {
+  const d = plainDateFromISO;
+  const isWeekend = (pd: PlainDate) =>
+    plainDateDayOfWeek(pd) === 0 || plainDateDayOfWeek(pd) === 6;
+
+  it('returns the target inside the bounds', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {
+        min: d('2026-01-01'),
+        max: d('2026-12-31'),
+      }),
+    ).toEqual(d('2026-11-04'));
+  });
+
+  it('clamps a target before min to min', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {min: d('2027-03-01')}),
+    ).toEqual(d('2027-03-01'));
+  });
+
+  it('clamps a target after max to max', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {max: d('2025-06-30')}),
+    ).toEqual(d('2025-06-30'));
+  });
+
+  it('moves a disabled target to the nearest enabled day', () => {
+    // 2026-11-07 is a Saturday: Friday is one day away, Monday two.
+    expect(
+      nearestAcceptedDate(d('2026-11-07'), {isDateDisabled: isWeekend}),
+    ).toEqual(d('2026-11-06'));
+    // 2026-11-08 is a Sunday: Monday is one day away, Friday two.
+    expect(
+      nearestAcceptedDate(d('2026-11-08'), {isDateDisabled: isWeekend}),
+    ).toEqual(d('2026-11-09'));
+  });
+
+  it('prefers the later day on a tie', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {
+        isDateDisabled: pd => plainDateIsEqual(pd, d('2026-11-04')),
+      }),
+    ).toEqual(d('2026-11-05'));
+  });
+
+  it('searches only inside the bounds', () => {
+    // max is a Saturday; the Sunday after it is outside the bounds.
+    expect(
+      nearestAcceptedDate(d('2026-12-01'), {
+        max: d('2026-11-07'),
+        isDateDisabled: pd => isWeekend(pd) || plainDateDayOfWeek(pd) === 5,
+      }),
+    ).toEqual(d('2026-11-05'));
+  });
+
+  it('returns the clamped date when every day in the window is disabled', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {
+        min: d('2026-11-10'),
+        isDateDisabled: () => true,
+        searchDays: 30,
+      }),
+    ).toEqual(d('2026-11-10'));
   });
 });

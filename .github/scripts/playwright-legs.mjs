@@ -2,17 +2,19 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file interaction-legs.mjs
- * @description Splits the interaction proofs of one Playwright project into
- *   legs of about equal running time, by spec file, from the per-file times a
- *   CI run recorded (spec:AST-030 FR13).
- * @input `plan`: the project, this leg and the leg count, and any Playwright
- *   path filters; `.github/interaction-durations.json`. `record`: CI job logs
- *   of the list reporter.
+ * @file playwright-legs.mjs
+ * @description Splits the spec files of one Playwright suite into legs of
+ *   about equal running time, from the per-file times a CI run recorded
+ *   (spec:AST-030 FR13).
+ * @input `plan`: the suite's times key, its config and project, this leg and
+ *   the leg count, and any Playwright path filters;
+ *   `.github/playwright-leg-durations.json`. `record`: CI job logs of the list
+ *   reporter.
  * @output `plan`: this leg's spec files, one per line, for Playwright's
  *   `--test-list`, and `files=<count>` for `$GITHUB_OUTPUT`. `record`: the
- *   durations file, rewritten for the project.
- * @position The pr-interaction and pr-interaction-webkit legs in ci.yml.
+ *   durations file, rewritten for the suite.
+ * @position The pr-interaction, pr-interaction-webkit and docsite-browser
+ *   legs in ci.yml.
  */
 
 import {execFileSync} from 'node:child_process';
@@ -23,11 +25,13 @@ import {fileURLToPath} from 'node:url';
 import {costOf, splitByDuration} from '../../scripts/lib/duration-split.mjs';
 import {listedFiles} from './a11y-pr-contracts.mjs';
 
-// CI runs this file from the workflow's own commit, outside the checkout, in
-// the checkout's root.
+// CI may run this file from the workflow's own commit, outside the checkout,
+// in the checkout's root.
 const ROOT = process.cwd();
-export const DURATIONS = path.join(ROOT, '.github/interaction-durations.json');
-const CONFIG = 'playwright.interaction.config.ts';
+export const DURATIONS = path.join(
+  ROOT,
+  '.github/playwright-leg-durations.json',
+);
 
 /**
  * Splits `files` into `legs` lists of about equal estimated time, with the
@@ -46,7 +50,9 @@ export function planLegs(files, durations, legs) {
   }));
 }
 
-const TEST_LINE = /^(\S+Z)\s+\S+\s+\d+\s+\[([\w-]+)\] › ([^:]+):\d+:\d+ › /;
+// A suite with one unnamed project prints no `[project]`.
+const TEST_LINE =
+  /^(\S+Z)\s+\S+\s+\d+\s+(?:\[([\w-]+)\] › )?([^:\s]+):\d+:\d+ › /;
 const RUNNING = /Running \d+ tests? using/;
 
 /** Milliseconds of a log line's timestamp; GitHub writes seven fraction digits. */
@@ -57,8 +63,11 @@ function stamp(line) {
 /**
  * Seconds per spec file from a CI job log of the list reporter: each test's
  * time is the gap from the line before it, so a file's time includes its setup.
+ * `project` picks one project's lines (none for an unnamed project), and
+ * `strip` turns the printed path into the one Playwright lists (relative to
+ * the config's test directory).
  */
-export function recordLog(text, project) {
+export function recordLog(text, project, strip = '') {
   const seconds = {};
   let previous = null;
   for (const line of text.split('\n')) {
@@ -68,9 +77,13 @@ export function recordLog(text, project) {
       continue;
     }
     const match = TEST_LINE.exec(line);
-    if (!match || previous == null || match[2] !== project) continue;
+    if (!match || previous == null || match[2] !== (project ?? undefined))
+      continue;
     const time = stamp(match[1]);
-    seconds[match[3]] = (seconds[match[3]] ?? 0) + (time - previous) / 1000;
+    const file = match[3].startsWith(strip)
+      ? match[3].slice(strip.length)
+      : match[3];
+    seconds[file] = (seconds[file] ?? 0) + (time - previous) / 1000;
     previous = time;
   }
   return seconds;
@@ -85,8 +98,8 @@ function option(args, name) {
   return index === -1 ? undefined : args[index + 1];
 }
 
-/** The spec files Playwright lists for a project with these extra arguments. */
-function list(project, out, extra) {
+/** The spec files Playwright lists for a suite with these extra arguments. */
+function list({config, project}, out, extra) {
   // The report goes to a file: a spec's own logging can share stdout.
   const reportFile = `${out}.list.json`;
   execFileSync(
@@ -96,9 +109,8 @@ function list(project, out, extra) {
       'playwright',
       'test',
       '--config',
-      CONFIG,
-      '--project',
-      project,
+      config,
+      ...(project ? ['--project', project] : []),
       '--list',
       '--reporter=json',
       ...extra,
@@ -121,37 +133,44 @@ function plan(args) {
   const split = args.indexOf('--');
   const own = split === -1 ? args : args.slice(0, split);
   const filters = split === -1 ? [] : args.slice(split + 1);
-  const project = option(own, '--project');
+  const key = option(own, '--key');
+  const suite = {
+    config: option(own, '--config'),
+    project: option(own, '--project'),
+  };
   const leg = Number(option(own, '--leg'));
   const legs = Number(option(own, '--of'));
   const out = option(own, '--out');
   const durations = option(own, '--durations') ?? DURATIONS;
-  if (!project || !out || !Number.isInteger(leg) || leg < 1 || leg > legs) {
+  if (
+    !key ||
+    !suite.config ||
+    !out ||
+    !Number.isInteger(leg) ||
+    leg < 1 ||
+    leg > legs
+  ) {
     throw new Error(
-      'usage: plan --project <name> --leg <i> --of <n> --out <file> [--durations <file>] [-- <filters...>]',
+      'usage: plan --key <times key> --config <file> [--project <name>] --leg <i> --of <n> --out <file> [--durations <file>] [-- <filters...>]',
     );
   }
-  const files = list(project, out, filters);
+  const files = list(suite, out, filters);
   if (files.length === 0)
-    throw new Error(`Playwright listed no ${project} interaction spec files`);
-  const legsPlan = planLegs(
-    files,
-    readDurations(durations)[project] ?? {},
-    legs,
-  );
+    throw new Error(`Playwright listed no ${key} spec files`);
+  const legsPlan = planLegs(files, readDurations(durations)[key] ?? {}, legs);
   const mine = legsPlan[leg - 1];
   fs.writeFileSync(out, mine.files.map(file => `${file}\n`).join(''));
   // Playwright runs nothing, and passes, for a test list that matches no
   // spec, so the leg checks that its list selects exactly its files.
   if (mine.files.length > 0) {
-    const selected = list(project, out, ['--test-list', out]);
+    const selected = list(suite, out, ['--test-list', out]);
     if (selected.join('\n') !== mine.files.join('\n'))
       throw new Error(
-        `The ${project} leg's test list selects ${selected.length} spec files, not its ${mine.files.length}`,
+        `The ${key} leg's test list selects ${selected.length} spec files, not its ${mine.files.length}`,
       );
   }
   console.log(
-    `${project} leg ${leg}/${legs}: ${mine.files.length} of ${files.length} spec files, about ${Math.round(mine.seconds)} s`,
+    `${key} leg ${leg}/${legs}: ${mine.files.length} of ${files.length} spec files, about ${Math.round(mine.seconds)} s`,
   );
   for (const [i, each] of legsPlan.entries())
     console.log(
@@ -166,31 +185,36 @@ function plan(args) {
 }
 
 function record(args) {
+  const key = option(args, '--key');
   const project = option(args, '--project');
+  const strip = option(args, '--strip') ?? '';
+  const valued = new Set(['--key', '--project', '--strip']);
   const logs = args.filter(
-    (arg, i) => !arg.startsWith('--') && args[i - 1] !== '--project',
+    (arg, i) => !arg.startsWith('--') && !valued.has(args[i - 1]),
   );
-  if (!project || logs.length === 0)
-    throw new Error('usage: record --project <name> <job log...>');
+  if (!key || logs.length === 0)
+    throw new Error(
+      'usage: record --key <times key> [--project <name>] [--strip <path prefix>] <job log...>',
+    );
   const seconds = {};
   for (const log of logs) {
     for (const [file, value] of Object.entries(
-      recordLog(fs.readFileSync(log, 'utf8'), project),
+      recordLog(fs.readFileSync(log, 'utf8'), project, strip),
     )) {
       seconds[file] = (seconds[file] ?? 0) + value;
     }
   }
   if (Object.keys(seconds).length === 0)
-    throw new Error(`no ${project} test lines in the logs`);
+    throw new Error(`no ${key} test lines in the logs`);
   const durations = readDurations();
-  durations[project] = Object.fromEntries(
+  durations[key] = Object.fromEntries(
     Object.entries(seconds)
       .sort(([a], [b]) => (a < b ? -1 : 1))
       .map(([file, value]) => [file, Math.round(value * 10) / 10]),
   );
   fs.writeFileSync(DURATIONS, `${JSON.stringify(durations, null, 2)}\n`);
   console.log(
-    `${project}: ${Object.keys(seconds).length} spec files recorded into ${path.relative(ROOT, DURATIONS)}`,
+    `${key}: ${Object.keys(seconds).length} spec files recorded into ${path.relative(ROOT, DURATIONS)}`,
   );
 }
 
@@ -202,7 +226,7 @@ if (
   try {
     if (command === 'plan') plan(args);
     else if (command === 'record') record(args);
-    else throw new Error('usage: interaction-legs.mjs plan|record ...');
+    else throw new Error('usage: playwright-legs.mjs plan|record ...');
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;

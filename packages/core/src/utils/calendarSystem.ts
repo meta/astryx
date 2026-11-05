@@ -14,13 +14,15 @@
 import type {Locale} from '../i18n/types';
 import type {PlainDate} from './dateTypes';
 import {
+  dateTimeFormatAtCall,
   dateTimeFormatFor,
   plainDateAddDays,
   plainDateAddMonths,
-  plainDateFormat,
   plainDateFormatDayNumber,
   plainDateFormatStandaloneMonthYear,
   plainDateFormatToParts,
+  plainDateFromDate,
+  plainDateFromInstant,
   plainDateIsInRange,
   getDaysInMonth,
 } from './plainDate';
@@ -328,10 +330,17 @@ export function isInCalendarMonth(
 }
 
 /**
+ * The day that names a calendar month: its middle day. In the Japanese
+ * calendar an era can start inside a month, and most days of that month then
+ * belong to the era of its middle day.
+ */
+export function calendarMonthLabelDay(month: CalendarMonth): PlainDate {
+  return plainDateAddDays(month.start, Math.floor(month.length / 2));
+}
+
+/**
  * The stand-alone month and year label of a calendar month, such as
- * "Aban 1405 AP". It formats a day in the middle of the month: in the
- * Japanese calendar an era can start inside a month, and most days of that
- * month then belong to the era of its middle day.
+ * "Aban 1405 AP", named by `calendarMonthLabelDay`.
  */
 export function formatCalendarMonthLabel(
   calendar: CalendarSystem,
@@ -339,7 +348,7 @@ export function formatCalendarMonthLabel(
   locale: Locale,
 ): string {
   return plainDateFormatStandaloneMonthYear(
-    plainDateAddDays(month.start, Math.floor(month.length / 2)),
+    calendarMonthLabelDay(month),
     locale,
     labelCalendar(calendar),
   );
@@ -380,23 +389,75 @@ function monthPartsKey(parts: Intl.DateTimeFormatPart[]): string {
  * The label always names the month and day that the grid shows. Intl and the
  * runtime's Temporal can disagree on where a month of the Chinese or Dangi
  * calendar starts; the label then takes its month and year from the middle of
- * the Temporal month, its day from Temporal, and its weekday from the date.
+ * the Temporal month, and its day from Temporal. With `relatedYear`, a
+ * Chinese or Dangi year that the locale names only by its place in the 60-year
+ * cycle becomes the related Gregorian year.
  */
 export function formatCalendarDate(
   calendar: CalendarSystem,
   pd: PlainDate,
   options: Intl.DateTimeFormatOptions,
   locale: Locale,
+  labelOptions?: {readonly relatedYear?: boolean},
 ): string {
-  if (isGregorianAligned(calendar)) {
-    return plainDateFormat(
-      pd,
-      {...options, calendar: labelCalendar(calendar)},
-      locale,
-    );
+  return joinParts(
+    formatCalendarDateToParts(calendar, pd, options, locale, labelOptions),
+  );
+}
+
+/** The parts of `formatCalendarDate`'s label. */
+export function formatCalendarDateToParts(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+  {relatedYear = false}: {readonly relatedYear?: boolean} = {},
+): Intl.DateTimeFormatPart[] {
+  const parts = formatToParts(labelCalendar(calendar), pd, options, locale);
+  const fixed = withTemporalDay(calendar, pd, parts, options, locale);
+  return relatedYear
+    ? withRelatedYear(calendar, pd, fixed, options, locale)
+    : fixed;
+}
+
+function withRelatedYear(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+  parts: Intl.DateTimeFormatPart[],
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+): Intl.DateTimeFormatPart[] {
+  if (
+    (calendar !== 'chinese' && calendar !== 'dangi') ||
+    !isCalendarSystemAvailable(calendar) ||
+    parts.some(part => (part.type as string) === 'relatedYear')
+  ) {
+    return parts;
+  }
+  const {numberingSystem} = dateTimeFormatFor(locale, {
+    ...options,
+    calendar,
+    timeZone: 'UTC',
+  }).resolvedOptions();
+  const {year} = inCalendar(calendar, pd);
+  const value = plainDateFormatDayNumber(year, locale, numberingSystem);
+  return parts.map(part =>
+    /^year(Name)?$/.test(part.type) ? {...part, value} : part,
+  );
+}
+
+// Returns `parts` itself where Intl already names Temporal's month and day.
+function withTemporalDay(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+  parts: Intl.DateTimeFormatPart[],
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+): Intl.DateTimeFormatPart[] {
+  if (isGregorianAligned(calendar) || !isCalendarSystemAvailable(calendar)) {
+    return parts;
   }
   const date = inCalendar(calendar, pd);
-  const parts = formatToParts(calendar, pd, options, locale);
   const middle = plainDateAddDays(
     pd,
     Math.floor(date.daysInMonth / 2) - (date.day - 1),
@@ -412,23 +473,104 @@ export function formatCalendarDate(
     Number(intlDay) === date.day &&
     monthPartsKey(parts) === monthPartsKey(middleParts)
   ) {
-    return parts.map(part => part.value).join('');
+    return parts;
   }
   const {numberingSystem} = dateTimeFormatFor(locale, {
     ...options,
     calendar,
     timeZone: 'UTC',
   }).resolvedOptions();
-  const weekday = parts.find(part => part.type === 'weekday')?.value;
-  return middleParts
-    .map(part =>
-      part.type === 'day'
-        ? plainDateFormatDayNumber(date.day, locale, numberingSystem)
-        : part.type === 'weekday' && weekday != null
-          ? weekday
-          : part.value,
-    )
-    .join('');
+  const middleValues = new Map(
+    middleParts.map(part => [part.type, part.value]),
+  );
+  return parts.map(part =>
+    part.type === 'day'
+      ? {
+          ...part,
+          value: plainDateFormatDayNumber(date.day, locale, numberingSystem),
+        }
+      : MONTH_PART_TYPES.has(part.type)
+        ? {...part, value: middleValues.get(part.type) ?? part.value}
+        : part,
+  );
+}
+
+/**
+ * Formats an instant as `formatCalendarDate` formats the day it falls on in
+ * `timeZone`, the host's zone when omitted. Intl writes any time of day that
+ * `options` asks for.
+ */
+export function formatCalendarInstant(
+  calendar: CalendarSystem,
+  instant: Date,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+  timeZone?: string,
+): string {
+  return instantLabel(calendar, instant, options, locale, timeZone).text;
+}
+
+/**
+ * Formats the range between two instants. Intl writes the fields that both
+ * ends share once. Where Intl names another month or day than Temporal at
+ * either end, the range writes each end in full.
+ */
+export function formatCalendarInstantRange(
+  calendar: CalendarSystem,
+  start: Date,
+  end: Date,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+  timeZone?: string,
+): string {
+  const ends = [start, end].map(instant =>
+    instantLabel(calendar, instant, options, locale, timeZone),
+  );
+  const {format} = ends[0];
+  if (ends.every(({isIntl}) => isIntl)) {
+    return format.formatRange(start, end);
+  }
+  // Intl writes a range of different years as two full dates around its
+  // separator, which gives the separator to put between the two full ends.
+  const far = new Date(start.getTime() + 400 * 86_400_000);
+  const both = format.formatRange(start, far);
+  const [from, to] = [format.format(start), format.format(far)];
+  const separator =
+    both.startsWith(from) && both.endsWith(to)
+      ? both.slice(from.length, both.length - to.length)
+      : ' – ';
+  const [first, last] = ends.map(({text}) => text);
+  return first === last ? first : `${first}${separator}${last}`;
+}
+
+function instantLabel(
+  calendar: CalendarSystem,
+  instant: Date,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+  timeZone: string | undefined,
+) {
+  const format = dateTimeFormatAtCall(locale, {
+    ...options,
+    ...(timeZone === undefined ? {} : {timeZone}),
+    calendar: labelCalendar(calendar),
+  });
+  const parts = format.formatToParts(instant);
+  const day =
+    timeZone === undefined
+      ? plainDateFromDate(instant)
+      : plainDateFromInstant(instant.getTime(), timeZone);
+  const fixed = withTemporalDay(calendar, day, parts, options, locale);
+  const isIntl = fixed === parts;
+  return {
+    format,
+    isIntl,
+    text: isIntl ? format.format(instant) : joinParts(fixed),
+  };
+}
+
+function joinParts(parts: Intl.DateTimeFormatPart[]): string {
+  return parts.map(part => part.value).join('');
 }
 
 /**

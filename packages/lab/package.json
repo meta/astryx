@@ -85,6 +85,7 @@
     "@types/d3-array": "^3.2.2",
     "@types/d3-scale": "^4.0.9",
     "@types/d3-shape": "^3.1.8",
-    "emojibase-data": "17.0.0"
+    "emojibase-data": "17.0.0",
+    "temporal-polyfill": "^1.0.6"
   }
 }

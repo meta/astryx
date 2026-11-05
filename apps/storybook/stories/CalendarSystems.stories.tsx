@@ -2,8 +2,10 @@
 
 /**
  * @file CalendarSystems.stories.tsx
- * @input InternationalizationProvider locale and calendar, Calendar
- * @output Calendar in each kind of calendar system, with its Gregorian value
+ * @input InternationalizationProvider locale and calendar, Calendar,
+ *   Timestamp, PowerSearch
+ * @output Calendar in each kind of calendar system, with its Gregorian value,
+ *   and the built-in date formatters in the provider's calendar
  * @position Storybook verification stories for calendar systems; excluded from
  *   the visual matrix because the months depend on the runtime's Temporal
  */
@@ -19,6 +21,12 @@ import {
   type Locale,
 } from '@astryxdesign/core/i18n';
 import {Heading, Text} from '@astryxdesign/core/Text';
+import {Timestamp} from '@astryxdesign/core/Timestamp';
+import {
+  PowerSearch,
+  type PowerSearchConfig,
+  type PowerSearchFilter,
+} from '@astryxdesign/core/PowerSearch';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 
 const meta = {
@@ -211,11 +219,122 @@ export const Iso8601 = story(
   'The ISO 8601 calendar has Gregorian months and uses Gregorian month names.',
 );
 
+const formatterConfig: PowerSearchConfig = {
+  name: 'Dates',
+  fields: [
+    {
+      key: 'created',
+      label: 'Created',
+      defaultOperator: 'after',
+      operators: [
+        {key: 'after', label: 'after', value: {type: 'date_absolute'}},
+      ],
+    },
+  ],
+};
+
+const formatterFilters: PowerSearchFilter[] = [
+  {
+    field: 'created',
+    operator: 'after',
+    value: {
+      type: 'date_absolute',
+      unixSeconds: Date.parse('2026-10-30T12:00:00Z') / 1000,
+    },
+  },
+];
+
+const FORMATTED_INSTANT = '2026-10-30T12:00:00Z';
+
+function FormattedDatesView({
+  title,
+  locale,
+  calendar,
+}: {
+  title: string;
+  locale: Locale;
+  calendar?: CalendarSystem;
+}) {
+  return (
+    <InternationalizationProvider locale={locale} calendar={calendar}>
+      <section
+        aria-label={title}
+        dir={getLocaleDirection(locale)}
+        {...stylex.props(styles.panel)}>
+        <Heading level={2}>{title}</Heading>
+        {(['date', 'date_long', 'date_weekday', 'date_time'] as const).map(
+          format => (
+            <Text key={format}>
+              <code>{format}</code>:{' '}
+              <Timestamp
+                value={FORMATTED_INSTANT}
+                format={format}
+                data-testid={`timestamp-${format}`}
+              />
+            </Text>
+          ),
+        )}
+        <Text>
+          <code>system_date_time</code>:{' '}
+          <Timestamp
+            value={FORMATTED_INSTANT}
+            format="system_date_time"
+            data-testid="timestamp-system_date_time"
+          />
+        </Text>
+        <div {...stylex.props(styles.search)}>
+          <PowerSearch
+            config={formatterConfig}
+            filters={formatterFilters}
+            onChange={() => {}}
+            timezoneID="UTC"
+          />
+        </div>
+        <Calendar value="2026-10-30" />
+      </section>
+    </InternationalizationProvider>
+  );
+}
+
+export const FormattedDatesPersian: Story = {
+  render: () => (
+    <div {...stylex.props(styles.row)}>
+      <FormattedDatesView
+        title="Persian calendar, English"
+        locale="en"
+        calendar="persian"
+      />
+      <FormattedDatesView
+        title="Persian, fa-IR"
+        locale="fa-IR"
+        calendar="persian"
+      />
+    </div>
+  ),
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Timestamp's date formats, a PowerSearch date value, and Calendar follow the provider's calendar. `system_date_time` stays Gregorian ISO.",
+      },
+    },
+  },
+};
+
 const styles = stylex.create({
   panel: {
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-4'],
     alignItems: 'flex-start',
+  },
+  row: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: spacingVars['--spacing-8'],
+    alignItems: 'flex-start',
+  },
+  search: {
+    width: 360,
   },
 });

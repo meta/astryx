@@ -843,6 +843,11 @@
       "source": "./src/internal/spinner-rotor.ts",
       "types": "./dist/internal/spinner-rotor.d.ts",
       "default": "./dist/internal/spinner-rotor.js"
+    },
+    "./internal/calendar-system": {
+      "source": "./src/internal/calendar-system.ts",
+      "types": "./dist/internal/calendar-system.d.ts",
+      "default": "./dist/internal/calendar-system.js"
     }
   },
   "files": [

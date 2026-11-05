@@ -557,9 +557,9 @@ jobs:
           echo "::notice title=Heavy CI deferred::Heavy CI deferred: runs when marked ready and before merge. Mark the pull request ready, reopen it, or re-run all jobs of this run to run everything."
           echo "Heavy CI deferred: runs when marked ready and before merge." >> "$GITHUB_STEP_SUMMARY"
 
-  docsite-test:
+  docsite-build:
     needs: [room, admission, heavy-ci]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled()) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled() && needs.heavy-ci.outputs.deferred != 'true' && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true') }}
     # The Next.js production build uses every core it gets.
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -572,29 +572,22 @@ jobs:
     env:
       NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN: https://docs.example.test
       NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: https://probe.example.test
+    outputs:
+      lab_only: ${{ steps.scope.outputs.lab_only }}
+      # The browser contracts apply: the docsite was built, and the change is
+      # shared infrastructure or more than component tests, stories, spec
+      # records and changesets.
+      browser: ${{ steps.browser.outputs.applies }}
     steps:
-      - name: Require a branch in this repository or the ci:run label
-        if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) }}
-        run: |
-          echo "::error::Waiting for a maintainer's ci:run label: an outside contributor's pull request runs CI once a maintainer adds it (spec:AST-030 FR17)."
-          exit 1
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
-      # everything is in scope when it cannot decide.
-      - name: Stop when CI is full
-        if: needs.room.outputs.full == 'true' || needs.admission.outputs.full == 'true'
-        run: |
-          echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
-          exit 1
-
-      # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
-      # required check fails with the reason, never passes as skipped.
-      - name: Heavy CI deferred
-        if: needs.heavy-ci.outputs.deferred == 'true'
-        run: |
-          echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
-          exit 1
-
+      # everything is in scope when it cannot decide. `touches` is false only
+      # when every changed file outside the docsite app is a test, a story
+      # (or Storybook file), a spec record, a changeset, or an a11y-spec or
+      # interaction-harness file. The browser contracts still run when the
+      # classifier calls the change shared infrastructure (`full_suite`: the
+      # harnesses, Storybook config, a shared test), as for every owner
+      # (spec:AST-030 FR13).
       - name: Check out the scope action
         uses: actions/checkout@v7
         with:
@@ -605,6 +598,8 @@ jobs:
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
+        with:
+          paths: '^(?:apps/docsite/|(?!(?:.*/)?__tests__/|.*\.(?:test|spec)\.[cm]?[jt]sx?$|apps/storybook/|.*\.stories\.[jt]sx?$|docs/specs/|\.changeset/|internal/a11y-spec/|internal/interaction-harness/))'
 
       - name: 'Lab-only: Lab tests + Storybook build'
         if: steps.scope.outputs.lab_only == 'true'
@@ -627,14 +622,6 @@ jobs:
         if: (steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true')
         run: node scripts/check-knowledge.mjs
 
-      - name: Install Playwright
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
-        run: npx playwright install chromium
-
-      # The production build (and the data generation inside it) imports every
-      # theme package's built entry and the canary component packages, on top
-      # of core. Core builds first; the rest depend on it and not on each
-      # other, so they build side by side.
       - name: Build docsite workspace dependencies
         if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: |
@@ -659,26 +646,60 @@ jobs:
         if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: pnpm -F @astryxdesign/docsite build
 
-      # test-docsite (the data tests) runs in the background while
-      # test-docsite-e2e (the browser contracts) drives the same build; the
-      # e2e step stays its own step so it can move to another tier alone.
-      - name: test-docsite (start the data tests)
-        id: data
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
-        # errexit off inside: a failing test run must still record its exit
-        # code, written whole so the result step never reads half a file.
-        run: (set +e; pnpm -F @astryxdesign/docsite test > docsite-data.log 2>&1; echo $? > docsite-data.exit.tmp; mv docsite-data.exit.tmp docsite-data.exit) &
+      - name: Decide whether the browser contracts apply
+        id: browser
+        run: echo "applies=${{ (steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true') && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite == 'true') }}" >> "$GITHUB_OUTPUT"
 
-      - name: test-docsite-e2e (browser contracts)
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
-        run: pnpm test:docsite-browser
-
-      - name: test-docsite (data test results)
-        if: ${{ !cancelled() && steps.data.outcome == 'success' }}
+      # docsite-browser serves this build, never one of its own. The commit
+      # stamp lets it check that the build is of the commit it checked out.
+      - name: Stamp the build with its commit
+        if: steps.browser.outputs.applies == 'true'
         run: |
-          while [ ! -f docsite-data.exit ]; do sleep 2; done
-          cat docsite-data.log
-          exit "$(cat docsite-data.exit)"
+          git rev-parse HEAD > apps/docsite/.next/BUILD_COMMIT
+          # The sizes behind the upload, largest first, and what it leaves out.
+          du -sh apps/docsite/.next/* apps/docsite/.next/server/* apps/docsite/src/generated apps/docsite/public/monaco apps/docsite/public/vendor 2>/dev/null | sort -rh | head -15
+          for kind in '*.map' '*.nft.json'; do
+            echo "left out, $kind: $(find apps/docsite/.next -path apps/docsite/.next/cache -prune -o -name "$kind" -type f -print0 | du -ch --files0-from=- 2>/dev/null | tail -1)"
+          done
+
+      # Everything `next start` reads that the build generated and the
+      # repository ignores: the server and static output, the generated data
+      # and theme, the ShadCN registry and the playground's vendored assets.
+      # Not the compile
+      # cache, the build traces, source maps or file traces (*.nft.json, for
+      # a standalone deployment), which serving never reads.
+      - name: Upload the docsite build
+        if: steps.browser.outputs.applies == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: docsite-build
+          path: |
+            apps/docsite/.next/
+            !apps/docsite/.next/cache/
+            !apps/docsite/.next/trace
+            !apps/docsite/.next/trace-build
+            !apps/docsite/.next/diagnostics/
+            !apps/docsite/.next/types/
+            !apps/docsite/.next/**/*.map
+            !apps/docsite/.next/**/*.nft.json
+            apps/docsite/src/generated/
+            apps/docsite/src/themes/astryx.js
+            apps/docsite/src/themes/astryx.css
+            apps/docsite/public/playground-types.json
+            apps/docsite/public/monaco/
+            apps/docsite/public/vendor/
+            apps/docsite/public/shadcn/
+          include-hidden-files: true
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 1
+          # HTML, RSC payloads and JavaScript compress well; the default level
+          # takes most of that at a fraction of the highest level's time.
+          compression-level: 6
+
+      - name: test-docsite (data tests)
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        run: pnpm -F @astryxdesign/docsite test
 
       # A docsite-only change skips test-node, and the registry generator
       # lives in the docsite.
@@ -686,14 +707,116 @@ jobs:
         if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: node internal/shadcn-registry/verify-production-gate.mjs
 
+  # The docsite browser contracts, against the build docsite-build uploaded:
+  # the same commit, never rebuilt. A planner-driven matrix (one leg today;
+  # playwright-legs.mjs splits the spec files by recorded time, so a second
+  # leg is a one-line change).
+  docsite-browser:
+    name: docsite-browser (${{ matrix.leg }}/${{ strategy.job-total }})
+    needs: [docsite-build]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.docsite-build.result == 'success' && needs.docsite-build.outputs.browser == 'true') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [1]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN: https://docs.example.test
+      NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: https://probe.example.test
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      - name: Install Playwright
+        run: npx playwright install chromium
+
+      - name: Download the docsite build
+        uses: actions/download-artifact@v8
+        with:
+          name: docsite-build
+          path: apps/docsite
+
+      - name: Require the build of this commit
+        run: |
+          built=$(cat apps/docsite/.next/BUILD_COMMIT)
+          here=$(git rev-parse HEAD)
+          echo "build: $built; checkout: $here"
+          test "$built" = "$here"
+
+      - name: Plan this leg's browser contracts
+        id: plan
+        run: |
+          node .github/scripts/playwright-legs.mjs plan \
+            --key docsite --config apps/docsite/playwright.config.ts \
+            --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
+            --out "$RUNNER_TEMP/docsite-leg.txt"
+
+      - name: test-docsite-e2e (browser contracts)
+        if: steps.plan.outputs.files != '0'
+        run: pnpm test:docsite-browser --test-list "$RUNNER_TEMP/docsite-leg.txt"
+
+      # Only a leg whose contracts ran has evidence; one that stopped before
+      # them reports that failure alone.
       - name: Upload docsite browser evidence
-        if: always() && steps.scope.outcome == 'success' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: always() && steps.plan.outcome == 'success' && steps.plan.outputs.files != '0'
         uses: actions/upload-artifact@v7
         with:
-          name: docsite-browser-evidence
+          name: docsite-browser-evidence-${{ matrix.leg }}
           path: test-results/docsite/
           if-no-files-found: error
           retention-days: 7
+
+  # The required docsite context (spec:AST-030 FR7): passes only when the
+  # build passed and every browser leg passed, or the build's scope found no
+  # browser contract to run. A skipped or cancelled leg otherwise fails it.
+  docsite-test:
+    needs: [room, admission, heavy-ci, docsite-build, docsite-browser]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled()) }}
+    runs-on: ubuntu-slim
+    permissions: {}
+    steps:
+      - name: Require a branch in this repository or the ci:run label
+        if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) }}
+        run: |
+          echo "::error::Waiting for a maintainer's ci:run label: an outside contributor's pull request runs CI once a maintainer adds it (spec:AST-030 FR17)."
+          exit 1
+
+      - name: Stop when CI is full
+        if: needs.room.outputs.full == 'true' || needs.admission.outputs.full == 'true'
+        run: |
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
+          exit 1
+
+      # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
+      # required check fails with the reason, never passes as skipped.
+      - name: Heavy CI deferred
+        if: needs.heavy-ci.outputs.deferred == 'true'
+        run: |
+          echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
+          exit 1
+
+      - name: 'Lab-only: Lab tests + Storybook build'
+        if: needs.docsite-build.outputs.lab_only == 'true'
+        run: |
+          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
+
+      - name: Require the docsite build and its browser contracts
+        env:
+          BUILD_RESULT: ${{ needs.docsite-build.result }}
+          BROWSER: ${{ needs.docsite-build.outputs.browser }}
+          BROWSER_RESULT: ${{ needs.docsite-browser.result }}
+        run: |
+          echo "docsite-build: $BUILD_RESULT; browser contracts apply: ${BROWSER:-unknown}; docsite-browser: $BROWSER_RESULT"
+          [ "$BUILD_RESULT" = success ] || exit 1
+          if [ "$BROWSER" = true ]; then
+            [ "$BROWSER_RESULT" = success ] || exit 1
+          else
+            [ "$BROWSER" = false ] && [ "$BROWSER_RESULT" = skipped ] || exit 1
+          fi
 
   # Tests run as two parallel lanes joined by `test` below.
   #
@@ -1027,7 +1150,7 @@ jobs:
       # offline-media's real-browser cases. This step runs them once Chromium
       # is in place, under the install's own condition; with
       # ASTRYX_OFFLINE_MEDIA_BROWSER set, a missing browser fails them.
-      # ci-offline-media-browser.test.mjs keeps this step after the install.
+      # ci-browser-gated-tests.test.mjs keeps this step after the install.
       - name: Offline-media browser cases
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         env:
@@ -1100,7 +1223,7 @@ jobs:
   # (spec:AST-026 FR10, draft): every item through the pinned client. It runs
   # for an explicit release check until the production registry launches; the
   # network-free production gate runs on every pull request that can change
-  # the registry: with the Node unit tests, and in docsite-test for a
+  # the registry: with the Node unit tests, and in docsite-build for a
   # docsite-only change.
   test-registry-e2e:
     name: test-registry-e2e (${{ matrix.leg }}, ${{ matrix.mode }})
@@ -2350,7 +2473,7 @@ jobs:
     # Frame evidence measures timing: four cores, one Playwright worker.
     # One runner ran every proof in about ten minutes and passed the job's
     # fifteen once its checkout was slow. Two legs share the spec files by
-    # their recorded times (interaction-legs.mjs), so each runs in about five
+    # their recorded times (playwright-legs.mjs), so each runs in about five
     # minutes, and a leg with the slowest checkout seen still ends with about
     # four minutes to spare. `test` reads the job's result, which is success
     # only when every leg passed.
@@ -2386,7 +2509,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(interaction-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/interaction-durations\.json$|\.github/actions/test-scope/)'
+          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -2408,10 +2531,10 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/interaction-legs/.github/scripts" "$RUNNER_TEMP/interaction-legs/scripts/lib"
-          cp .test-scope/.github/scripts/interaction-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/scripts/playwright-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/scripts/lib/duration-split.mjs "$RUNNER_TEMP/interaction-legs/scripts/lib/"
           cp .test-scope/.github/scripts/a11y-pr-contracts.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
-          cp .test-scope/.github/interaction-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
+          cp .test-scope/.github/playwright-leg-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
 
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
@@ -2471,9 +2594,10 @@ jobs:
         id: plan
         if: steps.scope.outputs.applies == 'true'
         run: |
-          node "$RUNNER_TEMP/interaction-legs/.github/scripts/interaction-legs.mjs" plan --project chromium \
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
+            --key interaction-chromium --config playwright.interaction.config.ts --project chromium \
             --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
-            --durations "$RUNNER_TEMP/interaction-legs/.github/interaction-durations.json" \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --out "$RUNNER_TEMP/interaction-leg.txt"
 
       - name: Run interaction proofs
@@ -2545,9 +2669,11 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/Layer/(inputHold|modalOutlet)\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(interaction-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/interaction-durations\.json$|\.github/actions/test-scope/)'
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/Layer/(inputHold|modalOutlet)\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
+          # Lists the changed files, so the planner adds a changed spec.
+          component-audit: 'true'
 
       - name: Require this pull request's Storybook build
         if: steps.scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
@@ -2557,7 +2683,7 @@ jobs:
 
       - name: Skip the WebKit proofs outside their scope
         if: steps.scope.outputs.applies != 'true'
-        run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, and none of their shared setup)."
+        run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, no interaction spec, and none of their shared setup)."
 
       # The head checkout below replaces the workspace, scope checkout
       # included, so the leg planner, the modules it imports (the shared
@@ -2567,10 +2693,10 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/interaction-legs/.github/scripts" "$RUNNER_TEMP/interaction-legs/scripts/lib"
-          cp .test-scope/.github/scripts/interaction-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/scripts/playwright-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/scripts/lib/duration-split.mjs "$RUNNER_TEMP/interaction-legs/scripts/lib/"
           cp .test-scope/.github/scripts/a11y-pr-contracts.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
-          cp .test-scope/.github/interaction-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
+          cp .test-scope/.github/playwright-leg-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
 
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
@@ -2625,20 +2751,35 @@ jobs:
 
       # This leg's share of the WebKit spec files, from the paths the lane
       # covers, by their recorded times. The planner and the times come from
-      # the scope checkout, as for the Chromium legs.
+      # the scope checkout, as for the Chromium legs. An interaction spec the
+      # pull request changes runs here too, wherever it lives.
       - name: Plan this leg's WebKit interaction proofs
         id: plan
         if: steps.scope.outputs.applies == 'true'
+        env:
+          CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
         run: |
-          node "$RUNNER_TEMP/interaction-legs/.github/scripts/interaction-legs.mjs" plan --project webkit \
+          CHANGED_SPECS=()
+          if [ -n "${CHANGED_FILES:-}" ] && [ -s "$CHANGED_FILES" ]; then
+            while IFS= read -r file; do
+              case "$file" in
+                *.interaction.browser.spec.ts) [ -f "$file" ] && CHANGED_SPECS+=("$file") ;;
+              esac
+            done < "$CHANGED_FILES"
+          else
+            echo "::warning title=Changed specs not planned::The scope step could not list the changed files, so a changed interaction spec outside this lane's paths does not run here."
+          fi
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
+            --key interaction-webkit --config playwright.interaction.config.ts --project webkit \
             --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
-            --durations "$RUNNER_TEMP/interaction-legs/.github/interaction-durations.json" \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --out "$RUNNER_TEMP/interaction-leg.txt" -- \
             packages/core/src/gestures/ \
             packages/core/src/motion/__tests__/animatedLayout.interaction \
             packages/core/src/motion/__tests__/animator.interaction \
             packages/core/src/hooks/__tests__/usePager.interaction \
-            internal/interaction-harness/
+            internal/interaction-harness/ \
+            "${CHANGED_SPECS[@]}"
 
       # WebKit renders through Mesa's llvmpipe, which sizes its thread pool
       # from the CPUs the process may run on. A container's CPU quota is not
