@@ -4,7 +4,8 @@
 
 /**
  * @file Wheel.tsx
- * @input Option list, selected value and change callback
+ * @input Option list, selected value and change callback; a ref for
+ *   programmatic turns
  * @output Exports Wheel (one picker column), ScrollWheel (the scrolling
  *   column) and the shared types of wheelOptions.ts
  * @position Internal component; consumed by MonthYearWheels.tsx,
@@ -27,7 +28,13 @@
  * - /packages/core/src/DateInput/DateInputTouch.test.tsx
  */
 
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -51,6 +58,7 @@ import {usePointerDragScroll} from './usePointerDragScroll';
 import {useScrollSettle} from './useScrollSettle';
 import {useWheelListbox} from './useWheelListbox';
 import {
+  canSpinTo,
   endIndex,
   nearestEnabledIndex,
   steppedIndex,
@@ -59,6 +67,7 @@ import {
 
 export {
   nearestEnabledIndex,
+  type WheelHandle,
   type WheelOption,
   type WheelProps,
 } from './wheelOptions';
@@ -71,23 +80,38 @@ const ITEM_BLOCK_SIZE = dateInputTouchSizes.wheelItemSize;
  * at the top — which is what a `view()` timeline over the `cover` range means,
  * and why this reads as a cylinder rotating under the finger.
  */
-const falloff = stylex.keyframes({
+const tip = stylex.keyframes({
+  '0%': {transform: 'rotateX(52deg) scale(0.86)'},
+  '50%': {transform: 'rotateX(0deg) scale(1)'},
+  '100%': {transform: 'rotateX(-52deg) scale(0.86)'},
+});
+
+/**
+ * Colour keeps every row at WCAG AA, which an opacity fade does not. The ends
+ * stop halfway to the secondary text colour, because that colour alone falls
+ * below AA in two shipped themes.
+ */
+const fade = stylex.keyframes({
   '0%': {
-    opacity: 0.3,
-    transform: 'rotateX(52deg) scale(0.86)',
+    color: `color-mix(in oklab, ${colorVars['--color-text-primary']}, ${colorVars['--color-text-secondary']})`,
   },
-  '50%': {
-    opacity: 1,
-    transform: 'rotateX(0deg) scale(1)',
-  },
+  '50%': {color: colorVars['--color-text-primary']},
   '100%': {
-    opacity: 0.3,
-    transform: 'rotateX(-52deg) scale(0.86)',
+    color: `color-mix(in oklab, ${colorVars['--color-text-primary']}, ${colorVars['--color-text-secondary']})`,
   },
 });
 
-/** Motion-free equivalent: the depth cue survives as opacity alone. */
-const fadeOnly = stylex.keyframes({
+/**
+ * A disabled row keeps its disabled colour and fades by opacity instead: WCAG
+ * 1.4.3 exempts inactive components from the contrast minimum.
+ */
+const tipAndDim = stylex.keyframes({
+  '0%': {opacity: 0.3, transform: 'rotateX(52deg) scale(0.86)'},
+  '50%': {opacity: 1, transform: 'rotateX(0deg) scale(1)'},
+  '100%': {opacity: 0.3, transform: 'rotateX(-52deg) scale(0.86)'},
+});
+
+const dim = stylex.keyframes({
   '0%': {opacity: 0.3},
   '50%': {opacity: 1},
   '100%': {opacity: 0.3},
@@ -115,7 +139,7 @@ const styles = stylex.create({
     overscrollBehavior: 'contain',
     // Room for row 0 and row n-1 to reach the centre.
     paddingBlock: dateInputTouchGeometry.wheelEdgePadding,
-    // Gives the rotateX falloff somewhere to recede to.
+    // Gives the rotateX tip somewhere to recede to.
     perspective: '520px',
     transformStyle: 'preserve-3d',
     scrollbarWidth: 'none',
@@ -144,7 +168,7 @@ const styles = stylex.create({
     whiteSpace: 'nowrap',
     // NO `overflow: hidden` here. It would make the row itself a scroll
     // container, and `view()` binds to the subject's nearest ancestor scroll
-    // container — the falloff would measure the row against itself and sit
+    // container — the tip would measure the row against itself and sit
     // frozen at 50% forever. Clipping belongs on the inner element.
     cursor: {
       default: 'pointer',
@@ -155,7 +179,7 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
   },
   /**
-   * The falloff rides an inner element, never the row itself.
+   * The tip rides an inner element, never the row itself.
    *
    * A snap area is the element's TRANSFORMED border box, so animating the row
    * would move the very positions the scroller is snapping to — the wheel
@@ -171,15 +195,14 @@ const styles = stylex.create({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     // The wheel look. Held behind @supports so browsers without scroll-driven
-    // animations get a plain, fully legible list instead of these keyframes
-    // playing themselves out once on the document timeline. Under reduced
-    // motion the same timeline drives opacity only — the depth cue survives,
-    // the tipping does not.
+    // animations get a plain list instead of these keyframes playing
+    // themselves out once on the document timeline. Under reduced motion, the
+    // colour fade on the row keeps the depth cue.
     animationName: {
       default: null,
       '@supports (animation-timeline: view())': {
-        default: falloff,
-        '@media (prefers-reduced-motion: reduce)': fadeOnly,
+        default: tip,
+        '@media (prefers-reduced-motion: reduce)': 'none',
       },
     },
     animationTimeline: 'view(y)',
@@ -188,6 +211,31 @@ const styles = stylex.create({
     animationDuration: 'auto',
     animationTimingFunction: 'linear',
     backfaceVisibility: 'hidden',
+  },
+  itemInnerDisabled: {
+    animationName: {
+      default: null,
+      '@supports (animation-timeline: view())': {
+        default: tipAndDim,
+        '@media (prefers-reduced-motion: reduce)': dim,
+      },
+    },
+  },
+  /**
+   * The colour fade, on the row and not the tipped inner element: colour does
+   * not move a snap area. An animated colour outranks the selected and
+   * disabled colours, so those rows do not take this fade.
+   */
+  itemFade: {
+    animationName: {
+      default: null,
+      '@supports (animation-timeline: view())': fade,
+    },
+    animationTimeline: 'view(y)',
+    animationRange: 'cover 0% cover 100%',
+    animationFillMode: 'both',
+    animationDuration: 'auto',
+    animationTimingFunction: 'linear',
   },
   itemActive: {
     color: colorVars['--color-text-accent'],
@@ -260,7 +308,26 @@ export function ScrollWheel({
   value,
   onChange,
   isActive = true,
+  ref,
 }: WheelProps) {
+  // A spin commits the row at once. The new value then scrolls the column
+  // there, as any new value does.
+  useImperativeHandle(
+    ref,
+    () => ({
+      spinTo: async index => {
+        if (!canSpinTo(options, index)) {
+          return false;
+        }
+        const option = options[index];
+        if (option.value !== value) {
+          onChange(option.value);
+        }
+        return true;
+      },
+    }),
+    [options, value, onChange],
+  );
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const selectedIndex = Math.max(
     0,
@@ -493,7 +560,6 @@ export function ScrollWheel({
   // there is no way to share — it takes every touch that lands on it.
   useOwnScrollGesture(scrollerRef, 'all', {isEnabled: isActive});
 
-  // A key commits the row it moves to and scrolls the column there.
   const moveTo = useCallback(
     (row: number | null) => {
       const option = row == null ? undefined : options[row];
@@ -568,10 +634,17 @@ export function ScrollWheel({
             {...optionProps(option, index)}
             {...stylex.props(
               styles.item,
+              index !== activeIndex && !option.isDisabled && styles.itemFade,
               index === activeIndex && styles.itemActive,
               option.isDisabled && styles.itemDisabled,
             )}>
-            <span {...stylex.props(styles.itemInner)}>{option.label}</span>
+            <span
+              {...stylex.props(
+                styles.itemInner,
+                option.isDisabled && styles.itemInnerDisabled,
+              )}>
+              {option.label}
+            </span>
           </div>
         ))}
       </div>

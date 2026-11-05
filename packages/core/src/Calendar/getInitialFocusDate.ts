@@ -2,7 +2,7 @@
 
 /**
  * @file getInitialFocusDate.ts
- * @input PlainDate utilities, min/max bounds, today
+ * @input PlainDate and calendar-system utilities, min/max bounds, today
  * @output Exports getInitialFocusDate — the month Calendar opens on
  * @position Calendar-specific helper; used by Calendar.tsx
  *
@@ -15,11 +15,14 @@ import type {ISODateString, DateRange} from '../utils/dateTypes';
 import {
   type PlainDate,
   plainDateFromISO,
-  plainDateSetFirstOfMonth,
-  plainDateAddMonths,
   plainDateIsBefore,
   plainDateIsAfter,
 } from '../utils/plainDate';
+import {
+  type CalendarSystem,
+  calendarAddMonths,
+  calendarMonthOf,
+} from '../utils/calendarSystem';
 
 export interface InitialFocusDateOptions {
   /** Controlled visible month, if the consumer supplied one. */
@@ -34,6 +37,8 @@ export interface InitialFocusDateOptions {
   numberOfMonths: number;
   /** Today, injected so the caller keeps a single memoized source of "now". */
   today: PlainDate;
+  /** The calendar system whose months the panes show. Default: `gregory`. */
+  calendar?: CalendarSystem;
 }
 
 /**
@@ -57,7 +62,15 @@ export interface InitialFocusDateOptions {
 export function getInitialFocusDate(
   options: InitialFocusDateOptions,
 ): PlainDate {
-  const {focusDate, value, min, max, numberOfMonths, today} = options;
+  const {
+    focusDate,
+    value,
+    min,
+    max,
+    numberOfMonths,
+    today,
+    calendar = 'gregory',
+  } = options;
 
   if (focusDate) {
     return plainDateFromISO(focusDate);
@@ -76,13 +89,14 @@ export function getInitialFocusDate(
 
   if (maxDate && plainDateIsAfter(today, maxDate)) {
     const lastPaneOffset = Math.max(0, numberOfMonths - 1);
-    const shifted = plainDateAddMonths(
-      plainDateSetFirstOfMonth(maxDate),
+    const shifted = calendarAddMonths(
+      calendar,
+      calendarMonthOf(calendar, maxDate),
       -lastPaneOffset,
-    );
+    ).start;
     if (
       minDate &&
-      plainDateIsBefore(shifted, plainDateSetFirstOfMonth(minDate))
+      plainDateIsBefore(shifted, calendarMonthOf(calendar, minDate).start)
     ) {
       return minDate;
     }

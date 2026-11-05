@@ -31,11 +31,8 @@ import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useAnnounce, useGridFocus} from '../hooks';
-import {
-  useCalendarDays,
-  useCalendarConstraints,
-  type CalendarDay,
-} from './hooks';
+import {useCalendarConstraints, type CalendarDay} from './hooks';
+import {useCalendarDays} from './hooks/useCalendarDays';
 import {
   calendarStyles,
   monthGridStyles,
@@ -48,28 +45,34 @@ import {
   plainDateToISO,
   plainDateToDate,
   plainDateToday,
-  plainDateSetFirstOfMonth,
-  plainDateAddMonths,
   plainDateAddDays,
   plainDateDiffDays,
-  getDaysInMonth,
   plainDateIsAfter,
   plainDateIsBefore,
   plainDateIsEqual,
   plainDateGetWeekNumber,
-  plainDateFormat,
   plainDateWeekFieldName,
+  plainDateFormatDayNumber,
   DATE_FORMAT_WITH_WEEKDAY,
 } from '../utils/plainDate';
 import {
-  plainDateFormatDayNumber,
-  plainDateFormatStandaloneMonthYear,
-} from '../utils/plainDate';
+  type CalendarMonth,
+  type CalendarSystem,
+  calendarAddMonths,
+  calendarMonthOf,
+  calendarShiftMonths,
+  calendarShiftYears,
+  calendarYearMonthOf,
+  formatCalendarDate,
+  formatCalendarMonthLabel,
+  isInCalendarMonth,
+} from '../utils/calendarSystem';
 import {mergeProps, composeEventHandlers, rtlStyles} from '../utils';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {getInitialFocusDate} from './getInitialFocusDate';
+import {getWeekdayHeaders} from './getWeekdayHeaderNames';
 import {
   computeDayCellState,
   computeRangeRounding,
@@ -98,6 +101,7 @@ import type {
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {
   registerEnglishFallback,
@@ -107,7 +111,7 @@ import english from '../i18n/generated-english/Calendar/Calendar.generated';
 
 registerEnglishFallback(english);
 
-/** How a month navigation moves the focused day: by its row offset in days, or by whole months or years. */
+/** How a month navigation moves the focused day: by its row offset in days, or by whole calendar months or years. */
 type NavigationUnit = 'days' | 'months' | 'years';
 
 /** Imperative handle for Calendar handleRef */
@@ -180,13 +184,15 @@ interface CalendarBaseProps extends Omit<
   hasOutsideDays?: boolean;
 
   /**
-   * Show ISO week numbers in a side column.
+   * Show ISO 8601 week numbers in a side column. They are ISO 8601 week
+   * numbers in every calendar system.
    * Default: false
    */
   hasWeekNumbers?: boolean;
 
   /**
-   * Use variable rows per month vs. fixed 6-row grid.
+   * Give each month only the rows it needs instead of a fixed 6-row grid.
+   * The fixed grid keeps the same height from month to month.
    * Default: false (fixed 6 rows for consistent height)
    */
   hasVariableRowCount?: boolean;
@@ -197,6 +203,16 @@ interface CalendarBaseProps extends Omit<
    * Default: 0 (Sunday)
    */
   weekStartsOn?: DayOfWeek | DayOfWeekName;
+
+  /**
+   * The calendar system the grid shows, such as `'persian'` or `'hebrew'`.
+   * It sets the months, their labels, and month and year navigation. `value`,
+   * `min`, `max`, `focusDate`, and every callback stay Gregorian ISO dates.
+   * Default: the `InternationalizationProvider` calendar, else Gregorian.
+   * Calendars other than `gregory`, `iso8601`, `buddhist`, `roc`, and
+   * `japanese` need `Temporal`; without it the grid shows Gregorian months.
+   */
+  calendar?: CalendarSystem;
 }
 
 // ─── Mode-specific Props (discriminated union) ────────────────
@@ -231,19 +247,26 @@ interface CalendarRangeProps extends CalendarBaseProps {
 
 export type CalendarProps = CalendarSingleProps | CalendarRangeProps;
 
-/** The first day of `month`'s month that `isDisabled` allows, or null. */
 function firstEnabledDayOfMonth(
-  month: PlainDate,
+  month: CalendarMonth,
   isDisabled: (pd: PlainDate) => boolean,
 ): PlainDate | null {
-  const days = getDaysInMonth(month.year, month.month);
-  for (let day = 1; day <= days; day += 1) {
-    const pd = {year: month.year, month: month.month, day};
+  for (let offset = 0; offset < month.length; offset += 1) {
+    const pd = plainDateAddDays(month.start, offset);
     if (!isDisabled(pd)) {
       return pd;
     }
   }
   return null;
+}
+
+/** A day's full label, such as "Friday, Aban 8, 1405 AP", in the calendar. */
+function formatDateLabel(
+  date: PlainDate,
+  calendar: CalendarSystem,
+  locale: string,
+): string {
+  return formatCalendarDate(calendar, date, DATE_FORMAT_WITH_WEEKDAY, locale);
 }
 
 // =============================================================================
@@ -279,12 +302,14 @@ export function Calendar({ref, ...props}: CalendarProps) {
     hasWeekNumbers = false,
     hasVariableRowCount = false,
     weekStartsOn: weekStartsOnProp = 0,
+    calendar: calendarProp,
     xstyle,
     className,
     style,
     onKeyDown,
     ...rest
   } = props;
+  const calendar = useCalendarSystem(calendarProp, 'Calendar');
 
   // Normalize `weekStartsOn` (number or three-letter day name) to a numeric
   // DayOfWeek so all downstream date math keeps working with an index.
@@ -328,6 +353,7 @@ export function Calendar({ref, ...props}: CalendarProps) {
       max,
       numberOfMonths,
       today,
+      calendar,
     }),
   );
 
@@ -353,17 +379,21 @@ export function Calendar({ref, ...props}: CalendarProps) {
     [isControlledFocus, onFocusDateChange],
   );
 
-  // Base month (first day of focus month)
-  const baseMonth = useMemo(() => {
-    return plainDateSetFirstOfMonth(focusDate);
-  }, [focusDate]);
+  // A controlled focus date is a new object on each render. Key the memo on
+  // its ISO string.
+  const focusIso = plainDateToISO(focusDate);
+  const baseMonth = useMemo(
+    () => calendarMonthOf(calendar, plainDateFromISO(focusIso)),
+    [calendar, focusIso],
+  );
 
   // Generate visible months
   const visibleMonths = useMemo(() => {
     return Array.from({length: numberOfMonths}, (_, i) => {
-      return plainDateAddMonths(baseMonth, i);
+      return calendarAddMonths(calendar, baseMonth, i);
     });
-  }, [baseMonth, numberOfMonths]);
+  }, [calendar, baseMonth, numberOfMonths]);
+  const lastVisibleMonth = visibleMonths[visibleMonths.length - 1];
 
   // A pending target is claimed by the grid that shows its month, or dropped
   // by the next focus move that is not onto the target day: when a controlled
@@ -377,9 +407,7 @@ export function Calendar({ref, ...props}: CalendarProps) {
       return null;
     }
     const target = plainDateFromISO(pendingFocus);
-    return visibleMonths.some(
-      pd => pd.year === target.year && pd.month === target.month,
-    )
+    return visibleMonths.some(month => isInCalendarMonth(target, month))
       ? pendingFocus
       : null;
   }, [pendingFocus, visibleMonths]);
@@ -404,9 +432,9 @@ export function Calendar({ref, ...props}: CalendarProps) {
   const monthYearLabel = useMemo(
     () =>
       visibleMonths
-        .map(m => plainDateFormatStandaloneMonthYear(m, locale))
+        .map(m => formatCalendarMonthLabel(calendar, m, locale))
         .join(' – '),
-    [visibleMonths, locale],
+    [calendar, visibleMonths, locale],
   );
 
   // Announce the newly visible month to screen readers whenever it changes.
@@ -438,31 +466,13 @@ export function Calendar({ref, ...props}: CalendarProps) {
     [max],
   );
 
-  const canNavigatePrevious = useMemo(() => {
-    if (!min) {
-      return true;
-    }
-    const minDate = plainDateFromISO(min);
-    // Can't go back if min is in the current focus month
-    return (
-      minDate.year < baseMonth.year ||
-      (minDate.year === baseMonth.year && minDate.month < baseMonth.month)
-    );
-  }, [min, baseMonth]);
-
-  const canNavigateNext = useMemo(() => {
-    if (!max) {
-      return true;
-    }
-    const maxDate = plainDateFromISO(max);
-    // Check against the last visible month, not just baseMonth
-    const lastVisibleMonth = plainDateAddMonths(baseMonth, numberOfMonths - 1);
-    return (
-      maxDate.year > lastVisibleMonth.year ||
-      (maxDate.year === lastVisibleMonth.year &&
-        maxDate.month > lastVisibleMonth.month)
-    );
-  }, [max, baseMonth, numberOfMonths]);
+  // A month button is available while a day past the shown months is in range.
+  const canNavigatePrevious =
+    minDateForKeys == null ||
+    plainDateIsBefore(minDateForKeys, baseMonth.start);
+  const canNavigateNext =
+    maxDateForKeys == null ||
+    plainDateIsAfter(maxDateForKeys, lastVisibleMonth.end);
 
   // Navigation handlers
   // The same constraint view the grids use, so a key can resolve its target
@@ -490,10 +500,6 @@ export function Calendar({ref, ...props}: CalendarProps) {
       offset?: number,
       unit: NavigationUnit = 'days',
     ) => {
-      const monthIndex = (pd: PlainDate) => pd.year * 12 + pd.month;
-      const firstShown = monthIndex(baseMonth);
-      const lastShown = firstShown + numberOfMonths - 1;
-
       // The Previous/Next buttons move the month with no focused day.
       if (!focusedDate) {
         if (
@@ -502,7 +508,7 @@ export function Calendar({ref, ...props}: CalendarProps) {
         ) {
           return;
         }
-        const newPd = plainDateAddMonths(baseMonth, delta);
+        const newPd = calendarAddMonths(calendar, baseMonth, delta).start;
         if (onFocusDateChange) {
           onFocusDateChange(plainDateToISO(newPd));
         } else {
@@ -522,19 +528,19 @@ export function Calendar({ref, ...props}: CalendarProps) {
         !(maxDateForKeys && plainDateIsAfter(pd, maxDateForKeys));
       let targetPd: PlainDate;
       if (unit === 'months' || unit === 'years') {
-        // A page or a year step keeps the day of the month and clamps it to the
-        // target month's length. A month with no enabled day is no target, the
-        // same as for an arrow.
-        const candidate = plainDateAddMonths(
-          currentPd,
-          unit === 'years' ? delta * 12 : delta,
-        );
+        // A page or a year step keeps the day of the calendar month and clamps
+        // it to the target month's length. A month with no enabled day is no
+        // target, the same as for an arrow.
+        const candidate =
+          unit === 'years'
+            ? calendarShiftYears(calendar, currentPd, delta)
+            : calendarShiftMonths(calendar, currentPd, delta);
         if (!inRange(candidate)) {
           return;
         }
         if (isRootDateDisabled(candidate)) {
           const firstEnabled = firstEnabledDayOfMonth(
-            candidate,
+            calendarMonthOf(calendar, candidate),
             isRootDateDisabled,
           );
           if (firstEnabled == null) {
@@ -571,16 +577,15 @@ export function Calendar({ref, ...props}: CalendarProps) {
       // key's direction, so the target month becomes the first (backwards)
       // or last (forwards) month shown.
       const resolved: PlainDate = targetPd;
-      const targetMonth = monthIndex(resolved);
       setPendingFocus(plainDateToISO(resolved));
-      if (targetMonth >= firstShown && targetMonth <= lastShown) {
+      const isBeforeShown = plainDateIsBefore(resolved, baseMonth.start);
+      if (!isBeforeShown && !plainDateIsAfter(resolved, lastVisibleMonth.end)) {
         return;
       }
-      const targetFirst = {year: resolved.year, month: resolved.month, day: 1};
-      const newPd =
-        targetMonth < firstShown
-          ? targetFirst
-          : plainDateAddMonths(targetFirst, -(numberOfMonths - 1));
+      const targetMonth = calendarMonthOf(calendar, resolved);
+      const newPd = isBeforeShown
+        ? targetMonth.start
+        : calendarAddMonths(calendar, targetMonth, -(numberOfMonths - 1)).start;
       if (onFocusDateChange) {
         onFocusDateChange(plainDateToISO(newPd));
       } else {
@@ -589,9 +594,11 @@ export function Calendar({ref, ...props}: CalendarProps) {
     },
     [
       baseMonth,
+      calendar,
       canNavigateNext,
       canNavigatePrevious,
       isRootDateDisabled,
+      lastVisibleMonth,
       maxDateForKeys,
       minDateForKeys,
       numberOfMonths,
@@ -636,7 +643,7 @@ export function Calendar({ref, ...props}: CalendarProps) {
           setRangeSelectionStart(iso);
           announce(
             t('@astryx.calendar.rangeStartAnnounce', {
-              date: plainDateFormat(date, DATE_FORMAT_WITH_WEEKDAY, locale),
+              date: formatDateLabel(date, calendar, locale),
             }),
           );
         } else {
@@ -652,7 +659,7 @@ export function Calendar({ref, ...props}: CalendarProps) {
             setRangeSelectionStart(null);
             announce(
               t('@astryx.calendar.rangeClearedAnnounce', {
-                date: plainDateFormat(date, DATE_FORMAT_WITH_WEEKDAY, locale),
+                date: formatDateLabel(date, calendar, locale),
               }),
             );
             return;
@@ -678,22 +685,23 @@ export function Calendar({ref, ...props}: CalendarProps) {
           // swapped {start, end} above even for a reverse pick).
           announce(
             t('@astryx.calendar.rangeCompleteAnnounce', {
-              start: plainDateFormat(
-                plainDateFromISO(start),
-                DATE_FORMAT_WITH_WEEKDAY,
-                locale,
-              ),
-              end: plainDateFormat(
-                plainDateFromISO(end),
-                DATE_FORMAT_WITH_WEEKDAY,
-                locale,
-              ),
+              start: formatDateLabel(plainDateFromISO(start), calendar, locale),
+              end: formatDateLabel(plainDateFromISO(end), calendar, locale),
             }),
           );
         }
       }
     },
-    [mode, onChange, rangeSelectionStart, minRangeSpan, announce, t, locale],
+    [
+      mode,
+      onChange,
+      rangeSelectionStart,
+      minRangeSpan,
+      announce,
+      t,
+      locale,
+      calendar,
+    ],
   );
 
   return (
@@ -755,8 +763,9 @@ export function Calendar({ref, ...props}: CalendarProps) {
       <div {...stylex.props(calendarStyles.monthsContainer)}>
         {visibleMonths.map(month => (
           <MonthGrid
-            key={`${month.year}-${month.month}`}
+            key={plainDateToISO(month.start)}
             month={month}
+            calendar={calendar}
             value={effectiveValue}
             mode={mode}
             rangeSelectionStart={rangeSelectionStart}
@@ -797,7 +806,8 @@ Calendar.displayName = 'Calendar';
 // =============================================================================
 
 interface MonthGridProps {
-  month: PlainDate;
+  month: CalendarMonth;
+  calendar: CalendarSystem;
   value: ISODateString | DateRange | undefined;
   mode: 'single' | 'range';
   rangeSelectionStart: ISODateString | null;
@@ -830,6 +840,7 @@ interface MonthGridProps {
 
 function MonthGrid({
   month,
+  calendar,
   value,
   mode,
   rangeSelectionStart,
@@ -852,22 +863,22 @@ function MonthGrid({
   onPendingFocusHandled,
 }: MonthGridProps) {
   const locale = useLocale();
-  const year = month.year;
 
   // Use hooks for days generation and constraints
-  const {days, weeks, dayNames} = useCalendarDays({
-    year,
-    month: month.month,
+  const yearMonth = useMemo(
+    () => calendarYearMonthOf(calendar, month),
+    [calendar, month],
+  );
+  const {days, weeks} = useCalendarDays({
+    year: yearMonth.year,
+    month: yearMonth.month,
+    calendar,
     weekStartsOn,
     hasVariableRowCount,
   });
   const dayNameHeaders = useMemo(
-    () =>
-      dayNames.map((name, offset) => ({
-        dayOfWeek: ((weekStartsOn + offset) % 7) as DayOfWeek,
-        name,
-      })),
-    [dayNames, weekStartsOn],
+    () => getWeekdayHeaders(locale, weekStartsOn),
+    [locale, weekStartsOn],
   );
 
   const rangeAnchor = useMemo(
@@ -902,15 +913,16 @@ function MonthGrid({
   // enabled) > today (if visible and enabled) > first enabled in-month day.
   const seedTabbableIso = useMemo((): ISODateString | null => {
     if (selectedDateForTabindex) {
-      const isSelectedInMonth =
-        selectedDateForTabindex.year === year &&
-        selectedDateForTabindex.month === month.month;
+      const isSelectedInMonth = isInCalendarMonth(
+        selectedDateForTabindex,
+        month,
+      );
       if (isSelectedInMonth && !isDateDisabled(selectedDateForTabindex)) {
         return plainDateToISO(selectedDateForTabindex);
       }
     }
 
-    const isTodayInMonth = today.year === year && today.month === month.month;
+    const isTodayInMonth = isInCalendarMonth(today, month);
     if (isTodayInMonth && !isDateDisabled(today)) {
       return plainDateToISO(today);
     }
@@ -922,7 +934,7 @@ function MonthGrid({
     }
 
     return null;
-  }, [days, today, year, month.month, isDateDisabled, selectedDateForTabindex]);
+  }, [days, today, month, isDateDisabled, selectedDateForTabindex]);
 
   // Helper to get the focused date from the currently focused element.
   // Reads the machine-readable `data-date` (ISO) attribute rather than parsing
@@ -1031,7 +1043,7 @@ function MonthGrid({
     }
 
     const targetPd = plainDateFromISO(pendingFocus);
-    if (targetPd.year !== year || targetPd.month !== month.month) {
+    if (!isInCalendarMonth(targetPd, month)) {
       return;
     }
     const targetIso = plainDateToISO(targetPd);
@@ -1066,7 +1078,7 @@ function MonthGrid({
       targetButton.focus();
     }
     onPendingFocusHandled?.();
-  }, [pendingFocus, gridRef, month.month, onPendingFocusHandled, year]);
+  }, [pendingFocus, gridRef, month, onPendingFocusHandled]);
 
   // Parse selection
   let selectedDate: PlainDate | null = null;
@@ -1106,8 +1118,8 @@ function MonthGrid({
 
   // Month label for announcements
   const monthLabel = useMemo(() => {
-    return plainDateFormatStandaloneMonthYear(month, locale);
-  }, [month, locale]);
+    return formatCalendarMonthLabel(calendar, month, locale);
+  }, [calendar, month, locale]);
 
   return (
     <div {...stylex.props(monthGridStyles.monthGrid)}>
@@ -1201,6 +1213,7 @@ function MonthGrid({
                     neighbors={neighbors}
                     isTabbable={day.iso === seedTabbableIso}
                     isRangeSelectionInProgress={rangeSelectionStart !== null}
+                    calendar={calendar}
                     onDayClick={onDayClick}
                     onDayHover={onDayHover}
                   />
@@ -1249,6 +1262,8 @@ interface DayCellProps {
    * "range start and range end" (rangeStart === rangeEnd in both cases).
    */
   isRangeSelectionInProgress: boolean;
+  /** The calendar system that writes the day's accessible name. */
+  calendar: CalendarSystem;
   onDayClick: (date: PlainDate) => void;
   onDayHover: (date: PlainDate | null) => void;
 }
@@ -1268,6 +1283,7 @@ function DayCell({
   neighbors,
   isTabbable: isTabbableDay,
   isRangeSelectionInProgress,
+  calendar,
   onDayClick,
   onDayHover,
 }: DayCellProps) {
@@ -1319,7 +1335,7 @@ function DayCell({
   // params rather than string concatenation. A mid-flight first pick (where
   // rangeStart === rangeEnd) reads as "range start" only; a completed one-day
   // range reads as both start and end.
-  const dateLabel = plainDateFormat(date, DATE_FORMAT_WITH_WEEKDAY, locale);
+  const dateLabel = formatDateLabel(date, calendar, locale);
   const dayLabel = state.isSelected
     ? t('@astryx.calendar.daySelected', {date: dateLabel})
     : state.isRangeStart && state.isRangeEnd

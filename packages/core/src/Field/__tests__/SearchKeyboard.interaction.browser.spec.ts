@@ -10,7 +10,12 @@
  *   touch input and no real focus.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {openStory, withStorybook} from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
@@ -42,8 +47,8 @@ test('a tap on Typeahead focuses a field that asks for the Search key and no aut
 test('a tap on the inline Tokenizer focuses a field that asks for the Search key and no autocorrection', async ({
   page,
 }) => {
-  // The story pins `presentation="popover"`, so the phone keeps the inline field.
-  await openStory(page, storybook(), 'core-tokenizer--with-end-content');
+  // `presentation="popover"` keeps the inline field on the phone.
+  await openStory(page, storybook(), 'core-tokenizer--popover-presentation');
   await expectSearchKeyboard(page.getByRole('combobox'));
 });
 

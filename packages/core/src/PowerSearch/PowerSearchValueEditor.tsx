@@ -19,6 +19,7 @@ import React, {
   useCallback,
   useMemo,
   useRef,
+  useState,
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
@@ -43,10 +44,14 @@ import {
 } from '../NumberInput/numberInputCommit';
 import {DateInput} from '../DateInput';
 import {
+  isoDateTimeToUnixSeconds,
   isoDateToUnixSeconds,
   resolveDateZone,
   unixSecondsToISODate,
+  unixSecondsToISODateTime,
 } from './powerSearchDateZone';
+import type {ISODateTimeString} from '../DateTimeInput/DateTimeInput';
+import {HStack} from '../HStack/HStack';
 import {DateRangeInput, type DateRange} from '../DateRangeInput';
 import {resolveDateTimeRangePart} from './resolveDateTimeRangePart';
 import {TimeInput} from '../TimeInput';
@@ -504,6 +509,85 @@ function TimeEditor({
   );
 }
 
+/**
+ * A value with a time of day: its wall-clock time in `zone`, read and written
+ * as one instant through a date picker beside a time field.
+ */
+function DateTimeEditor({
+  label,
+  isDisabled,
+  presentation,
+  unixSeconds,
+  zone,
+  onChange,
+}: {
+  label: string;
+  isDisabled?: boolean;
+  presentation: EditorPresentation;
+  unixSeconds: number | undefined;
+  zone: string | undefined;
+  onChange: (value: FilterValue) => void;
+}) {
+  const t = useComponentTranslator();
+  const [datePart, timePart] = useMemo(() => {
+    if (unixSeconds == null) {
+      return [undefined, undefined] as const;
+    }
+    const [date, time] = unixSecondsToISODateTime(unixSeconds, zone).split('T');
+    return [date as ISODateString, time as ISOTimeString] as const;
+  }, [unixSeconds, zone]);
+  // A part picked first waits for the other. The editor writes the instant
+  // once both parts exist.
+  const [pendingDate, setPendingDate] = useState<ISODateString | undefined>();
+  const [pendingTime, setPendingTime] = useState<ISOTimeString | undefined>();
+  const date = datePart ?? pendingDate;
+  const time = timePart ?? pendingTime;
+  const commit = (
+    nextDate: ISODateString | undefined,
+    nextTime: ISOTimeString | undefined,
+  ) => {
+    if (nextDate == null || nextTime == null) {
+      return;
+    }
+    onChange({
+      type: 'date_absolute',
+      unixSeconds: isoDateTimeToUnixSeconds(
+        `${nextDate}T${nextTime}` as ISODateTimeString,
+        zone,
+      ),
+    });
+  };
+  const width = presentation === 'bottom-sheet' ? '100%' : undefined;
+  // A nested sub-filter row keeps its selectors' widths, so the pair wraps
+  // where the value cell is narrower than the two inputs.
+  return (
+    <HStack gap={2} wrap="wrap">
+      <DateInput
+        label={label}
+        isLabelHidden
+        isDisabled={isDisabled}
+        value={date}
+        onChange={value => {
+          setPendingDate(value);
+          commit(value, time);
+        }}
+        width={width}
+      />
+      <TimeInput
+        label={t('@astryx.powersearch.valueEditor.time')}
+        isLabelHidden
+        isDisabled={isDisabled}
+        value={time}
+        onChange={value => {
+          setPendingTime(value);
+          commit(date, value);
+        }}
+        width={width}
+      />
+    </HStack>
+  );
+}
+
 function DateAbsoluteEditor({
   operatorValue,
   filterValue,
@@ -520,18 +604,29 @@ function DateAbsoluteEditor({
   timezoneID?: string;
 }) {
   const t = useComponentTranslator();
-  // A date-only value edits in the zone the token and the label use. An
-  // `isDateOnly: false` value edits its UTC day.
-  const zone =
-    operatorValue.isDateOnly === false
-      ? 'UTC'
-      : resolveDateZone(timezoneID, true);
+  const label = t('@astryx.powersearch.valueEditor.date');
   const unixSeconds =
     filterValue?.type === 'date_absolute' ? filterValue.unixSeconds : undefined;
 
+  if (operatorValue.isDateOnly === false) {
+    return (
+      <DateTimeEditor
+        label={label}
+        isDisabled={isDisabled}
+        presentation={presentation}
+        unixSeconds={unixSeconds}
+        zone={resolveDateZone(timezoneID, false)}
+        onChange={onChange}
+      />
+    );
+  }
+
+  // A calendar day edits in the one zone the token and the label read it in.
+  const zone = resolveDateZone(timezoneID, true);
+
   return (
     <DateInput
-      label={t('@astryx.powersearch.valueEditor.date')}
+      label={label}
       isLabelHidden
       isDisabled={isDisabled}
       value={

@@ -372,6 +372,17 @@ function isBlock(b) {
 }
 
 /**
+ * The text value of a deprecated component's `deprecated` field: the component
+ * to use instead, then the modernization route. Every command that prints a
+ * component result's fields prints it this way.
+ * @param {{replacement: string, description: string}} deprecation
+ * @returns {string}
+ */
+export function formatDeprecation(deprecation) {
+  return `use ${deprecation.replacement}: ${deprecation.description}`;
+}
+
+/**
  * The one sanctioned way to write human output to stdout. Joins blocks with a
  * single blank line and hands the result to `humanLog`, which is a no-op in
  * `--json` mode (stdout carries only the envelope there). Accepts only Blocks

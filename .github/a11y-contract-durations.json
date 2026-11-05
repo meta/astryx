@@ -1,5 +1,5 @@
 {
-  "$comment": "Seconds of test time per accessibility contract spec file and per test (file and title path), from a release check's contract legs (four workers). Only shard balance depends on these numbers; a missing or stale entry never drops or repeats a test. Regenerate with: node .github/scripts/a11y-contract-shard.mjs record <leg logs>…",
+  "$comment": "Seconds of test time per accessibility contract spec file and per test (file and title path), from a release check's contract legs (four workers). They balance the release shards, where a missing or stale entry never drops or repeats a test. They also plan the pull-request contract job: a file starts there only when its recorded time fits the job's budget, and a file that does not fit is reported as not run. A missing entry counts as the median file. Regenerate with: node .github/scripts/a11y-contract-shard.mjs record <leg logs>…",
   "source": "release check contract legs at main 2026-11-01",
   "seconds": {
     "internal/a11y-spec/src/harness/chromium.chromium.spec.ts": 2.6,

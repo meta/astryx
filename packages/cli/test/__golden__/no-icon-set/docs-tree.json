@@ -684,8 +684,27 @@
       "which-features-set-the-floor",
       "which-components-are-affected",
       "what-astryx-guarantees",
+      "the-on-screen-keyboard",
       "supporting-older-browsers",
       "how-these-tiers-move-over-time"
+    ],
+    "mentions": []
+  },
+  "calendars": {
+    "type": "docs.node",
+    "children": [
+      "calendars/calendar-systems"
+    ],
+    "mentions": []
+  },
+  "calendars/calendar-systems": {
+    "type": "docs.detail",
+    "sections": [
+      "choose-a-calendar",
+      "supported-calendars",
+      "load-temporal-where-the-runtime-lacks-it",
+      "lunisolar-calendars",
+      "week-numbers"
     ],
     "mentions": []
   },
@@ -926,7 +945,15 @@
     "children": [
       "internationalization/i18n-quick-start",
       "internationalization/i18n-library-integration",
+      "internationalization/i18n-calendars",
       "internationalization/i18n-rtl-and-testing"
+    ],
+    "mentions": []
+  },
+  "internationalization/i18n-calendars": {
+    "type": "docs.detail",
+    "sections": [
+      "show-dates-in-another-calendar"
     ],
     "mentions": []
   },

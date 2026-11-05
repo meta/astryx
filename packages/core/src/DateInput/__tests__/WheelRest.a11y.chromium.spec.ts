@@ -3,8 +3,8 @@
 
 /**
  * @file WheelRest.a11y.chromium.spec.ts
- * @input The built TimeInput bottom-sheet story with bounds; real Chromium
- *   touch input (CDP) on a phone profile, and a mouse on a desktop one
+ * @input The built TimeInput bottom-sheet story with bounds and the Wheel
+ *   story; real touch input (CDP) on a phone profile, a mouse on a desktop one
  * @output Browser evidence that a wheel dragged onto a row outside the bounds
  *   comes to rest on the nearest row inside them and commits it, on the touch
  *   column under a finger and on today's column under a mouse; that a
@@ -16,7 +16,12 @@
  *   of it is in jsdom. Wheel.test.tsx and PickerWheel.test.tsx hold the rule.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -501,19 +506,53 @@ test.describe('under a mouse', () => {
     await expect(field).toHaveValue('11:00 AM');
   });
 
-  test('under Reduce Motion, the rows fade toward the edges without tipping', async ({
+  test('under Reduce Motion, a disabled row fades toward the edges without tipping', async ({
     page,
   }) => {
     await page.emulateMedia({reducedMotion: 'reduce'});
     const {hours} = await openHourWheelWithMouse(page);
     await expectFinePointer(page);
-    // Two rows above the band (8 AM): dimmed, and flat.
-    const label = hours.locator('[role="option"]').nth(8).locator('span');
-    const {opacity, transform} = await label.evaluate(el => {
+    // Two rows above the band (8 AM), outside the bounds: dimmed, and flat.
+    const row = hours.locator('[role="option"]').nth(7);
+    await expect(row).toHaveText('8');
+    await expect(row).toHaveAttribute('aria-disabled', 'true');
+    const {opacity, transform} = await row.locator('span').evaluate(el => {
       const style = getComputedStyle(el);
       return {opacity: Number(style.opacity), transform: style.transform};
     });
     expect(opacity).toBeLessThan(0.95);
     expect(transform).toBe('none');
+  });
+
+  test('under Reduce Motion, the enabled rows fade toward the edges in colour without tipping', async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-wheel--minutes&viewMode=story`,
+    );
+    await expectFinePointer(page);
+    const rows = page
+      .getByRole('listbox', {name: 'Minute'})
+      .locator('[role="option"] > span');
+    await expect(rows.first()).toBeVisible();
+    const drawn = async (index: number) =>
+      rows.nth(index).evaluate(el => {
+        const style = getComputedStyle(el);
+        return {
+          color: style.color,
+          opacity: Number(style.opacity),
+          transform: style.transform,
+        };
+      });
+    // 00 sits under the band, and 01 and 02 sit one and two rows away. Both
+    // are flat and opaque, and 02 is further along the colour fade.
+    const near = await drawn(1);
+    const far = await drawn(2);
+    for (const row of [near, far]) {
+      expect(row.transform).toBe('none');
+      expect(row.opacity).toBe(1);
+    }
+    expect(far.color).not.toBe(near.color);
   });
 });

@@ -908,8 +908,8 @@ export function defineTheme<
     iconVariants,
   );
 
-  // Component icon slots merge by slot. The base's values include its slot
-  // functions, which its static `componentIcons` view does not.
+  // The base's static `componentIcons` view omits its slot functions, so read
+  // its `__componentIcons` first.
   const componentIconValues = mergeComponentIcons(
     base?.__componentIcons ?? base?.componentIcons,
     input.componentIcons,

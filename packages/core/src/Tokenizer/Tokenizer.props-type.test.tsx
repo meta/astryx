@@ -106,14 +106,6 @@ export function compiles() {
         onChange={() => {}}
         presentation="bottom-sheet"
       />
-      {/* The deprecated spelling still compiles. */}
-      <Tokenizer
-        label="Tags"
-        searchSource={source}
-        value={[]}
-        onChange={() => {}}
-        experimental={{presentation: 'adaptive'}}
-      />
       <Tokenizer
         label="Tags"
         searchSource={source}
