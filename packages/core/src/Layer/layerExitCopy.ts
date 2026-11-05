@@ -111,24 +111,18 @@ function outermostLayer(element: HTMLElement): HTMLElement | null {
 /** Each layer's copy: placing another for the same layer replaces it. */
 const copies = new WeakMap<HTMLElement, HTMLElement>();
 
-/** Layers whose copies may still stand. */
-const copiedLayers = new Set<HTMLElement>();
-
 /**
  * Shows the copies of layers inside `element` again, so they stay above the
- * copy just shown for it. Those layers were drawn above it.
+ * copy just shown for it. Those layers were drawn above it. They are found
+ * in `element` itself, so no closed layer is kept here once it is gone.
  */
 function raiseInnerCopies(element: HTMLElement): void {
   const inner: HTMLElement[] = [];
-  for (const layer of copiedLayers) {
+  for (const layer of element.querySelectorAll<HTMLElement>(
+    '[popover], dialog',
+  )) {
     const copy = copies.get(layer);
-    if (copy?.isConnected !== true) {
-      copiedLayers.delete(layer);
-    } else if (
-      layer !== element &&
-      element.contains(layer) &&
-      copy.matches(':popover-open')
-    ) {
+    if (copy?.isConnected === true && copy.matches(':popover-open')) {
       inner.push(layer);
     }
   }
@@ -180,11 +174,8 @@ function layoutBox(element: HTMLElement): LayerExitBox {
  * names or label targets, and no form owner. A cloned checked radio then
  * cannot take the live group's selection, and a named field cannot submit.
  * It is `inert`, hidden from assistive technology, and out of pointer reach.
- * Its frames and media load nothing, and a canvas shows its pixels. Content
- * holding a canvas that reads back empty gets no copy: the close is then
- * immediate. Its descendants' keyframe animations do not start again. A
- * layer has one copy: placing another for the same layer takes the previous
- * one away.
+ * Its descendants' keyframe animations do not start again. A layer has one
+ * copy: placing another for the same layer takes the previous one away.
  *
  * It is shown only in the top layer, as a manual popover, so a clipping,
  * transformed or sticky ancestor neither cuts nor moves it. A fixed box or a
@@ -205,8 +196,7 @@ export function placeLayerExitCopy(
   }
   // One copy per layer: a close during a close replaces it.
   copies.get(element)?.remove();
-  // Past the copy cap, or with a canvas that reads back empty, there is no
-  // copy, so the close is immediate.
+  // Past the copy cap there is no copy, so the close is immediate.
   if (!isCopyable(element)) {
     return null;
   }
@@ -278,7 +268,6 @@ export function placeLayerExitCopy(
     keepInherited(copy, outer.parentElement);
   }
   copies.set(element, copy);
-  copiedLayers.add(element);
   const show = (): boolean => {
     try {
       copy.showPopover();
@@ -295,7 +284,6 @@ export function placeLayerExitCopy(
     copy.remove();
     if (copies.get(element) === copy) {
       copies.delete(element);
-      copiedLayers.delete(element);
     }
   };
   if (!show()) {
