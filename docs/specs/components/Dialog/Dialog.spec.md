@@ -31,7 +31,7 @@ architecture:
     architecture:react-component-runtime,
   ]
 contributing: []
-system_specs: [spec:AST-013, spec:AST-020, spec:AST-021]
+system_specs: [spec:AST-013, spec:AST-020, spec:AST-021, spec:AST-094/FR35]
 ---
 
 # Dialog component contract
@@ -181,7 +181,9 @@ containment `useFocusTrap` applies for Drawer and Popover. Each modal
 presentation applies the same module instead of
 leaving Tab to the browser: Dialog, and AlertDialog and CommandPalette through
 it, a modal BottomSheet, Lightbox, and a modal Drawer. A fault in the wrapping
-is fixed in that module, not worked around in a component.
+is fixed in that module, not worked around in a component. The one exception
+is a step of the deprecated BottomSheetSwitcher (DEP-0015): it keeps native
+containment under `component:BottomSheetSwitcher/DEC-1`.
 
 Rejected: leaving Tab to native `showModal()`, which sends focus to the browser's own interface from inside a modal.
 

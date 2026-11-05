@@ -568,6 +568,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-circle-check-indicator",
+      "path": "components/lab/circle-check-indicator",
+      "aliases": []
+    },
+    {
       "name": "component-lab-circular-progress",
       "path": "components/lab/circular-progress",
       "aliases": []
@@ -2292,6 +2297,16 @@
       "aliases": []
     },
     {
+      "name": "example-info-tip-metric-definitions",
+      "path": "examples/info-tip/metric-definitions",
+      "aliases": []
+    },
+    {
+      "name": "example-info-tip-permission-notes",
+      "path": "examples/info-tip/permission-notes",
+      "aliases": []
+    },
+    {
       "name": "example-input-group-basic",
       "path": "examples/input-group/basic",
       "aliases": []
@@ -3652,6 +3667,16 @@
       "aliases": []
     },
     {
+      "name": "example-use-clickable-container-clickable-project-card",
+      "path": "examples/use-clickable-container/clickable-project-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-clipboard-share-link",
+      "path": "examples/use-clipboard/share-link",
+      "aliases": []
+    },
+    {
       "name": "example-use-collapsible-custom-disclosure",
       "path": "examples/use-collapsible/custom-disclosure",
       "aliases": []
@@ -3692,6 +3717,16 @@
       "aliases": []
     },
     {
+      "name": "example-use-icon-status-row",
+      "path": "examples/use-icon/status-row",
+      "aliases": []
+    },
+    {
+      "name": "example-use-image-mode-photo-caption",
+      "path": "examples/use-image-mode/photo-caption",
+      "aliases": []
+    },
+    {
       "name": "example-use-input-status-icon-coupon-code-status",
       "path": "examples/use-input-status-icon/coupon-code-status",
       "aliases": []
@@ -3712,6 +3747,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-link-component-article-cards",
+      "path": "examples/use-link-component/article-cards",
+      "aliases": []
+    },
+    {
       "name": "example-use-list-focus-recent-files",
       "path": "examples/use-list-focus/recent-files",
       "aliases": []
@@ -3722,6 +3762,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-merged-refs-auto-grow-text-area",
+      "path": "examples/use-merged-refs/auto-grow-text-area",
+      "aliases": []
+    },
+    {
       "name": "example-use-outline-from-markdown-docs-article",
       "path": "examples/use-outline-from-markdown/docs-article",
       "aliases": []
@@ -3729,6 +3774,16 @@
     {
       "name": "example-use-overflow-editor-toolbar",
       "path": "examples/use-overflow/editor-toolbar",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-draggable-box",
+      "path": "examples/use-pan-gesture/a-draggable-box",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-playing-card-advanced",
+      "path": "examples/use-pan-gesture/a-playing-card-advanced",
       "aliases": []
     },
     {
@@ -3744,6 +3799,11 @@
     {
       "name": "example-use-scroll-lock-full-screen-mobile-menu",
       "path": "examples/use-scroll-lock/full-screen-mobile-menu",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scroll-overflow-filter-strip-edge-fades",
+      "path": "examples/use-scroll-overflow/filter-strip-edge-fades",
       "aliases": []
     },
     {
@@ -3852,6 +3912,11 @@
       "aliases": []
     },
     {
+      "name": "hook-create-pan-gesture",
+      "path": "hooks/create-pan-gesture",
+      "aliases": []
+    },
+    {
       "name": "hook-use-animated-layout",
       "path": "hooks/use-animated-layout",
       "aliases": []
@@ -3932,6 +3997,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-icon",
+      "path": "hooks/use-icon",
+      "aliases": []
+    },
+    {
       "name": "hook-use-image-mode",
       "path": "hooks/use-image-mode",
       "aliases": []
@@ -3982,6 +4052,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-link-component",
+      "path": "hooks/use-link-component",
+      "aliases": []
+    },
+    {
       "name": "hook-use-list-focus",
       "path": "hooks/use-list-focus",
       "aliases": []
@@ -4024,6 +4099,11 @@
     {
       "name": "hook-use-overflow",
       "path": "hooks/use-overflow",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-pan-gesture",
+      "path": "hooks/use-pan-gesture",
       "aliases": []
     },
     {
@@ -4589,6 +4669,11 @@
     {
       "name": "showcase-icon-default",
       "path": "showcases/icon/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-info-tip-default",
+      "path": "showcases/info-tip/default",
       "aliases": []
     },
     {
