@@ -129,7 +129,7 @@ if (!('Temporal' in globalThis)) {
         },
         {
           type: 'prose',
-          text: 'If you render on the server, a server and a browser that use different implementations can disagree on one of these month starts. The browser then renders that month differently from the server markup, and React renders that part again on the client during hydration. When identical server and browser markup for these calendars matters more than matching official data, load the same `Temporal` implementation on both sides. Otherwise, do not install a polyfill over a native `Temporal`: that makes native environments less accurate.',
+          text: 'If you render on the server, a server and a browser that use different implementations can disagree on one of these month starts. The browser then renders that month differently from the server markup, and React renders that part again on the client during hydration. The `temporal-polyfill/full/global` import keeps a native `Temporal` where one exists, so on its own it leaves Chrome, Edge, and Firefox on native `Temporal` and a Node.js 24 server on the polyfill. When identical server and browser markup for these calendars matters more than matching official data, call `installImplementation()` from `temporal-polyfill/full/shim` on the server and in the browser before rendering: it installs the polyfill even over a native `Temporal`. A server runtime with native `Temporal`, such as Node.js 26, also matches native browsers. Otherwise, do not replace a native `Temporal`: that makes native environments less accurate.',
         },
       ],
     },

@@ -191,7 +191,7 @@ export const docs = {
       name: 'calendar',
       type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
       description:
-        "Calendar system the grid shows, such as 'persian', 'hebrew', or 'islamic-umalqura'. It sets the months, their names, and month and year navigation. value, min, max, focusDate, and every callback stay Gregorian ISO dates. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal; where the runtime lacks it, load a polyfill such as temporal-polyfill/full/global on the server and in the browser, or the grid shows Gregorian months. Month starts in the Chinese and Dangi calendars come from the runtime's Temporal, and some polyfills start a few months one day apart from native Temporal; when you render on the server, load the same Temporal implementation on the server and in the browser.",
+        "Calendar system the grid shows, such as 'persian', 'hebrew', or 'islamic-umalqura'. It sets the months, their names, and month and year navigation. value, min, max, focusDate, and every callback stay Gregorian ISO dates. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal; where the runtime lacks it, load a polyfill such as temporal-polyfill/full/global on the server and in the browser, or the grid shows Gregorian months. Month starts in the Chinese and Dangi calendars come from the runtime's Temporal, and some polyfills start a few months one day apart from native Temporal; when server and browser markup must match, use one implementation on both sides, such as installImplementation() from temporal-polyfill/full/shim, which replaces a native Temporal.",
       default: 'the InternationalizationProvider calendar, else gregory',
     },
   ],
@@ -341,7 +341,7 @@ export const docsZh = {
       name: 'calendar',
       type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
       description:
-        "网格显示的历法，如 'persian'、'hebrew' 或 'islamic-umalqura'。它决定月份、月份名称以及按月和按年的导航。value、min、max、focusDate 和所有回调仍为公历 ISO 日期。gregory、iso8601、buddhist、roc 和 japanese 以外的历法需要 Temporal；运行环境没有 Temporal 时，请在服务端和浏览器中加载 polyfill（如 temporal-polyfill/full/global），否则网格显示公历月份。农历（chinese）和檀纪历（dangi）的月初取自运行环境的 Temporal，部分 polyfill 与原生 Temporal 有少数月份的月初相差一天；服务端渲染时，请在服务端和浏览器中加载同一种 Temporal 实现。",
+        "网格显示的历法，如 'persian'、'hebrew' 或 'islamic-umalqura'。它决定月份、月份名称以及按月和按年的导航。value、min、max、focusDate 和所有回调仍为公历 ISO 日期。gregory、iso8601、buddhist、roc 和 japanese 以外的历法需要 Temporal；运行环境没有 Temporal 时，请在服务端和浏览器中加载 polyfill（如 temporal-polyfill/full/global），否则网格显示公历月份。农历（chinese）和檀纪历（dangi）的月初取自运行环境的 Temporal，部分 polyfill 与原生 Temporal 有少数月份的月初相差一天；服务端渲染且需要两端标记一致时，请在两端使用同一种实现，例如 temporal-polyfill/full/shim 的 installImplementation()，它会替换原生 Temporal。",
       default: 'InternationalizationProvider 的历法，否则为 gregory',
     },
   ],
