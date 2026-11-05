@@ -425,15 +425,22 @@ const CASES = [
     name: 'experimental render',
     args: ['experimental', 'render', 'page.jsx'],
     cwd: '__TMP__',
-    // A page with no imports, in a folder that can resolve React.
+    // A page with no imports, in a folder that can resolve React and Core, so
+    // the page gets Core's stylesheets in every runner.
     setup: dir => {
-      fs.mkdirSync(path.join(dir, 'node_modules'), {recursive: true});
+      fs.mkdirSync(path.join(dir, 'node_modules', '@astryxdesign'), {
+        recursive: true,
+      });
       for (const pkg of ['react', 'react-dom']) {
         fs.symlinkSync(
           path.join(REPO_ROOT, 'node_modules', pkg),
           path.join(dir, 'node_modules', pkg),
         );
       }
+      fs.symlinkSync(
+        path.join(REPO_ROOT, 'packages', 'core'),
+        path.join(dir, 'node_modules', '@astryxdesign', 'core'),
+      );
       fs.writeFileSync(
         path.join(dir, 'page.jsx'),
         'export default function Page() { return <h1>Hello</h1>; }\n',

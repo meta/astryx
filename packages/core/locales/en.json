@@ -2446,5 +2446,9 @@
   "@astryx.infoTip.label": {
     "defaultMessage": "More information",
     "description": "Default accessible name of an InfoTip, the small info-icon button whose press reveals help about the label, value, or metric beside it."
+  },
+  "@astryx.navigationStack.back": {
+    "defaultMessage": "Back",
+    "description": "Label of the back button in a lab NavigationStack's bar when the screen it returns to has no title of its own. Returns to the previous screen; keep it short, as on an iOS navigation bar."
   }
 }
