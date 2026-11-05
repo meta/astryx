@@ -42,6 +42,14 @@ export const docs = {
       {property: 'borderRadius', vars: ['--_chat-composer-radius']},
       {property: 'padding', vars: ['--_chat-composer-padding']},
     ],
+    componentIcons: [
+      {
+        slot: 'chat-send-button-send',
+        description: "ChatSendButton's send glyph. A sendIcon the caller passes wins over the theme's mapping.",
+        fallback: '`arrowUp`',
+        whenNull: 'Hides the glyph. The button keeps its size, name, and send action.',
+      },
+    ],
   },
   components: [
     {name: 'ChatMessageList'},

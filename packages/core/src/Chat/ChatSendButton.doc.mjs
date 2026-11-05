@@ -32,7 +32,7 @@ export const docs = {
     {
       name: 'sendIcon',
       type: 'ReactNode',
-      description: 'Custom icon for the send state. Defaults to arrowUp from icon registry.',
+      description: "Custom icon for the send state. It wins over the theme's chat-send-button-send component icon; with neither, the button shows arrowUp.",
       slotElements: [
         {
           __element: 'Icon',
