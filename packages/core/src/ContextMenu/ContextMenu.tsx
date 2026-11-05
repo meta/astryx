@@ -929,8 +929,6 @@ function useContextMenuElement(
   const mergedTriggerRef = useMergedRefs(ref, triggerRef);
   const mergedAnchorRef = useMergedRefs(cursorAnchorRef, layer.ref);
 
-  // An external trigger gets the handlers and the layer's anchor ref while
-  // this menu is mounted.
   const triggerHandlers = useMemo<ContextMenuTriggerHandlers>(
     () => ({
       onContextMenu: handleTriggerContextMenu,
@@ -948,6 +946,8 @@ function useContextMenuElement(
     ],
   );
   const layerAnchorRef = layer.ref;
+  // Syncs the caller's trigger element with this menu: it receives the
+  // trigger handlers while the menu is mounted, and none after unmount.
   useIsomorphicLayoutEffect(() => {
     if (externalTrigger == null) {
       return;
@@ -958,6 +958,9 @@ function useContextMenuElement(
       onHandlersChange(null);
     };
   }, [externalTrigger, triggerHandlers]);
+  // Syncs the menu's popover anchoring with the caller's DOM: the layer
+  // anchors to the caller's cursor anchor, and the open handlers measure the
+  // caller's trigger.
   useIsomorphicLayoutEffect(() => {
     if (externalTrigger == null) {
       return;

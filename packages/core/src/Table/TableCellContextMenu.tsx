@@ -7,19 +7,12 @@
  * @input React (lazy, Suspense), StyleX, tableContextActions
  * @output TableCellContextMenu, loadTableContextMenu
  * @position Renders a cell's `contextMenuActions` for TableCell and
- * TableHeaderCell. The context menu (ContextMenu, its menu hooks and touch
- * sheet) loads only for cells that have actions, so a table without context
- * menus doesn't ship it.
+ * TableHeaderCell. The menu code loads only for cells that have actions. The
+ * cell renders the trigger and cursor anchor, and the menu loads beside them,
+ * so the content keeps its node, focus and state.
  *
- * The cell renders the right-click trigger and its cursor anchor itself, and
- * the menu loads as their sibling, so the cell's content keeps its DOM node,
- * focus and state when the menu arrives. Until then right-click shows the
- * browser's menu.
- *
- * SYNC: When modified, update these files to stay in sync:
- * - /packages/core/src/Table/tableContextMenu.tsx (TableContextMenuForTrigger)
- * - /packages/core/src/ContextMenu/ContextMenu.tsx (trigger and cursorAnchor
- *   styles, ContextMenuForTrigger)
+ * SYNC: /packages/core/src/Table/tableContextMenu.tsx,
+ * /packages/core/src/ContextMenu/ContextMenu.tsx (trigger styles)
  */
 
 import {lazy, Suspense, useRef, type ReactNode} from 'react';
