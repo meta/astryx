@@ -79,6 +79,11 @@ export const docs = {
         description:
           'Use FieldStatus for general alerts or page-level notices; use Banner or Toast instead.',
       },
+      {
+        guidance: true,
+        description:
+          "A field's status is announced when its message or type changes, not again when a repeated submit fails with the same errors. On a failed submit, announce it from the form with useAnnounce, for example announce(`${errors.length} errors. ${errors[0]}`, 'assertive'), and move focus to the first invalid field.",
+      },
     ],
     anatomy,
   },
@@ -104,6 +109,11 @@ export const docsDense = {
         guidance: false,
         description:
           'Use FieldStatus for general alerts or page-level notices; use Banner or Toast instead.',
+      },
+      {
+        guidance: true,
+        description:
+          'Status announces on message/type change only. On a failed submit, the form announces once via useAnnounce (error count + first error) and focuses the first invalid field.',
       },
     ],
     anatomy,
