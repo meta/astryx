@@ -112,6 +112,10 @@ const command = [
   `${shaderCache}:${containerShaderCache}`,
   '-e',
   `MESA_SHADER_CACHE_DIR=${containerShaderCache}`,
+  // Only this script sets it: the harness self-test then requires the
+  // host-kept cache above.
+  '-e',
+  'ASTRYX_WEBKIT_CONTAINER=1',
   '-w',
   root,
   ...env,

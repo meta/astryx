@@ -141,7 +141,8 @@ export const docs = {
     {
       name: 'timezoneID',
       type: 'string',
-      description: 'Timezone ID for date formatting (e.g. "America/New_York").',
+      description:
+        'IANA zone a date-only date_absolute value, and each absolute part of a date_range, is read and written in: the day shows, edits and stores (as that midnight) in it; unset, a day is its UTC day. A date_absolute with isDateOnly: false shows and edits its date and time in it; unset, in the viewer\'s zone. E.g. "America/New_York". Date values are written in the InternationalizationProvider calendar, such as calendar="persian"; filter values stay Unix seconds.',
     },
     {
       name: 'handleRef',
@@ -207,22 +208,22 @@ export const docs = {
         'StyleX styles for layout customization. Must be a stylex.create() value.',
     },
     {
-      name: 'experimental',
-      type: "{presentation?: 'popover' | 'bottom-sheet' | 'adaptive'}",
-      stability: 'experimental',
+      name: 'presentation',
+      type: "'popover' | 'bottom-sheet' | 'adaptive'",
       description:
-        "Experimental options: anything in this object may change or be removed in a patch release, and omitting it keeps the stable behavior. presentation (default 'popover') chooses how the field presents filter editing. popover is the tokenizer field with its typeahead and the editor popover. bottom-sheet makes the whole field one trigger showing display-only filter tokens: it opens a Filters sheet listing the filters as rows that edit or remove a filter, with Add filter, Done, and Clear all (which asks first and keeps read-only filters); an Add filter sheet with the fields (or the content search with inline suggestions) opens above it, and a value step that stages operator → value and confirms from its footer opens above that. Dismissing a step reveals the one beneath. List values edit through the Tokenizer's own sheet. adaptive uses the bottom sheet on compact touch screens and the popover otherwise, resolved the same way Selector resolves it. In the sheet presentation menuWidth and tokenOverflowBehavior have no surface to act on and warn in development.",
+        'How the field presents filter editing. adaptive (the default) uses the bottom sheet on compact touch screens and the popover otherwise, resolved the same way Selector resolves it; the server render and the hydrating render are the popover. popover is the tokenizer field with its typeahead and the editor popover on every device. bottom-sheet makes the whole field, on every device, one trigger showing display-only filter tokens: it opens a Filters sheet listing the filters as rows that edit or remove a filter, with Add filter, Done, and Clear all (which asks first and keeps read-only filters); an Add filter sheet with the fields (or the content search with inline suggestions) opens above it, and a value step that stages operator → value and confirms from its footer opens above that. Dismissing a step reveals the one beneath. The flow edits a draft: adding, editing and removing filters and Clear all change the draft, and onChange is called when Done applies it, once per edit in order; dismissing the flow with a changed draft asks before discarding it. List values edit through the Tokenizer\'s own sheet. In the sheet presentation menuWidth and tokenOverflowBehavior have no surface to act on and warn in development. Pass presentation="popover" to keep the tokenizer field and the editor popover on every device.',
+      default: "'adaptive'",
     },
   ],
   examples: [
     {
-      label: 'Touch sheet on compact screens (experimental)',
+      label: 'Keep the popover on every device',
       code: `const [filters, setFilters] = useState([]);
 <PowerSearch
   config={config}
   filters={filters}
   onChange={next => setFilters(next)}
-  experimental={{presentation: 'adaptive'}}
+  presentation="popover"
 />`,
     },
   ],
@@ -448,7 +449,8 @@ export const docsZh = {
     {
       name: 'timezoneID',
       type: 'string',
-      description: '用于日期格式化的时区 ID（例如 "America/New_York"）。',
+      description:
+        '仅日期的 date_absolute 值及 date_range 的每个绝对端点读写所用的 IANA 时区：该日在此时区显示、编辑并以其午夜存储；未设置时为 UTC 日。isDateOnly: false 的 date_absolute 值在此时区显示并编辑其日期和时间；未设置时为查看者所在时区。例如 "America/New_York"。日期值使用 InternationalizationProvider 的历法（如 calendar="persian"）显示；筛选值仍为 Unix 秒数。',
     },
     {
       name: 'handleRef',
@@ -479,11 +481,11 @@ export const docsZh = {
       description: '用于布局自定义的 StyleX 样式。必须是 stylex.create() 值。',
     },
     {
-      name: 'experimental',
-      type: "{presentation?: 'popover' | 'bottom-sheet' | 'adaptive'}",
-      stability: 'experimental',
+      name: 'presentation',
+      type: "'popover' | 'bottom-sheet' | 'adaptive'",
       description:
-        "实验性选项：此对象中的任何内容都可能在补丁版本中更改或移除；省略它即保持稳定行为。presentation（默认 'popover'）决定字段如何呈现筛选编辑：popover 为带有预输入和编辑弹出层的标记字段；bottom-sheet 将整个字段变为一个显示只读筛选标记的触发按钮——点按后打开列出筛选项的「筛选」面板，每行可编辑或移除筛选（含添加筛选、完成、全部清除；全部清除会先确认，并保留只读筛选）；列出字段（或带内联建议的内容搜索）的「添加筛选」面板在其上方打开，按运算符 → 值暂存并在底部确认的取值步骤再在其上方打开。关闭某一步会露出下方的那一步。列表值通过 Tokenizer 自身的面板编辑。adaptive 在紧凑触摸屏上使用底部面板，其他情况使用 popover，解析方式与 Selector 相同。在底部面板呈现中，menuWidth 和 tokenOverflowBehavior 没有作用对象，并会在开发环境中发出警告。",
+        '字段如何呈现筛选编辑。adaptive（默认）在紧凑触摸屏上使用底部面板，其他情况使用 popover，解析方式与 Selector 相同；服务端渲染和水合期间的渲染均为 popover。popover 在所有设备上为带有预输入和编辑弹出层的标记字段。bottom-sheet 在所有设备上将整个字段变为一个显示只读筛选标记的触发按钮——点按后打开列出筛选项的「筛选」面板，每行可编辑或移除筛选（含添加筛选、完成、全部清除；全部清除会先确认，并保留只读筛选）；列出字段（或带内联建议的内容搜索）的「添加筛选」面板在其上方打开，按运算符 → 值暂存并在底部确认的取值步骤再在其上方打开。关闭某一步会露出下方的那一步。整个流程编辑的是草稿：添加、编辑、移除筛选和全部清除都只改动草稿，点按「完成」应用草稿时才按编辑顺序逐次触发 onChange；草稿有改动时关闭流程会先询问是否放弃。列表值通过 Tokenizer 自身的面板编辑。在底部面板呈现中，menuWidth 和 tokenOverflowBehavior 没有作用对象，并会在开发环境中发出警告。传入 presentation="popover" 可在所有设备上保留标记字段和编辑弹出层。',
+      default: "'adaptive'",
     },
   ],
   usage: {
@@ -569,7 +571,8 @@ export const docsDense = {
       'Max ranked results for a non-empty query; excludes value editors.',
     menuWidth: 'Main field/search menu width in pixels.',
     popoverSaveButtonLabel: 'Label for save button in edit popover.',
-    timezoneID: 'Timezone ID for date formatting (e.g. "America/New_York").',
+    timezoneID:
+      'IANA zone a date-only value reads and writes in; unset, its UTC day. Dates show in the provider calendar.',
     handleRef:
       'Imperative handle w/ focusTypeahead() + blurTypeahead() methods.',
     endContent:
@@ -579,7 +582,7 @@ export const docsDense = {
     size: 'Search input+token size.',
     xstyle:
       'StyleX styles for layout customization. Must be stylex.create() value.',
-    experimental:
-      "Experimental; may change in a patch. presentation: 'popover' (default, tokenizer field + editor popover) | 'bottom-sheet' (one trigger with display-only tokens + stacked Filters / Add filter / value sheets; rows remove inline; Clear all confirms, keeps read-only; list values via Tokenizer's sheet) | 'adaptive' (sheet on compact touch, else popover).",
+    presentation:
+      "'adaptive' (default: sheet on compact touch, else popover; SSR/hydration render popover) | 'popover' (tokenizer field + editor popover, every device) | 'bottom-sheet' (one trigger with display-only tokens + stacked Filters / Add filter / value sheets; rows remove inline; Clear all confirms, keeps read-only; list values via Tokenizer's sheet). Sheet: menuWidth/tokenOverflowBehavior inert (dev warning). presentation=\"popover\" keeps the popover on every device.",
   },
 };

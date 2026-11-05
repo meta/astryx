@@ -8,8 +8,8 @@
  *   an InfoTip.
  * @position The reproduction path for the press-to-pin cases in
  *   `packages/core/src/Layer/__tests__/TouchTrigger.a11y.chromium.spec.ts`
- *   (`component:Tooltip` FR9, FR10; InfoTip is Tooltip's press-to-pin
- *   trigger). Per `docs/specs/AST-009/spec.md` FR30, a browser claim is
+ *   (`component:InfoTip` FR2; InfoTip pins through `useTooltip`'s `show()`
+ *   and `hide()`). Per `docs/specs/AST-009/spec.md` FR30, a browser claim is
  *   checked against a checked-in story.
  *
  * SYNC: The spec navigates to these story ids by name. Nothing at compile
@@ -21,7 +21,7 @@ import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {ClickableCard} from '@astryxdesign/core/ClickableCard';
 import {InfoTip} from '@astryxdesign/core/InfoTip';
-import {VStack} from '@astryxdesign/core/Layout';
+import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
 
 const meta: Meta = {
@@ -60,10 +60,10 @@ function InAClickableCardRender() {
     <div style={{padding: 100, maxWidth: 360}}>
       <VStack gap={2}>
         <ClickableCard label="Icon usage" onClick={() => setOpened(n => n + 1)}>
-          <VStack gap={2}>
+          <HStack gap={1} vAlign="center">
             Icon usage
             <InfoTip content={HELP} label="What is this?" />
-          </VStack>
+          </HStack>
         </ClickableCard>
         <span>Card opened {opened} times</span>
       </VStack>

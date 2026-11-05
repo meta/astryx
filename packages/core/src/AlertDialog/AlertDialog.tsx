@@ -34,6 +34,7 @@ import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {useTouchPresentation} from '../utils/touchPresentation';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -45,6 +46,9 @@ import {alertController} from '../motion/uikit/alert';
 import {pressGroupItemProps} from '../privateAttributes/pressGroupItem.stylex';
 
 registerEnglishFallback(english);
+
+const SLIDING_POINTERS = ['touch', 'pen'] as const;
+const ACTION_TRACKING_PROPS = pressGroupItemProps(SLIDING_POINTERS);
 
 const SMALL_SCREEN_QUERY = '(max-width: 640px)';
 
@@ -193,15 +197,20 @@ export function AlertDialog({
   // Each action carries the press-group marker from its first render, so the
   // tracker is its only painter.
   const actionsRef = useRef<HTMLElement>(null);
-  const isTracking = isOpen && isInline !== true;
+  // Only under the touch presentation does a press slide across the
+  // actions. A desktop press stays the native button's.
+  const {isTouch} = useTouchPresentation();
+  const isTracking = isOpen && isInline !== true && isTouch;
   useActionGroupTracking(actionsRef, {
     // The actions row holds only the two buttons.
     itemSelector: 'button',
     highlightOnsetMs: alertController.actions.highlightOnsetMs,
     highlightExpansion: alertController.actions.highlightExpansion,
+    // A mouse press acts as a native button's under any presentation.
+    pointerTypes: SLIDING_POINTERS,
     isEnabled: isTracking,
   });
-  const actionTrackingProps = isTracking ? pressGroupItemProps : undefined;
+  const actionTrackingProps = isTracking ? ACTION_TRACKING_PROPS : undefined;
 
   const buttonActionStyle = [
     styles.action,

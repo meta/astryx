@@ -13,7 +13,8 @@
  *   carries only the gesture code its touch components import; two components
  *   that import the touch module share one copy per page; only the internal
  *   `internal/touch` entry reaches it, and no consumer doc or component
- *   `import()` does
+ *   `import()` does; the names that entry gives Lab are not in the root
+ *   entry
  * @position Node test over source, so it needs no build. Its build files
  *   live under the repository's `node_modules/.cache`, never the system temp
  *   directory, whose listing esbuild would read for every build
@@ -100,6 +101,33 @@ function outputsOf(entries) {
   );
 }
 
+/** The names a build of `entry` exports, read from esbuild's metafile. */
+function exportsOf(entry) {
+  const result = esbuild.buildSync({...BUILD_OPTIONS, entryPoints: [entry]});
+  return Object.values(result.metafile.outputs).flatMap(
+    output => output.exports ?? [],
+  );
+}
+
+/**
+ * What the internal entry gives Lab's refresh pull: the pan, its hook, the
+ * motion animator, its motion math and companion curves, the scroll view's
+ * spring and the motion-role parsers. None is public API.
+ */
+const LAB_ONLY_NAMES = [
+  'PanGestureRecognizer',
+  'useGestureRecognizer',
+  'createMotionAnimator',
+  'cubicBezier',
+  'mapProgress',
+  'parseCssEasing',
+  'parseMotionRoleValue',
+  'rubberBand',
+  'rubberBandInverse',
+  'rubberBandSlope',
+  'scroll',
+];
+
 /** The inputs matching `pattern` that put bytes in `bytes`. */
 function bytesOf(bytes, pattern = PRIMITIVE_INPUT) {
   return Object.entries(bytes).filter(
@@ -141,7 +169,8 @@ const GESTURE_USERS = new Set([
   // AlertDialog: its actions' press, tracked across both for every pointer.
   'AlertDialog',
   // Through AlertDialog: Tokenizer's bottom sheet confirms with an alert, and
-  // PowerSearch and Table's filtering render a Tokenizer.
+  // PowerSearch and Table's filtering render a Tokenizer. Both also reach
+  // TimeInput's wheels: PowerSearch's edit popover and Table's filtering.
   'PowerSearch',
   'Table',
   'Tokenizer',
@@ -153,7 +182,9 @@ const GESTURE_USERS = new Set([
   'SegmentedControl',
   // DateTimeInput: through the SegmentedControl its touch field renders.
   'DateTimeInput',
-  // useScrollLock's page hold, and the imports that reach it.
+  // useScrollLock's page hold, and the imports that reach it. The sheet
+  // wheels of DateInput, TimeInput and DateTimeInput also drag and tap
+  // through the gesture system's pan and tap (DateInput/PickerWheel.tsx).
   'hooks: useScrollLock',
   'AppShell',
   'BottomSheet',
@@ -356,6 +387,22 @@ describe('the touch module in bundles', () => {
     }
   });
 
+  it('is absent from a component that holds its layer (Layer/inputHold)', () => {
+    // A component in the root entry may hold its layer's input statically
+    // (a popover's presentation): the hold brings no gesture code with it.
+    const holder = entryWith(
+      'Holder.ts',
+      `import {holdInput} from ${JSON.stringify(
+        path.join(CORE_SRC, 'Layer/inputHold.ts'),
+      )};
+export const Holder = holdInput;
+`,
+    );
+    for (const bytes of outputsOf([holder])) {
+      expect(bytesOf(bytes)).toEqual([]);
+    }
+  });
+
   it('is one copy that two components importing it share', () => {
     const component = name =>
       entryWith(
@@ -383,6 +430,17 @@ describe('the touch module internals', () => {
       'node_modules',
     );
   });
+
+  it('give Lab names that the public entry does not export', () => {
+    const internal = new Set(
+      exportsOf(path.join(CORE_SRC, 'internal/touch.ts')),
+    );
+    const root = new Set(exportsOf(path.join(CORE_SRC, 'index.ts')));
+    // The root build reads its exports: a public component is among them.
+    expect(root.has('Button')).toBe(true);
+    expect(LAB_ONLY_NAMES.filter(name => !internal.has(name))).toEqual([]);
+    expect(LAB_ONLY_NAMES.filter(name => root.has(name))).toEqual([]);
+  }, 120_000);
 
   it('have no entry in the exports map beside the internal touch entry', () => {
     const {exports} = JSON.parse(

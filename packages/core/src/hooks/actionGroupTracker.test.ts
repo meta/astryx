@@ -21,6 +21,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {__resetClickGuardForTest, isClickGuardArmed} from '../utils/clickGuard';
 import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {PRESS_FADE_MS} from '../utils/pressGesture';
 import {
   createActionGroupTracker,
@@ -238,6 +239,59 @@ describe('createActionGroupTracker', () => {
       second.button,
       null,
     ]);
+  });
+
+  it("times the release fade by the theme's exit duration, as the press controller does (spec:AST-094 FR5)", () => {
+    // A rule writes the token; browsers inherit it from the theme, jsdom
+    // only reads it where it is declared.
+    const style = document.createElement('style');
+    style.textContent = '[data-action] { --duration-exit: 333ms; }';
+    document.head.append(style);
+    try {
+      const group = tracker();
+      group.begin(100, 20);
+      group.end();
+      vi.advanceTimersByTime(332);
+      expect(first.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(1);
+      expect(first.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      style.remove();
+    }
+  });
+
+  it("under Reduce Motion the release fade is no longer than design:reduced-motion DR2's bound", () => {
+    vi.stubGlobal(
+      'matchMedia',
+      (query: string): MediaQueryList =>
+        ({
+          matches: /prefers-reduced-motion:\s*reduce/.test(query),
+          media: query,
+          onchange: null,
+          addListener: () => undefined,
+          removeListener: () => undefined,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+          dispatchEvent: () => false,
+        }) as MediaQueryList,
+    );
+    const style = document.createElement('style');
+    style.textContent = '[data-action] { --duration-exit: 333ms; }';
+    document.head.append(style);
+    try {
+      const group = tracker();
+      group.begin(100, 20);
+      group.end();
+      vi.advanceTimersByTime(
+        Number.parseFloat(reducedMotionFadeConsts.duration) - 1,
+      );
+      expect(first.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(1);
+      expect(first.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      style.remove();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('dispose finishes a pending release fade', () => {

@@ -23,6 +23,8 @@
  * A hidden <input type="checkbox"> inside the card provides the accessible
  * role, label, and checked state — the card surface itself has no role/tabIndex.
  * Space toggles it natively; Enter is wired up as an additional toggle key.
+ * Inside a single-choice group (Lab's SelectableCardGroup, through an internal
+ * context) the input is a radio: the card selects and never deselects itself.
  *
  * For static display, use Card.
  * For navigation or action cards, use ClickableCard.
@@ -34,13 +36,15 @@ import {
   type KeyboardEvent,
   useRef,
   useCallback,
+  use,
   type Ref,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {colorVars, durationVars, easeVars} from '../theme/tokens.stylex';
 import type {Elevation, SizeValue, SpacingStep} from '../utils/types';
-import {mergeProps} from '../utils';
+import {isImeKeyEvent, mergeProps} from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {Card} from '../Card/Card';
 import type {CardVariant} from '../Card/Card';
 import {useClickableContainer} from '../hooks/useClickableContainer';
@@ -52,6 +56,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {SelectableCardInputContext} from './selectableCardInput';
 // =============================================================================
 // Styles — selection + interaction; Card handles the rest
 // =============================================================================
@@ -394,6 +399,7 @@ export function SelectableCard({
   onChange,
   onClick: onClickProp,
   onMouseUp: onMouseUpProp,
+  onPointerDown: onPointerDownProp,
   isDisabled = false,
   children,
   padding,
@@ -412,20 +418,34 @@ export function SelectableCard({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const interactiveRef = useRef<HTMLInputElement | null>(null);
 
+  // A group can make the input a radio. A radio only selects: a native radio
+  // stays checked when it is clicked again.
+  const groupInput = use(SelectableCardInputContext);
+  const isRadio = groupInput?.type === 'radio';
+  const requestChange = useCallback(() => {
+    if (!isRadio) {
+      onChange(!isSelected);
+    } else if (!isSelected) {
+      onChange(true);
+    }
+  }, [isRadio, isSelected, onChange]);
+
   const handleClick = useCallback(
     (_event: MouseEvent<HTMLElement>) => {
       if (!isDisabled) {
-        onChange(!isSelected);
+        requestChange();
       }
     },
-    [isDisabled, isSelected, onChange],
+    [isDisabled, requestChange],
   );
 
-  // The focusable control is a native checkbox, which toggles on Space but
-  // ignores Enter. Add Enter as an extra toggle key; Space keeps its native
-  // handling, so we deliberately do not toggle on Space here (would double).
+  // A native checkbox or radio reacts to Space but not to Enter. This handler
+  // adds Enter. Space is not handled here, because it would act twice.
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLInputElement>) => {
+      if (isImeKeyEvent(event.nativeEvent)) {
+        return;
+      }
       if (isDisabled) {
         if (event.key === ' ' || event.key === 'Enter') {
           event.preventDefault();
@@ -434,13 +454,13 @@ export function SelectableCard({
       }
       if (event.key === 'Enter') {
         event.preventDefault();
-        onChange(!isSelected);
+        requestChange();
       }
     },
-    [isDisabled, isSelected, onChange],
+    [isDisabled, requestChange],
   );
 
-  const {onClick, onMouseUp} = useClickableContainer({
+  const {onClick, onMouseUp, onPointerDown} = useClickableContainer({
     containerRef,
     interactiveRef,
     onClick: handleClick,
@@ -512,6 +532,11 @@ export function SelectableCard({
       }
       onClick={!isDisabled ? composedOnClick : undefined}
       onMouseUp={!isDisabled ? composedOnMouseUp : undefined}
+      onPointerDown={
+        !isDisabled
+          ? chainEventHandlers(onPointerDown, onPointerDownProp)
+          : onPointerDownProp
+      }
       {...props}
       onClickCapture={
         !isDisabled && handleLayerClickCapture
@@ -523,7 +548,18 @@ export function SelectableCard({
       }>
       <input
         ref={interactiveRef}
-        type="checkbox"
+        type={isRadio ? 'radio' : 'checkbox'}
+        name={groupInput?.name}
+        value={groupInput?.value}
+        // Radios group by name and form owner, so every radio card leaves
+        // the form together and the group stays one tab stop. The group
+        // submits its choice itself. A disabled checkbox card submits
+        // nothing, so it leaves the form too.
+        form={
+          groupInput != null && (groupInput.type === 'radio' || isDisabled)
+            ? ''
+            : undefined
+        }
         checked={isSelected}
         aria-label={label}
         aria-disabled={isDisabled ? 'true' : undefined}
@@ -531,7 +567,7 @@ export function SelectableCard({
           if (isDisabled) {
             return;
           }
-          onChange(!isSelected);
+          requestChange();
         }}
         onKeyDown={handleKeyDown}
         {...stylex.props(styles.srOnly)}

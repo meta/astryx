@@ -5,8 +5,7 @@
 /**
  * @file Tooltip.tsx
  * @input Uses React, useTooltip hook
- * @output Exports Tooltip component for hover/focus triggered tooltips, and the
- *   module-only TooltipWithTriggerBehavior that InfoTip's press-to-pin uses
+ * @output Exports Tooltip component for hover/focus triggered tooltips
  * @position Layer component; uses display:contents wrapper to avoid cloneElement
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -24,14 +23,10 @@ import React, {
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {
-  useTooltipWithTriggerBehavior,
+  useTooltip,
   type TooltipFocusTrigger,
   type TooltipTouchTrigger,
 } from './useTooltip';
-import {
-  stopPressPinClick,
-  type LayerTriggerBehavior,
-} from '../Layer/usePressPin';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {colorVars} from '../theme/tokens.stylex';
 
@@ -194,32 +189,7 @@ function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
  * </Tooltip>
  * ```
  */
-export function Tooltip(props: TooltipProps): ReactElement {
-  // The option is fixed to `adaptive`, so a spread object that carries it at
-  // runtime cannot reach the press-to-pin path.
-  return <TooltipWithTriggerBehavior {...props} triggerBehavior="adaptive" />;
-}
-
-/**
- * Module-only props for `TooltipWithTriggerBehavior`. Not exported from the
- * package.
- */
-export interface TooltipWithTriggerBehaviorProps extends TooltipProps {
-  /**
-   * How the trigger opens the tooltip. `toggle` pins it on a click, a tap,
-   * Enter, or Space on a button trigger, and stops that press at the trigger
-   * (see `useTooltipWithTriggerBehavior`). InfoTip uses it.
-   *
-   * @default 'adaptive'
-   */
-  triggerBehavior?: LayerTriggerBehavior;
-}
-
-/**
- * `Tooltip` with a trigger behavior. Module-only: InfoTip's press-to-pin goes
- * through it, and the package does not export it.
- */
-export function TooltipWithTriggerBehavior({
+export function Tooltip({
   children,
   anchorRef,
   content,
@@ -229,13 +199,12 @@ export function TooltipWithTriggerBehavior({
   hideDelay = 0,
   focusTrigger = 'auto',
   touchTrigger = 'auto',
-  triggerBehavior = 'adaptive',
   isEnabled = true,
   onOpenChange,
   hasHoverIndication = 'auto',
   isOpen,
   isDefaultOpen,
-}: TooltipWithTriggerBehaviorProps): ReactElement {
+}: TooltipProps): ReactElement {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const textOnly = children != null ? isTextOnly(children) : false;
 
@@ -252,14 +221,13 @@ export function TooltipWithTriggerBehavior({
   }, [onOpenChange]);
 
   // Use the hook for all tooltip behavior
-  const tooltip = useTooltipWithTriggerBehavior({
+  const tooltip = useTooltip({
     placement,
     alignment,
     delay,
     hideDelay,
     focusTrigger,
     touchTrigger,
-    triggerBehavior,
     isEnabled,
     isOpen,
     isDefaultOpen,
@@ -373,7 +341,6 @@ export function TooltipWithTriggerBehavior({
           ref={tooltip.ref}
           tabIndex={0}
           aria-describedby={tooltip.describedBy}
-          onClick={stopPressPinClick}
           {...stylex.props(
             styles.wrapperInline,
             showHoverIndication && styles.hoverIndication,
@@ -388,10 +355,7 @@ export function TooltipWithTriggerBehavior({
   // For element children: use display:contents, ref on first child
   return (
     <>
-      <div
-        ref={wrapperRef}
-        onClick={stopPressPinClick}
-        {...stylex.props(styles.wrapperContents)}>
+      <div ref={wrapperRef} {...stylex.props(styles.wrapperContents)}>
         {children}
       </div>
       {tooltip.renderTooltip(content)}

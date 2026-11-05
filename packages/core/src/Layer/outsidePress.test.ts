@@ -9,7 +9,12 @@
  */
 
 import {afterEach, describe, expect, it} from 'vitest';
-import {isFocusInsideOwnedLayer, isPressInsideOwnedLayer} from './outsidePress';
+import {
+  isFocusInsideOwnedLayer,
+  isPressInsideOwnedLayer,
+  outsideDismissalCount,
+  watchOutsidePress,
+} from './outsidePress';
 
 describe('isFocusInsideOwnedLayer', () => {
   function setup() {
@@ -94,5 +99,28 @@ describe('inside tests across realms', () => {
     expect(
       isPressInsideOwnedLayer([frameDocument.body], field, 'framed-layer'),
     ).toBe(false);
+  });
+});
+
+describe('outsideDismissalCount', () => {
+  it('counts each layer an outside press closes, and not a press inside', () => {
+    const owner = document.createElement('div');
+    const outside = document.createElement('div');
+    document.body.append(owner, outside);
+    const stop = watchOutsidePress(
+      owner,
+      path => path.includes(owner),
+      () => {},
+    );
+    const before = outsideDismissalCount(document);
+    owner.dispatchEvent(new Event('pointerdown', {bubbles: true}));
+    owner.dispatchEvent(new Event('pointerup', {bubbles: true}));
+    expect(outsideDismissalCount(document)).toBe(before);
+    outside.dispatchEvent(new Event('pointerdown', {bubbles: true}));
+    outside.dispatchEvent(new Event('pointerup', {bubbles: true}));
+    expect(outsideDismissalCount(document)).toBe(before + 1);
+    stop();
+    owner.remove();
+    outside.remove();
   });
 });

@@ -8,8 +8,8 @@
  *   useAdaptivePresentation, and PowerSearchBottomSheet (lazy)
  * @output Structured filter bar with token-based filter management
  * @position Main component; forwards DOM ref and exposes tokenizer control via
- *   handleRef. The experimental `presentation` option swaps the tokenizer
- *   field and editor popover for one trigger that opens PowerSearchBottomSheet.
+ *   handleRef. The `presentation` prop swaps the tokenizer field and editor
+ *   popover for one trigger that opens PowerSearchBottomSheet.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/PowerSearch/index.ts
@@ -58,7 +58,10 @@ import {usePopover} from '../Popover/usePopover';
 import {useTooltip} from '../Tooltip/useTooltip';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {useAnnounce} from '../hooks/useAnnounce';
-import {useAdaptivePresentation} from '../hooks/useAdaptivePresentation';
+import {
+  type AdaptivePresentation,
+  useAdaptivePresentation,
+} from '../hooks/useAdaptivePresentation';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {
@@ -70,7 +73,7 @@ import {
   fontWeightVars,
 } from '../theme/tokens.stylex';
 import {useSize} from '../SizeContext/SizeContext';
-import {isFocusDetached} from '../utils/focusReturn';
+import {isFocusDetached} from '../utils/isFocusDetached';
 import {isRenderable} from '../utils/isRenderable';
 import {useInternalConfig} from './useInternalConfig';
 import {usePowerSearchSource} from './usePowerSearchSource';
@@ -83,6 +86,7 @@ import {
 import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n/useLocale';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {Locale} from '../i18n/types';
 import type {SearchableItem} from '../Typeahead/types';
 import type {
@@ -239,6 +243,15 @@ const sheetTriggerStyles = stylex.create({
     },
     outline: 'none',
   },
+  // A placeholder longer than the trigger ends in an ellipsis inside it, as
+  // Selector's value does. It never runs under the result count or past the
+  // field's border.
+  placeholder: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
   // Once a token is present the empty trigger covers the token lane instead
   // of reserving 40px or wrapping onto an otherwise blank row.
   triggerWithTokens: {
@@ -378,7 +391,13 @@ export interface PowerSearchProps extends Omit<
   maxSearchResults?: number;
   /** Label for the save button in edit popover. @default 'Apply' */
   popoverSaveButtonLabel?: string;
-  /** Timezone ID for date formatting. */
+  /**
+   * IANA zone a date-only `date_absolute` value, and each absolute part of a
+   * `date_range`, is read and written in: the token, the label and the editor
+   * show its day there, and a picked day stores as that midnight. Unset, a
+   * day is its UTC day. A `date_absolute` with `isDateOnly: false` shows and
+   * edits its date and time in it; unset, in the viewer's zone.
+   */
   timezoneID?: string;
   /**
    * Controls how tokens overflow when the container is too narrow.
@@ -410,38 +429,35 @@ export interface PowerSearchProps extends Omit<
    * Keys are operator value types (e.g. 'string', 'enum', 'date_absolute').
    */
   components?: PowerSearchComponents;
-
   /**
-   * Experimental options, outside the stable compatibility promise: anything
-   * in this object may change or be removed in a patch release. Omit it for
-   * the stable behavior.
-   * @experimental
+   * How the field presents filter editing.
+   * - `'popover'`: the tokenizer field with its typeahead and the editor
+   *   popover, on every device.
+   * - `'bottom-sheet'`: the whole field is one trigger showing display-only
+   *   filter tokens; it opens a stack of sheets. Filters lists the filters
+   *   as rows that edit or remove one, with Add filter, Done, and Clear
+   *   all, which asks first and keeps read-only filters. Add filter opens
+   *   above it with the fields (or the content search with inline
+   *   suggestions), and a value step opens above that, stages operator →
+   *   value, and confirms from its footer. Dismissing a step reveals the
+   *   one beneath. The flow edits a draft: `onChange` is called when Done
+   *   applies it, once per edit in order, and a dismissal with a changed
+   *   draft asks before discarding it. Suited to compact touch screens,
+   *   where the editor popover competes with the software keyboard.
+   * - `'adaptive'`: the bottom sheet on compact coarse-pointer screens,
+   *   otherwise the popover — the same resolution Selector uses. The server
+   *   render and the hydrating render are the popover.
+   *
+   * In the sheet presentation `menuWidth` and `tokenOverflowBehavior` have
+   * no surface to act on and warn in development. Pass `'popover'` to keep
+   * the tokenizer field and the editor popover on every device.
+   * @default 'adaptive'
    */
-  experimental?: {
-    /**
-     * How the field presents filter editing.
-     * - `'popover'`: the tokenizer field with its typeahead and the editor
-     *   popover — the stable behavior.
-     * - `'bottom-sheet'`: the whole field is one trigger showing display-only
-     *   filter tokens; it opens a stack of sheets. Filters lists the filters
-     *   as rows that edit or remove one, with Add filter, Done, and Clear
-     *   all, which asks first and keeps read-only filters. Add filter opens
-     *   above it with the fields (or the content search with inline
-     *   suggestions), and a value step opens above that, stages operator →
-     *   value, and confirms from its footer. Dismissing a step reveals the
-     *   one beneath. Suited to compact touch screens, where the editor
-     *   popover competes with the software keyboard.
-     * - `'adaptive'`: the bottom sheet on compact coarse-pointer screens,
-     *   otherwise the popover — the same resolution Selector uses.
-     *
-     * In the sheet presentation `menuWidth` and `tokenOverflowBehavior` have
-     * no surface to act on and warn in development.
-     * @experimental
-     * @default 'popover'
-     */
-    presentation?: 'popover' | 'bottom-sheet' | 'adaptive';
-  };
+  presentation?: PowerSearchPresentation;
 }
+
+/** How PowerSearch presents filter editing; see `PowerSearchProps.presentation`. */
+export type PowerSearchPresentation = AdaptivePresentation;
 
 // =============================================================================
 // State
@@ -577,13 +593,14 @@ export function PowerSearch({
   className,
   style,
   components: componentOverrides,
-  experimental,
+  presentation = 'adaptive',
 }: PowerSearchProps) {
   const size = useSize(sizeProp, 'md');
   const config = useInternalConfig(configProp);
   const searchSource = usePowerSearchSource(config, maxSearchResults);
   const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'PowerSearch');
   const label = labelFromProps ?? t('@astryx.powersearch.label');
   const placeholder =
     placeholderFromProps ?? t('@astryx.powersearch.placeholder');
@@ -591,11 +608,6 @@ export function PowerSearch({
     popoverSaveButtonLabelFromProps ?? t('@astryx.powersearch.editor.apply');
   const tokenizerRef = useRef<TokenizerHandle>(null);
 
-  // Experimental presentation. `adaptive`
-  // resolves through the policy the selection controls share; an open flow
-  // keeps its presentation until it closes, so a resolution change mid-task
-  // cannot pull the surface out from under the person.
-  const presentation = experimental?.presentation ?? 'popover';
   const resolvedPresentation = useAdaptivePresentation(presentation);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   // Latched for the flow's lifetime: the flow stays presented after it closes
@@ -681,12 +693,12 @@ export function PowerSearch({
   }
   useDevWarning(
     'PowerSearch',
-    '`menuWidth` has no surface in the bottom-sheet presentation: the sheet flow has no typeahead popover to size. Scope it to the popover presentation or leave it out.',
+    '`menuWidth` has no surface in the bottom-sheet presentation: the sheet flow has no typeahead popover to size. Pass `presentation="popover"` to keep the popover on every device, or leave it out.',
     isSheetPresentation && menuWidth != null,
   );
   useDevWarning(
     'PowerSearch',
-    '`tokenOverflowBehavior` has no surface in the bottom-sheet presentation: the trigger wraps its display-only tokens. Scope it to the popover presentation or leave it out.',
+    '`tokenOverflowBehavior` has no surface in the bottom-sheet presentation: the trigger wraps its display-only tokens. Pass `presentation="popover"` to keep the tokenizer field on every device, or leave it out.',
     isSheetPresentation && tokenOverflowBehavior != null,
   );
 
@@ -713,11 +725,15 @@ export function PowerSearch({
               10,
             ),
             locale,
+            calendar,
+            undefined,
+            undefined,
+            timezoneID,
           )
         : null;
       return {label, value, full: value != null ? `${label} ${value}` : label};
     },
-    [config, maxTokenLength, t, locale],
+    [config, maxTokenLength, t, locale, timezoneID, calendar],
   );
   // The built-in token being edited. A token from a `components` override
   // names itself, so its editor keeps the plain popover.
@@ -868,6 +884,7 @@ export function PowerSearch({
             t,
             locale,
             timezoneID,
+            calendar,
           )
         : '';
 
@@ -886,7 +903,7 @@ export function PowerSearch({
         },
       };
     });
-  }, [filters, config, maxTokenLength, timezoneID, t, locale]);
+  }, [filters, config, maxTokenLength, timezoneID, t, locale, calendar]);
 
   // Handle tokenizer onChange (field selected from typeahead)
   const handleTokenizerChange = useCallback(
@@ -1090,6 +1107,7 @@ export function PowerSearch({
             onClick={handleClick}
             onRemove={handleRemove}
             isDisabled={isDisabled}
+            timezoneID={timezoneID}
           />
         );
       }
@@ -1166,6 +1184,7 @@ export function PowerSearch({
       );
     },
     [
+      timezoneID,
       filters,
       config,
       configProp,
@@ -1260,6 +1279,7 @@ export function PowerSearch({
           onCancel={handlePopoverCancel}
           saveButtonLabel={popoverSaveButtonLabel}
           isReadOnly={isReadOnly}
+          timezoneID={timezoneID}
         />
       );
     }
@@ -1275,9 +1295,11 @@ export function PowerSearch({
         saveButtonLabel={popoverSaveButtonLabel}
         maxMenuItems={maxOperatorMenuItems}
         isReadOnly={isReadOnly}
+        timezoneID={timezoneID}
       />
     );
   }, [
+    timezoneID,
     popoverPartialFilter,
     popoverState,
     EditorOverride,
@@ -1535,7 +1557,11 @@ export function PowerSearch({
                   sheetTriggerStyles.trigger,
                   filters.length > 0 && sheetTriggerStyles.triggerWithTokens,
                 )}>
-                {filters.length === 0 ? placeholder : null}
+                {filters.length === 0 ? (
+                  <span {...stylex.props(sheetTriggerStyles.placeholder)}>
+                    {placeholder}
+                  </span>
+                ) : null}
               </button>
             </div>
             {(endContent || isRenderable(resultCountText)) && (
@@ -1574,6 +1600,7 @@ export function PowerSearch({
             isDisabled={isDisabled}
             hasClear={hasClear}
             maxOperatorMenuItems={maxOperatorMenuItems}
+            timezoneID={timezoneID}
             maxSearchResults={maxSearchResults}
             saveButtonLabel={popoverSaveButtonLabelFromProps}
             components={componentOverrides}
@@ -1620,6 +1647,7 @@ export function PowerSearch({
               containerClassName={className}
               containerStyle={style}
               data-testid={testId}
+              presentation="popover"
             />
           </TokenizerItemRemovableContext>
         </TokenizerClearAllMessageContext>

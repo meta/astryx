@@ -334,6 +334,10 @@ empty-state content remains one shared tree.
 
 ## Current-state impact
 
+- **Active option perception.** The active option shows only the
+  `--color-overlay-hover` fill, under 3:1 against the listbox in light and
+  dark, against `spec:AST-020` FR1 (WCAG 2.2 1.4.11). Selector draws the
+  shared focus ring after keyboard input (`component:Selector` AR5).
 - **Loading read as no options (FR2).** `isLoading` withholds the Empty state,
   the create row, and search announcements, so a person searching while the
   field reports loading sees and hears nothing, against `spec:AST-001` FR4.

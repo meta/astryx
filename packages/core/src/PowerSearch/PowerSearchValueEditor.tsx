@@ -19,6 +19,7 @@ import React, {
   useCallback,
   useMemo,
   useRef,
+  useState,
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
@@ -42,6 +43,15 @@ import {
   type NumberInputCommitDecision,
 } from '../NumberInput/numberInputCommit';
 import {DateInput} from '../DateInput';
+import {
+  isoDateTimeToUnixSeconds,
+  isoDateToUnixSeconds,
+  resolveDateZone,
+  unixSecondsToISODate,
+  unixSecondsToISODateTime,
+} from './powerSearchDateZone';
+import type {ISODateTimeString} from '../DateTimeInput/DateTimeInput';
+import {HStack} from '../HStack/HStack';
 import {DateRangeInput, type DateRange} from '../DateRangeInput';
 import {resolveDateTimeRangePart} from './resolveDateTimeRangePart';
 import {TimeInput} from '../TimeInput';
@@ -122,10 +132,9 @@ function enumItemsToSearchableItems(
 function dateRangePartToISO(
   part: DateTimeRangePart,
   nowSeconds: number,
+  zone: string | undefined,
 ): ISODateString {
-  return new Date(resolveDateTimeRangePart(part, nowSeconds) * 1000)
-    .toISOString()
-    .split('T')[0] as ISODateString;
+  return unixSecondsToISODate(resolveDateTimeRangePart(part, nowSeconds), zone);
 }
 
 // =============================================================================
@@ -264,7 +273,7 @@ function StringListEditor({
       hasCreate={hasCreate}
       maxMenuItems={maxMenuItems}
       width={isSheet ? '100%' : undefined}
-      experimental={isSheet ? {presentation: 'bottom-sheet'} : undefined}
+      presentation={isSheet ? 'bottom-sheet' : 'popover'}
     />
   );
 }
@@ -500,38 +509,137 @@ function TimeEditor({
   );
 }
 
+/**
+ * A value with a time of day: its wall-clock time in `zone`, read and written
+ * as one instant through a date picker beside a time field.
+ */
+function DateTimeEditor({
+  label,
+  isDisabled,
+  presentation,
+  unixSeconds,
+  zone,
+  onChange,
+}: {
+  label: string;
+  isDisabled?: boolean;
+  presentation: EditorPresentation;
+  unixSeconds: number | undefined;
+  zone: string | undefined;
+  onChange: (value: FilterValue) => void;
+}) {
+  const t = useComponentTranslator();
+  const [datePart, timePart] = useMemo(() => {
+    if (unixSeconds == null) {
+      return [undefined, undefined] as const;
+    }
+    const [date, time] = unixSecondsToISODateTime(unixSeconds, zone).split('T');
+    return [date as ISODateString, time as ISOTimeString] as const;
+  }, [unixSeconds, zone]);
+  // A part picked first waits for the other. The editor writes the instant
+  // once both parts exist.
+  const [pendingDate, setPendingDate] = useState<ISODateString | undefined>();
+  const [pendingTime, setPendingTime] = useState<ISOTimeString | undefined>();
+  const date = datePart ?? pendingDate;
+  const time = timePart ?? pendingTime;
+  const commit = (
+    nextDate: ISODateString | undefined,
+    nextTime: ISOTimeString | undefined,
+  ) => {
+    if (nextDate == null || nextTime == null) {
+      return;
+    }
+    onChange({
+      type: 'date_absolute',
+      unixSeconds: isoDateTimeToUnixSeconds(
+        `${nextDate}T${nextTime}` as ISODateTimeString,
+        zone,
+      ),
+    });
+  };
+  const width = presentation === 'bottom-sheet' ? '100%' : undefined;
+  // A nested sub-filter row keeps its selectors' widths, so the pair wraps
+  // where the value cell is narrower than the two inputs.
+  return (
+    <HStack gap={2} wrap="wrap">
+      <DateInput
+        label={label}
+        isLabelHidden
+        isDisabled={isDisabled}
+        value={date}
+        onChange={value => {
+          setPendingDate(value);
+          commit(value, time);
+        }}
+        width={width}
+      />
+      <TimeInput
+        label={t('@astryx.powersearch.valueEditor.time')}
+        isLabelHidden
+        isDisabled={isDisabled}
+        value={time}
+        onChange={value => {
+          setPendingTime(value);
+          commit(date, value);
+        }}
+        width={width}
+      />
+    </HStack>
+  );
+}
+
 function DateAbsoluteEditor({
+  operatorValue,
   filterValue,
   onChange,
   isDisabled,
   presentation,
+  timezoneID,
 }: {
   operatorValue: OperatorValue & {type: 'date_absolute'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue) => void;
   isDisabled?: boolean;
   presentation: EditorPresentation;
+  timezoneID?: string;
 }) {
   const t = useComponentTranslator();
-  // Convert unixSeconds to ISO date string for the date input
-  const currentValue = useMemo(() => {
-    if (filterValue?.type !== 'date_absolute') {
-      return undefined;
-    }
-    const date = new Date(filterValue.unixSeconds * 1000);
-    return date.toISOString().split('T')[0] as ISODateString;
-  }, [filterValue]);
+  const label = t('@astryx.powersearch.valueEditor.date');
+  const unixSeconds =
+    filterValue?.type === 'date_absolute' ? filterValue.unixSeconds : undefined;
+
+  if (operatorValue.isDateOnly === false) {
+    return (
+      <DateTimeEditor
+        label={label}
+        isDisabled={isDisabled}
+        presentation={presentation}
+        unixSeconds={unixSeconds}
+        zone={resolveDateZone(timezoneID, false)}
+        onChange={onChange}
+      />
+    );
+  }
+
+  // A calendar day edits in the one zone the token and the label read it in.
+  const zone = resolveDateZone(timezoneID, true);
 
   return (
     <DateInput
-      label={t('@astryx.powersearch.valueEditor.date')}
+      label={label}
       isLabelHidden
       isDisabled={isDisabled}
-      value={currentValue}
+      value={
+        unixSeconds == null
+          ? undefined
+          : unixSecondsToISODate(unixSeconds, zone)
+      }
       onChange={value => {
         if (value != null) {
-          const unixSeconds = Math.floor(new Date(value).getTime() / 1000);
-          onChange({type: 'date_absolute', unixSeconds});
+          onChange({
+            type: 'date_absolute',
+            unixSeconds: isoDateToUnixSeconds(value, zone),
+          });
         }
       }}
       width={presentation === 'bottom-sheet' ? '100%' : undefined}
@@ -644,14 +752,18 @@ function DateRangeEditor({
   onChange,
   isDisabled,
   presentation,
+  timezoneID,
 }: {
   operatorValue: OperatorValue & {type: 'date_range'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue) => void;
   isDisabled?: boolean;
   presentation: EditorPresentation;
+  timezoneID?: string;
 }) {
   const t = useComponentTranslator();
+  // A range part is a calendar day, read and written as a date-only value is.
+  const zone = resolveDateZone(timezoneID, true);
   const currentValue = useMemo<DateRange | null>(() => {
     if (filterValue?.type !== 'date_range') {
       return null;
@@ -659,10 +771,10 @@ function DateRangeEditor({
     const {start, end} = filterValue.value;
     const nowSeconds = Date.now() / 1000;
     return {
-      start: dateRangePartToISO(start, nowSeconds),
-      end: dateRangePartToISO(end, nowSeconds),
+      start: dateRangePartToISO(start, nowSeconds, zone),
+      end: dateRangePartToISO(end, nowSeconds, zone),
     };
-  }, [filterValue]);
+  }, [filterValue, zone]);
 
   const handleChange = useCallback(
     (range: DateRange | null) => {
@@ -674,16 +786,16 @@ function DateRangeEditor({
         value: {
           start: {
             type: 'ABSOLUTE',
-            unixSeconds: Date.parse(`${range.start}T00:00:00Z`) / 1000,
+            unixSeconds: isoDateToUnixSeconds(range.start, zone),
           },
           end: {
             type: 'ABSOLUTE',
-            unixSeconds: Date.parse(`${range.end}T00:00:00Z`) / 1000,
+            unixSeconds: isoDateToUnixSeconds(range.end, zone),
           },
         },
       });
     },
-    [onChange],
+    [onChange, zone],
   );
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
@@ -798,6 +910,7 @@ function EnumListEditor({
       // all of them instead of BaseTypeahead's 10-suggestion default, which
       // would silently drop valid choices with no way to reach them.
       maxMenuItems={items.length}
+      presentation="popover"
     />
   );
 }
@@ -875,7 +988,7 @@ function EntityListEditor({
       debounceMs={operatorValue.searchSource ? 150 : 0}
       maxMenuItems={maxMenuItems}
       width={isSheet ? '100%' : undefined}
-      experimental={isSheet ? {presentation: 'bottom-sheet'} : undefined}
+      presentation={isSheet ? 'bottom-sheet' : 'popover'}
     />
   );
 }
@@ -924,6 +1037,7 @@ export function PowerSearchValueEditor({
   onUnstage,
   presentation = 'popover',
   fieldLabel,
+  timezoneID,
 }: PowerSearchValueEditorProps) {
   switch (operatorValue.type) {
     case 'empty':
@@ -1000,6 +1114,7 @@ export function PowerSearchValueEditor({
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}
+          timezoneID={timezoneID}
         />
       );
 
@@ -1021,6 +1136,7 @@ export function PowerSearchValueEditor({
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}
+          timezoneID={timezoneID}
         />
       );
 
