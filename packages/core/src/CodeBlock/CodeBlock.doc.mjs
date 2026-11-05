@@ -219,6 +219,23 @@ export const docs = {
         private: true,
       },
     ],
+    componentIcons: [
+      {
+        slot: 'code-block-copy',
+        description: 'The copy button icon.',
+        fallback: '`copy`; `check` while copied',
+        state: [
+          {
+            name: 'copied',
+            type: 'boolean',
+            description:
+              'True while the copied feedback shows after a successful copy.',
+          },
+        ],
+        whenNull:
+          'Hides the glyph. The button keeps its size, name, tooltip, and copy action.',
+      },
+    ],
   },
   usage: {
     description:

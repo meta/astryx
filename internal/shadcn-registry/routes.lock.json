@@ -1967,11 +1967,6 @@
       "aliases": []
     },
     {
-      "name": "example-create-pan-gesture-a-playing-card-without-react",
-      "path": "examples/create-pan-gesture/a-playing-card-without-react",
-      "aliases": []
-    },
-    {
       "name": "example-date-input-clearable",
       "path": "examples/date-input/clearable",
       "aliases": []
@@ -3757,6 +3752,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-link-component-article-cards",
+      "path": "examples/use-link-component/article-cards",
+      "aliases": []
+    },
+    {
       "name": "example-use-list-focus-recent-files",
       "path": "examples/use-list-focus/recent-files",
       "aliases": []
@@ -3764,6 +3764,11 @@
     {
       "name": "example-use-locale-invoice-summary",
       "path": "examples/use-locale/invoice-summary",
+      "aliases": []
+    },
+    {
+      "name": "example-use-merged-refs-auto-grow-text-area",
+      "path": "examples/use-merged-refs/auto-grow-text-area",
       "aliases": []
     },
     {
@@ -3777,8 +3782,13 @@
       "aliases": []
     },
     {
-      "name": "example-use-pan-gesture-a-playing-card",
-      "path": "examples/use-pan-gesture/a-playing-card",
+      "name": "example-use-pan-gesture-a-draggable-box",
+      "path": "examples/use-pan-gesture/a-draggable-box",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-playing-card-advanced",
+      "path": "examples/use-pan-gesture/a-playing-card-advanced",
       "aliases": []
     },
     {
@@ -3789,6 +3799,11 @@
     {
       "name": "example-use-press-feedback-pressable-card",
       "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scroll-overflow-filter-strip-edge-fades",
+      "path": "examples/use-scroll-overflow/filter-strip-edge-fades",
       "aliases": []
     },
     {
@@ -4034,6 +4049,11 @@
     {
       "name": "hook-use-lightbox",
       "path": "hooks/use-lightbox",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-link-component",
+      "path": "hooks/use-link-component",
       "aliases": []
     },
     {
