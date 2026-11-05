@@ -66,6 +66,65 @@ export function readPrA11yRoutes(repoRoot) {
   }));
 }
 
+/**
+ * The public components each changed multi-component folder (such as Chat or
+ * Table) implements, from the analysis's unresolved component sources. Only
+ * the changed folder expands, never the whole package roster. Shared by the
+ * accessibility scope and the touched-components check.
+ *
+ * @param {string[]} sources - `package/Folder` entries
+ * @param {string} [repoRoot]
+ * @returns {{packageName: string, directory: string, name: string, owner: string}[]}
+ */
+export function changedFolderMembers(sources, repoRoot = process.cwd()) {
+  const members = [];
+  const publicComponentsByPackage = new Map();
+  for (const source of sources) {
+    const [packageName, directory, extra] = source.split('/');
+    const pkg = componentPackage(packageName);
+    if (
+      !pkg ||
+      extra !== undefined ||
+      !/^[A-Za-z0-9_.-]+$/.test(directory ?? '') ||
+      ['.', '..'].includes(directory)
+    ) {
+      throw new Error(`Invalid unresolved component source: ${source}`);
+    }
+    const sourceRoot = path.join(repoRoot, pkg.src);
+    const changedDirectory = path.join(sourceRoot, directory);
+    const names = documentedComponentNames(changedDirectory);
+    if (names.length === 0) continue;
+    let publicComponents = publicComponentsByPackage.get(packageName);
+    if (publicComponents == null) {
+      publicComponents = new Set(
+        pkg.layout === 'flat'
+          ? flatPackageComponentNames(repoRoot, pkg)
+          : nestedPackageComponentNames(repoRoot, pkg),
+      );
+      publicComponentsByPackage.set(packageName, publicComponents);
+    }
+    const exports = componentExportsFromBarrel(
+      path.join(sourceRoot, 'index.ts'),
+      sourceRoot,
+    );
+    for (const name of names) {
+      // Utility docs in shared source directories do not create component owners.
+      if (!publicComponents.has(name)) continue;
+      // A doc can mention a dependency such as Avatar; it does not make that
+      // component part of the changed folder's scope.
+      if (exports.get(name)?.startsWith(`${changedDirectory}${path.sep}`)) {
+        members.push({
+          packageName,
+          directory,
+          name,
+          owner: `${packageName}/${name}`,
+        });
+      }
+    }
+  }
+  return members;
+}
+
 export function resolvePrA11yComponents(
   analysis,
   repoRoot = process.cwd(),
@@ -104,56 +163,19 @@ export function resolvePrA11yComponents(
   }
   // Analysis deliberately leaves multi-component folders (such as Chat)
   // unresolved. Expand only that changed folder, not the whole package roster.
-  const publicComponentsByPackage = new Map();
-  for (const source of analysis.unresolvedComponentSources) {
-    const [packageName, directory, extra] = source.split('/');
-    const pkg = componentPackage(packageName);
-    if (
-      !pkg ||
-      extra !== undefined ||
-      !/^[A-Za-z0-9_.-]+$/.test(directory ?? '') ||
-      ['.', '..'].includes(directory)
-    ) {
-      throw new Error(`Invalid unresolved component source: ${source}`);
-    }
-    const sourceRoot = path.join(repoRoot, pkg.src);
-    const changedDirectory = path.join(sourceRoot, directory);
-    const names = documentedComponentNames(changedDirectory);
-    if (names.length === 0) continue;
-    let publicComponents = publicComponentsByPackage.get(packageName);
-    if (publicComponents == null) {
-      publicComponents = new Set(
-        pkg.layout === 'flat'
-          ? flatPackageComponentNames(repoRoot, pkg)
-          : nestedPackageComponentNames(repoRoot, pkg),
-      );
-      publicComponentsByPackage.set(packageName, publicComponents);
-    }
-    const exports = componentExportsFromBarrel(
-      path.join(sourceRoot, 'index.ts'),
-      sourceRoot,
-    );
-    for (const name of names) {
-      // Utility docs in shared source directories do not create component owners.
-      if (!publicComponents.has(name)) continue;
-      const implementation = exports.get(name);
-      // A doc can mention a dependency such as Avatar; it does not make that
-      // component part of the changed folder's scope.
-      if (implementation?.startsWith(`${changedDirectory}${path.sep}`)) {
-        routes ??= readPrA11yRoutes(repoRoot);
-        const owner = `${packageName}/${name}`;
-        const umbrella = `${packageName}/${directory}`;
-        if (componentRoutesForFilters(routes, [owner]).length > 0) {
-          owners.add(owner);
-        } else if (componentRoutesForFilters(routes, [umbrella]).length > 0) {
-          // Some grouped exports are exercised only by their family's stories.
-          owners.add(umbrella);
-        } else {
-          throw new Error(
-            `No scoped Storybook route for ${owner} or ${umbrella}`,
-          );
-        }
-      }
+  for (const {packageName, directory, owner} of changedFolderMembers(
+    analysis.unresolvedComponentSources,
+    repoRoot,
+  )) {
+    routes ??= readPrA11yRoutes(repoRoot);
+    const umbrella = `${packageName}/${directory}`;
+    if (componentRoutesForFilters(routes, [owner]).length > 0) {
+      owners.add(owner);
+    } else if (componentRoutesForFilters(routes, [umbrella]).length > 0) {
+      // Some grouped exports are exercised only by their family's stories.
+      owners.add(umbrella);
+    } else {
+      throw new Error(`No scoped Storybook route for ${owner} or ${umbrella}`);
     }
   }
   return [...owners].sort();

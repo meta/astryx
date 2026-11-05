@@ -9,7 +9,7 @@
  * @position spec:AST-061 read/edit parity, CodeBlock FR13 evidence
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

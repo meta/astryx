@@ -71,6 +71,7 @@ export * from './SelectableCard';
 export * from './Selector';
 export * from './MultiSelector';
 export * from './Icon';
+export * from './InfoTip';
 export * from './Indicator';
 export * from './InputGroup';
 export * from './Item';
@@ -172,8 +173,23 @@ export * from './Outline';
 // Overflow list
 export * from './OverflowList';
 
+// Animating one element: from the package root only, since one API has one
+// entry. Its hook ships from './hooks'.
+export {
+  createAnimator,
+  type Animator,
+  type AnimatorAnimateOptions,
+  type AnimatorChannel,
+  type AnimatorDecayVelocity,
+  type AnimatorHandle,
+  type AnimatorSnapshot,
+  type AnimatorValues,
+} from './animator/createAnimator';
+
 // Hooks
 export * from './hooks';
+
+export {createPanGesture} from './gestures/createPanGesture';
 
 // Utilities
 export * from './utils';

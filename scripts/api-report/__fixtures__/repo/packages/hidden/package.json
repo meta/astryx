@@ -1,0 +1,7 @@
+{
+  "name": "@astryxdesign/hidden",
+  "private": true,
+  "exports": {
+    ".": "./index.js"
+  }
+}

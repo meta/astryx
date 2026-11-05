@@ -1,7 +1,7 @@
 # Stepper Collapsed-Summary Naming Vibe Test
 
 **Status:** ad-hoc · run 1 complete · decided
-**Related:** [`../README.md`](../README.md) (Checker Protocol), [API Arbitration](https://github.com/facebook/astryx/wiki/API-Arbitration), [Designing Vibe Tests](https://github.com/facebook/astryx/wiki/Designing-Vibe-Tests), [PR #5659](https://github.com/facebook/astryx/pull/5659)
+**Related:** [`../README.md`](../README.md) (Checker Protocol), [API Arbitration](https://github.com/meta/astryx/wiki/API-Arbitration), [Designing Vibe Tests](https://github.com/meta/astryx/wiki/Designing-Vibe-Tests), [PR #5659](https://github.com/meta/astryx/pull/5659)
 
 ---
 
@@ -22,7 +22,7 @@ props or one?**
 
 ## 2. Design
 
-Four-ingredient intake per [Designing Vibe Tests](https://github.com/facebook/astryx/wiki/Designing-Vibe-Tests).
+Four-ingredient intake per [Designing Vibe Tests](https://github.com/meta/astryx/wiki/Designing-Vibe-Tests).
 
 **Goal & measure.** A naive agent is told what the *page* provides and never told a prop
 name. Scored on correctness, hallucination, directness, and confidence calibration.

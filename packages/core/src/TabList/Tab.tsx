@@ -39,9 +39,11 @@ import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
 import {mergeProps} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {isRenderable} from '../utils/isRenderable';
 
 export interface TabProps extends BaseProps<HTMLButtonElement> {
   /**
@@ -304,7 +306,8 @@ export function Tab({
   const isTabsPattern = tabListCtx.pattern === 'tabs';
   const isLink = href != null && !isTabsPattern;
   const isTabRole = isTabsPattern && !isLink;
-  const displayIcon = isSelected && selectedIcon ? selectedIcon : icon;
+  const displayIcon =
+    isSelected && isRenderable(selectedIcon) ? selectedIcon : icon;
   const hasVisibleLabel = !isLabelHidden && label !== '';
 
   const isDisabled =
@@ -353,14 +356,17 @@ export function Tab({
     !isTabsPattern && panelId != null,
   );
 
-  const iconElement = displayIcon ? (
+  const iconElement = isRenderable(displayIcon) ? (
     <span {...stylex.props(styles.icon, iconSizeStyles[size])}>
       {displayIcon}
     </span>
   ) : null;
 
   const sharedProps = {
-    ...restProps,
+    // A disabled tab keeps its tab stop, so the browser still sends it events.
+    // It runs no caller handler other than `onFocus` and `onBlur`, as a natively
+    // disabled control runs none. `onClick` is guarded in `handleSelect`.
+    ...withholdCallerHandlers(restProps, isDisabled),
     ...pressable,
     ...(isLabelHidden ? {'aria-label': label} : {}),
     [EDGE_COMP_ATTR]: '',
@@ -439,7 +445,7 @@ export function Tab({
     </span>
   ) : null;
 
-  const endContentElement = endContent ? (
+  const endContentElement = isRenderable(endContent) ? (
     <span {...stylex.props(styles.endContentWrapper)}>{endContent}</span>
   ) : null;
 

@@ -15,7 +15,12 @@
  *   pnpm storybook:build
  *   pnpm exec playwright install chromium webkit
  *   pnpm test:interaction --project chromium
- *   pnpm test:interaction harness.interaction.browser.spec.ts
+ *   pnpm test:interaction BottomSheetDetent.interaction.browser.spec.ts
+ *
+ * Specs import `test` from `@astryxdesign/a11y-spec/playwright`, the base test
+ * shared with playwright.config.ts: no context reaches a remote host. The
+ * gesture fixtures and Storybook servers listen on the loopback host, which
+ * passes.
  *
  * A spec that needs Chromium-only evidence (CDP tracing, scripted touch
  * timestamps) skips itself in WebKit with the reason; see the harness README.
@@ -59,6 +64,8 @@ export default defineConfig({
   testMatch: [
     'internal/interaction-harness/src/**/*.interaction.browser.spec.ts',
     'packages/*/src/**/*.interaction.browser.spec.ts',
+    // The gesture system's own proofs (esbuild fixtures, no Storybook).
+    'packages/core/src/gestures/__tests__/browser/*.browser.spec.ts',
   ],
   // Playwright wipes its output directory per run; evidence (storyboards,
   // curve traces) goes to test-results/interaction-evidence instead.
