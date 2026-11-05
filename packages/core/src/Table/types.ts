@@ -442,7 +442,11 @@ export interface TableRenderContext {
   readonly viewport: React.RefObject<HTMLDivElement | null>;
 }
 
-/** Immutable facts about one body row that Table passes to its transforms. */
+/**
+ * Immutable facts about one body row that Table passes to its transforms.
+ * Read its values during the transform, and copy what a returned callback
+ * needs: a row that does not re-render keeps its old context.
+ */
 export interface TableRowContext {
   /** The row's key: its `idKey` value, or its index when there is no `idKey`. */
   readonly key: string | number | undefined;
@@ -518,7 +522,10 @@ export interface TablePlugin<
     columnIndex: number,
     columns: ReadonlyArray<TableColumn<T>>,
   ) => HeaderCellRenderProps;
-  /** Transform each body `<tr>` props */
+  /**
+   * Transform each body `<tr>` props. Read `context` values during the
+   * transform, not later in a callback it returns.
+   */
   transformBodyRow?: (
     props: BodyRowRenderProps,
     item: T,
@@ -526,7 +533,8 @@ export interface TablePlugin<
     context?: TableRowContext,
   ) => BodyRowRenderProps;
   /**
-   * Transform each body `<td>` props.
+   * Transform each body `<td>` props. Read `context` values during the
+   * transform, not later in a callback it returns.
    *
    * `columnIndex` and the full `columns` list are provided for plugins that
    * need to reason about column position (e.g. cumulative sticky offsets).

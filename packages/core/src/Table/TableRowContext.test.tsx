@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect, vi} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {describe, it, expect, vi, afterEach} from 'vitest';
+import {fireEvent, render, screen} from '@testing-library/react';
+import {__resetDevWarnings} from '../utils/devWarning';
 import {Table} from './Table';
 import type {
   TableColumn,
@@ -24,6 +25,11 @@ const data: Row[] = [
 const columns: TableColumn<Row>[] = [{key: 'name', header: 'Name'}];
 
 describe('Table transform context (FR17, FR20)', () => {
+  afterEach(() => {
+    __resetDevWarnings();
+    vi.restoreAllMocks();
+  });
+
   it('passes each body row and cell transform an immutable row context', () => {
     const rowContexts: TableRowContext[] = [];
     const cellContexts: TableRowContext[] = [];
@@ -208,5 +214,69 @@ describe('Table transform context (FR17, FR20)', () => {
       ['b', 3],
       ['c', 3],
     ]);
+  });
+
+  it('gives a callback that copied the index during the transform the current position after a re-sort', () => {
+    const clicked = vi.fn();
+    const plugin: TablePlugin<Row> = {
+      rowModel: 'flat',
+      transformBodyCell(props, _column, item, _ci, _columns, context) {
+        const position = context?.logicalIndex;
+        return {
+          ...props,
+          htmlProps: {
+            ...props.htmlProps,
+            onClick: () => {
+              clicked(item.id, position);
+            },
+          },
+        };
+      },
+    };
+    const {rerender} = render(
+      <Table data={data} columns={columns} idKey="id" plugins={{plugin}} />,
+    );
+    rerender(
+      <Table
+        data={[data[2], data[0], data[1]]}
+        columns={columns}
+        idKey="id"
+        plugins={{plugin}}
+      />,
+    );
+    fireEvent.click(screen.getByText('Carol'));
+    fireEvent.click(screen.getByText('Alice'));
+    expect(clicked.mock.calls).toEqual([
+      ['c', 0],
+      ['a', 1],
+    ]);
+  });
+
+  it('warns in development when a callback reads the index after its transform returned', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const lateRead = vi.fn();
+    const plugin: TablePlugin<Row> = {
+      rowModel: 'flat',
+      transformBodyCell(props, _column, _item, _ci, _columns, context) {
+        return {
+          ...props,
+          htmlProps: {
+            ...props.htmlProps,
+            onClick: () => {
+              lateRead(context?.logicalIndex);
+            },
+          },
+        };
+      },
+    };
+    render(
+      <Table data={data} columns={columns} idKey="id" plugins={{plugin}} />,
+    );
+    fireEvent.click(screen.getByText('Alice'));
+    expect(
+      warn.mock.calls.some(([message]) =>
+        String(message).includes('after its transform returned'),
+      ),
+    ).toBe(true);
   });
 });

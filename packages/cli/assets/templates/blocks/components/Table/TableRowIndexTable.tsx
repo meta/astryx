@@ -33,7 +33,7 @@ const columns: TableColumn<Track>[] = [
 
 export default function TableRowIndexTable() {
   // Pass the rendered data array — numbering follows its order.
-  const rowIndex = useTableRowIndex<Track>({data: tracks});
+  const rowIndex = useTableRowIndex<Track>();
 
   return (
     <Table

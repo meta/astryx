@@ -9,6 +9,7 @@
  */
 
 import type {TablePlugin, TableRowContext} from './types';
+import {warnOnce} from '../utils/devWarning';
 
 const indexReadingPlugins = new WeakSet<object>();
 const countReadingPlugins = new WeakSet<object>();
@@ -16,6 +17,34 @@ const trackedContexts = new WeakMap<
   TableRowContext,
   WeakMap<object, TableRowContext>
 >();
+let transformingPlugin: object | null = null;
+
+/** Run one plugin transform; context reads inside it are in time. */
+export function runPluginTransform<R>(plugin: object, transform: () => R): R {
+  const outer = transformingPlugin;
+  transformingPlugin = plugin;
+  try {
+    return transform();
+  } finally {
+    transformingPlugin = outer;
+  }
+}
+
+/**
+ * A read after the transform returned (from a callback the transform made)
+ * is not tracked in time. A row that does not re-render keeps its old
+ * context, so the read can return a stale index or count.
+ */
+function warnIfLate(plugin: object, field: string): void {
+  if (transformingPlugin !== plugin) {
+    warnOnce(
+      `table-row-context-late-read-${field}`,
+      'Table',
+      `A plugin read TableRowContext.${field} after its transform returned. ` +
+        'Read context values during the transform and copy them into any callback it returns.',
+    );
+  }
+}
 
 /** Whether a transform of the plugin has read a row's `logicalIndex`. */
 export function readsRowIndex<T extends Record<string, unknown>>(
@@ -52,6 +81,7 @@ export function trackRowContext<T extends Record<string, unknown>>(
   const render = Object.freeze({
     ...context.render,
     get logicalRowCount() {
+      warnIfLate(plugin, 'render.logicalRowCount');
       countReadingPlugins.add(plugin);
       return context.render.logicalRowCount;
     },
@@ -60,10 +90,12 @@ export function trackRowContext<T extends Record<string, unknown>>(
     ...context,
     render,
     get logicalIndex() {
+      warnIfLate(plugin, 'logicalIndex');
       indexReadingPlugins.add(plugin);
       return context.logicalIndex;
     },
     get logicalRowCount() {
+      warnIfLate(plugin, 'logicalRowCount');
       countReadingPlugins.add(plugin);
       return context.logicalRowCount;
     },

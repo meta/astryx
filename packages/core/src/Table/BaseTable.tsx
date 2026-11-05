@@ -59,6 +59,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
   readsRowCount,
   readsRowIndex,
+  runPluginTransform,
   trackRowContext,
 } from './tableRowContextUsage';
 import {devError} from '../utils/devWarning';
@@ -150,7 +151,9 @@ function applyRowPlugins<
       return transform == null
         ? undefined
         : (props: TProps, ...values: TArgs) =>
-            transform(props, ...values, trackRowContext(plugin, context));
+            runPluginTransform(plugin, () =>
+              transform(props, ...values, trackRowContext(plugin, context)),
+            );
     },
     initial,
     ...args,

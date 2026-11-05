@@ -90,8 +90,9 @@ export function useTableRowIndex<T extends Record<string, unknown>>(
   }, [data, getRowKey]);
 
   return useMemo((): TablePlugin<T> => {
-    // Table runs a row's cell transforms before it renders the cells, so the
-    // index cell's renderer finds the position its own transform stored.
+    // Table runs each cell's transforms just before it renders that cell. So
+    // the index cell's renderer reads the position that its own transform
+    // stored.
     const positions = new WeakMap<T, number>();
     return {
       rowModel: 'flat',
