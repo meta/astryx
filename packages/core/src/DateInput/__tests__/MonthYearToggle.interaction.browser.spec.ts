@@ -903,6 +903,36 @@ for (const [name, story, titleSelector, panelSelector, panelKey] of [
 test.describe('with a mouse', () => {
   test.use({hasTouch: false, isMobile: false});
 
+  test('DateTimeInput: Done hands focus to the shown month’s day, not to a month mounted off-screen', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), DTI_STORY);
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(false);
+    await page.locator('button[aria-label^="Open "]').first().click();
+    await waitForRest(
+      page.getByRole('dialog').locator('.astryx-bottom-sheet').first(),
+    );
+    await page
+      .locator('button[aria-label$="Choose month and year"]')
+      .first()
+      .click();
+    const wheels = page.locator('[data-date-surface="wheels"]').first();
+    await waitForRest(wheels);
+    // Done from the keyboard: focus sits in the wheels' footer.
+    const done = wheels.getByRole('button', {name: 'Done', exact: true});
+    await done.focus();
+    await page.keyboard.press('Enter');
+    // The mouse calendar gives every mounted month a tab stop. The story's
+    // March 2026 is the month in view.
+    const day = page.locator(
+      'button[data-date="2026-03-15"]:not([data-outside])',
+    );
+    await expect(day).toBeFocused();
+    await expect(day).toBeInViewport();
+  });
+
   test('under Reduced Motion the toggle changes at once', async ({page}) => {
     // design:reduced-motion DR3: no animated property with a mouse.
     await page.emulateMedia({reducedMotion: 'reduce'});
