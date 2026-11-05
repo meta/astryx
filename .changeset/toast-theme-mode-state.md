@@ -1,0 +1,11 @@
+---
+'@astryxdesign/core': patch
+---
+
+[feat] `Toast` reflects the resolved colour mode of the Theme it renders under as a theming state, `themeMode` (`data-theme-mode="light|dark"`, never `system`), on the card beside `type`. Inside the card, `MediaTheme` flips every `light-dark()` token to the side that reads on the painted surface, so when that surface is dark in both app modes — the error toast is, and a brand that keeps its toasts dark is too — no theme rule could tell a dark app from a light one, and the only way to treat a toast action differently per app mode was to pick its `variant` from `useTheme()` in product code. A theme keys on the state instead: `toast: {'themeMode:dark': {...}}`, alone or compounded with the type (`'type:error+themeMode:dark'`), and a theme-owned custom property set there inherits into `endContent`, where the theme's Button rule can read it (the `ThemedToastAction` story shows the shape). The state is a closed vocabulary derived from context, so nothing can set it untruthfully and nothing about the toast's content reaches the DOM through it. `astryx theme targets Toast` and `theme build` validation pick the state up from the doc. (#5503)
+
+[fix] `useTheme().mode` now resolves a Theme `mode` outside `light | dark | system` (a stale persisted preference cast to `ThemeMode`, say) through the OS preference, the way the root Theme's `<html data-theme>` sync already treats it, instead of returning the string as is. The declared `'light' | 'dark'` return type holds, and the Toast reflection above can only ever carry one of the two. The card's `type` reflection is closed the same way: a runtime value other than `error` reflects as `info`, which is how the card already renders it.
+
+[fix] A `Theme` rendered inside toast content in `useToast`'s fallback viewport (no `ToastViewport` mounted) no longer acts as the app's root Theme. The fallback root is a separate React root, so such a Theme saw no ancestor, rewrote `<html data-theme>` and `<html data-astryx-theme>` to its own values while the toast showed, and stripped both on dismiss even though the app's Theme was still mounted. It now behaves as nested, theming its own subtree only, so the card keeps reflecting the app's mode.
+
+@AKnassa
