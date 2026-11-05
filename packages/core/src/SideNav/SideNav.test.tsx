@@ -1005,6 +1005,65 @@ describe('SideNavItem', () => {
     expect(handleClick).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['a button item', {}],
+    ['an item with href', {href: '/dashboard'}],
+  ])(
+    'does not run a disabled %s’s caller handlers other than focus and blur',
+    (_name, extraProps) => {
+      const onKeyDown = vi.fn();
+      const onKeyUp = vi.fn();
+      const onPointerDown = vi.fn();
+      const onMouseDown = vi.fn();
+      const onFocus = vi.fn();
+      const onBlur = vi.fn();
+      render(
+        <SideNavItem
+          label="Dashboard"
+          isDisabled
+          onKeyDown={onKeyDown}
+          onKeyUp={onKeyUp}
+          onPointerDown={onPointerDown}
+          onMouseDown={onMouseDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          {...extraProps}
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Dashboard'});
+      fireEvent.pointerDown(button);
+      fireEvent.mouseDown(button);
+      fireEvent.keyDown(button, {key: 'x'});
+      fireEvent.keyUp(button, {key: 'x'});
+      expect(onPointerDown).not.toHaveBeenCalled();
+      expect(onMouseDown).not.toHaveBeenCalled();
+      expect(onKeyDown).not.toHaveBeenCalled();
+      expect(onKeyUp).not.toHaveBeenCalled();
+      fireEvent.focus(button);
+      fireEvent.blur(button);
+      expect(onFocus).toHaveBeenCalledTimes(1);
+      expect(onBlur).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('still runs an enabled item’s caller handlers', () => {
+    const onKeyDown = vi.fn();
+    const onPointerDown = vi.fn();
+    render(
+      <SideNavItem
+        label="Dashboard"
+        onClick={() => {}}
+        onKeyDown={onKeyDown}
+        onPointerDown={onPointerDown}
+      />,
+    );
+    const button = screen.getByRole('button', {name: 'Dashboard'});
+    fireEvent.pointerDown(button);
+    fireEvent.keyDown(button, {key: 'x'});
+    expect(onPointerDown).toHaveBeenCalledTimes(1);
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
   it('renders a disabled item with href as a focusable button that does not navigate', () => {
     const handleClick = vi.fn();
     render(
