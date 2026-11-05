@@ -2494,13 +2494,13 @@ describe('DateTimeInput', () => {
         <DateTimeInput label="When" onChange={() => {}} />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Su',
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
+        'Sun',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
       ]);
     });
 
@@ -2509,13 +2509,13 @@ describe('DateTimeInput', () => {
         <DateTimeInput label="When" onChange={() => {}} weekStartsOn={1} />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
-        'Su',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
+        'Sun',
       ]);
     });
 
@@ -2524,13 +2524,13 @@ describe('DateTimeInput', () => {
         <DateTimeInput label="When" onChange={() => {}} weekStartsOn="mon" />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
-        'Su',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
+        'Sun',
       ]);
     });
   });

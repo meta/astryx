@@ -13,11 +13,13 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {Badge} from '@astryxdesign/core/Badge';
+import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Switch} from '@astryxdesign/core/Switch';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Layout';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {
   Cog6ToothIcon,
   BellIcon,
@@ -255,6 +257,77 @@ export const Links: Story = {
       />
     </List>
   ),
+};
+
+function EndControlsDemo() {
+  const [isWifiOn, setIsWifiOn] = useState(true);
+  return (
+    // The button after the list sits 4 px below its last row.
+    <div style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+      <List
+        density="compact"
+        hasDividers
+        header={
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}>
+            <Text type="label" size="lg">
+              Connections
+            </Text>
+            <Button label="Edit" variant="ghost" size="sm" />
+          </div>
+        }>
+        <ListItem
+          label="Network"
+          onClick={() => {}}
+          endContent={
+            <Icon icon={ChevronRightIcon} xstyle={rtlStyles.mirror} />
+          }
+          swipeActions={{trailing: [{label: 'Forget', onActivate: () => {}}]}}
+        />
+        <ListItem
+          label="Wi-Fi"
+          endContent={
+            <Switch
+              label="Wi-Fi"
+              isLabelHidden
+              value={isWifiOn}
+              onChange={checked => setIsWifiOn(checked)}
+            />
+          }
+        />
+        <ListItem
+          label="Bluetooth"
+          onClick={() => {}}
+          endContent={
+            <Icon icon={ChevronRightIcon} xstyle={rtlStyles.mirror} />
+          }
+        />
+      </List>
+      <Button label="Load more" variant="secondary" />
+    </div>
+  );
+}
+
+export const WithEndControls: Story = {
+  render: () => <EndControlsDemo />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A compact row whose end content is its own control, a switch, ' +
+          'between two interactive rows (the first one swipeable), under a ' +
+          'header with its own button ' +
+          'and above a button 4 px after the list. Under a finger, the ' +
+          'interactive rows grow ' +
+          'their touch targets only where nothing is near, never into the ' +
+          "control's row, and a tap on the switch stays the switch's.",
+      },
+    },
+  },
 };
 
 export const OrderedList: Story = {

@@ -20,11 +20,13 @@
  * The touch arms are asserted the same way: the paint reads the press's
  * strength (`--astryx-press-alpha`, see utils/interactionOverlay.stylex.ts)
  * and the element the controller writes to runs the release animation on the
- * machine's own clock.
+ * machine's own clock; a list row's compositor layer (privateAttributes/press.stylex.ts)
+ * runs its own release on the row's `::before`, which these checks leave out.
  *
  * SYNC: When modified, update this header.
  */
 
+import {durationDefaults} from '../theme/tokens.stylex';
 import {PRESS_FADE_MS} from '../utils/pressGesture';
 
 const PRESSED_TOKEN = '--color-overlay-pressed';
@@ -223,15 +225,50 @@ export function declaresPressPaint(el: Element): boolean {
   );
 }
 
-/** `.2s`, `200ms`, `0.2s` → 200; a scaled clock reads its base, at tempo 1. */
+/**
+ * A clock in ms as a page without a theme resolves it: `.2s`, `200ms` → 200;
+ * a duration token (`var(--duration-exit)`) reads its default; `min(a, b)`
+ * is the smaller. The press release plays the exit token, no longer than
+ * DR2's bound under Reduce Motion (`spec:AST-094` FR5).
+ */
 export function durationToMs(value: string): number {
-  // The press release scales its base clock by the theme's tempo, capped under
-  // Reduce Motion: `calc(<ms> * …)`, `min(<ms>, …)` (`spec:AST-108` FR4).
-  const match = value.trim().match(/^(?:(?:calc|min)\(\s*)?([\d.]+)(ms|s)\b/);
+  const css = value.trim();
+  const smaller = /^min\((.*)\)$/u.exec(css);
+  if (smaller != null) {
+    return Math.min(...topLevelArguments(smaller[1]).map(durationToMs));
+  }
+  const token = /^var\((--[\w-]+)\)$/u.exec(css);
+  if (token != null) {
+    const fallback: string | undefined = (
+      durationDefaults as Record<string, string>
+    )[token[1]];
+    return fallback == null ? Number.NaN : durationToMs(fallback);
+  }
+  const match = /^([\d.]+)(ms|s)$/u.exec(css);
   if (match == null) {
     return Number.NaN;
   }
   return Number(match[1]) * (match[2] === 's' ? 1000 : 1);
+}
+
+/** `a, f(b, c)` → `['a', 'f(b, c)']`: the commas outside parentheses split. */
+function topLevelArguments(list: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < list.length; index++) {
+    const char = list[index];
+    if (char === '(') {
+      depth++;
+    } else if (char === ')') {
+      depth--;
+    } else if (char === ',' && depth === 0) {
+      parts.push(list.slice(start, index));
+      start = index + 1;
+    }
+  }
+  parts.push(list.slice(start));
+  return parts;
 }
 
 /**
@@ -242,7 +279,11 @@ export function durationToMs(value: string): number {
  * on a descendant that merely reads the strength.
  */
 export function hasReleaseFade(el: Element): boolean {
-  const fading = rulesWithSelector(el, FADING_ARM);
+  // The element's own release: a layer of its own (a row's `::before`, a
+  // card's `::after`) runs its clock separately.
+  const fading = rulesWithSelector(el, FADING_ARM).filter(
+    rule => !rule.slice(0, rule.indexOf('{')).includes('::'),
+  );
   const durations = fading.flatMap(rule => {
     const match = rule.match(/animation-duration:\s*([^;}]+)/);
     return match == null ? [] : [durationToMs(match[1])];

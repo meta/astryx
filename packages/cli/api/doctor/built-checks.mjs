@@ -560,10 +560,11 @@ function jsxFindings(text, rel, iconNames) {
  * @param {string} target an existing file or folder
  * @param {readonly string[]} packages package names whose components count as
  *   Astryx, beside every `@astryxdesign/*` package
+ * @param {{fileLimit?: number}} [options] how many files to read at most
  * @returns {BuiltScan}
  */
-export function scanBuilt(target, packages) {
-  const {files, truncated, missing = 0} = readBuiltPath(target);
+export function scanBuilt(target, packages, {fileLimit} = {}) {
+  const {files, truncated, missing = 0} = readBuiltPath(target, {fileLimit});
   /** @type {BuiltScan} */
   const scan = {
     sourceFiles: 0,
@@ -705,11 +706,15 @@ function plural(count, word) {
 /**
  * The two checks for a path.
  * @param {string} target as the caller gave it
- * @param {{cwd: string, packages: readonly string[]}} options `packages`: the
- *   integration packages whose components count as Astryx
+ * @param {{cwd: string, packages: readonly string[], fileLimit?: number}} options
+ *   `packages`: the integration packages whose components count as Astryx.
+ *   `fileLimit`: how many files to read at most (BUILT_FILE_LIMIT).
  * @returns {import('./doctor.type.mjs').DoctorCheck[]}
  */
-export function checkBuilt(target, {cwd, packages}) {
+export function checkBuilt(
+  target,
+  {cwd, packages, fileLimit = BUILT_FILE_LIMIT},
+) {
   const resolved = resolveBuiltPath(cwd, target);
   if (resolved == null) {
     return [
@@ -722,10 +727,10 @@ export function checkBuilt(target, {cwd, packages}) {
       },
     ];
   }
-  const scan = scanBuilt(resolved, packages);
+  const scan = scanBuilt(resolved, packages, {fileLimit});
   const used =
     scan.imports > 0 || scan.componentUses > 0 || scan.stylesheets.length > 0;
-  const read = `${plural(scan.sourceFiles, 'source file')} and ${plural(scan.builtFiles, 'built file')}${scan.truncated ? ` (the first ${BUILT_FILE_LIMIT} files)` : ''}`;
+  const read = `${plural(scan.sourceFiles, 'source file')} and ${plural(scan.builtFiles, 'built file')}${scan.truncated ? ` (the first ${fileLimit} files)` : ''}`;
   const evidence = [
     scan.imports > 0
       ? `${plural(scan.imports, 'import')} from ${scan.packages.join(', ')} in ${plural(scan.importFiles, 'file')}`
@@ -761,7 +766,7 @@ export function checkBuilt(target, {cwd, packages}) {
             id: 'built-astryx-usage',
             label: 'Built output uses Astryx',
             status: 'warn',
-            message: `Read ${read} and found no Astryx in them, but ${[scan.truncated ? `the rest past the first ${BUILT_FILE_LIMIT} files` : null, scan.unread > 0 ? `${plural(scan.unread, 'source file')} over ${BUILT_FILE_MAX_MB} MB, unreadable or unparsed` : null, scan.missingLinks > 0 ? `${plural(scan.missingLinks, 'file')} the page links but that are not there` : null].filter(Boolean).join(' and ')} went unread, so this does not show whether the output uses Astryx.`,
+            message: `Read ${read} and found no Astryx in them, but ${[scan.truncated ? `the rest past the first ${fileLimit} files` : null, scan.unread > 0 ? `${plural(scan.unread, 'source file')} over ${BUILT_FILE_MAX_MB} MB, unreadable or unparsed` : null, scan.missingLinks > 0 ? `${plural(scan.missingLinks, 'file')} the page links but that are not there` : null].filter(Boolean).join(' and ')} went unread, so this does not show whether the output uses Astryx.`,
             fix: `Run \`${formatCliCommand('doctor --built <folder>', cwd)}\` on the folder that holds the page itself, or on its build output.`,
           }
         : {
@@ -798,7 +803,7 @@ export function checkBuilt(target, {cwd, packages}) {
       id: 'built-astryx-purity',
       label: 'Source uses Astryx well',
       status: 'info',
-      message: `Not fully inspected: ${plural(scan.jsxFiles, 'source file')} with JSX had no finding${scan.truncated ? `, but only the first ${BUILT_FILE_LIMIT} files were read` : ''}.${unreadNote}`,
+      message: `Not fully inspected: ${plural(scan.jsxFiles, 'source file')} with JSX had no finding${scan.truncated ? `, but only the first ${fileLimit} files were read` : ''}.${unreadNote}`,
       fix: `Run \`${formatCliCommand('doctor --built <folder>', cwd)}\` on the folder that holds the page's own source.`,
     };
   } else if (scan.findings.length === 0) {
@@ -829,7 +834,7 @@ export function checkBuilt(target, {cwd, packages}) {
       id: 'built-astryx-purity',
       label: 'Source uses Astryx well',
       status: 'warn',
-      message: `${plural(scan.findings.length, 'finding')} (${counts}): ${shown}${more}.${unreadNote}${scan.truncated ? ` Only the first ${BUILT_FILE_LIMIT} files were read.` : ''}`,
+      message: `${plural(scan.findings.length, 'finding')} (${counts}): ${shown}${more}.${unreadNote}${scan.truncated ? ` Only the first ${fileLimit} files were read.` : ''}`,
       fix: `Replace each with the Astryx component, icon surface, prop or token it names; \`${formatCliCommand('docs is-my-code-good', cwd)}\` has the full rubric. Keep a raw element only where its native meaning is needed.`,
     };
   }

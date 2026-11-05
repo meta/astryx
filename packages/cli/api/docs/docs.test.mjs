@@ -93,7 +93,7 @@ describe('docs() dispatcher routing', () => {
 
   it("lists the docs tree's namespaces in meta, so every data entry reads as a topic", async () => {
     const res = await docs();
-    expect(res.meta.namespaces.map(entry => entry.topic)).toEqual(['authoring', 'cli', 'foundations', 'global', 'guides', 'internationalization', 'layout', 'migration', 'styling', 'styling-libraries', 'tokens', 'typography']);
+    expect(res.meta.namespaces.map(entry => entry.topic)).toEqual(['authoring', 'calendars', 'cli', 'foundations', 'global', 'guides', 'internationalization', 'layout', 'migration', 'styling', 'styling-libraries', 'tokens', 'typography']);
     for (const entry of res.data) {
       expect((await docs(entry.topic)).type).toBe('docs.detail');
     }

@@ -2191,6 +2191,32 @@ export const SheetPresentationContentSearch: Story = {
 };
 
 /**
+ * A placeholder longer than the trigger ends in an ellipsis inside it and
+ * stays clear of the result count at every width. The grid column sizes the
+ * field, so a test can narrow it.
+ */
+export const SheetPresentationLongPlaceholder: Story = {
+  render: () => {
+    const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>(
+      [],
+    );
+    return (
+      <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 360px)'}}>
+        <PowerSearch
+          config={fullConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          placeholder="Filter issues by title, assignee, status, label or date..."
+          resultCount={128}
+          presentation="bottom-sheet"
+        />
+      </div>
+    );
+  },
+  name: 'Bottom sheet with a long placeholder',
+};
+
+/**
  * Read-only keeps the Filters sheet as plain rows with Done only; disabled
  * keeps the trigger focusable (aria-disabled) and shows its reason; the result
  * count renders at the end of the field in both presentations.
