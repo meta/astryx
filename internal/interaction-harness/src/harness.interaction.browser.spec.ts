@@ -1070,10 +1070,12 @@ test.describe('frame evidence', () => {
     const control = await startBusyControl(page);
     // On the compositor: a move, a 300 ms hold (as WebKit holds a sheet's
     // just-started release on screen), then a move; or one jump inside the
-    // block and nothing after it.
+    // block and nothing after it. `heldAt` is the hold's offset, the position
+    // the page set last.
     const run = async (
       keyframes: Keyframe[],
       options: KeyframeAnimationOptions,
+      heldAt?: number,
     ) => {
       const cast = await startScreencast(page);
       await page.waitForTimeout(150);
@@ -1091,19 +1093,27 @@ test.describe('frame evidence', () => {
       });
       await page.waitForTimeout(150);
       const frames = await cast.stop();
-      return busyWindowProof(await trackMarker(page, frames), window, {
+      const tracked = await trackMarker(page, frames);
+      // Where the box sits untransformed: the run starts there.
+      const top = Math.min(
+        ...tracked.flatMap(f => (f.box == null ? [] : [f.box.y])),
+      );
+      return busyWindowProof(tracked, window, {
         axis: 'y',
         control: await trackMarker(page, frames, {rgb: CONTROL_RGB}),
+        ...(heldAt == null ? {} : {setBeforeBlock: top + heldAt}),
       });
     };
+    // Held at a half pixel: WebKit's 2 px cast reads it up to a step off.
     const held = await run(
       [
         {transform: 'translateY(0px)', offset: 0},
-        {transform: 'translateY(100px)', offset: 0.3},
-        {transform: 'translateY(100px)', offset: 0.45},
+        {transform: 'translateY(100.5px)', offset: 0.3},
+        {transform: 'translateY(100.5px)', offset: 0.45},
         {transform: 'translateY(560px)', offset: 1},
       ],
       {duration: 2000, easing: 'linear'},
+      100.5,
     );
     expect(held.verdict.failures, held.summary).toEqual([]);
     const jumpThenFreeze = await run(
