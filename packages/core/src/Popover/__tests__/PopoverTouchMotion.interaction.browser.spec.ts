@@ -218,14 +218,21 @@ async function scaleAnimationOf(locator: Locator) {
   }
 }
 
+/** A scale animation's `animate()` call and its own start, epoch ms. */
+interface ScaleStart {
+  call: number;
+  start: number;
+}
+
 /**
- * Logs when each `scale` animation starts, epoch ms, from a wrapper on
- * `Element.animate`. It runs no frame loop, so it reads nothing between
- * frames.
+ * Logs each `scale` animation's `animate()` call and its own start time, epoch
+ * ms, from a wrapper on `Element.animate`. A motion created in a frame
+ * callback can start at that frame's time, before the call. It runs no frame
+ * loop, so it reads nothing between frames.
  */
 async function logScaleStarts(page: Page) {
   await page.addInitScript(() => {
-    const starts: number[] = [];
+    const starts: ScaleStart[] = [];
     Object.defineProperty(window, '__popoverScaleStarts', {value: starts});
     const animate = Element.prototype.animate;
     Element.prototype.animate = function (keyframes, options) {
@@ -234,7 +241,20 @@ async function logScaleStarts(page: Page) {
         Array.isArray(keyframes) &&
         keyframes.some(frame => frame != null && 'scale' in frame)
       ) {
-        starts.push(performance.timeOrigin + performance.now());
+        const call = performance.timeOrigin + performance.now();
+        void animation.ready.then(
+          () => {
+            const {startTime} = animation;
+            starts.push({
+              call,
+              start:
+                startTime == null
+                  ? call
+                  : performance.timeOrigin + Number(startTime),
+            });
+          },
+          () => {},
+        );
       }
       return animation;
     };
@@ -257,9 +277,9 @@ async function pageNow(page: Page): Promise<number> {
 }
 
 /**
- * Waits in the page until `ms` after the first logged scale start at or after
- * `after`, and returns that start. It reads only the log, never a style, and
- * after the start it sets one timer.
+ * Waits in the page until `ms` after the start of the first scale animation
+ * called at or after `after`, and returns that start. It reads only the log,
+ * never a style, and after the start it sets one timer.
  */
 async function waitPastScaleStart(
   page: Page,
@@ -269,12 +289,14 @@ async function waitPastScaleStart(
   return page.evaluate(
     async ({after, ms}) =>
       new Promise<number>((resolve, reject) => {
-        const starts = (window as unknown as {__popoverScaleStarts: number[]})
-          .__popoverScaleStarts;
+        const starts = (
+          window as unknown as {__popoverScaleStarts: ScaleStart[]}
+        ).__popoverScaleStarts;
         const deadline = performance.now() + 5_000;
         const look = () => {
-          const start = starts.find(logged => logged >= after);
-          if (start != null) {
+          const logged = starts.find(entry => entry.call >= after);
+          if (logged != null) {
+            const {start} = logged;
             const now = performance.timeOrigin + performance.now();
             setTimeout(() => resolve(start), Math.max(0, start + ms - now));
           } else if (performance.now() > deadline) {
