@@ -16,6 +16,10 @@ export const docs = {
     'delta',
   ],
 
+  theming: {
+    targets: [{className: 'astryx-metric-tile', visualProps: ['size']}],
+  },
+
   usage: {
     description:
       'MetricTile is a KPI tile: a label, a large headline value, an optional sentiment-aware delta, a supporting description, and a trend slot for a Sparkline. Use it for dashboard headline metrics instead of hand-rolling label/value layouts.',
@@ -152,14 +156,27 @@ export const docs = {
   examples: [
     {
       label: 'Metric with delta and trend',
-      code: `import {MetricTile, Sparkline} from '@astryxdesign/charts';
+      code: `import {MetricTile, Chart, line} from '@astryxdesign/charts';
+
+const trendRows = [4, 7, 5, 9, 6, 11].map((value, index) => ({
+  index: index + 1,
+  value,
+}));
 
 <MetricTile
   label="Total requests"
   value="2.4M"
   delta={{value: '+12.4%', direction: 'up'}}
   description="vs. previous 30 days"
-  trend={<Sparkline data={[4, 7, 5, 9, 6, 11]} />}
+  trend={
+    <Chart
+      data={trendRows}
+      xKey="index"
+      series={[line('value')]}
+      height={48}
+      title="Request trend"
+    />
+  }
 />;`,
     },
     {
