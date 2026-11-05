@@ -111,24 +111,18 @@ function outermostLayer(element: HTMLElement): HTMLElement | null {
 /** Each layer's copy: placing another for the same layer replaces it. */
 const copies = new WeakMap<HTMLElement, HTMLElement>();
 
-/** Layers whose copies may still stand. */
-const copiedLayers = new Set<HTMLElement>();
-
 /**
  * Shows the copies of layers inside `element` again, so they stay above the
- * copy just shown for it. Those layers were drawn above it.
+ * copy just shown for it. Those layers were drawn above it. They are found
+ * in `element` itself, so no closed layer is kept here once it is gone.
  */
 function raiseInnerCopies(element: HTMLElement): void {
   const inner: HTMLElement[] = [];
-  for (const layer of copiedLayers) {
+  for (const layer of element.querySelectorAll<HTMLElement>(
+    '[popover], dialog',
+  )) {
     const copy = copies.get(layer);
-    if (copy?.isConnected !== true) {
-      copiedLayers.delete(layer);
-    } else if (
-      layer !== element &&
-      element.contains(layer) &&
-      copy.matches(':popover-open')
-    ) {
+    if (copy?.isConnected === true && copy.matches(':popover-open')) {
       inner.push(layer);
     }
   }
@@ -205,8 +199,7 @@ export function placeLayerExitCopy(
   }
   // One copy per layer: a close during a close replaces it.
   copies.get(element)?.remove();
-  // Past the copy cap, or with a canvas that reads back empty, there is no
-  // copy, so the close is immediate.
+  // Past the copy cap there is no copy, so the close is immediate.
   if (!isCopyable(element)) {
     return null;
   }
@@ -278,7 +271,6 @@ export function placeLayerExitCopy(
     keepInherited(copy, outer.parentElement);
   }
   copies.set(element, copy);
-  copiedLayers.add(element);
   const show = (): boolean => {
     try {
       copy.showPopover();
@@ -295,7 +287,6 @@ export function placeLayerExitCopy(
     copy.remove();
     if (copies.get(element) === copy) {
       copies.delete(element);
-      copiedLayers.delete(element);
     }
   };
   if (!show()) {
