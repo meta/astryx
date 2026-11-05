@@ -562,6 +562,13 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV18 — Only a shown layer's trigger is an anchor.**
   A trigger carries its CSS anchor name only while its layer is shown; a closed trigger is not an anchor, so a surface that moves around it keeps its transform animation off the main thread.
   A layer that animates out counts as shown until its animations end.
+- **INV20 — A closed layer costs nothing until first shown.** Every Core
+  surface built on `useLayer` in context mode (Tooltip, HoverCard, Popover,
+  DropdownMenu, ContextMenu, Selector's and MultiSelector's lists, and the
+  date pickers) mounts its layer on its first show, not with its trigger, and
+  keeps it mounted after that first show. A closed trigger renders only the
+  trigger. This uses `useLayer`'s existing `lazyMount` internally and adds no
+  public prop (DEC-2).
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
@@ -722,10 +729,24 @@ app-declared inset.
 runtime and must move to `shipped` before its requirements are incorporated into
 this current architecture record.
 
+### DEC-2 — Closed layers mount on first show
+
+**Decider:** pending
+
+A person opening a table where each row has a few tooltips waits seconds,
+because every tooltip mounts its layer with its trigger. `useLayer` already
+supports mounting on first show. Core surfaces now use it, so a page pays for a
+layer only when a person opens it.
+
+Rejected: a public `lazyMount` prop on each surface, which makes every caller
+opt in to the fast path. Rejected: unmounting after every close, which repeats
+the mount cost and loses state on each open.
+
 ## Verification
 
 | Invariant    | Evidence                                                                                                                                                                                                                                                                             | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV20        | Mount-count tests per surface plus a real-browser trace: a table of 100 rows with five tooltips each, before and after first hover                                                                                                                                                   | A closed trigger that mounts its layer, or a layer that unmounts after its first close                                                                                                                                                                                                                                                                                                                                       |
 | INV1, INV2   | `useLayer.test.tsx` and `layerHost.test.ts`                                                                                                                                                                                                                                          | Invalid DOM, stale host, lost theme/writing context, or portal mistaken for top-layer promotion                                                                                                                                                                                                                                                                                                                              |
 | INV3–INV5    | `useLayer.test.tsx` and `anchorName.test.ts`                                                                                                                                                                                                                                         | A mode leaks geometry, RTL resolves from the wrong context, fallback clips, or a sibling anchor is lost                                                                                                                                                                                                                                                                                                                      |
 | INV11        | `layerViewportInset.test.ts`, `useLayer.test.tsx`, and the `Core/Layer` viewport-inset stories under the story play guard at a desktop and a phone viewport; `BaseTypeahead.incremental.test.tsx` and the Typeahead incremental-results stories for the `spec:AST-092` FR6 exception | A second gutter definition, a `100%`-of-span cap, a layer narrower than its explicit size, a layer box wider than the viewport, a layer inside the gutter, or a layer that slides toward an off-screen anchor; for an open Typeahead popup, a later list for the same query that flips it to the other side or grows it past the room on its side, or a first list for a query that is capped to the span beside the trigger |
