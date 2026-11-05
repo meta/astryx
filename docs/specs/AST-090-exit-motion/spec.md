@@ -72,18 +72,20 @@ components read through two shared primitives is a system fact.
 ## Non-goals
 
 - Exits of touch presentations, which each component's record gives under
-  `spec:AST-094` FR7 and FR8 (FR14). The exit switches here do not reach
-  touch exits; a touch exit that a tap, a key or the program starts plays
-  `--duration-exit` and `--ease-exit`, and a gesture-driven exit keeps its
-  velocity spring (FR14).
+  `spec:AST-094` FR7 and FR8 (FR14). The exit switches here do not reach touch
+  exits; in a component whose main interaction is a tap, a touch exit that a
+  tap, a key or the program starts plays `--duration-exit` and `--ease-exit`; in
+  a gesture component, such as a sheet or the Lightbox, every exit plays its
+  spring, and a gesture-driven exit starts from the release velocity (FR14).
 - Surfaces that already animate out (`Drawer`, `BottomSheet`, `MobileNav`,
-  `Toast`, and the `TopNavMegaMenu` panel) keep their durations and curves in
-  a pointer presentation, and for an exit a gesture drives, a swipe or a drag
-  with velocity, which keeps its measured spring. In a touch presentation, an exit that a tap, a
-  key or the program starts plays `--duration-exit` and `--ease-exit` (FR14),
-  `BottomSheet`'s close included. `BottomSheet`'s close in a pointer
-  presentation reads `--ease-exit` at the curve it uses (FR12); moving the
-  others' pointer-presentation exits onto the exit vocabulary is a visual
+  `Toast`, and the `TopNavMegaMenu` panel) keep their durations and curves in a
+  pointer presentation, and for an exit a gesture drives, a swipe or a drag with
+  velocity, which keeps its measured spring. In a touch presentation, an exit
+  that a tap, a key or the program starts plays `--duration-exit` and
+  `--ease-exit` in a tap component, and the component's spring in a gesture
+  component, `BottomSheet`'s close included (FR14). `BottomSheet`'s close in a
+  pointer presentation reads `--ease-exit` at the curve it uses (FR12); moving
+  the others' pointer-presentation exits onto the exit vocabulary is a visual
   change for a separate decision.
 - Layers with no entrance (`Typeahead` suggestions, `MultiSelector`,
   `Tokenizer`, the date and time pickers, the `TabList` overflow menu, the
@@ -180,14 +182,16 @@ governs them in a touch presentation.
   above it for the whole exit (`spec:AST-003` FR16). When it is hidden, they
   move to the latest remaining outlet with their entries and timers intact
   (`spec:AST-003` FR18, FR19).
-- **FR14 — Touch exits are never removed; tap-started exits play the theme's exit timing.** A dialog or layer
-  surface in a touch presentation plays the exit its component's record gives
-  it under `spec:AST-094` FR7 and FR8. A touch presentation's exit that a
+- **FR14 — Touch exits are never removed; a tap component's tap-started exits
+  play the theme's exit timing.** A dialog or layer surface in a touch presentation plays the
+  exit its component's record gives it under `spec:AST-094` FR7 and FR8. In a
+  component whose main interaction is a tap, a touch presentation's exit that a
   tap, key or program starts plays the theme's exit duration and easing,
-  `--duration-exit` and `--ease-exit` (`spec:AST-094` FR7); a gesture-driven
-  exit keeps its velocity spring. The exit switches do not change that exit:
-  a theme that leaves a kind off does not remove it, and a theme that turns a
-  kind on does not replace it.
+  `--duration-exit` and `--ease-exit`; in a gesture component, such as a sheet
+  or the Lightbox, that exit plays the component's spring from rest, and a
+  gesture-driven exit keeps its velocity spring (`spec:AST-094` FR7, FR45). The
+  exit switches do not change that exit: a theme that leaves a kind off does not
+  remove it, and a theme that turns a kind on does not replace it.
 
 ### Platform support
 
@@ -232,8 +236,9 @@ governs them in a touch presentation.
   it keeps its outlet and toasts stay operable above it (FR16, FR18).
 - `spec:AST-094`: a touch presentation keeps the exit FR7 and FR8 give it
   (FR14). One that a tap, a key or the program starts plays `--duration-exit`
-  and `--ease-exit`, and one a gesture drives keeps its velocity spring
-  (`spec:AST-094` FR7, FR45, DEC-26).
+  and `--ease-exit` in a tap component and the component's spring in a gesture
+  component, and one a gesture drives keeps its velocity spring (`spec:AST-094`
+  FR7, FR45, DEC-26).
 - `spec:AST-108`: no claim changes. Its FR2 admits `--ease-exit` at the same
   curve at every `character`; a spring-driven exit plays its own exit role and
   a CSS part beside it takes the spring's settle time (FR3, FR4a); and an exit
@@ -251,16 +256,18 @@ governs them in a touch presentation.
 - `component:Popover`: AR4 keeps its focus-return claim; FR6 states when the
   return happens for a layer.
 - `component:BottomSheet`: its close in a pointer presentation reads
-  `--ease-exit`. In a touch presentation, a close that a tap, a key or the
-  program starts plays `--duration-exit` and `--ease-exit`, and a swipe or a
-  drag that closes it keeps its measured spring (`spec:AST-094` FR7, FR45).
-  Implementation gap: a coarse-pointer close started by a tap or key plays
-  `--duration-medium` today.
+  `--ease-exit`. BottomSheet is a gesture component: in a touch presentation, a
+  close that a tap, a key or the program starts plays the sheet's spring from
+  rest, and a swipe or a drag that closes it keeps its measured spring from the
+  release (`spec:AST-094` FR7, FR45). Implementation gap: a coarse-pointer close
+  started by a tap or key plays `--duration-medium` today.
 - Consumer docs: `motion` describes both curves, that exits are off by default
-  in a pointer presentation, how a theme turns each kind on, that a touch
-  exit is never removed and a tap-started one plays the theme's exit timing, and that callers keep content rendered
-  while a surface closes. The token tables and the theme template list the new
-  tokens, and each member component's docs describe its exit.
+  in a pointer presentation, how a theme turns each kind on, that a touch exit
+  is never removed, that a tap component's tap-started one plays the theme's
+  exit timing, and that a sheet's and the Lightbox's touch close springs (FR14),
+  and that callers keep content rendered while a surface closes. The token
+  tables and the theme template list the new tokens, and each member component's
+  docs describe its exit.
 
 ## Verification
 
@@ -340,20 +347,21 @@ is also the default.
 
 Rejected: holding the live layer in the top layer with an `overlay` transition, which plays only in browsers that support that transition.
 
-### DEC-5 — Touch exits are never removed; tap-started exits play the theme's exit timing
+### DEC-5 — Touch exits are never removed; a tap component's tap-started exits play the theme's exit timing
 
 **Reference:** `spec:AST-090/DEC-5`
 **Decider:** `cixzhang`, `2026-10-28`
 
-On a touch device a surface keeps the look of its native counterpart, by
-default and with no opt-in (`spec:AST-094`). That record springs only motion
-a gesture drives and gives every other motion, under every pointer, the
-theme's tokens (`spec:AST-094` FR45). The switches here govern whether a
-pointer presentation's exit plays, and a touch presentation keeps its exit
-whatever they resolve to. A touch exit that a tap, a key or
-the program starts plays the theme's exit duration and easing,
-`--duration-exit` and `--ease-exit`, and a gesture-driven exit keeps its
-velocity spring (`spec:AST-094` DEC-26).
+On a touch device a surface keeps the look of its native counterpart, by default
+and with no opt-in (`spec:AST-094`). That record springs the motion of a
+component whose main interaction is a gesture and gives a tap component's
+tap-started motion, under every pointer, the theme's tokens (`spec:AST-094`
+FR45). The switches here govern whether a pointer presentation's exit plays, and
+a touch presentation keeps its exit whatever they resolve to. In a tap
+component, a touch exit that a tap, a key or the program starts plays the
+theme's exit duration and easing, `--duration-exit` and `--ease-exit`; in a
+gesture component it plays the component's spring, and a gesture-driven exit
+keeps its velocity spring (`spec:AST-094` FR45, DEC-26).
 
 Rejected: letting the exit switches turn touch exits off, which removes the exit `spec:AST-094` FR7 requires.
 

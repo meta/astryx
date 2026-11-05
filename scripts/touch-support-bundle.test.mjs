@@ -110,14 +110,16 @@ function exportsOf(entry) {
 }
 
 /**
- * What the internal entry gives Lab's refresh pull: the pan, its hook, the
- * motion animator, its motion math and companion curves, the scroll view's
- * spring and the motion-role parsers. None is public API.
+ * What the internal entry gives Lab components, none of it public API. Lab's
+ * refresh pull reads the pan, its hook, the motion engine, its motion math and
+ * companion curves, the scroll view's spring and the motion-role parsers.
+ * Other Lab components read the UIKit gesture table, the touch presentation
+ * and its query, and an element's direction.
  */
 const LAB_ONLY_NAMES = [
   'PanGestureRecognizer',
   'useGestureRecognizer',
-  'createMotionAnimator',
+  'createMotionEngine',
   'cubicBezier',
   'mapProgress',
   'parseCssEasing',
@@ -126,6 +128,10 @@ const LAB_ONLY_NAMES = [
   'rubberBandInverse',
   'rubberBandSlope',
   'scroll',
+  'isRtlElement',
+  'UIKIT_GESTURES',
+  'useTouchPresentation',
+  'TOUCH_QUERY',
 ];
 
 /** The inputs matching `pattern` that put bytes in `bytes`. */
