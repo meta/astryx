@@ -409,16 +409,23 @@ describe('Node-tooling CI routing', () => {
 
   it('keeps required build and docsite contexts green without their heavy work', () => {
     expect(
-      step(ci.jobs['docsite-test'], 'Skip docsite work for Node tooling').if,
+      step(ci.jobs['docsite-build'], 'Skip docsite work for Node tooling').if,
     ).toContain(TOOLING_TRUE);
     for (const name of [
       'Build docsite workspace dependencies',
       'Build the docsite',
-      'test-docsite (start the data tests)',
-      'test-docsite-e2e (browser contracts)',
+      'test-docsite (data tests)',
     ]) {
-      expect(step(ci.jobs['docsite-test'], name).if).toContain(TOOLING_FALSE);
+      expect(step(ci.jobs['docsite-build'], name).if).toContain(TOOLING_FALSE);
     }
+    // The browser contracts run only when the build found them in scope,
+    // which a tooling-only change never is.
+    expect(
+      step(
+        ci.jobs['docsite-build'],
+        'Decide whether the browser contracts apply',
+      ).run,
+    ).toContain(TOOLING_FALSE);
 
     for (const candidate of [
       ...ci.jobs['build-storybook'].steps,
@@ -443,9 +450,10 @@ describe('Node-tooling CI routing', () => {
   });
 
   it('preserves the historical joins and fails them on owned-lane failure', () => {
-    // room only tells test when CI is full (ci-admission.test.mjs).
+    // room and admission only tell test when CI is full (ci-admission.test.mjs).
     expect(ci.jobs.test.needs).toEqual([
       'room',
+      'admission',
       'heavy-ci',
       'release-bump',
       'test-ui',
@@ -454,9 +462,11 @@ describe('Node-tooling CI routing', () => {
       'test-native-swift',
       'pr-interaction',
       'pr-interaction-webkit',
+      'pr-component-a11y-contracts',
     ]);
     expect(ci.jobs.build.needs).toEqual([
       'room',
+      'admission',
       'heavy-ci',
       'build-storybook',
       'typecheck',
@@ -484,6 +494,8 @@ describe('Node-tooling CI routing', () => {
       TEST_NATIVE_SWIFT_RESULT: '${{ needs.test-native-swift.result }}',
       PR_INTERACTION_RESULT: '${{ needs.pr-interaction.result }}',
       PR_INTERACTION_WEBKIT_RESULT: '${{ needs.pr-interaction-webkit.result }}',
+      PR_COMPONENT_A11Y_CONTRACTS_RESULT:
+        '${{ needs.pr-component-a11y-contracts.result }}',
     });
     const buildJoin = step(
       ci.jobs.build,

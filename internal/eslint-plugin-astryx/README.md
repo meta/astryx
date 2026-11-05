@@ -76,6 +76,9 @@ Approved implementations:
 - `packages/core/src/PowerSearch/formatFilterValue.ts`
 - `packages/core/src/NumberInput/numberParser.ts` — reads typed and pasted
   numbers under the field's locale
+- `packages/core/src/utils/calendarDateParser.ts` — typed dates for DateInput
+  and DateTimeInput in any calendar: names, eras, field order, and digits read
+  off Intl and parsed back, the committed text, and the calendar's name
 - `packages/core/src/utils/timeFormat.ts` — time-of-day text for TimeInput and
   DateTimeInput: the locale's hour cycle, digits, separator, and day periods,
   formatted and parsed back
@@ -260,6 +263,58 @@ review. Sites that existed when the rule arrived are listed by file in
 allowed until they move into an owner module; remove an entry when you move its
 site, and never add one.
 `node internal/eslint-plugin-astryx/no-raw-private-attribute.baseline.mjs`
+rewrites the list from the source (`--check` verifies it).
+
+### `@astryx/no-comment-provenance`
+
+Reports provenance in source comments. A comment explains only what the code
+cannot show: a reason, a constraint, an invariant, or a platform quirk. The
+record links the code, so `pnpm specs:for <path>` finds it; a citation in a
+comment goes stale and duplicates that link. The "Source comments" rule in
+`docs/architecture/knowledge-contracts.md` is the authority.
+
+```ts
+// flagged
+// Matches spec:AST-108 FR4 and component:Button (#9428).
+// Decided 2026-10-31; true as of Oct 2026.
+// The panel MUST close when focus leaves it.
+
+// fine
+// Safari fires blur before click, so the close waits a frame.
+```
+
+It finds four kinds of text, in comments only, never in strings:
+
+- record ids (`spec:AST-108`, `component:Button`, `module:Icon/registry`,
+  `architecture:…`, `family:…`, `design:…`, `theme:…`, a bare `AST-094`) and
+  claim ids with a known prefix (`FR12`, `INV3`, `DEC-4`, `AR2`, `DR1`, …);
+- pull request and issue references: `#1234`, `PR #77`, `issue 12`, and GitHub
+  pull request, issue, discussion, and commit URLs. A bare `#123` with 3, 6, or
+  8 digits can be a hex colour, so it is not reported;
+- date stamps: an ISO date outside quotes (`2026-10-31`) and `as of Oct 2026`;
+- quote blocks: a comment block with `MUST` or `SHALL` in capitals, or a block
+  of more than six prose lines that also cites a record or a claim. The block
+  is reported once, as `spec quote`, beside its citations.
+
+Every comment is checked, public JSDoc, Effect notes, and file headers
+included. Only the lines a tool reads and code samples are skipped: lint,
+TypeScript, and other tool directives (with their `--` reasons); `@pr-a11y`
+routing lines and `SYNC:` blocks, with their continuation lines; the copyright
+line; and `@example` sections and fenced code. Adjacent line comments in one
+column are one block.
+
+When a citation is the file's only link to a record or a claim, link the file
+from a record first, then remove the citation: the source-comments rule says
+which field to use. A claim citation that `pnpm check:knowledge` cannot resolve
+yet stays in the baseline until it can.
+
+The repo config turns it on for `packages/*/src`, outside tests, stories and
+test helpers, at the strict-mode severity (an error in CI). Sites that existed
+when the rule arrived are listed by file in
+`no-comment-provenance.baseline.json`, once per site, and that many stay
+allowed until they are removed; remove an entry when you remove its site, and
+never add one.
+`node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs`
 rewrites the list from the source (`--check` verifies it).
 
 ### `@astryx/no-core-internal-import`
@@ -633,7 +688,7 @@ import {isRenderable} from '@astryxdesign/core/utils';
 }
 ```
 
-The rule needs type information (`parserOptions.projectService`) and stops with an error without it, so it is not in the presets. The repository config enforces it in core, where it is an error in strict mode. Other packages read core's types from core's build output, so a core type there is `any` before a build and real after it; the rule would give a different result per build state, so they are out of scope. The guards that predate it are listed in `no-truthy-jsx-guard.baseline.json`, once per guard, and that many stay allowed until they move to `isRenderable`; one more is reported. Regenerate the list with `node internal/eslint-plugin-astryx/no-truthy-jsx-guard.baseline.mjs` (`--check` verifies it). A guard that is right as written says so with `// eslint-disable-next-line @astryx/no-truthy-jsx-guard -- <reason>`. The rule also provides an ESLint suggestion that wraps the guard in `isRenderable(value)` (add the import manually).
+The rule needs type information (`parserOptions.projectService`) and stops with an error without it, so it is not in the presets. The repository config enforces it in core, where it is an error in strict mode. Other packages read core's types from core's build output, so a core type there is `any` before a build and real after it; the rule would give a different result per build state, so they are out of scope. Core has no baseline: every guard is reported. A guard that is right as written says so with `// eslint-disable-next-line @astryx/no-truthy-jsx-guard -- <reason>`. The rule also provides an ESLint suggestion that wraps the guard in `isRenderable(value)` (add the import manually).
 
 ### `@astryx/focus-outline-keyboard-only`
 

@@ -13,6 +13,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Text} from '@astryxdesign/core/Text';
 import {MobileNav} from '@astryxdesign/core/MobileNav';
 import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
+import {BreadcrumbItem, Breadcrumbs} from '@astryxdesign/core/Breadcrumbs';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {
   SideNav,
@@ -351,6 +352,37 @@ export const LongHeadingOnMobile: Story = {
                 icon={<UserCircleIcon style={{width: 16, height: 16}} />}
                 isIconOnly
               />
+            </>
+          }
+        />
+      }
+      sideNav={<SideNavWithoutHeader />}>
+      <MockContent />
+    </AppShell>
+  ),
+};
+
+/**
+ * Breadcrumbs in TopNav's start content on a phone. Below the breakpoint they
+ * render in the mobile drawer; a crumb link closes the drawer, like the
+ * TopNav and SideNav rows beside it, and the current crumb leaves it open.
+ */
+export const BreadcrumbsInMobileDrawer: Story = {
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      topNav={
+        <TopNav
+          label="Main navigation"
+          heading={<TopNavHeading heading="Acme App" headingHref="#/" />}
+          startContent={
+            <>
+              <Breadcrumbs>
+                <BreadcrumbItem href="#/projects">Projects</BreadcrumbItem>
+                <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+              </Breadcrumbs>
+              <TopNavItem label="Docs" href="#/docs" />
             </>
           }
         />
@@ -841,6 +873,30 @@ export const WithBanner: Story = {
         />
       }>
       <MockContent />
+    </AppShell>
+  ),
+};
+
+/**
+ * Auto height with a banner and a side nav but no top nav. Below the mobile
+ * breakpoint, the side nav shows as the phone top bar under the banner. Both
+ * stick to the top as the page scrolls.
+ */
+export const AutoHeightSideNavBanner: Story = {
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      sideNav={<SideNavWithHeader />}
+      height="auto"
+      banner={
+        <Banner
+          status="info"
+          container="section"
+          title="System maintenance scheduled"
+          description="The system will undergo maintenance tonight at 10pm UTC."
+        />
+      }>
+      <MockContent paragraphs={20} />
     </AppShell>
   ),
 };

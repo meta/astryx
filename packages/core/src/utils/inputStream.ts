@@ -4,49 +4,40 @@
  * @file inputStream.ts
  * @input A window, and subscribers to its input events (the press feedback
  *   controller, the gesture host)
- * @output Exports subscribeInput
+ * @output subscribeInput, and getLastPointerType: the type of the latest
+ *   pointer event the stream delivered
  * @position The one entry for document-wide input listeners in core: one
  *   native listener per event type on the window's capture phase, shared by
  *   every subscriber
  *
- * The window's capture phase runs before any document listener, so an app's
- * window-capture `stopPropagation`, or a document-capture
- * `stopImmediatePropagation` registered before core subscribed, no longer
- * hides input from the press feedback or the gesture host, as UIKit's
- * recognizers see touches before views do. A recognizer that claims a touch
- * still needs the touch to reach its element: its blocking `touchmove` sits
- * there, below such a stop. And the stream stays ahead of an app's own
- * window-capture listener only until a type's listener is re-added: a
- * passivity switch, or a subscription after the type's last subscriber left,
- * appends it after every window-capture listener registered meanwhile, so an
- * app listener added after core's first subscription runs before core from
- * then on, and its `stopImmediatePropagation` hides the event from every
- * subscriber. Events fired at the document (`visibilitychange`, the
- * page's `scroll`) and every element's `scroll` reach the window's capture
- * phase too. A non-bubbling event fired at an element (`blur`, `focus`)
- * reaches it as well, so a subscriber that means the window's own event
- * checks `event.target`.
- *
- * Subscribers run in subscription order, each isolated: one that throws is
- * reported and the rest still run, as separate native listeners would.
- *
- * A type's native listener is passive, so a page that only paints presses
- * blocks no scroll. It is registered non-passive only while a subscriber
- * that cancels the event (`{cancels: true}`) is subscribed (the gesture
- * host's `touchend` and `contextmenu` while a claiming participant is
- * attached; the page hold's `touchmove` while it holds; the click guard's
- * `click` while it is armed, and from the menu press model's first arm on),
- * and passive again once that subscriber leaves. With no subscriber left,
- * it is removed.
- *
  * SYNC: When modified, update inputStream.test.ts.
  */
 
-type InputListener = (event: Event) => void;
+// The window's capture phase runs before document listeners, so an app's
+// `stopPropagation` there does not hide input from press feedback or the
+// gesture host. A claiming recognizer still needs the touch to reach its
+// element. A passivity switch or a new first subscriber adds a type's
+// listener again. App window-capture listeners added meanwhile then run
+// before it. Document events and element
+// `scroll` reach the window's capture phase too, and so does an element's
+// `blur` or `focus`. A subscriber for the window's own event checks
+// `event.target`.
+//
+// Subscribers run in subscription order, after the ones subscribed `first`.
+// A first subscriber that returns `true` ends the dispatch: no later
+// subscriber hears the event. One that throws is reported, and the rest still
+// run.
+//
+// A type's native listener is passive, so it blocks no scroll. It is
+// non-passive only while a subscriber that cancels the event
+// (`{cancels: true}`) is subscribed. With no subscriber left, it is removed.
+
+type InputListener = (event: Event) => unknown;
 
 interface Subscriber {
   readonly listener: InputListener;
   readonly cancels: boolean;
+  readonly isFirst: boolean;
 }
 
 interface Channel {
@@ -63,12 +54,30 @@ export interface InputSubscriptionOptions {
    * @default false
    */
   readonly cancels?: boolean;
+  /**
+   * The subscriber runs before every subscriber that is not first. When it
+   * returns `true`, no later subscriber hears the event.
+   * @default false
+   */
+  readonly first?: boolean;
 }
 
 /** The events a window's capture phase sees: its own, and the document's. */
 export type InputEventMap = WindowEventMap & DocumentEventMap;
 
 const streams = new WeakMap<Window, Map<string, Channel>>();
+/** The type of the latest pointer event each window's stream delivered. */
+const lastPointerTypes = new WeakMap<Window, string>();
+
+/**
+ * The type of the latest pointer event `view`'s stream delivered: `mouse`,
+ * `pen` or `touch`, or `null` before any. The stream hears a pointer event
+ * type only while a subscriber listens to it, as press feedback does on any
+ * page with a pressable. Reading it adds no listener.
+ */
+export function getLastPointerType(view: Window): string | null {
+  return lastPointerTypes.get(view) ?? null;
+}
 
 /**
  * Listen to `type` on `view`'s capture phase through its shared native
@@ -77,8 +86,8 @@ const streams = new WeakMap<Window, Map<string, Channel>>();
 export function subscribeInput<K extends keyof InputEventMap>(
   view: Window,
   type: K,
-  listener: (event: InputEventMap[K]) => void,
-  {cancels = false}: InputSubscriptionOptions = {},
+  listener: (event: InputEventMap[K]) => unknown,
+  {cancels = false, first = false}: InputSubscriptionOptions = {},
 ): () => void {
   let channels = streams.get(view);
   if (channels == null) {
@@ -93,8 +102,16 @@ export function subscribeInput<K extends keyof InputEventMap>(
   const subscriber: Subscriber = {
     listener: listener as InputListener,
     cancels,
+    isFirst: first,
   };
-  channel.subscribers.push(subscriber);
+  const firstLater = first
+    ? channel.subscribers.findIndex(other => !other.isFirst)
+    : -1;
+  if (firstLater === -1) {
+    channel.subscribers.push(subscriber);
+  } else {
+    channel.subscribers.splice(firstLater, 0, subscriber);
+  }
   register(view, type, channel);
   let isSubscribed = true;
   return () => {
@@ -137,12 +154,17 @@ function register(view: Window, type: string, channel: Channel): void {
   if (wanted == null) {
     return;
   }
-  const listener: InputListener = event => dispatch(channel, event);
+  const listener: InputListener = event => dispatch(view, channel, event);
   view.addEventListener(type, listener, {capture: true, passive: !wanted});
   channel.native = {listener, cancels: wanted};
 }
 
-function dispatch(channel: Channel, event: Event): void {
+function dispatch(view: Window, channel: Channel, event: Event): void {
+  // Recorded before any subscriber runs, so each reads the pointer at hand.
+  const {pointerType} = event as Partial<PointerEvent>;
+  if (typeof pointerType === 'string' && pointerType !== '') {
+    lastPointerTypes.set(view, pointerType);
+  }
   // A subscriber may subscribe or unsubscribe while the event runs; the
   // event goes to those subscribed when it arrived.
   for (const subscriber of [...channel.subscribers]) {
@@ -150,7 +172,9 @@ function dispatch(channel: Channel, event: Event): void {
       continue;
     }
     try {
-      subscriber.listener(event);
+      if (subscriber.listener(event) === true && subscriber.isFirst) {
+        return;
+      }
     } catch (error) {
       report(error);
     }

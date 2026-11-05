@@ -25,11 +25,11 @@ import {FieldStatus} from '../FieldStatus/FieldStatus';
 import {useFieldStatusAnnouncement} from '../FieldStatus/useFieldStatusAnnouncement';
 import {spacingVars, borderVars, sizeVars} from '../theme/tokens.stylex';
 import type {IconType} from '../Icon';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 import {Text} from '../Text/Text';
-import {VisuallyHidden} from '../VisuallyHidden';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
 import type {FieldStatusPlacement} from './fieldStatusPlacement';
 

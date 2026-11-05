@@ -6,7 +6,11 @@
  * @file outsidePress.ts
  * @input Listens for pointerdown, pointerup and pointercancel on a document
  * @output Exports watchOutsidePress and useOutsidePress, which owns one watch
- *   for a component: start on show, stop on hide, stop on unmount
+ *   for a component: start on show, stop on hide, stop on unmount;
+ *   noteOutsideDismissal and outsideDismissalCount, a per-document count of
+ *   layers that an outside press or focus move closed; and the
+ *   inside tests a text field's owner runs: isPressInsideOwnedLayer for a
+ *   press, isFocusInsideOwnedLayer for a blur
  * @position Internal to Layer; the outside-press dismissal for a manual
  *   popover whose owner decides what counts as inside (a combobox's field
  *   and its list). Not exported from the package.
@@ -20,6 +24,20 @@
  */
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
+
+// A modal host's backdrop press reads this. A press that closed a layer above
+// the host is that layer's, so the host stays open.
+const outsideDismissals = new WeakMap<Document, number>();
+
+/** Records that a layer in `doc` is closing because a press or focus went outside it. */
+export function noteOutsideDismissal(doc: Document): void {
+  outsideDismissals.set(doc, (outsideDismissals.get(doc) ?? 0) + 1);
+}
+
+/** How many layers an outside press has closed in `doc` so far. */
+export function outsideDismissalCount(doc: Document): number {
+  return outsideDismissals.get(doc) ?? 0;
+}
 
 /**
  * Watch the owner's document for a press outside, until the returned function
@@ -47,6 +65,7 @@ export function watchOutsidePress(
     const wasOutside = startedOutside;
     startedOutside = false;
     if (wasOutside && !isInside(event.composedPath())) {
+      noteOutsideDismissal(doc);
       onOutside();
     }
   };
@@ -94,6 +113,85 @@ export function useOutsidePress(): OutsidePressWatch {
     },
     [],
   );
+  // Stops the outside-press listeners on unmount.
   useEffect(() => stop, [stop]);
   return useMemo(() => ({start, stop}), [start, stop]);
+}
+
+// Node, Element and ShadowRoot are checked by nodeType, not instanceof: a
+// node from a same-origin iframe or a Picture-in-Picture window belongs to
+// another realm, where instanceof against this window's classes is false.
+function isNode(target: unknown): target is Node {
+  return (
+    typeof target === 'object' &&
+    target !== null &&
+    typeof (target as {nodeType?: unknown}).nodeType === 'number'
+  );
+}
+
+function isElement(node: Node): node is Element {
+  return node.nodeType === 1;
+}
+
+function isShadowRoot(node: Node): node is ShadowRoot {
+  return node.nodeType === 11 && 'host' in node;
+}
+
+/** Whether `node` is the layer with this id, or inside it across shadow roots. */
+function isWithinLayer(node: Node, layerId: string): boolean {
+  for (
+    let current: Node | null = node;
+    current != null;
+    current =
+      current.parentNode ?? (isShadowRoot(current) ? current.host : null)
+  ) {
+    if (isElement(current) && current.id === layerId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether a press with this composed path is on a text field or in the
+ * field's own layer, which may be hosted outside the field.
+ *
+ * @param path - The press's composed path.
+ * @param field - The field that owns the layer.
+ * @param layerId - The layer element's id.
+ */
+export function isPressInsideOwnedLayer(
+  path: ReadonlyArray<EventTarget>,
+  field: Element,
+  layerId: string,
+): boolean {
+  return path.some(
+    target =>
+      target === field ||
+      (layerId !== '' &&
+        isNode(target) &&
+        isElement(target) &&
+        target.id === layerId),
+  );
+}
+
+/**
+ * Whether focus moving to `next` stays with a text field's own layer: on the
+ * field, or in the layer, which may be hosted outside the field or inside a
+ * shadow root. Each owner decides what a blur that fails this means,
+ * including when `next` is null.
+ *
+ * @param next - The blur's `relatedTarget`.
+ * @param field - The field that owns the layer.
+ * @param layerId - The layer element's id.
+ */
+export function isFocusInsideOwnedLayer(
+  next: EventTarget | null,
+  field: Element | null | undefined,
+  layerId: string,
+): boolean {
+  return (
+    isNode(next) &&
+    (field?.contains(next) === true || isWithinLayer(next, layerId))
+  );
 }

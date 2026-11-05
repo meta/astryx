@@ -24,6 +24,7 @@ import React, {
   useCallback,
   useEffect,
   useId,
+  useInsertionEffect,
   useMemo,
   useRef,
   useState,
@@ -40,7 +41,12 @@ import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {useOutsidePress} from '../Layer/outsidePress';
+import {
+  isFocusInsideOwnedLayer,
+  isPressInsideOwnedLayer,
+  noteOutsideDismissal,
+  useOutsidePress,
+} from '../Layer/outsidePress';
 import {isImeKeyEvent} from '../utils/ime';
 import {TypeaheadItem} from './TypeaheadItem';
 import {Icon} from '../Icon';
@@ -75,6 +81,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Typeahead/BaseTypeahead.generated';
+import {textEntryTraitAttributes} from '../Field/textEntryTraits';
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -308,8 +315,13 @@ const styles = stylex.create({
   },
   dropdown: {
     boxSizing: 'border-box',
-    // Matches DROPDOWN_MAX_HEIGHT, which the room-below cap uses.
-    maxHeight: '300px',
+    // Matches DROPDOWN_MAX_HEIGHT, which the room-below cap uses. It is no
+    // taller than its layer's block-size cap either, which folds in the
+    // software keyboard: the list ends above the keyboard with the layer.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     padding: spacingVars['--spacing-1'],
   },
@@ -603,8 +615,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   );
   // Committed values (Tokenizer's tokens) leave the shown rows in the same
   // render that commits them, before any reload answers, so a list never
-  // offers a token (component:Tokenizer FR13). The highlight stays on its item
-  // when that item remains. The previous key is remembered in state, like
+  // offers a token (component:Tokenizer FR13). Until the reload answers, the
+  // highlight stays on its item when that item remains; the reloaded list
+  // highlights its first row. The previous key is remembered in state, like
   // `sourceOfState` below.
   const committedChoices = useCommittedChoices();
   const committedChoicesKey = committedChoices?.key;
@@ -769,15 +782,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // source: they can never be re-shown, so focus bootstraps the new source.
   const sourceGenRef = useRef(0);
 
-  // Results still arriving from a replaced source must not land in the new
-  // one's menu.
-  const prevSearchSourceRef = useRef(searchSource);
-  if (prevSearchSourceRef.current !== searchSource) {
-    prevSearchSourceRef.current.cancel?.();
-    prevSearchSourceRef.current = searchSource;
-    sourceGenRef.current = ++searchGenRef.current;
-  }
-
   // The previous source is remembered in state, not a ref, so a render React
   // discards cannot consume the comparison without its state updates.
   const [sourceOfState, setSourceOfState] = useState(searchSource);
@@ -787,7 +791,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setIsLoading(false);
       setHasSearched(false);
     }
-    loadingRef.current = false;
   }
   // A field that becomes disabled stops showing a search as busy in the same
   // render, and the dropped query shows no outcome, so no empty state; the
@@ -801,15 +804,34 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
   }
 
-  // When the search source is replaced, any in-flight load from the previous
-  // source is abandoned (generation bumped above). Notify the wrapper's busy lane
-  // in an effect so external store listeners run safely after commit.
-  const isInitialMountRef = useRef(true);
-  useEffect(() => {
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
+  // Results that arrive from a replaced source must not land in the new
+  // source's menu, so the replacement starts a new generation. That happens
+  // when the replacement commits, not in render. React can render a
+  // replacement and then discard it, for example when a transition suspends
+  // and a newer update replaces it. The source that stays then keeps its read.
+  // An insertion effect runs before every layout effect and ref callback of
+  // its commit. A read that one of them starts against the replacement gets a
+  // later generation, after the replaced source stopped its requests.
+  const prevSearchSourceRef = useRef(searchSource);
+  const isSourceReplacedRef = useRef(false);
+  useInsertionEffect(() => {
+    if (prevSearchSourceRef.current === searchSource) {
       return;
     }
+    prevSearchSourceRef.current.cancel?.();
+    prevSearchSourceRef.current = searchSource;
+    sourceGenRef.current = ++searchGenRef.current;
+    // The replacing render cleared the busy state.
+    loadingRef.current = false;
+    isSourceReplacedRef.current = true;
+  }, [searchSource]);
+  // Syncs the wrapper's busy lane. A read of the replacement that already
+  // started keeps the lane busy.
+  useIsomorphicLayoutEffect(() => {
+    if (!isSourceReplacedRef.current) {
+      return;
+    }
+    isSourceReplacedRef.current = false;
     if (!loadingRef.current) {
       onLoadingChangeRef.current?.(false);
     }
@@ -842,13 +864,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       dropdownRef.current?.closest<HTMLElement>('[popover]') ?? null;
     outsidePress.start(
       anchorEl,
-      path => {
-        const anchor = anchorRef?.current ?? fallbackAnchorRef.current;
-        const layer = findLayer();
-        return path.some(
-          target => target === anchor || (layer != null && target === layer),
-        );
-      },
+      path =>
+        isPressInsideOwnedLayer(
+          path,
+          anchorRef?.current ?? fallbackAnchorRef.current ?? anchorEl,
+          findLayer()?.id ?? '',
+        ),
       () => findLayer()?.hidePopover(),
     );
   }, [onOpenChange, anchorRef, outsidePress]);
@@ -1116,11 +1137,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       resultsGenRef.current = gen;
       const shown = bootstrapResults.slice(0, maxMenuItems);
       const nextHighlightedIndex = shown.length > 0 ? 0 : -1;
+      // A focus load that yields no choice, or fails (it arrives here empty),
+      // closes the list rather than leaving it open and empty. A typed
+      // query's empty search is not a focus load and keeps its empty-search
+      // message.
       if (
         results.length === 0 &&
         shown.length === 0 &&
         highlightedIndex === -1
       ) {
+        popover.hide();
         return;
       }
       setHeldHeight(null);
@@ -1128,11 +1154,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setHighlightedIndex(nextHighlightedIndex);
       if (bootstrapResults.length > 0) {
         showLayer();
-      } else if (committedChoices != null) {
-        // A Tokenizer list left with no eligible choice (its focus entries
-        // all committed, or the request failed) closes rather than staying
-        // open and empty (component:Tokenizer FR15). A plain Typeahead
-        // provides no committed choices and keeps its current behavior.
+      } else {
         popover.hide();
       }
     },
@@ -1143,7 +1165,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       showLayer,
       replaceResults,
       popover,
-      committedChoices,
     ],
   );
 
@@ -1359,6 +1380,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       searchSource.cancel?.();
       onChange(item);
       setQuery('');
+      // The pick empties the input, which is a change to the query like any
+      // typed one. A query that was already empty (a pick from the focus list)
+      // did not change.
+      if (query !== '') {
+        onChangeQuery?.('');
+      }
       replaceResults([]);
       setHeldHeight(null);
       setHasSearched(false);
@@ -1369,7 +1396,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       popover.hide();
       inputRef.current?.focus();
     },
-    [isDisabled, onChange, popover, searchSource, setLoading, replaceResults],
+    [
+      isDisabled,
+      onChange,
+      onChangeQuery,
+      query,
+      popover,
+      searchSource,
+      setLoading,
+      replaceResults,
+    ],
   );
 
   // Shared by handleFocus and handleClick: bootstrap entries if none are
@@ -1454,14 +1490,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       if (!popover.isOpen) {
         return;
       }
-      const next = e.relatedTarget as Node | null;
-      if (next) {
-        const anchorEl = anchorRef?.current ?? fallbackAnchorRef.current;
-        const popoverEl = document.getElementById(popover.id);
-        if (anchorEl?.contains(next) || popoverEl?.contains(next)) {
-          return;
-        }
+      const anchorEl = anchorRef?.current ?? fallbackAnchorRef.current;
+      if (isFocusInsideOwnedLayer(e.relatedTarget, anchorEl, popover.id)) {
+        return;
       }
+      noteOutsideDismissal(e.currentTarget.ownerDocument);
       popover.hide();
     },
     [popover, anchorRef],
@@ -1723,6 +1756,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         autoFocus={hasAutoFocus}
         data-autofocus={hasAutoFocus || undefined}
         autoComplete="off"
+        // Autocorrect would rewrite names and identifiers. The key is only a
+        // label: Enter still commits the highlighted option.
+        {...textEntryTraitAttributes({
+          enterKeyHint: 'search',
+          hasAutoCorrect: false,
+        })}
         {...mergeProps(
           stylex.props(
             styles.input,

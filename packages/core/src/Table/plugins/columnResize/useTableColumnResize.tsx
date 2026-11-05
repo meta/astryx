@@ -865,7 +865,7 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
     }
   }, []);
 
-  // Clean up observer on unmount
+  // Releases the table resize observer on unmount.
   useEffect(() => {
     return () => {
       unobserveTableRef.current?.();
@@ -934,6 +934,7 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
     };
   }, []);
 
+  // Releases the resize gate on unmount.
   useEffect(() => {
     return () => {
       gateCleanupRef.current?.();

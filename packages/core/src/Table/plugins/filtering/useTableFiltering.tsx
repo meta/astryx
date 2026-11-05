@@ -820,6 +820,7 @@ function StringListFilterControl({
       }}
       size={size}
       hasClear={hasClear}
+      presentation="popover"
     />
   );
 }

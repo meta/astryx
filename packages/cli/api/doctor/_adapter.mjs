@@ -468,11 +468,13 @@ export function resolveBuiltPath(cwd, target) {
  * path relative to the folder (a file's own name when the path is one file),
  * whether it sits in build output, and a reader that returns its text, or
  * null when it cannot be read or is over 5 MB. Installs and version control
- * are skipped; at most BUILT_FILE_LIMIT files are listed.
+ * are skipped; at most `fileLimit` files are listed.
  * @param {string} target an existing absolute path
+ * @param {{fileLimit?: number}} [options] `fileLimit`: BUILT_FILE_LIMIT
+ *   unless the caller reads fewer
  * @returns {{files: {rel: string, built: boolean, read: () => string | null}[], truncated: boolean, missing?: number}}
  */
-export function readBuiltPath(target) {
+export function readBuiltPath(target, {fileLimit = BUILT_FILE_LIMIT} = {}) {
   /** @param {string} file */
   const reader = file => () => {
     try {
@@ -568,7 +570,7 @@ export function readBuiltPath(target) {
           built: built || BUILD_OUTPUT_DIRS.has(entry.name),
         });
       } else if (entry.isFile()) {
-        if (files.length >= BUILT_FILE_LIMIT) return {files, truncated: true};
+        if (files.length >= fileLimit) return {files, truncated: true};
         files.push({
           rel: path.relative(target, full).split(path.sep).join('/'),
           built,

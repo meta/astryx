@@ -13,6 +13,7 @@ import {scope as internalBarrelScope} from './internal/eslint-plugin-astryx/no-i
 import {scope as nullishGuardScope} from './internal/eslint-plugin-astryx/no-nullish-jsx-guard.js';
 import {scope as truthyGuardScope} from './internal/eslint-plugin-astryx/no-truthy-jsx-guard.js';
 import {scope as privateAttributeScope} from './internal/eslint-plugin-astryx/no-raw-private-attribute.js';
+import {scope as commentProvenanceScope} from './internal/eslint-plugin-astryx/no-comment-provenance.js';
 
 /* global process */
 
@@ -48,19 +49,6 @@ const internalBarrelBaseline = JSON.parse(
   ),
 );
 
-// Truthiness guards on ReactNode values that existed when
-// `@astryx/no-truthy-jsx-guard` arrived, by repo-relative file, once per
-// guard. The list only shrinks.
-const truthyGuardBaseline = JSON.parse(
-  readFileSync(
-    path.join(
-      import.meta.dirname,
-      'internal/eslint-plugin-astryx/no-truthy-jsx-guard.baseline.json',
-    ),
-    'utf8',
-  ),
-);
-
 // Private `data-astryx-*` attributes written by hand before
 // `@astryx/no-raw-private-attribute` arrived, by repo-relative file, once per
 // site. The list only shrinks.
@@ -69,6 +57,20 @@ const privateAttributeBaseline = JSON.parse(
     path.join(
       import.meta.dirname,
       'internal/eslint-plugin-astryx/no-raw-private-attribute.baseline.json',
+    ),
+    'utf8',
+  ),
+);
+
+// Record ids, claim ids, pull request and issue references, date stamps, and
+// quote blocks in source comments that predate
+// `@astryx/no-comment-provenance`, by repo-relative file, once per site. The
+// list only shrinks.
+const commentProvenanceBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
     ),
     'utf8',
   ),
@@ -909,6 +911,29 @@ export default defineConfig(
       'no-restricted-syntax': 'off',
     },
   },
+  // Browser specs use the shared base test, whose contexts answer remote
+  // images locally and block other remote requests. A remote host that is
+  // slow then cannot stall a spec.
+  {
+    files: ['**/*.browser.spec.ts', '**/*.chromium.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            '@playwright/test',
+            'playwright/test',
+            'playwright',
+            'playwright-core',
+          ].map(name => ({
+            name,
+            message:
+              "Import from '@astryxdesign/a11y-spec/playwright' instead: its `test` keeps every browser context off remote hosts.",
+          })),
+        },
+      ],
+    },
+  },
   // Inside a package's own shipped source, import the module that defines a
   // name, not a folder's index (a barrel): a lazily imported module that goes
   // through a barrel pulls every sibling export into its graph, which broke
@@ -948,8 +973,7 @@ export default defineConfig(
   // renders a stray "0" (`&&`) or drops the slot (`? :`), so a slot's
   // presence is decided by `isRenderable` here too. The rule reads types, so
   // its scope is core, which the type-aware block above parses with the
-  // project service. The guards that predate the rule are listed in the
-  // baseline, once per guard; one more is reported (an error in strict mode).
+  // project service. Every guard is reported (an error in strict mode).
   {
     files: truthyGuardScope.files,
     ignores: truthyGuardScope.ignores,
@@ -957,10 +981,7 @@ export default defineConfig(
       '@astryx': astryxEslintPlugin,
     },
     rules: {
-      '@astryx/no-truthy-jsx-guard': [
-        reactSeverity,
-        {baseline: truthyGuardBaseline, root: import.meta.dirname},
-      ],
+      '@astryx/no-truthy-jsx-guard': reactSeverity,
     },
   },
   // A private `data-astryx-*` attribute is written once, in its owner module
@@ -982,6 +1003,26 @@ export default defineConfig(
       '@astryx/no-raw-private-attribute': [
         reactSeverity,
         {baseline: privateAttributeBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // A source comment explains a reason, a constraint, or a quirk. It does not
+  // cite a record, a claim, a pull request, an issue, or a date, and it does
+  // not quote requirement text: the record links the code, and
+  // `pnpm specs:for <path>` finds it. The sites that predate this block are
+  // listed in the baseline, once per site, and that many stay allowed until
+  // they are removed; one more is reported (an error in strict mode, so a pull
+  // request that adds one fails lint, while main stays green).
+  {
+    files: commentProvenanceScope.files,
+    ignores: commentProvenanceScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-comment-provenance': [
+        reactSeverity,
+        {baseline: commentProvenanceBaseline, root: import.meta.dirname},
       ],
     },
   },

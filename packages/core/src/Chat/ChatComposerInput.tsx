@@ -68,6 +68,8 @@ import {
 import {Badge, type BadgeProps} from '../Badge';
 import {useChatComposerContext} from './ChatContext';
 import {themeProps} from '../utils/themeProps';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
+import type {EnterKeyHint} from '../Field/textEntryTraits';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -247,6 +249,14 @@ export interface ChatComposerInputProps extends Omit<
    * never submits while a composition is in progress.
    */
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
+  /**
+   * What the Return key of a touch keyboard says (the native
+   * `enterkeyhint`). Enter sends the message, so the key says so: iOS shows
+   * its Send key. When `onKeyDown` makes Enter insert a line break on touch
+   * keyboards, pass `'enter'` so the key shows Return again.
+   * @default 'send'
+   */
+  enterKeyHint?: EnterKeyHint;
 }
 
 // =============================================================================
@@ -373,6 +383,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     onFiles,
     onSubmit = composerCtx?.onSubmit,
     onKeyDown: onKeyDownProp,
+    enterKeyHint = 'send',
     xstyle,
     className,
     style,
@@ -380,13 +391,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   } = props;
   // Keep focus/blur observation available, but do not forward activation or
   // editing callbacks from the disabled root (including capture handlers).
-  const rootProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const rootProps = withholdCallerHandlers(rest, isDisabled);
   const label = labelFromProps ?? t('@astryx.chat.composerInput.label');
   const placeholder =
     placeholderFromProps ??
@@ -519,6 +524,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     };
   }, [inputControlRef, focusEditableAtEnd]);
 
+  // Syncs the contentEditable DOM with the controlled `value`.
   useEffect(() => {
     if (controlledValue === undefined || !editableRef.current) {
       return;
@@ -640,6 +646,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         }
       : triggerMenu.ariaProps;
 
+  // Syncs the trigger menu's pending searches with `isDisabled`.
   useEffect(() => {
     if (isDisabled && triggerMenu.state.isActive) {
       // Reset also cancels pending searches, so late results cannot reopen
@@ -655,6 +662,14 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     emitChange();
     triggerMenu.handleInput();
   }, [isDisabled, emitChange, triggerMenu]);
+
+  // A click inside the editor keeps the menu open, but it can move the caret
+  // out of the query; the trigger is checked again at the new caret.
+  const handleEditorClick = useCallback(() => {
+    if (!isDisabled && triggerMenu.state.isActive) {
+      triggerMenu.handleInput();
+    }
+  }, [isDisabled, triggerMenu]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
@@ -933,8 +948,10 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         // Explicit in both states: losing editability must not lose focus.
         tabIndex={0}
         contentEditable={!isDisabled}
+        enterKeyHint={enterKeyHint}
         suppressContentEditableWarning
         onInput={handleInput}
+        onClick={handleEditorClick}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
         onDragOver={handleDragOver}
