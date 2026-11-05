@@ -300,6 +300,66 @@ describe('neutral theme palette mappings', () => {
   });
 });
 
+// A wash of `color` at `alpha` (0-255) over `background`, as the browser
+// composites `--color-neutral`, the hover tint.
+function composite(color: string, alpha: number, background: string): string {
+  const channel = (hex: string, offset: number) =>
+    Number.parseInt(hex.slice(offset + 1, offset + 3), 16);
+  return `#${[0, 2, 4]
+    .map(offset =>
+      Math.round(
+        (channel(color, offset) * alpha +
+          channel(background, offset) * (255 - alpha)) /
+          255,
+      )
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+}
+
+describe('neutral selected fill', () => {
+  // `--color-accent-muted` fills a selected row, a range, a highlighted line
+  // and a pressed preset. It must stand apart from every surface it sits on,
+  // and from the hover tint on that surface, in both modes.
+  const [, lightFill, darkFill] =
+    /^light-dark\((#[0-9a-f]{6}), (#[0-9a-f]{6})\)$/i.exec(
+      String(neutralTheme.tokens?.['--color-accent-muted']),
+    ) ?? [];
+  const modes = [
+    {
+      name: 'light',
+      fill: lightFill,
+      surface: neutralPalettes.neutral.light[100],
+      body: neutralPalettes.neutral.light[95],
+      tint: neutralPalettes.neutral.light[0],
+      alpha: 0x0f,
+    },
+    {
+      name: 'dark',
+      fill: darkFill,
+      surface: neutralPalettes.neutral.dark[15],
+      body: neutralPalettes.neutral.dark[10],
+      tint: neutralPalettes.neutral.dark[100],
+      alpha: 0x1a,
+    },
+  ];
+
+  it.each(modes)(
+    'stands apart from the surface, the body and their hover tints in $name mode',
+    ({fill, surface, body, tint, alpha}) => {
+      for (const background of [
+        surface,
+        body,
+        composite(tint, alpha, surface),
+        composite(tint, alpha, body),
+      ]) {
+        expect(contrastRatio(fill, background)).toBeGreaterThanOrEqual(1.15);
+      }
+    },
+  );
+});
+
 describe('neutral syntax contrast', () => {
   it('keeps light CodeBlock comments and operators at normal-text AA', () => {
     const background = neutralPalettes.neutral.light[100];
