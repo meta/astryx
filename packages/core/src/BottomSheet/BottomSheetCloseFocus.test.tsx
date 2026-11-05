@@ -474,6 +474,59 @@ describe('BottomSheet removed while open', () => {
     expect(opener).toHaveFocus();
   });
 
+  it('returns focus to the bottom sheet opener when a sibling stack declared top first is removed', async () => {
+    function Siblings() {
+      const [isOpen, setIsOpen] = useState(false);
+      const [isSortOpen, setIsSortOpen] = useState(false);
+      const searchRef = useRef<HTMLInputElement>(null);
+      return (
+        <>
+          <input aria-label="Search" ref={searchRef} />
+          <button type="button" onClick={() => setIsOpen(true)}>
+            Filters
+          </button>
+          {isOpen && isSortOpen && (
+            <BottomSheet
+              isOpen
+              onOpenChange={setIsSortOpen}
+              label="Sort by"
+              finalFocusRef={searchRef}>
+              <button type="button" onClick={() => setIsOpen(false)}>
+                Apply all
+              </button>
+            </BottomSheet>
+          )}
+          {isOpen && (
+            <BottomSheet isOpen onOpenChange={setIsOpen} label="Filters">
+              <button type="button" onClick={() => setIsSortOpen(true)}>
+                Sort
+              </button>
+            </BottomSheet>
+          )}
+        </>
+      );
+    }
+    render(<Siblings />);
+    const opener = screen.getByRole('button', {name: 'Filters'});
+    act(() => opener.focus());
+    fireEvent.click(opener);
+    const sort = screen.getByRole('button', {name: 'Sort', hidden: true});
+    act(() => sort.focus());
+    fireEvent.click(sort);
+    const applyAll = screen.getByRole('button', {
+      name: 'Apply all',
+      hidden: true,
+    });
+    act(() => applyAll.focus());
+
+    fireEvent.click(applyAll);
+    await settle();
+
+    expect(sheetNamed('Filters')).toBeNull();
+    expect(sheetNamed('Sort by')).toBeNull();
+    expect(opener).toHaveFocus();
+  });
+
   it('moves no focus when a covered sheet is removed under a top sheet that stays', async () => {
     function Siblings() {
       const [isFiltersShown, setIsFiltersShown] = useState(true);

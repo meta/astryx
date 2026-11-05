@@ -558,8 +558,8 @@ function StandaloneBottomSheet({
     const key = stackKeyRef.current;
     const dialog = dialogRef.current;
     // Removing an open dialog runs no close, so focus would drop to the page.
-    // A sheet removed while open is closed for focus: once the commit has
-    // finished, focus goes where a close sends it, if the removal lost focus.
+    // After the commit, the repair sends focus where a close would, if the
+    // removal lost focus.
     const repairOnRemoval =
       dialog == null ? null : prepareFocusRepairOnRemoval(dialog);
     const leave = registerBottomSheet(
@@ -627,9 +627,13 @@ function StandaloneBottomSheet({
           finalFocusRefRef.current?.current ?? triggerRef.current;
         const revealed = hasScrim ? getBottomSheetBeneath(key) : null;
         repairOnRemoval(() => {
+          // The sheet beneath left too. Its own repair returns focus for the
+          // stack.
+          if (revealed != null && !revealed.element.isConnected) {
+            return;
+          }
           if (
             revealed != null &&
-            revealed.element.isConnected &&
             (returnTarget == null || !revealed.element.contains(returnTarget))
           ) {
             revealed.focus();
