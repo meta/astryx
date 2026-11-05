@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
-import {planLegs, recordLog} from './interaction-legs.mjs';
+import {planLegs, recordLog} from './playwright-legs.mjs';
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -19,7 +19,7 @@ const ci = yaml.parse(
 );
 const durations = JSON.parse(
   fs.readFileSync(
-    path.join(root, '.github/interaction-durations.json'),
+    path.join(root, '.github/playwright-leg-durations.json'),
     'utf8',
   ),
 );
@@ -78,7 +78,7 @@ describe('planLegs', () => {
 describe('the list reader and recordLog', () => {
   it('reads the list report with the reader the accessibility contracts use', () => {
     const source = fs.readFileSync(
-      path.join(root, '.github/scripts/interaction-legs.mjs'),
+      path.join(root, '.github/scripts/playwright-legs.mjs'),
       'utf8',
     );
     expect(source).toContain(
@@ -100,6 +100,25 @@ describe('the list reader and recordLog', () => {
       'b.spec.ts': 5,
     });
     expect(recordLog('no run here', 'chromium')).toEqual({});
+  });
+
+  it('reads a suite with one unnamed project, with its printed path made relative to its test directory', () => {
+    const log = [
+      '2026-11-03T20:04:07.000Z Running 2 tests using 1 worker',
+      '2026-11-03T20:04:15.000Z   ✓   1 apps/docsite/e2e/a.spec.ts:37:5 › first (4.1s)',
+      '2026-11-03T20:04:25.000Z   ✓   2 apps/docsite/e2e/b.spec.ts:65:7 › second (10.2s)',
+    ].join('\n');
+    expect(recordLog(log, undefined, 'apps/docsite/e2e/')).toEqual({
+      'a.spec.ts': 8,
+      'b.spec.ts': 10,
+    });
+    // A named project's lines never count for an unnamed one.
+    expect(
+      recordLog(
+        '2026-11-03T20:04:07.000Z Running 1 test using 1 worker\n2026-11-03T20:04:15.000Z   ✓   1 [chromium] › a.spec.ts:3:5 › t',
+        undefined,
+      ),
+    ).toEqual({});
   });
 });
 
@@ -159,19 +178,19 @@ describe('the interaction proof legs in ci.yml', () => {
       expect(job.steps.indexOf(keep)).toBeLessThan(checkout);
       expect(keep.if).toBe("steps.scope.outputs.applies == 'true'");
       for (const [file, dir] of [
-        ['.github/scripts/interaction-legs.mjs', '.github/scripts/'],
+        ['.github/scripts/playwright-legs.mjs', '.github/scripts/'],
         ['.github/scripts/a11y-pr-contracts.mjs', '.github/scripts/'],
         ['scripts/lib/duration-split.mjs', 'scripts/lib/'],
-        ['.github/interaction-durations.json', '.github/'],
+        ['.github/playwright-leg-durations.json', '.github/'],
       ])
         expect(keep.run).toContain(
           `cp .test-scope/${file} "$RUNNER_TEMP/interaction-legs/${dir}"`,
         );
       expect(plan.run).toContain(
-        `node "$RUNNER_TEMP/interaction-legs/.github/scripts/interaction-legs.mjs" plan --project ${lane.project}`,
+        `--key interaction-${lane.project} --config playwright.interaction.config.ts --project ${lane.project}`,
       );
       expect(plan.run).toContain(
-        '--durations "$RUNNER_TEMP/interaction-legs/.github/interaction-durations.json"',
+        '--durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json"',
       );
       expect(plan.run).not.toMatch(/git (fetch|show)/);
       expect(plan.run).toContain(
@@ -202,10 +221,10 @@ describe('the interaction proof legs in ci.yml', () => {
       const scope = ci.jobs[id].steps.find(each => each.id === 'scope');
       const pattern = new RegExp(scope.with.paths);
       for (const file of [
-        '.github/scripts/interaction-legs.mjs',
+        '.github/scripts/playwright-legs.mjs',
         '.github/scripts/a11y-pr-contracts.mjs',
         'scripts/lib/duration-split.mjs',
-        '.github/interaction-durations.json',
+        '.github/playwright-leg-durations.json',
       ])
         expect(pattern.test(file), `${id} ${file}`).toBe(true);
     }
@@ -291,9 +310,17 @@ describe('the interaction proof legs in ci.yml', () => {
     }
   });
 
+  it('records the docsite browser contracts too, one leg inside the same budget', () => {
+    const times = durations.docsite;
+    expect(Object.keys(times).length).toBeGreaterThan(0);
+    const legs = ci.jobs['docsite-browser'].strategy.matrix.leg.length;
+    for (const leg of planLegs(Object.keys(times), times, legs))
+      expect(leg.seconds).toBeLessThanOrEqual(6 * 60);
+  });
+
   it('records a time for each project the legs plan, each under the legs\u2019 per-runner budget', () => {
     for (const lane of lanes) {
-      const times = durations[lane.project];
+      const times = durations[`interaction-${lane.project}`];
       expect(Object.keys(times).length, lane.project).toBeGreaterThan(0);
       const plan = planLegs(Object.keys(times), times, lane.legs.length);
       // About six minutes a leg under load; the recorded run was a loaded one.
@@ -304,7 +331,7 @@ describe('the interaction proof legs in ci.yml', () => {
 
   it('plans from a copy outside the checkout, run in its root, with the times it is given', () => {
     const out = path.join(
-      fs.mkdtempSync(path.join(root, 'node_modules/.cache-interaction-legs-')),
+      fs.mkdtempSync(path.join(root, 'node_modules/.cache-playwright-legs-')),
       'leg.txt',
     );
     try {
@@ -330,24 +357,30 @@ describe('the interaction proof legs in ci.yml', () => {
       // it imports, laid out as in the tree, outside the checkout.
       const copies = path.join(path.dirname(out), 'legs');
       for (const file of [
-        '.github/scripts/interaction-legs.mjs',
+        '.github/scripts/playwright-legs.mjs',
         '.github/scripts/a11y-pr-contracts.mjs',
         'scripts/lib/duration-split.mjs',
       ]) {
         fs.mkdirSync(path.dirname(path.join(copies, file)), {recursive: true});
         fs.copyFileSync(path.join(root, file), path.join(copies, file));
       }
-      const copy = path.join(copies, '.github/scripts/interaction-legs.mjs');
+      const copy = path.join(copies, '.github/scripts/playwright-legs.mjs');
       const times = path.join(path.dirname(out), 'durations.json');
       fs.writeFileSync(
         times,
-        JSON.stringify({chromium: {'x.spec.ts': 1, 'y.spec.ts': 100}}),
+        JSON.stringify({
+          'interaction-chromium': {'x.spec.ts': 1, 'y.spec.ts': 100},
+        }),
       );
       execFileSync(
         process.execPath,
         [
           copy,
           'plan',
+          '--key',
+          'interaction-chromium',
+          '--config',
+          'playwright.interaction.config.ts',
           '--project',
           'chromium',
           '--leg',
@@ -379,6 +412,10 @@ describe('the interaction proof legs in ci.yml', () => {
           [
             copy,
             'plan',
+            '--key',
+            'interaction-chromium',
+            '--config',
+            'playwright.interaction.config.ts',
             '--project',
             'chromium',
             '--leg',
@@ -405,8 +442,12 @@ describe('the interaction proof legs in ci.yml', () => {
         execFileSync(
           process.execPath,
           [
-            path.join(root, '.github/scripts/interaction-legs.mjs'),
+            path.join(root, '.github/scripts/playwright-legs.mjs'),
             'plan',
+            '--key',
+            'interaction-chromium',
+            '--config',
+            'playwright.interaction.config.ts',
             '--project',
             'chromium',
             '--leg',

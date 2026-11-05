@@ -183,11 +183,21 @@ describe('where runs wait', () => {
       )
         continue;
       if (NO_WORK_ALONE.includes(id)) continue;
+      // Runs only after a job that stops behind a full admission succeeded.
+      if (
+        needsOf(job).some(
+          need =>
+            condition.includes(`needs.${need}.result == 'success'`) &&
+            String(ci.jobs[need]?.if ?? '').includes(FULL_GUARD),
+        )
+      )
+        continue;
       expect(needsOf(job), id).toContain('admission');
       expect(condition, id).toContain(FULL_GUARD);
       guarded.push(id);
     }
     expect(guarded.sort()).toEqual([
+      'docsite-build',
       'pr-component-a11y-contracts',
       'pr-interaction',
       'pr-interaction-webkit',
