@@ -956,6 +956,88 @@ describe('useSheetGestures', () => {
       expect(hook.result.current.isDragging).toBe(true);
     });
 
+    it('cancels the native pan of a top pull-down past a tap wobble, before the drag begins', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      let wobble!: Event;
+      let pull!: Event;
+      let promoted!: Event;
+      act(() => {
+        touch(el, 'touchstart', 0);
+        wobble = touch(el, 'touchmove', 3);
+      });
+      // A tap's wobble keeps its click: nothing is cancelled yet.
+      expect(wobble.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+      act(() => {
+        pull = touch(el, 'touchmove', 6);
+      });
+      // Past the wobble the pan is cancelled while the drag waits for its slop.
+      expect(pull.defaultPrevented).toBe(true);
+      expect(hook.result.current.isDragging).toBe(false);
+      act(() => {
+        promoted = touch(el, 'touchmove', 9);
+      });
+      expect(promoted.defaultPrevented).toBe(true);
+      expect(hook.result.current.isDragging).toBe(true);
+    });
+
+    it('leaves an upward move from the top to the scroll, cancelling nothing', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      let scroll!: Event;
+      act(() => {
+        touch(el, 'touchstart', 100);
+        scroll = touch(el, 'touchmove', 94);
+      });
+      expect(scroll.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+
+    it('cancels the native pan of a bottom pull-up past a tap wobble, before the drag begins', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 600,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      // Settle at the lower detent first, so expanding has somewhere to go.
+      down(hook, 0, 0, el);
+      move(hook, 180, 700, el);
+      up(hook, 180, 1100, el);
+      expect(hook.result.current.settledOffset).toBe(200);
+      let wobble!: Event;
+      let pull!: Event;
+      act(() => {
+        touch(el, 'touchstart', 300);
+        wobble = touch(el, 'touchmove', 297);
+      });
+      expect(wobble.defaultPrevented).toBe(false);
+      act(() => {
+        pull = touch(el, 'touchmove', 294);
+      });
+      expect(pull.defaultPrevented).toBe(true);
+      expect(hook.result.current.isDragging).toBe(false);
+      act(() => {
+        touch(el, 'touchmove', 291);
+      });
+      expect(hook.result.current.isDragging).toBe(true);
+    });
+
     it('promotes a bottom pull-up (touch) into a sheet drag that travels', () => {
       const {hook} = setup({snapHeights: () => [200]});
       // scrolled to the bottom: scrollTop + clientHeight === scrollHeight

@@ -139,6 +139,13 @@ const CONTENT_END_HANDOFF_SLOP = 4;
 // the tap caused cut instead of animating. 8px is the usual tap slop and is
 // well under what a real pull covers in its first frames.
 const DRAG_PROMOTION_SLOP = 8;
+// How far a pull against a scroll edge travels before its native pan is
+// cancelled, ahead of the promotion. More than a tap's wobble, so a tap on a
+// control keeps its click (a cancelled touchmove ends it in WebKit); under the
+// ~10 px at which iOS Safari commits the touch to the scroller's pan, after
+// which no preventDefault() stops the pan and the body rubber-bands under the
+// finger while the sheet is dragged beside it.
+const PAN_CANCEL_SLOP = 5;
 
 // Short haptic tick on detent settle where supported. iOS Safari doesn't
 // expose navigator.vibrate, so this is a no-op there; skipped under
@@ -1674,18 +1681,31 @@ export function useSheetGestures({
         return;
       }
       const delta = t.clientY - armed.startY;
+      // A pull against the armed edge can never scroll: the chain is at that
+      // edge. Cancel the native pan before the promotion slop, as soon as the
+      // pull is more than a tap's wobble. iOS Safari commits a touch to the
+      // scroller's pan on the first touchmove it is allowed to keep once the
+      // finger has moved about 10 px; a preventDefault() on a later move no
+      // longer stops that pan, and the body then rubber-bands under the finger
+      // while the sheet is dragged beside it. A cancelled touchmove also ends
+      // the touch's click, so a tap keeps its wobble.
+      const opposesTop = armed.top && delta > 0 && chainAtTop(armed.scrollers);
+      const opposesBottom =
+        armed.bottom && delta < 0 && chainAtBottom(armed.scrollers);
+      if (
+        (opposesTop || opposesBottom) &&
+        Math.abs(delta) > PAN_CANCEL_SLOP &&
+        event.cancelable
+      ) {
+        event.preventDefault();
+      }
       // Promote to a sheet drag on a pull that opposes the armed edge and can
       // no longer scroll that way: at the top, a downward pull (delta > 0)
       // collapses; at the bottom, an upward pull (delta < 0) expands. The
       // opposite direction is a real scroll, so disarm and let it through.
-      const pullDownAtTop =
-        armed.top && delta > DRAG_PROMOTION_SLOP && chainAtTop(armed.scrollers);
-      const pullUpAtBottom =
-        armed.bottom &&
-        delta < -DRAG_PROMOTION_SLOP &&
-        chainAtBottom(armed.scrollers);
+      const pullDownAtTop = opposesTop && delta > DRAG_PROMOTION_SLOP;
+      const pullUpAtBottom = opposesBottom && delta < -DRAG_PROMOTION_SLOP;
       if (pullDownAtTop || pullUpAtBottom) {
-        event.preventDefault();
         releaseContentHold(armed);
         touchDragRef.current = null;
         beginDragRef.current(
