@@ -3,7 +3,8 @@
 /**
  * @fileoverview The text a PowerSearch filter token shows for a value.
  *
- * @input `OperatorValue`, `FilterValue`, a width budget, and the locale.
+ * @input `OperatorValue`, `FilterValue`, a width budget, the locale, and the
+ * calendar.
  * @output `formatTokenValueText` — one string, or null for an empty value.
  * @position Shared by the token itself (`PowerSearch.tsx`) and the sheet
  * presentation's Filters rows and removal announcement
@@ -13,6 +14,7 @@
 
 import type {OperatorValue, FilterValue, EnumItem} from './types';
 import type {Locale, TranslatorFn} from '../i18n';
+import type {CalendarSystem} from '../utils/calendarSystem';
 import {truncateCharacters} from '../utils/characters';
 import {formatDateAbsolute, formatSharedNumber} from './formatFilterValue';
 import {registerEnglishFallback} from '../i18n/englishFallback';
@@ -103,6 +105,8 @@ function formatListText(
  * the sheet presentation's Filters rows and its removal announcement — can
  * use the same words and the same zone handling. `maxLength` is the token's
  * width budget; pass `Number.MAX_SAFE_INTEGER` for the untruncated text.
+ * A `date_absolute` value is written in `calendar`, the calendar that the
+ * provider resolves.
  * With `t`, the list, date-range and nested summaries resolve through the
  * catalog (`@astryx.powersearch.valueEditor.*`); without it they are the
  * token's own literals. With `formatList` (the provider's list formatter),
@@ -114,6 +118,7 @@ export function formatTokenValueText(
   filterValue: FilterValue,
   maxLength: number,
   locale: Locale,
+  calendar: CalendarSystem,
   t?: TranslatorFn,
   formatList?: ListFormatFn,
   timezoneID?: string,
@@ -182,6 +187,7 @@ export function formatTokenValueText(
           timezoneID,
           operatorValue.type !== 'date_absolute' ||
             operatorValue.isDateOnly !== false,
+          calendar,
         ),
         maxLength,
       );

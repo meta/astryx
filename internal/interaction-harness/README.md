@@ -11,6 +11,8 @@ An accessibility spec (`*.a11y.browser.spec.ts`, under
 [`playwright.config.ts`](../../playwright.config.ts)) may use the animation
 holds and the timer gate too, to check a state an animation passes through.
 
+The exemplar to copy is
+[`BottomSheetDetent.interaction.browser.spec.ts`](../../packages/core/src/BottomSheet/__tests__/BottomSheetDetent.interaction.browser.spec.ts).
 The harness proves its own instruments in
 [`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts).
 The busy-main-thread proof and the rendering-trace counts have a negative
@@ -24,7 +26,7 @@ self-tests check an instrument against a known answer.
 pnpm storybook:build                      # the specs read stories from the built Storybook
 pnpm exec playwright install chromium webkit
 pnpm test:interaction --project chromium  # everything, Chromium
-pnpm test:interaction <spec file>         # one spec, both engines
+pnpm test:interaction BottomSheetDetent   # one spec, both engines
 pnpm storyboards                          # only the tests tagged @storyboard
 ```
 
@@ -64,6 +66,16 @@ committed: a pull request links or attaches it.
 | `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event), `castStoryboard` (real screencast frames): PNG contact sheet + JSON trace.                                                                                           |
 | `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                                                                    |
 | `story.ts`      | `phone`, `withStorybook`, `openStory`, `frames`, and the timer gate (`installTimerGate`, `freezeTimers`, `thawTimers`).                                                                                                                                                      |
+| `pointer.ts`    | `newFinePointerPage(browser)`: a page under a mouse that really reads `(pointer: fine)`. `assertFinePointer` / `assertCoarsePointer`: fail before a case's checks when the page reads the other pointer.                                                                     |
+
+## A fine pointer
+
+Every interaction project is the touch phone, and a context a test makes with
+`browser.newContext()` inherits it: it reads `(pointer: coarse)` unless it
+passes `hasTouch: false`. A case that shows touch work costs nothing under a
+mouse opens its page with `newFinePointerPage(browser)`, which turns touch and
+mobile off and checks the pointer first. A case that builds its own context
+calls `assertFinePointer(page)` before its checks.
 
 ## The proofs
 
@@ -119,6 +131,9 @@ seeking and sampling run a curve forward. The recorder keeps one entry per
 `Animation` object, so one reversed or replayed mid-run is misread: a watch
 taken before the reversal rejects, and an unwatched wait returns at once with
 a curve dated before it. Take a fresh animation for each run a proof reads.
+`sampleCurve(locator, times, {pseudoElement: '::before'})` samples the
+element's `::before` or `::after` instead: its presented values, labelled by
+that pseudo-element's own animations.
 
 **Waiting for an animation.** The page records every animation from the first
 call into `curves.ts` on it (and on every later document): a frame loop on the
@@ -192,8 +207,11 @@ before the block until its first presented change inside it: WebKit presents
 a just-started compositor animation late (a sheet's release held on screen for
 130 to 300 ms while its timeline ran), and its cast reaches Node about 0.7 s
 late on a loaded runner, too late to wait on before blocking. Only a hold that
-starts before the block, on two frames at least, is excused, and every frame
-after its first change is judged, so a freeze later in the block still fails.
+starts before the block, on two frames at least, at the position the page last
+set before the block is excused. Pass that position as `setBeforeBlock`, such
+as the drag's last position at the release. An animation frozen at the block's
+start holds a position of its own, and is judged as a stall. Every frame after
+its first change is judged, so a freeze later in the block still fails.
 Any other element already moving is judged from the block's start. WebKit's
 casts are 2 px quantized: their JPEG frames hold the
 marker's color in 2 by 2 pixel chroma blocks (4:2:0, which the frame header
@@ -406,7 +424,7 @@ time: it fast-forwards whenever the page is idle.
 |                                                        | Chromium 149                                                                                                           | WebKit 26.5 (Linux build)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Trusted touch + pointer events, multi-touch            | yes                                                                                                                    | yes (a `touchstart` lists only the fingers that landed in it; pointer events exact)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Page sees the scripted timestamps                      | yes, exactly                                                                                                           | no: real dispatch time; pacing keeps velocities within ~1 ms on an idle runner, but a CPU-starved one sends some steps late, then back to back; `pacing: 'spacing'` keeps the script's spacing after a stall instead, and fails a play whose page read a resting finger where the script moves, a throw where the script rests, or fewer than two moves, or, given `releaseTolerance`, a release that strays further than that from the script's (each read as Core's velocity tracker reads it): `TouchPageStallError` when the page's own touch or pointer listeners held an event back, `TouchPacingError` otherwise; the lift's `release` names what the page read |
+| Page sees the scripted timestamps                      | yes, exactly                                                                                                           | no: real dispatch time; pacing keeps velocities within ~1 ms on an idle runner; after a stall each step waits its gap, less 2 ms, after WebKit answered the one before (unless a `'schedule'` play has `onEvent`); `pacing: 'spacing'` fails a play whose page read a resting finger where the script moves, a throw where the script rests, or fewer than two moves, or, given `releaseTolerance`, a release straying further from the script's (each read as Core's velocity tracker reads it): `TouchPageStallError` when the page's own touch or pointer listeners held an event back, `TouchPacingError` otherwise; the lift's `release` names what the page read |
 | Sub-pixel touch positions                              | yes                                                                                                                    | no: integer CSS px                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Native scroll, fling, pinch-zoom from injected touches | yes                                                                                                                    | no                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Lifting one finger while others stay down              | yes                                                                                                                    | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |

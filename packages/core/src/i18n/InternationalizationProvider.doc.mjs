@@ -26,7 +26,7 @@ export const docs = {
         name: 'Provider boundary',
         required: true,
         description:
-          'A nonvisual context boundary that supplies locale, message catalogs, overrides, direction, and a resolved calendar system to descendant Astryx components. It renders no DOM element.',
+          'A nonvisual context boundary that supplies locale, message catalogs, overrides, and direction to descendant Astryx components, and a calendar system to `Calendar`. It renders no DOM element.',
       },
     ],
     bestPractices: [
@@ -53,7 +53,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Set `calendar` to select the calendar system of the subtree. A locale never selects the calendar: `fa-IR` resolves to Gregorian until you set `calendar="persian"`, and a `-u-ca-` keyword in `locale`, as in `th-TH-u-ca-buddhist`, keeps Gregorian dates too. Astryx date components show Gregorian dates, and date values stay Gregorian ISO strings.',
+          'Set `calendar` to show `Calendar`, `DateInput`, `DateRangeInput`, and `DateTimeInput` in another calendar system and write Timestamp, PowerSearch, and Schedule dates in it. A locale never selects the calendar: `fa-IR` shows Gregorian dates until you set `calendar="persian"`, and a `-u-ca-` keyword in `locale`, as in `th-TH-u-ca-buddhist`, keeps Gregorian dates too. Date values stay Gregorian ISO strings.',
       },
       {
         guidance: false,
@@ -96,7 +96,7 @@ export const docs = {
       type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
       required: false,
       description:
-        "Calendar system of the subtree, such as 'persian', 'hebrew', or 'buddhist'. The provider resolves it and exposes it on the context as `calendar`; Astryx date components show Gregorian dates. When omitted, the calendar is Gregorian: a locale never selects it, neither by its default calendar nor by a `-u-ca-` keyword. Values stay Gregorian ISO dates. Calendars other than gregory, iso8601, buddhist, roc, and japanese need `Temporal`; the context keeps the requested calendar, and where the runtime lacks `Temporal`, a date component that resolves it shows Gregorian dates and warns in development. Load a polyfill such as `temporal-polyfill/full/global` on the server and in the browser.",
+        "Calendar system of the subtree, such as 'persian', 'hebrew', or 'buddhist'. `Calendar`, `DateInput`, `DateRangeInput`, and `DateTimeInput` show it, and Timestamp, PowerSearch, and Lab's Schedule write their dates in it. When omitted, the calendar is Gregorian: a locale never selects it, neither by its default calendar nor by a `-u-ca-` keyword. A component's own `calendar` prop takes precedence. Values stay Gregorian ISO dates. Calendars other than gregory, iso8601, buddhist, roc, and japanese need `Temporal`; the context keeps the requested calendar, and where the runtime lacks `Temporal`, these components show Gregorian dates and warn in development. Load a polyfill such as `temporal-polyfill/full/global` on the server and in the browser.",
     },
     {
       name: 'children',
@@ -139,7 +139,7 @@ export function AppI18n({children}: {children: ReactNode}) {
 }`,
     },
     {
-      label: 'Select the Persian calendar',
+      label: 'Show Calendar in the Persian calendar',
       code: `import type {ReactNode} from 'react';
 import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 
@@ -217,6 +217,6 @@ export const docsDense = {
     overrides:
       'sparse per-locale key overrides applied on top of shipped defaults',
     calendar:
-      'calendar system the provider resolves and exposes on the context; date components show Gregorian (default: gregory; a -u-ca- keyword in locale does not select it); values stay Gregorian ISO; non-Gregorian-aligned calendars need Temporal',
+      'calendar system for Calendar, DateInput, DateRangeInput, DateTimeInput, Timestamp, PowerSearch, and Schedule dates (default: gregory; a -u-ca- keyword in locale does not select it); values stay Gregorian ISO; non-Gregorian-aligned calendars need Temporal',
   },
 };

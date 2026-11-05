@@ -2,7 +2,7 @@
 
 /**
  * @file tooltipEntries.ts
- * @input A Date and the consumer's tooltip entry list
+ * @input A Date, the consumer's tooltip entry list, a locale and a calendar
  * @output Pure formatting of one tooltip line per entry, plus the entry types
  * @position Leaf module; owns which zone each tooltip line names and whether
  *   it needs a zone abbreviation, then defers to formatInstant to render it
@@ -25,6 +25,7 @@ import {devWarn} from '../utils/devWarning';
 import {formatInstant} from './formatInstant';
 import type {InstantFormat} from './formatInstant';
 import type {Locale} from '../i18n/types';
+import type {CalendarSystem} from '../utils/calendarSystem';
 
 // =============================================================================
 // Types
@@ -197,15 +198,17 @@ function shouldShowZoneName(
 }
 
 /**
- * Renders one tooltip line per entry, in the order given.
+ * Renders one tooltip line per entry, in the order given, with dates in
+ * `calendar`.
  *
  * Pure: the same `date` and `entries` always produce the same lines for a given
- * host zone and locale.
+ * host zone, locale, and calendar.
  */
 export function formatTooltipLines(
   date: Date,
   entries: ReadonlyArray<TimestampTooltipEntry>,
   locale: Locale,
+  calendar: CalendarSystem = 'gregory',
 ): ReadonlyArray<TimestampTooltipLine> {
   const resolved = entries.map(entry => resolveTimezoneID(entry.timezoneID));
   const hasMultipleZones = new Set(resolved.map(zoneKey)).size > 1;
@@ -219,6 +222,7 @@ export function formatTooltipLines(
       isCopyable: entry.isCopyable ?? false,
       value: formatInstant(date, format, locale, {
         timeZone,
+        calendar,
         isTimezoneShown: shouldShowZoneName(
           format,
           hasMultipleZones,

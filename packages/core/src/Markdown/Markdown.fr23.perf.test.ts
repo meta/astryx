@@ -11,10 +11,11 @@
  * a time, and only asserts on what that process reports.
  *
  * A fresh process isolates engine state left by other plugin configurations,
- * but it still shares CPU and memory with other Vitest workers. CI and Deploy
- * exclude this file from the parallel UI suite, then run it alone after those
- * workers exit, as the spec's isolated-process-and-runner protocol requires.
- * Local measurements need the same isolation from other test and build work.
+ * but it still shares CPU and memory with other Vitest workers. So this file
+ * is the only one in the `perf` Vitest project. That project starts after
+ * every other project's files finish, as the spec's isolated-process-and-runner
+ * protocol requires. Local measurements need the same isolation from other
+ * test and build work.
  *
  * The timed region inside each process is the spec's protocol, unsmoothed:
  * ten untimed warmups, then one median of nine alternating paired rounds,

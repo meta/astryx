@@ -87,6 +87,7 @@ import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
   focusForLastInput,
   prepareFocusReturnOnRemoval,
+  returnFocusForLastInput,
 } from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 
@@ -661,7 +662,7 @@ export function Dialog({
       // the last input in that element's own document calls for.
       const trigger = triggerElementRef.current;
       if (trigger) {
-        focusForLastInput(trigger);
+        returnFocusForLastInput(trigger);
       }
       triggerElementRef.current = null;
     }

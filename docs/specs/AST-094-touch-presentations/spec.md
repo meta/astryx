@@ -39,15 +39,15 @@ affects_consumer_docs: []
 ## Intent
 
 A person using an Astryx product on a phone or tablet gets controls, sheets,
-menus, lists and navigation with native-feeling touch behavior: measured
-physics and gesture thresholds instead of desktop motion stretched to a
-finger. What a person drags follows their hand, and what they throw settles on
-a spring from the speed of the throw, under every pointer. Motion that a tap,
-a click, a hold, a key or the program starts plays the theme's motion tokens
-(FR45).
-This behavior is the default on every touch device, iOS and Android alike,
-with no opt-in, and its motion keeps running at display rate while the page's
-JavaScript is busy.
+menus, lists and navigation with native-feeling touch behavior: measured physics
+and gesture thresholds instead of desktop motion stretched to a finger. What a
+person drags follows their hand, and what they throw settles on a spring from
+the speed of the throw, under every pointer. In a component whose main
+interaction is a tap, motion that a tap, a click, a hold, a key or the program
+starts plays the theme's motion tokens; in a component whose main interaction is
+a gesture, it settles on the component's springs (FR45). This behavior is the
+default on every touch device, iOS and Android alike, with no opt-in, and its
+motion keeps running at display rate while the page's JavaScript is busy.
 
 The behavior comes from one measured table. Its values are measured from UIKit
 on a named reference release, UIKit on iOS 26.2 today; each number names the
@@ -59,15 +59,15 @@ a measured, sourced difference exists.
 
 ## Non-goals
 
-- The timing and easing of motion that no gesture drives. Motion that a tap,
-  a click, a hold, a key or the program starts, such as an entrance, a move
-  or a change of value, plays the theme's duration and easing tokens
-  (`architecture:theme-tokens`) under every pointer, a finger included
-  (FR45). A touch presentation's exit that no gesture drives keeps its look
-  and plays the theme's exit duration and easing, and no exit switch removes
-  it (FR7, `spec:AST-090` FR14). Gestures, press tracking, a part that follows a
-  pointer, and the spring that settles a gesture apply to every pointer
-  (FR43, FR45).
+- The timing and easing of tap-started motion in a component whose main
+  interaction is a tap. In such a component, motion that a tap, a click, a hold,
+  a key or the program starts, such as an entrance, a move or a change of value,
+  plays the theme's duration and easing tokens (`architecture:theme-tokens`)
+  under every pointer, a finger included (FR45). Such a component's touch exit
+  that no gesture drives keeps its look and plays the theme's exit duration and
+  easing, and no exit switch removes it (FR7, `spec:AST-090` FR14). Gestures,
+  press tracking, a part that follows a pointer, and the spring that settles a
+  gesture apply to every pointer (FR43, FR45).
 - Platform-matched look and feel: glass versus material surfaces, glyphs and
   chrome. This record governs behavior, and touch sizing only as FR42 states.
 - WebKit embedded in a native app and the native Swift package. This record
@@ -84,17 +84,17 @@ a measured, sourced difference exists.
 
 ### Physics
 
-- **FR1 — Measured values, the same everywhere.** Every spring, duration
-  and deceleration rate that a gesture's motion plays (FR45), and every rubber-band coefficient, gesture threshold, input
-  timing and haptic moment a touch presentation uses MUST default to the
-  measured native value for that use (FR2), and every component that plays
-  the same motion or gesture MUST use the same value; a theme reaches the
-  roles only through its motion knobs (FR4, DEC-15). Motion that no gesture
-  drives plays the theme's duration and easing tokens, not a measured value
-  (FR45, DEC-26).
-  No component uses a value of its own where a measured value exists. The same
-  values apply on every touch platform; a platform gets a value of its own only
-  where a measured, sourced difference exists (FR2).
+- **FR1 — Measured values, the same everywhere.** Every spring, duration and
+  deceleration rate that a gesture's motion plays (FR45), and every rubber-band
+  coefficient, gesture threshold, input timing and haptic moment a touch
+  presentation uses MUST default to the measured native value for that use
+  (FR2), and every component that plays the same motion or gesture MUST use the
+  same value; a theme reaches the roles only through its motion knobs (FR4,
+  DEC-15). In a component whose main interaction is a tap, motion that no
+  gesture drives plays the theme's duration and easing tokens, not a measured
+  value (FR45, DEC-26). No component uses a value of its own where a measured
+  value exists. The same values apply on every touch platform; a platform gets a
+  value of its own only where a measured, sourced difference exists (FR2).
 - **FR2 — Every value has a source.** Each measured value MUST name its source next to it: Apple's documentation, a WWDC session, WebKit's own
   source where WebKit states it matches UIKit, or a measurement of UIKit on
   the iOS simulator naming the app, the iOS version, the method and the date.
@@ -140,32 +140,37 @@ a measured, sourced difference exists.
   310.7–329.9 pt/s; releases at rest stay at 45–48.5 % and advance at
   55–57.5 % (DEC-25).
 - **FR4 — Touch motion uses named roles.** Every spring, duration and curve a
-  touch presentation plays for a gesture (FR45) MUST be a motion role named for its use
-  (`architecture:theme-tokens` INV3). The roles this record names are listed below with their defaults and
-  sources; further roles a component's own record measures join through the
-  generated motion role table (DEC-5). With tempo 1 and character
-  standard, every role plays its measured value exactly (FR1, FR2); a theme's
-  tempo scales durations and its character offsets bounce through fixed
-  per-role weights (`spec:AST-108` FR3), and roles on the fixed list ignore
-  both: the on-screen keyboard (`spec:AST-099` FR8); gesture thresholds, the
-  content-touch delay, and momentum (`spec:AST-002` FR3); finger tracking, the
-  rubber band, the press model's onset delay, cancel distance, and tap flash
-  (`spec:AST-108` FR4), and busy loops; and the 200 ms Reduce Motion cap.
-  The per-role tables stay internal (DEC-15). A component MUST read touch motion through these roles
-  and MUST NOT play a literal. A theme's knob values MUST reach the motion at its
-  start, without changing how the motion runs (FR5, FR6). Motion that
-  must stay in step with the on-screen keyboard is not a theme role: it rides
-  the keyboard's own motion (`spec:AST-099` FR8,
-  `architecture:react-component-runtime` INV11). Gesture thresholds, the timings that decide who gets a touch (the
-  content-touch delay, the scroll brake, momentum memory), hold durations,
-  flick speeds and haptics are measured input values, not motion: they are
-  not motion roles, they stay internal and are not public concepts (`spec:AST-002` FR3),
-  except the `flickThreshold` a product passes to `spec:AST-107`'s snap-point
-  drag. The three knobs join the motion configuration of
-  `architecture:theme-authoring-contract` and `architecture:theme-tokens`
-  (`spec:AST-108`). It departs from the draft `design:motion` DR3
-  wherever the native motion settles with an overshoot or stretches with a
-  rubber band.
+  touch presentation plays for a gesture (FR45) MUST be a motion role named for
+  its use (`architecture:theme-tokens` INV3), with one exception. A
+  gesture-driven exit (a release that closes or dismisses) may play a spring
+  measured from the platform reference without a named motion role (FR45); its
+  component's motion table lists that spring with its platform source. Every
+  other gesture-driven motion plays a motion role. The roles this record names
+  are listed below with their defaults and sources; further roles a component's
+  own record measures join through the generated motion role table (DEC-5). With
+  tempo 1 and character standard, every role plays its measured value exactly
+  (FR1, FR2); a theme's tempo scales durations and its character offsets bounce
+  through fixed per-role weights (`spec:AST-108` FR3), and roles on the fixed
+  list ignore both: the on-screen keyboard (`spec:AST-099` FR8); gesture
+  thresholds, the content-touch delay, and momentum (`spec:AST-002` FR3); finger
+  tracking, the rubber band, the press model's onset delay, cancel distance, and
+  tap flash (`spec:AST-108` FR4), and busy loops; and the 200 ms Reduce Motion
+  cap. The per-role tables stay internal (DEC-15). A component MUST read touch
+  motion through these roles and MUST NOT play a literal, apart from that
+  measured gesture-driven exit spring. A theme's knob values MUST reach the
+  motion at its start, without changing how the motion runs (FR5, FR6). Motion
+  that must stay in step with the on-screen keyboard is not a theme role: it
+  rides the keyboard's own motion (`spec:AST-099` FR8,
+  `architecture:react-component-runtime` INV11). Gesture thresholds, the timings
+  that decide who gets a touch (the content-touch delay, the scroll brake,
+  momentum memory), hold durations, flick speeds and haptics are measured input
+  values, not motion: they are not motion roles, they stay internal and are not
+  public concepts (`spec:AST-002` FR3), except the `flickThreshold` a product
+  passes to `spec:AST-107`'s snap-point drag. The three knobs join the motion
+  configuration of `architecture:theme-authoring-contract` and
+  `architecture:theme-tokens` (`spec:AST-108`). It departs from the draft
+  `design:motion` DR3 wherever the native motion settles with an overshoot or
+  stretches with a rubber band.
 
   | Role                         | Default                             | Source                                                                                                |
   | ---------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -194,26 +199,37 @@ a measured, sourced difference exists.
   The three `springs.contextMenu*` rows are measured for ContextMenu's lift,
   and `component:ContextMenu` owns them (DEC-5).
 
-  A role plays only for motion a gesture drives (FR45): a release's settle, a
-  flick, a pan's or a pinch's settle, a rubber band's return, and a follow.
-  The theme's `tempo` scales a gesture's spring's duration and its
+  In a component whose main interaction is a tap, a role plays only for motion a
+  gesture drives: a release's settle, a flick, a pan's or a pinch's settle, a
+  rubber band's return, and a follow. In a component whose main interaction is a
+  gesture, its roles also settle the moves a tap, a key or the program starts
+  (FR45). The theme's `tempo` scales a gesture's spring's duration and its
   `character` offsets the role's measured bounce by the role's fixed weight
-  (`spec:AST-108` FR3); the follow itself and
-  the rubber band stay fixed (`spec:AST-108` FR4). The rows measured for
-  motion that a tap, a hold, a key or the program starts, an exit included
-  (`springs.menuOpen`, `springs.menuClose`, `springs.subMenuOpen`,
-  `springs.subMenuBack`, the three `springs.contextMenu*` rows, `timing.stateChangeMs`,
-  `timing.curves.entrance` and `timing.curves.move`) stay as the measured
-  native reference, and no motion plays them: that motion plays the theme's
-  duration and easing tokens (FR45), and an exit plays the theme's exit
-  duration and easing (FR7). Three approved motions keep their springs until their own records change: the layout glide (`spec:AST-105` FR4), the animator's `animate` (`spec:AST-107` FR3), and `useDragToSnapPoints`'s `settleTo` (`spec:AST-107`). Reduce Motion substitutions and continuous busy loops (such as ProgressBar's indeterminate pulse, `component:ProgressBar` FR6) keep their named roles; they are neither gesture- nor interaction-started motion. A component's own record states which of
-  its roles a gesture drives.
+  (`spec:AST-108` FR3); the follow itself and the rubber band stay fixed
+  (`spec:AST-108` FR4). The rows measured for motion that a tap, a hold, a key
+  or the program starts, an exit included (`springs.menuOpen`,
+  `springs.menuClose`, `springs.subMenuOpen`, `springs.subMenuBack`, the three
+  `springs.contextMenu*` rows, `timing.stateChangeMs`, `timing.curves.entrance`
+  and `timing.curves.move`) stay as the measured native reference. No motion
+  that a tap, a hold, a key or the program starts in a component whose main
+  interaction is a tap plays them: that motion plays the theme's duration and
+  easing tokens (FR45), and an exit plays the theme's exit duration and easing
+  (FR7). Two approved motions keep their springs until their own records change:
+  the animator's `animate` (`spec:AST-107` FR3) and `useDragToSnapPoints`'s
+  `settleTo` (`spec:AST-107`). AST-105's glide, swap and edge reveal are
+  tap-started layout motion and play the theme's curve tokens (`spec:AST-105`
+  FR4). Reduce Motion substitutions and continuous busy loops (such as
+  ProgressBar's indeterminate pulse, `component:ProgressBar` FR6) keep their
+  named roles; they are neither gesture- nor interaction-started motion. A
+  component's own record states which of its roles a gesture drives.
 
-  Implementation gap: the pager's measured settle after a release (DEC-25)
-  plays from internal constants and is not yet a named role. Its animated
-  scroll to a page that the program asks for is a programmatic move, so it
-  plays the theme's duration and easing tokens (FR45); today it plays a
-  300 ms scroll on a sinusoidal curve.
+  The pager's measured settle after a release (DEC-25) is not an exit, so FR4's
+  exception does not cover it. Implementation gap: it plays UIKit's measured
+  settle without a named role, and it doesn't yet follow `tempo` or `character`
+  (usePager calls solvePaging with no theme input). Implementation gap: the
+  pager is a gesture component, so its animated scroll to a page that the
+  program asks for settles on the pager's spring from rest (FR45); today it
+  plays a 300 ms scroll on a sinusoidal curve.
 
   Implementation gap: the sheet picker wheel's snap rate (UIKit's measured
   picker deceleration) plays from an internal constant and is not yet a named
@@ -246,41 +262,106 @@ a measured, sourced difference exists.
   change during a drag starts from rest (DEC-25). On a starved page, a
   retarget may skip ahead by up to the browser's commit delay
   (start-at-call).
-- **FR7 — Exits keep the native counterpart's look.** A touch presentation
-  MUST play an exit with the look of its UIKit counterpart's exit, on every
-  touch platform: a menu shrinks into its trigger, and an alert fades. An
-  exit that a tap, a key, an outside press or the program starts plays the
-  theme's exit duration and easing, `--duration-exit` and `--ease-exit`
-  (`spec:AST-090` FR14, FR45); an exit that a gesture drives keeps its spring
-  from the release velocity (FR38, FR45). The theme's exit switches never
-  remove a touch exit (`spec:AST-090` FR14). FR8 governs their reduced-motion
-  form. Each overlay's own record states its exit, since members own their
-  animation (`family:overlay-dismissal` AV6).
-- **FR45 — A gesture's motion springs; other motion plays the theme's
-  motion tokens.** Motion that a gesture drives MUST play a spring, or for
-  a coast its measured deceleration rate, that starts at the gesture's
-  velocity, under every pointer (FR43). A gesture is
-  a continuous pointer movement whose velocity carries into the motion: a
-  drag, a flick, a swipe, a pan, a pinch, and the settle and rubber-band
-  return after any of them. The theme's `tempo` scales the spring's duration
-  and its `character` offsets the role's measured bounce by the role's fixed
-  weight (`spec:AST-108` FR3); the follow
-  and the rubber band themselves stay fixed (`spec:AST-108` FR4). A part that
-  follows a pointer follows it under every pointer (FR43). Every other
-  motion, which a tap, a click, a hold, a key or the program starts, MUST
-  play the theme's motion tokens, its duration and easing tokens scaled by
+- **FR7 — Exits keep the native counterpart's look.** A touch presentation MUST
+  play an exit with the look of its UIKit counterpart's exit, on every touch
+  platform: a menu shrinks into its trigger, and an alert fades. In a component
+  whose main interaction is a tap, an exit that a tap, a key, an outside press
+  or the program starts plays the theme's exit duration and easing,
+  `--duration-exit` and `--ease-exit` (`spec:AST-090` FR14, FR45). A component
+  whose main interaction is a gesture, such as a sheet or the Lightbox, plays
+  every exit on its spring: a close that a tap, a key, an outside press or the
+  program starts plays the same settle as a swipe close, from rest, and an exit
+  that a gesture drives starts from the release velocity (FR38, FR45). The
+  theme's exit switches never remove a touch exit (`spec:AST-090` FR14). FR8
+  governs their reduced-motion form. Each overlay's own record states its exit,
+  since members own their animation (`family:overlay-dismissal` AV6).
+- **FR45 — A component's main interaction picks springs or the theme's motion
+  tokens.** A component whose main interaction is a gesture plays springs for
+  its motion, including moves a tap starts inside it (a tap on a sheet detent or
+  a close button settles on the same spring), so its pieces stay coordinated. A
+  component whose main interaction is a tap plays the theme's curve tokens
+  (duration and easing, scaled by `tempo`), never a spring, since a tap carries
+  no velocity; no character or option plays a platform-measured curve for it
+  (owner decision, 2026-11-04). Gesture-driven motion where the release velocity
+  matters plays a spring that starts at the gesture's velocity (the settle, a
+  fling, the rubber-band return), or for a coast its measured deceleration rate
+  from that velocity, under every pointer (FR43). In a component whose main
+  interaction is a tap, a motion a tap, key or the program starts whose record
+  names no duration step, and for which the platform has a measured duration,
+  plays the theme duration token whose value in the Storybook theme (neutral) is
+  nearest that measurement, with the easing for its kind (entrance, exit or
+  move); the measured value stays a reference in the component's motion table. A
+  motion whose record names its step keeps it: a tap-started overlay exit plays
+  `--duration-exit` and `--ease-exit` (FR7); an in-place toggle cross-fade is
+  not an exit, and `component:ProgressBar` FR4's fill keeps `--duration-medium`.
+  In a tap component, small anchored surfaces (a popover, a menu, a toggle, a
+  row) and full-screen surfaces (a Dialog, an AlertDialog) each take their own
+  platform measurement; no kind of motion without a named step defaults to one
+  duration step. Springs follow the theme's `tempo`: tempo scales a spring's
+  speed and leaves its bounce unchanged. Each spring pairs with a timing tier,
+  so its settle and its companion curves finish together: menu springs with
+  `--duration-medium-min`, sheet and sub-menu springs with `--duration-medium`,
+  settle and emphasis springs with `--duration-medium-max`. In a tap component,
+  quick taps and presses keep timing tokens and no spring. At tempo 1, every
+  measured spring keeps its platform feel (owner decision, 2026-11-04). A
+  gesture is a continuous pointer movement whose velocity carries into the
+  motion: a drag, a flick, a swipe, a pan, a pinch, and the settle and
+  rubber-band return after any of them. The theme's `tempo` scales the spring's
+  duration and its `character` offsets the role's measured bounce by the role's
+  fixed weight (`spec:AST-108` FR3); the follow and the rubber band themselves
+  stay fixed (`spec:AST-108` FR4). A part that follows a pointer follows it
+  under every pointer (FR43). In a component whose main interaction is a tap,
+  every other motion, which a tap, a click, a hold, a key or the program starts,
+  MUST play the theme's motion tokens, its duration and easing tokens scaled by
   `tempo` (`architecture:theme-tokens`, `spec:AST-108` FR2), under every
-  pointer, a finger included. Three approved motions keep their springs until their own records change: the layout glide (`spec:AST-105` FR4), the animator's `animate` (`spec:AST-107` FR3), and `useDragToSnapPoints`'s `settleTo` (`spec:AST-107`). Reduce Motion substitutions and continuous busy loops (such as ProgressBar's indeterminate pulse, `component:ProgressBar` FR6) keep their named roles; they are neither gesture- nor interaction-started motion. A tap has no velocity, so it is not a gesture.
-  A touch presentation keeps its own look for that motion (FR13), such as a
-  menu that grows from its trigger or a thumb that lifts, and plays it on
-  those tokens. A press that starts as a tap or a hold and continues as a
-  drag springs from the drag's release. A touch presentation's exit that
-  no gesture drives plays the theme's exit duration and easing, and no exit
-  switch removes it (FR7, `spec:AST-090` FR14). Gesture
-  thresholds, the timings that decide who gets a touch, hold durations,
-  flick speeds, the press model's clocks and haptics are measured input
-  values, not motion roles, and stay internal as FR4 states. Under reduced motion, `design:reduced-motion`
-  governs both kinds (FR8, FR38, FR43).
+  pointer, a finger included. Two approved motions keep their springs until
+  their own records change: the animator's `animate` (`spec:AST-107` FR3) and
+  `useDragToSnapPoints`'s `settleTo` (`spec:AST-107`). AST-105's glide, swap and
+  edge reveal are tap-started layout motion and play the theme's curve tokens
+  (`spec:AST-105` FR4). Reduce Motion substitutions and continuous busy loops
+  (such as ProgressBar's indeterminate pulse, `component:ProgressBar` FR6) keep
+  their named roles; they are neither gesture- nor interaction-started motion. A
+  tap has no velocity, so it is not a gesture. Springs drive the motion of a
+  component whose main interaction is a gesture; curve tokens (a duration plus
+  an easing) drive the motion of a component whose main interaction is a tap.
+  Spring and curve timing share that one coordinated scale, so the theme's tempo
+  scales both; the spring tiers are listed below (implementation gap: springs
+  are tuned independently today). A touch presentation keeps its own look for
+  that motion (FR13), such as a menu that grows from its trigger, and plays it
+  on those tokens. A press that starts as a tap or a hold and continues as a
+  drag springs from the drag's release. In a component whose main interaction is
+  a tap, a touch presentation's exit that no gesture drives plays the theme's
+  exit duration and easing, and no exit switch removes it (FR7, `spec:AST-090`
+  FR14). Gesture thresholds, the timings that decide who gets a touch, hold
+  durations, flick speeds, the press model's clocks and haptics are measured
+  input values, not motion roles, and stay internal as FR4 states. Under reduced
+  motion, `design:reduced-motion` governs both kinds (FR8, FR38, FR43).
+  Companion motion inside a component (a sheet's scrim fade, handle and content
+  fade or scale, a Lightbox's chrome fade, a menu's backdrop) runs on the pace
+  of the component's main motion: it derives from the main spring's progress and
+  settle time in a gesture component, or from the main curve's duration and
+  easing in a tap component, and never runs on independent timing.
+
+  | Main interaction                  | Motion                                                                                                                                                                                                          | Components                                                                                                                                 |
+  | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+  | Gesture                           | Springs                                                                                                                                                                                                         | BottomSheet, Drawer, swipeable List rows, Lightbox, the pager and Carousel, ContextMenu's long-press presentation, Slider, pull-to-refresh |
+  | Gesture                           | Springs: a tap, key or program turn plays `springs.settle` from rest; the flick coast keeps UIKit's measured deceleration; the slow-release snap stays as recorded                                              | the DateInput and TimeInput wheels                                                                                                         |
+  | Tap                               | Curve tokens                                                                                                                                                                                                    | Accordion, Disclosure, Collapsible, DropdownMenu, Popover, Tooltip, HoverCard, Dialog, AlertDialog, Tabs, Checkbox, press feedback         |
+  | Gesture-capable                   | Springs under a touch presentation: the thumb drags, so every tap, click, key or value change settles on the same spring; without a touch presentation they keep the theme's curve (owner decision, 2026-11-04) | Switch, SegmentedControl                                                                                                                   |
+  | Open (as its record states today) | Theme timing for a tap dismiss; a spring from the release for a swipe                                                                                                                                           | Toast                                                                                                                                      |
+
+  Toast keeps the motion its record states today: theme timing for a tap
+  dismiss, and a spring from the release for a swipe (`component:Toast` FR5).
+  Which main interaction classifies it is open.
+
+  | Spring roles                                                                                                                                                                                                        | Timing tier                                     |
+  | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+  | `springs.menuOpen`, `springs.menuClose`, `springs.contextMenuLift`, `springs.contextMenuDismiss`, `springs.contextMenuMorph`                                                                                        | `--duration-medium-min`                         |
+  | `springs.subMenuOpen`, `springs.subMenuBack`, and a sheet's springs                                                                                                                                                 | `--duration-medium`                             |
+  | `springs.settle`, `springs.emphasis`                                                                                                                                                                                | `--duration-medium-max`                         |
+  | `segmented.selectionSpring`, `springs.directChange`, `springs.quickChange`, `springs.stateChange`, `springs.timedChange`, `springs.viewChange`, `springs.sliderLift`, `springs.sliderDrop`, `springs.sliderRelease` | no tier named yet                               |
+  | `springs.fingerTracking`                                                                                                                                                                                            | none; a follow stays fixed (`spec:AST-108` FR4) |
+
 - **FR8 — Reduce Motion.** Under reduced motion, touch presentations follow
   `design:reduced-motion` DR2 and DR4.
 
@@ -338,27 +419,30 @@ a measured, sourced difference exists.
   thresholds its UIKit counterpart uses: 0.5 s and 10 pt for a plain long
   press, the measured values for context menus and menus. A rubber band MUST
   use the coefficient its use measures.
-- **FR13 — One rule for the touch presentation.** A touch presentation
-  applies under a coarse primary pointer, and only after hydration: a server
-  render and the hydrating render produce the pointer presentation
-  (`spec:AST-013` FR9). Where a presentation also depends on size, compact is
-  governed by `spec:AST-012` FR9 and `architecture:public-component-api`
-  INV17. A presentation asks for exactly the conditions its own record names
-  (the date and time sheet asks for the pointer only, `spec:AST-043` FR1).
-  A style keyed on the literal touch media query conforms, since the server
-  and hydrating markup are identical (DEC-6).
-  A touch presentation is the look and press timing a component adds under
-  this condition: a lift, a sheet in place of a popover, a grow from the
-  trigger, hit-area growth (FR42), touch press timing (FR11) and haptics
-  (FR23). It never decides whether a part follows a pointer or whether a
-  gesture's settle springs (FR43, FR45). Its other motion plays the theme's
-  duration and easing tokens (FR45), and its exit plays as FR7 states.
+- **FR13 — One rule for the touch presentation.** A touch presentation applies
+  under a coarse primary pointer, and only after hydration: a server render and
+  the hydrating render produce the pointer presentation (`spec:AST-013` FR9).
+  Where a presentation also depends on size, compact is governed by
+  `spec:AST-012` FR9 and `architecture:public-component-api` INV17. A
+  presentation asks for exactly the conditions its own record names (the date
+  and time sheet asks for the pointer only, `spec:AST-043` FR1). A style keyed
+  on the literal touch media query conforms, since the server and hydrating
+  markup are identical (DEC-6). A touch presentation is the look and press
+  timing a component adds under this condition: a lift, a sheet in place of a
+  popover, a grow from the trigger, hit-area growth (FR42), touch press timing
+  (FR11) and haptics (FR23). It never decides whether a part follows a pointer
+  or whether a gesture's settle springs (FR43, FR45). In a tap component its
+  other motion plays the theme's duration and easing tokens, and in a gesture
+  component its springs (FR45); its exit plays as FR7 states.
 - **FR14 — Nested scrolling follows the native rule.** Who gets a drag that
   starts inside a scroll area MUST be decided once, when the drag begins. If
   the area sits at its edge and the drag moves toward that edge, the
   surrounding surface (a sheet) takes the drag; otherwise the area keeps it for
   the whole gesture and rubber-bands at its edge. The drag MUST NOT change
-  hands midway, in either direction. This amends `spec:AST-025` FR14 (scroll
+  hands midway, in either direction, with one exception (DEC-28). At a
+  sheet's tallest detent, a pull that carries its content past its end
+  continues as the sheet's stretch, and a reversal hands it back to the
+  content (`component:BottomSheet` FR18). This amends `spec:AST-025` FR14 (scroll
   chaining by default) for touch presentations on every touch platform.
 - **FR15 — Recognizers arbitrate like UIKit's.** Recognizers that see the
   same touch sequence MUST be exclusive by default: the first to recognize
@@ -537,22 +621,21 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   WCAG 2.2 SC 1.4.4). Listening for that outside touch costs nothing once it ends (FR24). A menu
   whose caller passes `presentation="popover"` keeps its released outside
   dismissal (FR25).
-- **FR33 — A ContextMenu under a finger.** With a finger or pen, the long
-  press that opens a ContextMenu MUST NOT close it at the lift, and a press
-  outside it follows FR32. After a held
-  finger opens it, nothing is lit and a lift acts on nothing until that finger
-  has travelled the handoff distance (FR2) from the first position the open
-  menu sees; from then on FR26–FR28 apply. On every touch device, a ContextMenu that a held
-  finger opens on a block trigger MUST lift the trigger above the page and
-  show the menu beside it, with no row lit. A tap outside closes the menu and
-  reaches nothing beneath it, and closing returns the trigger to its place.
-  The lift plays on the theme's duration and easing tokens (FR45); the
-  return is part of the menu's exit and plays on the theme's exit duration
-  and easing (FR7).
-  Under reduced motion FR8 applies. An inline trigger keeps today's menu, a menu presented as a
-  bottom sheet follows the sheet, and `presentation="popover"` keeps the
-  released menu without the lift (`architecture:public-component-api`
-  INV16).
+- **FR33 — A ContextMenu under a finger.** With a finger or pen, the long press
+  that opens a ContextMenu MUST NOT close it at the lift, and a press outside it
+  follows FR32. After a held finger opens it, nothing is lit and a lift acts on
+  nothing until that finger has travelled the handoff distance (FR2) from the
+  first position the open menu sees; from then on FR26–FR28 apply. On every
+  touch device, a ContextMenu that a held finger opens on a block trigger MUST
+  lift the trigger above the page and show the menu beside it, with no row lit.
+  A tap outside closes the menu and reaches nothing beneath it, and closing
+  returns the trigger to its place. ContextMenu's long-press presentation is a
+  gesture component, so the lift plays `springs.contextMenuLift`, the menu's
+  grow `springs.contextMenuMorph`, and the return, part of the menu's exit,
+  `springs.contextMenuDismiss` (FR7, FR45). Under reduced motion FR8 applies. An
+  inline trigger keeps today's menu, a menu presented as a bottom sheet follows
+  the sheet, and `presentation="popover"` keeps the released menu without the
+  lift (`architecture:public-component-api` INV16).
 - **FR34 — A sub-menu drills in under a finger.** Under a finger on a
   compact touch screen, an `adaptive` sub-menu row MUST drill in: the
   sub-menu's rows and a leading "Back to <parent>" row replace the menu's rows
@@ -808,8 +891,15 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   drag and a mouse wheel never do.
 - `component:BottomSheet`: a `form` or `required` sheet rubber-bands past its
   resting place under a finger as under a trackpad (FR3, FR43), with the same
-  stretch for the same travel; a mouse wheel scrolls its content and never
-  moves it. Implementation gap: a finger drags it one for one below rest.
+  stretch for the same travel; a mouse wheel scrolls its content and never moves
+  it. Past its tallest detent, every finger's pull stretches it on FR3's rubber
+  band with no hold, over a reserve deep enough for the whole stretch and the
+  release, unless the caller sizes or styles it (`component:BottomSheet` FR18).
+  A pull on its content does so once the content cannot scroll that way
+  (`component:BottomSheet` FR18). Past its tallest detent, a mouse and a pen
+  keep FR18's resisted stretch of at most 48 px, an exception to FR43's same
+  rubber band (`spec:AST-017` FR59). Implementation gap: a finger drags it one
+  for one below rest.
 - The shared pager (Carousel's paging presentation, Lightbox's viewer): a
   trackpad swipe follows FR43's pager rule in Lightbox's viewer and in
   Carousel's paging presentation, under every pointer (`component:Lightbox`
@@ -846,30 +936,31 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
 - BottomSheet, Toast, Lightbox, NavigationStack and keyboard dismissal: a
   drag that commits follows FR36–FR40.
 - `spec:AST-100` owns release velocity, which FR17 reads.
-- Under FR45, motion that a tap, a hold, a key or the program starts plays
-  the theme's duration and easing tokens under a finger as under a mouse.
-  The records that state such motion carry it: `component:Switch` FR9, FR10
-  and FR15, `component:Slider` FR7, `component:ContextMenu` FR5,
-  `component:DropdownMenu` FR21, `component:Popover` FR9,
-  `component:AlertDialog` FR6, `component:Lightbox` FR5, FR12 and FR16,
-  `component:TreeList` FR8, `component:ProgressBar` FR4,
-  `component:SegmentedControl` FR9 and FR10 and `component:DateInput` FR14. A touch presentation's exit
-  that a tap, a key or the program starts plays `spec:AST-090`'s
-  `--duration-exit` and `--ease-exit`, and no exit switch removes it (FR7;
-  `spec:AST-090` FR14 and DEC-5 carry it). Implementation gap: Switch, Slider and
-  SegmentedControl still play their measured roles for a tap or a key under a
-  coarse pointer; ProgressBar's fill still moves linearly for
-  `progress.fillTrackMs` times the share of the track moved under a coarse
-  pointer (`component:ProgressBar` FR4); and DateInput's sheet wheel turns
-  onto a clamped or a tapped row on its measured tap spin, not the theme's
-  move tokens (`component:DateInput` FR14).
-- Under FR45, an open swipe row closed by a tap or Escape (`spec:AST-057`
-  FR5, FR7) plays the theme's exit tokens; a swipe that closes it keeps its
-  measured spring.
-- Under FR45, `spec:AST-105` FR4's glide, which `component:SideNav` FR6 and
-  `component:AppShell` FR17 ride, and `spec:AST-107`'s `settleTo` and an
-  `animate` call without a velocity play a spring for motion that no gesture
-  drives. Their records keep their springs until each carries FR45.
+- Under FR45, motion that a tap, a hold, a key or the program starts plays the
+  theme's duration and easing tokens in a tap component, and the component's
+  springs from rest in a gesture component, under a finger as under a mouse. The
+  records that state such motion carry it: on tokens, `component:DropdownMenu`
+  FR21, `component:Popover` FR9, `component:AlertDialog` FR6,
+  `component:TreeList` FR8 and `component:ProgressBar` FR4; on springs,
+  `component:Switch` FR9, FR10 and FR15, `component:SegmentedControl` FR9 and
+  FR10, `component:Slider` FR7, `component:ContextMenu` FR5,
+  `component:Lightbox` FR5, FR12 and FR16 and `component:DateInput` FR14. A tap
+  component's touch exit that a tap, a key or the program starts plays
+  `spec:AST-090`'s `--duration-exit` and `--ease-exit`, and no exit switch
+  removes it (FR7; `spec:AST-090` FR14 and DEC-5 carry it). On Switch and
+  SegmentedControl, every change under a touch presentation settles on the
+  spring, as it does today; without a touch presentation a click, a key or a
+  change of value keeps the theme's curve, unchanged. Implementation gap:
+  ProgressBar's fill still moves linearly for `progress.fillTrackMs` times the
+  share of the track moved under a coarse pointer (`component:ProgressBar` FR4);
+  and DateInput's sheet wheel turns onto a clamped or a tapped row on its
+  measured tap spin, not `springs.settle` (`component:DateInput` FR14).
+- Under FR45, a swipe row is a gesture component: a close or return that a tap
+  or Escape starts (`spec:AST-057` FR5, FR7) plays the row's spring from rest,
+  and a swipe that closes it keeps its measured spring from the release.
+- Under FR45, `spec:AST-107`'s `settleTo` and an `animate` call without a
+  velocity play a spring for motion that no gesture drives. Their records keep
+  their springs until each carries FR45.
 - Under FR43 and FR45, a part that follows a pointer follows every pointer
   and its release springs from the release velocity under every pointer:
   `component:Switch` FR15's thumb under a mouse or a pen, `component:Slider`
@@ -890,26 +981,28 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
 
 Motion that FR45 moves, by component. Each component's record carries its own line, except Carousel, whose trackpad paging this record states through the shared pager (FR43):
 
-| Component             | Motion                                                                  | Today                                                    | Under FR45                                                             |
-| --------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Switch                | Thumb travel and track colour on a tap, a hold or a key, under a finger | Measured switch springs                                  | Theme duration and easing tokens                                       |
-| Switch                | Thumb lift while a finger presses, with a minimum lift time             | Measured lift and settle springs                         | The same lift on the theme's tokens                                    |
-| Switch                | A mouse's or a pen's drag                                               | Thumb still until the release, then the theme's duration | Thumb follows; the release springs from its velocity                   |
-| Slider                | Thumb lift and drop under a finger                                      | Measured lift and drop springs                           | Theme tokens                                                           |
-| Slider                | A mouse's or a pen's flick                                              | Ends at the release                                      | Coasts and settles as a finger's does                                  |
-| DropdownMenu, Popover | Grow from the trigger and shrink back under a finger                    | `springs.menuOpen`, `springs.menuClose`                  | Theme entrance tokens; theme exit duration and easing                  |
-| DropdownMenu          | Sub-menu drill-in on a compact touch screen                             | `springs.subMenuOpen`, `springs.subMenuBack`             | Theme move tokens                                                      |
-| ContextMenu           | Trigger lift and the menu's grow after a long press                     | `springs.contextMenuLift`, `springs.contextMenuMorph`    | Theme tokens                                                           |
-| AlertDialog           | Scale-in present under a finger                                         | `springs.alertPresent`                                   | Theme entrance tokens                                                  |
-| Lightbox              | Controls fade on a tap, a double tap's zoom, the grow from its source   | Named measured roles                                     | Theme tokens                                                           |
-| TreeList              | Group slide under a coarse pointer                                      | Measured motion                                          | Theme tokens                                                           |
-| ProgressBar           | Determinate fill on a value change under a coarse pointer               | Linear, `progress.fillTrackMs` times the share moved     | `--duration-medium` and the theme's easing, every pointer              |
-| DateInput             | Sheet wheel turning onto a clamped or a tapped row                      | `picker.tapSpin.durationMs` on `timing.curves.move`      | Theme move tokens                                                      |
-| DateInput             | Sheet wheel under a trackpad                                            | Coarse primary pointer only                              | Wherever the sheet shows                                               |
-| Carousel              | Paging under a trackpad swipe                                           | Coarse primary pointer only                              | Every pointer                                                          |
-| Every overlay         | A touch exit that a tap, a key or an outside press starts               | The native counterpart's timing                          | `--duration-exit` and `--ease-exit`; the exit switches never remove it |
-| SegmentedControl      | Selection slide on a tap or a key under a finger                        | `segmented.selectionSpring`                              | Theme duration and easing tokens                                       |
-| SegmentedControl      | A mouse's or a pen's drag release                                       | Slides on the theme's duration                           | Settles on a spring from the release velocity                          |
+| Component                   | Motion                                                                                         | Today                                                    | Under FR45                                                                                                                                                           |
+| --------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Switch                      | Thumb travel and track colour on a tap, a hold, a click or a key under a touch presentation    | Measured switch springs                                  | The thumb's `switchControl.travel` spring from rest                                                                                                                  |
+| Switch                      | Thumb travel and track colour on a click, a key or a value change without a touch presentation | The theme's curve (`--duration-fast`, `--ease-standard`) | Unchanged: the theme's curve                                                                                                                                         |
+| Switch                      | Thumb lift while a finger presses, with a minimum lift time                                    | Measured lift and settle springs                         | `switchControl.lift` (gesture component)                                                                                                                             |
+| Switch                      | A mouse's or a pen's drag                                                                      | Thumb still until the release, then the theme's duration | Thumb follows; the release springs from its velocity                                                                                                                 |
+| Slider                      | Thumb lift and drop under a finger                                                             | Measured lift and drop springs                           | `springs.sliderLift` and `springs.sliderDrop` (gesture component)                                                                                                    |
+| Slider                      | A mouse's or a pen's flick                                                                     | Ends at the release                                      | Coasts and settles as a finger's does                                                                                                                                |
+| DropdownMenu, Popover       | Grow from the trigger and shrink back under a finger                                           | `springs.menuOpen`, `springs.menuClose`                  | Theme entrance tokens; theme exit duration and easing                                                                                                                |
+| DropdownMenu                | Sub-menu drill-in on a compact touch screen                                                    | `springs.subMenuOpen`, `springs.subMenuBack`             | Theme move tokens                                                                                                                                                    |
+| ContextMenu                 | Trigger lift and the menu's grow after a long press                                            | `springs.contextMenuLift`, `springs.contextMenuMorph`    | The same springs (gesture component)                                                                                                                                 |
+| AlertDialog                 | Scale-in present under a finger                                                                | `springs.alertPresent`                                   | Theme entrance tokens                                                                                                                                                |
+| Lightbox                    | Controls fade on a tap, a double tap's zoom, the grow from its source                          | Named measured roles                                     | Springs, `springs.settle` unless the motion table names another role; the controls fade keeps the main spring's pace                                                 |
+| TreeList                    | Group slide under a coarse pointer                                                             | Measured motion                                          | Theme tokens                                                                                                                                                         |
+| ProgressBar                 | Determinate fill on a value change under a coarse pointer                                      | Linear, `progress.fillTrackMs` times the share moved     | `--duration-medium` and the theme's easing, every pointer                                                                                                            |
+| DateInput                   | Sheet wheel turning onto a clamped or a tapped row                                             | `picker.tapSpin.durationMs` on `timing.curves.move`      | `springs.settle` from rest                                                                                                                                           |
+| DateInput                   | Sheet wheel under a trackpad                                                                   | Coarse primary pointer only                              | Wherever the sheet shows                                                                                                                                             |
+| Carousel                    | Paging under a trackpad swipe                                                                  | Coarse primary pointer only                              | Every pointer                                                                                                                                                        |
+| Every tap-component overlay | A touch exit that a tap, a key or an outside press starts                                      | The native counterpart's timing                          | `--duration-exit` and `--ease-exit`; the exit switches never remove it; a gesture component's such exit, such as a sheet's or the Lightbox's, plays its spring (FR7) |
+| SegmentedControl            | Selection slide on a tap, a click or a key under a touch presentation                          | `segmented.selectionSpring`                              | The selection spring from rest (gesture component under touch)                                                                                                       |
+| SegmentedControl            | Selection slide on a click, a key or a program change without a touch presentation             | The theme's duration and easing                          | Unchanged: the theme's curve                                                                                                                                         |
+| SegmentedControl            | A mouse's or a pen's drag release                                                              | Slides on the theme's duration                           | Settles on a spring from the release velocity                                                                                                                        |
 
 ## Verification
 
@@ -918,13 +1011,16 @@ Motion that FR45 moves, by component. Each component's record carries its own li
 | FR1, FR2        | Value check over every measured value and its uses                                                                                                  | every value; a guess and its measurement task; a platform-specific value; two components playing the same motion                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | an unsourced value, an unknown source kind, a guess without a listed measurement, an unsourced platform split, or two values for one use fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | FR3             | Unit tests of the spring, decay, rubber band and projection math against an independent integration and values read from UIKit                      | under-, critically and overdamped springs; release velocities; both rates; overscroll depths                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | changing a formula or a constant breaks the agreement with UIKit's values                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | FR3 pager       | Unit tests of the pager's page choice against the recorded UIKit releases                                                                           | releases at 292.7–298.6 pt/s that stay and 310.7–329.9 pt/s that advance, at 10, 25 and 40 % of a page; releases at rest at 45–48.5 % and 55–57.5 %; a 1.5-page drag released at 0, 600 and 3000 pt/s; a release moving back toward the start page                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | a page chosen by projection, a release at or past 300 pt/s that stays, or a release that travels more than one page from its start fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| FR4             | Role unit tests over every touch motion                                                                                                             | each role at its table value; a theme that writes `motion`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a literal played in place of a role, a value that differs from the table at `tempo` 1 and `'standard'`, or a theme that changes a role other than through its motion knobs fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| FR4             | Role unit tests over every touch motion                                                                                                             | each role at its table value; a theme that writes `motion`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a literal played in place of a role (other than a measured gesture-driven exit spring its component's motion table lists with its platform source), a value that differs from the table at `tempo` 1 and `'standard'`, or a theme that changes a role other than through its motion knobs fails                                                                                                                                                                                                                                                                                                                                                                                                          |
+| FR4             | Role unit tests over gesture-driven exits                                                                                                           | a gesture-driven exit (a release that closes or dismisses) playing a spring measured from the platform reference with no named role; the same unnamed spring played by a program-started motion or by a gesture-driven motion that is not an exit, such as a settle                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | a gesture-driven exit playing a measured table spring passes; a program-started motion, or a non-exit gesture motion, playing an unnamed spring fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | FR5             | Browser proof: an animation keeps advancing frame by frame through a 1 s main-thread block, with no layout or paint per frame                       | Chromium phone emulation; WebKit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a script-driven or layout-animating implementation freezes or lays out                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | FR6             | Unit and browser tests catching an animation mid-flight and retargeting it                                                                          | catch at peak velocity; retarget with a new spring; a retarget before the browser reports the call's start                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | a layout read, a jump, or a lost velocity fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | FR6 pager       | Unit and browser tests of a pager's settle start                                                                                                    | releases just under and over 225 pt/s; a catch mid-settle; a programmatic page change mid-settle                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a release under the floor whose settle starts moving, a release over it whose settle starts from rest, a catch that loses the on-screen velocity, or a programmatic page change mid-settle that starts from rest fails; a page change during a drag starts from rest                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | FR6 starved     | Switch frame proofs on a starved main thread (4 workers on 2 cores); a unit test of a retarget on a settle tail                                     | a second tap mid-travel, with frames read late or its lift handled 100 ms late; a first frame committed late; a retarget once the thumb is still                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a jump out of a thumb that is still fails; a mid-travel step within the browser's commit delay is the known limit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| FR7, FR8        | Component browser tests and storyboards with and without Reduce Motion                                                                              | entrance, exit, move; a drag and its lift under Reduce Motion                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | a missing exit, any travel, scale or spring under Reduce Motion other than a coast after a throw and its settle at an edge (`design:reduced-motion` DR2), or an opacity fade over 200 ms fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| FR45            | Browser tests with a mouse, a pen, a trackpad and a finger at each `tempo` bound and each `character`, and with Reduce Motion                       | a tap, a click, a key and a programmatic change on a Switch, a menu, an alert, a sheet and a ProgressBar under a fine and a coarse pointer; a drag release, a flick and a pinch on a Switch, a Slider, a sheet, a pager and a Lightbox photo under each pointer; a tap that continues as a drag                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | a tap, click, key or programmatic change under a finger that plays a measured role instead of the theme's duration and easing tokens, a gesture's settle that starts from rest or plays a theme curve, a gesture's spring that ignores `character` or `tempo`, or a part that follows one pointer and not another, fails                                                                                                                                                                                                                                                                                                                                                                                 |
+| FR7, FR8        | Component browser tests and storyboards with and without Reduce Motion                                                                              | entrance, exit, move; a drag and its lift under Reduce Motion; a tap-, key- and program-started close of a sheet and the Lightbox                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | a missing exit, any travel, scale or spring under Reduce Motion other than a coast after a throw and its settle at an edge (`design:reduced-motion` DR2), an opacity fade over 200 ms, or a tap-, key- or program-started close of a gesture component on the exit curve instead of its spring, fails                                                                                                                                                                                                                                                                                                                                                                                                    |
+| FR45            | Browser tests with a mouse, a pen, a trackpad and a finger at each `tempo` bound and each `character`, and with Reduce Motion                       | a tap, a click, a key and a programmatic change on a Switch, a menu, an alert, a sheet and a ProgressBar under a fine and a coarse pointer; a drag release, a flick and a pinch on a Switch, a Slider, a sheet, a pager and a Lightbox photo under each pointer; a tap that continues as a drag                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | a tap, click, key or programmatic change in a tap-classified component that plays a measured role or a spring instead of the theme's duration and easing tokens, a touch tap-started move in a gesture or gesture-capable component on a curve instead of its spring, a click, a key or a value change on Switch or SegmentedControl without a touch presentation that leaves the theme's curve, a velocity-carrying release that settles from rest or on a curve, a gesture's spring that ignores `character` or `tempo`, or a part that follows one pointer and not another, fails; the pager's measured settle, which does not yet follow `tempo` or `character`, is a recorded implementation gap    |
+| FR45            | Component source and token tests for a tap component's motion whose record names no step, with a platform measurement                               | a small anchored surface (a popover, a menu, a toggle, a row) and a full-screen surface (a Dialog, an AlertDialog), each with its own measurement; a tap component's overlay exit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | a token cited as nearest to the measurement in the Storybook theme passes, and a tap component's overlay exit on `--duration-exit` passes; a token chosen by role alone, or nearest at Core's unthemed defaults, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| FR45            | Browser frame capture of companion motion in a gesture and a tap component                                                                          | a sheet's scrim, handle and content fade; a Lightbox's chrome fade; a menu's backdrop                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | a companion fade on its own duration fails; one driven by the main motion's progress or settle time passes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | FR9, FR10       | Recognizer unit tests on synthetic streams and browser tests with real touch input                                                                  | drag, second finger, pinch, page zoom, main-thread block                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | a second finger that breaks a drag, or a page pinch blocked other than by the author's `touch-action`, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | FR11, FR12      | Press and long-press tests on synthetic streams with explicit timestamps                                                                            | inside and outside a scroll view; a drag the browser takes; a lift inside; a menu row under a finger; a press on a row of a menu whose rows fit and of one that scrolls; a slide-off lift on a Switch and on a Radio                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | the wrong profile's timing, a press that survives the browser taking the touch, or a control outside an action group activated other than by the browser's click, outside `spec:AST-020` FR9's slide-off exception, a row of a menu whose rows fit that waits 150 ms, or one of a scrolling menu that does not, or a slide-off lift that completes a control outside `spec:AST-020` FR9's exception, fails                                                                                                                                                                                                                                                                                               |
 | FR13            | Resolver unit tests and a server-render test                                                                                                        | coarse and fine pointer; narrow, wide and short; server render; hydrating render                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | a component that answers the conditions differently, or a touch presentation in the server or hydrating render, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -1257,14 +1353,15 @@ applies unchanged.
 Rejected: projecting a paging release with a deceleration rate; handing a
 slow paging release's velocity to the settle.
 
-### DEC-26 — Only a gesture's motion springs from measured roles; other motion plays the theme's tokens
+### DEC-26 — A gesture component's motion springs from measured roles; a tap component's tap-started motion plays the theme's tokens
 
 **Reference:** `spec:AST-094/DEC-26`
 **Decider:** `cixzhang`, `2026-11-02`
 
-Motion that a gesture drives continues the person's hand, so it starts at the
-gesture's speed and settles on a spring under every pointer: a flick with a
-mouse throws as a flick with a finger does. Motion that a tap, a click, a
+Motion that a gesture drives continues the person's hand. A release that
+carries the gesture's velocity starts at that speed and settles on a spring
+under every pointer: a flick with a mouse throws as a flick with a finger does.
+In a component whose main interaction is a tap, motion that a tap, a click, a
 hold, a key or the program starts has no speed to carry, so it plays the
 theme's motion tokens, its duration and easing scaled by `tempo`, under every
 pointer, and a theme's timing reaches it as it reaches every other timed
@@ -1284,13 +1381,19 @@ applies the theme's motion tokens.
 This narrows the measured motion roles of DEC-1, DEC-3 and DEC-15 to motion a
 gesture drives, and extends the Non-goals' theme timing to every pointer.
 Measured input timings, such as who gets a touch, hold durations and flick
-speeds, stay internal values and are not motion roles. A touch presentation's
-exit that no gesture drives plays the theme's exit duration and easing; the
-theme's exit switches still never remove it (`spec:AST-090` DEC-5).
-
+speeds, stay internal values and are not motion roles. A tap component's touch
+exit that no gesture drives plays the theme's exit duration and easing, and a
+gesture component's plays its spring; the theme's exit switches still never
+remove it (`spec:AST-090` DEC-5).
 Rejected: keeping the measured springs for motion a tap starts under a finger.
 Rejected: a theme curve for a mouse release, which stops a flick dead.
 Rejected: following a pointer only under a finger.
+
+On 2026-11-04 the owner set the unit of that choice: a component's main
+interaction. A component whose main interaction is a gesture plays springs for
+all its motion, a tap inside it included, and a component whose main
+interaction is a tap plays curve tokens, so each component's pieces stay
+coordinated (FR45).
 
 ### DEC-27 — Android claims rest on emulator evidence
 
@@ -1306,6 +1409,18 @@ Safari claims keep real-device evidence. The owner decided this on
 checks there.
 
 Rejected: a physical Android phone as a gate or as a follow-up check.
+
+### DEC-28 — Sheet stretch at the tallest detent
+
+**Reference:** `spec:AST-094/DEC-28`
+**Decider:** the owner, `2026-11-03`
+
+Decided by the owner in a feel check on a phone: at a sheet's tallest detent,
+a pull that carries its content past its end continues as the sheet's
+stretch, and a reversal hands it back (FR14's one exception).
+
+Rejected: keeping the whole gesture with the content (the strict nested-scroll
+rule).
 
 ## Open questions
 

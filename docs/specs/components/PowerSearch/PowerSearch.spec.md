@@ -13,6 +13,7 @@ review_triggers: [public-api, behavior, layout, accessibility]
 verified_by:
   [
     packages/core/src/PowerSearch/PowerSearch.test.tsx,
+    packages/core/src/PowerSearch/PowerSearch.calendarSystems.test.tsx,
     packages/core/src/PowerSearch/PowerSearchEditPopover.test.tsx,
     packages/core/src/PowerSearch/PowerSearchDateZone.test.tsx,
     packages/core/src/PowerSearch/PowerSearchDateTime.test.tsx,
@@ -40,6 +41,7 @@ architecture:
 contributing: []
 system_specs:
   [
+    spec:AST-013/FR12,
     spec:AST-017/FR3,
     spec:AST-017/FR27,
     spec:AST-020/FR15,
@@ -85,6 +87,9 @@ present-tense implementation gap note.
   change with no public API change. DEC-3 adds the stable `presentation` prop
   and its `adaptive` default, as the two DEC-3 bullets below state.
 - Controlled/uncontrolled behavior: unchanged.
+- Calendar: date values follow the provider's calendar. A provider locale with a
+  `-u-ca-` keyword keeps Gregorian dates (`spec:AST-111` DEC-2); set the
+  provider's `calendar` to choose one.
 - Migration decisions: `component:PowerSearch/DEC-1`,
   `component:PowerSearch/DEC-2`, and, for the `adaptive` default,
   `presentation="popover"` (below).
@@ -508,6 +513,34 @@ no theming target or theme state; the root element keeps the existing
   content added to it, the route an owner rendered inside an open native modal
   takes because the shared page-body channel is not exposed there.
 - `spec:AST-017/FR3` governs the default change.
+
+### `spec:AST-013` FR12 exception — calendars that need `Temporal`
+
+- **Capability:** date values that PowerSearch (its tokens in both
+  presentations, and the sheet's Filters rows and removal announcement) and
+  PowerSearchToken write in the provider's calendar (`spec:AST-111` FR18), for
+  calendars other than `gregory`, `iso8601`, `buddhist`, `roc`, and
+  `japanese`, which need the runtime's `Temporal`.
+- **Reduction:** where `Temporal` is missing or does not support the calendar,
+  as in Safari on macOS and iOS, such a calendar resolves to `gregory` before
+  the first render and warns once in development, on the server and in the
+  browser, naming `temporal-polyfill/full/global` (`spec:AST-111` FR5). Date
+  values then show Gregorian dates; filter values stay Unix seconds. An
+  application that loads a `Temporal` polyfill gets the full calendar. A
+  server without `Temporal` renders Gregorian text, which a browser with
+  `Temporal` does not match, so a server-rendered application loads `Temporal`
+  on the server too.
+- **Preserved obligations:** `spec:AST-013` FR7 and FR8, and FR9 whenever the
+  server and the browser resolve the calendar the same way, outside the
+  `chinese` and `dangi` case of `spec:AST-111` FR19. The filter flow and the
+  filter values do not change; nothing throws.
+- **Evidence:** `PowerSearch.calendarSystems.test.tsx` with a `Temporal`
+  polyfill and with `Temporal` removed; `PowerSearchBottomSheet.test.tsx`
+  ("writes the trigger token and the Filters row in the provider calendar").
+  Evidence gap: no real-browser run, and no server render and hydration test,
+  under a calendar that needs `Temporal`.
+- **Owner:** `nynexman4464`.
+- **Review condition:** Safari ships `Temporal`.
 
 ### Current dependency
 

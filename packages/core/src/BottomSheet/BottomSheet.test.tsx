@@ -4018,7 +4018,11 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(opener).toHaveFocus();
-        expect(focus.mock.calls).toEqual([[{focusVisible: false}]]);
+        // The return reveals nothing: the opener was on screen when the sheet
+        // opened and the page has not moved since.
+        expect(focus.mock.calls).toEqual([
+          [{preventScroll: true, focusVisible: false}],
+        ]);
       });
 
       it('leaves the ring to the browser after a keyboard close', () => {
@@ -4027,7 +4031,7 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(opener).toHaveFocus();
-        expect(focus.mock.calls).toEqual([[]]);
+        expect(focus.mock.calls).toEqual([[{preventScroll: true}]]);
       });
 
       it('clears a ring the native close already drew before refocusing', () => {
@@ -4055,7 +4059,9 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(blur).toHaveBeenCalledTimes(1);
-        expect(focus.mock.calls.at(-1)).toEqual([{focusVisible: false}]);
+        expect(focus.mock.calls.at(-1)).toEqual([
+          {preventScroll: true, focusVisible: false},
+        ]);
         expect(blur.mock.invocationCallOrder[0]).toBeLessThan(
           focus.mock.invocationCallOrder.at(-1) ?? 0,
         );
@@ -4093,7 +4099,9 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(target).toHaveFocus();
-        expect(focus.mock.calls).toEqual([[{focusVisible: false}]]);
+        expect(focus.mock.calls).toEqual([
+          [{preventScroll: true, focusVisible: false}],
+        ]);
       });
     });
   });

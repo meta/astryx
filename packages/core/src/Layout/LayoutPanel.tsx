@@ -5,7 +5,7 @@
 /**
  * @file LayoutPanel.tsx
  * @input Uses React StyleX, LayoutAreaContext, LayoutSlotsContext,
- *   useScrollRegionProps
+ *   useScrollRegionProps, resizablePane.ts
  * @output Exports LayoutPanel component and LayoutPanelProps
  * @position Sidebar panel for Layout start/end slots. Use for navigation panels,
  *   settings sidebars, detail panels, or any fixed-width side content.
@@ -18,7 +18,7 @@
 
 import type {AriaRole, ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
-import {use} from 'react';
+import {use, useCallback, useRef, useState, useSyncExternalStore} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {LayoutAreaContext} from './LayoutAreaContext';
@@ -27,7 +27,19 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useScrollRegionProps} from '../hooks/useScrollRegionProps';
 import {mergeProps} from '../utils';
 import type {SizeValue, SpacingStep} from '../utils/types';
-import type {ResizableProps} from '../Resizable/useResizable';
+import {
+  resizablePropsOf,
+  type ResizableProps,
+  type ResizableRegion,
+} from '../Resizable/useResizable';
+import {
+  createResizablePaneLink,
+  resizeHandleBeside,
+} from '../Resizable/resizablePane';
+import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
+import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
 import {themeProps} from '../utils/themeProps';
 import {
   paddingStyles,
@@ -80,6 +92,12 @@ const styles = stylex.create({
   scrollable: {
     overflow: 'auto',
   },
+  // At width 0 the padding box is 0 too, so the clip hides every child.
+  zeroWidth: {
+    paddingInlineStart: 0,
+    paddingInlineEnd: 0,
+    overflow: 'clip',
+  },
   // For start panel: divider on end edge
   dividerEnd: {
     borderInlineEndWidth: 1,
@@ -102,6 +120,8 @@ const styles = stylex.create({
     marginInlineEnd: `calc(-1 * var(--layout-padding-inner-x, ${spacingVars['--spacing-4']}))`,
   },
 });
+
+const returnFalse = () => false;
 
 // Dynamic styles for sizing props
 const dynamicStyles = stylex.create({
@@ -166,20 +186,20 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
   width?: SizeValue;
 
   /**
-   * Resize props from `useResizable()`. When provided, the panel width
-   * is driven by the hook and a resize handle should be placed adjacent
-   * to this panel.
+   * The output of `useResizable()`, or its `props`. When provided, the panel
+   * width is driven by the hook and a resize handle should be placed
+   * adjacent to this panel.
    *
    * @example
    * ```
-   * const sidebar = useResizable({ defaultSize: 250, minSize: 200 });
-   * <LayoutPanel resizable={sidebar.props}>
+   * const resizable = useResizable({ defaultSize: 250, minSize: 200 });
+   * <LayoutPanel resizable={resizable}>
    *   <Navigation />
    * </LayoutPanel>
-   * <ResizeHandle resizable={sidebar.props} />
+   * <ResizeHandle resizable={resizable} />
    * ```
    */
-  resizable?: ResizableProps;
+  resizable?: ResizableRegion | ResizableProps;
 }
 
 /**
@@ -218,30 +238,94 @@ export function LayoutPanel({
   padding,
   role,
   width,
-  resizable,
+  resizable: resizableValue,
   xstyle,
   className,
   style,
   ref,
   ...props
 }: LayoutPanelProps) {
+  const resizable =
+    resizableValue == null ? undefined : resizablePropsOf(resizableValue);
   const area = use(LayoutAreaContext);
   const {hasHeader, hasFooter} = use(LayoutSlotsContext);
 
   // When resizable props are provided, use the hook-driven size
   const effectiveWidth = resizable ? resizable._size : width;
 
+  // With no `resizable`, a ResizeHandle beside the panel that has a region's
+  // props finds the panel and holds it collapsed with the region. The panel
+  // lends its element in its callback ref for that.
+  const [paneLink] = useState(createResizablePaneLink);
+  const isHeldCollapsed = useSyncExternalStore(
+    paneLink.subscribe,
+    paneLink.isCollapsed,
+    returnFalse,
+  );
+  const isLentBeside = resizable == null;
+  const lendRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      paneLink.attach(isLentBeside ? element : null);
+    },
+    [paneLink, isLentBeside],
+  );
+
+  // A collapsing panel moves focus inside it to its ResizeHandle, through the
+  // focus-leaving sequence that disclosures share. It goes inert and hidden
+  // from assistive technology a commit later, so inert never drops that focus
+  // to the page. Opening drops both at once. The ResizeHandle beside it holds
+  // the region's collapse state, or else the `resizable` props hold it.
+  const elementRef = useRef<HTMLDivElement>(null);
+  const isRegionCollapsed =
+    resizable == null ? isHeldCollapsed : resizable._isCollapsed;
+  const noteFocusBeforeCollapse = useFocusLeavingChange(
+    isRegionCollapsed,
+    (wasCollapsed: boolean) =>
+      wasCollapsed ? null : noteFocusWithin(elementRef.current),
+    (noted, isCollapsed) => {
+      const panel = elementRef.current;
+      if (isCollapsed && panel != null) {
+        moveFocusLeftBehind(
+          noted,
+          paneLink.focusTarget() ?? resizeHandleBeside(panel, area),
+          panel,
+        );
+      }
+    },
+  );
+  const [isSettledCollapsed, setIsSettledCollapsed] =
+    useState(isRegionCollapsed);
+  if (!isRegionCollapsed && isSettledCollapsed) {
+    setIsSettledCollapsed(false);
+  }
+  // Syncs `inert` with the browser's focus: the panel goes inert only after
+  // this commit's focus move.
+  useIsomorphicLayoutEffect(() => {
+    if (isRegionCollapsed && !isSettledCollapsed) {
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- the panel goes inert only after the focus-leaving move above ran in this commit; inert in the collapsing commit would drop that focus to the page first
+      setIsSettledCollapsed(true);
+    }
+  }, [isRegionCollapsed, isSettledCollapsed]);
+  const isConcealed = isRegionCollapsed && isSettledCollapsed;
+
   // Determine panel position
   const isStartPanel = area === 'start';
   const isEndPanel = area === 'end';
 
   const isZeroPadding = padding === 0;
+  // A collapsed region sizes its panel to 0.
+  const isZeroWidth = effectiveWidth === 0;
 
   // When no divider, collapse spacing for seamless visual flow
   const shouldCollapseSpacing =
-    !hasDivider && !isZeroPadding && padding == null;
-  const region = useScrollRegionProps({isScrollable, role, label});
-  const mergedRef = useMergedRefs(ref, region.ref);
+    !hasDivider && !isZeroPadding && padding == null && !isZeroWidth;
+  // At width 0 the panel clips its content, so it does not scroll.
+  const region = useScrollRegionProps({
+    isScrollable: isScrollable && !isZeroWidth,
+    role,
+    label,
+  });
+  const mergedRef = useMergedRefs(ref, region.ref, elementRef, lendRef);
 
   // Select divider style based on position
   const dividerStyle = isStartPanel
@@ -283,12 +367,18 @@ export function LayoutPanel({
           padding != null && containerPaddingBlockEndVarStyles[padding],
           hasDivider && dividerStyle,
           shouldCollapseSpacing && collapseStyle,
+          isZeroWidth && styles.zeroWidth,
           xstyle,
         ),
         className,
         style,
       )}
-      {...props}>
+      {...props}
+      {...(isConcealed ? {inert: true, 'aria-hidden': true} : {})}>
+      <LayoutChangeSnapshot
+        value={isRegionCollapsed}
+        onBeforeChange={noteFocusBeforeCollapse}
+      />
       {children}
     </div>
   );

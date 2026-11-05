@@ -139,12 +139,12 @@ export const WithPreselected: Story = {
   name: 'Pre-selected Items',
 };
 
+/** On touch screens, clear through the sheet's Clear all. */
 export const WithClear: Story = {
   ...Default,
   args: {
     ...Default.args,
     hasClear: true,
-    presentation: 'popover',
   },
   name: 'With Clear All Button',
 };
@@ -254,7 +254,6 @@ export const WithEntriesOnFocus: Story = {
         value={value}
         onChange={items => setValue(items)}
         hasEntriesOnFocus
-        presentation="popover"
       />
     );
   },
@@ -265,6 +264,7 @@ export const WithEntriesOnFocus: Story = {
   name: 'With Entries On Focus',
 };
 
+/** Overflow modes apply to the inline field. */
 export const OverflowInline: Story = {
   render: args => {
     const [value, setValue] = useState<SearchableItem[]>([
@@ -283,7 +283,6 @@ export const OverflowInline: Story = {
           value={value}
           onChange={items => setValue(items)}
           tokenOverflowBehavior="unfocusedInline"
-          presentation="popover"
         />
         <p style={{marginTop: 8}}>
           This text will shift down when the tokenizer expands on focus.
@@ -298,6 +297,7 @@ export const OverflowInline: Story = {
   name: 'Overflow Inline',
 };
 
+/** Overflow modes apply to the inline field. */
 export const OverflowLayer: Story = {
   render: args => {
     const [value, setValue] = useState<SearchableItem[]>([
@@ -316,7 +316,6 @@ export const OverflowLayer: Story = {
           value={value}
           onChange={items => setValue(items)}
           tokenOverflowBehavior="unfocusedLayer"
-          presentation="popover"
         />
         <p style={{marginTop: 8}}>
           This text should not shift when the tokenizer expands on focus.
@@ -341,7 +340,6 @@ export const WithEndContent: Story = {
         value={value}
         onChange={items => setValue(items)}
         endContent={<Button label="Apply" variant="primary" size="sm" />}
-        presentation="popover"
       />
     );
   },
@@ -404,7 +402,6 @@ export const SizeVariants: Story = {
           placeholder="Small size"
           size="sm"
           hasClear
-          presentation="popover"
         />
         <Tokenizer
           label="Medium (32px)"
@@ -414,7 +411,6 @@ export const SizeVariants: Story = {
           placeholder="Medium size (default)"
           size="md"
           hasClear
-          presentation="popover"
         />
         <Tokenizer
           label="Large (36px)"
@@ -424,7 +420,6 @@ export const SizeVariants: Story = {
           placeholder="Large size"
           size="lg"
           hasClear
-          presentation="popover"
         />
       </div>
     );
@@ -445,7 +440,6 @@ export const CreatableWithSearch: Story = {
         hasCreate
         hasEntriesOnFocus
         placeholder="Search or type a new name..."
-        presentation="popover"
       />
     );
   },
@@ -516,7 +510,6 @@ export const Loading: Story = {
         onChange={items => setValue(items)}
         hasClear
         endContent={<span>{value.length} selected</span>}
-        presentation="popover"
       />
     );
   },
@@ -548,6 +541,8 @@ export const LogicalOrder: Story = {
     label: 'Team Members',
     placeholder: 'Add more...',
     hasClear: true,
+    // A fixture for the inline field's end lane and caret, so it keeps the
+    // inline field on every device.
     presentation: 'popover',
   },
   name: 'Logical order',
@@ -570,6 +565,8 @@ export const RtlEndLane: Story = {
       value={[users[0]]}
       onChange={() => {}}
       hasClear
+      // A fixture for the inline field's end lane: the inline field on every
+      // device.
       presentation="popover"
     />
   ),
@@ -599,6 +596,8 @@ export const LongTokenEndLane: Story = {
         value={[longToken]}
         onChange={() => {}}
         hasClear
+        // A fixture for the inline field's end lane: the inline field on every
+        // device.
         presentation="popover"
       />
       <Tokenizer
@@ -657,6 +656,8 @@ export const CaretPlacement: Story = {
     label: 'Team Members',
     placeholder: 'Add more...',
     hasClear: true,
+    // A fixture for the inline field's end lane and caret, so it keeps the
+    // inline field on every device.
     presentation: 'popover',
   },
   name: 'Caret placement',
@@ -966,6 +967,19 @@ export const SheetPresentationEndContent: Story = {
   },
   name: 'Bottom sheet with end content and custom tokens',
   parameters: {viewport: {defaultViewport: 'mobile2'}},
+};
+
+/**
+ * `presentation="popover"`: the inline combobox with its anchored suggestion
+ * menu on every device, a compact coarse-pointer screen included.
+ */
+export const PopoverPresentation: Story = {
+  render: Default.render,
+  args: {
+    ...Default.args,
+    presentation: 'popover',
+  },
+  name: 'Popover (every device)',
 };
 
 /**

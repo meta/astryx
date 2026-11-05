@@ -105,14 +105,16 @@ export interface InternationalizationProviderProps {
    */
   dir?: 'ltr' | 'rtl';
   /**
-   * The calendar system of this subtree, such as `'persian'` or `'hebrew'`. The
-   * provider resolves it and exposes it on the context as `calendar`. Astryx
-   * date components show Gregorian dates. Values stay Gregorian ISO dates. When
-   * omitted, the calendar is Gregorian: a locale never selects it, neither by
-   * its default calendar nor by a `-u-ca-` keyword. Calendars other than
-   * `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese` need `Temporal`.
-   * The context keeps the requested calendar; where `Temporal` is missing, a
-   * date component that resolves it shows Gregorian dates and warns once in
+   * The calendar system of this subtree, such as `'persian'` or `'hebrew'`.
+   * `Calendar` shows it, and Timestamp, PowerSearch, and Lab's Schedule write
+   * their dates in it. `DateInput`, `DateRangeInput`, and `DateTimeInput`
+   * show it too. Values stay
+   * Gregorian ISO dates. When omitted, the calendar is Gregorian: a locale
+   * never selects it, neither by its default calendar nor by a `-u-ca-`
+   * keyword. A component's own `calendar` prop takes precedence. Calendars
+   * other than `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese` need
+   * `Temporal`. The context keeps the requested calendar; where `Temporal` is
+   * missing, these components show Gregorian dates and warn once in
    * development.
    *
    * @example
