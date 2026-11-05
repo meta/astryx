@@ -279,7 +279,7 @@ useMenuHover useMenuHover hooks/useAnimatedLayout.doc.mjs hooks/useMenuHover.ts
 useMenuOverflow useMenuOverflow DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/useMenuOverflow.ts
 useMobileKeyboard ERR_UNKNOWN_COMPONENT - keyboard/useMobileKeyboard.ts
 useOutlineFromDOM useOutlineFromDOM Outline/Outline.doc.mjs Outline/useOutlineFromDOM.ts
-useOverlay useOverlay Overlay/Overlay.doc.mjs Overlay/useOverlay.tsx
+useOverlay useOverlay Overlay/useOverlay.doc.mjs Overlay/useOverlay.tsx
 useOwnScrollGesture useOwnScrollGesture DateInput/DateInput.doc.mjs DateInput/useOwnScrollGesture.ts
 usePager usePager hooks/useAnimatedLayout.doc.mjs hooks/usePager.ts
 usePointerDragScroll usePointerDragScroll DateInput/DateInput.doc.mjs DateInput/usePointerDragScroll.ts
