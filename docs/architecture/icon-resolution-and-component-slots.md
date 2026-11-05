@@ -80,7 +80,8 @@ This record does not invalidate or require migration of that shipped behavior.
 
 The target model adds one rule for future component roles: new semantic component
 slots use `componentIcons`. Each Core slot is recorded in its owning component's
-contract. Selector's selected-option
+contract or in the system spec that adds it (`spec:AST-032` FR2 for
+`chat-send-button-send`). Selector's selected-option
 mark is drawn by the `check` indicator, so it is not a component icon slot. Shipped extension keys remain supported until a
 separate compatibility decision changes them. This record does not decide the
 outcome for any existing component.
