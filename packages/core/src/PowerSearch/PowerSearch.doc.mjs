@@ -142,7 +142,7 @@ export const docs = {
       name: 'timezoneID',
       type: 'string',
       description:
-        'IANA zone a date-only date_absolute value, and each absolute part of a date_range, is read and written in: the day shows, edits and stores (as that midnight) in it; unset, a day is its UTC day. A date_absolute with isDateOnly: false shows and edits its date and time in it; unset, in the viewer\'s zone. E.g. "America/New_York". Date values are written in the InternationalizationProvider calendar, such as calendar="persian"; filter values stay Unix seconds.',
+        'IANA zone a date-only date_absolute value, and each absolute part of a date_range, is read and written in: the day shows, edits and stores (as that midnight) in it; unset, a day is its UTC day. A date_absolute with isDateOnly: false shows and edits its date and time in it; unset, in the viewer\'s zone. E.g. "America/New_York". Date values are written in the InternationalizationProvider calendar, such as calendar="persian"; filter values stay Unix seconds. The value editor, a DateInput or DateRangeInput, shows the calendar that input resolves, which is Gregorian.',
     },
     {
       name: 'handleRef',
@@ -450,7 +450,7 @@ export const docsZh = {
       name: 'timezoneID',
       type: 'string',
       description:
-        '仅日期的 date_absolute 值及 date_range 的每个绝对端点读写所用的 IANA 时区：该日在此时区显示、编辑并以其午夜存储；未设置时为 UTC 日。isDateOnly: false 的 date_absolute 值在此时区显示并编辑其日期和时间；未设置时为查看者所在时区。例如 "America/New_York"。日期值使用 InternationalizationProvider 的历法（如 calendar="persian"）显示；筛选值仍为 Unix 秒数。',
+        '仅日期的 date_absolute 值及 date_range 的每个绝对端点读写所用的 IANA 时区：该日在此时区显示、编辑并以其午夜存储；未设置时为 UTC 日。isDateOnly: false 的 date_absolute 值在此时区显示并编辑其日期和时间；未设置时为查看者所在时区。例如 "America/New_York"。日期值使用 InternationalizationProvider 的历法（如 calendar="persian"）显示；筛选值仍为 Unix 秒数。值编辑器（DateInput 或 DateRangeInput）显示该输入框解析的历法，即公历。',
     },
     {
       name: 'handleRef',
@@ -572,7 +572,7 @@ export const docsDense = {
     menuWidth: 'Main field/search menu width in pixels.',
     popoverSaveButtonLabel: 'Label for save button in edit popover.',
     timezoneID:
-      'IANA zone a date-only value reads and writes in; unset, its UTC day. Dates show in the provider calendar.',
+      'IANA zone a date-only value reads and writes in; unset, its UTC day. Dates show in the provider calendar; their editor shows Gregorian dates.',
     handleRef:
       'Imperative handle w/ focusTypeahead() + blurTypeahead() methods.',
     endContent:
