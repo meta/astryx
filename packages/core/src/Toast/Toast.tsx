@@ -93,8 +93,8 @@ const styles = stylex.create({
     },
     transitionTimingFunction: easeVars['--ease-standard'],
     '@starting-style': {
-      opacity: 0,
-      transform: `translateY(var(--_toast-slide-y, ${TOAST_EDGE_DRIFT}))`,
+      opacity: 'var(--_toast-start-opacity, 0)',
+      transform: `translateY(var(--_toast-start-slide, var(--_toast-slide-y, ${TOAST_EDGE_DRIFT})))`,
     },
   },
   variantDefault: {

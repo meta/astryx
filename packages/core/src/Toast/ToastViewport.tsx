@@ -144,6 +144,10 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce)': '0.01ms',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
+  },
+  // A row opens from a closed track only when it first renders. A move to
+  // another modal outlet renders it again, and it must not open again.
+  toastWrapperEntering: {
     '@starting-style': {
       gridTemplateRows: '0fr',
       paddingBlockEnd: 0,
@@ -182,6 +186,12 @@ const styles = stylex.create({
   },
   toastWrapperInnerSettled: {
     overflow: 'visible',
+  },
+  // The card's starting style reads these. Once the entrance starts, a move
+  // renders the card at rest.
+  toastWrapperInnerEntered: {
+    '--_toast-start-opacity': 1,
+    '--_toast-start-slide': '0px',
   },
 });
 
@@ -261,12 +271,40 @@ function ToastRow({
   const isAutoHide = o.isAutoHide ?? (type === 'error' ? false : true);
   const dur = o.autoHideDuration ?? 5000;
   const [isSettled, setIsSettled] = useState(false);
+  // Each move between modal outlets renders the row again. Its starting style
+  // must not apply then.
+  const [hasEntryStarted, setHasEntryStarted] = useState(false);
+  // React's transition run and cancel events have no propertyName field.
+  const watchEntry = useCallback((row: HTMLDivElement | null) => {
+    if (row == null) {
+      return;
+    }
+    const onTransition = (event: TransitionEvent) => {
+      if (event.target !== row || event.propertyName !== 'grid-template-rows') {
+        return;
+      }
+      setHasEntryStarted(true);
+      // A move cancels the entry, and the row then renders fully open. No
+      // transition ends, so the row settles here.
+      if (event.type === 'transitioncancel') {
+        setIsSettled(true);
+      }
+    };
+    row.addEventListener('transitionrun', onTransition);
+    row.addEventListener('transitioncancel', onTransition);
+    return () => {
+      row.removeEventListener('transitionrun', onTransition);
+      row.removeEventListener('transitioncancel', onTransition);
+    };
+  }, []);
 
   return (
     <div
+      ref={watchEntry}
       data-toast-id={entry.id}
       {...stylex.props(
         styles.toastWrapper,
+        !hasEntryStarted && styles.toastWrapperEntering,
         isReversed ? styles.toastWrapperFromTop : styles.toastWrapperFromBottom,
         isReversed ? styles.toastWrapperGapReversed : styles.toastWrapperGap,
         isExiting && styles.toastWrapperExiting,
@@ -289,11 +327,13 @@ function ToastRow({
         // still owns pointer events and restores the clip synchronously when
         // dismissal starts.
         setIsSettled(true);
+        setHasEntryStarted(true);
       }}>
       <div
         {...stylex.props(
           styles.toastWrapperInner,
           isSettled && !isExiting && styles.toastWrapperInnerSettled,
+          hasEntryStarted && styles.toastWrapperInnerEntered,
         )}>
         <ToastSurface
           type={type}
