@@ -7,7 +7,8 @@
  * @input Uses React state/effects, ToastContext, content-provider boundary, useAnnounce, viewport tokens,
  *   shared layer text reset, the active modal outlet, the layer toast host
  *   registry, and placement-derived motion variables
- * @output Exports the ToastViewport provider, stack, live announcement dispatch,
+ * @output Exports the ToastViewport provider, stack, live announcement dispatch (its own
+ *   persistent regions in the top layer, else useAnnounce),
  *   focus handoff, safe-area-aware edge gutters, modal rehosting, and motion context
  * @position Core provider/imperative viewport for useToast()
  *
@@ -22,7 +23,6 @@ import {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from 'react';
 import type {ReactNode} from 'react';
 import {createPortal} from 'react-dom';
@@ -36,7 +36,8 @@ import {
   type FocusWithin,
 } from '../utils/focusReturn';
 import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
-import {useAnnounce} from '../hooks/useAnnounce';
+import {useAnnounce, type AnnouncePoliteness} from '../hooks/useAnnounce';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
@@ -316,8 +317,8 @@ function ToastRow({
 }
 ToastRow.displayName = 'ToastRow';
 
-const hasActiveModalOutlet = (): boolean => getActiveModalOutlet() != null;
-const hasNoModalOutlet = (): boolean => false;
+/** How long a toast's text stays in a top-layer viewport's own live region. */
+const OWN_REGION_CLEAR_DELAY_MS = 2000;
 
 /**
  * Container that renders and manages toast notifications. Place at the root
@@ -424,17 +425,53 @@ export function ToastViewport({
   // double-render/double-effect, viewport remounts, and unrelated list
   // re-renders never re-announce). It is client-only (addToast never runs
   // during SSR), so it is SSR-safe.
-  const announce = useAnnounce();
-  // An open native modal hides the body-level channel above from assistive
-  // technology, so while the viewport is hosted in one, each card announces
-  // itself through its own live region instead. Outside a modal the cards
-  // carry none, so a card updated in place is announced once.
-  const hasModalOutlet = useSyncExternalStore(
-    subscribeModalOutlets,
-    hasActiveModalOutlet,
-    hasNoModalOutlet,
+  // The viewport is each toast's only announcement owner; the card carries no
+  // live role. A top-layer viewport is rehosted above open modals, where the
+  // page's shared channel is not exposed, so it writes into its own
+  // persistent regions, which move with it. A viewport rendered in place uses
+  // `useAnnounce`, which delivers inside an enclosing Astryx modal.
+  const announceShared = useAnnounce();
+  const politeRegionRef = useRef<HTMLDivElement>(null);
+  const assertiveRegionRef = useRef<HTMLDivElement>(null);
+  const ownRegionTimersRef = useRef<
+    Partial<Record<AnnouncePoliteness, {frame: number; clear: number}>>
+  >({});
+  useEffect(() => {
+    const timers = ownRegionTimersRef.current;
+    return () => {
+      for (const pending of Object.values(timers)) {
+        cancelAnimationFrame(pending.frame);
+        clearTimeout(pending.clear);
+      }
+    };
+  }, []);
+  const announce = useCallback(
+    (text: string, politeness: AnnouncePoliteness) => {
+      const region = (
+        politeness === 'assertive' ? assertiveRegionRef : politeRegionRef
+      ).current;
+      if (!isTopLayer || region == null) {
+        announceShared(text, politeness);
+        return;
+      }
+      // As the shared channel delivers: clear, write next frame, clear later.
+      const previous = ownRegionTimersRef.current[politeness];
+      if (previous) {
+        cancelAnimationFrame(previous.frame);
+        clearTimeout(previous.clear);
+      }
+      region.textContent = '';
+      ownRegionTimersRef.current[politeness] = {
+        frame: requestAnimationFrame(() => {
+          region.textContent = text;
+        }),
+        clear: window.setTimeout(() => {
+          region.textContent = '';
+        }, OWN_REGION_CLEAR_DELAY_MS),
+      };
+    },
+    [announceShared, isTopLayer],
   );
-  const isModalHosted = isTopLayer && hasModalOutlet;
 
   const addToast = useCallback(
     (entry: ToastEntry) => {
@@ -923,7 +960,7 @@ export function ToastViewport({
             isReversed={isReversed}
             onExited={handleExited}
             onDismiss={removeToast}
-            isLiveRegion={isModalHosted}
+            isLiveRegion={false}
           />
         ))}
       </LayerContentBoundary>
@@ -936,7 +973,30 @@ export function ToastViewport({
       {isTopLayer ? (
         <>
           <div ref={rootOutletRef} {...stylex.props(styles.rootOutlet)} />
-          {host != null ? createPortal(viewport, host) : null}
+          {host != null
+            ? createPortal(
+                <>
+                  {viewport}
+                  <VisuallyHidden
+                    as="div"
+                    ref={politeRegionRef}
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true">
+                    {null}
+                  </VisuallyHidden>
+                  <VisuallyHidden
+                    as="div"
+                    ref={assertiveRegionRef}
+                    role="alert"
+                    aria-live="assertive"
+                    aria-atomic="true">
+                    {null}
+                  </VisuallyHidden>
+                </>,
+                host,
+              )
+            : null}
         </>
       ) : (
         viewport

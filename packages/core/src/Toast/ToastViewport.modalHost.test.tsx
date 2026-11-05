@@ -18,7 +18,7 @@
 
 import {useState, type ReactNode} from 'react';
 import {describe, it, expect, vi, afterEach, beforeEach} from 'vitest';
-import {act, fireEvent, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import {ToastViewport} from './ToastViewport';
 import {useToast} from './useToast';
 import {BottomSheet, BottomSheetSwitcher} from '../BottomSheet';
@@ -241,10 +241,22 @@ function trackPopoverState() {
 }
 
 describe('ToastViewport modal hosting', () => {
-  // spec:AST-086 FR10: an open modal hides the body-level channel, so while
-  // the viewport is hosted in one each card announces itself; outside a modal
-  // the cards carry no live region and the viewport's channel announces once.
-  it('gives each card its own live region only while a modal hosts the viewport', () => {
+  // The live region the toast's own text sits in, inside its row.
+  const cardLiveRegionOf = (text: string) => {
+    const node = screen.getByText(text, {selector: '[data-toast-id] *'});
+    const row = node.closest('[data-toast-id]');
+    const region = node.closest('[aria-live], [role="status"], [role="alert"]');
+    return region != null && row?.contains(region) ? region : null;
+  };
+  // Every live element whose text includes `text`.
+  const liveRegionsWith = (text: string) =>
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        '[aria-live], [role="status"], [role="alert"]',
+      ),
+    ].filter(region => region.textContent?.includes(text));
+
+  it('announces each toast once, through its own persistent region, and the card has no live role, over a modal or not', async () => {
     render(
       <ToastViewport>
         <ToastButton />
@@ -253,25 +265,26 @@ describe('ToastViewport modal hosting', () => {
         </DialogFixture>
       </ToastViewport>,
     );
-    // The live region the toast's own text sits in, inside its row.
-    const liveRegionOf = (text: string) => {
-      const node = screen.getByText(text);
-      const row = node.closest('[data-toast-id]');
-      const region = node.closest(
-        '[aria-live], [role="status"], [role="alert"]',
-      );
-      return region != null && row?.contains(region) ? region : null;
-    };
 
     fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
-    expect(liveRegionOf('Saved')).toBeNull();
+    expect(cardLiveRegionOf('Saved')).toBeNull();
+    await waitFor(() => expect(liveRegionsWith('Saved')).toHaveLength(1));
+    const [region] = liveRegionsWith('Saved');
+    expect(region).toHaveAttribute('aria-live', 'polite');
+    expect(getViewport().contains(region)).toBe(false);
 
     fireEvent.click(screen.getByRole('button', {name: 'Toggle Edit'}));
     expect(getDialog('Edit').contains(getViewport())).toBe(true);
-    expect(liveRegionOf('Saved')).toHaveAttribute('aria-live', 'polite');
-
-    fireEvent.click(screen.getByRole('button', {name: 'Close Edit'}));
-    expect(liveRegionOf('Saved')).toBeNull();
+    // The region moves with the viewport into the modal, so it stays exposed.
+    expect(getDialog('Edit').contains(region)).toBe(true);
+    for (const card of document.querySelectorAll('[data-toast-id]')) {
+      expect(
+        card.closest('[aria-live], [role="status"], [role="alert"]'),
+      ).toBeNull();
+      expect(
+        card.querySelector('[aria-live], [role="status"], [role="alert"]'),
+      ).toBeNull();
+    }
   });
 
   it('moves into an open Dialog and back when it closes, keeping the toast', () => {
@@ -463,6 +476,41 @@ describe('ToastViewport modal hosting', () => {
     // jsdom does not blur a moved node, so this guards only the end state;
     // the browser blur is handled by ToastViewport's focus restore.
     expect(document.activeElement).toBe(dismiss);
+  });
+
+  it('announces a toast once through the modal container when an in-place viewport sits inside a Dialog', async () => {
+    const matches = Element.prototype.matches;
+    const spy = vi
+      .spyOn(Element.prototype, 'matches')
+      .mockImplementation(function (this: Element, selector: string) {
+        return selector === ':modal'
+          ? this instanceof HTMLDialogElement && this.open
+          : matches.call(this, selector);
+      });
+    try {
+      render(
+        <Dialog isOpen={true} onOpenChange={() => {}} aria-label="Edit">
+          <ToastViewport isTopLayer={false}>
+            <ToastButton />
+          </ToastViewport>
+        </Dialog>,
+      );
+      const dialog = screen.getByRole('dialog', {name: 'Edit'});
+
+      fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
+
+      await waitFor(() =>
+        expect(
+          dialog.querySelector(
+            ':scope > [data-astryx-modal-live-region="polite"]',
+          ),
+        ).toHaveTextContent('Saved'),
+      );
+      expect(liveRegionsWith('Saved')).toHaveLength(1);
+      expect(cardLiveRegionOf('Saved')).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('stays in place when the caller renders it in place', () => {

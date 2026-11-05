@@ -248,11 +248,6 @@ announcement channel.
   mounted live container; elsewhere they already match FR2, FR5, and FR7.
 - `architecture:react-component-runtime` INV5 gains the authority it requires
   for the document-owned channel (FR9). INV2 and INV3 already require FR6.
-- Toast: the viewport announces each toast through the body-level channel, and
-  each visible card also carries `role="status"`/`role="alert"` with
-  `aria-live`. Under FR1 and FR10 the viewport's own persistent live containers,
-  which `spec:AST-003` rehosts above native modals, is the one owner, and the
-  card drops its live role. A toast shown over a Dialog stays announced.
 - Switch: busy is announced through the channel, and the thumb Spinner also
   mounts with `role="status"`. Under FR8 the thumb Spinner is silent. Under FR6
   StrictMode replay does not repeat the busy announcement.
