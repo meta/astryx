@@ -22,8 +22,9 @@ const REPO_ROOT = path.resolve(import.meta.dirname, '..');
 
 /**
  * `import.meta.url === \`file://${process.argv[1]}\`` and its string-concatenation
- * twin. Written as a pattern over source text, not run: this file is the only
- * place the broken comparison is allowed to appear, as data.
+ * twin. Written as a pattern over source text, never used as a guard: a scan needs
+ * the broken comparison somewhere as data, and `trackedSources()` skips every test
+ * file — this one included.
  */
 const NAIVE_ENTRYPOINT_GUARD =
   /import\.meta\.url\s*===\s*(?:`file:\/\/\$\{process\.argv\[1\]\}`|'file:\/\/'\s*\+\s*process\.argv\[1\])/;
@@ -35,7 +36,11 @@ afterEach(() => {
   }
 });
 
-/** Tracked runnable sources, excluding this suite's own fixtures. */
+/**
+ * Tracked runnable sources, excluding test files. A guard lives in a `.ts`
+ * entrypoint as readily as in an `.mjs` one — `internal/vibe-tests/setup-test/`
+ * has both — so the scan covers every extension a command runs from.
+ */
 function trackedSources() {
   const listing = execFileSync('git', ['ls-files', '-z'], {
     cwd: REPO_ROOT,
@@ -45,8 +50,8 @@ function trackedSources() {
   return listing
     .split('\0')
     .filter(Boolean)
-    .filter(file => /\.(?:mjs|cjs|js)$/.test(file))
-    .filter(file => !/\.test\.(?:mjs|cjs|js)$/.test(file))
+    .filter(file => /\.[mc]?[jt]s$/.test(file))
+    .filter(file => !/\.test\.[mc]?[jt]s$/.test(file))
     .filter(file => fs.existsSync(path.join(REPO_ROOT, file)));
 }
 
