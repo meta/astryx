@@ -112,11 +112,7 @@ test.describe('SegmentedControl touch target (spec:AST-094 FR42), under a finger
     const x = Math.min(centerX(segment), (button.left + button.right) / 2);
     const from = {x, y: (segment.top + segment.bottom) / 2};
     const to = {x, y: segment.top - insets.top - 2};
-    if (driver.engine === 'webkit') {
-      await driver.drag(from, to);
-    } else {
-      await driver.play(drag(from, to, {steps: 8}));
-    }
+    await driver.play(drag(from, to, {durationMs: 160}));
     await page.waitForTimeout(400);
     await expect(month$).toHaveAttribute('aria-checked', 'true');
   });

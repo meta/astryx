@@ -180,7 +180,7 @@ export function useSegmentedTouchTracking(
   const isDraggingRef = useRef(false);
   /** The segments as the finger found them (disabled ones too). */
   const segmentsRef = useRef<SegmentSpan[]>([]);
-  /** The control's box as the finger found it: a lift outside it cancels. */
+  /** The lift area as the finger found it: a lift outside it cancels. */
   const areaRef = useRef<ReadonlyArray<ControlBounds>>(NO_AREA);
   const trackerRef = useRef<ActionGroupTracker | null>(null);
   const tracker = (trackerRef.current ??= createActionGroupTracker(() => ({
