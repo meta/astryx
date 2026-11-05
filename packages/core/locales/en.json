@@ -499,6 +499,14 @@
     "defaultMessage": "{label} data",
     "description": "Screen-reader-only caption for the small-data table that mirrors a Chart. `{label}` is the Chart's resolved accessible name."
   },
+  "@astryx.chart.sparklineValueLabel": {
+    "defaultMessage": "Value",
+    "description": "Series name for a Sparkline trend, announced in the accessible name and data table."
+  },
+  "@astryx.chart.sparklinePositionLabel": {
+    "defaultMessage": "Position",
+    "description": "Name of the point position dimension in a Sparkline accessible name and data table."
+  },
   "@astryx.chartLegend.label": {
     "defaultMessage": "Chart legend",
     "description": "Screen-reader-only accessible name for the list of series labels and swatches rendered by ChartLegend."
