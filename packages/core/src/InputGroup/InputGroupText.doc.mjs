@@ -21,6 +21,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'Plain text keeps its character order under right-to-left, so https:// and .com read as written. When rich content mixes directions, mark the direction on your own content, for example with `dir` or `<bdi>`.',
+      },
+      {
+        guidance: true,
+        description:
           'Put what a screen reader user needs in the input\'s own label, such as "Amount in USD" beside a $ prefix. The addon is read as plain text in reading order.',
       },
       {

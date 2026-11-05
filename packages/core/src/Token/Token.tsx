@@ -43,6 +43,7 @@ import {cancelNestedTouchPress} from '../hooks/useClickableContainer';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {TokenNamingContext} from './TokenNamingContext';
+import {textDirectionProps} from '../utils/textDirection';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -145,6 +146,7 @@ const styles = stylex.create({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     minWidth: 0,
+    unicodeBidi: 'isolate',
   },
   interactive: {
     cursor: {
@@ -351,7 +353,7 @@ export function Token({
     <>
       {icon}
       <span
-        dir="auto"
+        {...textDirectionProps(label)}
         {...stylex.props(styles.label, isLabelHidden && styles.labelHidden)}>
         {label}
       </span>
@@ -472,7 +474,7 @@ export function Token({
         {...pressable}
         labelContent={
           <span
-            dir="auto"
+            {...textDirectionProps(label)}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,
@@ -565,7 +567,7 @@ export function Token({
           {...(isDisabled ? disabledInteractionProps() : null)}
           {...stylex.props(styles.invisibleButton)}>
           <span
-            dir="auto"
+            {...textDirectionProps(label)}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,
