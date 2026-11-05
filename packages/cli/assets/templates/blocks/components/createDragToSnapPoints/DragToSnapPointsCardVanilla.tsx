@@ -50,6 +50,20 @@ function mountCard(table: HTMLElement, buttons: HTMLElement) {
     const button = document.createElement('button');
     button.type = 'button';
     button.textContent = name;
+    // The Astryx reset removes a native button's own look, so these take the
+    // theme's secondary button look.
+    Object.assign(button.style, {
+      height: 'var(--size-element-md)',
+      paddingInline: 'var(--spacing-3)',
+      border: 'none',
+      borderRadius: 'var(--radius-element)',
+      backgroundColor: 'var(--color-neutral)',
+      color: 'var(--color-text-primary)',
+      font: 'inherit',
+      fontSize: 'var(--text-label-size)',
+      fontWeight: 'var(--font-weight-medium)',
+      cursor: 'pointer',
+    });
     button.addEventListener('click', () => snap.settleTo(placeAt(index)));
     buttons.append(button);
     return button;

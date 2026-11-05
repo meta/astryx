@@ -24,6 +24,7 @@ import {
   type DragToSnapPointsOptions,
 } from '../dragToSnapPoints/createDragToSnapPoints';
 import {useAttachment} from './useAttachment';
+import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 
 export interface UseDragToSnapPointsResult {
   /**
@@ -59,8 +60,11 @@ export function useDragToSnapPoints(
 ): UseDragToSnapPointsResult {
   const {axis, snapPoints, flickThreshold} = options;
   const onSettleRef = useRef(options.onSettle);
-  // The drag calls the latest onSettle.
-  onSettleRef.current = options.onSettle;
+  // Effect: syncs the drag, which runs outside React, with the latest
+  // committed onSettle, never one from a render that React throws away.
+  useIsomorphicLayoutEffect(() => {
+    onSettleRef.current = options.onSettle;
+  });
   const snapRef = useRef<DragToSnapPoints | null>(null);
   // The snap points as a value, so a new array with the same points keeps
   // the drag (an empty list stays empty).

@@ -8,7 +8,8 @@
  *   stand-in for Element.animate.
  * @output Tests `design:bidirectionality` DR13 for the examples. The places
  *   run in reading order. So a card sent to the next place moves toward the
- *   inline end, rightward or leftward, and its place has the same name.
+ *   inline end, rightward or leftward, and its place has the same name. The
+ *   plain-JavaScript example's buttons take the theme's button look.
  * @position The examples ship to products through the CLI, so their direction
  *   handling is checked here, beside the drag they demonstrate.
  */
@@ -161,5 +162,15 @@ describe('the plain-JavaScript example', () => {
     const {style} = screen.getByText('Q\u2665');
     expect(style.backgroundColor).toBe('var(--color-background-surface)');
     expect(style.color).toBe('var(--color-text-primary)');
+  });
+
+  it('gives its place buttons the theme\u2019s secondary button look, which the reset takes from a native button', () => {
+    render(<DragToSnapPointsCardVanilla />);
+    for (const {style} of screen.getAllByRole('button')) {
+      expect(style.backgroundColor).toBe('var(--color-neutral)');
+      expect(style.color).toBe('var(--color-text-primary)');
+      expect(style.borderRadius).toBe('var(--radius-element)');
+      expect(style.height).toBe('var(--size-element-md)');
+    }
   });
 });

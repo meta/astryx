@@ -5,6 +5,7 @@
  * @input vitest (jsdom, fake clock), React Testing Library, the hook
  * @output Checks `spec:AST-107` FR2 and FR6 for the hook. `settleTo` from a
  *   key settles and calls the latest `onSettle`, and `settleTo` is stable.
+ *   A render that React throws away leaves the committed `onSettle` in place.
  *   An unmount stops reporting, and an empty list stays empty. The hook
  *   module holds no behavior of its own.
  * @position Testing; validates useDragToSnapPoints.ts
@@ -13,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {act, render} from '@testing-library/react';
-import {useRef} from 'react';
+import {Suspense, startTransition, use, useRef} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {coarsePrimaryPointer} from '../gestures/__tests__/harness';
 import {useDragToSnapPoints} from './useDragToSnapPoints';
@@ -114,6 +115,55 @@ describe('useDragToSnapPoints', () => {
     });
     expect(first).not.toHaveBeenCalled();
     expect(latest).toHaveBeenCalledWith(2);
+  });
+
+  it('a render that React throws away leaves the committed onSettle in place', async () => {
+    const settlers = new Set<(index: number) => void>();
+    const committed = vi.fn();
+    const discarded = vi.fn();
+    const never = new Promise<never>(() => {});
+    function Pending({
+      onSettle,
+      isPending,
+    }: {
+      onSettle: (index: number) => void;
+      isPending: boolean;
+    }) {
+      const ref = useRef<HTMLDivElement>(null);
+      const {settleTo} = useDragToSnapPoints(ref, {
+        axis: 'y',
+        snapPoints: POINTS,
+        onSettle,
+      });
+      settlers.add(settleTo);
+      if (isPending) {
+        use(never);
+      }
+      return <div ref={ref} />;
+    }
+    const {rerender} = render(
+      <Suspense fallback={null}>
+        <Pending onSettle={committed} isPending={false} />
+      </Suspense>,
+    );
+    // A transition that suspends keeps the committed screen, and React throws
+    // its render away.
+    act(() => {
+      startTransition(() => {
+        rerender(
+          <Suspense fallback={null}>
+            <Pending onSettle={discarded} isPending />
+          </Suspense>,
+        );
+      });
+    });
+    const [settleTo] = settlers;
+    act(() => settleTo(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    expect(discarded).not.toHaveBeenCalled();
+    expect(committed).toHaveBeenCalledWith(2);
   });
 
   it('after an unmount nothing reports', async () => {
@@ -359,6 +409,7 @@ describe('useDragToSnapPoints', () => {
     expect([...new Set(imports)].sort()).toEqual([
       '../dragToSnapPoints/createDragToSnapPoints',
       './useAttachment',
+      './useIsomorphicLayoutEffect',
       'react',
     ]);
     expect(source).toContain('createDragToSnapPoints(element');
