@@ -8,7 +8,7 @@
  * @position CodeBlock FR9 proof: row paint follows a scrolled line, and wraps
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

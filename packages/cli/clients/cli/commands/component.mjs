@@ -6,6 +6,7 @@
  * Global options: --detail full|compact|brief, --lang en|zh|dense
  */
 
+import {withListingCache} from '../../../foundation/fs/listing-cache.mjs';
 import {findCoreDir} from '../../../foundation/fs/paths.mjs';
 import {
   resolveImportPath,
@@ -307,15 +308,18 @@ export function registerComponent(program) {
                 }
               }
             }
+            // Each row resolves its import by walking the same source tree.
             emit(
               code(
-                await formatBriefAll(coreDir, {
-                  zh,
-                  lang,
-                  themeData,
-                  replacements,
-                  categories: Object.keys(result.data.components),
-                }),
+                await withListingCache(() =>
+                  formatBriefAll(coreDir, {
+                    zh,
+                    lang,
+                    themeData,
+                    replacements,
+                    categories: Object.keys(result.data.components),
+                  }),
+                ),
               ),
             );
             break;
@@ -383,7 +387,13 @@ export function registerComponent(program) {
               ? section(firstGroup[0])
               : section(`Components (${sorted.length})`),
             records(
-              sorted.map(item => ({name: item.name, import: importCell(item)})),
+              // Each row resolves its import by walking the same source tree.
+              withListingCache(() =>
+                sorted.map(item => ({
+                  name: item.name,
+                  import: importCell(item),
+                })),
+              ),
               {fields: ['name', 'import']},
             ),
             listFooter,

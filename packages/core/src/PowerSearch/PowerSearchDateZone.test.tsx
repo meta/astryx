@@ -396,8 +396,8 @@ describe('PowerSearch date zone', () => {
       expect(screen.getByText('Mar 9, 2024')).toBeTruthy();
     });
 
-    it("PowerSearchToken keeps an isDateOnly: false value in the viewer's zone with its time", () => {
-      process.env.TZ = 'America/Los_Angeles';
+    it('PowerSearchToken reads an isDateOnly: false value with its time in timezoneID, as the editor does', () => {
+      process.env.TZ = 'Asia/Tokyo';
       function Token(props: PowerSearchTokenProps) {
         return <PowerSearchToken {...props} />;
       }
@@ -413,12 +413,12 @@ describe('PowerSearch date zone', () => {
           ]}
           onChange={vi.fn()}
           label="Search"
-          timezoneID="Asia/Tokyo"
+          timezoneID="America/Los_Angeles"
           components={{date_absolute: {Token}}}
         />,
       );
-      // 7:00 PM March 9 in Los Angeles, as it read before timezoneID reached
-      // the token; the Tokyo reading would be March 10, 12:00 PM.
+      // 7:00 PM March 9 in Los Angeles, the time the editor opens on; the
+      // Tokyo viewer's reading would be March 10, 12:00 PM.
       expect(screen.getByText('Mar 9, 2024, 7:00 PM')).toBeTruthy();
     });
 
@@ -443,34 +443,9 @@ describe('PowerSearch date zone', () => {
     });
   });
 
-  it('leaves a value with a time of day (isDateOnly: false) on its released reading', async () => {
-    // Not a calendar day, so outside the zone rule: the token keeps the
-    // device's day, the label its date and time in timezoneID, and the editor
-    // the UTC day — as before, until that value has its own rule.
-    process.env.TZ = 'America/Los_Angeles';
-    const onChange = renderOne(
-      {
-        field: 'at',
-        operator: 'on',
-        value: {type: 'date_absolute', unixSeconds: EVENING_LA},
-      },
-      'Asia/Tokyo',
-    );
-    expect(tokenText('At')).toBe('At: onMar 9, 2024');
-    const remove = screen.getByRole('button', {name: /^Remove /});
-    act(() => {
-      fireEvent.click(remove);
-    });
-    expect(onChange).toHaveBeenCalledWith([], 'remove', 0);
-    await waitFor(() => {
-      const announced = Array.from(document.querySelectorAll('[aria-live]'))
-        .map(region => region.textContent ?? '')
-        .join(' ');
-      expect(announced).toContain('Removed At: on Mar 10, 2024, 12:00 PM');
-    });
-  });
-
-  it('opens a value with a time of day (isDateOnly: false) on the UTC day, as before', () => {
+  it('a value with a time of day (isDateOnly: false) is an instant, not a calendar day', () => {
+    // FR26 governs it: its token and label show the date and time in
+    // timezoneID; the date-only rule leaves it alone.
     process.env.TZ = 'America/Los_Angeles';
     renderOne(
       {
@@ -478,9 +453,9 @@ describe('PowerSearch date zone', () => {
         operator: 'on',
         value: {type: 'date_absolute', unixSeconds: EVENING_LA},
       },
-      'America/Los_Angeles',
+      'Asia/Tokyo',
     );
-    expect(openEditor('At').value).toBe('March 10, 2024');
+    expect(tokenText('At')).toBe('At: onMar 10, 2024, 12:00 PM');
   });
 
   describe('range parts are calendar days in the same zone', () => {

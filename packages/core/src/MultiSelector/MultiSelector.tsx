@@ -76,8 +76,10 @@ import {
 import {useMultiCombobox} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {devWarn, warnOnce} from '../utils/devWarning';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
@@ -1850,23 +1852,12 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ),
   });
 
-  const [isKeyboardHighlight, setIsKeyboardHighlight] = useState(
-    () => readModality() === 'keyboard',
-  );
-  const onKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLElement>) => {
-      onComboboxKeyDown(event);
-      setIsKeyboardHighlight(readModality() === 'keyboard');
-    },
-    [onComboboxKeyDown, readModality],
-  );
-  const onItemMouseEnter = useCallback(
-    (...args: Parameters<typeof onComboboxItemMouseEnter>) => {
-      onComboboxItemMouseEnter(...args);
-      setIsKeyboardHighlight(readModality() === 'keyboard');
-    },
-    [onComboboxItemMouseEnter, readModality],
-  );
+  const {isKeyboardHighlight, onKeyDown, onItemMouseEnter} =
+    useKeyboardHighlight(
+      readModality,
+      onComboboxKeyDown,
+      onComboboxItemMouseEnter,
+    );
 
   // The trigger button owns its click so a consumer `onClick`, which lands on
   // the button, composes after the built-in toggle. A press elsewhere in the
@@ -2468,13 +2459,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // A disabled trigger stays focusable but, like a natively disabled button,
   // runs no caller event handler other than focus and blur, and a press on it
   // reaches no handler at all (`spec:AST-085` FR2).
-  const callerProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const callerProps = withholdCallerHandlers(rest, isDisabled);
   const triggerSharedProps: React.HTMLAttributes<HTMLElement> = {
     ...callerProps,
     id: triggerId,

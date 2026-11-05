@@ -12,7 +12,12 @@
  *   (`*.interaction.browser.spec.ts`, run by `pnpm test:interaction`)
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   openStory,
   touchDriver,

@@ -118,6 +118,7 @@ export type {
   SingleComponentDoc,
   MultiComponentDoc,
   ComponentEntry,
+  ComponentDeprecation,
   ComponentGroupDoc,
   ComponentTranslationDoc,
   ComponentPropDoc,

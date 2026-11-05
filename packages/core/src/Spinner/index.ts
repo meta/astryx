@@ -12,8 +12,4 @@
  */
 
 export {Spinner} from './Spinner';
-export type {
-  SpinnerProps,
-  SpinnerSize,
-  SpinnerShade,
-} from './Spinner';
+export type {SpinnerProps, SpinnerSize, SpinnerShade} from './Spinner';
