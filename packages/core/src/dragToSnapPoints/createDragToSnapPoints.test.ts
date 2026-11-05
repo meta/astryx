@@ -33,10 +33,10 @@ vi.mock('../motion/animator', async importOriginal => {
   const actual = await importOriginal<typeof AnimatorModule>();
   return {
     ...actual,
-    createMotionAnimator: (
-      ...args: Parameters<typeof actual.createMotionAnimator>
+    createMotionEngine: (
+      ...args: Parameters<typeof actual.createMotionEngine>
     ) => {
-      const animator = actual.createMotionAnimator(...args);
+      const animator = actual.createMotionEngine(...args);
       const animate = animator.animate.bind(animator);
       animator.animate = (target, options, ...rest) => {
         animates.push({target, options: {...options}});

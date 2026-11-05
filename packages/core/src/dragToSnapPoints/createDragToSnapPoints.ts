@@ -21,7 +21,7 @@ import {
   createPanGesture,
   type PanGestureEvent,
 } from '../gestures/createPanGesture';
-import {createMotionAnimator} from '../motion/animator';
+import {createMotionEngine} from '../motion/animator';
 import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import {devWarn} from '../utils/devWarning';
 import {registerSpringsTable, springs} from '../motion/uikit/springs';
@@ -132,7 +132,7 @@ export function createDragToSnapPoints(
   // It starts where the element is drawn, so a drag created again to
   // change its options moves on from there instead of jumping.
   const drawn = drawnAt(element);
-  const animator = createMotionAnimator(element, {initial: drawn});
+  const animator = createMotionEngine(element, {initial: drawn});
   let targetIndex = resolveSnapPoint({
     points,
     position: drawn[axis],
