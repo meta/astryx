@@ -213,9 +213,8 @@ export function TopNavItem({
   // disabled paths of Link and SideNavItem.)
   const Root = isDisabled ? 'a' : LinkComponent;
 
-  // A disabled item runs no caller handler other than `onFocus` and `onBlur`
-  // (spec:AST-085 FR2), as a natively disabled control runs none. `onClick` is
-  // handled separately below.
+  // A disabled item runs no caller handler except `onFocus` and `onBlur`, as a
+  // natively disabled control runs none.
   const callerProps = withholdCallerHandlers(props, isDisabled);
 
   // =========================================================================
