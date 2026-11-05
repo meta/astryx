@@ -6,14 +6,16 @@
  *   evaluating modules through the interception's virtual modules
  * @output The root namespace is read only when a theme module requires the
  *   root, once, with its own exports and `defineTheme` wrapped; a Core with
- *   no root entry gives the theme namespace; `patchCommonJs` reads only an
- *   absent Core entry as absent and throws any other error; jiti reads a
- *   virtual module only when a module requires it, so a theme that imports
- *   only the theme subpath never loads the root
+ *   no root entry gives the theme namespace; `patchCommonJs` skips a Core
+ *   entry that is absent, fails to load, or sits in a package config it
+ *   cannot read, and still wraps the root when the load requires it; jiti
+ *   reads a virtual module only when a module requires it, so a theme that
+ *   imports only the theme subpath never loads the root
  * @position Unit test of packages/cli/api/theme/build/core-interception.mjs
  */
 
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {createJiti} from 'jiti';
@@ -125,23 +127,34 @@ describe("Core's entries", () => {
     patch.undo();
   });
 
-  it("patchCommonJs throws a theme entry's own error when it fails to load, rather than leave it unwrapped", () => {
+  it('patchCommonJs skips a theme entry that fails to load, and still wraps the root when the load requires it', () => {
     const {theme} = project({
       'package.json': CORE_PACKAGE,
       'theme.cjs': "throw new Error('the theme entry failed to load');",
+      'index.cjs':
+        'module.exports = {defineTheme: input => ({...input, defined: true})};',
     });
-    expect(() =>
-      interceptCore(themeNamespace(), null).patchCommonJs(theme),
-    ).toThrow(/the theme entry failed to load/);
+    const interception = interceptCore(themeNamespace(), null);
+    const patch = interception.patchCommonJs(theme);
+    try {
+      // A `.cjs` dependency beside the theme requires the root during the load.
+      const root = createRequire(theme)('@astryxdesign/core');
+      expect(interception.observed(root.defineTheme({name: 'reef'}))).toBe(
+        true,
+      );
+      expect(patch.covered).toBe(true);
+    } finally {
+      patch.undo();
+    }
   });
 
-  it('patchCommonJs throws on a package config it cannot read, rather than read its entries as absent', () => {
+  it('patchCommonJs skips the entries of a package config it cannot read', () => {
     const {theme} = project({
       'package.json': '{"name": "@astryxdesign/core", "exports": ',
       'theme.cjs': 'module.exports = {};',
     });
-    expect(() =>
-      interceptCore(themeNamespace(), null).patchCommonJs(theme),
-    ).toThrow(/package/i);
+    const patch = interceptCore(themeNamespace(), null).patchCommonJs(theme);
+    expect(patch.covered).toBe(true);
+    patch.undo();
   });
 });

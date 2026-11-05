@@ -222,30 +222,6 @@ function mergeGenerativeAxes(inherited, own) {
 }
 
 /**
- * The file `specifier` resolves to through `require`, or null when Core has
- * no such entry: no file where its `exports` points (`MODULE_NOT_FOUND`), or
- * no such subpath in them (`ERR_PACKAGE_PATH_NOT_EXPORTED`). Any other error
- * is thrown.
- * @param {NodeJS.Require} require
- * @param {string} specifier
- * @returns {string | null}
- */
-export function resolveEntry(require, specifier) {
-  try {
-    return require.resolve(specifier);
-  } catch (error) {
-    const {code} = /** @type {NodeJS.ErrnoException} */ (error);
-    if (
-      code === 'MODULE_NOT_FOUND' ||
-      code === 'ERR_PACKAGE_PATH_NOT_EXPORTED'
-    ) {
-      return null;
-    }
-    throw error;
-  }
-}
-
-/**
  * Wrap an installed core module so every `defineTheme()` call records the raw
  * input against the theme it produced.
  *
@@ -532,19 +508,32 @@ export function interceptCore(coreThemeModule, coreRootModule) {
         }
       };
 
-      // A specifier that CommonJS cannot resolve cannot be used by a `.cjs`
-      // source dependency either, so it creates no unobserved path. Both are
-      // resolved before anything is patched, so an error leaves nothing to
-      // undo.
-      const themeFile = resolveEntry(
-        requireFromTheme,
-        '@astryxdesign/core/theme',
-      );
-      const rootFile = resolveEntry(requireFromTheme, '@astryxdesign/core');
+      // An entry that CommonJS cannot resolve or load cannot be used by a
+      // `.cjs` source dependency either, so it creates no unobserved path. It
+      // is skipped, as are the entries of a package config CommonJS cannot
+      // read. Throwing instead would fail every theme beside such an install.
+      /** @param {string} specifier @returns {string | null} */
+      const resolveEntry = specifier => {
+        try {
+          return requireFromTheme.resolve(specifier);
+        } catch {
+          return null;
+        }
+      };
+      const themeFile = resolveEntry('@astryxdesign/core/theme');
+      const rootFile = resolveEntry('@astryxdesign/core');
 
-      // The theme subpath is small, so it is wrapped now. It loads here, and
-      // its error, if it throws, is the build's.
-      if (themeFile && !wrap(requireFromTheme(themeFile))) covered = false;
+      // The theme subpath is small, so it is wrapped now.
+      if (themeFile) {
+        /** @type {any} */
+        let themeExports = null;
+        try {
+          themeExports = requireFromTheme(themeFile);
+        } catch {
+          // A dependency that requires it fails the same way.
+        }
+        if (themeExports && !wrap(themeExports)) covered = false;
+      }
 
       // The root loads all of Core, so it is wrapped when this load first
       // requires it (a `.cjs` dependency, or the virtual module's own loader),

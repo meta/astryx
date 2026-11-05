@@ -166,6 +166,25 @@ describe('theme build generates with the Core the project installed', () => {
     expect(globalThis.__astryxProjectCoreLoads).toEqual(['theme']);
   });
 
+  it('checks the private inputs of every theme beside an installed Core whose theme entry fails to load', async () => {
+    // Doctor runs this check for each added theme. A `.cjs` dependency could
+    // not load that entry either, so the CommonJS patch skips it.
+    const app = makeDir();
+    installCore(app, {
+      themeModule: "throw new Error('the theme entry failed to load');\n",
+    });
+    fs.writeFileSync(
+      path.join(app, 'harbor.mjs'),
+      "export default {name: 'harbor', tokens: {'--_card-radius': '4px'}};\n",
+    );
+    expect(await validateThemePrivateInputs('ocean.mjs', {cwd: app})).toEqual(
+      [],
+    );
+    const errors = await validateThemePrivateInputs('harbor.mjs', {cwd: app});
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('--_card-radius');
+  });
+
   it('keeps the CLI’s own Core when the project has none', async () => {
     const bare = makeDir();
     await themeBuild('ocean.mjs', {}, {cwd: bare});
