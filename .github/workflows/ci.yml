@@ -110,8 +110,8 @@ jobs:
   # inside the fifteen-minute job budget.
   room:
     # Finds room for the run's first job, its Storybook build, and records
-    # whether the whole run fit on that look. A pull-request run finding ten
-    # others already waiting, and no room, is turned away: CI is full.
+    # whether the whole run fit on that look. A pull-request run that finds no
+    # room waits, up to its longest wait.
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
     # A dispatch (a main or release check) may wait longer than a slim job's
     # fifteen-minute cap, so it waits on a standard runner (spec:AST-030 DEC-16).
