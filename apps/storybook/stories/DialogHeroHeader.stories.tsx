@@ -29,7 +29,6 @@ import {Button} from '@astryxdesign/core/Button';
 import {Heading} from '@astryxdesign/core/Heading';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Text} from '@astryxdesign/core/Text';
-import DialogHeroHeaderShowcase from '../../../packages/lab/blocks/DialogHeroHeaderShowcase';
 import * as stylex from '@stylexjs/stylex';
 
 const styles = stylex.create({
@@ -76,11 +75,6 @@ const meta: Meta<typeof DialogHeroHeader> = {
 
 export default meta;
 type Story = StoryObj<typeof DialogHeroHeader>;
-
-/** The same block is discoverable through the Lab integration and canary docsite. */
-export const Showcase: Story = {
-  render: () => <DialogHeroHeaderShowcase />,
-};
 
 /**
  * The hero header drops into Layout's header slot exactly like DialogHeader.

@@ -130,6 +130,10 @@
         },
         {
           "kind": "component",
+          "name": "DialogHeroHeader"
+        },
+        {
+          "kind": "component",
           "name": "DiffViewer"
         },
         {
