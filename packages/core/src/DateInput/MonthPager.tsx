@@ -42,6 +42,7 @@ import {
   borderVars,
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {observeResize} from '../utils/sharedResizeObserver';
 import type {DayOfWeek, ISODateString, PlainDate} from '../utils/dateTypes';
 import {
   plainDateAddDays,
@@ -285,10 +286,9 @@ function MonthPagerComponent({
   const [focusedDate, setFocusedDate] = useState<PlainDate | null>(null);
   const shouldRestoreFocusRef = useRef(false);
 
+  // Read through a ref, so a caller need not memoize the callback.
   const onVisibleMonthChangeRef = useRef(onVisibleMonthChange);
-  useLayoutEffect(() => {
-    onVisibleMonthChangeRef.current = onVisibleMonthChange;
-  });
+  onVisibleMonthChangeRef.current = onVisibleMonthChange;
 
   const report = useCallback(
     (row: number) => {
@@ -317,11 +317,11 @@ function MonthPagerComponent({
     // The settle has come to rest: whatever the frames showed, the title
     // names the month the grid rests on.
     onSettle: index => report(index),
-    // UIKit's split in a sheet (useOwnScrollGesture's 'pager', MEASUREMENTS.md M-DP01).
-    // The pan begins on the first move where either axis travels its
-    // hysteresis, and only if the sideways travel has reached it. Like every
-    // pan, it claims its touch only when it begins, on the move the sheet's
-    // split decides on.
+    // UIKit's split in a sheet (useOwnScrollGesture's 'pager' mode,
+    // MEASUREMENTS.md M-DP01). The pan begins on the first move where either
+    // axis travels its hysteresis, and only if the sideways travel has reached
+    // it. Like every pan, it claims its touch only when it begins, on the move
+    // the sheet's split decides on.
     panOptions: {
       axisRatio: 0,
       shouldBegin: recognizer =>
@@ -330,25 +330,22 @@ function MonthPagerComponent({
     },
   });
 
+  // Syncs the pane width with the viewport's size, through the shared resize
+  // observer. It measures once on registration, then on every resize.
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     if (viewport == null) {
       return;
     }
-    const measure = () => {
+    return observeResize(viewport, () => {
       // Ignore zero: the picker can be mounted inside something not yet
       // displayed (a closed BottomSheet).
       const measured = viewport.clientWidth;
       if (measured > 0) {
         paneSizeRef.current = measured;
-        // eslint-disable-next-line @eslint-react/set-state-in-effect -- pane width is a measurement; layout is the only place it exists
         setPaneSize(measured);
       }
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(viewport);
-    return () => observer.disconnect();
+    });
   }, []);
 
   // The settle's frames, read for the title until the grid rests.
@@ -464,9 +461,9 @@ function MonthPagerComponent({
 
   useImperativeHandle(handleRef, () => ({scrollToMonth}), [scrollToMonth]);
 
+  const isWheelRTL = useDirection() === 'rtl';
   // Synchronizes with the viewport's wheel events: one month per horizontal
   // wheel gesture (WHEEL_STEP_PX), following the reading direction.
-  const isWheelRTL = useDirection() === 'rtl';
   useEffect(() => {
     const viewport = viewportRef.current;
     if (viewport == null) {
@@ -609,9 +606,10 @@ function MonthPagerComponent({
     [isRTL, monthModel, moveFocusTo, weekStartsOn],
   );
 
-  // The focused day may sit in a pane mounted only this frame. Focus it once
-  // it exists, and only after a key press, so a drag never steals focus.
   const focusedISO = focusedDate == null ? null : plainDateToISO(focusedDate);
+  // Syncs DOM focus with the focused day. The day may sit in a pane mounted
+  // only this frame: it takes focus once it exists. Only a key press moves
+  // it, so a drag never steals focus.
   useEffect(() => {
     if (!shouldRestoreFocusRef.current || focusedISO == null) {
       return;
