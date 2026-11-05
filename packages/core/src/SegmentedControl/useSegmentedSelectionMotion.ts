@@ -25,7 +25,7 @@ import {
   type RefObject,
 } from 'react';
 import {
-  createMotionAnimator,
+  createMotionEngine,
   type AnimateOptions,
   type Animator,
   type MotionCurve,
@@ -539,7 +539,7 @@ export class SegmentedSelectionMotion {
   private readonly after: Animator;
 
   constructor(
-    private readonly animator: Animator = createMotionAnimator(null, {
+    private readonly animator: Animator = createMotionEngine(null, {
       pseudoElement: '::before',
     }),
     options: SegmentedSelectionMotionOptions = {},
@@ -552,7 +552,7 @@ export class SegmentedSelectionMotion {
     this.now = options.now ?? defaultNow;
     this.after =
       options.afterAnimator ??
-      createMotionAnimator(null, {
+      createMotionEngine(null, {
         pseudoElement: '::after',
         initial: {opacity: 0},
       });
