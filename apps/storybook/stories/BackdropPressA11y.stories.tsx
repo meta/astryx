@@ -122,7 +122,7 @@ export const LayersInDialog: StoryObj = {
             label="Date"
             value={date}
             onChange={setDate}
-            nativePicker="never"
+            presentation="popover"
           />
           <InfoTip content="Help text" label="About layers" />
           <ContextMenu items={menuItems}>

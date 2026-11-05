@@ -15,7 +15,12 @@
  *   click retargeting to the common ancestor.
  */
 
-import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -49,6 +54,17 @@ const MEMBERS = [
 // A backdrop point clear of every member: Dialog and CommandPalette sit in the
 // middle, the Drawer at the end edge.
 const BACKDROP = {x: 12, y: 12};
+
+// FR11: a press that closes only the layer leaves focus inside the host.
+async function expectFocusInside(surface: Locator) {
+  expect(
+    await surface.evaluate(
+      element =>
+        element === document.activeElement ||
+        element.contains(document.activeElement),
+    ),
+  ).toBe(true);
+}
 
 async function openMember(page: Page, open: string, dialog: string) {
   await page.goto(
@@ -134,6 +150,7 @@ for (const {name, open, dialog} of MEMBERS.filter(
       await page.mouse.click(BACKDROP.x, BACKDROP.y);
       await expect(menu).toBeHidden();
       await expect(surface).toBeVisible();
+      await expectFocusInside(surface);
       await page.mouse.click(BACKDROP.x, BACKDROP.y);
       await expect(surface).toBeHidden();
     });
@@ -145,6 +162,7 @@ for (const {name, open, dialog} of MEMBERS.filter(
       await page.touchscreen.tap(BACKDROP.x, BACKDROP.y);
       await expect(menu).toBeHidden();
       await expect(surface).toBeVisible();
+      await expectFocusInside(surface);
       await page.touchscreen.tap(BACKDROP.x, BACKDROP.y);
       await expect(surface).toBeHidden();
     });
@@ -204,6 +222,7 @@ test.describe('Dialog with another layer open inside, with a mouse', () => {
       await page.mouse.click(BACKDROP.x, BACKDROP.y);
       await expect(layer).toBeHidden();
       await expect(surface).toBeVisible();
+      await expectFocusInside(surface);
       await page.mouse.click(BACKDROP.x, BACKDROP.y);
       await expect(surface).toBeHidden();
     });
