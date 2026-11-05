@@ -1,11 +1,16 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {spawnSync} from 'node:child_process';
+import fs from 'node:fs';
 import {createRequire} from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 
 const require = createRequire(import.meta.url);
 const {
   SURFACES,
+  VITEST_CONFIG_SCRIPTS,
   classifyChanges,
   parseNameStatus,
 } = require('./change-scope.cjs');
@@ -503,6 +508,104 @@ describe('full-suite scope', () => {
   it('runs everything when there are no paths to scope from', () => {
     expect(classifyChanges([]).fullSuite).toBe(true);
     expect(classifyChanges([], {expectedCount: 0}).fullSuite).toBe(true);
+  });
+});
+
+describe('shared infrastructure only the Vitest module graph reaches (spec:AST-030 FR13)', () => {
+  const scope = files => classifyChanges(files.map(filename => ({filename})));
+
+  it('narrows only the Vitest lanes for the interaction harness, the lint plugin and the Node scripts', () => {
+    for (const file of [
+      'internal/interaction-harness/src/busy.ts',
+      'internal/eslint-plugin-astryx/rules/no-internal-barrel-import.js',
+      'scripts/build-css.mjs',
+      '.github/scripts/playwright-legs.mjs',
+      'apps/sandbox/scripts/check-sandbox.mjs',
+    ]) {
+      const result = scope(['packages/core/src/Button/Button.tsx', file]);
+      // Every other owner still runs as for shared infrastructure.
+      expect(result.fullSuite, file).toBe(true);
+      expect(result.vitestFullSuite, file).toBe(false);
+    }
+  });
+
+  it('keeps every other shared path, and a mix with one, on every Vitest test', () => {
+    for (const file of [
+      'internal/a11y-spec/src/index.ts',
+      'internal/test-utils/src/setup.ts',
+      'eslint.config.js',
+      'package.json',
+      'vitest.config.ts',
+      '.github/workflows/ci.yml',
+      // Admitted Node tooling keeps its whole Node project (FR8).
+      'scripts/score-ledger.mjs',
+      'internal/scripts/lib/a-future-strategy.mjs',
+      ...VITEST_CONFIG_SCRIPTS,
+    ]) {
+      expect(scope([file]).vitestFullSuite, file).toBe(true);
+      expect(
+        scope(['internal/interaction-harness/src/busy.ts', file])
+          .vitestFullSuite,
+        file,
+      ).toBe(true);
+    }
+  });
+
+  it('agrees with the full suite when nothing is shared or the list is incomplete', () => {
+    expect(scope(['packages/core/src/Button/Button.tsx']).vitestFullSuite).toBe(
+      false,
+    );
+    expect(
+      classifyChanges([{filename: 'scripts/build-css.mjs'}], {expectedCount: 2})
+        .vitestFullSuite,
+    ).toBe(true);
+    expect(classifyChanges([]).vitestFullSuite).toBe(true);
+  });
+
+  it('keeps every script the Vitest configuration loads out of the narrowing', () => {
+    const root = new URL('../../', import.meta.url);
+    const read = file => fs.readFileSync(new URL(file, root), 'utf8');
+    const relativeImports = (file, text) =>
+      [...text.matchAll(/(?:from|require\()\s*['"](\.{1,2}\/[^'"]+)['"]/g)].map(
+        m =>
+          path.posix.normalize(path.posix.join(path.posix.dirname(file), m[1])),
+      );
+    const loaded = relativeImports(
+      'vitest.config.ts',
+      read('vitest.config.ts'),
+    ).filter(f => f.startsWith('scripts/'));
+    expect(loaded.length).toBeGreaterThan(0);
+    const all = new Set(loaded);
+    for (const file of loaded) {
+      for (const dep of relativeImports(file, read(file))) {
+        if (dep.startsWith('scripts/')) all.add(dep);
+      }
+    }
+    expect([...all].sort()).toEqual([...VITEST_CONFIG_SCRIPTS].sort());
+  });
+
+  it('reports vitest_full_suite to the workflow', () => {
+    const out = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'scope-')),
+      'out',
+    );
+    const result = spawnSync(
+      'node',
+      [
+        new URL('./change-scope.cjs', import.meta.url).pathname,
+        '--github-output',
+      ],
+      {
+        input:
+          'M\tpackages/core/src/Button/Button.tsx\nM\tscripts/build-css.mjs\n',
+        env: {...process.env, GITHUB_OUTPUT: out},
+        encoding: 'utf8',
+      },
+    );
+    expect(result.status).toBe(0);
+    const text = fs.readFileSync(out, 'utf8');
+    expect(text).toContain('full_suite=true\n');
+    expect(text).toContain('vitest_full_suite=false\n');
   });
 });
 

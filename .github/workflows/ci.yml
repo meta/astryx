@@ -965,11 +965,13 @@ jobs:
 
       # A scoped pull request runs the tests Vitest's module graph relates to
       # its diff against the base (`--changed`): the changed tests, and every
-      # test that imports a changed module, however indirectly. Anything else
-      # runs every test.
+      # test that imports a changed module, however indirectly. That includes
+      # shared infrastructure only the module graph reaches (the interaction
+      # harness, the lint plugin, the Node scripts: `vitest_full_suite`).
+      # Anything else runs every test.
       - name: Run this shard of the UI tests
         env:
-          SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}
+          SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}
           LAB_ONLY: ${{ steps.scope.outputs.lab_only }}
         run: |
           if [ "$LAB_ONLY" = true ]; then
@@ -1109,7 +1111,7 @@ jobs:
       # Scoped like test-ui's run.
       - name: Run this shard of the Node tests
         env:
-          SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}
+          SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.vitest_full_suite == 'false' }}
         run: |
           if [ "$SCOPED" = true ]; then
             .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:node --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}

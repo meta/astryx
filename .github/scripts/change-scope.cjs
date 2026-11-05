@@ -232,6 +232,34 @@ const PACKAGE_INFRA_PATTERNS = [
   /^packages\/[^/]+\/[^/]+\.(?:c|m)?js$/,
 ];
 
+// Shared infrastructure that only Vitest's module graph can reach: the
+// interaction harness, the repository's lint plugin and the Node scripts. A
+// change there still runs every other owner as shared infrastructure, but
+// the Vitest lanes run the tests that import it and the guards that read
+// sources (spec:AST-030 FR13). The scripts the Vitest configuration itself
+// loads stay shared for Vitest too: no module graph reaches them. Admitted
+// Node tooling keeps its whole Node project (FR8).
+const VITEST_GRAPH_INFRA_PATTERNS = [
+  /^internal\/interaction-harness\//,
+  /^internal\/eslint-plugin-astryx\//,
+  /^scripts\//,
+  /^\.github\/scripts\//,
+  /^apps\/sandbox\/scripts\//,
+];
+const VITEST_CONFIG_SCRIPTS = new Set([
+  'scripts/stylex-module-resolution.cjs',
+  'scripts/vitest-shard-sequencer.mjs',
+  'scripts/lib/duration-split.mjs',
+]);
+
+function isVitestGraphInfraPath(filePath) {
+  return (
+    VITEST_GRAPH_INFRA_PATTERNS.some(pattern => pattern.test(filePath)) &&
+    !VITEST_CONFIG_SCRIPTS.has(filePath) &&
+    !isNodeToolingPath(filePath)
+  );
+}
+
 // Surfaces a pull request's tests can be scoped to by the import graph (the
 // components and modules it changed, and what imports them). Anything else,
 // or any infrastructure path above, runs the full suite; Node tooling keeps
@@ -342,6 +370,7 @@ function classifyChanges(
       labOnly: false,
       // No paths to scope from runs everything (spec:AST-030 FR4).
       fullSuite: true,
+      vitestFullSuite: true,
       surfaces: complete ? [] : [SURFACES.SHARED_OR_UNKNOWN],
       complete,
       reason: complete ? 'no changed files' : 'changed-file list is incomplete',
@@ -420,12 +449,16 @@ function classifyChanges(
     );
   // An incomplete list, or any shared infrastructure, runs everything. A Lab
   // entry file of a Lab-only change is not shared infrastructure for it.
-  const fullSuite =
+  const sharedInfra = allPaths.filter(
+    filePath =>
+      isSharedInfraPath(filePath) && !(labOnly && labEntries.has(filePath)),
+  );
+  const fullSuite = !complete || sharedInfra.length > 0;
+  // The Vitest lanes run every test unless every shared path is one the
+  // module graph reaches.
+  const vitestFullSuite =
     !complete ||
-    allPaths.some(
-      filePath =>
-        isSharedInfraPath(filePath) && !(labOnly && labEntries.has(filePath)),
-    );
+    sharedInfra.some(filePath => !isVitestGraphInfraPath(filePath));
   return {
     specOnly,
     toolingOnly,
@@ -435,6 +468,7 @@ function classifyChanges(
     docsiteOnly,
     labOnly,
     fullSuite,
+    vitestFullSuite,
     surfaces,
     complete,
     reason: !complete
@@ -529,7 +563,7 @@ if (require.main === module) {
         throw new Error('GITHUB_OUTPUT is required with --github-output.');
       fs.appendFileSync(
         outputPath,
-        `spec_only=${result.specOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\n`,
+        `spec_only=${result.specOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\nvitest_full_suite=${result.vitestFullSuite}\n`,
       );
     } else {
       process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -543,12 +577,14 @@ module.exports = {
   ROUTES_LOCK,
   NODE_TOOLING_PATHS,
   SURFACES,
+  VITEST_CONFIG_SCRIPTS,
   classifyChanges,
   classifyPaths,
   isKnowledgeRecordPath,
   isNodeToolingPath,
   isPackageReleasePath,
   isSharedInfraPath,
+  isVitestGraphInfraPath,
   isLabEntryChange,
   isSpecRecordPath,
   labRouteSlug,
