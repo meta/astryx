@@ -53,7 +53,6 @@ import {useKeepLayerOpenProps, type LayerPlacement} from '../Layer/useLayer';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Spinner} from '../Spinner';
 import {PanelSearchInput} from '../Field/PanelSearchInput';
-import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {
@@ -67,7 +66,6 @@ import {
   fontWeightVars,
   typeScaleVars,
   borderVars,
-  focusVars,
 } from '../theme/tokens.stylex';
 import type {SelectorOptionType, SelectorOptionData} from './types';
 import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
@@ -458,7 +456,7 @@ const styles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     textAlign: 'start',
-    outlineStyle: 'none',
+    outline: 'none',
   },
   itemContent: {
     display: 'flex',
@@ -490,15 +488,6 @@ const styles = stylex.create({
   },
   itemHighlighted: {
     backgroundColor: colorVars['--color-overlay-hover'],
-  },
-  // The fill alone does not reach 3:1 against the listbox. After keyboard
-  // input, the active option also draws the standard focus ring, inside the
-  // row by its own width, as a focused menu row does.
-  itemKeyboardHighlighted: {
-    outlineWidth: focusVars['--focus-outline-width'],
-    outlineStyle: focusVars['--focus-outline-style'],
-    outlineColor: focusVars['--focus-outline-color'],
-    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   itemSelected: {
     fontWeight: fontWeightVars['--font-weight-medium'],
@@ -931,8 +920,6 @@ interface SelectorOptionRowProps {
   flatIndex: number;
   id: string;
   isHighlighted: boolean;
-  /** The highlight came from keyboard input, so the row draws the focus ring. */
-  isKeyboardHighlighted: boolean;
   isSelected: boolean;
   size: SelectorSize;
   indicatorPosition: IndicatorPosition;
@@ -951,7 +938,6 @@ const SelectorOptionRow = memo(function SelectorOptionRow({
   flatIndex,
   id,
   isHighlighted,
-  isKeyboardHighlighted,
   isSelected,
   size,
   indicatorPosition,
@@ -1012,7 +998,6 @@ const SelectorOptionRow = memo(function SelectorOptionRow({
           styles.item,
           itemSizeStyles[size],
           isHighlighted && styles.itemHighlighted,
-          isKeyboardHighlighted && styles.itemKeyboardHighlighted,
           isSelected && styles.itemSelected,
           item.disabled && styles.itemDisabled,
         ),
@@ -1497,10 +1482,10 @@ export function Selector<T extends SelectorOptionType>(
     highlightedIndex,
     setHighlightedIndex,
     getItemId,
-    onTriggerClick: comboboxTriggerClick,
-    onKeyDown: comboboxKeyDown,
+    onTriggerClick,
+    onKeyDown,
     onItemSelect,
-    onItemMouseEnter: comboboxItemMouseEnter,
+    onItemMouseEnter,
   } = useCombobox({
     selectableItems: filteredItems,
     // The optimistic value, not the raw prop: with a pending changeAction the
@@ -1518,23 +1503,6 @@ export function Selector<T extends SelectorOptionType>(
     onSearchSeed: appendSearchQuery,
     listboxId,
   });
-
-  // Only after keyboard input does the active option draw the focus ring; a
-  // pointer highlight keeps the fill alone, as a focused menu row does.
-  const {
-    isKeyboardHighlight: isHighlightFromKeyboard,
-    noteHighlightMove,
-    onKeyDown,
-    onItemMouseEnter,
-  } = useKeyboardHighlight(
-    triggerModality.readModality,
-    comboboxKeyDown,
-    comboboxItemMouseEnter,
-  );
-  const onTriggerClick = useCallback(() => {
-    comboboxTriggerClick();
-    noteHighlightMove();
-  }, [comboboxTriggerClick, noteHighlightMove]);
 
   // Type-to-select, shared with the other collections (menus, listboxes).
   // Open, it walks the highlight — aria-activedescendant announces each match.
@@ -1612,7 +1580,6 @@ export function Selector<T extends SelectorOptionType>(
       if (isDisabled || isEffectivelyReadOnly) {
         return;
       }
-      noteHighlightMove();
       // With hasSearch the query input owns typing, so type-to-select is off.
       if (!hasSearch && typeahead.onKeyDown(e)) {
         e.preventDefault();
@@ -1620,14 +1587,7 @@ export function Selector<T extends SelectorOptionType>(
       }
       onKeyDown(e);
     },
-    [
-      isDisabled,
-      isEffectivelyReadOnly,
-      hasSearch,
-      typeahead,
-      onKeyDown,
-      noteHighlightMove,
-    ],
+    [isDisabled, isEffectivelyReadOnly, hasSearch, typeahead, onKeyDown],
   );
 
   // Highlight scrolling (and its hover/keyboard split) lives in useCombobox.
@@ -1769,9 +1729,6 @@ export function Selector<T extends SelectorOptionType>(
         flatIndex={flatIndex}
         id={getItemId(flatIndex)}
         isHighlighted={flatIndex === highlightedIndex}
-        isKeyboardHighlighted={
-          flatIndex === highlightedIndex && isHighlightFromKeyboard
-        }
         isSelected={item.value === normalizedValue}
         size={size}
         indicatorPosition={indicatorPosition}
@@ -1785,7 +1742,6 @@ export function Selector<T extends SelectorOptionType>(
       renderOption,
       indicatorPosition,
       highlightedIndex,
-      isHighlightFromKeyboard,
       size,
       normalizedValue,
       getItemId,
