@@ -535,39 +535,39 @@ export function interceptCore(coreThemeModule, coreRootModule) {
         if (themeExports && !wrap(themeExports)) covered = false;
       }
 
-      // The root loads all of Core, so it is wrapped when this load first
-      // requires it (a `.cjs` dependency, or the virtual module's own loader),
-      // not before: every CommonJS require goes through `Module._load`, which
-      // is watched for the load's duration. A load that never requires the
-      // root leaves no path through it to observe.
+      // The root loads all of Core, so it is wrapped only once this load
+      // requires it. Every CommonJS require goes through `Module._load`,
+      // which is watched for the load's duration. The watch reads the require
+      // cache, where the root's file is keyed by its real path. So any
+      // request that loads that file counts, however it is spelled. A load
+      // that never requires the root leaves no path through it to observe.
       if (rootFile) {
         /** @type {any} */
         const loader = Module;
-        const load = loader._load;
-        let seen = false;
-        loader._load = function (
-          /** @type {string} */ request,
-          /** @type {any} */ parent,
-          /** @type {boolean} */ isMain,
-        ) {
-          const exports = load.apply(this, arguments);
-          if (
-            !seen &&
-            typeof request === 'string' &&
-            request.includes('@astryxdesign/core')
-          ) {
-            // The request just loaded, so it resolves.
-            const resolved = loader._resolveFilename(request, parent, isMain);
-            if (resolved === rootFile) {
-              seen = true;
-              if (!wrap(exports)) covered = false;
-            }
-          }
-          return exports;
+        /** Wraps the root if its file has loaded; false while it has not. */
+        const wrapLoadedRoot = () => {
+          const loaded = loader._cache[rootFile];
+          if (!loaded) return false;
+          if (!wrap(loaded.exports)) covered = false;
+          return true;
         };
-        undo.push(() => {
-          loader._load = load;
-        });
+        if (!wrapLoadedRoot()) {
+          const load = loader._load;
+          /** @this {any} @param {...any} args */
+          const watch = function (...args) {
+            const exports = load.apply(this, args);
+            if (loader._load === watch && wrapLoadedRoot()) {
+              loader._load = load;
+            }
+            return exports;
+          };
+          loader._load = watch;
+          // Theme loads never overlap: each caller awaits one at a time. The
+          // watch is still removed only while it is the one installed.
+          undo.push(() => {
+            if (loader._load === watch) loader._load = load;
+          });
+        }
       }
       return {
         /** Read after the load: a root required during it counts. */

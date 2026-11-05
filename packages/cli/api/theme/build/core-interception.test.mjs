@@ -4,13 +4,12 @@
  * @file core-interception.test.mjs
  * @input interceptCore with a stand-in theme namespace and a root loader; jiti
  *   evaluating modules through the interception's virtual modules
- * @output The root namespace is read only when a theme module requires the
- *   root, once, with its own exports and `defineTheme` wrapped; a Core with
- *   no root entry gives the theme namespace; `patchCommonJs` skips a Core
- *   entry that is absent, fails to load, or sits in a package config it
- *   cannot read, and still wraps the root when the load requires it; jiti
- *   reads a virtual module only when a module requires it, so a theme that
- *   imports only the theme subpath never loads the root
+ * @output The root namespace is read once, only when a theme module requires
+ *   the root, with its own exports and `defineTheme` wrapped. A Core with no
+ *   root entry gives the theme namespace. `patchCommonJs` skips a Core entry
+ *   that is absent or fails to load, and the entries of an unreadable package
+ *   config. It wraps the root whatever request loads its file. A theme that
+ *   imports only the theme subpath never loads the root through jiti.
  * @position Unit test of packages/cli/api/theme/build/core-interception.mjs
  */
 
@@ -139,6 +138,36 @@ describe("Core's entries", () => {
     try {
       // A `.cjs` dependency beside the theme requires the root during the load.
       const root = createRequire(theme)('@astryxdesign/core');
+      expect(interception.observed(root.defineTheme({name: 'reef'}))).toBe(
+        true,
+      );
+      expect(patch.covered).toBe(true);
+    } finally {
+      patch.undo();
+    }
+  });
+
+  it('patchCommonJs wraps the root whatever request loads its file', () => {
+    // A vendored Core linked into node_modules: a `.cjs` dependency can reach
+    // the root's file by a path that never names the package.
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-core-linked-'));
+    const vendored = path.join(dir, 'vendor', 'core');
+    fs.mkdirSync(vendored, {recursive: true});
+    fs.writeFileSync(path.join(vendored, 'package.json'), CORE_PACKAGE);
+    fs.writeFileSync(path.join(vendored, 'theme.cjs'), 'module.exports = {};');
+    fs.writeFileSync(
+      path.join(vendored, 'index.cjs'),
+      'module.exports = {defineTheme: input => ({...input, defined: true})};',
+    );
+    const scope = path.join(dir, 'node_modules', '@astryxdesign');
+    fs.mkdirSync(scope, {recursive: true});
+    fs.symlinkSync(vendored, path.join(scope, 'core'), 'dir');
+    const theme = path.join(dir, 'theme.ts');
+    fs.writeFileSync(theme, 'export {};\n');
+    const interception = interceptCore(themeNamespace(), null);
+    const patch = interception.patchCommonJs(theme);
+    try {
+      const root = createRequire(theme)('./vendor/core/index.cjs');
       expect(interception.observed(root.defineTheme({name: 'reef'}))).toBe(
         true,
       );
