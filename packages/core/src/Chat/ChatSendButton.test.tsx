@@ -263,6 +263,20 @@ describe('ChatSendButton', () => {
       expect(glyph()).toBeUndefined();
     });
 
+    it('treats sendIcon={null} as no override, so the theme mapping applies', () => {
+      render(
+        <Theme
+          theme={defineTheme({
+            name: 'send-slot-null-prop',
+            icons,
+            componentIcons: {'chat-send-button-send': 'clock'},
+          })}>
+          <ChatSendButton sendIcon={null} />
+        </Theme>,
+      );
+      expect(glyph()).toBe('clock');
+    });
+
     it('lets an explicit sendIcon win over the theme mapping', () => {
       render(
         <Theme
