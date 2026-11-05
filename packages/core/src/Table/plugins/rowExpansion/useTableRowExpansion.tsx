@@ -4,7 +4,8 @@
 
 /**
  * @file useTableRowExpansion.tsx
- * @input React, StyleX, Icon, Table types, table context (density), i18n
+ * @input React, StyleX, Icon, the theme's `table-row-expand` icon slot, Table
+ *   types, table context (density), i18n
  *   (useComponentTranslator)
  * @output Exports useTableRowExpansion hook + config type
  * @position Row-expansion plugin (detail panel); consumed by Table via plugins prop
@@ -39,6 +40,8 @@ import {tableRowMarker} from '../../table.stylex';
 import {panelDividerFor} from '../../rowDivider';
 import {useTheme, useThemeName} from '../../../theme/useTheme';
 import {Icon} from '../../../Icon';
+import {ComponentIcon} from '../../../Icon/ComponentIcon';
+import {iconBoxSizeStyles} from '../../../Icon/IconSize.stylex';
 import {VisuallyHidden} from '../../../VisuallyHidden';
 import {resolveContextActions} from '../../tableContextMenu';
 import {useTableContext} from '../../useTableCellStyles';
@@ -216,6 +219,21 @@ const expansionStyles = stylex.create({
       color: colorVars['--color-icon-primary'],
     },
   },
+  // The button takes its baseline from this fixed box. A theme's glyph size
+  // or a hidden glyph then keeps the row height. The box is the toggle's
+  // first child, which the glide gives its spring, so it carries the turn.
+  glyphBox: {
+    display: 'inline-block',
+    position: 'relative',
+    flexShrink: 0,
+  },
+  glyphCenter: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   chevron: {
     transitionProperty: 'transform',
     transitionDuration: durationVars['--duration-fast'],
@@ -387,16 +405,23 @@ function ExpansionChevron({
       }}
       aria-label={ariaLabel}
       aria-expanded={isExpanded}>
-      <Icon
-        icon="chevronRight"
-        size="xsm"
-        xstyle={[
+      <span
+        {...stylex.props(
+          expansionStyles.glyphBox,
+          iconBoxSizeStyles.xsm,
           expansionStyles.chevron,
           isExpanded
             ? expansionStyles.chevronExpanded
             : expansionStyles.chevronCollapsed,
-        ]}
-      />
+        )}>
+        <span {...stylex.props(expansionStyles.glyphCenter)}>
+          <ComponentIcon
+            slot="table-row-expand"
+            state={{expanded: isExpanded}}
+            fallback={{icon: 'chevronRight', size: 'xsm'}}
+          />
+        </span>
+      </span>
     </button>
   );
 }
