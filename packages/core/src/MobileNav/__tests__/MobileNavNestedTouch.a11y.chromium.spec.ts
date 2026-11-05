@@ -49,6 +49,7 @@ test('a Dialog opened inside the drawer keeps touch scrolling', async ({
   await expect(nav).toBeVisible();
   await page.waitForTimeout(600); // the slide-in
   await nav.getByRole('button', {name: 'Search'}).tap();
+  // The scrolling region of the Dialog's results, named while it scrolls.
   const results = page.getByRole('group', {name: 'Search results'});
   await expect(results).toBeVisible();
   await page.waitForTimeout(400);
