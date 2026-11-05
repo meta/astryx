@@ -123,9 +123,7 @@ registerEnglishFallback(english);
  */
 const MOST_ROWS_THAT_FIT = 12;
 
-// The overlay's block-start margin: a `min()` of the measured shift and the
-// software keyboard's term. The layer's margin reads it through this property.
-// Selector's own runtime state, never set by an app or a theme.
+// Private runtime state. No app or theme sets it.
 const OVERLAY_MARGIN_PROPERTY = '--_selector-overlay-margin';
 
 const styles = stylex.create({

@@ -189,7 +189,6 @@ export function useSelectedItemOffset({
 }
 
 interface SelectedItemOverlayMargin {
-  /** The overlay layer's block-start margin, or undefined for none. */
   marginBlockStart: string | undefined;
   isPositioned: boolean;
 }
