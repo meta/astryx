@@ -69,6 +69,103 @@ describe('run-named.sh', () => {
   });
 });
 
+describe('run-named.sh on a failing test run', () => {
+  // Vitest's shape: a FAIL line, the assertion, and the stack line naming the
+  // test file, with colour codes as a CI terminal gets them.
+  const vitestFailure = [
+    'printf "\\033[32m ✓\\033[39m |node| a.test.mjs (3 tests)\\n"',
+    'printf "\\033[31m FAIL \\033[39m |node| .github/scripts/ci-test-routing.test.mjs > ci.yml test routing > splits each lane\\n"',
+    'printf "AssertionError: expected 1 to be 2 // 100%% sure\\n"',
+    'printf " ❯ .github/scripts/ci-test-routing.test.mjs:287:45\\n"',
+    'printf " Test Files  1 failed | 1 passed (2)\\n"',
+    'exit 1',
+  ].join('; ');
+
+  it('prints the failure lines after the group and names the first failing file and line', () => {
+    const result = run(
+      'Tests that read source files',
+      '--',
+      'bash',
+      '-c',
+      vitestFailure,
+    );
+    expect(result.status).toBe(1);
+    const after = result.stdout.slice(result.stdout.indexOf('::endgroup::'));
+    expect(after).toContain(
+      'Tests that read source files failed. Its failure lines:',
+    );
+    expect(after).toContain(
+      ' FAIL  |node| .github/scripts/ci-test-routing.test.mjs > ci.yml test routing > splits each lane',
+    );
+    expect(after).toContain('AssertionError: expected 1 to be 2');
+    expect(after).not.toContain('\u001b[');
+    expect(after).not.toContain('a.test.mjs (3 tests)');
+    const error = after.split('\n').find(line => line.startsWith('::error '));
+    expect(error).toMatch(
+      /^::error file=\.github\/scripts\/ci-test-routing\.test\.mjs,line=287,title=Tests that read source files failed::Tests that read source files exited with status 1\. First failure: FAIL {2}\|node\| /,
+    );
+  });
+
+  it('escapes a percent sign in the annotation and keeps it on one line', () => {
+    const result = run(
+      'T',
+      '--',
+      'bash',
+      '-c',
+      'echo "Error: 100% broken"; exit 2',
+    );
+    const error = result.stdout
+      .split('\n')
+      .find(line => line.startsWith('::error '));
+    expect(error).toContain('First failure: Error: 100%25 broken');
+    expect(error).not.toContain('file=');
+  });
+
+  it('caps the failure lines at 30', () => {
+    const result = run(
+      'T',
+      '--',
+      'bash',
+      '-c',
+      'for i in $(seq 1 50); do echo " FAIL  |ui| f$i.test.tsx"; done; exit 1',
+    );
+    const after = result.stdout.slice(result.stdout.indexOf('::endgroup::'));
+    expect(
+      after.split('\n').filter(line => line.startsWith(' FAIL ')).length,
+    ).toBe(30);
+  });
+
+  it('reads the failure lines from standard error with --stdout', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-named-'));
+    try {
+      const file = path.join(dir, 'list.txt');
+      const result = run(
+        'List',
+        '--stdout',
+        file,
+        '--',
+        'bash',
+        '-c',
+        'echo listed; echo "Error: cannot read the list" >&2; exit 1',
+      );
+      expect(fs.readFileSync(file, 'utf8')).toBe('listed\n');
+      expect(result.stderr).toContain('Error: cannot read the list');
+      expect(result.stdout).toContain(
+        'List failed. Its failure lines:\nError: cannot read the list',
+      );
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('adds nothing but the old error when a failing command prints no failure line', () => {
+    const result = run('T', '--', 'bash', '-c', 'echo quiet; exit 4');
+    expect(result.stdout).toBe(
+      '::group::T\nquiet\n::endgroup::\n::error title=T failed::T exited with status 4. Its output is in the "T" group of this step\'s log.\n',
+    );
+  });
+});
+
 describe('the UI and Node test steps', () => {
   const workflow = YAML.parse(
     fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8'),
