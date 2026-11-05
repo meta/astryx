@@ -126,7 +126,7 @@ interface TemporalPlainDateConstructor {
   ): TemporalPlainDate;
   from(
     fields: CalendarDateFields & {calendar: string},
-    options: {overflow: 'reject' | 'constrain'},
+    options: {overflow: 'reject'},
   ): TemporalPlainDate;
 }
 
@@ -681,45 +681,18 @@ export function calendarMonthsBetween(
 }
 
 /**
- * The year of the calendar that a date falls in, and the position of its month
- * in that year (1 for the first month). Gregorian-aligned calendars count
- * Gregorian years; the others count the calendar's own years, as Temporal
- * does, so a Hebrew leap year has months 1 to 13.
- */
-export function calendarYearMonthOf(
-  calendar: CalendarSystem,
-  pd: PlainDate,
-): {readonly year: number; readonly month: number} {
-  if (isGregorianAligned(calendar)) {
-    return {year: pd.year, month: pd.month};
-  }
-  const {year, month} = inCalendar(calendar, pd);
-  return {year, month};
-}
-
-/**
- * The calendar month at a position in a year of the calendar, as
- * {@link calendarYearMonthOf} counts them. A position past the last month of
- * the year is the last month.
+ * The calendar month at a position in a year of the calendar. A
+ * Gregorian-aligned calendar counts Gregorian years here; the others count
+ * years as {@link calendarYearMonthOf} does.
  */
 export function calendarMonthOfYear(
   calendar: CalendarSystem,
   year: number,
   month: number,
 ): CalendarMonth {
-  if (isGregorianAligned(calendar)) {
-    return gregorianMonth(year, month);
-  }
-  const temporal = getTemporal();
-  if (temporal == null) {
-    throw new Error(`The "${calendar}" calendar needs Temporal.`);
-  }
-  return temporalMonth(
-    temporal.PlainDate.from(
-      {calendar, year, month, day: 1},
-      {overflow: 'constrain'},
-    ),
-  );
+  return isGregorianAligned(calendar)
+    ? gregorianMonth(year, month)
+    : calendarMonthFromYearMonth(calendar, {year, month});
 }
 
 /** The number of months in a year of the calendar. */

@@ -133,7 +133,7 @@ export function rowsIn({start, end}: PaneWindow): number[] {
 
 /**
  * Month indexes for one calendar. Years and month positions are the ones
- * `calendarYearMonthOf` counts.
+ * `calendarMonthOfYear` counts.
  */
 export interface MonthModel {
   readonly calendar: CalendarSystem;
@@ -199,7 +199,7 @@ function temporalMonthModel(calendar: CalendarSystem): MonthModel {
     calendar,
     indexOf,
     monthAt,
-    yearMonthAt: index => calendarYearMonthOf(calendar, monthAt(index).start),
+    yearMonthAt: index => calendarYearMonthOf(calendar, monthAt(index)),
     indexOfYearMonth: (year, month) =>
       indexOf(calendarMonthOfYear(calendar, year, month).start),
     monthsInYear: year => calendarMonthsInCalendarYear(calendar, year),

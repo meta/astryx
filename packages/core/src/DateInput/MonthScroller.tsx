@@ -42,7 +42,7 @@ import {
 } from 'react';
 import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
-import {useCalendarMonthDays} from '../Calendar/hooks/useCalendarDays';
+import {useCalendarDays} from '../Calendar/hooks/useCalendarDays';
 import {useDirection} from '../i18n/useDirection';
 import {useLocale} from '../i18n/useLocale';
 import {
@@ -69,6 +69,7 @@ import {
   type ReducedMotionDip,
 } from '../motion/reducedMotion';
 import {
+  calendarYearMonthOf,
   formatCalendarDate,
   formatCalendarMonthLabel,
   isInCalendarMonth,
@@ -928,8 +929,8 @@ function MonthPane({
     () => monthModel.monthAt(monthIndex),
     [monthModel, monthIndex],
   );
-  const {weeks} = useCalendarMonthDays({
-    month,
+  const {weeks} = useCalendarDays({
+    ...calendarYearMonthOf(calendar, month),
     calendar,
     weekStartsOn,
     // Always six rows: a variable grid would make pane heights differ, and
