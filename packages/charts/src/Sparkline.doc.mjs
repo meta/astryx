@@ -17,7 +17,7 @@ export const docs = {
 
   usage: {
     description:
-      'Sparkline is a compact label-free trend graphic for tables, metric tiles, and list rows. It renders one line with an optional area fill and no axes, grid, or legend. Pair it with MetricTile through the trend slot.',
+      'Sparkline is a compact label-free trend graphic for tables, metric tiles, and list rows. It renders one line with an optional area fill and no axes, grid, or legend.',
     bestPractices: [
       {
         guidance: true,
