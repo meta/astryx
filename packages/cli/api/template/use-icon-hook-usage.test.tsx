@@ -71,4 +71,18 @@ describe('useIcon example', () => {
       rowIcons('Current theme').map(icon => icon.innerHTML),
     );
   });
+
+  it("keeps the page's color mode inside the overriding Theme", () => {
+    act(() =>
+      root?.render(
+        <Theme theme={appTheme} mode="dark">
+          <UseIconHookUsage />
+        </Theme>,
+      ),
+    );
+    const nested = container.querySelector(
+      '[data-astryx-theme="status-icons-docs"]',
+    );
+    expect(nested?.getAttribute('data-theme')).toBe('dark');
+  });
 });

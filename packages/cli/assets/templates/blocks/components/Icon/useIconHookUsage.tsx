@@ -10,7 +10,7 @@ import {
 import {useIcon} from '@astryxdesign/core/Icon';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
-import {Theme, defineTheme} from '@astryxdesign/core/theme';
+import {Theme, defineTheme, useTheme} from '@astryxdesign/core/theme';
 
 const statusIconTheme = defineTheme({
   name: 'status-icons-docs',
@@ -45,6 +45,8 @@ function StatusRow() {
 }
 
 export default function UseIconHookUsage() {
+  const {mode} = useTheme();
+
   return (
     <VStack gap={4}>
       <VStack gap={2}>
@@ -53,7 +55,7 @@ export default function UseIconHookUsage() {
         </Text>
         <StatusRow />
       </VStack>
-      <Theme theme={statusIconTheme}>
+      <Theme theme={statusIconTheme} mode={mode}>
         <VStack gap={2}>
           <Text type="supporting" color="secondary">
             Theme with its own status icons
