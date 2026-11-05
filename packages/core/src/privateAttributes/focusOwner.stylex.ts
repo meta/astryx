@@ -47,5 +47,5 @@ const styles = stylex.create({
   },
 });
 
-/** The wrapper's ring. Spread it first; caller styles that follow keep it. */
+/** The wrapper's focus ring. */
 export const focusWithinOwner = styles.focusWithinOwner;

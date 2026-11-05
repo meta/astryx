@@ -2158,7 +2158,9 @@ export function Selector<T extends SelectorOptionType>(
             variant !== 'input' && interactionOverlayStyles.backgroundImage,
             // Rings for the trigger button only. The clear and status
             // buttons ring themselves.
-            variant !== 'input' && focusWithinOwner,
+            variant !== 'input' &&
+              !surface.isTriggerFocusRingSuppressed &&
+              focusWithinOwner,
             surface.isTriggerFocusRingSuppressed &&
               selectorPresentationStyles.pointerRestoredFocus,
             isDisabled && inputWrapperStyles.disabled,
