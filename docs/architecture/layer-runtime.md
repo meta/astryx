@@ -109,6 +109,14 @@ layer:
 A React portal changes DOM placement. It is not itself a top-layer host and
 cannot use `z-index` to outrank a native modal dialog.
 
+An app's own portal to `document.body`, opened from inside a native modal,
+lands in content that the modal makes inert, so the person cannot reach it. An
+overlay nested in a Core modal renders through a Core layer (Popover,
+DropdownMenu, `useLayer`, or a nested Dialog), which stays inside the modal's
+top-layer subtree. UI that a browser extension injects outside the modal is
+inert by the same platform rule. Core documents this limitation and does not
+work around it.
+
 `useLayer` keeps a context layer at its JSX position when that position is safe.
 When parsing, interactive-content, or inline-formatting constraints make that
 position unsafe, it portals only beyond the outermost unsafe ancestor. A
