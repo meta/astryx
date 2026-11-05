@@ -22,8 +22,7 @@ const formatTooltipLines = (
   date: Parameters<typeof formatTooltipLinesForLocale>[0],
   entries: Parameters<typeof formatTooltipLinesForLocale>[1],
   defaultTimezoneID?: Parameters<typeof formatTooltipLinesForLocale>[3],
-) =>
-  formatTooltipLinesForLocale(date, entries, 'en-US', defaultTimezoneID);
+) => formatTooltipLinesForLocale(date, entries, 'en-US', defaultTimezoneID);
 
 /** 2026-02-19T17:00:00Z — chosen so several zones land on different dates. */
 const INSTANT = new Date('2026-02-19T17:00:00Z');
