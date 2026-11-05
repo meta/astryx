@@ -1367,3 +1367,59 @@ describe('review follow-ups', () => {
     }
   });
 });
+
+describe('review follow-ups, round two', () => {
+  it('evaluates the predicate once per row on mount', () => {
+    const getIsItemActivatable = vi.fn(() => true);
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: null,
+        onActivate: () => {},
+        getIsItemActivatable,
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    render(<Harness />);
+    // Once per row in the transform; the mount apply reuses that result and
+    // the mount notify reaches no bucket for a null key.
+    expect(getIsItemActivatable).toHaveBeenCalledTimes(3);
+  });
+
+  it('warns once for rows with no usable identity value', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    __resetDevWarnings();
+    const onActivate = vi.fn();
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: 'undefined',
+        onActivate,
+      });
+      return (
+        <Table
+          data={[{name: 'No id', team: 'Core'}] as Member[]}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    try {
+      render(<Harness />);
+      expect(bodyRows()[0].hasAttribute('data-active')).toBe(false);
+      expect(
+        warn.mock.calls.some(call =>
+          String(call[0]).includes('no usable idKey value'),
+        ),
+      ).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});

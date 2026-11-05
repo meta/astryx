@@ -126,6 +126,11 @@ function createActivationStore<T extends Record<string, unknown>>(
       bucket.add(listener);
       return () => {
         bucket.delete(listener);
+        // Empty buckets leave the map: the store keeps no entry for a row
+        // id it no longer serves.
+        if (bucket.size === 0) {
+          buckets.delete(key);
+        }
       };
     },
     notify() {
@@ -169,6 +174,12 @@ const activeBarColor = colorVars['--color-accent'];
 /** Width of the leading-edge active bar, the non-colour active cue. */
 const ACTIVE_BAR_WIDTH_PX = 3;
 
+/** Whether a row already exposes current state this module must not overwrite. */
+function hasCompetingCurrentOwner(row: Element | null): boolean {
+  const current = row?.getAttribute('aria-current');
+  return current != null && current !== 'true';
+}
+
 /**
  * Apply or remove active styling on a `<tr>` element.
  *
@@ -181,11 +192,6 @@ const ACTIVE_BAR_WIDTH_PX = 3;
  * outline, which draws over the cell in a system color. No selection
  * semantics are inferred: `aria-selected` is never written here.
  */
-/** Whether a row already exposes current state this module must not overwrite. */
-function hasCompetingCurrentOwner(row: Element | null): boolean {
-  const current = row?.getAttribute('aria-current');
-  return current != null && current !== 'true';
-}
 
 function applyRowActivationStyle(
   row: HTMLTableRowElement,
@@ -343,15 +349,6 @@ function shouldSuppressActivation(
 }
 
 /**
- * Whether a live text selection intersects the row. Every selected range is
- * checked, so a multi-range selection (one range per table cell in some
- * browsers) suppresses the click when any range touches the row. Endpoints
- * are compared in document order rather than through
- * `selection.containsNode`: equivalent semantics, and jsdom's `containsNode`
- * answers true for disjoint nodes, which would make any page selection block
- * every row under test.
- */
-/**
  * Whether two selection ends intersect the row: either end inside it, or the
  * ends on opposite sides of it in document order (a drag spanning across the
  * row). Pure over the end nodes so tests can pin the geometry without
@@ -380,6 +377,15 @@ export function selectionEndsIntersectRow(
   return (anchorBefore && focusAfter) || (anchorAfter && focusBefore);
 }
 
+/**
+ * Whether a live text selection intersects the row. Every selected range is
+ * checked, so a multi-range selection (one range per table cell in some
+ * browsers) suppresses the click when any range touches the row. Endpoints
+ * are compared in document order rather than through
+ * `selection.containsNode`: equivalent semantics, and jsdom's `containsNode`
+ * answers true for disjoint nodes, which would make any page selection block
+ * every row under test.
+ */
 function selectionIntersectsRow(row: Element): boolean {
   if (typeof document === 'undefined' || !('getSelection' in document)) {
     return false;
@@ -553,8 +559,7 @@ export function useTableActivation<T extends Record<string, unknown>>(
           if (!row) {
             return;
           }
-          const applyStyle = () => {
-            const eligibleNow = isEligibleNow();
+          const applyStyle = (eligibleNow: boolean) => {
             // Keyboard affordances follow the same liveness as paint and
             // presses: a row a later plugin marked current, or one the
             // caller predicate now excludes, is not a tab stop and
@@ -574,14 +579,17 @@ export function useTableActivation<T extends Record<string, unknown>>(
               eligibleNow && key === store.getConfig().activeKey,
             );
           };
-          applyStyle();
+          // The first apply reuses the render-time eligibility above, so the
+          // caller predicate runs once per row on mount; later notifies
+          // re-resolve it live.
+          applyStyle(eligible);
           const unsubscribe = store.subscribe(key, () => {
             if (!row.isConnected) {
               clearRowActivationStyle(row);
               unsubscribe();
               return;
             }
-            applyStyle();
+            applyStyle(isEligibleNow());
           });
           return () => {
             clearRowActivationStyle(row);

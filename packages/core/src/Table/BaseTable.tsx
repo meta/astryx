@@ -666,6 +666,22 @@ function BaseTableInner<T extends Record<string, unknown>>({
         'so identity-dependent behavior is inert. Pass a stable unique idKey.',
     );
   }
+  // Rows with no usable identity value stay inert with a deterministic
+  // per-record fallback; duplicates warn above, so this covers the missing
+  // and invalid remainder with one development diagnostic.
+  if (
+    canonicalIdentityOptIn &&
+    idKey != null &&
+    hasData &&
+    canonicalKeys.some(key => key === undefined)
+  ) {
+    warnOnce(
+      'table-missing-row-key',
+      'Table',
+      'Table rows have no usable idKey value, so those rows carry no stable identity. ' +
+        'Give every row a usable id.',
+    );
+  }
 
   let tableElement: ReactNode = (
     <table
