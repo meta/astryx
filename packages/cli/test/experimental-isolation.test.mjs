@@ -1322,8 +1322,26 @@ describe('with icon sets installed but no experimental.iconSet, stable output is
     expect(readers.sort()).toEqual(Object.keys(ICON_SET_READERS).sort());
   });
 
+  // Doctor looks for Core's peers in the node_modules of a fixed number of
+  // folders above the project, and that search can leave the checkout. In a
+  // checkout nested inside another checkout's folder, it finds the outer
+  // install. So the project installs each peer itself, from Core's own
+  // install, and the result does not depend on where the checkout is.
   it('doctor reports nothing about an invalid installed set', async () => {
     const cwd = installed('doctor', '{nope');
+    const core = path.join(PROJECTS_ROOT, 'packages', 'core');
+    const {peerDependencies} = JSON.parse(
+      fs.readFileSync(path.join(core, 'package.json'), 'utf8'),
+    );
+    for (const name of Object.keys(peerDependencies)) {
+      const link = path.join(cwd, 'node_modules', ...name.split('/'));
+      fs.mkdirSync(path.dirname(link), {recursive: true});
+      fs.symlinkSync(
+        fs.realpathSync(path.join(core, 'node_modules', ...name.split('/'))),
+        link,
+        'dir',
+      );
+    }
     const res = astryx(['doctor', '--json'], cwd);
     expect(res.stdout).not.toMatch(/icon/i);
     await expect(withoutComputerChecks(res.stdout)).toMatchFileSnapshot(
