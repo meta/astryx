@@ -11,6 +11,8 @@
  *   read from its frames, `pooledBusyProof`, which judges several short
  *   blocks as one, and `BusyWindowTooLateError`, for a block that began
  *   after the motion it was meant to catch had ended.
+ *   `trackControl` and `controlClock` read the control's box and its own
+ *   clock from the screencast, a second control's too (`ahead`).
  * @position The busy-main-thread proof: an animation that runs on the
  *   compositor keeps advancing at display rate while JavaScript holds the main
  *   thread; one driven from the main thread (rAF, style writes, layout
@@ -22,14 +24,58 @@
 
 import type {Locator, Page} from '@playwright/test';
 import {defineCurveEnd} from './curve-end';
-import {frameStats, type FrameStats, type TrackedFrame} from './frames';
+import {
+  frameStats,
+  trackMarker,
+  type CastFrame,
+  type FrameStats,
+  type TrackedFrame,
+} from './frames';
 
 /** The control's colour, apart from the component's marker (`MARKER_RGB`). */
 export const CONTROL_RGB: readonly [number, number, number] = [0, 255, 255];
 
-/** The control box's side, and how far it travels along the top edge, CSS px. */
-const CONTROL_SIDE = 12;
+/**
+ * The control box's side, CSS px: it crosses the page's top `CONTROL_SIDE` px,
+ * where a proof reads nothing of the component.
+ */
+export const CONTROL_SIDE = 12;
+/** How far the control travels along the top edge, CSS px. */
 const CONTROL_TRAVEL = 240;
+/** How long the control takes to travel `CONTROL_TRAVEL` one way, ms. */
+const CONTROL_LEG_MS = 400;
+/**
+ * The colour of the control ahead (`startBusyControl`'s `ahead`), apart from
+ * the first control's and the component's marker.
+ */
+export const AHEAD_CONTROL_RGB: readonly [number, number, number] = [
+  128, 0, 255,
+];
+/** Where the strip of the control ahead starts, CSS px: below the first's. */
+const AHEAD_TOP = CONTROL_SIDE + 4;
+/** How far the control ahead runs ahead of the first, ms: half a leg. */
+const AHEAD_MS = CONTROL_LEG_MS / 2;
+
+/**
+ * The control in each frame (`startBusyControl`'s box): `trackMarker` with
+ * `CONTROL_RGB`, searching only the strip the box crosses. With `ahead`, the
+ * control ahead, with `AHEAD_CONTROL_RGB` in its own strip.
+ */
+export async function trackControl(
+  page: Page,
+  frames: readonly CastFrame[],
+  {ahead = false}: {ahead?: boolean} = {},
+): Promise<TrackedFrame[]> {
+  return trackMarker(page, frames, {
+    rgb: ahead ? AHEAD_CONTROL_RGB : CONTROL_RGB,
+    region: {
+      x: 0,
+      y: ahead ? AHEAD_TOP - 2 : 0,
+      width: CONTROL_SIDE + CONTROL_TRAVEL + 4,
+      height: CONTROL_SIDE + 4,
+    },
+  });
+}
 
 /**
  * Starts a plain compositor-only control animation: a `CONTROL_RGB` box in the
@@ -53,14 +99,32 @@ const CONTROL_TRAVEL = 240;
  * compositor; see `blockMainThread`). Keep the component's marker out of the
  * strip it crosses (the top `CONTROL_SIDE` px, `CONTROL_SIDE +
  * CONTROL_TRAVEL` px wide).
+ *
+ * It resolves with `start`, the animation's start on the page clock (epoch
+ * ms). The control's own time at a frame, past this start, is that frame's
+ * time on the page clock (`controlClock`).
+ *
+ * With `ahead`, it starts a second control after the first: the same box in
+ * `AHEAD_CONTROL_RGB`, in the strip below, half a leg (200 ms) ahead.
+ * `controlClock` reads no frame within `CONTROL_EDGE` px of a turn. Wherever
+ * the first control is there, the one ahead is mid-leg, so the two read
+ * every frame. Track it with `trackControl(page, frames, {ahead: true})`, and
+ * keep the marker out of its strip too (the top `2 * CONTROL_SIDE + 4` px).
  */
 export async function startBusyControl(
   page: Page,
   {
-    rgb = CONTROL_RGB,
+    ahead = false,
+    rgb = ahead ? AHEAD_CONTROL_RGB : CONTROL_RGB,
     within,
-  }: {rgb?: readonly [number, number, number]; within?: Locator} = {},
+  }: {
+    ahead?: boolean;
+    rgb?: readonly [number, number, number];
+    within?: Locator;
+  } = {},
 ): Promise<{
+  /** The control's start on the page clock, epoch ms. */
+  readonly start: number;
   readonly raise: () => Promise<void>;
   readonly remove: () => Promise<void>;
 }> {
@@ -69,14 +133,14 @@ export async function startBusyControl(
       host.setAttribute('data-harness-control-host', ''),
     );
   }
-  await page.evaluate(
-    ({color, side, travel}) =>
-      new Promise<void>((resolve, reject) => {
+  const start = await page.evaluate(
+    ({color, side, travel, legMs, top, aheadMs}) =>
+      new Promise<number>((resolve, reject) => {
         const host = document.querySelector('[data-harness-control-host]');
         host?.removeAttribute('data-harness-control-host');
         const box = document.createElement('div');
-        box.setAttribute('data-harness-control', '');
-        box.style.cssText = `position:fixed;inset:auto;left:0;top:0;margin:0;padding:0;border:0;overflow:visible;width:${side}px;height:${side}px;background:rgb(${color.join(',')});z-index:2147483647;pointer-events:none;`;
+        box.setAttribute('data-harness-control', aheadMs > 0 ? 'ahead' : '');
+        box.style.cssText = `position:fixed;inset:auto;left:0;top:${top}px;margin:0;padding:0;border:0;overflow:visible;width:${side}px;height:${side}px;background:rgb(${color.join(',')});z-index:2147483647;pointer-events:none;`;
         if (host == null) {
           box.setAttribute('popover', 'manual');
           document.body.appendChild(box);
@@ -90,7 +154,7 @@ export async function startBusyControl(
             {transform: `translateX(${travel}px)`},
           ],
           {
-            duration: 400,
+            duration: legMs,
             iterations: Infinity,
             direction: 'alternate',
             easing: 'linear',
@@ -117,12 +181,38 @@ export async function startBusyControl(
           );
           return;
         }
+        if (aheadMs > 0) {
+          // Half a leg ahead of the first control, on the same timeline.
+          const first = [
+            ...document.querySelectorAll('[data-harness-control=""]'),
+          ]
+            .map(el => el.getAnimations()[0])
+            .find(running => running?.startTime != null);
+          if (first == null) {
+            box.remove();
+            reject(
+              new Error(
+                'startBusyControl: start the first control before the one ahead',
+              ),
+            );
+            return;
+          }
+          animation.startTime = Number(first.startTime) - aheadMs;
+        }
         const frame = gate?.frame ?? window.requestAnimationFrame.bind(window);
         const realNow = gate?.now ?? (() => performance.now());
         const deadline = realNow() + 5_000;
+        // The one ahead starts running at once: give it a frame on the
+        // compositor too.
+        let ticks = 0;
         const tick = () => {
-          if (!animation.pending && Number(animation.currentTime ?? 0) >= 16) {
-            resolve();
+          ticks += 1;
+          if (
+            !animation.pending &&
+            Number(animation.currentTime ?? 0) >= 16 &&
+            (aheadMs === 0 || ticks >= 2)
+          ) {
+            resolve(performance.timeOrigin + Number(animation.startTime));
           } else if (realNow() > deadline) {
             reject(new Error('startBusyControl: the control did not start'));
           } else {
@@ -131,9 +221,17 @@ export async function startBusyControl(
         };
         frame(tick);
       }),
-    {color: [...rgb], side: CONTROL_SIDE, travel: CONTROL_TRAVEL},
+    {
+      color: [...rgb],
+      side: CONTROL_SIDE,
+      travel: CONTROL_TRAVEL,
+      legMs: CONTROL_LEG_MS,
+      top: ahead ? AHEAD_TOP : 0,
+      aheadMs: ahead ? AHEAD_MS : 0,
+    },
   );
   return {
+    start,
     raise: () =>
       page.evaluate(() => {
         for (const box of document.querySelectorAll<HTMLElement>(
@@ -150,6 +248,95 @@ export async function startBusyControl(
         }
       }),
   };
+}
+
+/** How far a frame's stamp may run late and still agree with the others, ms. */
+const CONTROL_AGREE_MS = 20;
+/**
+ * Frames this near a turn get no reading. There the two times that a position
+ * gives are under 120 ms apart, and a stamp 60 ms late could pick either.
+ */
+const CONTROL_EDGE = 36;
+
+/**
+ * The compositor's clock in each frame of `control` (`startBusyControl`'s box,
+ * tracked with `trackControl`), ms. The compositor samples every animation at
+ * one time in a frame. So a component can be judged against this clock, not
+ * the screencast's stamps. A loaded machine can stamp a frame late, and
+ * `inPresentationOrder` then puts it after frames that it came before.
+ *
+ * The box's position gives two times a cycle, on the way out and on the way
+ * back. The cycle's origin is the one that the most frames agree with, each
+ * within `CONTROL_AGREE_MS` of one of its two times. So no single frame sets
+ * it. Each frame's stamp, measured from that origin, then picks its own time.
+ * A late or reordered frame moves only its own reading, and a gap moves none.
+ *
+ * A frame without the box gets no reading, and so does a frame within
+ * `CONTROL_EDGE` px of a turn. There a control started `ahead` is mid-leg:
+ * read it with its own clock. A frame that repeats the position before it
+ * shows no new time, so it gets none either. Readings count up from the
+ * origin a whole cycle or less before the first reading.
+ */
+export function controlClock(
+  control: readonly TrackedFrame[],
+): Map<number, number> {
+  const cycle = 2 * CONTROL_LEG_MS;
+  const usable = control.flatMap((frame, i) => {
+    const x = frame.box?.x;
+    const before = i > 0 ? control[i - 1].box?.x : undefined;
+    if (
+      x == null ||
+      x < CONTROL_EDGE ||
+      x > CONTROL_TRAVEL - CONTROL_EDGE ||
+      (before != null && Math.abs(x - before) <= 0.25)
+    ) {
+      return [];
+    }
+    const out = (x / CONTROL_TRAVEL) * CONTROL_LEG_MS;
+    return [{t: frame.t, out, back: cycle - out}];
+  });
+  const clock = new Map<number, number>();
+  if (usable.length === 0) {
+    return clock;
+  }
+  const onCycle = (a: number, b: number) => {
+    const d = Math.abs(a - b) % cycle;
+    return Math.min(d, cycle - d);
+  };
+  let origin = 0;
+  let agreeing = -1;
+  let spread = Number.POSITIVE_INFINITY;
+  for (let candidate = 0; candidate < cycle; candidate += 1) {
+    let count = 0;
+    let sum = 0;
+    for (const frame of usable) {
+      const phase = frame.t - candidate;
+      const d = Math.min(onCycle(phase, frame.out), onCycle(phase, frame.back));
+      if (d <= CONTROL_AGREE_MS) {
+        count += 1;
+        sum += d;
+      }
+    }
+    if (count > agreeing || (count === agreeing && sum < spread)) {
+      origin = candidate;
+      agreeing = count;
+      spread = sum;
+    }
+  }
+  const first = Math.min(...usable.map(frame => frame.t));
+  const anchored = origin + Math.floor((first - origin) / cycle) * cycle;
+  for (const frame of usable) {
+    const expected = frame.t - anchored;
+    const nearest = (ms: number) =>
+      ms + Math.round((expected - ms) / cycle) * cycle;
+    const out = nearest(frame.out);
+    const back = nearest(frame.back);
+    clock.set(
+      frame.t,
+      Math.abs(out - expected) <= Math.abs(back - expected) ? out : back,
+    );
+  }
+  return clock;
 }
 
 /** What the control presented in the judged part (see `busyWindowProof`). */
@@ -618,8 +805,10 @@ function motionStepPx(values: readonly number[]): number {
  * at the first presented change inside it: WebKit presents a just-started
  * compositor animation late (a sheet's release held on screen for 130 to
  * 300 ms while its timeline ran, and the screencast reaches Node about 0.7 s
- * late on a loaded runner, too late to wait on before blocking). Every frame
- * after that first change is judged, so a freeze later in the block fails.
+ * late on a loaded runner, too late to wait on before blocking). Only a hold
+ * at `setBeforeBlock`, the value the page itself last set before the block,
+ * is excused. Every frame after that first change is judged, so a freeze
+ * later in the block fails.
  * The judged part still ends with the block and the `minJudgedFrames` floor
  * applies to it, so a start the block itself delays fails; any other
  * animation that was already moving is judged from the block's start, and a
@@ -684,6 +873,7 @@ export function busyWindowProof(
     settledWithin,
     settledWithinSteps,
     settledAt,
+    setBeforeBlock,
     maxMedianFrameMs = Infinity,
     maxStallFrames = 3,
     minMovedFraction = 0.9,
@@ -736,6 +926,17 @@ export function busyWindowProof(
      */
     settledAt?: number;
     /**
+     * The tracked value the page itself last set before the block, such as a
+     * drag's last position at its release. It is in the tracked box's
+     * coordinates: where the box sits at rest, plus the offset the page wrote.
+     * A hold that starts before the block and ends at its first presented
+     * change can be a late hand-off. It is one only when it holds this value,
+     * where the animation starts. Without it, or when the hold shows another
+     * value, the hold is judged as a stall. An animation can freeze at the
+     * block's start.
+     */
+    setBeforeBlock?: number;
+    /**
      * When the compositor presented each frame, epoch ms on the page clock
      * (`startCompositorTrace`; Chromium). Empty or absent, the screencast is
      * judged alone.
@@ -781,7 +982,9 @@ export function busyWindowProof(
     // when it and the block's first frame are both within the bound.
     let before: (typeof valued)[number] | undefined;
     for (const f of valued) {
-      if (f.t >= window.from) break;
+      if (f.t >= window.from) {
+        break;
+      }
       before = f;
     }
     const firstInBlock = valued.find(f => f.t >= window.from);
@@ -877,11 +1080,20 @@ export function busyWindowProof(
         v.t < (inWindow[0] ?? -Infinity) &&
         Math.abs(v.value - lead[lead.length - 1]) <= 0.25,
     ).length;
+  // A late hand-off holds the page's last position. An animation that froze
+  // at the block's start holds a position of its own. Within one cast step:
+  // WebKit's cast reads positions on a 2 px grid, so a held position can read
+  // up to a step off. A cast with no step is read within a pixel.
+  const matchPx = tracked.some(f => f.step != null)
+    ? castStep(tracked, axis)
+    : 1;
   const heldFromBeforeBlock =
+    setBeforeBlock != null &&
     lead.length > 0 &&
     holdStart > 0 &&
     prior[holdStart].t < window.from &&
-    heldFrames >= 2;
+    heldFrames >= 2 &&
+    Math.abs(lead[lead.length - 1] - setBeforeBlock) <= matchPx;
   const onScreenFrom =
     prior.length > 0 &&
     (!movedBefore || heldFromBeforeBlock) &&
@@ -1112,32 +1324,33 @@ export function busyWindowProof(
       }
       const unchanged = k - 1 - start;
       // Under one step a frame the change that ends the run is a single step.
-      // Under two, a frame delivered early can also show no step, and the
-      // change then carries the motion of every frame the run held, at the
-      // pace of the frames before it, to the nearest step. An early frame
-      // hides one frame's motion: at one step a frame or more the run is one
-      // frame long, and under one step a frame it adds at most one step to
-      // the catch-up.
+      // Under two, a frame delivered early can also show no step. The change
+      // then carries the motion of every frame the run held, to the nearest
+      // step, at the pace before the run or across it. An early frame hides
+      // one frame's motion. At one step a frame or more, the run is one frame
+      // long. Under one step a frame, it adds at most one step to the
+      // catch-up.
       const catchUp = Math.abs(series[k].value - series[i].value);
-      // The pace at the run: the component's motion over the frames before
-      // it. A proof that bounds its settle in the cast's own steps also reads
-      // the pace across the run itself, its catch-up over the frames from the
-      // run's start to the change, where the curve slows faster than the
-      // frames before it show. A freeze still fails: its run is longer than
-      // one frame at a step a frame or more, and at a steady pace of two steps
-      // a frame its catch-up carries two frames of that pace.
+      // Two readings give the pace at the run, and either can explain the
+      // run. One is the component's motion over the frames before the run.
+      // The other is its catch-up across the run itself, from the run's start
+      // to the change. The run's own reading counts where the curve slows
+      // faster than the frames before it show. It also counts where a loaded
+      // runner stamps those frames unevenly, whatever the settle bound. A
+      // freeze still fails. Its run is longer than one frame at a step a frame
+      // or more. At a steady pace of two steps a frame, its catch-up carries
+      // two frames of that pace.
       const paceBefore = pxPerFrameBefore(start);
       const runFrames = (series[k].t - series[start].t) / cadence;
-      const pace =
-        paceBefore == null || settledWithinSteps == null || runFrames <= 0
-          ? paceBefore
-          : Math.min(paceBefore, catchUp / runFrames);
+      const explains = (pace: number | null): boolean =>
+        pace != null &&
+        pace < 2 * stepPx &&
+        (pace < stepPx ? catchUp < 2.5 * stepPx : unchanged <= 1) &&
+        catchUp <= (unchanged + 1) * pace + stepPx;
       const shown =
         catchUp < 1.5 * stepPx ||
-        (pace != null &&
-          pace < 2 * stepPx &&
-          (pace < stepPx ? catchUp < 2.5 * stepPx : unchanged <= 1) &&
-          catchUp <= (unchanged + 1) * pace + stepPx);
+        explains(paceBefore) ||
+        (paceBefore != null && runFrames > 0 && explains(catchUp / runFrames));
       if (!shown) {
         return false;
       }

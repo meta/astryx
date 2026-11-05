@@ -11,7 +11,12 @@
  *   utils/hitArea.ts's, unit-tested there
  */
 
-import {expect, test, type Browser, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Browser,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -171,6 +176,42 @@ test('the hit area stops halfway to a neighbouring button', async ({
     expect(await hitIndex(middle - 1, y)).toBe(index);
     expect(await hitIndex(middle + 1, y)).toBe(index + 1);
   }
+});
+
+test('inside a divided List row the info button reaches its measured inset and no further', async ({
+  browser,
+}) => {
+  const page = await pageWith(browser, 'coarse');
+  await openStory(page, 'in-a-divided-list');
+  const buttons = page.locator('#storybook-root').getByRole('button');
+  await expect(buttons).toHaveCount(2);
+  const button = buttons.first();
+  const box = await button.boundingBox();
+  expect(box?.width ?? 0).toBeGreaterThan(0);
+  expect(box?.height ?? 0).toBeGreaterThan(0);
+  await expect
+    .poll(async () =>
+      button.evaluate(element =>
+        Number.parseFloat(
+          getComputedStyle(element).getPropertyValue(
+            '--astryx-hit-inset-bottom',
+          ),
+        ),
+      ),
+    )
+    .toBeGreaterThan(0);
+  const [inset, layerBottom, inheritedBorder] = await button.evaluate(
+    element => [
+      Number.parseFloat(
+        getComputedStyle(element).getPropertyValue('--astryx-hit-inset-bottom'),
+      ),
+      Number.parseFloat(getComputedStyle(element, '::after').bottom),
+      getComputedStyle(element).getPropertyValue('--_hit-border-bottom').trim(),
+    ],
+  );
+  // The row's divider width stays on the row's own layer.
+  expect(inheritedBorder).toBe('');
+  expect(layerBottom).toBeCloseTo(-inset, 1);
 });
 
 test('under a fine pointer the info button grows nothing', async ({

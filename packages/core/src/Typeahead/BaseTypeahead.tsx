@@ -44,6 +44,7 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   isFocusInsideOwnedLayer,
   isPressInsideOwnedLayer,
+  noteOutsideDismissal,
   useOutsidePress,
 } from '../Layer/outsidePress';
 import {isImeKeyEvent} from '../utils/ime';
@@ -314,8 +315,13 @@ const styles = stylex.create({
   },
   dropdown: {
     boxSizing: 'border-box',
-    // Matches DROPDOWN_MAX_HEIGHT, which the room-below cap uses.
-    maxHeight: '300px',
+    // Matches DROPDOWN_MAX_HEIGHT, which the room-below cap uses. It is no
+    // taller than its layer's block-size cap either, which folds in the
+    // software keyboard: the list ends above the keyboard with the layer.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     padding: spacingVars['--spacing-1'],
   },
@@ -1374,6 +1380,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       searchSource.cancel?.();
       onChange(item);
       setQuery('');
+      // The pick empties the input, which is a change to the query like any
+      // typed one. A query that was already empty (a pick from the focus list)
+      // did not change.
+      if (query !== '') {
+        onChangeQuery?.('');
+      }
       replaceResults([]);
       setHeldHeight(null);
       setHasSearched(false);
@@ -1384,7 +1396,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       popover.hide();
       inputRef.current?.focus();
     },
-    [isDisabled, onChange, popover, searchSource, setLoading, replaceResults],
+    [
+      isDisabled,
+      onChange,
+      onChangeQuery,
+      query,
+      popover,
+      searchSource,
+      setLoading,
+      replaceResults,
+    ],
   );
 
   // Shared by handleFocus and handleClick: bootstrap entries if none are
@@ -1473,6 +1494,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       if (isFocusInsideOwnedLayer(e.relatedTarget, anchorEl, popover.id)) {
         return;
       }
+      noteOutsideDismissal(e.currentTarget.ownerDocument);
       popover.hide();
     },
     [popover, anchorRef],

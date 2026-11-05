@@ -56,26 +56,23 @@ const RUNNERS = {
     runs: "`npm pack`, `tar`, and a Node script that resolves the packed specifiers, to check a package as published, and the package's doc modules, to see which need a newer CLI",
     sites: ['child_process.spawnSync ×3', 'loadTopicModule'],
   },
-  'api/swizzle/_github.mjs': {
-    runs: '`gh auth status`, to check the GitHub CLI is signed in',
-    sites: ['child_process.execFileSync'],
-  },
   'api/theme/_adapter.mjs': {
     runs: 'recorded built theme modules through the shared app-theme loader',
     sites: ['importThemeArtifact'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, through jiti; the project's installed Core",
+    runs: "theme source modules, through jiti; the project's installed Core, and a Core's root entry once a theme imports it",
     sites: [
       '.evalModule() ×2',
       '.import()',
       'createJiti ×5',
-      'import(<computed>) ×3',
+      'import(<computed>) ×2',
+      'require(<computed>)',
     ],
   },
   'api/theme/build/core-interception.mjs': {
-    runs: "@astryxdesign/core as a theme's CommonJS dependencies require it, to wrap defineTheme",
-    sites: ['require(<computed>)'],
+    runs: "@astryxdesign/core/theme beside a theme whose CommonJS dependencies may require Core, to wrap defineTheme; Module._load is watched during the load so the root is wrapped only as the load requires it; require.resolve for Core's entries",
+    sites: ['module', 'require(<computed>)'],
   },
   'api/upgrade/_adapter.mjs': {
     runs: 'the commands a codemod declares as its post-codemod hooks',
@@ -382,6 +379,10 @@ const RUNNERS = {
   'foundation/fs/paths.mjs': {
     runs: "Yarn's pnpapi, under Plug'n'Play, to find an installed package",
     sites: ['require(pnpapi)'],
+  },
+  'foundation/integrations/contribution-fixes.mjs': {
+    runs: 'jscodeshift (CommonJS) on first use, so loading the project never loads it',
+    sites: ['require(jscodeshift)'],
   },
   'foundation/integrations/integrations.mjs': {
     runs: "each installed integration's manifest",

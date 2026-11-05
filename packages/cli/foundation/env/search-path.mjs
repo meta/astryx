@@ -13,9 +13,10 @@
  * package folder is read from the shim's text.
  *
  * @input  the search path and, on Windows, its executable names
- * @output one row per `astryx` command found
- * @position packages/cli/foundation/env — read by doctor, init --user, and
- *   the update notices.
+ * @output one row per `astryx` command found, and the executable files that
+ *   any command name finds there
+ * @position packages/cli/foundation/env — read by doctor, init --user, the
+ *   update notices, and swizzle's `gh` lookup.
  */
 
 import * as fs from 'node:fs';
@@ -147,6 +148,53 @@ function namesCliPackage(file) {
 }
 
 /**
+ * Whether `file` is a file this user may run. On Windows, any file counts.
+ * @param {string} file
+ * @param {boolean} windows
+ * @returns {boolean}
+ */
+function isRunnableFile(file, windows) {
+  try {
+    if (!fs.statSync(file).isFile()) return false;
+    if (!windows) fs.accessSync(file, fs.constants.X_OK);
+    return true;
+  } catch {
+    // The shell skips a candidate the system cannot read: a missing folder, a
+    // stale mount, a symlink loop. `which` and execvp read PATH the same way.
+    return false;
+  }
+}
+
+/**
+ * The executable files on the search path named one of `names`, in the order
+ * a shell tries them. In each folder, it takes the first name that is a file
+ * this user may run. Nothing is started.
+ * @param {readonly string[]} names
+ * @param {{searchPath?: string, platform?: NodeJS.Platform}} [options]
+ * @returns {string[]}
+ */
+export function executablesOnSearchPath(
+  names,
+  {
+    searchPath = process.env.PATH ?? process.env.Path ?? '',
+    platform = process.platform,
+  } = {},
+) {
+  const windows = platform === 'win32';
+  /** @type {string[]} */
+  const files = [];
+  for (const dir of searchPath.split(windows ? ';' : path.delimiter)) {
+    if (!dir) continue;
+    // One command per folder: the shell runs the first name it finds.
+    const file = names
+      .map(name => path.join(dir, name))
+      .find(candidate => isRunnableFile(candidate, windows));
+    if (file !== undefined) files.push(file);
+  }
+  return files;
+}
+
+/**
  * Every `astryx` command on the search path, in the order a shell tries
  * them. The first row is the one that runs.
  * @param {{searchPath?: string, platform?: NodeJS.Platform}} [options]
@@ -156,50 +204,30 @@ export function astryxCommandsOnSearchPath({
   searchPath = process.env.PATH ?? process.env.Path ?? '',
   platform = process.platform,
 } = {}) {
-  const windows = platform === 'win32';
-  const names = windows
-    ? ['astryx.cmd', 'astryx.exe', 'astryx.ps1', 'astryx']
-    : [COMMAND];
+  const names =
+    platform === 'win32'
+      ? ['astryx.cmd', 'astryx.exe', 'astryx.ps1', 'astryx']
+      : [COMMAND];
   /** @type {SearchPathCommand[]} */
   const rows = [];
   const seen = new Set();
-  for (const dir of searchPath.split(windows ? ';' : path.delimiter)) {
-    if (!dir) continue;
-    for (const name of names) {
-      const file = path.join(dir, name);
-      let stat;
-      try {
-        stat = fs.statSync(file);
-      } catch {
-        continue;
-      }
-      if (!stat.isFile()) continue;
-      if (!windows) {
-        try {
-          fs.accessSync(file, fs.constants.X_OK);
-        } catch {
-          continue;
-        }
-      }
-      let key = file;
-      try {
-        key = fs.realpathSync(file);
-      } catch {
-        // Keep the path as found.
-      }
-      if (seen.has(key)) break;
-      seen.add(key);
-      const cliRoot = astryxCliRootOf(file);
-      rows.push({
-        file,
-        astryx: cliRoot !== null || namesCliPackage(file),
-        cliRoot,
-        version: cliRoot ? cliVersionAt(cliRoot) : null,
-        handsOff: cliRoot ? handsOffAt(cliRoot) : null,
-      });
-      // One command per folder: the shell runs the first name it finds.
-      break;
+  for (const file of executablesOnSearchPath(names, {searchPath, platform})) {
+    let key = file;
+    try {
+      key = fs.realpathSync(file);
+    } catch {
+      // Keep the path as found.
     }
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const cliRoot = astryxCliRootOf(file);
+    rows.push({
+      file,
+      astryx: cliRoot !== null || namesCliPackage(file),
+      cliRoot,
+      version: cliRoot ? cliVersionAt(cliRoot) : null,
+      handsOff: cliRoot ? handsOffAt(cliRoot) : null,
+    });
   }
   return rows;
 }

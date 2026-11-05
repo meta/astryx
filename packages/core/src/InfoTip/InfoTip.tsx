@@ -15,6 +15,7 @@
  * - /docs/specs/components/InfoTip/InfoTip.spec.md (contract)
  * - /packages/core/src/InfoTip/InfoTip.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/InfoTip/index.ts (exports if types change)
+ * - /packages/cli/assets/templates/blocks/components/InfoTip/ (showcase and example blocks)
  */
 
 import {
@@ -46,7 +47,8 @@ import {
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {mergeProps} from '../utils/mergeProps';
-import {watchHitArea, writeHitInsets} from '../utils/hitArea';
+import {useTouchHitArea} from '../utils/touchHitArea';
+import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
 
 registerEnglishFallback(english);
 
@@ -106,21 +108,6 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
   },
-  // The invisible hit area. Under a coarse pointer, the shared hit area writes
-  // how far the button may grow toward 44 px on each side. It never takes a
-  // neighbour's tap, and it writes 0 elsewhere. This layer takes taps out to
-  // there.
-  // SYNC: /packages/core/src/utils/hitArea.ts (HIT_INSET_PROPERTIES)
-  hitArea: {
-    '::after': {
-      content: '""',
-      position: 'absolute',
-      // Physical sides on purpose: the shared hit area measures each side
-      // from the page's rects, left and right included, in any direction.
-      inset:
-        'calc(var(--astryx-hit-inset-top, 0px) * -1) calc(var(--astryx-hit-inset-right, 0px) * -1) calc(var(--astryx-hit-inset-bottom, 0px) * -1) calc(var(--astryx-hit-inset-left, 0px) * -1)',
-    },
-  },
 });
 
 /**
@@ -150,15 +137,7 @@ export function InfoTip({
   style,
 }: InfoTipProps): ReactNode {
   const t = useComponentTranslator();
-  // Under a coarse pointer the button takes taps out toward 44 px. The watch
-  // lives as long as the button is attached: the ref's cleanup stops it, and a
-  // replaced button starts its own.
-  const watchButtonHitArea = useCallback((button: HTMLButtonElement | null) => {
-    if (button == null) {
-      return;
-    }
-    return watchHitArea(button, insets => writeHitInsets(button, insets));
-  }, []);
+  const hitAreaRef = useTouchHitArea(true);
   // Whether a press pinned the help. A hover or focus preview is not pinned.
   const [isPinned, setIsPinned] = useState(false);
   // Whether the help shows, pinned or previewed: the button names it in
@@ -172,7 +151,7 @@ export function InfoTip({
     setIsPinned(false);
   }, []);
   const tooltip = useTooltip({onShow: handleShow, onHide: handleHide});
-  const mergedRef = useMergedRefs(ref, watchButtonHitArea, tooltip.ref);
+  const mergedRef = useMergedRefs(ref, hitAreaRef, tooltip.ref);
 
   // A primary mouse or pen press on a preview calls show() first. The hook's
   // press-to-close then leaves it open. The click pins it.
@@ -226,7 +205,7 @@ export function InfoTip({
           stylex.props(
             focusOutlineStyles.focusVisible,
             styles.trigger,
-            styles.hitArea,
+            touchHitAreaStyles.layer,
             xstyle,
           ),
           className,

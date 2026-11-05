@@ -222,6 +222,30 @@ describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
     expect(shows(TIP)).toBe(false);
   });
 
+  it('a pen held on a hover preview pins it without hiding it first', () => {
+    vi.useFakeTimers();
+    render(<InfoTooltip />);
+    const trigger = screen.getByRole('button', {name: 'About billing'});
+    fireEvent.pointerEnter(trigger, {pointerType: 'pen'});
+    fireEvent.mouseEnter(trigger);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(shows(TIP)).toBe(true);
+    vi.mocked(HTMLElement.prototype.hidePopover).mockClear();
+    fireEvent.pointerDown(trigger, {pointerType: 'pen'});
+    // The pen stays down past the hover delay, then lifts.
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(shows(TIP)).toBe(true);
+    fireEvent.pointerUp(trigger, {pointerType: 'pen'});
+    fireEvent.click(trigger, {detail: 1});
+    expect(shows(TIP)).toBe(true);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(HTMLElement.prototype.hidePopover).not.toHaveBeenCalled();
+  });
+
   it('after a press on a preview that ends off the button, Enter and Space still pin and close it', () => {
     vi.useFakeTimers();
     render(<InfoTooltip />);
@@ -390,6 +414,24 @@ describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
     fireEvent.focusOut(trigger, {relatedTarget: null});
     fireEvent.pointerUp(text);
     fireEvent.click(text);
+    expect(shows(TIP)).toBe(true);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+});
+
+describe('a pinned InfoTip and a caller ref that changes on each render', () => {
+  it('stays pinned when the parent renders again with an inline ref', () => {
+    const Parent = ({count}: {count: number}) => (
+      <div data-count={count}>
+        <InfoTip ref={() => {}} content={TIP} label="About billing" />
+      </div>
+    );
+    const {rerender} = render(<Parent count={0} />);
+    const trigger = screen.getByRole('button', {name: 'About billing'});
+    click(trigger);
+    expect(shows(TIP)).toBe(true);
+    rerender(<Parent count={1} />);
+    rerender(<Parent count={2} />);
     expect(shows(TIP)).toBe(true);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });

@@ -3,12 +3,17 @@
 /**
  * @file coarsePointer.test.ts
  * @input coarsePointer.ts and the gestures' pointer test helper
- * @output The gate reads and follows the primary pointer
+ * @output The gate reads and follows the primary pointer, and watches any
+ *   media query
  * @position Unit tests of packages/core/src/utils/coarsePointer.ts
  */
 
 import {describe, expect, it} from 'vitest';
-import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
+import {
+  isCoarsePointer,
+  watchCoarsePointer,
+  watchMediaQuery,
+} from './coarsePointer';
 import {pointerQuery} from '../gestures/__tests__/pointerQuery';
 
 describe('coarsePointer', () => {
@@ -32,5 +37,31 @@ describe('coarsePointer', () => {
   it('answers fine without a window', () => {
     expect(isCoarsePointer(null)).toBe(false);
     expect(watchCoarsePointer(null, () => {})).toBeTypeOf('function');
+  });
+
+  it('watches any media query, through the older pair where there is no addEventListener', () => {
+    const handlers = new Set<() => void>();
+    let matches = false;
+    const view = {
+      matchMedia: (query: string) => ({
+        media: query,
+        get matches() {
+          return matches;
+        },
+        addListener: (handler: () => void) => handlers.add(handler),
+        removeListener: (handler: () => void) => handlers.delete(handler),
+      }),
+    } as unknown as Window;
+    const seen: boolean[] = [];
+    const stop = watchMediaQuery(view, '(max-width: 600px)', next =>
+      seen.push(next),
+    );
+    matches = true;
+    for (const handler of Array.from(handlers)) {
+      handler();
+    }
+    stop();
+    expect(seen).toEqual([true]);
+    expect(handlers.size).toBe(0);
   });
 });

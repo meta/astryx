@@ -35,7 +35,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {findPresentFiles, loadModuleWithParser} from '../fs/module-loader.mjs';
+import {loadModuleWithParser} from '../fs/module-loader.mjs';
+import {findConfigPath} from './config-path.mjs';
 import {parseConfig} from '../../authoring/config/parse.mjs';
 import {
   loadIntegrations,
@@ -104,6 +105,8 @@ import {
   cacheKey,
   configContentHash,
 } from './config-cache.mjs';
+
+export {CONFIG_BASENAMES, findConfigPath} from './config-path.mjs';
 
 /**
  * Extract a human-readable message from an unknown thrown value.
@@ -321,12 +324,6 @@ function readPackageJson(dir) {
  * @typedef {import('../integrations/issue').AstryxIntegrationIssue & {package: string}} ProjectIntegrationIssue
  */
 
-/** Conventional config basenames, in load-precedence order. */
-export const CONFIG_BASENAMES = [
-  'astryx.config.ts',
-  'astryx.config.mjs',
-  'astryx.config.js',
-];
 
 /** Default issue tracker used when neither config nor integration routes one. */
 export const DEFAULT_ISSUES_URL =
@@ -367,25 +364,6 @@ function inheritsIntegrationDebug(projectDir) {
   }
 }
 
-/**
- * Find astryx.config.{ts,mjs,js} as a sibling of the nearest package.json.
- * Returns the absolute path, or null if none is present. Throws if multiple
- * config files exist at that root.
- * @param {string} [startDir]
- * @returns {string|null}
- */
-export function findConfigPath(startDir = process.cwd()) {
-  const root = findPackageRoot(startDir) ?? startDir;
-  const present = findPresentFiles(root, CONFIG_BASENAMES);
-  if (present.length > 1) {
-    throw new Error(
-      `Multiple Astryx config files found in ${root} (${present
-        .map(p => path.basename(p))
-        .join(', ')}). Keep exactly one.`,
-    );
-  }
-  return present.length === 1 ? present[0] : null;
-}
 
 /**
  * The provider ledger each loaded Project resolved, kept off the class so it
@@ -404,6 +382,15 @@ const PROVIDER_LEDGERS = new WeakMap();
 export function providerLedgerOf(project) {
   return PROVIDER_LEDGERS.get(project) ?? new Map();
 }
+
+/**
+ * True when an integration's templates root exists, the only place its
+ * templates come from (discoverIntegrationTemplatesForOne).
+ * @param {any} integration
+ * @returns {boolean}
+ */
+const hasTemplatesRoot = integration =>
+  integration?.templates != null && fs.existsSync(integration.templates);
 
 /**
  * The single API for reading resolved project configuration. Construct via the
@@ -1281,15 +1268,24 @@ export class Project {
    * @returns {Promise<ProjectIntegrationIssue[]>}
    */
   async issues() {
-    // Template replacement validity depends on the combined Core + integration
-    // catalog. Resolve it first so issue results never depend on which discovery
-    // method the caller happened to invoke earlier.
-    await this.templates();
-    // Component replacement validity likewise depends on Core plus every
-    // integration's components.
-    await this.componentReplacements();
-    for (const integration of this.#loadedIntegrations) {
-      await this.#collectIssues(integration);
+    // Each issue these passes find belongs to an integration, because Core's
+    // templates and components declare no replacement. A project with no
+    // integration skips them.
+    if (this.#loadedIntegrations.length > 0) {
+      // Template replacement validity depends on the combined Core +
+      // integration catalog. Resolve it first so issue results never depend
+      // on which discovery method the caller happened to invoke earlier. Only
+      // an integration's own templates can replace one, so with none, Core's
+      // templates stay unread.
+      if (this.#loadedIntegrations.some(hasTemplatesRoot)) {
+        await this.templates();
+      }
+      // Component replacement validity likewise depends on Core plus every
+      // integration's components.
+      await this.componentReplacements();
+      for (const integration of this.#loadedIntegrations) {
+        await this.#collectIssues(integration);
+      }
     }
     // Return a stable copy so callers can't mutate internal state.
     return this.#issues.map(i => ({...i}));

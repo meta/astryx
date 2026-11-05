@@ -92,13 +92,14 @@ describe('useOverflow example', () => {
     ]);
   });
 
-  it('moves the actions that do not fit into More, and back on resize', () => {
+  it('moves the actions that do not fit into More, and back on resize', async () => {
     // Three 100px actions, three 4px gaps and the 100px More button fit 450px.
     const row = renderExample(450);
     expect(labels(row)).toEqual(['Bold', 'Italic', 'Underline', 'More']);
 
     rowWidth = 1000;
-    act(() => {
+    // The hook measures a reported resize again in a microtask, before paint.
+    await act(async () => {
       resize(
         [{target: row} as unknown as ResizeObserverEntry],
         {} as ResizeObserver,

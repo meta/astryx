@@ -155,16 +155,31 @@ describe.each(Object.entries(WORKFLOWS))(
       const suites = job.steps.filter(
         step =>
           !specReaderRun(step) &&
-          expandScripts(step.run ?? '').includes('--project ui'),
+          /--project (ui|perf)\b/.test(expandScripts(step.run ?? '')),
       );
-      // The two package scripts every lane calls: the parallel suite without
-      // FR23, and FR23 alone with no file parallelism.
-      expect(rootScripts['test:ui']).toBe(
-        `vitest run --project ui --exclude ${benchmark}`,
-      );
+      // The two package scripts every lane calls: the parallel UI project, and
+      // the `perf` project with no file parallelism.
+      expect(rootScripts['test:ui']).toBe('vitest run --project ui');
       expect(rootScripts['test:ui:isolated']).toBe(
-        `vitest run --project ui ${benchmark} --no-file-parallelism`,
+        'vitest run --project perf --no-file-parallelism',
       );
+      // The benchmark is the `perf` project's only file, and `ui` excludes it.
+      // No other project sets a group, so `perf` starts after all of them.
+      const config = read('vitest.config.ts');
+      const projectBlock = name => {
+        const start = config.indexOf(`name: '${name}',`);
+        return config.slice(start, config.indexOf("name: '", start + 1));
+      };
+      const named = /const helperOverheadBenchmark =\s*'([^']+)';/.exec(config);
+      expect(named?.[1]).toBe(benchmark);
+      expect(projectBlock('ui')).toContain(
+        'exclude: [...configDefaults.exclude, helperOverheadBenchmark]',
+      );
+      expect(projectBlock('perf')).toContain(
+        'include: [helperOverheadBenchmark]',
+      );
+      expect(projectBlock('perf')).toContain('sequence: {groupOrder: 1}');
+      expect(config.match(/groupOrder/g)).toHaveLength(1);
       expect(job['continue-on-error']).not.toBe(true);
       for (const suite of suites) {
         expect(suite['continue-on-error']).not.toBe(true);
@@ -183,22 +198,30 @@ describe.each(Object.entries(WORKFLOWS))(
             '  # A change only to the Lab package runs every Lab test across the',
             '  # same legs, and the guards below as any scoped run does',
             '  # (spec:AST-030 FR26).',
-            `  pnpm test:ui --passWithNoTests ${SHARD_ARG} packages/lab/`,
-            '  node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"',
+            `  .github/scripts/run-named.sh "Lab tests" -- pnpm test:ui --passWithNoTests ${SHARD_ARG} packages/lab/`,
+            '  # The guard run leaves out the tests the run above already ran, so',
+            '  # no test runs twice. Every leg splits the same reduced list, so a',
+            '  # leg that cannot list them fails rather than split a different one.',
+            '  .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project ui packages/lab/ --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"',
+            '  .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"',
             '  mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"',
             '  if [ "${#GUARDS[@]}" -gt 0 ]; then',
-            `    pnpm test:ui --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
+            `    .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
             '  fi',
             'elif [ "$SCOPED" = true ]; then',
-            `  pnpm test:ui --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
+            `  .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:ui --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
             '  # Tests no module graph relates to the change run too: guards',
             '  # that read sources, and tests that load a changed package from',
             '  # its build (by name or its dist/).',
             '  # The list goes through a file so a failing lister fails the step.',
-            '  node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"',
+            '  # The guard run leaves out the tests the run above already ran, so',
+            '  # no test runs twice. Every leg splits the same reduced list, so a',
+            '  # leg that cannot list them fails rather than split a different one.',
+            '  .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project ui --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"',
+            '  .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"',
             '  mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"',
             '  if [ "${#GUARDS[@]}" -gt 0 ]; then',
-            `    pnpm test:ui --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
+            `    .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
             '  fi',
             'else',
             `  pnpm test:ui ${SHARD_ARG}`,
@@ -215,15 +238,19 @@ describe.each(Object.entries(WORKFLOWS))(
         expect(node.run.trim()).toBe(
           [
             'if [ "$SCOPED" = true ]; then',
-            `  pnpm test:node --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
+            `  .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:node --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
             '  # Tests no module graph relates to the change run too: guards',
             '  # that read sources, and tests that load a changed package from',
             '  # its build (by name or its dist/).',
             '  # The list goes through a file so a failing lister fails the step.',
-            '  node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"',
+            '  # The guard run leaves out the tests the run above already ran, so',
+            '  # no test runs twice. Every leg splits the same reduced list, so a',
+            '  # leg that cannot list them fails rather than split a different one.',
+            '  .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"',
+            '  .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"',
             '  mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"',
             '  if [ "${#GUARDS[@]}" -gt 0 ]; then',
-            `    pnpm test:node --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
+            `    .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:node --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
             '  fi',
             'else',
             `  pnpm test:node ${SHARD_ARG}`,
@@ -267,14 +294,12 @@ describe.each(Object.entries(WORKFLOWS))(
               !specReaderRun(step) &&
               /--project \w+/.test(expandScripts(step.run ?? '')),
           );
-          // The one step that is not sharded is the isolated FR23 benchmark.
+          // The one step that is not sharded is the `perf` project's benchmark.
           const unsharded = suites.filter(
             step => !step.run.includes(SHARD_ARG),
           );
           for (const step of unsharded) {
-            expect(expandScripts(step.run)).toContain(
-              'Markdown.fr23.perf.test.ts',
-            );
+            expect(expandScripts(step.run)).toContain('--project perf');
           }
           expect(suites.length - unsharded.length).toBe(1);
         }
@@ -455,6 +480,8 @@ describe('ci.yml RTL package sharding', () => {
       [
         'pr-a11y-guards',
         'pr-a11y-specs',
+        'pr-component-a11y-contracts',
+        'pr-interaction-webkit',
         'pr-rtl',
         'pr-rtl-merge',
         'pr-rtl-shard',
@@ -1018,8 +1045,8 @@ describe('heavy lanes outside their component scope (spec:AST-030 FR9)', () => {
     }
   });
 
-  it('validates spec records whenever docsite-test cannot decide its scope', () => {
-    const validate = workflow.jobs['docsite-test'].steps.find(
+  it('validates spec records whenever docsite-build cannot decide its scope', () => {
+    const validate = workflow.jobs['docsite-build'].steps.find(
       step => step.name === 'Validate spec records',
     );
     expect(validate.if).toBe(
