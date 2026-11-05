@@ -620,15 +620,16 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     [emitChange, insertTextWithoutEmit],
   );
 
+  const insertTokenWithoutEmit = tokens.insertToken;
   const insertToken = useCallback(
     (token: ChatComposerToken) => {
-      const id = tokens.insertToken(token);
+      const id = insertTokenWithoutEmit(token);
       if (id != null) {
         emitChange();
       }
       return id;
     },
-    [emitChange, tokens.insertToken],
+    [emitChange, insertTokenWithoutEmit],
   );
 
   // A caller may retain a handle across renders. Resolve mutation permission
