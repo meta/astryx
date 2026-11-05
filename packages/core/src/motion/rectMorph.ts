@@ -106,11 +106,11 @@ function startValues(path: MorphPath, opacity?: number): MotionValues {
 const INLINE_PROPERTIES = ['translate', 'scale', 'transform-origin'] as const;
 
 /**
- * How a present or a dismissal is timed. A motion that a tap, a key or the
- * program starts plays the theme's duration (ms) and easing. A gesture's
- * release plays a spring. Either starts at the velocity it is given
- * (`RectMorphPlayOptions.velocity`), so a new target keeps the current
- * velocity.
+ * How a present or a dismissal is timed: a duration (ms) and easing, or a
+ * spring. The timing follows the component's motion record (`spec:AST-094`
+ * FR45); the morph has no rule of its own about which input plays which.
+ * Either starts at the velocity it is given (`RectMorphPlayOptions.velocity`),
+ * so a new target keeps the current velocity.
  */
 export type RectMorphMotion =
   | {readonly duration: number; readonly easing: MotionCurvePoints}
@@ -211,10 +211,10 @@ function defaultNow(): number {
  * ```
  * const morph = createRectMorph(menu);
  * const path = lerpPath(square, box, {opacity: [0, 1]});
- * // A tap opened the menu: the theme's entrance duration and easing.
- * morph.present(path, {duration: enterMs, easing: enterEasing});
- * // …a finger flicked it closed, with a copy placed where the menu stands:
- * morph.dismiss(path, {spring: springs.menuClose}, {target: copy, velocity});
+ * // Each play takes the timing the component's motion record names.
+ * morph.present(path, presentMotion);
+ * // A dismissal onto a copy placed where the menu stands keeps its velocity.
+ * morph.dismiss(path, dismissMotion, {target: copy, velocity});
  * ```
  *
  * An element that already has an animator (a zoom stage's pinch and pan)
