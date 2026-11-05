@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/Text/ (showcase blocks)
  */
 
-import {lazy, Suspense, useRef, type ReactNode} from 'react';
+import {lazy, Suspense, use, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {
   TextType,
@@ -279,6 +279,9 @@ export function Text({
 
   // Keep the merged ref stable across rerenders.
   const mergedRef = useMergedRefs(ref, truncation.ref, textRef);
+  const isInClampedText = use(TextClampContext);
+  // A capsize block removes a multi-line clamp (FR4).
+  const isClamped = maxLines === 1 || (maxLines > 1 && !hasCapsize);
 
   // Build inline style for -webkit-line-clamp (dynamic value)
   const inlineStyle = maxLines > 1 ? {WebkitLineClamp: maxLines} : undefined;
@@ -319,11 +322,10 @@ export function Text({
           {...style, ...inlineStyle},
         )}
         {...props}>
-        {maxLines > 0 ? (
-          <TextClampContext value={true}>{children}</TextClampContext>
-        ) : (
-          children
-        )}
+        {/* Always mounted, so a change of maxLines keeps every child mounted. */}
+        <TextClampContext value={isClamped || isInClampedText}>
+          {children}
+        </TextClampContext>
       </Component>
       {tooltipEnabled && (
         <Suspense fallback={null}>

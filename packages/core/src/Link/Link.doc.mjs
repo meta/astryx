@@ -187,7 +187,7 @@ export const docs = {
       { guidance: false, description: 'Use Link for actions that do not navigate; use a Button instead.' },
       { guidance: false, description: 'Use generic text like "click here" or "read more"; describe the destination.' },
       { guidance: false, description: 'Set `label` on text links; `aria-label` prevents assistive technology from reading the actual link content.' },
-      { guidance: false, description: 'Give a Link inside a clamped Text its own `display` or `maxLines` and expect the outer clamp to cut it; that Link keeps its own box.' },
+      { guidance: false, description: 'Give a Link inside a clamped Text its own `display` or `maxLines`, or render it as a button (`onClick` with no `href`), and expect the outer clamp to cut it; that Link keeps its own box.' },
     ],
     anatomy: [
       {name: 'Label', required: true, description: 'The visible text of the link.'},
@@ -321,7 +321,7 @@ export const docsZh = {
       { guidance: false, description: 'Use Link for actions that do not navigate; use a Button instead.' },
       { guidance: false, description: 'Use generic text like "click here" or "read more"; describe the destination.' },
       { guidance: false, description: 'Set `label` on text links; `aria-label` prevents assistive technology from reading the actual link content.' },
-      { guidance: false, description: 'Give a Link inside a clamped Text its own `display` or `maxLines` and expect the outer clamp to cut it; that Link keeps its own box.' },
+      { guidance: false, description: 'Give a Link inside a clamped Text its own `display` or `maxLines`, or render it as a button (`onClick` with no `href`), and expect the outer clamp to cut it; that Link keeps its own box.' },
     ],
     anatomy: [
       {name: 'Label', required: true, description: 'The visible text of the link.'},
@@ -346,7 +346,7 @@ export const docsDense = {
       { guidance: false, description: 'Use Link for actions that do not navigate; use a Button instead.' },
       { guidance: false, description: 'Use generic text like "click here" or "read more"; describe the destination.' },
       { guidance: false, description: 'Set `label` on text links; `aria-label` prevents assistive technology from reading the actual link content.' },
-      { guidance: false, description: 'Give a Link inside a clamped Text its own `display` or `maxLines` and expect the outer clamp to cut it; that Link keeps its own box.' },
+      { guidance: false, description: 'Give a Link inside a clamped Text its own `display` or `maxLines`, or render it as a button (`onClick` with no `href`), and expect the outer clamp to cut it; that Link keeps its own box.' },
     ],
     anatomy: [
       {name: 'Label', required: true, description: 'The visible text of the link.'},

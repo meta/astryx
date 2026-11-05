@@ -436,3 +436,37 @@ describe('Text maxLines without a truncation tooltip', () => {
     expect(reads).toBeGreaterThan(0);
   });
 });
+
+describe('Text keeps its children mounted when maxLines changes', () => {
+  it('keeps the same child elements, focus, and input values across a clamp toggle', () => {
+    const {rerender} = render(
+      <Text maxLines={2} hasTruncateTooltip={false}>
+        Lead text <input aria-label="Note" defaultValue="" />
+      </Text>,
+    );
+    const input = screen.getByRole('textbox', {
+      name: 'Note',
+    }) as HTMLInputElement;
+    input.value = 'typed';
+    input.focus();
+
+    rerender(
+      <Text maxLines={0} hasTruncateTooltip={false}>
+        Lead text <input aria-label="Note" defaultValue="" />
+      </Text>,
+    );
+    const after = screen.getByRole('textbox', {
+      name: 'Note',
+    }) as HTMLInputElement;
+    expect(after).toBe(input);
+    expect(after.value).toBe('typed');
+    expect(document.activeElement).toBe(after);
+
+    rerender(
+      <Text maxLines={2} hasTruncateTooltip={false}>
+        Lead text <input aria-label="Note" defaultValue="" />
+      </Text>,
+    );
+    expect(screen.getByRole('textbox', {name: 'Note'})).toBe(input);
+  });
+});
