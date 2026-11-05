@@ -3677,6 +3677,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-calendar-days-month-grid",
+      "path": "examples/use-calendar-days/month-grid",
+      "aliases": []
+    },
+    {
       "name": "example-use-clickable-container-clickable-project-card",
       "path": "examples/use-clickable-container/clickable-project-card",
       "aliases": []
@@ -3737,6 +3742,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-input-container-search-field-wrapper",
+      "path": "examples/use-input-container/search-field-wrapper",
+      "aliases": []
+    },
+    {
       "name": "example-use-input-status-icon-coupon-code-status",
       "path": "examples/use-input-status-icon/coupon-code-status",
       "aliases": []
@@ -3757,6 +3767,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-link-component-article-cards",
+      "path": "examples/use-link-component/article-cards",
+      "aliases": []
+    },
+    {
       "name": "example-use-list-focus-recent-files",
       "path": "examples/use-list-focus/recent-files",
       "aliases": []
@@ -3764,6 +3779,11 @@
     {
       "name": "example-use-locale-invoice-summary",
       "path": "examples/use-locale/invoice-summary",
+      "aliases": []
+    },
+    {
+      "name": "example-use-merged-refs-auto-grow-text-area",
+      "path": "examples/use-merged-refs/auto-grow-text-area",
       "aliases": []
     },
     {
@@ -3777,6 +3797,21 @@
       "aliases": []
     },
     {
+      "name": "example-use-overlay-product-quick-view",
+      "path": "examples/use-overlay/product-quick-view",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-draggable-box",
+      "path": "examples/use-pan-gesture/a-draggable-box",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-playing-card-advanced",
+      "path": "examples/use-pan-gesture/a-playing-card-advanced",
+      "aliases": []
+    },
+    {
       "name": "example-use-popover-quick-actions",
       "path": "examples/use-popover/quick-actions",
       "aliases": []
@@ -3784,6 +3819,11 @@
     {
       "name": "example-use-press-feedback-pressable-card",
       "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scroll-overflow-filter-strip-edge-fades",
+      "path": "examples/use-scroll-overflow/filter-strip-edge-fades",
       "aliases": []
     },
     {
@@ -3829,6 +3869,11 @@
     {
       "name": "example-use-table-selection-table-floating-bulk-actions",
       "path": "examples/use-table-selection/table-floating-bulk-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-sortable-state-multi-sort-orders",
+      "path": "examples/use-table-sortable-state/multi-sort-orders",
       "aliases": []
     },
     {
@@ -3892,6 +3937,11 @@
       "aliases": []
     },
     {
+      "name": "hook-create-pan-gesture",
+      "path": "hooks/create-pan-gesture",
+      "aliases": []
+    },
+    {
       "name": "hook-use-animated-layout",
       "path": "hooks/use-animated-layout",
       "aliases": []
@@ -3909,6 +3959,11 @@
     {
       "name": "hook-use-app-shell-mobile",
       "path": "hooks/use-app-shell-mobile",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-calendar-days",
+      "path": "hooks/use-calendar-days",
       "aliases": []
     },
     {
@@ -4027,6 +4082,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-link-component",
+      "path": "hooks/use-link-component",
+      "aliases": []
+    },
+    {
       "name": "hook-use-list-focus",
       "path": "hooks/use-list-focus",
       "aliases": []
@@ -4069,6 +4129,16 @@
     {
       "name": "hook-use-overflow",
       "path": "hooks/use-overflow",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-overlay",
+      "path": "hooks/use-overlay",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-pan-gesture",
+      "path": "hooks/use-pan-gesture",
       "aliases": []
     },
     {
@@ -4164,6 +4234,11 @@
     {
       "name": "hook-use-table-sortable",
       "path": "hooks/use-table-sortable",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-sortable-state",
+      "path": "hooks/use-table-sortable-state",
       "aliases": []
     },
     {

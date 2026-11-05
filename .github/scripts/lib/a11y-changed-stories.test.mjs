@@ -2,21 +2,25 @@
 
 /**
  * @file a11y-changed-stories.test.mjs
- * Tests for the selection of changed stories no component owns, the ones the
- * touched-components check audits on their own (spec:AST-030 FR12).
+ * Tests for the selection of changed stories no other audit covers, the ones
+ * the touched-components check audits on their own (spec:AST-030 FR12).
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
-import {changedUnownedStoryIds, storyFilePath} from './a11y-changed-stories.js';
+import {
+  changedUncoveredStoryIds,
+  storyFilePath,
+} from './a11y-changed-stories.js';
 import {STORY_FILE} from '../touched-components.mjs';
 
 const root = path.resolve(import.meta.dirname, '../../..');
 const story = importPath => ({type: 'story', importPath});
 
-// #9985's shape: an `a11y/` story file whose stories route to an unknown
-// owner, beside a component's own story file.
+// #9985's shape: an `a11y/` story file no component owns. #9992's shape: a
+// story added to an untouched component's file (Resizable) while the change
+// touched another component (LayoutPanel).
 const stories = {
   'a11y-scroll-region-name--content-scrolls': story(
     './stories/ScrollRegionA11y.stories.tsx',
@@ -28,24 +32,15 @@ const stories = {
     type: 'docs',
     importPath: './stories/ScrollRegionA11y.stories.tsx',
   },
-  'core-alertdialog--delete': story('./stories/AlertDialog.stories.tsx'),
+  'core-resizable--collapsing-scroll-panel-fixture': story(
+    './stories/Resizable.stories.tsx',
+  ),
+  'core-resizable--default': story('./stories/Resizable.stories.tsx'),
+  'core-layoutpanel--default': story('./stories/LayoutPanel.stories.tsx'),
   'core-chip--default': story('../../packages/core/src/Chip/Chip.stories.tsx'),
-  'pattern-x--unrouted': story('./stories/Unrouted.stories.tsx'),
 };
-const routes = [
-  {
-    id: 'a11y-scroll-region-name--content-scrolls',
-    component: 'unknown/a11y-scroll-region-name',
-  },
-  {
-    id: 'a11y-scroll-region-name--panel-scrolls',
-    component: 'unknown/a11y-scroll-region-name',
-  },
-  {id: 'core-alertdialog--delete', component: 'core/AlertDialog'},
-  {id: 'core-chip--default', component: 'core/Chip'},
-];
 
-describe('changed stories no component owns', () => {
+describe('changed stories no other audit covers', () => {
   it('reads an index import path as a repository path', () => {
     expect(storyFilePath('./stories/X.stories.tsx')).toBe(
       'apps/storybook/stories/X.stories.tsx',
@@ -57,7 +52,7 @@ describe('changed stories no component owns', () => {
 
   it("selects a changed `a11y/` story file's stories, not its docs page", () => {
     expect(
-      changedUnownedStoryIds(stories, routes, [
+      changedUncoveredStoryIds(stories, [
         'apps/storybook/stories/ScrollRegionA11y.stories.tsx',
       ]),
     ).toEqual([
@@ -66,47 +61,57 @@ describe('changed stories no component owns', () => {
     ]);
   });
 
-  it("leaves a component's own stories to its touched-component audit", () => {
+  it("selects a changed story an untouched component owns (#9992's fixture)", () => {
     expect(
-      changedUnownedStoryIds(stories, routes, [
-        'apps/storybook/stories/AlertDialog.stories.tsx',
-        'packages/core/src/Chip/Chip.stories.tsx',
-      ]),
-    ).toEqual([]);
+      changedUncoveredStoryIds(
+        stories,
+        [
+          'apps/storybook/stories/Resizable.stories.tsx',
+          'apps/storybook/stories/LayoutPanel.stories.tsx',
+        ],
+        ['core-layoutpanel--default'],
+      ),
+    ).toEqual([
+      'core-resizable--collapsing-scroll-panel-fixture',
+      'core-resizable--default',
+    ]);
   });
 
-  it('audits a story with no route rather than dropping it', () => {
+  it("leaves a touched component's stories to its own audit", () => {
     expect(
-      changedUnownedStoryIds(stories, routes, [
-        'apps/storybook/stories/Unrouted.stories.tsx',
-      ]),
-    ).toEqual(['pattern-x--unrouted']);
+      changedUncoveredStoryIds(
+        stories,
+        ['packages/core/src/Chip/Chip.stories.tsx'],
+        ['core-chip--default'],
+      ),
+    ).toEqual([]);
   });
 
   it('selects nothing for unchanged story files or an empty list', () => {
     expect(
-      changedUnownedStoryIds(stories, routes, [
+      changedUncoveredStoryIds(stories, [
         'packages/core/src/Chip/Chip.tsx',
         '',
       ]),
     ).toEqual([]);
-    expect(changedUnownedStoryIds(stories, routes, [])).toEqual([]);
+    expect(changedUncoveredStoryIds(stories, [])).toEqual([]);
   });
 
-  it('selects the six #9985 stories from the real Storybook index, when one is built', () => {
+  it("selects #9992's fixture from the real Storybook index, when one is built", () => {
     const index = path.join(root, 'apps/storybook/dist/index.json');
     if (!fs.existsSync(index)) return;
     const entries = JSON.parse(fs.readFileSync(index, 'utf8')).entries;
-    const unknown = Object.keys(entries)
-      .filter(id => id.startsWith('a11y-scroll-region-name--'))
-      .map(id => ({id, component: 'unknown/a11y-scroll-region-name'}));
-    const ids = changedUnownedStoryIds(entries, unknown, [
-      'apps/storybook/stories/ScrollRegionA11y.stories.tsx',
-    ]);
-    expect(ids.length).toBeGreaterThanOrEqual(6);
-    expect(ids.every(id => id.startsWith('a11y-scroll-region-name--'))).toBe(
-      true,
+    if (!entries['core-resizable--collapsing-scroll-panel-fixture']) return;
+    const layoutPanel = Object.keys(entries).filter(id =>
+      id.startsWith('core-layoutpanel--'),
     );
+    const ids = changedUncoveredStoryIds(
+      entries,
+      ['apps/storybook/stories/Resizable.stories.tsx'],
+      layoutPanel,
+    );
+    expect(ids).toContain('core-resizable--collapsing-scroll-panel-fixture');
+    expect(ids.every(id => id.startsWith('core-resizable--'))).toBe(true);
   });
 
   it('knows a story file when it sees one', () => {

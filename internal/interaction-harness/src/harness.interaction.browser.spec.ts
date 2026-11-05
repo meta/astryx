@@ -67,6 +67,8 @@ import {
   countBetween,
   cubicBezier,
   CONTROL_RGB,
+  CONTROL_SIDE,
+  controlClock,
   curveOf,
   drag,
   flick,
@@ -108,6 +110,7 @@ import {
   TouchPageStallError,
   touchStoryboard,
   traceRendering,
+  trackControl,
   trackMarker,
   waitForAnimation,
   releaseAnimationLog,
@@ -1059,6 +1062,39 @@ test.describe('frame evidence', () => {
     await waitForAnimation(dialog);
     await blockMainThread(page, 100, {during: dialog});
     await control.remove();
+  });
+
+  test('a control started ahead runs half a leg ahead of the first, in the strip below, and the two read every frame', async ({
+    page,
+  }, testInfo) => {
+    await busyFixture(page);
+    const first = await startBusyControl(page);
+    const ahead = await startBusyControl(page, {ahead: true});
+    // Half a leg ahead of the first, on the page clock.
+    expect(first.start - ahead.start).toBeCloseTo(200, 0);
+    const cast = await startScreencast(page);
+    // Five turns of the first control.
+    await page.waitForTimeout(2000);
+    const castFrames = await cast.stop();
+    const one = await trackControl(page, castFrames);
+    const two = await trackControl(page, castFrames, {ahead: true});
+    // Each box shows on every frame, the one ahead in the strip below.
+    expect(one.every(f => f.box != null)).toBe(true);
+    expect(two.every(f => f.box != null && f.box.y >= CONTROL_SIDE)).toBe(true);
+    // Where the first control reads nothing, within 36 px of a turn, the one
+    // ahead reads the frame.
+    const clocks = [controlClock(one), controlClock(two)];
+    const unread = castFrames.filter(f => clocks.every(c => !c.has(f.t)));
+    testInfo.annotations.push({
+      type: 'the controls read (frames)',
+      description: JSON.stringify({
+        frames: castFrames.length,
+        firstBlind: castFrames.filter(f => !clocks[0].has(f.t)).length,
+        unread: unread.length,
+      }),
+    });
+    expect(unread.map(f => f.t)).toEqual([]);
+    await first.remove();
   });
 
   test('a hold that starts before the block is judged from its first presented change inside it; a single change and then a freeze still fails', async ({
