@@ -16,6 +16,8 @@ verified_by:
     packages/core/src/Layout/__tests__/contentWidth.test.tsx,
     packages/core/src/Layout/__tests__/Layout.a11y.test.tsx,
     packages/core/src/Layout/__tests__/Layout.a11y.chromium.spec.ts,
+    packages/core/src/hooks/useScrollRegionProps.test.tsx,
+    packages/core/src/hooks/__tests__/scrollRegionName.a11y.chromium.spec.ts,
     .github/visual-baseline/manifest.json,
     scripts/check-knowledge.mjs,
     apps/storybook/rtl-audit/targets.json,
@@ -42,8 +44,8 @@ system_specs: [spec:AST-038]
 | Public contract         | `children`, `isScrollable`, `padding`, `label`, `role`, root `BaseProps`, and a root `ref`.                                                   |
 | Behavior                | The main content region fills the Layout's middle area, scrolls by default, and insets its children from neighbouring regions and open edges. |
 | End-user impact         | People scroll the main content while headers, footers, and panels stay put, with the scrollbar at the content area's open edge.               |
-| Builder impact          | None; the record describes shipped behavior.                                                                                                  |
-| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes. Three implementation gaps are listed under Current-state impact.   |
+| Builder impact          | None: no API change; a scrolling region gains a role and a name with no code change (AR3).                                                    |
+| Compatibility/readiness | No API or default changes; the scrolling-region role and name (AR3) are a patch `[fix]`. Three gaps are listed under Current-state impact.    |
 | Review checks           | Reject an inner wrapper around the children, a scrollbar moved off the open edge, an inferred landmark, or a further publication mismatch.    |
 | Governing rules         | `family:layout-regions` FR1, FR3, FR4, FR7, FR8, FR12; `architecture:container-padding`; `architecture:public-component-api` INV5–INV8.       |
 
@@ -61,8 +63,10 @@ Consumer syntax and examples belong in `LayoutContent.doc.mjs`.
 
 - Released default preserved: `yes` — scrollable, automatic inset, no
   landmark role.
-- Compatibility class: records shipped behavior; no public prop, default, DOM,
-  target, or styling output changes.
+- Compatibility class: patch. No public prop, default, target, or styling
+  output changes. While it scrolls, a region with no caller `role` gains
+  `role="group"` and an `aria-label` (DOM; AR3, `[fix]` under
+  `spec:AST-017` FR53).
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
@@ -121,7 +125,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR1 | LayoutContent renders one `div` carrying the `layout-content` target that fills the middle area's height and remaining width and holds the children directly. It scrolls overflow by default; `isScrollable={false}` clips it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Current source and tests; `family:layout-regions` FR7                              |
 | FR2 | Without `padding`, each edge that faces another region (a panel, header, or footer) has the inner inset, and each open edge has the Layout-edge inset, where the Layout-edge inset comes from the Layout's `padding`, else the nearest padding container, and the inner inset from the nearest padding container (Card, Section, Dialog, Drawer, or BottomSheet), each spacing step 4 otherwise; a block edge beside a header or footer without a divider collapses to zero. A `padding` step replaces all four edges, and `0` removes them. The region publishes container-padding values equal to the padding it applies, excluding the content-width alignment gutter of FR3, which is applied but not published. Implementation gaps: with only a start panel the open inline-end edge applies the inner inset; the published values differ from the applied padding with only an end panel and beside a header or footer without a divider; and a nested Layout inherits an outer header's or footer's collapse, so its content sits flush against its own divider (Current-state impact). | Current source; `family:layout-regions` FR4, FR6; `architecture:container-padding` |
 | FR3 | When the Layout sets a content width, the region keeps its own box and scrollbar where `component:Layout` FR6 places them and aligns its children to that width through its inline padding, never less than its inset. With `padding={0}` it stays full bleed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Current source and tests; `family:layout-regions` FR12                             |
-| FR4 | `role` and `label` set the root's `role` and `aria-label`; LayoutContent adds no role of its own.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Current source and tests; `family:layout-regions` FR8                              |
+| FR4 | `role` and `label` set the root's `role` and `aria-label`; LayoutContent adds a role and a name of its own only while it scrolls (AR3).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Current source and tests; `family:layout-regions` FR8                              |
 | FR5 | `ref` reaches the root. Supported DOM, data, ARIA, and event props reach the root after the component's own attributes; `xstyle`, `className`, and `style` compose after component styles.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Current source and tests; `architecture:public-component-api` INV5–INV8            |
 
 ### Allowed variation
@@ -149,7 +153,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 ### Performance and resources
 
 - **PR1 — No external lifecycle.** LayoutContent reads which slots its Layout
-  fills and adds no listener, observer, timer, or measurement.
+  fills. It adds no listener, observer, timer, or measurement, except the
+  overflow observation of AR3 while it may scroll.
 
 ## Accessibility contract
 
@@ -159,6 +164,16 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **AR2 — Keyboard scrolling.** A scrolling region is a browser scroll
   container, so its overflow scrolls with the keyboard once focus is inside
   it or on it.
+- **AR3 — A scrolling region is named.** While the region scrolls, its
+  scrolling element has `role="group"` (unless the caller sets a `role`) and
+  an accessible name (the caller's `label`, or a translated "Content"), so a
+  screen reader that reaches it, including as a browser-made Tab stop,
+  announces it; Tab behavior is the browser's (owner decision, 2026-11-04).
+  A caller's `role` takes only the caller's `label` (AR1), so a single main
+  landmark relies on its role (`spec:AST-025` FR12). Where the browser makes no Tab stop of it, a
+  scrolling region whose content holds nothing focusable can't be scrolled
+  from the keyboard. The caller then adds a focusable child or uses
+  ScrollableArea.
 
 ## Design relationships
 
@@ -189,7 +204,8 @@ anatomy of its own, so no anatomy-theming block is declared here.
 | FR3          | `contentWidth.test.tsx`; stable visual baseline `core-layout--content-width-scrollbar-placement`                     | No panels, one panel, both; zero padding                                                       | A content region that is not full width without panels, children not aligned, or a lost full bleed fails; a scrollbar moved off its edge comes back changed for review.                                                          | `audit:LayoutContent/layout`        |
 | FR4, AR1     | `LayoutSlots.test.tsx` landmark test; `Layout.a11y.test.tsx` and `Layout.a11y.chromium.spec.ts` `content-main` state | Caller `main` role and label                                                                   | A lost role or name fails, including at the accessibility tree. Gap: no test asserts that a region without `role` exposes none.                                                                                                  | `audit:LayoutContent/accessibility` |
 | FR5          | `LayoutSlots.test.tsx` ref and className/style tests                                                                 | Ref; caller class and style                                                                    | A ref on another element, or a dropped class or style, fails. Gap: no test covers DOM, data, or event props, or the `xstyle` merge order.                                                                                        | `audit:LayoutContent/api`           |
-| AR2, PR1     | Source review                                                                                                        | Scrolling region                                                                               | Gap: no automated check covers keyboard scrolling or fails if LayoutContent adds a listener or measurement.                                                                                                                      | `audit:LayoutContent/behavior`      |
+| AR2, PR1     | Source review                                                                                                        | Scrolling region                                                                               | Gap: no automated check covers keyboard scrolling or fails if LayoutContent adds a listener or measurement beyond AR3's.                                                                                                         | `audit:LayoutContent/behavior`      |
+| AR3          | `useScrollRegionProps.test.tsx` LayoutContent tests; `scrollRegionName.a11y.chromium.spec.ts`                        | Scrolling, fitting, labelled, `main`, not scrollable                                           | A group role or name missing while it overflows, or present while it fits or cannot scroll, fails, in Chromium's accessibility tree too; a lost caller role or label, a default landmark name, or a tab index fails.             | `audit:LayoutContent/accessibility` |
 | RTL relation | RTL audit curated D8 target (`apps/storybook/rtl-audit/targets.json`) on the `Content width with start panel` story  | Start panel with a centered content width (logical padding 16px start, 144px end); LTR and RTL | A logical start/end padding pair that does not swap physical sides in RTL fails D8.                                                                                                                                              | `audit:LayoutContent/i18n-rtl`      |
 
 ## Decision log

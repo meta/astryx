@@ -39,6 +39,7 @@ src/
 │   └── chromium.ts    observes DOM + accessibility tree + real browser.
 ├── spoken.ts      how a visible label is compared against a computed name
 ├── storybook.ts   a static server over a built Storybook, for the browser lane
+├── playwright.ts  the base test of every browser spec: contexts stay off remote hosts
 └── patterns/
     ├── radio-group.*        the radio-group pattern, same four files
     ├── checkbox.*           the checkbox pattern, same four files
@@ -396,6 +397,13 @@ pnpm storybook:build
 npx playwright install chromium
 pnpm test:a11y-contract
 ```
+
+Every browser spec imports `test` from `@astryxdesign/a11y-spec/playwright`.
+Its contexts answer remote images with a local stand-in and block other remote
+requests; the loopback host passes. The rule covers every context made from
+the test's `browser`. A spec that launches its own browser
+(`chromium.launch()`) must call `keepRequestsLocal(context)` on each context
+it makes, before the first navigation.
 
 ## What this package does not claim
 

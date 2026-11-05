@@ -2,7 +2,7 @@
 
 /**
  * @file formatFilterValue.ts
- * @input OperatorValue, FilterValue, config
+ * @input OperatorValue, FilterValue, config, locale, time zone, calendar
  * @output Formatted display string for a filter value
  * @position Pure utility; consumed by PowerSearch token rendering
  *
@@ -13,6 +13,10 @@
 import type {OperatorValue, FilterValue, EnumItem} from './types';
 import type {InternalConfig} from './useInternalConfig';
 import type {Locale, TranslatorFn} from '../i18n';
+import {
+  formatCalendarInstant,
+  type CalendarSystem,
+} from '../utils/calendarSystem';
 import {truncateCharacters} from '../utils/characters';
 import {registerEnglishFallback} from '../i18n/englishFallback';
 import english from '../i18n/generated-english/PowerSearch/formatFilterValue.generated';
@@ -59,49 +63,32 @@ export function formatSharedNumber(
  * zone `resolveDateZone` names. The token text and the accessible label share
  * it; the editors read the same zone through `resolveDateZone`, so a value
  * never reads as two days in one field. A value whose operator sets
- * `isDateOnly: false` is not a calendar day: it keeps its date and time in
- * `timezoneID`, else the viewer's zone.
+ * `isDateOnly: false` is an instant: its date and time in `timezoneID`,
+ * else the viewer's zone, the time its editor reads and writes.
  */
 export function formatDateAbsolute(
   unixSeconds: number,
   locale: Locale,
   timezoneID: string | undefined,
   isDateOnly = true,
+  calendar: CalendarSystem = 'gregory',
 ): string {
   const options: Intl.DateTimeFormatOptions = isDateOnly
-    ? {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        timeZone: resolveDateZone(timezoneID, true),
-        calendar: 'gregory',
-      }
+    ? {year: 'numeric', month: 'short', day: 'numeric'}
     : {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
-        timeZone: resolveDateZone(timezoneID, false),
-        calendar: 'gregory',
       };
-  return new Intl.DateTimeFormat(locale, options).format(unixSeconds * 1000);
-}
-
-/**
- * The released token text for a value with a time of day: its day in the
- * viewer's zone, as the token has always shown it.
- */
-export function formatDateAbsoluteCompact(
-  unixSeconds: number,
-  locale: Locale,
-): string {
-  return new Intl.DateTimeFormat(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    calendar: 'gregory',
-  }).format(unixSeconds * 1000);
+  return formatCalendarInstant(
+    calendar,
+    new Date(unixSeconds * 1000),
+    options,
+    locale,
+    resolveDateZone(timezoneID, isDateOnly),
+  );
 }
 
 function formatRelativeDate(value: string): string {
@@ -116,6 +103,11 @@ function formatDateRange(
   return t('@astryx.powersearch.valueEditor.dateRange');
 }
 
+/**
+ * The display text of a filter value. A `date_absolute` value is written in
+ * `calendar`, which defaults to Gregorian; PowerSearch passes the calendar that
+ * its provider resolves.
+ */
 export function formatFilterValue(
   _config: InternalConfig,
   operatorValue: OperatorValue,
@@ -124,6 +116,7 @@ export function formatFilterValue(
   t: TranslatorFn,
   locale: Locale,
   timezoneID?: string,
+  calendar: CalendarSystem = 'gregory',
 ): string {
   switch (filterValue.type) {
     case 'empty':
@@ -226,6 +219,7 @@ export function formatFilterValue(
           timezoneID,
           operatorValue.type !== 'date_absolute' ||
             operatorValue.isDateOnly !== false,
+          calendar,
         ),
         maxLength,
       );

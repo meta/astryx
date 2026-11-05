@@ -13,7 +13,7 @@
  *   lives.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,

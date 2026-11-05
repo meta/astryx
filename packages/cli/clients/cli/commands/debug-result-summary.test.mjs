@@ -14,10 +14,11 @@
  * @position packages/cli/clients/cli/commands — debug result integration
  */
 
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterEach, beforeAll, describe, expect, it} from 'vitest';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {createProgram} from '../index.mjs';
 import {
   begin,
   finish,
@@ -43,6 +44,13 @@ async function runWithDebug(args) {
   expect(events).toHaveLength(1);
   return {run, event: events[0]};
 }
+
+// Every command module loads here, once. A command loads the project module
+// only when it runs. Without this, the first case's window times that first
+// load as well as the run.
+beforeAll(async () => {
+  await createProgram();
+});
 
 afterEach(() => resetRecorder());
 

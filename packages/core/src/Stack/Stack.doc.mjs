@@ -524,7 +524,7 @@ export const docs = {
           name: 'isScrollable',
           type: 'boolean',
           description:
-            'Enables scrollable overflow (overflow: auto). StackItem already applies the flex min-height/min-width reset, so <StackItem size="fill" isScrollable> is a complete scroll region. Matches isScrollable on LayoutContent and LayoutPanel.',
+            'Enables scrollable overflow (overflow: auto). StackItem already applies the flex min-height/min-width reset, so <StackItem size="fill" isScrollable> is a complete scroll region. Matches isScrollable on LayoutContent and LayoutPanel. While its content overflows, a div or span item is a group named by aria-label, or by a translated "Content"; another element keeps its own role.',
           default: 'false',
         },
         {

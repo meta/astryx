@@ -23,7 +23,11 @@
 //   Vitest test, so these are the ones its change can break
 //   (spec:AST-030 FR2). `--project ui|node` keeps one Vitest project's.
 //
-// Usage: node .github/scripts/fs-guard-tests.mjs [--spec-readers [--project ui|node]] [--changed <ref>]
+// - With `--already-run <file>`: leaves out the tests that file lists (Vitest
+//   `list --json` output, or one path per line), so a test the `--changed`
+//   run already ran does not run a second time.
+//
+// Usage: node .github/scripts/fs-guard-tests.mjs [--spec-readers [--project ui|node]] [--changed <ref>] [--already-run <file>]
 //   (newline-separated paths)
 
 import {execFileSync} from 'node:child_process';
@@ -285,6 +289,35 @@ export function uiTestRoots(config) {
 }
 
 /**
+ * The repository-relative test paths in `text`: Vitest `list --json` output
+ * (an array of `{file}`), or one path per line. Absolute paths under `root`
+ * become relative.
+ */
+export function readTestList(text, root) {
+  const trimmed = text.trim();
+  if (trimmed === '') return [];
+  const raw = trimmed.startsWith('[')
+    ? JSON.parse(trimmed).map(entry =>
+        typeof entry === 'string' ? entry : entry.file,
+      )
+    : trimmed.split('\n');
+  return raw
+    .filter(file => typeof file === 'string' && file.trim() !== '')
+    .map(file => {
+      const clean = file.trim();
+      return path.isAbsolute(clean)
+        ? path.relative(root, clean).split(path.sep).join('/')
+        : clean.replace(/^\.\//, '');
+    });
+}
+
+/** `tests` without the ones `alreadyRun` lists. */
+export function withoutAlreadyRun(tests, alreadyRun) {
+  const ran = new Set(alreadyRun);
+  return tests.filter(test => !ran.has(test));
+}
+
+/**
  * The tests that read a record a spec-only change may touch: the import
  * closure (relative imports followed, as for the guards above) reads files
  * and names a record path in its code. With `changedFiles`, only those whose
@@ -399,6 +432,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     }
   } else {
     tests = scopedExtraTests(files, read, changedFiles);
+  }
+  const alreadyRunFlag = process.argv.indexOf('--already-run');
+  if (alreadyRunFlag !== -1) {
+    tests = withoutAlreadyRun(
+      tests,
+      readTestList(read(process.argv[alreadyRunFlag + 1]), process.cwd()),
+    );
   }
   process.stdout.write(tests.length > 0 ? `${tests.join('\n')}\n` : '');
 }

@@ -7,10 +7,9 @@
  *   button opens and closes the tooltip, Escape, a press outside, and focus
  *   leaving still close it, it is announced once, and a controlled isOpen is
  *   not overridden
- * @position Testing; validates the app toggle path in useTooltip.tsx and
- *   usePressPin.ts
+ * @position Testing; validates the app toggle path in useTooltip.tsx
  *
- * SYNC: When useTooltip.tsx or usePressPin.ts changes, update these tests.
+ * SYNC: When useTooltip.tsx changes, update these tests.
  */
 
 import {
@@ -126,6 +125,22 @@ function ToggleTip(
 
 const trigger = () => screen.getByRole('button', {name: 'About billing'});
 
+/** A button that calls show() from an ordinary onPointerDown handler. */
+function PressShowTip(): ReactElement {
+  const tooltip = useTooltip({});
+  return (
+    <>
+      <button
+        type="button"
+        ref={tooltip.ref}
+        onPointerDown={() => tooltip.show()}>
+        About billing
+      </button>
+      {tooltip.renderTooltip(TIP)}
+    </>
+  );
+}
+
 describe('useTooltip show() and hide() (component:Tooltip FR12)', () => {
   it("an app's own button opens the tooltip with show() and closes it with hide()", () => {
     const onShow = vi.fn();
@@ -224,6 +239,51 @@ describe('useTooltip show() and hide() (component:Tooltip FR12)', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Close'}));
     expect(onHide).toHaveBeenCalledTimes(1);
     expect(shows()).toBe(false);
+  });
+
+  it('a show() during a press on the trigger ends with a press released on the tooltip; hover then decides', () => {
+    vi.useFakeTimers();
+    try {
+      render(<PressShowTip />);
+      fireEvent.pointerDown(trigger(), {pointerType: 'mouse', button: 0});
+      expect(shows()).toBe(true);
+      const layer = screen.getByRole('tooltip', {hidden: true});
+      fireEvent.mouseLeave(trigger());
+      fireEvent.mouseEnter(layer);
+      fireEvent.pointerUp(layer, {pointerType: 'mouse', button: 0});
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(shows()).toBe(true);
+      fireEvent.mouseLeave(layer);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(shows()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a show() during a press that ends on the trigger keeps its hold through a later press released on the tooltip', () => {
+    vi.useFakeTimers();
+    try {
+      render(<PressShowTip />);
+      fireEvent.pointerDown(trigger(), {pointerType: 'mouse', button: 0});
+      fireEvent.pointerUp(trigger(), {pointerType: 'mouse', button: 0});
+      fireEvent.click(trigger(), {detail: 1});
+      const layer = screen.getByRole('tooltip', {hidden: true});
+      fireEvent.pointerDown(layer, {pointerType: 'mouse', button: 0});
+      fireEvent.pointerUp(layer, {pointerType: 'mouse', button: 0});
+      fireEvent.mouseLeave(trigger());
+      fireEvent.mouseLeave(layer);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(shows()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('show() does nothing while isEnabled is false', () => {

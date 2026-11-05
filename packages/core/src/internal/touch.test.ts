@@ -33,6 +33,31 @@ describe('internal/touch', () => {
     expect(entry).not.toHaveProperty('touchModule');
   });
 
+  it("re-exports by name what Lab's useRefreshControl reads", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const pan = await import('../gestures/PanGestureRecognizer');
+    const hook = await import('../gestures/useGestureRecognizer');
+    const animator = await import('../motion/animator');
+    const bezier = await import('../motion/bezier');
+    const progress = await import('../motion/progress');
+    const roles = await import('../motion/roles');
+    const band = await import('../motion/rubberBand');
+    const scroll = await import('../motion/uikit/scroll');
+    expect(entry.PanGestureRecognizer).toBe(pan.PanGestureRecognizer);
+    expect(entry.useGestureRecognizer).toBe(hook.useGestureRecognizer);
+    expect(entry.createMotionAnimator).toBe(animator.createMotionAnimator);
+    expect(entry.cubicBezier).toBe(bezier.cubicBezier);
+    expect(entry.mapProgress).toBe(progress.mapProgress);
+    expect(entry.parseCssEasing).toBe(roles.parseCssEasing);
+    expect(entry.parseMotionRoleValue).toBe(roles.parseMotionRoleValue);
+    expect(entry.rubberBand).toBe(band.rubberBand);
+    expect(entry.rubberBandInverse).toBe(band.rubberBandInverse);
+    expect(entry.rubberBandSlope).toBe(band.rubberBandSlope);
+    expect(entry.scroll).toBe(scroll.scroll);
+    // No internal factory shares a public factory's name.
+    expect(entry).not.toHaveProperty('createAnimator');
+  });
+
   it('attaches no window or document listeners when it loads', async () => {
     vi.resetModules();
     const onWindow = vi.spyOn(window, 'addEventListener');

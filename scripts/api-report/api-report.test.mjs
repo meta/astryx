@@ -2,10 +2,10 @@
 
 /**
  * @file Tests for the API report generator and the API changes renderer.
- * @input  `__fixtures__/repo`: a built fixture package with every row kind, an
- *         overloaded component, an `./internal/*` entry point, a stylesheet,
- *         a component doc with theming targets, a private package, and a
- *         public-attribute record
+ * @input  `__fixtures__/repo`: a built fixture package with every row kind,
+ *         overloaded components, hooks and functions, an `./internal/*` entry
+ *         point, a stylesheet, a component doc with theming targets, a
+ *         private package, and a public-attribute record
  * @output Vitest assertions on report content, order, determinism, and change rows
  * @position scripts/api-report — guards architecture:public-component-api INV24
  */
@@ -21,6 +21,7 @@ import {
   diffReports,
   parseReport,
   renderChanges,
+  staleReportWarnings,
   usageFor,
 } from './changes.mjs';
 import {chooseBase, publishedPackages} from './cli.mjs';
@@ -111,6 +112,35 @@ describe('generateReport', () => {
   it('lists an overloaded component as internal when its row is', () => {
     expect(report).toMatch(/^component Pill\(props: PillProps\) @internal$/m);
     expect(report).toContain('internal Pill via .');
+  });
+
+  it("tags each overload of a hook or a function with its own declaration's tags", () => {
+    expect(report).toContain(
+      [
+        'hook useChipMode',
+        "  overload (mode: 'a') => string",
+        '  overload () => string @deprecated',
+        "  overload (mode: 'b') => number",
+      ].join('\n'),
+    );
+    expect(report).toContain(
+      [
+        'function parseChip',
+        '  overload (label: string, legacy: true) => string @deprecated',
+        '  overload (label: string) => string',
+      ].join('\n'),
+    );
+  });
+
+  it('tags the row of an overloaded hook or function only with the tags every overload has', () => {
+    expect(report).toMatch(/^function parseChip$/m);
+    expect(report).toContain(
+      [
+        'function legacyChip @deprecated',
+        '  overload (label: string) => string @deprecated',
+        '  overload (label: string, size: ChipSize) => string @deprecated',
+      ].join('\n'),
+    );
   });
 
   it('leaves out ./internal/*, commented-out custom properties, and unlisted attributes', () => {
@@ -254,6 +284,169 @@ describe('API changes', () => {
     );
     expect(md).toContain('<details><summary>1 API change (advisory)</summary>');
     expect(md).not.toContain("prop size?: ChipSize = 'sm'");
+  });
+
+  describe('a warning when this pull request leaves its own rows out of the report', () => {
+    const file = () => 'packages/demo/api-report.md';
+    const warn = input => staleReportWarnings(computeChanges([input]), file);
+
+    it('warns when the pull request changes a row and does not regenerate the report', () => {
+      const [change] = computeChanges([
+        {
+          pkg: '@astryxdesign/demo',
+          base: report,
+          head: resize(report),
+          committed: report,
+          baseSource: 'build',
+        },
+      ]);
+      expect(change.staleOwnRows).toBe(1);
+      expect(staleReportWarnings([change], file)).toEqual([
+        '::warning file=packages/demo/api-report.md,title=API report not regenerated::' +
+          "This pull request changes 1 row of @astryxdesign/demo's public API " +
+          'that its committed api-report.md does not show. Run pnpm api:report and commit the report.',
+      ]);
+    });
+
+    it('counts only its own rows when the report was already behind main', () => {
+      const [change] = computeChanges([
+        {
+          pkg: '@astryxdesign/demo',
+          base: resize(report),
+          head: addTone(resize(report)),
+          committed: report,
+          baseSource: 'build',
+        },
+      ]);
+      expect(change).toMatchObject({
+        stale: true,
+        staleRows: 2,
+        staleOwnRows: 1,
+      });
+      expect(staleReportWarnings([change], file)[0]).toContain(
+        'changes 1 row of',
+      );
+    });
+
+    it('counts a wholly added component as one row, as the pull request report does', () => {
+      const withChip2 = text =>
+        text.replace(
+          '### Components\n\n```text\n',
+          '### Components\n\n```text\ncomponent Chip2\n  prop a?: string\n  prop b?: string\n  prop c?: string\n  prop d?: string\n  prop e?: string\n',
+        );
+      const head = withChip2(report);
+      expect(head).not.toBe(report);
+      const [change] = computeChanges([
+        {
+          pkg: '@astryxdesign/demo',
+          base: report,
+          head,
+          committed: report,
+          baseSource: 'build',
+        },
+      ]);
+      expect(change.counts.added).toBe(1);
+      expect(change).toMatchObject({staleRows: 1, staleOwnRows: 1});
+      expect(staleReportWarnings([change], file)[0]).toContain(
+        'changes 1 row of',
+      );
+    });
+
+    // Small hand-written reports: one component with two props.
+    const tiny = ({
+      item = 'component Chip',
+      size = "'md'",
+      tone = "'neutral'",
+      chip = true,
+    } = {}) =>
+      '## `.`\n\n### Components\n\n```text\n' +
+      (chip
+        ? `${item}\n  prop size?: ChipSize = ${size}\n  prop tone?: ChipTone = ${tone}\n`
+        : '') +
+      '```\n';
+
+    it('warns for a prop change to a component the committed report lacks entirely', () => {
+      const [change] = computeChanges([
+        {
+          pkg: '@astryxdesign/demo',
+          base: tiny(),
+          head: tiny({size: "'sm'"}),
+          committed: tiny({chip: false}),
+          baseSource: 'build',
+        },
+      ]);
+      expect(change.rows.map(r => r.member)).toEqual(['size']);
+      expect(change.staleOwnRows).toBe(1);
+    });
+
+    it('does not count a changed item line the report already shows, when another member is behind', () => {
+      const head = tiny({item: 'component Chip<T>'});
+      const [change] = computeChanges([
+        {
+          pkg: '@astryxdesign/demo',
+          base: tiny(),
+          head,
+          committed: tiny({item: 'component Chip<T>', tone: "'accent'"}),
+          baseSource: 'build',
+        },
+      ]);
+      expect(change.rows.map(r => [r.item, r.member])).toEqual([
+        ['component Chip', null],
+      ]);
+      expect(change).toMatchObject({
+        stale: true,
+        staleRows: 1,
+        staleOwnRows: 0,
+      });
+    });
+
+    it('does not warn for a report that was stale before the pull request', () => {
+      expect(
+        warn({
+          pkg: '@astryxdesign/demo',
+          base: resize(report),
+          head: resize(report),
+          committed: report,
+          baseSource: 'build',
+        }),
+      ).toEqual([]);
+    });
+
+    it('does not warn when the pull request regenerated its report', () => {
+      expect(
+        warn({
+          pkg: '@astryxdesign/demo',
+          base: report,
+          head: resize(report),
+          committed: resize(report),
+          baseSource: 'build',
+        }),
+      ).toEqual([]);
+    });
+
+    it("does not warn against the merge base's committed report, which cannot tell the rows apart", () => {
+      expect(
+        warn({
+          pkg: '@astryxdesign/demo',
+          base: report,
+          head: resize(report),
+          committed: report,
+          baseSource: 'committed',
+        }),
+      ).toEqual([]);
+    });
+
+    it('does not warn for a new package with no report at the merge base', () => {
+      expect(
+        warn({
+          pkg: '@astryxdesign/demo',
+          base: null,
+          head: report,
+          committed: null,
+          baseSource: 'build',
+        }),
+      ).toEqual([]);
+    });
   });
 
   it('renders a stale report with no API change as one line', () => {

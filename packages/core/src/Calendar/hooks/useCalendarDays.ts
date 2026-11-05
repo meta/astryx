@@ -4,9 +4,11 @@
 
 /**
  * @file useCalendarDays.ts
- * @input Uses React useMemo, useLocale, PlainDate utilities, generated CLDR weekday data
- * @output Exports useCalendarDays hook for generating calendar day grids
- * @position Calendar-specific hook; used by Calendar
+ * @input Uses React useMemo, useLocale, PlainDate and calendar-system
+ *   utilities, generated CLDR weekday data
+ * @output Exports useCalendarDays, the day grid of one month of any calendar
+ *   system (Gregorian by default)
+ * @position Calendar-specific hook; used by Calendar and MonthScroller
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Calendar/hooks/index.ts
@@ -17,12 +19,17 @@ import type {DayOfWeek, ISODateString} from '../../utils/dateTypes';
 import {
   type PlainDate,
   plainDateToISO,
-  getDaysInMonth,
   plainDateDayOfWeek,
   plainDateAddDays,
 } from '../../utils/plainDate';
 import {useLocale} from '../../i18n';
-import {getStandaloneShortWeekdayNames} from '../getStandaloneShortWeekdayNames';
+import {getWeekdayHeaderNames} from '../getWeekdayHeaderNames';
+import {
+  type CalendarSystem,
+  calendarDayOfMonth,
+  calendarMonthFromYearMonth,
+} from '../../utils/calendarSystem';
+import {resolveShownCalendar} from '../../i18n/useCalendarSystem';
 
 /**
  * Represents a single day in the calendar grid.
@@ -42,14 +49,27 @@ export interface CalendarDay {
  * Configuration for calendar days generation
  */
 export interface UseCalendarDaysOptions {
-  /** The year to generate days for */
+  /** The year to generate days for, in `calendar`'s numbering */
   year: number;
-  /** The month (1-based: 1 = January, 12 = December) */
+  /**
+   * The month's position in its year (1-based). In the Gregorian calendar,
+   * 1 is January and 12 is December. In other calendars it is numbered as
+   * `Temporal.PlainDate` numbers it: 1 through 13 in a Hebrew leap year.
+   */
   month: number;
   /** First day of week (0=Sunday through 6=Saturday) */
   weekStartsOn?: DayOfWeek;
   /** Use variable rows per month vs. fixed 6-row grid */
   hasVariableRowCount?: boolean;
+  /**
+   * The calendar system that numbers `year`, `month`, and each `dayNumber`.
+   * Each day keeps its Gregorian `date` and `iso`. The hook never reads the
+   * InternationalizationProvider calendar. Calendars other than gregory,
+   * iso8601, buddhist, roc, and japanese need Temporal; without it, the hook
+   * reads Gregorian numbers and warns once in development.
+   * @default 'gregory'
+   */
+  calendar?: CalendarSystem;
 }
 
 /**
@@ -80,76 +100,82 @@ export interface UseCalendarDaysReturn {
  *   weekStartsOn: 0, // Sunday
  * });
  * // days[i].date is a PlainDate { year, month (1-based), day }
+ *
+ * // Aban 1405 in the Persian calendar; dates stay Gregorian
+ * useCalendarDays({year: 1405, month: 8, calendar: 'persian'});
  * ```
  */
 export function useCalendarDays(
   options: UseCalendarDaysOptions,
 ): UseCalendarDaysReturn {
-  const {year, month, weekStartsOn = 0, hasVariableRowCount = false} = options;
+  const {
+    year,
+    month,
+    weekStartsOn = 0,
+    hasVariableRowCount = false,
+    calendar: calendarOption = 'gregory',
+  } = options;
+  const calendar = resolveShownCalendar(calendarOption, 'useCalendarDays');
+  const days = useMemo(() => {
+    const calendarMonth = calendarMonthFromYearMonth(calendar, {year, month});
+    return layOutMonthDays({
+      first: calendarMonth.start,
+      length: calendarMonth.length,
+      weekStartsOn,
+      hasVariableRowCount,
+      dayNumberOf: (pd, offset) =>
+        offset >= 0 && offset < calendarMonth.length
+          ? offset + 1
+          : calendarDayOfMonth(calendar, pd),
+    });
+  }, [year, month, calendar, weekStartsOn, hasVariableRowCount]);
+  return useMonthGrid(days, weekStartsOn);
+}
+
+interface MonthLayout {
+  first: PlainDate;
+  length: number;
+  weekStartsOn: DayOfWeek;
+  hasVariableRowCount: boolean;
+  /** The day number of a grid day, given its offset from the month's first day. */
+  dayNumberOf: (pd: PlainDate, offset: number) => number;
+}
+
+function layOutMonthDays(layout: MonthLayout): CalendarDay[] {
+  const {first, length, weekStartsOn, hasVariableRowCount, dayNumberOf} =
+    layout;
+  let startingDayOfWeek = plainDateDayOfWeek(first) - weekStartsOn;
+  if (startingDayOfWeek < 0) {
+    startingDayOfWeek += 7;
+  }
+  const totalRows = hasVariableRowCount
+    ? Math.ceil((length + startingDayOfWeek) / 7)
+    : 6;
+  const result: CalendarDay[] = [];
+  for (let i = 0; i < totalRows * 7; i++) {
+    const offset = i - startingDayOfWeek;
+    const pd = plainDateAddDays(first, offset);
+    result.push({
+      date: pd,
+      iso: plainDateToISO(pd),
+      isOutside: offset < 0 || offset >= length,
+      dayNumber: dayNumberOf(pd, offset),
+    });
+  }
+  return result;
+}
+
+function useMonthGrid(
+  days: CalendarDay[],
+  weekStartsOn: DayOfWeek,
+): UseCalendarDaysReturn {
   const locale = useLocale();
 
-  // Calculate grid structure
-  const gridInfo = useMemo(() => {
-    const totalDaysInMonth = getDaysInMonth(year, month);
+  const dayNames = useMemo(
+    () => getWeekdayHeaderNames(locale, weekStartsOn),
+    [locale, weekStartsOn],
+  );
 
-    // Calculate starting offset based on weekStartsOn
-    let startingDayOfWeek =
-      plainDateDayOfWeek({year, month, day: 1}) - weekStartsOn;
-    if (startingDayOfWeek < 0) {
-      startingDayOfWeek += 7;
-    }
-
-    // Calculate total cells
-    const totalDays = totalDaysInMonth + startingDayOfWeek;
-    const totalRows = hasVariableRowCount ? Math.ceil(totalDays / 7) : 6;
-    const totalCells = totalRows * 7;
-
-    return {
-      daysInMonth: totalDaysInMonth,
-      startingDayOfWeek,
-      totalCells,
-    };
-  }, [year, month, weekStartsOn, hasVariableRowCount]);
-
-  // Generated strings avoid Date anchors, so weekday headers cannot shift with
-  // the runtime timezone. Keep numeric indices as the rotation source of truth.
-  const dayNames = useMemo(() => {
-    const names = getStandaloneShortWeekdayNames(locale);
-    return Array.from(
-      {length: 7},
-      (_, index) => names[(index + weekStartsOn) % 7],
-    );
-  }, [locale, weekStartsOn]);
-
-  // Generate days array
-  const days = useMemo(() => {
-    const {
-      daysInMonth: totalDaysInMonth,
-      startingDayOfWeek,
-      totalCells,
-    } = gridInfo;
-    const firstOfMonth: PlainDate = {year, month, day: 1};
-    const result: CalendarDay[] = [];
-
-    for (let i = 0; i < totalCells; i++) {
-      const dayOffset = i - startingDayOfWeek + 1;
-      const isOutside = dayOffset < 1 || dayOffset > totalDaysInMonth;
-      const pd: PlainDate = isOutside
-        ? plainDateAddDays(firstOfMonth, dayOffset - 1)
-        : {year, month, day: dayOffset};
-
-      result.push({
-        date: pd,
-        iso: plainDateToISO(pd),
-        isOutside,
-        dayNumber: pd.day,
-      });
-    }
-
-    return result;
-  }, [year, month, gridInfo]);
-
-  // Group days into weeks
   const weeks = useMemo(() => {
     const result: CalendarDay[][] = [];
     for (let i = 0; i < days.length; i += 7) {
@@ -158,10 +184,5 @@ export function useCalendarDays(
     return result;
   }, [days]);
 
-  return {
-    days,
-    weeks,
-    dayNames,
-    totalCells: gridInfo.totalCells,
-  };
+  return {days, weeks, dayNames, totalCells: days.length};
 }
