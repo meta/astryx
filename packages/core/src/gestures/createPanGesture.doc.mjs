@@ -100,7 +100,7 @@ export const docs = {
   },
   relatedHooks: ['usePanGesture'],
   importPath: '@astryxdesign/core',
-  category: 'interaction',
+  category: 'motion & gestures',
 };
 
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
