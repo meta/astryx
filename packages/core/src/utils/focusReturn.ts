@@ -160,9 +160,22 @@ export function returnFocusForLastInput(
  */
 export function prepareFocusRepairOnRemoval(
   surface: Element,
+  options?: {
+    /**
+     * Skip the repair when focus already rested on the page body before the
+     * commit's first removal: the removal did not lose that focus.
+     */
+    keepRestingFocus?: boolean;
+  },
 ): (repair: () => void) => void {
   const host = surface.ownerDocument.defaultView?.frameElement ?? null;
   return repair => {
+    if (
+      options?.keepRestingFocus === true &&
+      wasFocusDetachedBeforeRemoval(surface.ownerDocument)
+    ) {
+      return;
+    }
     queueMicrotask(() => {
       if (surface.isConnected) {
         return;
@@ -172,6 +185,20 @@ export function prepareFocusRepairOnRemoval(
       }
     });
   };
+}
+
+// Whether focus rested on the page body when the current commit began
+// removing surfaces, per document. One removal can drop focus before a later
+// surface's cleanup runs, so every cleanup of the commit reads the first value.
+const focusDetachedAtRemovalStart = new WeakMap<Document, boolean>();
+function wasFocusDetachedBeforeRemoval(doc: Document): boolean {
+  let wasDetached = focusDetachedAtRemovalStart.get(doc);
+  if (wasDetached === undefined) {
+    wasDetached = isFocusDetached(doc);
+    focusDetachedAtRemovalStart.set(doc, wasDetached);
+    queueMicrotask(() => focusDetachedAtRemovalStart.delete(doc));
+  }
+  return wasDetached;
 }
 
 /**
