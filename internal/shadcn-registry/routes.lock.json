@@ -3692,6 +3692,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-calendar-navigation-month-pager",
+      "path": "examples/use-calendar-navigation/month-pager",
+      "aliases": []
+    },
+    {
       "name": "example-use-clickable-container-clickable-project-card",
       "path": "examples/use-clickable-container/clickable-project-card",
       "aliases": []
@@ -4004,6 +4009,11 @@
     {
       "name": "hook-use-calendar-days",
       "path": "hooks/use-calendar-days",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-calendar-navigation",
+      "path": "hooks/use-calendar-navigation",
       "aliases": []
     },
     {
