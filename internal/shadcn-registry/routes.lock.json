@@ -603,6 +603,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-dialog-hero-header",
+      "path": "components/lab/dialog-hero-header",
+      "aliases": []
+    },
+    {
       "name": "component-lab-diff-viewer",
       "path": "components/lab/diff-viewer",
       "aliases": []
