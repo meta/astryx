@@ -174,11 +174,8 @@ function layoutBox(element: HTMLElement): LayerExitBox {
  * names or label targets, and no form owner. A cloned checked radio then
  * cannot take the live group's selection, and a named field cannot submit.
  * It is `inert`, hidden from assistive technology, and out of pointer reach.
- * Its frames and media load nothing, and a canvas shows its pixels. Content
- * holding a canvas that reads back empty gets no copy: the close is then
- * immediate. Its descendants' keyframe animations do not start again. A
- * layer has one copy: placing another for the same layer takes the previous
- * one away.
+ * Its descendants' keyframe animations do not start again. A layer has one
+ * copy: placing another for the same layer takes the previous one away.
  *
  * It is shown only in the top layer, as a manual popover, so a clipping,
  * transformed or sticky ancestor neither cuts nor moves it. A fixed box or a
