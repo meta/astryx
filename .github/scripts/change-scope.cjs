@@ -232,32 +232,20 @@ const PACKAGE_INFRA_PATTERNS = [
   /^packages\/[^/]+\/[^/]+\.(?:c|m)?js$/,
 ];
 
-// Shared infrastructure that only Vitest's module graph can reach: the
-// interaction harness, the repository's lint plugin and the Node scripts. A
-// change there still runs every other owner as shared infrastructure, but
-// the Vitest lanes run the tests that import it and the guards that read
-// sources (spec:AST-030 FR13). The scripts the Vitest configuration itself
-// loads stay shared for Vitest too: no module graph reaches them. Admitted
-// Node tooling keeps its whole Node project (FR8).
+// Shared infrastructure only Vitest's module graph reaches: the interaction
+// harness and the repository's lint plugin, both ES modules. A change there
+// still runs every other owner as shared infrastructure (the interaction
+// proofs included), but the Vitest lanes run the tests that import it and the
+// guards that read sources (spec:AST-030 FR13). Scripts stay shared: package
+// scripts run generators whose output tests read, and Vitest's graph does not
+// follow `require`.
 const VITEST_GRAPH_INFRA_PATTERNS = [
   /^internal\/interaction-harness\//,
   /^internal\/eslint-plugin-astryx\//,
-  /^scripts\//,
-  /^\.github\/scripts\//,
-  /^apps\/sandbox\/scripts\//,
 ];
-const VITEST_CONFIG_SCRIPTS = new Set([
-  'scripts/stylex-module-resolution.cjs',
-  'scripts/vitest-shard-sequencer.mjs',
-  'scripts/lib/duration-split.mjs',
-]);
 
 function isVitestGraphInfraPath(filePath) {
-  return (
-    VITEST_GRAPH_INFRA_PATTERNS.some(pattern => pattern.test(filePath)) &&
-    !VITEST_CONFIG_SCRIPTS.has(filePath) &&
-    !isNodeToolingPath(filePath)
-  );
+  return VITEST_GRAPH_INFRA_PATTERNS.some(pattern => pattern.test(filePath));
 }
 
 // Surfaces a pull request's tests can be scoped to by the import graph (the
@@ -577,7 +565,6 @@ module.exports = {
   ROUTES_LOCK,
   NODE_TOOLING_PATHS,
   SURFACES,
-  VITEST_CONFIG_SCRIPTS,
   classifyChanges,
   classifyPaths,
   isKnowledgeRecordPath,

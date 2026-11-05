@@ -10,7 +10,6 @@ import {describe, expect, it} from 'vitest';
 const require = createRequire(import.meta.url);
 const {
   SURFACES,
-  VITEST_CONFIG_SCRIPTS,
   classifyChanges,
   parseNameStatus,
 } = require('./change-scope.cjs');
@@ -514,13 +513,10 @@ describe('full-suite scope', () => {
 describe('shared infrastructure only the Vitest module graph reaches (spec:AST-030 FR13)', () => {
   const scope = files => classifyChanges(files.map(filename => ({filename})));
 
-  it('narrows only the Vitest lanes for the interaction harness, the lint plugin and the Node scripts', () => {
+  it('narrows only the Vitest lanes for the interaction harness and the lint plugin', () => {
     for (const file of [
       'internal/interaction-harness/src/busy.ts',
       'internal/eslint-plugin-astryx/rules/no-internal-barrel-import.js',
-      'scripts/build-css.mjs',
-      '.github/scripts/playwright-legs.mjs',
-      'apps/sandbox/scripts/check-sandbox.mjs',
     ]) {
       const result = scope(['packages/core/src/Button/Button.tsx', file]);
       // Every other owner still runs as for shared infrastructure.
@@ -537,10 +533,15 @@ describe('shared infrastructure only the Vitest module graph reaches (spec:AST-0
       'package.json',
       'vitest.config.ts',
       '.github/workflows/ci.yml',
-      // Admitted Node tooling keeps its whole Node project (FR8).
+      // Scripts stay shared: generators run by package scripts, and
+      // CommonJS files Vitest's graph does not follow.
+      'scripts/generate-i18n-runtime.mjs',
+      'scripts/build-css.mjs',
+      '.github/scripts/run-labels.cjs',
+      '.github/scripts/fs-guard-tests.mjs',
+      'apps/sandbox/scripts/check-sandbox.mjs',
       'scripts/score-ledger.mjs',
       'internal/scripts/lib/a-future-strategy.mjs',
-      ...VITEST_CONFIG_SCRIPTS,
     ]) {
       expect(scope([file]).vitestFullSuite, file).toBe(true);
       expect(
@@ -556,32 +557,12 @@ describe('shared infrastructure only the Vitest module graph reaches (spec:AST-0
       false,
     );
     expect(
-      classifyChanges([{filename: 'scripts/build-css.mjs'}], {expectedCount: 2})
-        .vitestFullSuite,
+      classifyChanges(
+        [{filename: 'internal/interaction-harness/src/busy.ts'}],
+        {expectedCount: 2},
+      ).vitestFullSuite,
     ).toBe(true);
     expect(classifyChanges([]).vitestFullSuite).toBe(true);
-  });
-
-  it('keeps every script the Vitest configuration loads out of the narrowing', () => {
-    const root = new URL('../../', import.meta.url);
-    const read = file => fs.readFileSync(new URL(file, root), 'utf8');
-    const relativeImports = (file, text) =>
-      [...text.matchAll(/(?:from|require\()\s*['"](\.{1,2}\/[^'"]+)['"]/g)].map(
-        m =>
-          path.posix.normalize(path.posix.join(path.posix.dirname(file), m[1])),
-      );
-    const loaded = relativeImports(
-      'vitest.config.ts',
-      read('vitest.config.ts'),
-    ).filter(f => f.startsWith('scripts/'));
-    expect(loaded.length).toBeGreaterThan(0);
-    const all = new Set(loaded);
-    for (const file of loaded) {
-      for (const dep of relativeImports(file, read(file))) {
-        if (dep.startsWith('scripts/')) all.add(dep);
-      }
-    }
-    expect([...all].sort()).toEqual([...VITEST_CONFIG_SCRIPTS].sort());
   });
 
   it('reports vitest_full_suite to the workflow', () => {
@@ -597,7 +578,7 @@ describe('shared infrastructure only the Vitest module graph reaches (spec:AST-0
       ],
       {
         input:
-          'M\tpackages/core/src/Button/Button.tsx\nM\tscripts/build-css.mjs\n',
+          'M\tpackages/core/src/Button/Button.tsx\nM\tinternal/interaction-harness/src/busy.ts\n',
         env: {...process.env, GITHUB_OUTPUT: out},
         encoding: 'utf8',
       },

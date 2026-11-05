@@ -967,7 +967,7 @@ jobs:
       # its diff against the base (`--changed`): the changed tests, and every
       # test that imports a changed module, however indirectly. That includes
       # shared infrastructure only the module graph reaches (the interaction
-      # harness, the lint plugin, the Node scripts: `vitest_full_suite`).
+      # harness and the lint plugin: `vitest_full_suite`).
       # Anything else runs every test.
       - name: Run this shard of the UI tests
         env:
