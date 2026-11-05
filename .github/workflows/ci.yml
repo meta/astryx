@@ -2651,6 +2651,10 @@ jobs:
     container:
       image: mcr.microsoft.com/playwright:v1.61.1-noble
       options: --ipc=host
+    # A container's steps default to `sh`; keep the runner's bash.
+    defaults:
+      run:
+        shell: bash
     permissions:
       # The heavy-suite caps read the author's pull requests and runs.
       actions: read
@@ -2731,6 +2735,12 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+
+      # The container runs as root over a workspace the runner owns, and git
+      # refuses a repository another user owns unless it is marked safe.
+      - name: Trust the checkout in the container
+        if: steps.scope.outputs.applies == 'true'
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Verify evidence checkout
         if: steps.scope.outputs.applies == 'true'

@@ -135,6 +135,16 @@ describe('WebKit interaction proof routing', () => {
       ),
       options: '--ipc=host',
     });
+    // Steps keep the runner's bash, and git trusts the root-owned checkout
+    // before the head check reads it.
+    expect(webkit.defaults).toEqual({run: {shell: 'bash'}});
+    const trust = step(webkit, 'Trust the checkout in the container');
+    expect(trust.run).toBe(
+      'git config --global --add safe.directory "$GITHUB_WORKSPACE"',
+    );
+    expect(webkit.steps.indexOf(trust)).toBe(
+      webkit.steps.indexOf(step(webkit, 'Verify evidence checkout')) - 1,
+    );
     const tag = /:v(\d+\.\d+\.\d+)-/.exec(webkit.container.image)[1];
     const lock = fs.readFileSync(path.join(root, 'pnpm-lock.yaml'), 'utf8');
     // Every resolved copy of the three packages, so a bump of any one of them
