@@ -879,25 +879,34 @@ describe('Timestamp', () => {
 
     it('keeps the default hover-card row in the viewer zone with timezoneID set', async () => {
       const user = userEvent.setup();
+      const originalTZ = process.env.TZ;
       process.env.TZ = 'UTC';
-      render(
-        <Timestamp
-          value={new Date('2026-03-25T10:00:00Z').getTime() / 1000}
-          format="relative"
-          timezoneID="Asia/Tokyo"
-          data-testid="ts"
-        />,
-      );
-      const el = screen.getByTestId('ts');
-      await user.tab();
-      expect(el).toHaveFocus();
-      await waitFor(() => {
-        expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
-      });
-      const card = screen.getByRole('dialog', {hidden: true});
-      // FR7: the default row reads the viewer's zone, not the pinned one.
-      expect(card.textContent).toContain('10:00:00');
-      expect(card.textContent).not.toContain('19:00:00');
+      try {
+        render(
+          <Timestamp
+            value={new Date('2026-03-25T10:00:00Z').getTime() / 1000}
+            format="relative"
+            timezoneID="Asia/Tokyo"
+            data-testid="ts"
+          />,
+        );
+        const el = screen.getByTestId('ts');
+        await user.tab();
+        expect(el).toHaveFocus();
+        await waitFor(() => {
+          expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
+        });
+        const card = screen.getByRole('dialog', {hidden: true});
+        // FR7: the default row reads the viewer's zone, not the pinned one.
+        expect(card.textContent).toContain('10:00:00');
+        expect(card.textContent).not.toContain('19:00:00');
+      } finally {
+        if (originalTZ === undefined) {
+          delete process.env.TZ;
+        } else {
+          process.env.TZ = originalTZ;
+        }
+      }
     });
 
     it('does not add a tab stop when the hover card is disabled', () => {

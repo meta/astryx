@@ -131,6 +131,10 @@ export interface TimestampProps extends BaseProps<HTMLTimeElement> {
    * is copyable. With no entries the card shows a single default row with the
    * full absolute time in the viewer's own zone, which is copyable.
    *
+   * An entry without its own `timezoneID` follows the Timestamp's
+   * `timezoneID` when set, else the viewer's zone; `'local'` always means
+   * the viewer's zone.
+   *
    * Configuring entries also attaches the surface to absolute formats, which
    * otherwise have no hover card at all. `hasTooltip={false}` still suppresses
    * it, and an empty array is treated as no configuration.
@@ -377,7 +381,7 @@ export function Timestamp({
               // every time zone — whatever `timezoneID` pins.
               isClockPending
                 ? {timeZone: 'UTC', isTimezoneShown: true}
-                : {timeZone: timezoneID, isTimezoneShown},
+                : {timeZone: timezoneID, isTimezoneShown, calendar},
             )
           : '';
 
@@ -388,12 +392,13 @@ export function Timestamp({
   // viewer's zone: the default hover-card row, and the relative accessible
   // name because relative formats ignore `timezoneID`.
   const fullAbsoluteText = isValidDate
-    ? formatInstant(date, 'full', locale, {timeZone: undefined})
+    ? formatInstant(date, 'full', locale, {timeZone: undefined, calendar})
     : '';
   const ariaLabelText = isValidDate
     ? formatInstant(date, 'full', locale, {
         timeZone: undefined,
         timeZoneNameStyle: 'long',
+        calendar,
       })
     : '';
 

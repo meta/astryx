@@ -65,7 +65,7 @@ export const docs = {
       name: 'tooltipEntries',
       type: 'ReadonlyArray<{timezoneID?: string; format?: TimestampTooltipFormat; label?: string; isCopyable?: boolean}>',
       description:
-        "Lines to show on hover, so one instant can be read (and optionally copied) in several time zones and/or formats at once. Each entry is one line, in the order given. Omit timezoneID (or pass 'local') for the viewer's own zone; format defaults to the full absolute style and also accepts 'full' alongside every non-relative TimestampFormat. Rows are read-only unless they set isCopyable (default false); copyable rows show a copy button in a dedicated trailing action column so buttons align, and the column is only present when some row is copyable. With no entries the card shows a single default row with the full absolute time, which is copyable. Configuring entries also attaches the surface to absolute formats, which otherwise have none.",
+        "Lines to show on hover, so one instant can be read (and optionally copied) in several time zones and/or formats at once. Each entry is one line, in the order given. An entry without timezoneID follows the Timestamp timezoneID when set, else the viewer's zone; 'local' always means the viewer's zone; format defaults to the full absolute style and also accepts 'full' alongside every non-relative TimestampFormat. Rows are read-only unless they set isCopyable (default false); copyable rows show a copy button in a dedicated trailing action column so buttons align, and the column is only present when some row is copyable. With no entries the card shows a single default row with the full absolute time, which is copyable. Configuring entries also attaches the surface to absolute formats, which otherwise have none.",
     },
     {
       name: 'isTimezoneShown',
@@ -230,10 +230,14 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsZh = {
   propDescriptions: {
-    value: '\u8981\u663e\u793a\u7684\u65e5\u671f/\u65f6\u95f4\u3002\u63a5\u53d7 Unix \u65f6\u95f4\u6233\uff08\u79d2\uff09\u6216 ISO 8601 \u5b57\u7b26\u4e32\u3002',
-    format: "\u663e\u793a\u683c\u5f0f\u3002'relative' \u663e\u793a '2\u5c0f\u65f6\u524d'\uff0c'date' \u663e\u793a\u65e5\u671f\uff0c'date_long' \u663e\u793a\u957f\u6708\u4efd\u65e5\u671f\uff0c'date_weekday' \u663e\u793a\u661f\u671f+\u65e5\u671f\uff0c'auto' \u6839\u636e\u65f6\u95f4\u8fdc\u8fd1\u81ea\u52a8\u5207\u6362\u3002\u5e26\u65e5\u671f\u7684\u683c\u5f0f\uff08'date'\u3001'date_long'\u3001'date_weekday'\u3001'date_time'\uff0c\u4ee5\u53ca\u60ac\u505c\u5361\u7247\u548c\u65e0\u969c\u788d\u540d\u79f0\u4e2d\u7684\u5b8c\u6574\u65e5\u671f\uff09\u4f7f\u7528 InternationalizationProvider \u7684\u5386\u6cd5\uff08\u5982 calendar=\"persian\"\uff09\uff1b'time'\u3001\u76f8\u5bf9\u683c\u5f0f\u3001'system_*' \u548c 'unix_seconds' \u4e0d\u53d8\u3002",
-    autoThreshold: "auto \u683c\u5f0f\u4ece\u76f8\u5bf9\u65f6\u95f4\u5207\u6362\u5230 date_time \u7684\u9608\u503c\u79d2\u6570\u3002",
-    hasTooltip: '\u60ac\u505c\u65f6\u662f\u5426\u663e\u793a\u5305\u542b\u5b8c\u6574\u65e5\u671f/\u65f6\u95f4\u7684\u53ef\u590d\u5236\u60ac\u505c\u5361\u7247\uff08\u76f8\u5bf9\u65f6\u95f4\u6a21\u5f0f\uff0c\u6216\u914d\u7f6e tooltipEntries \u7684\u4efb\u610f\u683c\u5f0f\uff09\u3002',
+    value:
+      '\u8981\u663e\u793a\u7684\u65e5\u671f/\u65f6\u95f4\u3002\u63a5\u53d7 Unix \u65f6\u95f4\u6233\uff08\u79d2\uff09\u6216 ISO 8601 \u5b57\u7b26\u4e32\u3002',
+    format:
+      "\u663e\u793a\u683c\u5f0f\u3002'relative' \u663e\u793a '2\u5c0f\u65f6\u524d'\uff0c'date' \u663e\u793a\u65e5\u671f\uff0c'date_long' \u663e\u793a\u957f\u6708\u4efd\u65e5\u671f\uff0c'date_weekday' \u663e\u793a\u661f\u671f+\u65e5\u671f\uff0c'auto' \u6839\u636e\u65f6\u95f4\u8fdc\u8fd1\u81ea\u52a8\u5207\u6362\u3002\u5e26\u65e5\u671f\u7684\u683c\u5f0f\uff08'date'\u3001'date_long'\u3001'date_weekday'\u3001'date_time'\uff0c\u4ee5\u53ca\u60ac\u505c\u5361\u7247\u548c\u65e0\u969c\u788d\u540d\u79f0\u4e2d\u7684\u5b8c\u6574\u65e5\u671f\uff09\u4f7f\u7528 InternationalizationProvider \u7684\u5386\u6cd5\uff08\u5982 calendar=\"persian\"\uff09\uff1b'time'\u3001\u76f8\u5bf9\u683c\u5f0f\u3001'system_*' \u548c 'unix_seconds' \u4e0d\u53d8\u3002",
+    autoThreshold:
+      'auto \u683c\u5f0f\u4ece\u76f8\u5bf9\u65f6\u95f4\u5207\u6362\u5230 date_time \u7684\u9608\u503c\u79d2\u6570\u3002',
+    hasTooltip:
+      '\u60ac\u505c\u65f6\u662f\u5426\u663e\u793a\u5305\u542b\u5b8c\u6574\u65e5\u671f/\u65f6\u95f4\u7684\u53ef\u590d\u5236\u60ac\u505c\u5361\u7247\uff08\u76f8\u5bf9\u65f6\u95f4\u6a21\u5f0f\uff0c\u6216\u914d\u7f6e tooltipEntries \u7684\u4efb\u610f\u683c\u5f0f\uff09\u3002',
     tooltipEntries:
       "\u60ac\u505c\u65f6\u8981\u663e\u793a\u7684\u884c\uff0c\u7528\u4e8e\u540c\u65f6\u5c55\u793a\u591a\u4e2a\u65f6\u533a\u548c/\u6216\u591a\u79cd\u683c\u5f0f\u3002\u6bcf\u9879\u4e3a\u4e00\u884c\uff0c\u6309\u987a\u5e8f\u6e32\u67d3\uff1b\u7701\u7565 timezoneID\uff08\u6216\u4f20\u5165 'local'\uff09\u8868\u793a\u67e5\u770b\u8005\u672c\u5730\u65f6\u533a\u3002\u60ac\u505c\u9762\u677f\u59cb\u7ec8\u662f\u53ef\u9010\u884c\u590d\u5236\u5230\u526a\u8d34\u677f\u7684\u4ea4\u4e92\u5f0f\u5361\u7247\uff0c\u8fd9\u4e9b\u914d\u7f6e\u9879\u81ea\u5b9a\u4e49\u5176\u884c\uff1b\u672a\u914d\u7f6e\u65f6\u5361\u7247\u663e\u793a\u4e00\u884c\u9ed8\u8ba4\u7684\u5b8c\u6574\u7edd\u5bf9\u65f6\u95f4\u3002\u914d\u7f6e\u540e\u7edd\u5bf9\u65f6\u95f4\u683c\u5f0f\u4e5f\u4f1a\u56e0\u6b64\u83b7\u5f97\u60ac\u505c\u9762\u677f\u3002",
     isTimezoneShown:
@@ -414,12 +418,13 @@ export const docsDense = {
   },
   propDescriptions: {
     value: 'date/time as unix seconds or ISO string',
-    format: "display mode: 'relative' (locale-native long wording), 'relative_short' (locale-native narrow wording), 'auto', 'date', 'date_long', 'date_weekday', 'date_time', 'time', 'system_date', 'system_date_time', 'system_time', 'unix_seconds'; date-bearing formats use the provider calendar, system_* and time do not",
+    format:
+      "display mode: 'relative' (locale-native long wording), 'relative_short' (locale-native narrow wording), 'auto', 'date', 'date_long', 'date_weekday', 'date_time', 'time', 'system_date', 'system_date_time', 'system_time', 'unix_seconds'; date-bearing formats use the provider calendar, system_* and time do not",
     autoThreshold: 'seconds threshold for auto relative\u2192date_time switch',
     hasTooltip:
       'show copyable full-time hover card on hover (relative mode, or any format with tooltipEntries)',
     tooltipEntries:
-      "hover rows across zones/formats: [{timezoneID?, format?, label?}]; timezoneID omitted or 'local' = viewer zone, format defaults to 'full'; the hover surface is always a copy-to-clipboard card, these customize its rows (default: a single full-time row), and configuring entries enables the card on absolute formats",
+      "hover rows across zones/formats: [{timezoneID?, format?, label?}]; an entry without timezoneID follows the Timestamp timezoneID when set, else the viewer zone ('local' always means the viewer zone), format defaults to 'full'; the hover surface is always a copy-to-clipboard card, these customize its rows (default: a single full-time row), and configuring entries enables the card on absolute formats",
     isTimezoneShown:
       'append timezone abbreviation to visible text (date_time and time only)',
     isLive: 'live-update relative time',

@@ -53,7 +53,8 @@ export type TimestampTooltipFormat = InstantFormat;
 export interface TimestampTooltipEntry {
   /**
    * IANA time zone identifier, e.g. `'UTC'`, `'America/Los_Angeles'`.
-   * Omit it — or pass `'local'` — for the viewer's own zone.
+   * Omit it to follow the Timestamp's `timezoneID` when set, else the
+   * viewer's own zone. Pass `'local'` for the viewer's own zone always.
    *
    * Prefer region identifiers. Fixed-offset abbreviations such as `'EST'` are
    * accepted by the platform but never observe daylight saving, so they read
@@ -224,7 +225,13 @@ export function formatTooltipLines(
       ? defaultTimezoneID
       : resolveTimezoneID(entry.timezoneID),
   );
-  const hasMultipleZones = new Set(resolved.map(zoneKey)).size > 1;
+  // The pinned zone reads on the page beside the card, so it counts too: a
+  // viewer-zone row next to pinned text needs its label to tell them apart.
+  const zoneKeys = new Set(resolved.map(zoneKey));
+  if (defaultTimezoneID !== undefined) {
+    zoneKeys.add(zoneKey(defaultTimezoneID));
+  }
+  const hasMultipleZones = zoneKeys.size > 1;
 
   return entries.map((entry, index) => {
     const format = entry.format ?? 'full';
