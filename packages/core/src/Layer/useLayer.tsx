@@ -552,10 +552,9 @@ function untransform(
 }
 
 /**
- * Whether an animation is running and ends on its own. A paused or idle one
- * never reaches its end by itself, and one with an infinite end time (an
- * infinite iteration count, say) never finishes, so waiting on either would
- * hold a layer for good.
+ * Whether an animation is running and ends on its own. A paused or idle
+ * animation does not end by itself. An animation with an infinite end time
+ * never ends. Waiting on either holds the layer for good.
  */
 function endsOnItsOwn(animation: Animation): boolean {
   return (
@@ -905,10 +904,10 @@ function isAnchorReady(anchor: HTMLElement): boolean {
 }
 
 /**
- * Calls `onReady` once every CSS animation/transition running on `anchor` or
- * one of its ancestors, AT THE NEXT FRAME, has finished. Calls it
- * synchronously if `document.getAnimations` does not exist (jsdom). Returns a
- * cancel function.
+ * Calls `onReady` one frame later, once every running animation that ends on
+ * its own, on the document timeline, on `anchor` or an ancestor, has finished.
+ * Calls it synchronously if `document.getAnimations` does not exist (jsdom).
+ * Returns a cancel function.
  *
  * `getBoundingClientRect()` reflects an ancestor's CSS transform, so an
  * anchor sitting inside a running entry animation — Dialog's own
@@ -928,11 +927,10 @@ function isAnchorReady(anchor: HTMLElement): boolean {
  * zero animations and defeat the whole guard. One frame is enough for the UA
  * to have started it.
  *
- * Only an animation that ends on its own, on the document's timeline, is
- * waited on. `Animation.finished` never resolves for one with
- * `iterationCount: Infinity` (it never reaches the finished play state), so a
- * continuously-animating ancestor — `StatusDot`'s pulse, e.g. — would
- * otherwise block a layer that anchors to it from ever opening.
+ * The wait skips an animation that never ends by itself: a paused one, an
+ * infinite one such as `StatusDot`'s pulse, and a scroll- or view-driven one.
+ * `Animation.finished` never resolves for these, so waiting on them would
+ * block a layer that anchors to them from ever opening.
  */
 
 function waitForAncestorAnimations(
