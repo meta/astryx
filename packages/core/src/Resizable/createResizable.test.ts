@@ -22,7 +22,7 @@ import type {ResizeGestureModel} from './resizeGesture';
 const controllers: ResizableController[] = [];
 
 function create(options?: CreateResizableOptions): ResizableController {
-  const controller = createResizable(options);
+  const controller = createResizable(null, options);
   controllers.push(controller);
   return controller;
 }
@@ -341,7 +341,7 @@ describe('createResizable: persistence', () => {
 describe('createResizable: destroy', () => {
   it('ends a gesture in flight and keeps the size it reached, then answers nothing', () => {
     const onSizeChange = vi.fn();
-    const resizable = createResizable({
+    const resizable = createResizable(null, {
       defaultSize: 200,
       autoSaveId: 'mid-gesture',
       onSizeChange,
@@ -376,7 +376,7 @@ describe('createResizable: destroy', () => {
     const container = document.createElement('div');
     document.body.append(container);
     Object.defineProperty(container, 'clientWidth', {get: () => 600});
-    const resizable = createResizable({
+    const resizable = createResizable(null, {
       containerRef: {current: container},
       maxSize: '50%',
     });

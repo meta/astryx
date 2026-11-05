@@ -76,6 +76,9 @@ Approved implementations:
 - `packages/core/src/PowerSearch/formatFilterValue.ts`
 - `packages/core/src/NumberInput/numberParser.ts` — reads typed and pasted
   numbers under the field's locale
+- `packages/core/src/utils/calendarDateParser.ts` — typed dates for DateInput
+  and DateTimeInput in any calendar: names, eras, field order, and digits read
+  off Intl and parsed back, the committed text, and the calendar's name
 - `packages/core/src/utils/timeFormat.ts` — time-of-day text for TimeInput and
   DateTimeInput: the locale's hour cycle, digits, separator, and day periods,
   formatted and parsed back
