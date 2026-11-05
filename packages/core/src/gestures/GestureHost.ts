@@ -2292,17 +2292,20 @@ export class GestureHost {
       };
       this.wheel = gesture;
     }
-    const {dx, dy} = wheelPixels(wheel, this.doc.defaultView);
+    let {dx, dy} = wheelPixels(wheel, this.doc.defaultView);
     const horizontal = Math.abs(dx) > Math.abs(dy);
     // The splitter reads a pan's stream only. A ctrl-wheel pinch has no
     // fingers' phase or momentum to tell apart, and ends 100 ms after its
     // last wheel.
     let seg: WheelSegment | null = null;
     if (kind === 'pan') {
+      // Only a trackpad's wheel can join its glide late; a mouse wheel's
+      // notches keep the splitter's other rules.
       seg = this.segmenter.push(
         time,
         horizontal ? dx : dy,
         horizontal ? WHEEL_FOLLOW_END_MS : WHEEL_FOLLOW_END_V_MS,
+        scrollTypeOf(wheel) === 'continuous',
       );
     } else {
       this.segmenter.end();
@@ -2312,6 +2315,14 @@ export class GestureHost {
       if (gesture != null) {
         this.endWheel(time);
         gesture = null;
+      }
+    }
+    // A late wheel the glide took was the fingers' first when this one grows.
+    if (seg != null && seg.carried !== 0) {
+      if (horizontal) {
+        dx += seg.carried;
+      } else {
+        dy += seg.carried;
       }
     }
     if (gesture == null) {

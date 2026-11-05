@@ -610,9 +610,9 @@ export function changedSinceMergeBase(base) {
 }
 
 /**
- * A spec's routing lines (and the audit config) come from the commit the
- * workflow steps come from when it has the file (an older PR head predates
- * current routing); otherwise from the checkout.
+ * A spec's routing lines, the audit config and the recorded durations come
+ * from the commit the workflow steps come from when it has the file (an older
+ * PR head predates current routing); otherwise from the checkout.
  */
 function readPolicySource(root, file, policySha) {
   if (policySha) {
@@ -639,10 +639,18 @@ function readAuditConfig(root, file, policySha) {
   return JSON.parse(source);
 }
 
-function readDurations(root) {
-  const file = path.join(root, '.github/a11y-contract-durations.json');
-  if (!fs.existsSync(file)) return {};
-  return fileSeconds(JSON.parse(fs.readFileSync(file, 'utf8')));
+function readDurations(root, policySha) {
+  let source;
+  try {
+    source = readPolicySource(
+      root,
+      '.github/a11y-contract-durations.json',
+      policySha,
+    );
+  } catch {
+    return {};
+  }
+  return fileSeconds(JSON.parse(source));
 }
 
 /** The Playwright worker count, as playwright.config.ts reads it. */
@@ -765,7 +773,7 @@ function main() {
             components: ownedBy,
             changedPaths: readLines(changedFilesFile) ?? changedPaths,
           }),
-          seconds: readDurations(root),
+          seconds: readDurations(root, policySha),
           workers: contractWorkers(),
         })
       : {run: routed, notRun: []};

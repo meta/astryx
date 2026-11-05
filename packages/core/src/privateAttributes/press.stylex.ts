@@ -5,23 +5,22 @@
 
 /**
  * @file privateAttributes/press.stylex.ts
- * @input StyleX, the semantic overlay color tokens, the touch press strength
- *   (`pressVars`, utils/interactionOverlay.stylex.ts) and the row layer's
- *   clocks (utils/rowPressLayer.stylex.ts)
- * @output `rowPressLayerStyles`: the compositor press layer for list rows
- *   (`cell`) and its own-image arms for a row on the `backgroundImage`
- *   variant (`cellOnImage`)
- * @position Owner module of the private press attribute for the row layer:
- *   the press controller (utils/pressFeedback.ts) writes the attribute, and
- *   this file reads it. No package entry exports it. Item and TreeList
- *   compose these styles after their overlay variant;
- *   utils/interactionOverlay.cell.test.ts tests them.
+ * @input StyleX, the overlay color tokens, the touch press strength
+ *   (`pressVars`) and the row layer's clocks (utils/rowPressLayer.stylex.ts)
+ * @output `rowPressLayerStyles`, the compositor press layer for list rows
+ *   (`cell`, `cellOnImage` for a `backgroundImage` row,
+ *   `cellOnImagePressOnly` for a row whose fill is the hover tone), and
+ *   `rowPressPaintStyles`, a CheckboxList row's press paint for its box
+ * @position Owner module of the private press attribute: the press controller
+ *   (utils/pressFeedback.ts) writes it, and this file reads it. No package
+ *   entry exports it. Item, TreeList and CheckboxListItem compose its styles;
+ *   utils/interactionOverlay.cell.test.ts tests the row layer.
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {colorVars} from '../theme/tokens.stylex';
+import {colorVars, durationVars, easeVars} from '../theme/tokens.stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {pressVars} from '../utils/interactionOverlay.stylex';
-import {cellPressConsts} from '../utils/rowPressLayer.stylex';
 
 // The overlay's arm selectors (interactionOverlay.stylex.ts), restated here:
 // StyleX resolves a style's keys within its own file.
@@ -54,13 +53,12 @@ const pressRelease = stylex.keyframes({
 });
 
 /**
- * The row layer's clock as CSS. It is the strength release's clock, scaled
- * by the theme's `--_astryx-motion-tempo` up to 1.5, so the layer and the
- * strength land together.
+ * The row layer's clock as CSS: the strength release's clock, the theme's
+ * exit duration, so the layer and the strength land together.
  */
-const CELL_RELEASE = `calc(${cellPressConsts.cellReleaseMs}ms * min(var(--_astryx-motion-tempo, 1), 1.5))`;
-/** The same clock under Reduce Motion: a tempo may shorten it, never lengthen it. */
-const CELL_RELEASE_REDUCED = `min(${cellPressConsts.cellReleaseMs}ms, calc(${cellPressConsts.cellReleaseMs}ms * var(--_astryx-motion-tempo, 1)))`;
+const CELL_RELEASE = durationVars['--duration-exit'];
+/** The same clock under Reduce Motion, no longer than the Reduce Motion fade. */
+const CELL_RELEASE_REDUCED = `min(${durationVars['--duration-exit']}, ${reducedMotionFadeConsts.duration})`;
 const REDUCED_MOTION = '@media (prefers-reduced-motion: reduce)';
 
 /** Opacity 1 → 0: the row layer leaves; its fading arm runs it. */
@@ -69,8 +67,8 @@ const cellRelease = stylex.keyframes({
   to: {opacity: 0},
 });
 
-/** The release's curve: the table's gentle ease-out. */
-const RELEASE_EASE = cellPressConsts.cellReleaseEase;
+/** The release's curve: the theme's exit easing, as the strength's. */
+const RELEASE_EASE = easeVars['--ease-exit'];
 
 export const rowPressLayerStyles = stylex.create({
   /**
@@ -92,6 +90,8 @@ export const rowPressLayerStyles = stylex.create({
    * a row's own `::before` and its stacking are as they were; during a press
    * the layer is the row's `::before`, so a caller's decoration there merges
    * into the layer for that time (decorate with `::after` or a child).
+   * Under a finger an interactive List row's `::after` is its touch hit area,
+   * so decorate that row with a child.
    *
    * Under a finger only (a coarse primary pointer): a fine pointer keeps the
    * variant exactly, with no layer, no stacking context and its own touch
@@ -238,6 +238,43 @@ export const rowPressLayerStyles = stylex.create({
         },
         [PRESSED_ON]: {default: pressedOverlayImage, [COARSE]: 'none'},
         [PRESSED_FADING]: {default: pressedOverlayImage, [COARSE]: 'none'},
+      },
+    },
+  },
+  /**
+   * `cellOnImage` without the hover arm, for a row whose fill is already the
+   * hover tone (a highlighted Item row). A hover layer on it would match a
+   * pressed row, so the row shows only its press.
+   */
+  cellOnImagePressOnly: {
+    backgroundImage: {
+      default: null,
+      [ENABLED]: {
+        default: null,
+        ':active': {
+          default: pressedImage,
+          [COARSE]: 'none',
+        },
+        [PRESSED_ON]: {default: pressedOverlayImage, [COARSE]: 'none'},
+        [PRESSED_FADING]: {default: pressedOverlayImage, [COARSE]: 'none'},
+      },
+    },
+  },
+});
+
+export const rowPressPaintStyles = stylex.create({
+  // A box reads its nearest row's value, so a list in a row's content keeps
+  // its own rows' paint.
+  checkboxRow: {
+    '--_checkbox-row-press-paint': {
+      default: 'none',
+      ':is([data-astryx-press="on"])': {
+        default: 'none',
+        '@media (pointer: coarse)': 'var(--_press-paint-image)',
+      },
+      ':is([data-astryx-press="fading"])': {
+        default: 'none',
+        '@media (pointer: coarse)': 'var(--_press-paint-image)',
       },
     },
   },

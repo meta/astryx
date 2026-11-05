@@ -5,7 +5,8 @@
 /**
  * @file CircularProgress.tsx
  * @input Uses React (useId, refs, layout effects), stylex, SVG, Web
- *   Animations, color/spacing/duration/ease tokens
+ *   Animations, color/spacing/duration/ease tokens, and Spinner's rotor
+ *   (core internal/spinner-rotor) for the indeterminate ring
  * @output Exports CircularProgress component, CircularProgressProps, CircularProgressSize, CircularProgressVariant types
  * @position Core implementation; consumed by index.ts
  *
@@ -27,6 +28,11 @@ import {
   spacingVars,
   typeScaleVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {
+  SPINNER_ARC_FRACTION,
+  spinnerRotorStyles,
+  syncRotationPhase,
+} from '@astryxdesign/core/internal/spinner-rotor';
 import {mergeProps} from '@astryxdesign/core/utils';
 import type {BaseProps} from '@astryxdesign/core';
 import {themeProps} from '@astryxdesign/core/utils';
@@ -119,7 +125,8 @@ export interface CircularProgressProps extends BaseProps<HTMLDivElement> {
    */
   variant?: CircularProgressVariant;
   /**
-   * When true, renders an animated indeterminate progress indicator.
+   * When true, renders an animated indeterminate progress indicator: an arc
+   * that turns as Spinner's does.
    * Use when the progress amount is unknown (e.g. loading, processing).
    * The `value` and `hasValueLabel` props are ignored in this mode.
    * Respects `prefers-reduced-motion` by slowing the animation.
@@ -137,32 +144,6 @@ export interface CircularProgressProps extends BaseProps<HTMLDivElement> {
    */
   'data-testid'?: string;
 }
-
-// =============================================================================
-// Indeterminate animation
-// =============================================================================
-
-const indeterminateRotation = stylex.keyframes({
-  '0%': {transform: 'rotate(0deg)'},
-  '100%': {transform: 'rotate(360deg)'},
-});
-
-// SVG dash percentages scale with the square viewport. A 300% gap exceeds every
-// ring circumference; shifting the 2% + 300% pattern by 302% closes the loop.
-const indeterminateDash = stylex.keyframes({
-  '0%': {
-    strokeDasharray: '2%, 300%',
-    strokeDashoffset: '0%',
-  },
-  '50%': {
-    strokeDasharray: '175%, 300%',
-    strokeDashoffset: '-68%',
-  },
-  '100%': {
-    strokeDasharray: '2%, 300%',
-    strokeDashoffset: '-302%',
-  },
-});
 
 // =============================================================================
 // Styles
@@ -186,13 +167,6 @@ const styles = stylex.create({
   },
   svgIndeterminate: {
     display: 'block',
-    animationName: indeterminateRotation,
-    animationDuration: {
-      default: '2s',
-      '@media (prefers-reduced-motion: reduce)': '4s',
-    },
-    animationTimingFunction: 'linear',
-    animationIterationCount: 'infinite',
   },
   track: {
     fill: 'none',
@@ -270,13 +244,6 @@ const styles = stylex.create({
   fillIndeterminate: {
     fill: 'none',
     strokeLinecap: 'round',
-    animationName: indeterminateDash,
-    animationDuration: {
-      default: '1.5s',
-      '@media (prefers-reduced-motion: reduce)': '3s',
-    },
-    animationTimingFunction: 'ease-in-out',
-    animationIterationCount: 'infinite',
   },
   children: {
     position: 'absolute',
@@ -687,8 +654,10 @@ export function CircularProgress({
           width={diameter}
           height={diameter}
           viewBox={`0 0 ${diameter} ${diameter}`}
+          ref={isIndeterminate ? syncRotationPhase : undefined}
           {...stylex.props(
             isIndeterminate ? styles.svgIndeterminate : styles.svg,
+            isIndeterminate && spinnerRotorStyles.turn,
           )}>
           <circle
             {...mergeProps(
@@ -713,6 +682,10 @@ export function CircularProgress({
               cy={center}
               r={radius}
               strokeWidth={strokeWidth}
+              // Spinner's arc: the same fraction of the ring, starting at 12
+              // o'clock.
+              strokeDasharray={`${circumference * SPINNER_ARC_FRACTION} ${circumference * (1 - SPINNER_ARC_FRACTION)}`}
+              transform={`rotate(-90 ${center} ${center})`}
             />
           ) : null}
         </svg>

@@ -143,6 +143,25 @@ export const docs = {
       {className: 'astryx-table-cell', visualProps: ['density']},
       {className: 'astryx-table-header-cell', visualProps: ['density']},
     ],
+    componentIcons: [
+      {
+        slot: 'table-sort-indicator',
+        description:
+          "The sort direction glyph beside a sortable column's label (`useTableSortable`).",
+        fallback:
+          '`arrowUp` ascending; `arrowDown` descending; `arrowsUpDown` unsorted',
+        state: [
+          {
+            name: 'direction',
+            type: "'ascending' | 'descending' | 'none'",
+            description:
+              "The column's sort direction; `none` while the column is not sorted.",
+          },
+        ],
+        whenNull:
+          'Hides the glyph. The Sort control keeps its label and its click and keyboard sorting; the column header keeps `aria-sort`.',
+      },
+    ],
   },
   description:
     'Styled, data-driven table with density, dividers, hover highlight, striped rows, and named plugin support. T must extend Record<string, unknown>.',

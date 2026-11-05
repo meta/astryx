@@ -2,9 +2,12 @@
 
 /**
  * @file touch.ts
- * @input The gesture core: the arena, the recognizers, and their geometry
+ * @input The gesture core: the arena, the recognizers, and their geometry;
+ *   the pan, the motion engine and math, and the touch-presentation and
+ *   direction helpers that Lab components read
  * @output `@astryxdesign/core/internal/touch`: the gesture core's primitives
- *   for Lab components, re-exported by name
+ *   and the motion, touch-presentation and direction modules for Lab
+ *   components, re-exported by name
  * @position An internal entry reserved for Astryx's own packages:
  *   undocumented, outside the public API and its compatibility promise
  *   (spec:AST-017 FR21), versioned in lockstep with Core, and allowed only in
@@ -39,3 +42,41 @@ export {
 export {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecognizer';
 export {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 export {DEFAULT_ENVIRONMENT} from '../gestures/types';
+
+// Lab's useRefreshControl reads these: its pull's pan and the hook that
+// starts it. It also reads the motion engine and math, and the scroll
+// view's bounce spring, for its pull, settle and end. Its indicator fades
+// along the settle's curve, and the motion-role parsers read the theme's
+// tokens for its end.
+export {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
+export type {PanGestureRecognizerOptions} from '../gestures/PanGestureRecognizer';
+export type {
+  GestureEventContext,
+  GestureTouch,
+  PointerKind,
+} from '../gestures/types';
+export {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+// The motion engine's factory. The public one, `createAnimator`, plays
+// only the theme's state-change motion.
+export {createMotionEngine} from '../motion/animator';
+export type {
+  Animator as MotionEngine,
+  AnimatorOptions as MotionEngineOptions,
+  MotionCurve,
+} from '../motion/animator';
+export {cubicBezier} from '../motion/bezier';
+export {mapProgress} from '../motion/progress';
+export {parseCssEasing, parseMotionRoleValue} from '../motion/roles';
+export {
+  rubberBand,
+  rubberBandInverse,
+  rubberBandSlope,
+} from '../motion/rubberBand';
+export {scroll} from '../motion/uikit/scroll';
+
+// Lab components also read the UIKit gesture table, the touch presentation
+// and its query, and an element's direction.
+export {isRtlElement} from '../hooks/isRtlElement';
+export {UIKIT_GESTURES} from '../motion/uikit/gestures';
+export {useTouchPresentation} from '../utils/touchPresentation';
+export {TOUCH_QUERY} from '../utils/touchQueries';

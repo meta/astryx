@@ -4,11 +4,10 @@
  * @file ListRowPress.interaction.browser.spec.ts
  * @input The built List, TreeList and press feedback stories, real touch input
  *   (Chromium CDP / WebKit's input command), the interaction harness, and the
- *   cell release clock and curve from the UIKit constants table
- *   (motion/uikit/timing.ts)
+ *   default theme's exit motion tokens, which the release plays
  * @output Interaction and animation proofs for a list row's touch press
  *   release: a held row paints the pressed token at full strength, and the
- *   release follows the cell release curve sampled frame by frame (both
+ *   release follows the exit easing sampled frame by frame (both
  *   engines); the release keeps fading on every frame while the main thread
  *   is blocked (Chromium screencast, WebKit video); the release does no
  *   Layout or Paint; storyboards of the release and of the blocked window
@@ -34,13 +33,13 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   animationStoryboard,
+  armHold,
   blockMainThread,
   castStoryboard,
   compareCurve,
   countBetween,
   cubicBezier,
   freezeTimers,
-  holdAnimations,
   installLongTaskLog,
   installTimerGate,
   openStory,
@@ -54,20 +53,49 @@ import {
   touchDriver,
   traceRendering,
   waitForAnimation,
+  watchAnimations,
   withStorybook,
   writeEvidence,
   type CastFrame,
   type TouchDriver,
 } from '@astryxdesign/interaction-harness';
-import {timing} from '../../motion/uikit/timing';
 
 const storybook = withStorybook(test);
 
-const RELEASE_MS = timing.press.highlightOutMs;
-const releaseEase = cubicBezier(...timing.press.highlightOutCurve);
+/** The release's clock and curve: the theme's exit motion tokens. */
+interface Exit {
+  readonly ms: number;
+  readonly curve: readonly [number, number, number, number];
+  readonly ease: (t: number) => number;
+}
+
+/** Reads `--duration-exit` and `--ease-exit` where the press paints. */
+async function exitOf(surface: Locator): Promise<Exit> {
+  const {ms, curve} = await surface.evaluate(el => {
+    const style = getComputedStyle(el);
+    const time = style.getPropertyValue('--duration-exit').trim();
+    const points = (
+      style.getPropertyValue('--ease-exit').match(/-?\d*\.?\d+/g) ?? []
+    ).map(Number);
+    return {
+      ms: time.endsWith('ms') ? parseFloat(time) : parseFloat(time) * 1000,
+      curve: points,
+    };
+  });
+  const points = curve as unknown as Exit['curve'];
+  return {ms, curve: points, ease: cubicBezier(...points)};
+}
+
 /** The layer's opacity t ms into the release: the strength, 1 → 0. */
-const expectedStrength = (t: number) =>
-  1 - releaseEase(Math.min(1, Math.max(0, t / RELEASE_MS)));
+const strengthAt = (exit: Exit, t: number) =>
+  1 - exit.ease(Math.min(1, Math.max(0, t / exit.ms)));
+
+/**
+ * How far before the release's end a recorded frame may land and still count
+ * as having reached rest: two of a Playwright video's frames (about 40 ms
+ * apart), because the recording's frame gaps vary.
+ */
+const REST_MARGIN_MS = 80;
 
 /** Long enough that the press is believed (scroll.delaysContentTouchesMs). */
 const HOLD_MS = 400;
@@ -217,39 +245,44 @@ async function samplePixel(
   }
 }
 
-test('a held row paints the pressed token and its release follows the cell release curve, sampled frame by frame', async ({
+test('a held row paints the pressed token and its release follows the exit easing, sampled frame by frame', async ({
   page,
 }, testInfo) => {
   const {driver, row, center} = await openRow(page, LIST_ROW);
+  const exit = await exitOf(row);
   expect(await layerOpacity(row)).toBe(0);
   // Gate the page's timers before the press, so the controller's check at
   // the release clock (after which the release ends with its animation) can
   // be held while the release is seeked.
   await installTimerGate(page);
+  // The page holds the release itself as soon as it runs. A hold the test
+  // sends after the lift arrives later on a busy machine, and the release
+  // can end first.
+  const hold = await armHold(page, row);
   await driver.play(tap(center, {holdMs: HOLD_MS}));
   expect(await pressState(row)).toBe('fading');
   await freezeTimers(page);
-  const held = await holdAnimations(page, row);
+  const held = await hold.held();
   const release = held.find(
     a => a.target?.startsWith('li') && a.kind === 'CSSAnimation',
   );
   expect(release, JSON.stringify(held)).toBeDefined();
-  expect(release?.durationMs).toBe(RELEASE_MS);
+  expect(release?.durationMs).toBe(exit.ms);
   const samples: {t: number; value: number}[] = [];
-  for (const t of timeline(RELEASE_MS)) {
+  for (const t of timeline(exit.ms)) {
     await seekAnimations(page, t);
     samples.push({t, value: await layerOpacity(row)});
   }
   await releaseAnimations(page, {finish: true});
   await thawTimers(page);
-  const comparison = compareCurve(samples, expectedStrength, 0.005);
+  const comparison = compareCurve(samples, t => strengthAt(exit, t), 0.005);
   await writeEvidence(
     'curves/list-row-press-release',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
         {
-          releaseMs: RELEASE_MS,
-          curve: timing.press.highlightOutCurve,
+          releaseMs: exit.ms,
+          curve: exit.curve,
           held,
           samples,
           comparison,
@@ -281,14 +314,23 @@ for (const story of [LIST_ROW, SCROLLER_ROW, TREE_ROW]) {
     );
     const {driver, row, center, probe} = await openRow(page, story);
     const cast = await startScreencast(page);
+    // The page starts the block itself, a frame into the release. A block the
+    // test sends after the release starts lands later on a busy machine. The
+    // short release can then end with too few frames left to judge.
+    const watch = await watchAnimations(row);
     // Strength 0 is the row at rest; strength 1 the believed press.
-    await driver.play(tap(center, {holdMs: HOLD_MS}));
-    const [release] = await waitForAnimation(row, {minProgressMs: 16});
-    const block = await blockMainThread(page, 700);
+    const [block] = await Promise.all([
+      blockMainThread(page, 700, {during: row}),
+      driver.play(tap(center, {holdMs: HOLD_MS})),
+    ]);
+    const [release] = await watch.started({minProgressMs: 16});
     await page.waitForTimeout(150);
     const frames = await cast.stop();
     const pixels = await samplePixel(page, frames, probe);
-    const rest = pixels[0].value;
+    // The last frame is the row at rest: the release ended inside the block.
+    // The first frame can already show the press, because a row outside a
+    // scroller paints in the frame the finger lands.
+    const rest = pixels[pixels.length - 1].value;
     const pressedFrames = pixels.filter(p => p.t < release.from);
     const pressed = Math.min(...pressedFrames.map(p => p.value));
     const strength = (v: number) => (rest - v) / (rest - pressed);
@@ -403,6 +445,7 @@ test('a busy first frame after the lift still plays the whole release before the
   browserName,
 }) => {
   const {driver, row, center} = await openRow(page, LIST_ROW);
+  const exit = await exitOf(row);
   // When the press controller writes the release, 150 ms of script hold the
   // main thread before the first frame, so the release starts after the
   // block. Every frame after it is read until the attribute goes: the layer
@@ -454,7 +497,10 @@ test('a busy first frame after the lift still plays the whole release before the
   }
   // The last frame still fading is at rest or within one frame of it: the
   // attribute goes once the release has played, however late it started.
-  expect(fading.at(-1)?.[1], JSON.stringify(frames)).toBeLessThanOrEqual(0.05);
+  const oneFrameFromRest = strengthAt(exit, exit.ms - 17) + 0.01;
+  expect(fading.at(-1)?.[1], JSON.stringify(frames)).toBeLessThanOrEqual(
+    oneFrameFromRest,
+  );
   // And the release played on the way there, frame by frame.
   for (let i = 1; i < fading.length; i++) {
     expect(fading[i][1], JSON.stringify(frames)).toBeLessThanOrEqual(
@@ -469,12 +515,13 @@ test('the release does no Layout or Paint per frame', async ({
 }) => {
   test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
   const {driver, row, center} = await openRow(page, LIST_ROW);
+  const exit = await exitOf(row);
   let release = {from: 0, to: 0};
   const started = Date.now();
   const trace = await traceRendering(page, async () => {
     await driver.play(tap(center, {holdMs: HOLD_MS}));
     [release] = await waitForAnimation(row);
-    await page.waitForTimeout(RELEASE_MS + 100);
+    await page.waitForTimeout(exit.ms + 100);
   });
   // The steady part of the release: its first and last frames may commit.
   const during = countBetween(trace, release.from + 30, release.to - 30);
@@ -502,7 +549,13 @@ test('WebKit: the release keeps fading while the main thread is blocked (video)'
     recordVideo: {dir: testInfo.outputPath('video'), size},
   });
   const page = await context.newPage();
-  const {driver, center, probe} = await openRow(page, LIST_ROW);
+  const {driver, row, center, probe} = await openRow(page, LIST_ROW);
+  // A long exit duration on the row, so its release spans many of the
+  // recording's frames inside the block, whatever the theme's own value is.
+  await row.evaluate(el =>
+    (el as HTMLElement).style.setProperty('--duration-exit', '400ms'),
+  );
+  const exit = await exitOf(row);
   // A beacon the main thread paints: blue while it is about to block, green
   // once it has run again. Frames in which the beacon is blue were presented
   // while script could not run.
@@ -607,17 +660,29 @@ test('WebKit: the release keeps fading while the main thread is blocked (video)'
       },
     );
     const blocked = samples.filter(s => s.beacon === 'blocked');
-    const rest = Math.max(
-      ...samples.filter(s => s.beacon === 'before').map(s => s.value),
+    const before = samples.filter(s => s.beacon === 'before');
+    const rest = Math.max(...before.map(s => s.value));
+    // The pressed colour from the hold's own frames, not from the page's
+    // load, so a dark frame while Storybook starts cannot move it.
+    const holdStart = blocked.length > 0 ? blocked[0].t - HOLD_MS / 1000 : 0;
+    const pressed = Math.min(
+      ...before.filter(s => s.t >= holdStart).map(s => s.value),
     );
-    // Judge the release up to the frame it reaches the row's resting color.
+    // The exit curve leaves fastest at its end, so the last frame the
+    // recording catches can be short of rest. The release has reached its
+    // end when a frame shows at least the curve's value `REST_MARGIN_MS`
+    // before the end.
+    const nearRest =
+      rest - (rest - pressed) * strengthAt(exit, exit.ms - REST_MARGIN_MS) - 1;
+    // Judge the release up to the frame it reaches the row's resting color,
+    // within `REST_MARGIN_MS`.
     // (Measured in the Linux WebKit build: once an accelerated animation has
     // finished while script is still blocked, the compositor shows the value
     // the main thread last committed until script runs again. That is this
     // build's end-of-animation hand-back, after the release; iOS Safari 26.2
     // holds the resting color on the simulator. It is recorded below, not
     // judged here.)
-    const restIndex = blocked.findIndex(s => s.value >= rest - 1);
+    const restIndex = blocked.findIndex(s => s.value >= nearRest);
     const fading = restIndex === -1 ? blocked : blocked.slice(0, restIndex + 1);
     const distinct = fading
       .map(s => Math.round(s.value))
@@ -627,7 +692,7 @@ test('WebKit: the release keeps fading while the main thread is blocked (video)'
       'busy-main-thread/list-row-release-webkit',
       {
         'webkit.json': JSON.stringify(
-          {rest, blocked, distinct, afterEnd},
+          {rest, pressed, nearRest, exit, blocked, distinct, afterEnd},
           null,
           1,
         ),
@@ -643,16 +708,21 @@ test('WebKit: the release keeps fading while the main thread is blocked (video)'
     expect(blocked.length).toBeGreaterThan(0);
     // The row kept getting lighter while script could not run, all the way
     // to its resting color: from a frame still short of rest, it reached rest
-    // inside the blocked window. A release on the main thread would hold its
-    // first frame's value until the block ends, 700 ms on, and could not. (The
-    // recording's frames are 40 ms apart, so how many land inside the 200 ms
-    // release depends on its phase: the count is not judged.)
+    // (within `REST_MARGIN_MS`) inside the blocked window. A release on
+    // the main thread would hold its first frame's value until the block
+    // ends, 700 ms on, and could not. (The recording's frames are about
+    // 40 ms apart, so how many land inside the release depends on its phase:
+    // the count is not judged.)
     const values = JSON.stringify(blocked.map(s => Math.round(s.value)));
-    expect(blocked[0].value, values).toBeLessThan(rest - 1);
+    expect(blocked[0].value, values).toBeLessThan(nearRest);
     expect(restIndex, values).toBeGreaterThan(0);
+    // Lighter frame by frame. The first frames move the row by about one
+    // level, so a video decode may round one of them a level back: allow
+    // that one level, never more.
     for (let i = 1; i < distinct.length; i++) {
-      expect(distinct[i], values).toBeGreaterThan(distinct[i - 1]);
+      expect(distinct[i], values).toBeGreaterThanOrEqual(distinct[i - 1] - 1);
     }
+    expect(distinct.at(-1), values).toBeGreaterThan(distinct[0]);
   } finally {
     await decoder.close();
   }
@@ -663,6 +733,7 @@ test(
   {tag: '@storyboard'},
   async ({page}, testInfo) => {
     const {driver, row, center} = await openRow(page, LIST_ROW);
+    const exit = await exitOf(row);
     await installTimerGate(page);
     const box = await row.boundingBox();
     if (box == null) {
@@ -698,7 +769,7 @@ test(
       expect(opacities[i]).toBeLessThanOrEqual(opacities[i - 1] + 1e-6);
     }
     storyboard.frames.forEach(f =>
-      expect(f.data.opacity as number).toBeCloseTo(expectedStrength(f.t), 2),
+      expect(f.data.opacity as number).toBeCloseTo(strengthAt(exit, f.t), 2),
     );
   },
 );

@@ -57,8 +57,9 @@ names for their use (`springs.settle`, `timing.stateChangeMs`,
 `timing.curves.move`, …): a shared table lists them when it registers
 (`roles`), and every other value, a component's measured spring included, is
 a plain constant. The per-role tables stay internal (`spec:AST-094` DEC-15): a
-role plays its table value, and nothing reads its CSS variable
-(`--motion-springs-settle`), so no page or theme style sets a role. A table's
+role plays its table value at the theme's tempo, and nothing reads the
+role's own CSS variable (`--motion-springs-settle`), so no page or theme
+style sets a role. A table's
 roles exist once its `register<Name>Table()` has run: the animator registers
 the Reduce Motion fade's curve, and code that plays the shared springs calls
 `registerSpringsTable()` before its first motion. The animator resolves each
@@ -69,7 +70,7 @@ the timings that decide who gets a touch are not roles.
 ## Animator
 
 ```
-import {createMotionAnimator} from '../motion/animator';
+import {createMotionEngine} from '../motion/animator';
 import {coast} from '../motion/coast';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
 import {resolveMotion} from '../motion/resolveMotion';
@@ -78,7 +79,7 @@ import {registerSpringsTable, springs} from '../motion/uikit';
 // Once, so the springs are registered as their roles:
 registerSpringsTable();
 
-const animator = createMotionAnimator(sheet);
+const animator = createMotionEngine(sheet);
 // The animator plays a motion role (spec:AST-094 FR4), its table value, as the
 // per-role tables stay internal (DEC-15); math on a spring reads the role with
 // resolveMotion.
@@ -175,7 +176,7 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
-- `createMotionAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
+- `createMotionEngine(dialog, {pseudoElement: '::backdrop'})` drives a
   pseudo-element; with no inline style to hold it, a static filling animation
   holds its end value until the next animation replaces it, while the
   pseudo-element exists. A dialog's `::backdrop` is made again each time the

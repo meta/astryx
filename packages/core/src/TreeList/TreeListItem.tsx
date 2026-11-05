@@ -31,6 +31,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {
+  cancelNestedTouchPress,
   hasInteractiveAncestor,
   useClickableContainer,
 } from '../hooks/useClickableContainer';
@@ -482,12 +483,33 @@ export function TreeListItem({
   // a plain element and both hook instances stay inert on it.
   const forwardsToLink = href != null && handleClick == null;
   const linkRowRef = useRef<HTMLDivElement>(null);
-  const {onClick: delegateToLink, onPointerDown: pressOnLinkRow} =
-    useClickableContainer({
-      containerRef: linkRowRef,
-      interactiveRef: linkRef,
-      disabled: isDisabled || !forwardsToLink,
-    });
+  const {onClick: delegateToLink} = useClickableContainer({
+    containerRef: linkRowRef,
+    interactiveRef: linkRef,
+    disabled: isDisabled || !forwardsToLink,
+  });
+
+  // A finger press that starts on a control inside the row does not activate
+  // the row, so the row shows no press for it. The row's own action, its link
+  // or invisible button, activates it. The Chevron does too when the row's
+  // surface toggles, since it runs that same toggle.
+  const actionButtonRef = useRef<HTMLButtonElement>(null);
+  const chevronRef = useRef<HTMLButtonElement>(null);
+  const surfaceToggles = onClick == null && handleClick != null;
+  const pressOnRow = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (isDisabled) {
+      return;
+    }
+    const chevron = chevronRef.current;
+    const ownAction =
+      surfaceToggles &&
+      chevron != null &&
+      event.target instanceof Node &&
+      chevron.contains(event.target)
+        ? chevron
+        : (linkRef.current ?? actionButtonRef.current);
+    cancelNestedTouchPress(event, event.currentTarget, ownAction);
+  };
   const {onMouseUp: openLinkOnMiddleClick} = useClickableContainer({
     containerRef: linkRowRef,
     href,
@@ -569,6 +591,7 @@ export function TreeListItem({
       // focusable element to receive Enter/Space). The row's handleClick ignores
       // clicks originating inside a <button>, so this never double-toggles.
       <button
+        ref={chevronRef}
         type="button"
         aria-expanded={isExpanded}
         aria-label={t('@astryx.treeList.toggleChildren')}
@@ -645,6 +668,7 @@ export function TreeListItem({
         </LinkComponent>
       ) : onClick != null ? (
         <button
+          ref={actionButtonRef}
           type="button"
           onClick={onClick}
           aria-disabled={isDisabled || undefined}
@@ -740,7 +764,9 @@ export function TreeListItem({
           ref={forwardsToLink ? linkRowRef : undefined}
           onClick={forwardsToLink ? delegateToLink : handleClick}
           onMouseUp={forwardsToLink ? openLinkOnMiddleClick : undefined}
-          onPointerDown={forwardsToLink ? pressOnLinkRow : undefined}>
+          onPointerDown={
+            forwardsToLink || handleClick != null ? pressOnRow : undefined
+          }>
           <div {...stylex.props(styles.indentedContent)}>{innerContent}</div>
         </div>
       </div>

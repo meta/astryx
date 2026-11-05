@@ -32,6 +32,9 @@ import {rtlStyles} from '../utils/rtlStyles';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useTouchHitArea} from '../utils/touchHitArea';
+import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
 import {useIndicator} from '../Indicator/useIndicator';
 import {Item, type ItemAlign} from '../Item/Item';
 import {themeProps} from '../utils/themeProps';
@@ -305,6 +308,13 @@ export function RadioListItem({
   // `<label htmlFor>` would double-fire under delegation.
   const radioRef = useRef<HTMLInputElement>(null);
 
+  // Under a coarse pointer an option's row grows toward 44 px through an
+  // invisible band, and the row keeps its size. A tap on the band lands on
+  // the row, which hands it to the radio. The band's insets stay live while
+  // the row takes taps, and clear when it stops.
+  const watchRowHitArea = useTouchHitArea(!isDisabled);
+  const mergedRowRef = useMergedRefs(ref, watchRowHitArea);
+
   const radioCircle = (
     <div
       {...stylex.props(
@@ -387,7 +397,7 @@ export function RadioListItem({
 
   return (
     <Item
-      ref={ref}
+      ref={mergedRowRef}
       {...(isDisabled ? undefined : pressable)}
       startContent={mediaContent}
       // Delegate row-surface clicks (label text, description, and the empty
@@ -419,6 +429,7 @@ export function RadioListItem({
           // still overrides it from the higher `astryx-theme` layer.
           rowStyles.root,
           !isDisabled && rowStyles.press,
+          !isDisabled && touchHitAreaStyles.layer,
           xstyle,
         ] as StyleXStyles
       }
