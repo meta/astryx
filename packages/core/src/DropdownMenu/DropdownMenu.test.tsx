@@ -2541,6 +2541,13 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
     );
     expect(del).toHaveFocus();
 
+    // A mouse press on the disabled row does not focus or light it.
+    fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {
+      key: 'Home',
+    });
+    expect(fireEvent.mouseDown(del)).toBe(false);
+    expect(fireEvent.mouseDown(edit)).toBe(true);
+
     // End and Home visit a disabled row as any other row.
     const menu = screen.getByRole('menu', {hidden: true});
     fireEvent.keyDown(menu, {key: 'Home'});

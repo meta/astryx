@@ -147,8 +147,8 @@ export interface InternalListFocusOptions extends UseListFocusOptions {
   focusFollowsLastInput?: boolean;
   /**
    * The arrow keys, Home, End and the Page keys visit a disabled item as they
-   * visit any other item. The item must take focus (`tabindex="-1"`). For a
-   * menu, whose disabled rows stay discoverable and inert. `focusFirst` and
+   * visit any other item. The item must take focus (`tabindex="-1"`). Use it in
+   * a menu, where a disabled row stays discoverable and inert. `focusFirst` and
    * `focusLast` still land on an enabled item, so an open from the keyboard
    * lands on a row that acts. Unset (the default): navigation skips disabled
    * items.

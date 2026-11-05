@@ -166,8 +166,7 @@ export function NavHeadingMenuItem({
       {...restProps}
       ref={itemRef}
       role="menuitem"
-      // -1 keeps every row focusable but out of the Tab order, a disabled
-      // link row with no href too: the keys reach a disabled row.
+      // Every row, disabled included, takes focus but is not a Tab stop.
       tabIndex={-1}
       aria-disabled={isDisabled || undefined}
       href={isDisabled ? undefined : href}
