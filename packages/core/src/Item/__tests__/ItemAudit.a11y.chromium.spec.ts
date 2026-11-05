@@ -321,12 +321,13 @@ for (const item of cases) {
       const target = await page
         .getByText('Disabled', {exact: true})
         .boundingBox();
-      if (target != null) {
-        await page.mouse.move(
-          target.x + target.width / 2,
-          target.y + target.height / 2,
-        );
+      if (target == null) {
+        throw new Error('the disabled row label has no box');
       }
+      await page.mouse.move(
+        target.x + target.width / 2,
+        target.y + target.height / 2,
+      );
     }
     await settle(page);
 
