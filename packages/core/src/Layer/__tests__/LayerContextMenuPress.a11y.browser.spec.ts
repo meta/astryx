@@ -8,7 +8,8 @@
  * @output Real-engine proof that a light-dismissible layer, and a
  *   DropdownMenu opened through `isMenuOpen`, stay open after the release of
  *   the right-button press whose `contextmenu` opened them, also when that
- *   release lands away from the zone; and that a later press outside still
+ *   release lands away from the zone; that the held pointer still
+ *   highlights the menu's rows; and that a later press outside still
  *   dismisses them (spec:AST-003 FR11, FR12, FR13). Only a real engine runs
  *   the popover's light dismiss at that release; the unit suite
  *   (useLayer.test.tsx) covers the claim on a stub.
@@ -79,6 +80,39 @@ test('the opening press’s release keeps the layer open even away from the zone
   await rightPress(page, 'layer-zone', {x: 0, y: -60});
   await page.waitForTimeout(150);
   await expect(page.getByTestId('layer')).toBeVisible();
+});
+
+test('with the right button still down, moving onto the DropdownMenu highlights the row under the pointer', async ({
+  page,
+}) => {
+  await openStory(page);
+  const zone = await page.getByTestId('menu-zone').boundingBox();
+  if (zone == null) {
+    throw new Error('menu-zone has no box');
+  }
+  await page.mouse.move(zone.x + zone.width / 2, zone.y + zone.height / 2);
+  await page.mouse.down({button: 'right'});
+  const menu = page.getByRole('menu');
+  await expect(menu).toBeVisible();
+  const row = page.getByRole('menuitem', {name: 'Duplicate'});
+  const rowBox = await row.boundingBox();
+  if (rowBox == null) {
+    throw new Error('the row has no box');
+  }
+  await page.mouse.move(
+    rowBox.x + rowBox.width / 2,
+    rowBox.y + rowBox.height / 2,
+    {steps: 8},
+  );
+  await expect(row).toBeFocused();
+
+  // Back outside the menu, the release still leaves it open.
+  await page.mouse.move(zone.x + zone.width / 2, zone.y + zone.height / 2, {
+    steps: 8,
+  });
+  await page.mouse.up({button: 'right'});
+  await page.waitForTimeout(150);
+  await expect(menu).toBeVisible();
 });
 
 test('a DropdownMenu opened through isMenuOpen from a right click stays open after that press’s release', async ({

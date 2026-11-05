@@ -4,8 +4,8 @@
 
 /**
  * @file gestureCounter.ts
- * @input Listens for pointerdown, pointerup, pointercancel, contextmenu,
- *   keydown, and click on the document
+ * @input Pointer and context-menu events through the shared input stream;
+ *   keydown and click on the document
  * @output Exports the gesture identity, whether its click has run, and
  *   claimContextMenuPress
  * @position Internal to Layer; used by useLayer to tell a click that belongs
@@ -18,6 +18,8 @@
  * layer" is exactly "the click while the counter still reads what it read at
  * the dismissal", no matter how long the main thread was blocked in between.
  */
+
+import {subscribeInput} from '../utils/inputStream';
 
 let gesture = 0;
 let clickedGesture: number | null = null;
@@ -52,10 +54,13 @@ function listen() {
   }
   isListening = true;
   // Capture phase: the count must advance before any handler reads it.
-  document.addEventListener('pointerdown', startPress, true);
-  document.addEventListener('pointerup', endPress, true);
-  document.addEventListener('pointercancel', endPress, true);
-  document.addEventListener('contextmenu', markContextMenu, true);
+  const view = document.defaultView;
+  if (view != null) {
+    subscribeInput(view, 'pointerdown', startPress, {first: true});
+    subscribeInput(view, 'pointerup', endPress, {first: true});
+    subscribeInput(view, 'pointercancel', endPress, {first: true});
+    subscribeInput(view, 'contextmenu', markContextMenu, {first: true});
+  }
   document.addEventListener('keydown', advance, true);
   // Capture phase observes the click even when a consumer stops propagation.
   document.addEventListener('click', markClicked, true);
@@ -80,19 +85,53 @@ export function currentGestureHasClicked(): boolean {
  * Keeps the release of the press in flight from dismissing `layer`, when that
  * press opened a context menu (a right click). The browser's light dismiss
  * reads a release outside every open popover as a dismissal, also the release
- * of the press that opened the popover. A pointer captured by the layer
- * releases on the layer, so that press cannot also close it. The browser drops
- * the capture at the release. A later press dismisses as usual.
+ * of the press that opened the popover. While the pointer is outside the
+ * layer, the layer captures it, so a release there lands on the layer. Over
+ * the layer the capture lets go, so hover works and a release there is inside
+ * anyway. The claim ends at that press's release; a later press dismisses as
+ * usual.
  */
 export function claimContextMenuPress(layer: HTMLElement): void {
   listen();
-  if (pressPointerId === null || contextMenuGesture !== gesture) {
+  const pointerId = pressPointerId;
+  const view = layer.ownerDocument.defaultView;
+  if (pointerId === null || contextMenuGesture !== gesture || view == null) {
     return;
   }
-  try {
-    layer.setPointerCapture(pressPointerId);
-  } catch {
-    // The pointer is no longer active (its release did not reach the page),
-    // so no release can dismiss the layer.
-  }
+  const holdCapture = (isOutside: boolean) => {
+    try {
+      if (isOutside) {
+        layer.setPointerCapture(pointerId);
+      } else if (layer.hasPointerCapture(pointerId)) {
+        layer.releasePointerCapture(pointerId);
+      }
+    } catch {
+      // The pointer is no longer active (its release did not reach the
+      // page), so no release can dismiss the layer.
+    }
+  };
+  holdCapture(true);
+  // Hit testing ignores the capture, so it finds what is under the pointer.
+  const followPointer = (event: PointerEvent) => {
+    if (event.pointerId === pointerId) {
+      const under = layer.ownerDocument.elementFromPoint(
+        event.clientX,
+        event.clientY,
+      );
+      holdCapture(under == null || !layer.contains(under));
+    }
+  };
+  const unsubscribes: (() => void)[] = [];
+  const endClaim = (event: PointerEvent) => {
+    if (event.pointerId === pointerId) {
+      for (const unsubscribe of unsubscribes) {
+        unsubscribe();
+      }
+    }
+  };
+  unsubscribes.push(
+    subscribeInput(view, 'pointermove', followPointer),
+    subscribeInput(view, 'pointerup', endClaim),
+    subscribeInput(view, 'pointercancel', endClaim),
+  );
 }

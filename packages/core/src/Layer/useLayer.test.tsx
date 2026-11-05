@@ -2704,6 +2704,53 @@ describe('a light-dismiss layer opened by a context-menu press', () => {
     ]);
   });
 
+  it('lets the capture go while the pointer is over the layer, and takes it again outside', () => {
+    const released: number[] = [];
+    HTMLElement.prototype.hasPointerCapture = () => true;
+    HTMLElement.prototype.releasePointerCapture = (pointerId: number) => {
+      released.push(pointerId);
+    };
+    const {container, getByTestId} = render(
+      <ContextOpenedHarness lightDismiss />,
+    );
+    const zone = getByTestId('zone');
+    pressDown(zone, 7);
+    fireEvent.contextMenu(zone);
+    const layer = container.querySelector('[popover]') as HTMLElement;
+    let under: Element = layer;
+    document.elementFromPoint = () => under;
+    const move = (pointerId: number) =>
+      fireEvent(
+        layer,
+        Object.assign(new MouseEvent('pointermove', {bubbles: true}), {
+          pointerId,
+        }),
+      );
+
+    move(7);
+    expect(released).toEqual([7]);
+    under = zone;
+    move(7);
+    expect(captured).toHaveLength(2);
+    // Another pointer's move leaves the claim alone.
+    move(8);
+    expect(captured).toHaveLength(2);
+
+    // The release ends the claim: later moves capture nothing.
+    fireEvent(
+      zone,
+      Object.assign(new MouseEvent('pointerup', {bubbles: true}), {
+        pointerId: 7,
+      }),
+    );
+    move(7);
+    expect(captured).toHaveLength(2);
+    delete (HTMLElement.prototype as Partial<HTMLElement>).hasPointerCapture;
+    delete (HTMLElement.prototype as Partial<HTMLElement>)
+      .releasePointerCapture;
+    delete (document as Partial<Document>).elementFromPoint;
+  });
+
   it('captures nothing for a context menu from the keyboard, which has no press', () => {
     const {getByTestId} = render(<ContextOpenedHarness lightDismiss />);
     const zone = getByTestId('zone');
