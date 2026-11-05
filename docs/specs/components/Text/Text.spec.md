@@ -80,6 +80,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Type-based size, weight, and default color; size, color, and weight
   overrides; and the text layout controls on that element.
 - Measuring truncation and deciding when to compose the truncation Tooltip.
+- The clamp it provides to its content. A Link inside a clamped Text lays out
+  inline so the clamp truncates it (`component:Link` FR6); Text provides that
+  clamp through an internal context.
 
 **Does not own / non-goals**
 
