@@ -292,6 +292,22 @@ describe('MobileNav', () => {
     ).toBeInTheDocument();
   });
 
+  it("falls back to the dialog's own name when the caller's aria-labelledby resolves to nothing", () => {
+    render(
+      <MobileNav
+        isOpen={true}
+        onOpenChange={() => {}}
+        header="My Nav"
+        aria-labelledby="missing-id">
+        <a href="/home">Home</a>
+      </MobileNav>,
+    );
+    const dialog = screen.getByRole('dialog', {name: 'My Nav'});
+    expect(
+      within(dialog).getByRole('navigation', {name: 'My Nav'}),
+    ).toBeInTheDocument();
+  });
+
   it('opens dialog via showModal when isOpen becomes true', () => {
     const {rerender} = render(
       <MobileNav
