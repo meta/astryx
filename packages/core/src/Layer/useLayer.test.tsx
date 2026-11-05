@@ -3326,15 +3326,20 @@ describe('contextRef anchor-name churn (#5398)', () => {
   // the outgoing element's ref with `null` and the incoming one's ref with
   // itself in the same commit — the exact churn shape a combined ref utility
   // (e.g. Tooltip's) produces.
+  // A trigger is an anchor only while its layer is shown, so each case opens
+  // the layer first.
   function ChurnHarness({
     refTarget,
     onReady,
+    onShow,
   }: {
     refTarget: 'x' | 'y' | 'none';
     onReady?: (anchorId: string) => void;
+    onShow?: (show: () => void) => void;
   }) {
     const layer = useLayerInternal({mode: 'context'});
     onReady?.(layer.anchorId);
+    onShow?.(layer.show);
     return (
       <>
         <button
@@ -3363,10 +3368,16 @@ describe('contextRef anchor-name churn (#5398)', () => {
 
   it('keeps the anchor name through a transient null-then-same-element reattach', () => {
     let anchorId = '';
+    let show = () => {};
     const {getByTestId, rerender} = render(
-      <ChurnHarness refTarget="x" onReady={id => (anchorId = id)} />,
+      <ChurnHarness
+        refTarget="x"
+        onReady={id => (anchorId = id)}
+        onShow={s => (show = s)}
+      />,
     );
     const x = getByTestId('x');
+    act(() => show());
     expect(anchorNamesOf(x)).toContain(anchorId);
 
     // No await between these two: the churn (null, then the same element
@@ -3380,11 +3391,17 @@ describe('contextRef anchor-name churn (#5398)', () => {
 
   it('removes the old element and adds the new one when a different element takes over the ref', () => {
     let anchorId = '';
+    let show = () => {};
     const {getByTestId, rerender} = render(
-      <ChurnHarness refTarget="x" onReady={id => (anchorId = id)} />,
+      <ChurnHarness
+        refTarget="x"
+        onReady={id => (anchorId = id)}
+        onShow={s => (show = s)}
+      />,
     );
     const x = getByTestId('x');
     const y = getByTestId('y');
+    act(() => show());
     expect(anchorNamesOf(x)).toContain(anchorId);
     expect(anchorNamesOf(y)).not.toContain(anchorId);
 
@@ -3396,10 +3413,16 @@ describe('contextRef anchor-name churn (#5398)', () => {
 
   it('removes the anchor name once a persistent (still-mounted) anchor genuinely lets go of the ref', async () => {
     let anchorId = '';
+    let show = () => {};
     const {getByTestId, rerender} = render(
-      <ChurnHarness refTarget="x" onReady={id => (anchorId = id)} />,
+      <ChurnHarness
+        refTarget="x"
+        onReady={id => (anchorId = id)}
+        onShow={s => (show = s)}
+      />,
     );
     const x = getByTestId('x');
+    act(() => show());
     expect(anchorNamesOf(x)).toContain(anchorId);
 
     // `x` stays mounted — only the ref moves off it, nothing reattaches.
