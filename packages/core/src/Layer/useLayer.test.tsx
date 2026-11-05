@@ -9,7 +9,7 @@
  * SYNC: When useLayer.tsx changes, update tests accordingly
  */
 
-import {describe, it, expect, vi, afterEach} from 'vitest';
+import {describe, it, expect, vi, afterEach, beforeEach} from 'vitest';
 import {
   render,
   renderHook,
@@ -2650,6 +2650,76 @@ describe('wasJustDismissed (light dismiss vs. the trigger click, #5004)', () => 
     fireEvent.click(trigger);
 
     expect(getByTestId('state')).toHaveTextContent('closed');
+  });
+});
+
+describe('a light-dismiss layer opened by a context-menu press', () => {
+  function ContextOpenedHarness({lightDismiss}: {lightDismiss: boolean}) {
+    const layer = useLayerInternal({mode: 'context', lightDismiss});
+    return (
+      <>
+        <div
+          data-testid="zone"
+          ref={layer.ref}
+          onContextMenu={event => {
+            event.preventDefault();
+            layer.show();
+          }}
+        />
+        {layer.render(<span>Menu</span>, {placement: 'below'})}
+      </>
+    );
+  }
+
+  /** A press of `pointerId` on `target`, which jsdom's events do not carry. */
+  function pressDown(target: Element, pointerId: number) {
+    fireEvent(
+      target,
+      Object.assign(new MouseEvent('pointerdown', {bubbles: true, button: 2}), {
+        pointerId,
+      }),
+    );
+  }
+
+  let captured: Array<{element: Element; pointerId: number}> = [];
+  beforeEach(() => {
+    captured = [];
+    HTMLElement.prototype.setPointerCapture = function (pointerId: number) {
+      captured.push({element: this, pointerId});
+    };
+  });
+  afterEach(() => {
+    delete (HTMLElement.prototype as Partial<HTMLElement>).setPointerCapture;
+  });
+
+  it('captures the opening press, so its release lands on the layer and cannot dismiss it', () => {
+    const {container, getByTestId} = render(
+      <ContextOpenedHarness lightDismiss />,
+    );
+    const zone = getByTestId('zone');
+    pressDown(zone, 7);
+    fireEvent.contextMenu(zone);
+    expect(captured).toEqual([
+      {element: container.querySelector('[popover]'), pointerId: 7},
+    ]);
+  });
+
+  it('captures nothing for a context menu from the keyboard, which has no press', () => {
+    const {getByTestId} = render(<ContextOpenedHarness lightDismiss />);
+    const zone = getByTestId('zone');
+    pressDown(zone, 7);
+    fireEvent.pointerUp(zone);
+    fireEvent.keyDown(zone, {key: 'F10', shiftKey: true});
+    fireEvent.contextMenu(zone);
+    expect(captured).toEqual([]);
+  });
+
+  it('captures nothing for a layer without light dismiss', () => {
+    const {getByTestId} = render(<ContextOpenedHarness lightDismiss={false} />);
+    const zone = getByTestId('zone');
+    pressDown(zone, 7);
+    fireEvent.contextMenu(zone);
+    expect(captured).toEqual([]);
   });
 });
 

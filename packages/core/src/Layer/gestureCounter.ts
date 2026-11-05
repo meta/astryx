@@ -4,8 +4,11 @@
 
 /**
  * @file gestureCounter.ts
- * @input Listens for pointerdown, keydown, and click on the document
- * @output Exports the current gesture identity and whether its click has run
+ * @input Listens for pointerdown, pointerup, pointercancel, contextmenu,
+ *   keydown, and click on the document
+ * @output Exports the current gesture identity, whether its click has run,
+ *   and claimContextMenuPress, which keeps the release of the press that
+ *   opened a layer from dismissing it
  * @position Internal to Layer; used by useLayer to tell a click that belongs
  *   to a dismissing press from a fresh one
  *
@@ -19,10 +22,25 @@
 
 let gesture = 0;
 let clickedGesture: number | null = null;
+let contextMenuGesture: number | null = null;
+let pressPointerId: number | null = null;
 let isListening = false;
 
 function advance() {
   gesture += 1;
+}
+
+function startPress(event: PointerEvent) {
+  advance();
+  pressPointerId = event.pointerId;
+}
+
+function endPress() {
+  pressPointerId = null;
+}
+
+function markContextMenu() {
+  contextMenuGesture = gesture;
 }
 
 function markClicked() {
@@ -35,7 +53,10 @@ function listen() {
   }
   isListening = true;
   // Capture phase: the count must advance before any handler reads it.
-  document.addEventListener('pointerdown', advance, true);
+  document.addEventListener('pointerdown', startPress, true);
+  document.addEventListener('pointerup', endPress, true);
+  document.addEventListener('pointercancel', endPress, true);
+  document.addEventListener('contextmenu', markContextMenu, true);
   document.addEventListener('keydown', advance, true);
   // Capture phase observes the click even when a consumer stops propagation.
   document.addEventListener('click', markClicked, true);
@@ -54,4 +75,25 @@ export function currentGesture(): number {
 export function currentGestureHasClicked(): boolean {
   listen();
   return clickedGesture === gesture;
+}
+
+/**
+ * Keeps the release of the press in flight from dismissing `layer`, when that
+ * press opened a context menu (a right click, or a held finger). The browser's
+ * light dismiss reads a release outside every open popover as a dismissal,
+ * also the release of the press that opened the popover. A pointer captured
+ * by the layer releases on the layer, so that press cannot also close it. The
+ * browser drops the capture at the release. A later press dismisses as usual.
+ */
+export function claimContextMenuPress(layer: HTMLElement): void {
+  listen();
+  if (pressPointerId === null || contextMenuGesture !== gesture) {
+    return;
+  }
+  try {
+    layer.setPointerCapture(pressPointerId);
+  } catch {
+    // The pointer is no longer active (its release did not reach the page),
+    // so no release can dismiss the layer.
+  }
 }
