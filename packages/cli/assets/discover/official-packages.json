@@ -146,6 +146,14 @@
         },
         {
           "kind": "component",
+          "name": "NavigationScreen"
+        },
+        {
+          "kind": "component",
+          "name": "NavigationStack"
+        },
+        {
+          "kind": "component",
           "name": "RadialChart"
         },
         {

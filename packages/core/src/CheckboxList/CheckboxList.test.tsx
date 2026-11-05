@@ -1063,7 +1063,9 @@ describe('CheckboxListItem ARIA props', () => {
     // The spinner is decorative — it lives inside the checkbox's
     // aria-hidden visual box, so query with hidden:true. The accessible
     // loading signal is `aria-busy` on the item (asserted above).
-    expect(screen.getByRole('status', {hidden: true})).toBeInTheDocument();
+    const spinner = screen.getByRole('progressbar', {hidden: true});
+    expect(spinner).toBeInTheDocument();
+    expect(spinner.closest('[aria-hidden="true"]')).not.toBeNull();
   });
 
   it('does not toggle when item-level isLoading is set', () => {
@@ -1101,12 +1103,12 @@ describe('CheckboxListItem ARIA props', () => {
     // The toggled item becomes busy and shows a spinner; the sibling stays idle.
     // The spinner is decorative (inside the aria-hidden box), so query hidden.
     expect(
-      await within(itemA).findByRole('status', {hidden: true}),
+      await within(itemA).findByRole('progressbar', {hidden: true}),
     ).toBeInTheDocument();
     expect(itemA).toHaveAttribute('aria-busy', 'true');
     expect(itemB).not.toHaveAttribute('aria-busy');
     expect(
-      within(itemB).queryByRole('status', {hidden: true}),
+      within(itemB).queryByRole('progressbar', {hidden: true}),
     ).not.toBeInTheDocument();
     expect(changeAction).toHaveBeenCalledWith(['a']);
   });
@@ -1175,7 +1177,7 @@ describe('CheckboxListItem ARIA props', () => {
     await waitFor(() => expect(itemB).toHaveAttribute('aria-busy', 'true'));
     expect(itemA).toHaveAttribute('aria-busy', 'true');
     expect(
-      within(itemA).getByRole('status', {hidden: true}),
+      within(itemA).getByRole('progressbar', {hidden: true}),
     ).toBeInTheDocument();
 
     // Re-toggling the still-pending item stays blocked.

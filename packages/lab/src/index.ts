@@ -328,6 +328,17 @@ export {
   type DiffViewerSide,
 } from './DiffViewer';
 
+// NavigationStack: push/pop drill-down navigation with UIKit's transitions
+// and back swipes.
+export {
+  NavigationScreen,
+  NavigationStack,
+  useNavigationStack,
+  type NavigationScreenProps,
+  type NavigationStackApi,
+  type NavigationStackProps,
+} from './NavigationStack';
+
 // TabBar: the floating bottom tab bar of iOS 26's UITabBarController.
 export {
   TabBar,
