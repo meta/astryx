@@ -6,8 +6,8 @@
  * @file useOwnScrollGesture.ts
  * @input A scroll container ref and which axis it owns
  * @output Stops touch gestures on that container from reaching an ancestor
- * @position Internal behavior hook; consumed by Wheel.tsx, PickerWheel.tsx and
- *   MonthScroller.tsx
+ * @position Internal behavior hook; consumed by Wheel.tsx, PickerWheel.tsx,
+ *   MonthScroller.tsx and MonthPager.tsx
  *
  * Lets a nested scroller keep the finger that lands on it.
  *
@@ -27,17 +27,18 @@
  * `touchmove` cancelled by the sheet, so the calendar did not move at all and
  * the sheet sprang back. The month simply would not change.
  *
- * ## Two ways to own a gesture
+ * ## Three ways to own a gesture
  *
- * - `'all'` — the wheels. They scroll vertically, exactly the axis the sheet
- *   wants, so there is no way to share: the scroller takes every touch that
- *   lands on it and the sheet is dismissed from the handle, the header or the
- *   scrim instead.
+ * - `'all'` — the wheels. They scroll on the sheet's own axis, so they take
+ *   every touch, and the sheet is dismissed from its handle, header or scrim.
  *
  * - `'inline'` — the month scroller. It pages sideways, so the two CAN share
  *   by direction: lock the axis on the first significant move, claim the
  *   gesture only when it is horizontal, and let vertical ones through so
  *   swipe-to-dismiss still works on the calendar.
+ *
+ * - `'pager'` — the month pager, which pans in JavaScript. It splits as UIKit
+ *   does in a sheet ({@link PAGER_DECISION_TRAVEL}), touch pointers included.
  *
  * ## Where the line falls, and the gestures that fall past it
  *
@@ -60,9 +61,8 @@
  * swipe that cleared {@link SWIPE_DISTANCE} is reported so the caller can page
  * itself. Native pans keep their momentum and snapping and report nothing.
  *
- * The remaining asymmetry is deliberate and in the direction the scroller
- * needs: it is generous about distance too, paging on a 30px flick where the
- * sheet asks for ~200px of pull before it dismisses.
+ * It is generous about distance too: a 30px flick pages, where the sheet asks
+ * for ~200px of pull before it dismisses.
  *
  * ## Why native listeners
  *
@@ -79,6 +79,8 @@
  */
 
 import {useEffect, useRef} from 'react';
+
+import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 
 /**
  * How much a gesture's vertical travel must exceed its horizontal travel
@@ -97,7 +99,21 @@ const AXIS_LOCK_SLOP = 6;
  */
 export const SWIPE_DISTANCE = 32;
 
-export type OwnedAxis = 'all' | 'inline';
+/**
+ * The travel, on either axis, at which a `'pager'` drag is decided. UIKit
+ * begins both the sheet's pan and the grid's at the pan's hysteresis.
+ *
+ * @source measured: UIKit lab, iOS 26.2 simulator, `.date` `.inline` in a
+ *   medium-detent sheet, 100 pt drags from the grid at 45°, 47.5°, 50°,
+ *   52.5° and 55°, slow and fast, three each, logged per touch sample
+ *   (motion/MEASUREMENTS.md M-DP01), Oct 25 2026: every drag was decided on
+ *   the first sample where |dx| or |dy| reached 10 pt; the grid took it when
+ *   |dx| had (first samples (10.0, 11.0), (10.7, 12.7)) and the sheet when
+ *   only |dy| had ((9.7, 11.3), (8.0, 10.3))
+ */
+const PAGER_DECISION_TRAVEL = UIKIT_GESTURES.pan.hysteresis.value;
+
+export type OwnedAxis = 'all' | 'inline' | 'pager';
 
 export type OwnScrollGestureOptions = {
   /** Skip while the scroller is hidden; a hidden panel keeps its layout box,
@@ -133,7 +149,8 @@ export type OwnScrollGestureOptions = {
  *
  * @param ref - the scroll container
  * @param axis - `'all'` to take every touch, `'inline'` to take only the
- *   horizontal ones and leave vertical drags to the sheet
+ *   horizontal ones and leave vertical drags to the sheet, `'pager'` to split
+ *   as UIKit does in a sheet
  * @param options - see {@link OwnScrollGestureOptions}
  */
 export function useOwnScrollGesture(
@@ -148,8 +165,8 @@ export function useOwnScrollGesture(
   const onSwipeRef = useRef(onSwipe);
   onSwipeRef.current = onSwipe;
 
-  // Syncs touch listeners on the element with `isEnabled`. They decide which
-  // gesture owns a horizontal scroll.
+  // Syncs the element's touch listeners, and a pager's pointer listeners,
+  // with `isEnabled`. They decide which gesture owns a drag on the element.
   useEffect(() => {
     const element = ref.current;
     if (element == null || !isEnabled) {
@@ -166,45 +183,63 @@ export function useOwnScrollGesture(
     // Sampled per move rather than compared once at the end, because a short
     // pan that snaps back finishes at the offset it started from.
     let didPan = false;
+    // Only an 'inline' scroller reads its offset: the swipe fallback needs it,
+    // and a pager's JavaScript pan should not force a layout on every move.
+    const isTrackingPan = axis === 'inline';
+
+    const begin = (x: number, y: number) => {
+      originX = x;
+      originY = y;
+      lastX = x;
+      offsetAtStart = isTrackingPan ? element.scrollLeft : 0;
+      didPan = false;
+      // 'all' decides at touchstart, before the sheet's own touchstart
+      // listener records an armed edge. The others cannot decide yet: a touch
+      // has no direction until it moves.
+      claimed = axis === 'all' ? true : null;
+    };
+
+    /**
+     * Whether a move to (x, y) is kept from the ancestor. It decides once:
+     * `'inline'` on the first move past the slop, and `'pager'` on the first
+     * move that travels its decision distance. A pager holds the moves before.
+     */
+    const isKept = (x: number, y: number): boolean => {
+      if (claimed == null) {
+        const dx = Math.abs(x - originX);
+        const dy = Math.abs(y - originY);
+        if (axis === 'pager') {
+          if (Math.max(dx, dy) < PAGER_DECISION_TRAVEL) {
+            return true;
+          }
+          claimed = dx >= PAGER_DECISION_TRAVEL;
+        } else {
+          if (Math.max(dx, dy) < AXIS_LOCK_SLOP) {
+            return false;
+          }
+          claimed = dy <= dx * VERTICAL_DOMINANCE;
+        }
+      }
+      return claimed;
+    };
 
     const onStart = (event: TouchEvent) => {
       const touch = event.touches[0];
-      originX = touch?.clientX ?? 0;
-      originY = touch?.clientY ?? 0;
-      lastX = originX;
-      offsetAtStart = element.scrollLeft;
-      didPan = false;
-      // 'all' decides at touchstart, before the sheet's own touchstart
-      // listener records an armed edge. 'inline' cannot decide yet — a touch
-      // has no direction until it moves — so it lets touchstart through and
-      // locks on the first move that clears the slop.
-      claimed = axis === 'all' ? true : null;
+      begin(touch?.clientX ?? 0, touch?.clientY ?? 0);
       if (claimed) {
         event.stopPropagation();
       }
     };
 
     const onMove = (event: TouchEvent) => {
-      if (claimed === false) {
-        return;
-      }
       const touch = event.touches[0];
-      if (touch == null) {
+      if (touch == null || !isKept(touch.clientX, touch.clientY)) {
         return;
-      }
-      if (claimed == null) {
-        const dx = Math.abs(touch.clientX - originX);
-        const dy = Math.abs(touch.clientY - originY);
-        if (Math.max(dx, dy) < AXIS_LOCK_SLOP) {
-          return;
-        }
-        claimed = dy <= dx * VERTICAL_DOMINANCE;
-        if (!claimed) {
-          return;
-        }
       }
       lastX = touch.clientX;
-      didPan ||= Math.abs(element.scrollLeft - offsetAtStart) >= 1;
+      if (isTrackingPan) {
+        didPan ||= Math.abs(element.scrollLeft - offsetAtStart) >= 1;
+      }
       event.stopPropagation();
     };
 
@@ -214,7 +249,7 @@ export function useOwnScrollGesture(
       // nothing at all. See the file header.
       if (
         claimed === true &&
-        axis === 'inline' &&
+        isTrackingPan &&
         !didPan &&
         Math.abs(lastX - originX) >= SWIPE_DISTANCE
       ) {
@@ -226,8 +261,24 @@ export function useOwnScrollGesture(
       claimed = null;
     };
 
+    // A pager pans in JavaScript, which cancels no pointer, so the sheet would
+    // also follow its touch pointer. The same decision keeps it.
+    const isTouchPointer = (event: PointerEvent) =>
+      event.pointerType === 'touch' && event.isPrimary;
+    const onPointerDown = (event: PointerEvent) => {
+      if (isTouchPointer(event)) {
+        begin(event.clientX, event.clientY);
+      }
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (isTouchPointer(event) && isKept(event.clientX, event.clientY)) {
+        event.stopPropagation();
+      }
+    };
+
     const keepPointer = (event: PointerEvent) => event.stopPropagation();
     const isKeepingPointer = axis === 'all' && isPointerKept;
+    const isSplittingPointer = axis === 'pager';
 
     element.addEventListener('touchstart', onStart, {passive: true});
     element.addEventListener('touchmove', onMove, {passive: true});
@@ -236,6 +287,10 @@ export function useOwnScrollGesture(
     if (isKeepingPointer) {
       element.addEventListener('pointerdown', keepPointer);
     }
+    if (isSplittingPointer) {
+      element.addEventListener('pointerdown', onPointerDown, {passive: true});
+      element.addEventListener('pointermove', onPointerMove, {passive: true});
+    }
     return () => {
       element.removeEventListener('touchstart', onStart);
       element.removeEventListener('touchmove', onMove);
@@ -243,6 +298,10 @@ export function useOwnScrollGesture(
       element.removeEventListener('touchcancel', onEnd);
       if (isKeepingPointer) {
         element.removeEventListener('pointerdown', keepPointer);
+      }
+      if (isSplittingPointer) {
+        element.removeEventListener('pointerdown', onPointerDown);
+        element.removeEventListener('pointermove', onPointerMove);
       }
     };
   }, [ref, axis, isEnabled, isPointerKept]);
