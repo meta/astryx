@@ -12,7 +12,7 @@
  * embedded frame still arrive.
  */
 
-import {useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useReducer, useRef, useState} from 'react';
 import type {HTMLAttributes, ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
@@ -28,18 +28,29 @@ import {mergeProps, rtlStyles} from '../utils';
 import {
   getCollapseControls,
   getEffectiveMaxPx,
+  resizablePropsOf,
   type ResizableProps,
+  type ResizableRegion,
 } from './useResizable';
 import {
   createResizeGesture,
   type ResizeGesture,
   type ResizeGestureModel,
 } from './resizeGesture';
+import {
+  handOverPane,
+  registerResizeHandle,
+  resizablePaneFor,
+  watchResizablePanes,
+  type ResizablePane,
+} from './resizablePane';
 import {separatorAttributes} from './separatorAttributes';
 import {themeProps} from '../utils/themeProps';
 
 import {useDevWarning} from '../hooks/useDevWarning';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -369,8 +380,8 @@ export interface ResizeHandleProps extends Omit<
    */
   label?: string;
 
-  /** Resize props from useResizable region. */
-  resizable?: ResizableProps;
+  /** The output of `useResizable()`, or its `props`. */
+  resizable?: ResizableRegion | ResizableProps;
 
   /** Custom handle content. Overrides the default pill. */
   children?: ReactNode;
@@ -386,7 +397,7 @@ export interface ResizeHandleProps extends Omit<
  * @example
  * ```
  * <ResizeHandle
- *   resizable={sidebar.props}
+ *   resizable={resizable}
  *   direction="horizontal"
  *   hasDivider />
  * ```
@@ -401,13 +412,15 @@ export function ResizeHandle({
   isAlwaysVisible = true,
   pillPlacement = 'auto',
   label: labelFromProps,
-  resizable,
+  resizable: resizableValue,
   children,
   xstyle,
   className,
   ref,
   ...props
 }: ResizeHandleProps) {
+  const resizable =
+    resizableValue == null ? undefined : resizablePropsOf(resizableValue);
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.resizable.handle.label');
   const handleRef = useRef<HTMLDivElement>(null);
@@ -529,6 +542,55 @@ export function ResizeHandle({
     };
   }, [hasRegion, regionGesture]);
 
+  // --- The LayoutPanel beside a handle given `resizable` props ---
+
+  // A collapsing panel moves focus here, and the ring follows the last input.
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  // A LayoutPanel at the region's size, with no `resizable` prop, has no
+  // controller to find it. This handle holds it collapsed with the region, so
+  // focus inside it moves here and it goes inert. A panel lent later is found
+  // at once.
+  const [, rerender] = useReducer((count: number) => count + 1, 0);
+  const heldPaneRef = useRef<ResizablePane | null>(null);
+  // The element goes in the handle registry, for a collapsing panel beside it
+  // to hand focus to. When the element goes, a held panel opens.
+  const registryRef = useCallback((element: HTMLDivElement | null) => {
+    if (element == null) {
+      return;
+    }
+    const unregister = registerResizeHandle(element);
+    return () => {
+      unregister();
+      heldPaneRef.current = handOverPane(
+        heldPaneRef.current,
+        null,
+        false,
+        null,
+      );
+    };
+  }, []);
+  const isRegionCollapsed = resizable?._isCollapsed ?? false;
+  // Syncs with the lent-panel registry. A panel lent or taken back re-renders
+  // this handle, so it looks for its pane again.
+  useEffect(
+    () => (hasRegion ? watchResizablePanes(rerender) : undefined),
+    [hasRegion],
+  );
+  // Syncs the held panel with the region's collapse state after each commit.
+  useIsomorphicLayoutEffect(() => {
+    const element = handleRef.current;
+    const pane =
+      hasRegion && element != null
+        ? resizablePaneFor(element, isReversed)
+        : null;
+    heldPaneRef.current = handOverPane(
+      heldPaneRef.current,
+      pane,
+      isRegionCollapsed,
+      element,
+    );
+  });
+
   // --- ARIA ---
   const sizeNow = resizable?._size;
   const minNow = resizable?._minSizePx;
@@ -587,7 +649,7 @@ export function ResizeHandle({
 
   return (
     <div
-      ref={useMergedRefs(ref, handleRef)}
+      ref={useMergedRefs(ref, handleRef, registryRef, modalityRef)}
       role="separator"
       {...aria}
       aria-label={label}

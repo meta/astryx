@@ -528,6 +528,77 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  it('leaves a touch on content that the element paints past its own box to that content, however near a neighbour is', () => {
+    // A row moved aside, its panel's entry painted beside it, and the next
+    // row 2 px below the touch.
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<div id="row"><button id="entry">Read</button></div>' +
+        '<a id="next" href="#next">Next</a>',
+    );
+    const row = byId('row');
+    const entry = byId('entry');
+    place(row, rect(88, 16, 388, 60));
+    place(entry, rect(16, 16, 72, 60));
+    place(byId('next'), rect(16, 78, 388, 60));
+    const stop = watchHitArea(row, () => {}, {ownsDescendantTouches: true});
+    show(row);
+    flush();
+    // On the entry: 36 px from the row's box, 32 px from the next row.
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 52, clientY: 46});
+    entry.dispatchEvent(press);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    entry.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+    // The same touch on the row itself, in its band, is still checked.
+    const bandPress = new Event('pointerdown', {bubbles: true});
+    Object.assign(bandPress, {
+      pointerType: 'touch',
+      clientX: 52,
+      clientY: 46,
+    });
+    row.dispatchEvent(bandPress);
+    const bandClick = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    row.dispatchEvent(bandClick);
+    expect(bandClick.defaultPrevented).toBe(true);
+    stop();
+  });
+
+  it('still swallows a touch on a control’s own grown input that a neighbour is nearer, unless the watch owns its descendants’ touches', () => {
+    // A switch whose invisible input grows past its track, as its coarse hit
+    // area. A link moved to 2 px past the switch.
+    const control = byId('switch');
+    control.insertAdjacentHTML('beforeend', '<input id="input" />');
+    const input = byId('input');
+    place(control, rect(100, 100, 24, 24));
+    place(input, rect(100, 100, 28, 24));
+    place(byId('link'), rect(126, 100, 60, 24));
+    const stop = watchHitArea(control, () => {});
+    show(control);
+    flush();
+    // On the input, 2.5 px past the switch and 0.5 px from the link.
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 126.5, clientY: 112});
+    input.dispatchEvent(press);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    input.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    stop();
+  });
+
   it('swallows a touch inside the fresh area that an offset neighbour is nearer (a corner)', () => {
     const control = byId('switch');
     // A tall link beside it, 8 px to the right, reaching far below.
@@ -676,6 +747,17 @@ describe('watchHitArea', () => {
     stop();
     flush();
     expect(heard).toEqual([]);
+  });
+
+  it('stops a watch whose window closed before it, as a removed iframe’s', () => {
+    const iframe = document.body.appendChild(document.createElement('iframe'));
+    const frameDocument = iframe.contentDocument as Document;
+    const control = frameDocument.body.appendChild(
+      frameDocument.createElement('button'),
+    );
+    const stop = watchHitArea(control, () => {});
+    iframe.remove();
+    expect(() => stop()).not.toThrow();
   });
 });
 

@@ -246,6 +246,9 @@ button.
 - `spec:AST-111` owns calendar selection, the supported calendars, Gregorian
   ISO values, and the `Temporal` boundary; FR8–FR10 and AR1 project its FR4,
   FR6–FR8, and AR1 onto the grid.
+- `component:DateInput`, `component:DateRangeInput`, and
+  `component:DateTimeInput` pass their popover Calendar the calendar their field
+  text uses (`component:DateInput` FR20, `component:DateRangeInput` FR6).
 
 ### `spec:AST-013` FR12 exception — calendars that need `Temporal`
 
