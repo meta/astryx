@@ -807,6 +807,7 @@
     "/templates/useOutlineFromMarkdownHookUsage/",
     "/templates/useOverflowHookUsage/",
     "/templates/usePressFeedbackHookUsage/",
+    "/templates/useScrollOverflowHookUsage/",
     "/templates/useScrollableAreaHookUsage/",
     "/templates/useStreamingTextHookUsage/",
     "/templates/useThemeHookUsage/",

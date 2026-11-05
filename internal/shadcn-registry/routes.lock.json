@@ -3792,6 +3792,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-scroll-overflow-filter-strip-edge-fades",
+      "path": "examples/use-scroll-overflow/filter-strip-edge-fades",
+      "aliases": []
+    },
+    {
       "name": "example-use-scrollable-area-activity-log-panel",
       "path": "examples/use-scrollable-area/activity-log-panel",
       "aliases": []
