@@ -3826,17 +3826,75 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     );
   });
 
-  it('under a finger: selects a tapped day at once, as UIDatePicker does', () => {
-    // datePicker.calendar.selection.tapAnimates: no animation on a tap. The
-    // shared pane fades a selection only for MonthScroller, the mouse calendar.
+  it('a finger\u2019s tapped day selects at once; a mouse or pen selection keeps the fade, in any presentation', () => {
+    // UIDatePicker takes a tap's selection at once
+    // (datePicker.calendar.selection.tapAnimates). MonthScroller, the calendar
+    // of a mouse or a pen, always fades; the pager fades a mouse's or a pen's
+    // pick from its pointer type.
     const pane = read('MonthPane.tsx');
     const puck = declarations(pane, 'puck');
     expect(puck.some(line => line.startsWith('transition'))).toBe(false);
     expect(declarations(pane, 'puckFade')).toContain(
       "transitionProperty: 'background-color, color, border-color'",
     );
+    expect(declarations(pane, 'puckFade')).toContain(
+      "transitionDuration: durationVars['--duration-fast']",
+    );
     expect(read('MonthScroller.tsx')).toContain('hasSelectionFade');
     expect(read('MonthPager.tsx')).not.toContain('hasSelectionFade');
+  });
+
+  it('under the touch presentation, a mouse or pen pick keeps the fade', () => {
+    renderAndOpen();
+    const day = pane('March 2026').querySelector<HTMLElement>(
+      '[data-date="2026-03-12"]',
+    );
+    const puck = day?.firstElementChild as HTMLElement | null;
+    if (day == null || puck == null) {
+      throw new Error('no day');
+    }
+    const resting = puck.className;
+    const press = (pointerType: string) => {
+      const event = new Event('pointerdown', {bubbles: true});
+      Object.assign(event, {pointerType});
+      act(() => {
+        day.dispatchEvent(event);
+      });
+      return puck.className;
+    };
+    // A finger's press leaves the puck as it rests; a mouse's or a pen's
+    // gives it the fade before the selection lands.
+    expect(press('touch')).toBe(resting);
+    expect(press('pen')).not.toBe(resting);
+    expect(press('mouse')).not.toBe(resting);
+    expect(press('touch')).toBe(resting);
+  });
+
+  it('in the scroller presentation, a finger\u2019s tap selects at once and a mouse pick fades', () => {
+    stubTouchscreenLaptop();
+    renderAndOpen(
+      <Controlled initial="2026-03-21" presentation="bottom-sheet" />,
+    );
+    const day = pane('March 2026').querySelector<HTMLElement>(
+      '[data-date="2026-03-12"]',
+    );
+    const puck = day?.firstElementChild as HTMLElement | null;
+    if (day == null || puck == null) {
+      throw new Error('no day');
+    }
+    // The scroller fades a pick before any press: a keyboard pick fades.
+    const resting = puck.className;
+    const press = (pointerType: string) => {
+      const event = new Event('pointerdown', {bubbles: true});
+      Object.assign(event, {pointerType});
+      act(() => {
+        day.dispatchEvent(event);
+      });
+      return puck.className;
+    };
+    expect(press('touch')).not.toBe(resting);
+    expect(press('mouse')).toBe(resting);
+    expect(press('pen')).toBe(resting);
   });
 
   it('under a finger: cross-fades the DateTimeInput sheet\u2019s month/year toggle on the same clock', () => {

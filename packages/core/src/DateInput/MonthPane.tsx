@@ -12,7 +12,7 @@
  * SYNC: When modified, update DateInputTouch.test.tsx.
  */
 
-import {memo, useMemo} from 'react';
+import {memo, useMemo, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useCalendarDays} from '../Calendar/hooks/useCalendarDays';
 import {useLocale} from '../i18n/useLocale';
@@ -235,6 +235,11 @@ export const MonthPane = memo(function MonthPane({
   hasSelectionFade = false,
 }: MonthPaneProps) {
   const locale = useLocale();
+  // The last press's pointer decides the fade in either presentation: a mouse
+  // or pen pick fades, and a finger's tap selects at once. Before any press,
+  // the presentation's own default holds.
+  const [pointerFade, setPointerFade] = useState<boolean | null>(null);
+  const isSelectionFade = pointerFade ?? hasSelectionFade;
   const {calendar} = monthModel;
   const month = useMemo(
     () => monthModel.monthAt(monthIndex),
@@ -307,6 +312,12 @@ export const MonthPane = memo(function MonthPane({
                   )}
                   aria-disabled={isDisabled || undefined}
                   aria-current={isToday ? 'date' : undefined}
+                  onPointerDown={event => {
+                    setPointerFade(
+                      event.pointerType === 'mouse' ||
+                        event.pointerType === 'pen',
+                    );
+                  }}
                   onClick={() => {
                     if (!isDisabled) {
                       onSelect(day.iso);
@@ -332,7 +343,7 @@ export const MonthPane = memo(function MonthPane({
                   <span
                     {...stylex.props(
                       styles.puck,
-                      hasSelectionFade && styles.puckFade,
+                      isSelectionFade && styles.puckFade,
                       !isDisabled && styles.puckHoverable,
                       isToday && styles.puckToday,
                       isSelected && styles.puckSelected,
