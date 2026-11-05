@@ -89,6 +89,13 @@ async function exitOf(surface: Locator): Promise<Exit> {
 const strengthAt = (exit: Exit, t: number) =>
   1 - exit.ease(Math.min(1, Math.max(0, t / exit.ms)));
 
+/**
+ * How far before the release's end a recorded frame may land and still count
+ * as having reached rest: two of a Playwright video's frames (about 40 ms
+ * apart), because the recording's frame gaps vary.
+ */
+const REST_MARGIN_MS = 80;
+
 /** Long enough that the press is believed (scroll.delaysContentTouchesMs). */
 const HOLD_MS = 400;
 
@@ -535,7 +542,13 @@ test('WebKit: the release keeps fading while the main thread is blocked (video)'
     recordVideo: {dir: testInfo.outputPath('video'), size},
   });
   const page = await context.newPage();
-  const {driver, center, probe} = await openRow(page, LIST_ROW);
+  const {driver, row, center, probe} = await openRow(page, LIST_ROW);
+  // A long exit duration on the row, so its release spans many of the
+  // recording's frames inside the block, whatever the theme's own value is.
+  await row.evaluate(el =>
+    (el as HTMLElement).style.setProperty('--duration-exit', '400ms'),
+  );
+  const exit = await exitOf(row);
   // A beacon the main thread paints: blue while it is about to block, green
   // once it has run again. Frames in which the beacon is blue were presented
   // while script could not run.
@@ -640,17 +653,29 @@ test('WebKit: the release keeps fading while the main thread is blocked (video)'
       },
     );
     const blocked = samples.filter(s => s.beacon === 'blocked');
-    const rest = Math.max(
-      ...samples.filter(s => s.beacon === 'before').map(s => s.value),
+    const before = samples.filter(s => s.beacon === 'before');
+    const rest = Math.max(...before.map(s => s.value));
+    // The pressed colour from the hold's own frames, not from the page's
+    // load, so a dark frame while Storybook starts cannot move it.
+    const holdStart = blocked.length > 0 ? blocked[0].t - HOLD_MS / 1000 : 0;
+    const pressed = Math.min(
+      ...before.filter(s => s.t >= holdStart).map(s => s.value),
     );
-    // Judge the release up to the frame it reaches the row's resting color.
+    // The exit curve leaves fastest at its end, so the last frame the
+    // recording catches can be short of rest. The release has reached its
+    // end when a frame shows at least the curve's value `REST_MARGIN_MS`
+    // before the end.
+    const nearRest =
+      rest - (rest - pressed) * strengthAt(exit, exit.ms - REST_MARGIN_MS) - 1;
+    // Judge the release up to the frame it reaches the row's resting color,
+    // within `REST_MARGIN_MS`.
     // (Measured in the Linux WebKit build: once an accelerated animation has
     // finished while script is still blocked, the compositor shows the value
     // the main thread last committed until script runs again. That is this
     // build's end-of-animation hand-back, after the release; iOS Safari 26.2
     // holds the resting color on the simulator. It is recorded below, not
     // judged here.)
-    const restIndex = blocked.findIndex(s => s.value >= rest - 1);
+    const restIndex = blocked.findIndex(s => s.value >= nearRest);
     const fading = restIndex === -1 ? blocked : blocked.slice(0, restIndex + 1);
     const distinct = fading
       .map(s => Math.round(s.value))
@@ -660,7 +685,7 @@ test('WebKit: the release keeps fading while the main thread is blocked (video)'
       'busy-main-thread/list-row-release-webkit',
       {
         'webkit.json': JSON.stringify(
-          {rest, blocked, distinct, afterEnd},
+          {rest, pressed, nearRest, exit, blocked, distinct, afterEnd},
           null,
           1,
         ),
@@ -676,16 +701,21 @@ test('WebKit: the release keeps fading while the main thread is blocked (video)'
     expect(blocked.length).toBeGreaterThan(0);
     // The row kept getting lighter while script could not run, all the way
     // to its resting color: from a frame still short of rest, it reached rest
-    // inside the blocked window. A release on the main thread would hold its
-    // first frame's value until the block ends, 700 ms on, and could not. (The
-    // recording's frames are 40 ms apart, so how many land inside the 200 ms
-    // release depends on its phase: the count is not judged.)
+    // (within `REST_MARGIN_MS`) inside the blocked window. A release on
+    // the main thread would hold its first frame's value until the block
+    // ends, 700 ms on, and could not. (The recording's frames are about
+    // 40 ms apart, so how many land inside the release depends on its phase:
+    // the count is not judged.)
     const values = JSON.stringify(blocked.map(s => Math.round(s.value)));
-    expect(blocked[0].value, values).toBeLessThan(rest - 1);
+    expect(blocked[0].value, values).toBeLessThan(nearRest);
     expect(restIndex, values).toBeGreaterThan(0);
+    // Lighter frame by frame. The first frames move the row by about one
+    // level, so a video decode may round one of them a level back: allow
+    // that one level, never more.
     for (let i = 1; i < distinct.length; i++) {
-      expect(distinct[i], values).toBeGreaterThan(distinct[i - 1]);
+      expect(distinct[i], values).toBeGreaterThanOrEqual(distinct[i - 1] - 1);
     }
+    expect(distinct.at(-1), values).toBeGreaterThan(distinct[0]);
   } finally {
     await decoder.close();
   }
