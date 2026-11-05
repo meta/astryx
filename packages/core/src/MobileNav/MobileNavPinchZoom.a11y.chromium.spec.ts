@@ -137,10 +137,13 @@ test('a pinch on the backdrop beside the nav zooms the page', async ({
   for (const finger of fingers) {
     expect(finger.x < panel.x || finger.x > panel.x + panel.width).toBe(true);
     expect(
-      await nav.evaluate(
-        (dialog, p) => document.elementFromPoint(p.x, p.y) === dialog,
-        finger,
-      ),
+      await nav.evaluate((dialog, p) => {
+        const hit = document.elementFromPoint(p.x, p.y);
+        return (
+          hit?.closest('dialog') === dialog &&
+          hit.closest('[tabindex="-1"]') == null
+        );
+      }, finger),
     ).toBe(true);
   }
   const cdp = await page.context().newCDPSession(page);

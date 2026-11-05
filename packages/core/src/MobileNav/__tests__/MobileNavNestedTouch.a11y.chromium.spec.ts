@@ -8,8 +8,10 @@
  *   touch scrolling: no ancestor of its content restricts panning, its
  *   results scroll under a finger drag, and the scrim and the header still
  *   block background pans
- * @position A browser resolves `touch-action` through DOM ancestors, and a
- *   descendant cannot allow back what an ancestor blocks.
+ * @position Some browsers resolve `touch-action` through every DOM ancestor,
+ *   so a block on the drawer would reach a layer inside it. Chromium stops at
+ *   the nearest scroll container and scrolls the results either way, so the
+ *   ancestor walk is the guard here; the drag is a regression check.
  */
 
 import {expect, test} from '@astryxdesign/a11y-spec/playwright';

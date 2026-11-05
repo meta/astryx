@@ -71,14 +71,17 @@ test.describe('on a 320 px phone', () => {
     expect(box.width).toBeCloseTo(272, 0);
     expect(strip.to - strip.from).toBeCloseTo(48, 0);
 
-    // The strip is backdrop (the dialog itself), not drawer.
+    // The strip is backdrop (inside the dialog, outside the drawer).
     const at = {x: (strip.from + strip.to) / 2, y: viewport.height / 2};
     expect(
-      await page.evaluate(
-        ({x, y}) => document.elementFromPoint(x, y)?.tagName.toLowerCase(),
-        at,
-      ),
-    ).toBe('dialog');
+      await page.evaluate(({x, y}) => {
+        const hit = document.elementFromPoint(x, y);
+        return (
+          hit?.closest('dialog') != null &&
+          hit.closest('dialog [tabindex="-1"]') == null
+        );
+      }, at),
+    ).toBe(true);
 
     await page.touchscreen.tap(at.x, at.y);
     await expect(nav).toBeHidden();

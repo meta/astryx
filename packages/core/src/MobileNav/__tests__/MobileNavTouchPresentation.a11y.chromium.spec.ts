@@ -158,7 +158,9 @@ async function openNav(
           type: 'click',
           t: performance.now(),
           inDialog: target.closest('dialog') != null,
-          onBackdrop: target === dialog,
+          onBackdrop:
+            target.closest('dialog') === dialog &&
+            target.closest('dialog [tabindex="-1"]') == null,
           inDrawer: target.closest('dialog [tabindex="-1"]') != null,
         });
       },

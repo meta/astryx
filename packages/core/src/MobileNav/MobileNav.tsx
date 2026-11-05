@@ -118,9 +118,8 @@ const styles = stylex.create({
     // depended on it being a scroll container.
     overflow: 'clip',
     overscrollBehavior: 'contain',
-    // No touch-action here: a browser resolves it through DOM ancestors, so a
-    // block on the dialog would also stop touch scrolling in a layer opened
-    // inside the drawer. The scrim and the header block pans instead.
+    // The scrim and the header block pans. The dialog sets no touch-action, so
+    // a layer in the drawer keeps its own.
     outline: 'none',
     // Native <dialog> uses display:none when closed.
     // Open state applied via isOpen prop to avoid :where([open]) specificity issues.
