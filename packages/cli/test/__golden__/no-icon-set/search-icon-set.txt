@@ -1,4 +1,4 @@
-Results for "icon set" (20 of 382)
+Results for "icon set" (20 of 384)
 name:        authoring/building-blocks/templates/build-the-template/template-assets/template-icons
 section:     use-astryx-icon
 domain:      doc
@@ -47,6 +47,11 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/InfoTip
 command:     pnpm exec astryx component InfoTip
+name:        useIcon
+domain:      hook
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Icon
+command:     pnpm exec astryx hook useIcon
 name:        useInputContainer
 domain:      hook
 package:     @astryxdesign/core
@@ -98,8 +103,3 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/i18n
 command:     pnpm exec astryx component InternationalizationProvider
-name:        MediaTheme
-domain:      component
-package:     @astryxdesign/core
-import:      @astryxdesign/core/theme
-command:     pnpm exec astryx component MediaTheme
