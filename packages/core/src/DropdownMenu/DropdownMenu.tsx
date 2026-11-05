@@ -5,7 +5,8 @@
 /**
  * @file DropdownMenu.tsx
  * @input Uses React, StyleX, usePopover, MenuBottomSheet (lazy), Button, List,
- *   useListFocus, and the shared viewport-safe menu-width resolver
+ *   useListFocus, the shared viewport-safe menu-width resolver, and the
+ *   layer runtime's entrance hold
  * @output Exports DropdownMenu with caller-selected popover or bottom-sheet
  *   presentation
  * @position Core implementation; consumed by index.ts
@@ -47,6 +48,7 @@ import React, {
 import {readAccessibleName} from '../utils/accessibleName';
 import * as stylex from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
+import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {Button, type ButtonProps} from '../Button';
 import {Heading} from '../Heading';
 import {Icon} from '../Icon';
@@ -955,6 +957,10 @@ function DropdownMenuPopover({
   // The press model is mounted below (it needs the popover); the hide path
   // above it ends the gesture in flight through this ref.
   const cancelMenuPressRef = useRef<() => void>(() => {});
+  // The entrance hold starts as the layer shows. Its start is set below, once
+  // the list ref exists, and its release is kept for the close.
+  const holdEntranceRef = useRef<() => void>(() => {});
+  const releaseEntranceRef = useRef<(() => void) | null>(null);
 
   // Submenu flyouts are `popover="manual"` elements nested inside the menu's
   // `popover="auto"` element, so the browser's light dismiss of the menu never
@@ -1000,6 +1006,8 @@ function DropdownMenuPopover({
   // keyboard (the modality tracker decides; the suppressed style hides the
   // pointer case, which Safari would otherwise paint after a touch pick).
   const handleLayerHide = useCallback(() => {
+    releaseEntranceRef.current?.();
+    releaseEntranceRef.current = null;
     // Whatever closed the menu — light dismiss, the dismissal stack, Escape
     // or a controlled close — its flyouts close with it.
     hideOpenFlyouts();
@@ -1060,6 +1068,7 @@ function DropdownMenuPopover({
 
   const handleLayerShow = useCallback(() => {
     acceptedOpenRef.current = true;
+    holdEntranceRef.current();
     resetFocusReturn();
     if (renderTrigger != null) {
       setTriggerName(readAccessibleName(buttonRef.current));
@@ -1200,6 +1209,28 @@ function DropdownMenuPopover({
       openModalityRef.current = 'keyboard';
     });
   }, [popover.isOpen, focusFirst, focusLast, listRef]);
+
+  // Under a finger, where the primary pointer is coarse, a tap or a drag during
+  // the entrance reaches nothing, as in UIMenu. Keys and assistive technology
+  // stay live.
+  const holdEntrance = useCallback(() => {
+    releaseEntranceRef.current?.();
+    const layer =
+      pressTouchModel === 'uikit'
+        ? listRef.current?.closest('[popover]')
+        : null;
+    releaseEntranceRef.current =
+      layer == null ? null : holdEntranceInput(layer);
+  }, [listRef, pressTouchModel]);
+  holdEntranceRef.current = holdEntrance;
+  // The layer runtime's input hold: an unmount during the entrance releases it.
+  useEffect(
+    () => () => {
+      releaseEntranceRef.current?.();
+      releaseEntranceRef.current = null;
+    },
+    [],
+  );
 
   // With a header or footer the popover is a modal dialog: Tab and Shift+Tab
   // walk the header's controls, the menu as one stop, then the footer's

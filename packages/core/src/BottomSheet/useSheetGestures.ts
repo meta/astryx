@@ -560,22 +560,29 @@ export function useSheetGestures({
   // onDismiss() and sets `pending`; the host answers in the same update, so
   // the first render afterwards says whether it took the close (its
   // controlled state now says closed: the exit under way is the drag's) or
-  // refused it (a guarded onOpenChange left it open: the sheet snaps back and
-  // the request is spent). Either way the flag is settled during render, the
-  // prev-prop pattern, and derived back to false once the sheet is open
-  // again — so a later close from a control, Escape or code is never
-  // mistaken for a drag.
+  // refused it (a guarded onOpenChange left it open: the sheet snaps back,
+  // its scrim with it, and the request is spent). Either way the flag is
+  // settled during render, the prev-prop pattern, and derived back to false
+  // once the sheet is open again — so a later close from a control, Escape
+  // or code is never mistaken for a drag.
   const [touchDragDismissal, setTouchDragDismissal] = useState<{
     isTouch: boolean;
     pending: boolean;
   } | null>(null);
+  // The render that spends a refused request counts it. The layout effect
+  // below answers each count.
+  const [refusedDismissalCount, setRefusedDismissalCount] = useState(0);
   if (touchDragDismissal != null) {
     if (touchDragDismissal.pending) {
-      setTouchDragDismissal(
-        isOpenRequested
-          ? null
-          : {isTouch: touchDragDismissal.isTouch, pending: false},
-      );
+      if (isOpenRequested) {
+        setTouchDragDismissal(null);
+        setRefusedDismissalCount(count => count + 1);
+      } else {
+        setTouchDragDismissal({
+          isTouch: touchDragDismissal.isTouch,
+          pending: false,
+        });
+      }
     } else if (isOpenRequested) {
       setTouchDragDismissal(null);
     }
@@ -711,6 +718,24 @@ export function useSheetGestures({
     onScrimOpacityRef.current = onScrimOpacity;
     hasFixedHeightRef.current = hasFixedHeight;
   });
+
+  // The release cannot know whether the host takes the close. The host
+  // answers through `isOpenRequested` in the next render. Keep the left
+  // detent's scrim until then.
+  const restingScrimOpacityRef = useRef<number | null>(null);
+  // Syncs the host's scrim (its backdrop, written through `onScrimOpacity`)
+  // with the panel's return to rest after a refusal: the panel rests on that
+  // detent again, so the scrim the drag thinned toward the dismiss line rests
+  // with it. The refusal changes none of the host's own scrim inputs, so the
+  // drag's last value would otherwise stand.
+  useLayoutEffect(() => {
+    const restingScrimOpacity = restingScrimOpacityRef.current;
+    if (refusedDismissalCount === 0 || restingScrimOpacity == null) {
+      return;
+    }
+    restingScrimOpacityRef.current = null;
+    onScrimOpacityRef.current?.(restingScrimOpacity);
+  }, [refusedDismissalCount]);
 
   // Live drag bookkeeping (refs so pointermove doesn't churn renders).
   const dragStateRef = useRef<{
@@ -1168,6 +1193,12 @@ export function useSheetGestures({
             baseLayoutOffset,
             naturalEndGap,
             false,
+          );
+          restingScrimOpacityRef.current = scrimOpacityForOffset(
+            baseOffset,
+            offsets,
+            dismissOffset,
+            peekOffset,
           );
           setTouchDragDismissal({isTouch, pending: true});
           onDismissRef.current();

@@ -248,7 +248,7 @@ useBackdropPress useBackdropPress Layer/Layer.doc.mjs Layer/useBackdropPress.ts
 useBaseTablePlugins useBaseTablePlugins Table/Table.doc.mjs Table/useBaseTablePlugins.ts
 useBusyAnnouncement useBusyAnnouncement hooks/useAnimatedLayout.doc.mjs hooks/useBusyAnnouncement.ts
 useCalendarConstraints useCalendarConstraints Calendar/Calendar.doc.mjs Calendar/hooks/useCalendarConstraints.ts
-useCalendarDays useCalendarDays Calendar/Calendar.doc.mjs Calendar/hooks/useCalendarDays.ts
+useCalendarDays useCalendarDays Calendar/useCalendarDays.doc.mjs Calendar/hooks/useCalendarDays.ts
 useCalendarNavigation useCalendarNavigation Calendar/Calendar.doc.mjs Calendar/hooks/useCalendarNavigation.ts
 useChatComposerTokens useChatComposerTokens Chat/Chat.doc.mjs Chat/useChatComposerTokens.ts
 useChatDictation useChatDictation Chat/Chat.doc.mjs Chat/useChatDictation.ts
@@ -270,7 +270,7 @@ useIsHydrating useIsHydrating hooks/useAnimatedLayout.doc.mjs hooks/useIsHydrati
 useIsomorphicLayoutEffect useIsomorphicLayoutEffect hooks/useAnimatedLayout.doc.mjs hooks/useIsomorphicLayoutEffect.ts
 useLayerDismissal useLayerDismissal Layer/Layer.doc.mjs Layer/useLayerDismissal.ts
 useLightbox useLightbox Lightbox/useLightbox.doc.mjs Lightbox/useLightbox.tsx
-useLinkComponent useLinkComponent Link/Link.doc.mjs Link/useLinkComponent.ts
+useLinkComponent useLinkComponent Link/useLinkComponent.doc.mjs Link/useLinkComponent.ts
 useLinkify useLinkify Link/Link.doc.mjs Link/useLinkify.tsx
 useListFormatter useListFormatter i18n/InternationalizationProvider.doc.mjs i18n/useListFormatter.ts
 useMenuDrillIn useMenuDrillIn DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/useMenuDrillIn.tsx
@@ -278,7 +278,7 @@ useMenuHover useMenuHover hooks/useAnimatedLayout.doc.mjs hooks/useMenuHover.ts
 useMenuOverflow useMenuOverflow DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/useMenuOverflow.ts
 useMobileKeyboard ERR_UNKNOWN_COMPONENT - keyboard/useMobileKeyboard.ts
 useOutlineFromDOM useOutlineFromDOM Outline/Outline.doc.mjs Outline/useOutlineFromDOM.ts
-useOverlay useOverlay Overlay/Overlay.doc.mjs Overlay/useOverlay.tsx
+useOverlay useOverlay Overlay/useOverlay.doc.mjs Overlay/useOverlay.tsx
 useOwnScrollGesture useOwnScrollGesture DateInput/DateInput.doc.mjs DateInput/useOwnScrollGesture.ts
 usePager usePager hooks/useAnimatedLayout.doc.mjs hooks/usePager.ts
 usePointerDragScroll usePointerDragScroll DateInput/DateInput.doc.mjs DateInput/usePointerDragScroll.ts
