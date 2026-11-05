@@ -269,7 +269,9 @@ export function Badge({
       title={labelTitle}
       {...props}>
       {icon}
-      <span {...stylex.props(styles.label)}>{label}</span>
+      <span dir="auto" {...stylex.props(styles.label)}>
+        {label}
+      </span>
     </span>
   );
 }

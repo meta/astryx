@@ -351,6 +351,7 @@ export function Token({
     <>
       {icon}
       <span
+        dir="auto"
         {...stylex.props(styles.label, isLabelHidden && styles.labelHidden)}>
         {label}
       </span>
@@ -471,6 +472,7 @@ export function Token({
         {...pressable}
         labelContent={
           <span
+            dir="auto"
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,
@@ -563,6 +565,7 @@ export function Token({
           {...(isDisabled ? disabledInteractionProps() : null)}
           {...stylex.props(styles.invisibleButton)}>
           <span
+            dir="auto"
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,

@@ -99,6 +99,7 @@ export function InputGroupText({
   return (
     <div
       ref={ref}
+      dir="auto"
       {...rest}
       {...inputGroupItemProps}
       {...mergeProps(
