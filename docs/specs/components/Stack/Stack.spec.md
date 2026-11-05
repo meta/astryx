@@ -157,7 +157,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   a translated "Content"), so a screen reader that reaches it, including as
   a browser-made Tab stop, announces it; Tab behavior is the browser's (owner
   decision, 2026-11-04). A caller's `role` takes only the caller's
-  `aria-label`, and another element keeps its own role and name.
+  `aria-label`, and another element keeps its own role and name. Where the browser makes no Tab stop of it, a
+  scrolling region whose content holds nothing focusable can't be scrolled
+  from the keyboard. The caller then adds a focusable child or uses
+  ScrollableArea.
 
 ## Design relationships
 
