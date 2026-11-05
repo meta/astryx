@@ -31,9 +31,11 @@ import {registerMotionTable, registerSpringRole} from '../roles';
 import type {SpringDescription} from '../spring';
 
 /**
- * A spring row that is a motion role. A page that plays no spring ships no
- * springs registry. Each spring role registers itself when the module that
- * plays it loads (one idempotent in-memory write, no DOM).
+ * Registers the row as the role `springs.<name>` and returns it. A page that
+ * plays no spring ships no springs registry. Each spring role registers
+ * itself when the module that plays it loads (one idempotent in-memory write,
+ * no DOM). Write each call with the pure annotation, so a bundle that does
+ * not use the row drops the call.
  */
 function springRole<T extends SpringDescription>(name: string, spring: T): T {
   return registerSpringRole(`springs.${name}`, spring);
@@ -582,9 +584,9 @@ const SPRING_ROLES = {
  * Registers the role springs (`SPRING_ROLES`) as internal motion roles
  * (motion/roles.ts), by their row names (`springs.settle`). Every other
  * spring, UIKit's menu spring under Reduce Motion and the keyboard's
- * included, is not a role. Each role row already registers itself when a
- * module that uses it loads, so a call adds nothing. It stays for the callers
- * that make it.
+ * included, is not a role. Each role row registers itself when it loads, so
+ * a call registers nothing new. A call still puts all 18 role rows in the
+ * caller's bundle.
  */
 export function registerSpringsTable(): void {
   registerMotionTable('springs', SPRING_ROLES, {
