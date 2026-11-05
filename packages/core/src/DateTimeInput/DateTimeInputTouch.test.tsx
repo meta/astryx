@@ -880,6 +880,74 @@ describe('DateTimeInput touch surface', () => {
     });
   });
 
+  it('keeps the arrows and Reset out of reach while the month/year toggle fades', async () => {
+    withMonthLayout(() => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-15T10:00' as ISODateTimeString}
+          onChange={() => {}}
+        />,
+      );
+      openDateSheet();
+    });
+    const surface = (which: 'calendar' | 'wheels') => {
+      const element = document.querySelector<HTMLElement>(
+        `[data-date-surface="${which}"]`,
+      );
+      if (element == null) {
+        throw new Error(`no ${which} surface`);
+      }
+      return element;
+    };
+    // A running exit on both surfaces, so their own `inert` waits for the
+    // fade's end (useFadeInert).
+    for (const which of ['calendar', 'wheels'] as const) {
+      surface(which).getAnimations = () =>
+        [
+          {transitionProperty: 'opacity', playState: 'running'},
+        ] as unknown as Animation[];
+    }
+    // Queried by attribute: role queries compute a name for every element of
+    // the open sheet.
+    const actions = () =>
+      [
+        document.querySelector('button[aria-label="Previous month"]'),
+        document.querySelector('button[aria-label="Next month"]'),
+        [...document.querySelectorAll('dialog[open] button')].find(
+          button => button.textContent?.trim() === 'Reset',
+        ),
+      ].map(button => button?.closest('[inert]') != null);
+    const title = document.querySelector<HTMLElement>(
+      'button[aria-label$="Choose month and year"]',
+    );
+    if (title == null) {
+      throw new Error('no month/year title');
+    }
+    const fadeEnd = async (which: 'calendar' | 'wheels') => {
+      const event = new Event('transitionend', {bubbles: true});
+      Object.assign(event, {propertyName: 'opacity'});
+      act(() => {
+        surface(which).dispatchEvent(event);
+      });
+      // The swap lands one frame after the end.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
+    };
+
+    // Opening: the arrows and Reset leave with the toggle.
+    fireEvent.click(title);
+    expect(actions()).toEqual([true, true, true]);
+    await fadeEnd('calendar');
+    expect(actions()).toEqual([true, true, true]);
+    // Closing: they wait for the fade, as the calendar does.
+    fireEvent.click(title);
+    expect(actions()).toEqual([true, true, true]);
+    await fadeEnd('wheels');
+    expect(actions()).toEqual([false, false, false]);
+  });
+
   it('keeps Save date disabled until a valid date exists', () => {
     withMonthLayout(() => {
       render(<ControlledDateTimeInput />);

@@ -60,6 +60,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
+import type {StyleXStyles} from '@stylexjs/stylex';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
 import {useCalendarConstraints} from '../Calendar';
@@ -122,7 +123,8 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
-import {MonthPager} from './datePickerTouch';
+import {MonthPager, useChevronDip, useWheelsWarmUp} from './datePickerTouch';
+import {useFadeInert} from './useFadeInert';
 import {MonthScroller, type MonthScrollerHandle} from './MonthScroller';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {MonthYearWheels} from './MonthYearWheels';
@@ -140,6 +142,8 @@ import {
 import english from '../i18n/generated-english/DateInput/TouchDateField.generated';
 
 registerEnglishFallback(english);
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {monthYearToggleMotion} from './monthYearToggle.stylex';
 
 /**
  * The comfortable minimum tap target on both iOS and Android, honoured by
@@ -165,6 +169,15 @@ const TOUCH_TARGET = dateInputTouchSizes.daySize;
  * and not half of one.
  */
 const SWAP_DURATION = durationVars['--duration-fast'];
+/**
+ * UIDatePicker's month/year toggle under a finger: its fades and the chevron's
+ * quarter turn, 0.25 s on ease-in-ease-out (monthYearToggle.stylex.ts).
+ */
+const TOGGLE_DURATION = monthYearToggleMotion.duration;
+const TOGGLE_CURVE = monthYearToggleMotion.curve;
+const CHEVRON_TURN = monthYearToggleMotion.chevronTurn;
+/** Under reduced motion the chevron's turn applies at its dip's middle. */
+const RM_DIP_HALF = `calc(${reducedMotionFadeConsts.duration} / 2)`;
 
 const sizeStyles = stylex.create({
   sm: {
@@ -272,11 +285,24 @@ const styles = stylex.create({
     // calendar the layer above cannot cover. They fade on its timing instead,
     // both directions, so the change reads as one motion rather than chrome
     // blinking out a beat before the grid is covered.
+    // Under a finger the fade is UIDatePicker's: 0.25 s on Core Animation's
+    // ease-in-ease-out. Under Reduced Motion it is the policy's cross-fade on
+    // a touch screen and immediate with a mouse.
     transitionProperty: 'opacity, visibility',
-    transitionDuration: SWAP_DURATION,
-    transitionTimingFunction: 'linear',
-    '@media (prefers-reduced-motion: reduce)': {
-      transitionDuration: '0.01s',
+    transitionDuration: {
+      default: SWAP_DURATION,
+      '@media (pointer: coarse)': TOGGLE_DURATION,
+      // Last, so they win over the finger's value.
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.duration,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
+    transitionTimingFunction: {
+      default: 'linear',
+      '@media (pointer: coarse)': TOGGLE_CURVE,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.easing,
     },
   },
   /**
@@ -329,11 +355,24 @@ const styles = stylex.create({
   headerReset: {
     display: 'flex',
     alignItems: 'center',
+    // Under a finger the fade is UIDatePicker's: 0.25 s on Core Animation's
+    // ease-in-ease-out. Under Reduced Motion it is the policy's cross-fade on
+    // a touch screen and immediate with a mouse.
     transitionProperty: 'opacity, visibility',
-    transitionDuration: SWAP_DURATION,
-    transitionTimingFunction: 'linear',
-    '@media (prefers-reduced-motion: reduce)': {
-      transitionDuration: '0.01s',
+    transitionDuration: {
+      default: SWAP_DURATION,
+      '@media (pointer: coarse)': TOGGLE_DURATION,
+      // Last, so they win over the finger's value.
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.duration,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
+    transitionTimingFunction: {
+      default: 'linear',
+      '@media (pointer: coarse)': TOGGLE_CURVE,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.easing,
     },
   },
   headerResetHidden: {
@@ -390,16 +429,47 @@ const styles = stylex.create({
     // The one part of the swap that keeps `--ease-standard`, because it is
     // the one part that travels: a rotation has a distance to cover, and
     // fast-out-slow-in is what that curve is for. Same duration as the
-    // surface it announces, so the two land together.
+    // surface it announces, so the two land together. Under a finger it is
+    // UIDatePicker's chevron. It points along the reading direction for the
+    // calendar and turns down on the toggle's own clock.
+    transform: {
+      default: 'none',
+      '@media (pointer: coarse)': {
+        default: `rotate(-${CHEVRON_TURN})`,
+        // Mirrored under RTL, so it points along the reading direction; the
+        // same function list in both states keeps the turn a turn.
+        ':is([dir="rtl"] *)': `scaleX(-1) rotate(-${CHEVRON_TURN})`,
+      },
+    },
     transitionProperty: 'transform',
-    transitionDuration: SWAP_DURATION,
-    transitionTimingFunction: easeVars['--ease-standard'],
-    '@media (prefers-reduced-motion: reduce)': {
-      transitionDuration: '0.01s',
+    transitionDuration: {
+      default: SWAP_DURATION,
+      '@media (pointer: coarse)': TOGGLE_DURATION,
+      // Under Reduced Motion the chevron does not turn. On a touch screen the
+      // turn applies at the middle of its opacity dip (useChevronDip), and
+      // with a mouse at once.
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
+    transitionDelay: {
+      default: '0s',
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        RM_DIP_HALF,
+    },
+    transitionTimingFunction: {
+      default: easeVars['--ease-standard'],
+      '@media (pointer: coarse)': TOGGLE_CURVE,
     },
   },
   titleChevronOpen: {
-    transform: 'rotate(180deg)',
+    transform: {
+      default: 'rotate(180deg)',
+      '@media (pointer: coarse)': {
+        default: 'rotate(0deg)',
+        ':is([dir="rtl"] *)': 'scaleX(-1) rotate(0deg)',
+      },
+    },
   },
   weekdays: {
     display: 'grid',
@@ -408,11 +478,24 @@ const styles = stylex.create({
     alignItems: 'center',
     // Same as the arrows: above the plate's reach, so it fades on the layer's
     // timing rather than clearing on its own.
+    // Under a finger the fade is UIDatePicker's: 0.25 s on Core Animation's
+    // ease-in-ease-out. Under Reduced Motion it is the policy's cross-fade on
+    // a touch screen and immediate with a mouse.
     transitionProperty: 'opacity, visibility',
-    transitionDuration: SWAP_DURATION,
-    transitionTimingFunction: 'linear',
-    '@media (prefers-reduced-motion: reduce)': {
-      transitionDuration: '0.01s',
+    transitionDuration: {
+      default: SWAP_DURATION,
+      '@media (pointer: coarse)': TOGGLE_DURATION,
+      // Last, so they win over the finger's value.
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.duration,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
+    transitionTimingFunction: {
+      default: 'linear',
+      '@media (pointer: coarse)': TOGGLE_CURVE,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.easing,
     },
   },
   weekdaysHidden: {
@@ -431,6 +514,20 @@ const styles = stylex.create({
     display: 'grid',
     blockSize: dateInputTouchGeometry.paneBlockSize,
     position: 'relative',
+  },
+  /**
+   * While the month/year toggle cross-fades, a shield over both panels takes
+   * touches, as a UIKit view animation ignores them. `inert` swaps only at
+   * the fade's end (useFadeInert). A pseudo-element on the body, so showing
+   * it restyles nothing inside the panels.
+   */
+  bodyFading: {
+    '::after': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+      zIndex: 3,
+    },
   },
   /**
    * The two panels share one grid cell, and the wheels are the one on top.
@@ -460,14 +557,21 @@ const styles = stylex.create({
    */
   panelBeneath: {
     transitionProperty: 'visibility',
-    transitionDuration: SWAP_DURATION,
-    '@media (prefers-reduced-motion: reduce)': {
-      transitionDuration: '0.01s',
+    transitionDuration: {
+      default: SWAP_DURATION,
+      '@media (pointer: coarse)': TOGGLE_DURATION,
+      // Last, so they win over the finger's value.
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.duration,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
     },
   },
+  // No `pointerEvents` here: it is inherited, so flipping it in the toggle's
+  // commit would restyle the calendar before the fade's first frame. `inert`
+  // and `visibility` keep it untouchable.
   panelBeneathHidden: {
     visibility: 'hidden',
-    pointerEvents: 'none',
   },
   /**
    * The month and year, as one layer that fades in and out on top.
@@ -510,17 +614,36 @@ const styles = stylex.create({
   panelOverlay: {
     backgroundColor: colorVars['--color-background-surface'],
     isolation: 'isolate',
+    // Under a finger the fade is UIDatePicker's: 0.25 s on Core Animation's
+    // ease-in-ease-out. Under Reduced Motion it is the policy's cross-fade on
+    // a touch screen and immediate with a mouse.
     transitionProperty: 'opacity, visibility',
-    transitionDuration: SWAP_DURATION,
-    transitionTimingFunction: 'linear',
-    '@media (prefers-reduced-motion: reduce)': {
-      transitionDuration: '0.01s',
+    transitionDuration: {
+      default: SWAP_DURATION,
+      '@media (pointer: coarse)': TOGGLE_DURATION,
+      // Last, so they win over the finger's value.
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.duration,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
+    transitionTimingFunction: {
+      default: 'linear',
+      '@media (pointer: coarse)': TOGGLE_CURVE,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.easing,
     },
   },
   panelOverlayHidden: {
     visibility: 'hidden',
     opacity: 0,
     pointerEvents: 'none',
+  },
+  // The hidden wheels under a finger once the sheet has settled: laid out, at
+  // opacity 0, so the toggle's commit only changes their opacity
+  // (useWheelsWarmUp). Still inert and hidden from assistive technology.
+  panelOverlayWarm: {
+    visibility: 'visible',
   },
   footer: {
     paddingBlockStart: spacingVars['--spacing-2'],
@@ -683,8 +806,29 @@ export function TouchDateField({
     isSheetOpen ? sheetBodyRef : inputRef,
   );
   const [isWheelOpen, setIsWheelOpen] = useState(false);
+  // The panels swap `inert` when the toggle's fade ends (useFadeInert), since
+  // flipping it restyles a panel's subtree. `aria-hidden` follows the toggle
+  // at once, and a shield takes touches while the fade runs.
+  const calendarPanelRef = useRef<HTMLDivElement | null>(null);
+  const wheelsPanelRef = useRef<HTMLDivElement | null>(null);
   const {isTouch} = useTouchPresentation();
+  const {isCalendarInert, isWheelsInert, isFading} = useFadeInert(
+    isWheelOpen,
+    calendarPanelRef,
+    wheelsPanelRef,
+    isTouch,
+  );
+  // The header's actions and the footer's two leave with the toggle and
+  // arrive with the fade's end. They sit outside the panels' shield, so they
+  // go inert at once. Otherwise a tap on Done during the fade would fall
+  // through to Save.
+  const isCalendarActionsInert = isWheelOpen || isCalendarInert;
+  const isWheelsActionsInert = !isWheelOpen || isWheelsInert;
   const MonthGrid = isTouch ? MonthPager : MonthScroller;
+  // Once the sheet settles, the hidden wheels are laid out at opacity 0, so
+  // the toggle itself only changes opacity.
+  const isWheelsWarm = useWheelsWarmUp(isSheetOpen && isTouch);
+  const chevronDipRef = useChevronDip(isWheelOpen);
   const scrollerHandleRef = useRef<MonthScrollerHandle | null>(null);
   // Pending focus handoff from the clear button; see handleClear.
   const clearFocusTimerRef = useRef<number | null>(null);
@@ -947,15 +1091,17 @@ export function TouchDateField({
    * lifts, so each lap committed the next month along and the value climbed
    * on its own. Ignoring the echo removes the cycle instead of damping it.
    */
-  const handleVisibleMonthChange = useCallback(
-    (next: number) => {
-      if (isWheelOpen) {
-        return;
-      }
-      setMonthIndex(next);
-    },
-    [isWheelOpen],
-  );
+  // Read through a ref, so the toggle leaves this callback unchanged. The
+  // memoized month grid that takes it does not re-render when the wheels open
+  // or close.
+  const isWheelOpenRef = useRef(isWheelOpen);
+  isWheelOpenRef.current = isWheelOpen;
+  const handleVisibleMonthChange = useCallback((next: number) => {
+    if (isWheelOpenRef.current) {
+      return;
+    }
+    setMonthIndex(next);
+  }, []);
 
   /**
    * Put the calendar back where it belongs when the wheels close.
@@ -1010,6 +1156,120 @@ export function TouchDateField({
     [openSheet],
   );
 
+  // The toggle re-renders only what it changes: the title's chevron, the
+  // panels' classes and `aria-hidden`, and the wheels, which go live with it.
+  // A live hidden wheel would hold the compositor to the main thread during
+  // the fade. The buttons keep their identity, so React skips them.
+  const closeSheet = useCallback(() => setIsSheetOpen(false), []);
+  const closeWheels = useCallback(() => setIsWheelOpen(false), []);
+  const monthArrowButtons = useMemo(
+    () => (
+      <>
+        <IconButton
+          variant="ghost"
+          size="sm"
+          xstyle={[
+            styles.monthArrow,
+            !canStepBack && styles.monthArrowUnavailable,
+          ]}
+          isDisabled={!canStepBack}
+          onClick={() => stepMonth(-1)}
+          label={t('@astryx.calendar.previousMonth')}
+          icon={
+            <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>
+              <Icon icon="chevronLeft" size="sm" color="inherit" />
+            </span>
+          }
+        />
+        <IconButton
+          variant="ghost"
+          size="sm"
+          xstyle={[
+            styles.monthArrow,
+            !canStepForward && styles.monthArrowUnavailable,
+          ]}
+          isDisabled={!canStepForward}
+          onClick={() => stepMonth(1)}
+          label={t('@astryx.calendar.nextMonth')}
+          icon={
+            <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>
+              <Icon icon="chevronRight" size="sm" color="inherit" />
+            </span>
+          }
+        />
+      </>
+    ),
+    [canStepBack, canStepForward, stepMonth, t],
+  );
+  const resetButton = useMemo(
+    () => (
+      <Button
+        // ghost: a filled button up here would outrank the Save that
+        // finishes the task.
+        variant="ghost"
+        size="sm"
+        xstyle={styles.resetButton}
+        label={t('@astryx.dateInput.resetPicking')}
+        onClick={handleResetInSheet}
+      />
+    ),
+    [handleResetInSheet, t],
+  );
+  const monthYearWheels = useMemo(
+    () => (
+      <MonthYearWheels
+        monthModel={monthModel}
+        monthIndex={monthIndex}
+        keptDay={keptDay}
+        minMonthIndex={minMonthIndex}
+        maxMonthIndex={maxMonthIndex}
+        onChange={handleWheelChange}
+        monthLabel={t('@astryx.dateInput.monthWheel')}
+        yearLabel={t('@astryx.dateInput.yearWheel')}
+        isActive={isWheelOpen}
+      />
+    ),
+    [
+      monthModel,
+      monthIndex,
+      keptDay,
+      minMonthIndex,
+      maxMonthIndex,
+      handleWheelChange,
+      t,
+      isWheelOpen,
+    ],
+  );
+  const saveButton = useMemo(
+    () => (
+      <Button
+        variant="primary"
+        // md, not sm: a thumb reaches for this action, so it gets the
+        // comfortable size, not the header buttons' compact one.
+        size="md"
+        width="100%"
+        label={t('@astryx.dateInput.savePicking')}
+        onClick={closeSheet}
+      />
+    ),
+    [closeSheet, t],
+  );
+  const doneButton = useMemo(
+    () => (
+      <Button
+        // secondary, not primary: this one does not finish the task, it
+        // finishes a step. Giving both surfaces a primary button would
+        // say the wheels are somewhere you can complete from.
+        variant="secondary"
+        size="md"
+        width="100%"
+        label={t('@astryx.dateInput.doneChoosingMonth')}
+        onClick={closeWheels}
+      />
+    ),
+    [closeWheels, t],
+  );
+
   const surface = (
     <div {...stylex.props(styles.surface)}>
       <div {...stylex.props(styles.header)}>
@@ -1029,6 +1289,7 @@ export function TouchDateField({
           // restyle the header button. Adding a target later is additive;
           // withdrawing one is not.
           data-title="month-year"
+          ref={chevronDipRef}
           {...pressable}
           {...stylex.props(
             styles.title,
@@ -1041,11 +1302,16 @@ export function TouchDateField({
             size="sm"
             color="secondary"
             // The transform rides on the Icon itself, not a wrapper span, so
-            // the element a theme can target is the element that moves.
-            xstyle={[
-              styles.titleChevron,
-              isWheelOpen && styles.titleChevronOpen,
-            ]}
+            // the element a theme can target is the element that moves (and,
+            // under reduced motion on a touch screen, dips: useChevronDip).
+            // StyleX's types do not model the touch key's nested RTL
+            // condition, so the styles are cast; they compile as written.
+            xstyle={
+              [
+                styles.titleChevron,
+                isWheelOpen && styles.titleChevronOpen,
+              ] as StyleXStyles
+            }
           />
         </button>
         {/* Both arrows at the trailing corner, as a pair — and only while the
@@ -1061,43 +1327,12 @@ export function TouchDateField({
           // `inert` as well as the hidden styling: the fade keeps them
           // `visible` until it finishes, and a control that is on its way out
           // should not answer a click or a Tab in the meantime.
-          inert={isWheelOpen ? true : undefined}
+          inert={isCalendarActionsInert ? true : undefined}
           {...stylex.props(
             styles.monthArrows,
             isWheelOpen && styles.monthArrowsHidden,
           )}>
-          <IconButton
-            variant="ghost"
-            size="sm"
-            xstyle={[
-              styles.monthArrow,
-              !canStepBack && styles.monthArrowUnavailable,
-            ]}
-            isDisabled={!canStepBack}
-            onClick={() => stepMonth(-1)}
-            label={t('@astryx.calendar.previousMonth')}
-            icon={
-              <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>
-                <Icon icon="chevronLeft" size="sm" color="inherit" />
-              </span>
-            }
-          />
-          <IconButton
-            variant="ghost"
-            size="sm"
-            xstyle={[
-              styles.monthArrow,
-              !canStepForward && styles.monthArrowUnavailable,
-            ]}
-            isDisabled={!canStepForward}
-            onClick={() => stepMonth(1)}
-            label={t('@astryx.calendar.nextMonth')}
-            icon={
-              <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>
-                <Icon icon="chevronRight" size="sm" color="inherit" />
-              </span>
-            }
-          />
+          {monthArrowButtons}
         </span>
         {/* Reset, past the arrows, and gone with them on the wheels: the
             wheels choose a month, and there is no date there to put back.
@@ -1105,20 +1340,12 @@ export function TouchDateField({
             keeps its size, so the header cannot change height mid-swap. */}
         <span
           data-action="reset"
-          inert={isWheelOpen ? true : undefined}
+          inert={isCalendarActionsInert ? true : undefined}
           {...stylex.props(
             styles.headerReset,
             isWheelOpen && styles.headerResetHidden,
           )}>
-          <Button
-            // ghost: a filled button up here would outrank the Save that
-            // finishes the task.
-            variant="ghost"
-            size="sm"
-            xstyle={styles.resetButton}
-            label={t('@astryx.dateInput.resetPicking')}
-            onClick={handleResetInSheet}
-          />
+          {resetButton}
         </span>
       </div>
 
@@ -1138,18 +1365,23 @@ export function TouchDateField({
         ))}
       </div>
 
-      <div {...stylex.props(styles.body)}>
+      <div {...stylex.props(styles.body, isFading && styles.bodyFading)}>
         <div
+          ref={calendarPanelRef}
+          aria-hidden={isWheelOpen ? true : undefined}
           data-panel="calendar"
           // `inert` as well as the hidden styling: the panel keeps its layout
           // box (so the scroller holds its position and the wheels can steer
           // it), which means without this it would still be tabbable behind
           // the layer on top.
-          inert={isWheelOpen ? true : undefined}
+          inert={isCalendarInert ? true : undefined}
           {...stylex.props(
             styles.panel,
             styles.panelBeneath,
-            isWheelOpen && styles.panelBeneathHidden,
+            // Under a finger the calendar stays visible beneath the opaque
+            // wheels: `aria-hidden` and `inert` keep it out of reach. Flipping
+            // the inherited `visibility` would restyle it in the toggle's commit.
+            isWheelOpen && !isTouch && styles.panelBeneathHidden,
           )}>
           <MonthGrid
             key={`${minMonthIndex}:${maxMonthIndex}`}
@@ -1167,24 +1399,18 @@ export function TouchDateField({
           />
         </div>
         <div
+          ref={wheelsPanelRef}
           data-panel="wheels"
-          inert={isWheelOpen ? undefined : true}
+          inert={isWheelsInert ? true : undefined}
+          aria-hidden={isWheelOpen ? undefined : true}
           {...stylex.props(
             styles.panel,
             styles.panelOverlay,
             !isWheelOpen && styles.panelOverlayHidden,
+            // Laid out ahead of the toggle, at opacity 0 (useWheelsWarmUp).
+            !isWheelOpen && isWheelsWarm && styles.panelOverlayWarm,
           )}>
-          <MonthYearWheels
-            monthModel={monthModel}
-            monthIndex={monthIndex}
-            keptDay={keptDay}
-            minMonthIndex={minMonthIndex}
-            maxMonthIndex={maxMonthIndex}
-            onChange={handleWheelChange}
-            monthLabel={t('@astryx.dateInput.monthWheel')}
-            yearLabel={t('@astryx.dateInput.yearWheel')}
-            isActive={isWheelOpen}
-          />
+          {monthYearWheels}
         </div>
       </div>
 
@@ -1211,40 +1437,22 @@ export function TouchDateField({
             belongs to a surface: Save finishes on the calendar, Done finishes
             the detour through the wheels. */}
         <div
-          inert={isWheelOpen ? true : undefined}
+          inert={isCalendarActionsInert ? true : undefined}
           {...stylex.props(
             styles.footerAction,
             styles.panelBeneath,
             isWheelOpen && styles.panelBeneathHidden,
           )}>
-          <Button
-            variant="primary"
-            // md, not sm: it is the action a thumb reaches for, so it gets
-            // the comfortable size rather than the compact one the header's
-            // ghost buttons use.
-            size="md"
-            width="100%"
-            label={t('@astryx.dateInput.savePicking')}
-            onClick={() => setIsSheetOpen(false)}
-          />
+          {saveButton}
         </div>
         <div
-          inert={isWheelOpen ? undefined : true}
+          inert={isWheelsActionsInert ? true : undefined}
           {...stylex.props(
             styles.footerAction,
             styles.panelOverlay,
             !isWheelOpen && styles.panelOverlayHidden,
           )}>
-          <Button
-            // secondary, not primary: this one does not finish the task, it
-            // finishes a step. Giving both surfaces a primary button would
-            // say the wheels are somewhere you can complete from.
-            variant="secondary"
-            size="md"
-            width="100%"
-            label={t('@astryx.dateInput.doneChoosingMonth')}
-            onClick={() => setIsWheelOpen(false)}
-          />
+          {doneButton}
         </div>
       </div>
     </div>

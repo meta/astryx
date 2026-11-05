@@ -105,6 +105,13 @@ const styles = stylex.create({
     borderStyle: 'solid',
     borderColor: 'transparent',
     backgroundColor: 'transparent',
+  },
+  /**
+   * The mouse calendar's selection fades in. Under a finger a tapped day takes
+   * its style in the frame of the lift, as UIDatePicker's does
+   * (datePicker.calendar.selection.tapAnimates).
+   */
+  puckFade: {
     transitionProperty: 'background-color, color, border-color',
     transitionDuration: durationVars['--duration-fast'],
   },
@@ -199,6 +206,8 @@ export interface MonthPaneProps {
   hasTabStop: boolean;
   /** The surface's own pane style: the scroller's snap or the pager's layer. */
   paneStyle?: stylex.StyleXStyles;
+  /** Whether a day's selection fades in, as it does with a mouse. */
+  hasSelectionFade?: boolean;
 }
 
 /**
@@ -223,6 +232,7 @@ export const MonthPane = memo(function MonthPane({
   onDayFocus,
   hasTabStop,
   paneStyle,
+  hasSelectionFade = false,
 }: MonthPaneProps) {
   const locale = useLocale();
   const {calendar} = monthModel;
@@ -315,6 +325,7 @@ export const MonthPane = memo(function MonthPane({
                   <span
                     {...stylex.props(
                       styles.puck,
+                      hasSelectionFade && styles.puckFade,
                       !isDisabled && styles.puckHoverable,
                       isToday && styles.puckToday,
                       isSelected && styles.puckSelected,

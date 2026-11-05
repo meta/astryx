@@ -307,6 +307,23 @@ export const WithTimeIncrement: Story = {
 };
 
 /**
+ * The bottom sheet: the calendar with its month/year toggle, and the time
+ * wheels.
+ */
+export const BottomSheetCalendar: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISODateTimeString | undefined>(
+      '2026-03-15T09:00' as ISODateTimeString,
+    );
+    return <DateTimeInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Time slot',
+    presentation: 'bottom-sheet',
+  },
+};
+
+/**
  * `timeOptionInterval` turns the time field into a combobox over a list of
  * preset times at that cadence. Click the time field or press Alt+ArrowDown to
  * open it; ArrowUp/ArrowDown move through the list, Enter picks, Escape closes.
