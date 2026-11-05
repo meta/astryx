@@ -17,8 +17,8 @@
  *   is. The action column is only added when at least one row is copyable, so
  *   a fully read-only card carries no dangling gutter. A copy button sits
  *   inside its row's value, which spans the value and action columns through
- *   a subgrid. A row without a label is named by its zone's long name, out of
- *   sight; a card with no labels drops the label column.
+ *   a subgrid. A row without a label is named by its zone's long name, which
+ *   is visually hidden. A card with no labels drops the label column.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Timestamp/Timestamp.tsx (the lazy() + Suspense wrapper)
@@ -92,9 +92,14 @@ const styles = stylex.create({
   },
   // A value carrying the action cell spans the value and action columns and
   // shares the card's tracks, so the copy buttons still align.
+  // Without subgrid, a flex row keeps the button at the row's end.
   valueCells: {
     gridColumn: 'span 2',
-    display: 'grid',
+    display: {
+      default: 'flex',
+      '@supports (grid-template-columns: subgrid)': 'grid',
+    },
+    justifyContent: 'space-between',
     gridTemplateColumns: 'subgrid',
     alignItems: 'center',
   },
