@@ -89,8 +89,7 @@ browser/OS date picker selected by the public presentation contract.
   blur, `parseDateInput` still reads text the field cannot otherwise read and
   a date the locale's field order lacks, and a one- or three-digit year is not
   a date (FR20). A provider locale with a `-u-ca-` keyword keeps Gregorian
-  dates (`spec:AST-111` DEC-2);
-  set `calendar` to choose one.
+  dates (`spec:AST-111` DEC-2); set `calendar` to choose one.
 - Controlled/uncontrolled behavior: unchanged; DateInput remains controlled by
   `value`, with `undefined` representing no selected date
 - Migration decision: `spec:AST-043/DEC-1` and `spec:AST-043/DEC-2` own the
