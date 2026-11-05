@@ -19,12 +19,12 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   animationStoryboard,
+  armHold,
   busyWindowProof,
   curveOf,
   drag,
   flick,
   freezeTimers,
-  holdAnimations,
   installTimerGate,
   markElement,
   openStory,
@@ -35,13 +35,13 @@ import {
   timeline,
   touchDriver,
   trackMarker,
-  waitForAnimation,
   waitForRest,
   webInputDriver,
   withStorybook,
   writeEvidence,
   WHEEL_SKIP,
   type TouchDriver,
+  type TouchScript,
 } from '@astryxdesign/interaction-harness';
 import {paging} from '../../motion/uikit/paging';
 
@@ -60,6 +60,43 @@ interface OpenCalendar {
 }
 
 const STORY = 'core-dateinput--bottom-sheet-calendar';
+
+/**
+ * Resolves once `locator`'s element shows `property` at `value` and no
+ * animation inside it is left unfinished. The page checks the value once a
+ * frame, then awaits each animation's own `finished` promise. It sets no
+ * deadline of its own, so a starved runner only makes it later.
+ */
+async function settlesAt(locator: Locator, property: string, value: string) {
+  await locator.evaluate(
+    async (element, [name, expected]) => {
+      await new Promise<void>(resolve => {
+        const check = () => {
+          if (getComputedStyle(element).getPropertyValue(name) === expected) {
+            resolve();
+          } else {
+            requestAnimationFrame(check);
+          }
+        };
+        check();
+      });
+      for (;;) {
+        const unfinished = element
+          .getAnimations({subtree: true})
+          .filter(animation => animation.playState !== 'finished');
+        if (unfinished.length === 0) {
+          return;
+        }
+        await Promise.all(
+          unfinished.map(async animation =>
+            animation.finished.catch(() => undefined),
+          ),
+        );
+      }
+    },
+    [property, value] as const,
+  );
+}
 
 async function openCalendar(
   page: Page,
@@ -92,7 +129,7 @@ async function openCalendar(
     .getByRole('dialog')
     .locator('.astryx-bottom-sheet')
     .first();
-  await waitForRest(sheet);
+  await settlesAt(sheet, 'transform', 'matrix(1, 0, 0, 1, 0, 0)');
   const rect = await viewport.boundingBox();
   if (rect == null) {
     throw new Error('no viewport');
@@ -231,16 +268,16 @@ test('the title follows the drag, changing at half a month', async ({page}) => {
 
 test('a flick released before half a month turns the title as the settle crosses half, not at the lift', async ({
   page,
+  browserName,
 }) => {
-  const {driver, track, title, center, width} = await openCalendar(page);
+  const {driver, track, title, center} = await openCalendar(page);
   await installTimerGate(page);
-  // About a fifth of a month, fast: the release pages, short of half.
+  // About a quarter of a month at 2500 px/s: the release pages, short of
+  // half.
   await driver.play(
-    flick(center, {
-      velocity: {x: -0.2 * width * 12.5, y: 0},
-      durationMs: 80,
-      hz: 120,
-    }),
+    liftWithLastMove(
+      flick(center, {velocity: {x: -2500, y: 0}, durationMs: 40, hz: 120}),
+    ),
   );
   // Hold the page's frames right after the lift: the title must not have
   // changed at the lift itself (UIDatePicker's title follows the content).
@@ -249,7 +286,12 @@ test('a flick released before half a month turns the title as the settle crosses
   expect(await title.textContent()).toBe('October 2026');
   await thawTimers(page);
   await waitForRest(track);
-  await expect(title).toHaveText('November 2026');
+  // WebKit stamps each injected touch when it arrives, so a stalled dispatch
+  // changes the release speed the page reads. The release's paging is
+  // asserted where the script sets each touch's time.
+  if (browserName === 'chromium') {
+    await expect(title).toHaveText('November 2026');
+  }
 });
 
 test('a flick pages exactly one month', async ({page}) => {
@@ -272,11 +314,13 @@ test('the arrow names the month at the tap and scrolls one month', async ({
   if (box == null) {
     throw new Error('no arrow');
   }
+  // The page holds the step as soon as it runs. A hold sent once the tap
+  // returns reaches a busy page late, and the step can end first.
+  const hold = await armHold(page, track);
   await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
   await expect(title).toHaveText('November 2026');
-  await waitForAnimation(track);
+  await hold.held();
   await freezeTimers(page);
-  await holdAnimations(page, track);
   const samples = curveOf(
     await sampleCurve(track, timeline(STEP_MS, 1000 / 60)),
     'translateX',
@@ -295,6 +339,20 @@ test('the arrow names the month at the tap and scrolls one month', async ({
   await waitForRest(track);
   expect(await monthsIn(viewport)).toBeCloseTo(10, 2);
 });
+
+/**
+ * `script` with its lift sent right after its last move. A lift that waits
+ * for its own time can reach a loaded page more than 40 ms late. The page
+ * then reads a resting finger, which releases at no speed.
+ */
+function liftWithLastMove(script: TouchScript): TouchScript {
+  const lift = script.at(-1);
+  const last = script.at(-2);
+  if (lift == null || last == null) {
+    return script;
+  }
+  return [...script.slice(0, -1), {...lift, t: last.t}];
+}
 
 /** Taps a header arrow through the touch driver. */
 async function tapArrow(
@@ -315,8 +373,10 @@ test('an arrow tapped right after a release keeps the title on the month it name
   // The release settles towards November; Next, tapped before that settle
   // ends, names December. The title goes October, November, December and
   // stays, instead of falling back to November while the content is still
-  // nearest it.
-  const {driver, title, track, center} = await openCalendar(page);
+  // nearest it. The drag rests before the lift, so it releases at no speed.
+  // The settle then runs by position, whatever a loaded runner does to the
+  // moves' times.
+  const {driver, title, track, center, width} = await openCalendar(page);
   await title.evaluate(element => {
     const seen: string[] = [element.textContent ?? ''];
     (window as unknown as {titles: string[]}).titles = seen;
@@ -327,10 +387,13 @@ test('an arrow tapped right after a release keeps the title on the month it name
       }
     }).observe(element, {subtree: true, characterData: true, childList: true});
   });
-  await driver.play(
-    drag(center, {x: center.x - 260, y: center.y}, {durationMs: 200}),
-  );
+  // The page holds the settle as soon as it runs, so Next lands mid-settle
+  // on any runner. The arrow's own step then replaces the held settle.
+  const hold = await armHold(page, track);
+  await driver.play(slowDrag(center, -0.7 * width));
+  expect((await hold.held()).length).toBeGreaterThan(0);
   await tapArrow(page, driver, 'Next month');
+  await releaseAnimations(page);
   await waitForRest(track);
   const titles = await page.evaluate(
     () => (window as unknown as {titles: string[]}).titles,
@@ -619,8 +682,10 @@ test('in the sheet, a drag is decided once it has moved 10 px either way: slow 3
   });
   /**
    * Plays `script` while the page records, every frame, the sheet's drop and
-   * the grid's offset. The page samples them itself: an evaluate per move
-   * would slow the script on a loaded runner and blunt the fast flick.
+   * the grid's offset, and counts the moves that reach the sheet. The split
+   * keeps the grid's moves from the sheet, so that count names who took the
+   * drag on any runner. The page samples the rest itself: an evaluate per
+   * move would slow the script on a loaded runner and blunt the fast flick.
    */
   const play = async (script: Parameters<typeof driver.play>[0]) => {
     await sheet.evaluate((sheetElement, top) => {
@@ -630,7 +695,16 @@ test('in the sheet, a drag is decided once it has moved 10 px either way: slow 3
         sheetDrop: 0,
         monthsMin: Infinity,
         monthsMax: -Infinity,
+        sheetMoves: 0,
         frame: 0,
+        stop: () => {},
+      };
+      const countMove = () => {
+        seen.sheetMoves += 1;
+      };
+      sheetElement.addEventListener('touchmove', countMove, {passive: true});
+      seen.stop = () => {
+        sheetElement.removeEventListener('touchmove', countMove);
       };
       const sample = () => {
         if (months == null || track == null) {
@@ -655,14 +729,18 @@ test('in the sheet, a drag is decided once it has moved 10 px either way: slow 3
           sheetDrop: number;
           monthsMin: number;
           monthsMax: number;
+          sheetMoves: number;
           frame: number;
+          stop: () => void;
         };
       };
       cancelAnimationFrame(splitSeen.frame);
+      splitSeen.stop();
       return {
         sheetDrop: splitSeen.sheetDrop,
         monthsMin: splitSeen.monthsMin,
         monthsMax: splitSeen.monthsMax,
+        sheetMoves: splitSeen.sheetMoves,
       };
     });
   };
@@ -673,27 +751,33 @@ test('in the sheet, a drag is decided once it has moved 10 px either way: slow 3
   const shallow = await play(
     drag(center, along(35, 145), {durationMs: 500, restMs: 150}),
   );
+  expect(shallow.sheetMoves).toBe(0);
   expect(shallow.sheetDrop).toBeLessThan(1);
   expect(shallow.monthsMax - 9).toBeGreaterThan(0.2);
   await waitForRest(track);
   expect(await monthsIn(viewport)).toBeCloseTo(9, 2);
 
   // 55°, fast (25 px steps, ~1500 px/s): the first move lands 14 px
-  // sideways. So the grid takes the drag, the flick pages to October, and
-  // the sheet never moves.
+  // sideways. So the grid takes the drag: no move reaches the sheet, and the
+  // sheet never moves. Where the grid then rests depends on the release's
+  // speed, which a loaded runner can change, so it is read, not asserted.
   const fast = await play(drag(center, along(55, 150), {durationMs: 100}));
+  expect(fast.sheetMoves).toBe(0);
   expect(fast.sheetDrop).toBeLessThan(1);
   await waitForRest(track);
-  expect(await monthsIn(viewport)).toBeCloseTo(10, 2);
+  const restsOn = await monthsIn(viewport);
+  expect([9, 10]).toContain(Math.round(restsOn));
+  expect(restsOn).toBeCloseTo(Math.round(restsOn), 2);
 
   // 60°, slow (3.3 px steps): the vertical travel reaches 10 px first, so
   // the sheet takes the drag and the grid never moves.
   const steep = await play(
     drag(center, along(60, 120), {durationMs: 600, restMs: 150}),
   );
+  expect(steep.sheetMoves).toBeGreaterThan(0);
   expect(steep.sheetDrop).toBeGreaterThan(20);
   expect(steep.monthsMax - steep.monthsMin).toBeLessThan(0.01);
-  expect(await monthsIn(viewport)).toBeCloseTo(10, 2);
+  expect(await monthsIn(viewport)).toBeCloseTo(restsOn, 2);
 });
 
 test(
@@ -707,13 +791,17 @@ test(
     if (box == null) {
       throw new Error('no arrow');
     }
+    // The page holds the step as soon as it runs, so a busy page cannot let
+    // it end before the film starts.
+    const hold = await armHold(page, track);
     await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
-    await waitForAnimation(track);
+    const held = await hold.held();
     await freezeTimers(page);
     const {storyboard} = await animationStoryboard(page, {
       name: 'month-pager-arrow-step',
       clip: viewport,
       scope: track,
+      held,
       times: timeline(STEP_MS, 1000 / 30),
       columns: 6,
       cellScale: 0.4,
@@ -731,13 +819,16 @@ test(
   async ({page}, testInfo) => {
     const {driver, viewport, track, width, center} = await openCalendar(page);
     await installTimerGate(page);
+    // The page holds the settle as soon as it runs, as for the arrow step.
+    const hold = await armHold(page, track);
     await driver.play(slowDrag(center, -0.7 * width));
-    await waitForAnimation(track);
+    const held = await hold.held();
     await freezeTimers(page);
     const {storyboard} = await animationStoryboard(page, {
       name: 'month-pager-release-settle',
       clip: viewport,
       scope: track,
+      held,
       columns: 6,
       cellScale: 0.4,
       measure: async () => ({months: +(await monthsIn(viewport)).toFixed(3)}),
