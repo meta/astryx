@@ -60,7 +60,8 @@ icon, styling, and ref seams available for standalone composition.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public change
+- Compatibility class: records shipped behavior plus the additive
+  `chat-send-button-send` component icon slot (FR3); no other public change
 - Controlled/uncontrolled behavior: not applicable; explicit props take
   precedence over context-derived values
 - Migration decision: none
