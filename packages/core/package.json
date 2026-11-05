@@ -848,6 +848,11 @@
       "source": "./src/internal/calendar-system.ts",
       "types": "./dist/internal/calendar-system.d.ts",
       "default": "./dist/internal/calendar-system.js"
+    },
+    "./internal/scroll-anchoring": {
+      "source": "./src/internal/scroll-anchoring.ts",
+      "types": "./dist/internal/scroll-anchoring.d.ts",
+      "default": "./dist/internal/scroll-anchoring.js"
     }
   },
   "files": [

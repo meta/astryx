@@ -87,7 +87,7 @@ async function position(page: Page) {
   return viewport(page).evaluate(element => ({
     top: element.scrollTop,
     gap: element.scrollHeight - element.clientHeight - element.scrollTop,
-    following: element.hasAttribute('data-astryx-chat-following'),
+    following: getComputedStyle(element).overflowAnchor === 'none',
     dpr: devicePixelRatio,
     reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
   }));

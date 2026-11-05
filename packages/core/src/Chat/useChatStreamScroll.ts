@@ -33,6 +33,7 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {setScrollAnchoringOff} from '../privateAttributes/scrollAnchoring.stylex';
 
 // =============================================================================
 // Types
@@ -128,28 +129,6 @@ export interface UseChatStreamScrollReturn {
 
 const SIXTY_FPS_MS = 1000 / 60;
 
-// While following, the hook owns the container's position, so the browser's
-// scroll anchoring must not move it. The rule rides on an attribute rather
-// than the element's inline style: a consumer's own `overflow-anchor` is never
-// read, written or restored — it simply applies again once the attribute is
-// gone. `!important` so an inline `auto` cannot switch anchoring back on under
-// a following container; an inline `!important` still wins, deliberately.
-const FOLLOWING_ATTR = 'data-astryx-chat-following';
-const FOLLOWING_STYLE_ATTR = 'data-astryx-chat-following-style';
-
-function ensureFollowingStyle(): void {
-  if (
-    typeof document === 'undefined' ||
-    document.head.querySelector(`[${FOLLOWING_STYLE_ATTR}]`)
-  ) {
-    return;
-  }
-  const style = document.createElement('style');
-  style.setAttribute(FOLLOWING_STYLE_ATTR, '');
-  style.textContent = `[${FOLLOWING_ATTR}]{overflow-anchor:none !important}`;
-  document.head.appendChild(style);
-}
-
 export function useChatStreamScroll({
   scrollRef,
   enabled = true,
@@ -187,7 +166,10 @@ export function useChatStreamScroll({
     (locked: boolean) => {
       lockedRef.current = locked;
       setIsLocked(locked);
-      scrollRef.current?.toggleAttribute(FOLLOWING_ATTR, locked);
+      const el = scrollRef.current;
+      if (el != null) {
+        setScrollAnchoringOff(el, locked);
+      }
     },
     [scrollRef],
   );
@@ -367,8 +349,7 @@ export function useChatStreamScroll({
     }
 
     lastScrollTopRef.current = el.scrollTop;
-    ensureFollowingStyle();
-    el.toggleAttribute(FOLLOWING_ATTR, lockedRef.current);
+    setScrollAnchoringOff(el, lockedRef.current);
 
     const onScroll = () => {
       const {scrollTop, scrollHeight, offsetHeight} = el;
@@ -414,7 +395,7 @@ export function useChatStreamScroll({
     return () => {
       el.removeEventListener('scroll', onScroll);
       el.removeEventListener('scrollend', onScrollEnd);
-      el.removeAttribute(FOLLOWING_ATTR);
+      setScrollAnchoringOff(el, false);
     };
   }, [scrollRef, enabled, lockThreshold, buttonThreshold, setLocked]);
 

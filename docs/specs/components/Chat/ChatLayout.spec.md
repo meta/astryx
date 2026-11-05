@@ -90,6 +90,10 @@ inline-size`, and the `chat-layout` theming target with its `density` axis.
 
 - Scroll measurement, spring animation, lock behavior, or new-message detection —
   owned by `useChatStreamScroll` and `useChatNewMessages`.
+- Turning the browser's scroll anchoring off while following — owned by
+  `useChatStreamScroll`, which writes it only through Core's scroll-anchoring
+  owner module (`privateAttributes/scrollAnchoring.stylex.ts`), the one owner
+  of that rule (`architecture:public-component-api` INV23).
 - Message presentation, grouping, or sender semantics — owned by
   `component:ChatMessageList` and `component:ChatMessage`.
 - Composer behavior, sizing, or status — owned by `component:ChatComposer`.
