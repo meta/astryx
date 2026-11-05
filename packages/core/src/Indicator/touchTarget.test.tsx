@@ -280,6 +280,48 @@ describe('the hit band is at least 44 px and never smaller than the row (FR42)',
     }
   });
 
+  it('clears a checkbox row’s insets when it stops taking taps', async () => {
+    const {rerender} = render(
+      <CheckboxInput label="Accept" value={false} onChange={() => {}} />,
+    );
+    const row = closestOrThrow(
+      screen.getByRole('checkbox', {name: 'Accept'}),
+      '[data-astryx-pressable]',
+    );
+    measure(row, 24);
+    expect(row.style.getPropertyValue(HIT_INSET_PROPERTIES.top)).toBe('10px');
+    rerender(
+      <CheckboxInput
+        label="Accept"
+        value={false}
+        onChange={() => {}}
+        isDisabled
+      />,
+    );
+    await Promise.resolve();
+    expect(row.style.getPropertyValue(HIT_INSET_PROPERTIES.top)).toBe('0px');
+    expect(row.style.getPropertyValue(HIT_INSET_PROPERTIES.bottom)).toBe('0px');
+  });
+
+  it('clears a radio option’s insets when it stops taking taps', async () => {
+    const options = (isDisabled: boolean) => (
+      <RadioList label="Plan" value="a" onChange={() => {}}>
+        <RadioListItem label="Option A" value="a" isDisabled={isDisabled} />
+      </RadioList>
+    );
+    const {rerender} = render(options(false));
+    const row = closestOrThrow(
+      screen.getByRole('radio', {name: 'Option A'}),
+      '.astryx-item',
+    );
+    measure(row, 24);
+    expect(row.style.getPropertyValue(HIT_INSET_PROPERTIES.top)).toBe('10px');
+    rerender(options(true));
+    await Promise.resolve();
+    expect(row.style.getPropertyValue(HIT_INSET_PROPERTIES.top)).toBe('0px');
+    expect(row.style.getPropertyValue(HIT_INSET_PROPERTIES.bottom)).toBe('0px');
+  });
+
   it('grows a 24 px radio option to 44 px, and leaves a 60 px one at its own box', () => {
     for (const [height, expected] of [
       [24, 44],

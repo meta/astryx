@@ -21,8 +21,16 @@ const styles = stylex.create({
 
 const LINES = Array.from({length: 40}, (_, index) => `Line ${index + 1}`);
 
+/**
+ * The lines are buttons, realistic focusable content: a keyboard reaches the
+ * scrolling content without a tab stop on the region.
+ */
 function Lines() {
-  return LINES.map(line => <p key={line}>{line}</p>);
+  return LINES.map(line => (
+    <p key={line}>
+      <button type="button">{line}</button>
+    </p>
+  ));
 }
 
 function Frame({children}: {children: ReactNode}) {
@@ -119,7 +127,9 @@ export const StackItemListScrolls: StoryObj = {
     <VStack height={240}>
       <StackItem as="ul" data-scroll-region isScrollable size="fill">
         {LINES.map(line => (
-          <li key={line}>{line}</li>
+          <li key={line}>
+            <button type="button">{line}</button>
+          </li>
         ))}
       </StackItem>
     </VStack>
