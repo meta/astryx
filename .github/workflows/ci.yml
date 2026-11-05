@@ -200,9 +200,9 @@ jobs:
           exit 1
 
   # Stops a pull-request run that CI is full for, with the reason, so it builds
-  # nothing: room found no room and ten other pull-request runs waiting, or the
-  # run waited its longest while another started at its longest wait. It
-  # cancels the run when its token can. A fork's read-only token cannot; then
+  # nothing: the run waited its longest while another started at its longest
+  # wait, or a run that waited longer still waits. It cancels the run when its
+  # token can. A fork's read-only token cannot; then
   # admission fails, the jobs behind it skip or stop, and build, test and
   # docsite-test fail with the same reason, never skip or pass.
   ci-full:

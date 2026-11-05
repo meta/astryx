@@ -399,8 +399,8 @@ they are separately named.
   `main` check looks again every two minutes while it does, and a run within ten
   jobs of room every four minutes, inside its longest wait. A pull-request run
   that finds no room waits like the others, on its slim runner, until its
-  longest wait (12 minutes); waiting runs count only their waiting job and
-  don't hold each other back. A pull-request run still without room at its
+  longest wait (12 minutes); waiting runs count only what they run: their
+  waiting job and a Storybook build that found room. A pull-request run still without room at its
   longest wait looks once more and starts only if no other pull-request run
   started at its longest wait in the last ten minutes and no run that waited
   longer still waits; otherwise it stops with "CI is full: re-run all jobs or
@@ -994,9 +994,9 @@ CI can still pass ninety in five bounded ways, the first three rare:
   over by at most its own jobs.
 - A waiting run's own waiting job starts before it finds room; its Storybook
   build starts only once there is room for it. CI is over by at most one
-  waiting job per waiting run: at most ten for pull requests, plus one for each
-  waiting merge-queue entry and `main` run, which are never turned away, for at
-  most a wait (twelve minutes for a pull request, two hours for `main`).
+  waiting job per waiting run, pull requests, merge-queue entries and `main`
+  runs alike, with no limit on how many wait, for at most a wait (twelve
+  minutes for a pull request, two hours for `main`).
 - Small workflows can run more jobs at once than the eighteen counted for them:
   they peaked at twenty in a day's runs, two over, while their jobs ran.
 
