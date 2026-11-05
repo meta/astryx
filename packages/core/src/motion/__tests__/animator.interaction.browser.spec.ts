@@ -192,25 +192,46 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
   expect(proof.verdict.failures, proof.summary).toEqual([]);
   expect(proof.monotonic).toBe(true);
   // And it is the spring. The control moves 240 px out and back every 800
-  // ms, linearly, on the compositor: between two frames where it kept one
-  // direction it advanced |dx| / 0.6 ms of its own curve, whatever the
-  // screencast's timestamps say (a loaded runner stamps some frames late).
-  // Placing the box's position on the analytic curve (inverting it), the
-  // spring must have advanced the same time over each such run of frames.
-  // The control's start plus its own time places each frame on the page's
-  // clock, so the median offset from the curve is near zero too.
+  // ms, linearly, on the compositor. Its start plus its own time places each
+  // frame on the page clock (controlClock). The frame's stamp only picks the
+  // whole cycle, so a late stamp moves no frame.
   const inside = tracked.filter(
     f => f.box != null && f.t > busy.from + 20 && f.t < busy.to - 20,
   );
-  expect(inside.length).toBeGreaterThan(30);
-  const curveMs = await page.evaluate(
-    ({springs, travel, xs}) =>
+  const clock = controlClock(control);
+  const timed = inside.flatMap(f => {
+    const ms = clock.get(f.t);
+    if (ms == null) {
+      return [];
+    }
+    const cycles = Math.round((f.t - controlStart - ms) / 800);
+    return [
+      {
+        x: (f.box?.x ?? NaN) - MARKER_INSET,
+        at: controlStart + ms + cycles * 800 - start,
+      },
+    ];
+  });
+  // The judged frames cover the block, at least one in each quarter of it,
+  // however few frames a loaded runner presents.
+  const quarters = new Set(
+    timed.map(({at}) =>
+      Math.floor((start + at - busy.from) / (busy.spanMs / 4)),
+    ),
+  );
+  // Each frame is judged in px, against where the curve puts the box at that
+  // frame's time. Judged as time instead, a frame in the slow tail of the
+  // spring turns the marker's 1 px step into 10 ms or more. A loaded runner
+  // that starts the block late spends more of the block there.
+  const judged = await page.evaluate(
+    ({springs, travel, frames}) =>
       springs.map(spring => {
         const solved = Motion.solveSpring(Motion.toSpring(spring), {
           from: 0,
           to: travel,
         });
-        return xs.map(x => {
+        // The curve's time at each position, found by bisection.
+        const curveMs = frames.map(({x}) => {
           let lo = 0;
           let hi = 3;
           for (let i = 0; i < 60; i++) {
@@ -223,66 +244,51 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
           }
           return lo * 1000;
         });
+        // The curve's start on the page clock, against the commit that
+        // handle.started reports: the median over the frames.
+        const offsets = frames
+          .map(({at}, i) => at - curveMs[i])
+          .sort((p, q) => p - q);
+        const median = offsets[Math.floor(offsets.length / 2)];
+        const worst = Math.max(
+          ...frames.map(({x, at}) =>
+            Math.abs(x - solved.value((at - median) / 1000)),
+          ),
+        );
+        return {median, worst};
       }),
     {
       // The spring, and one 10% faster: the check must tell them apart.
       springs: [SLOW, {...SLOW, response: SLOW.response * 0.9}],
       travel: TRAVEL,
-      xs: inside.map(f => (f.box?.x ?? NaN) - MARKER_INSET),
+      frames: timed,
     },
   );
-  const [curve, faster] = curveMs;
-  // The control's own time at each frame (controlClock): 240 px out in
-  // 400 ms, back in 400 ms, read from its position on the origin most frames
-  // agree with, so no one frame's stamp or direction sets it.
-  const clock = controlClock(control);
-  const timed = inside.flatMap((f, i) => {
-    const ms = clock.get(f.t);
-    return ms == null ? [] : [{i, ms}];
-  });
-  /** How far the box's curve time drifts from the control's, ms. */
-  const drift = (times: number[]) => {
-    const gaps = timed.map(({i, ms}) => times[i] - ms).sort((x, y) => x - y);
-    return (
-      gaps[Math.floor(gaps.length * 0.9)] - gaps[Math.floor(gaps.length * 0.1)]
-    );
-  };
-  // Each timed frame's time on the page clock is the control's start plus
-  // the control's own time. Its stamp only picks the whole cycle, so a late
-  // stamp moves no offset.
-  const offsets = timed
-    .map(({i, ms}) => {
-      const cycles = Math.round((inside[i].t - controlStart - ms) / 800);
-      return controlStart + ms + cycles * 800 - start - curve[i];
-    })
-    .sort((x, y) => x - y);
-  const median = offsets[Math.floor(offsets.length / 2)];
-  // The stamps' own offsets, recorded only: a loaded runner stamps some
-  // frames late.
-  const stamped = inside
-    .map((f, i) => f.t - start - curve[i])
-    .sort((x, y) => x - y);
+  const [spring, faster] = judged;
   const read = {
     frames: timed.length,
-    drift: drift(curve),
-    faster: drift(faster),
-    median,
-    stampMedian: stamped[Math.floor(stamped.length / 2)],
-    stampSpread:
-      stamped[Math.floor(stamped.length * 0.9)] -
-      stamped[Math.floor(stamped.length * 0.1)],
+    quarters: [...quarters].sort((p, q) => p - q),
+    worst: spring.worst,
+    faster: faster.worst,
+    median: spring.median,
   };
   test.info().annotations.push({
-    type: 'the spring against the control (ms)',
+    type: 'the spring against the control (px, ms)',
     description: JSON.stringify(read),
   });
-  // Placed on its curve and on the control's, every frame is the same time
-  // apart, to within the 1 px steps of both; a spring 10% off drifts.
-  expect(timed.length, JSON.stringify(read)).toBeGreaterThan(20);
-  expect(read.drift, JSON.stringify(read)).toBeLessThan(12);
-  expect(read.faster, JSON.stringify(read)).toBeGreaterThan(24);
+  expect(
+    [0, 1, 2, 3].every(q => quarters.has(q)),
+    JSON.stringify(read),
+  ).toBe(true);
+  // Every frame is within 3 px of the curve, a px for each of three reads.
+  // The box's marker and the control are read at whole px. The control's px
+  // is 1.7 ms of its time, so at most 0.6 px of the spring. The fitted start
+  // can be off by about as much.
+  expect(read.worst, JSON.stringify(read)).toBeLessThanOrEqual(3);
+  // A spring 10% faster is off by more than twice that somewhere.
+  expect(read.faster, JSON.stringify(read)).toBeGreaterThan(6);
   if (browserName === 'chromium') {
-    expect(Math.abs(median), JSON.stringify(read)).toBeLessThan(20);
+    expect(Math.abs(read.median), JSON.stringify(read)).toBeLessThan(20);
   }
 });
 

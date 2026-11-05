@@ -72,7 +72,9 @@ import {
   shadowVars,
 } from '../theme/tokens.stylex';
 import type {DialogPurpose} from '../Dialog';
-import {useFocusTrap, useMergedRefs, useScrollLock} from '../hooks';
+import {useFocusTrap} from '../hooks/useFocusTrap';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useScrollLock} from '../hooks/useScrollLock';
 import {LayerDepthProvider, useLayerDismissal} from '../Layer';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';

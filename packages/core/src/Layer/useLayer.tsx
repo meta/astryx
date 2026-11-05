@@ -36,6 +36,9 @@ import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
 import {layerStructureReset} from './layerStructureReset.stylex';
 import {layerViewportInset} from './layerViewportInset.stylex';
+import {useLayerKeyboardClearance} from './LayerTouch';
+import {LAYER_ANCHORED_ATTRIBUTE} from './layerKeyboardClearance';
+import {settledBox} from './settledBox';
 import {layerInsetProperties} from './layerInset';
 import {
   LAYER_CLEARANCE_PROPERTY,
@@ -60,6 +63,19 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 
 const styles = stylex.create({
+  // The software keyboard's block-size cap, on the layer's own element. Every
+  // layer sets it, an uncapped one to a limit no viewport cap reaches. So a
+  // layer nested in a capped one does not inherit the outer cap. The surfaces
+  // inside a layer read it through `layerViewportInset.maxBlockSize`. The cap
+  // also writes the overflow a capped surface takes. Popover's surface reads
+  // it, so it scrolls from the commit that caps it. Both are private runtime
+  // state, never set by an app or a theme.
+  // SYNC: the properties are LAYER_KEYBOARD_CAP_PROPERTY and
+  // LAYER_KEYBOARD_OVERFLOW_PROPERTY (useLayerKeyboardClearance.ts).
+  keyboardCap: (cap: string, overflow: 'auto' | 'visible') => ({
+    '--_layer-keyboard-max-block-size': cap,
+    '--_layer-keyboard-overflow': overflow,
+  }),
   // Base reset for all layers
   base: {
     marginBlockStart: 0,
@@ -481,74 +497,6 @@ function placeAfresh(layer: HTMLElement): void {
   });
 }
 
-const TRANSFORM_PROPERTIES = ['transform', 'translate', 'scale', 'rotate'];
-
-function hasTransform(style: CSSStyleDeclaration): boolean {
-  return TRANSFORM_PROPERTIES.some(name => {
-    const value = style.getPropertyValue(name);
-    return value !== '' && value !== 'none';
-  });
-}
-
-/**
- * `rect`, the box of an element whose computed style still carries a 2D
- * transform, with that transform undone: the transformed box's centre is the
- * image of the element's centre, so undoing the transform about its origin on
- * that centre gives the untransformed box, at the element's layout size. A
- * transform this cannot undo (3D, or a rotation in another unit) leaves `rect`
- * as it is.
- */
-function untransform(
-  rect: DOMRect,
-  layer: HTMLElement,
-  style: CSSStyleDeclaration,
-): DOMRect {
-  const set = (value: string) => value !== '' && value !== 'none';
-  if (typeof DOMMatrix === 'undefined' || layer.offsetWidth <= 0) {
-    return rect;
-  }
-  // The individual transform properties apply before `transform`, in this
-  // order (CSS Transforms 2).
-  let matrix = new DOMMatrix();
-  if (set(style.translate)) {
-    const [x = '0', y = '0', z] = style.translate.split(' ');
-    if (z != null) {
-      return rect;
-    }
-    matrix = matrix.translate(parseFloat(x), parseFloat(y));
-  }
-  if (set(style.rotate)) {
-    if (!/^-?[\d.]+deg$/.test(style.rotate)) {
-      return rect;
-    }
-    matrix = matrix.rotate(parseFloat(style.rotate));
-  }
-  if (set(style.scale)) {
-    const [x = '1', y = x, z] = style.scale.split(' ');
-    if (z != null) {
-      return rect;
-    }
-    matrix = matrix.scale(parseFloat(x), parseFloat(y));
-  }
-  if (set(style.transform)) {
-    matrix = matrix.multiply(new DOMMatrix(style.transform));
-  }
-  if (!matrix.is2D) {
-    return rect;
-  }
-  const [originX = 0, originY = 0] = style.transformOrigin
-    .split(' ')
-    .map(value => parseFloat(value));
-  const width = layer.offsetWidth;
-  const height = layer.offsetHeight;
-  const centre = matrix.transformPoint(
-    new DOMPoint(width / 2 - originX, height / 2 - originY),
-  );
-  const left = rect.left + rect.width / 2 - centre.x - originX;
-  const top = rect.top + rect.height / 2 - centre.y - originY;
-  return new DOMRect(left, top, width, height);
-}
-
 /**
  * The finite animations still running on `layer` and its content. A layer
  * that fades out keeps running them after the browser hides it, and it stays
@@ -565,60 +513,6 @@ function exitAnimations(layer: HTMLElement | null): Animation[] {
         animation.playState === 'running' &&
         animation.effect?.getComputedTiming().endTime !== Infinity,
     );
-}
-
-/**
- * The layer's box where its position option put it, without the transform an
- * entry animation (or anything else) applies to it: a Tooltip enters from a
- * few pixels toward its trigger, scaled down, so the transformed box of a
- * tooltip that fits beside its trigger can read as covering it while it
- * enters. The layer's transforms are overridden with `none !important`, which
- * outranks an animation, for this one read and then restored, in the same
- * task: no frame paints in between and the animation keeps running. Where the
- * engine still applies an animated transform under that override (WebKit),
- * the read box has that transform undone instead (`untransform`). A layer
- * that transitions a transform property is not overridden, since restoring the
- * value would start that transition; its box has its transform undone.
- */
-function settledBox(layer: HTMLElement): DOMRect {
-  const view = layer.ownerDocument.defaultView;
-  const style = view?.getComputedStyle(layer);
-  if (style == null || !hasTransform(style)) {
-    return layer.getBoundingClientRect();
-  }
-  const transitions = style.transitionProperty.split(',').map(p => p.trim());
-  const durations = style.transitionDuration.split(',').map(parseFloat);
-  const transitioned = transitions.some(
-    (name, index) =>
-      (name === 'all' || TRANSFORM_PROPERTIES.includes(name)) &&
-      (durations[index % durations.length] ?? 0) > 0,
-  );
-  if (transitioned) {
-    return untransform(layer.getBoundingClientRect(), layer, style);
-  }
-  const saved = TRANSFORM_PROPERTIES.map(
-    name =>
-      [
-        name,
-        layer.style.getPropertyValue(name),
-        layer.style.getPropertyPriority(name),
-      ] as const,
-  );
-  for (const name of TRANSFORM_PROPERTIES) {
-    layer.style.setProperty(name, 'none', 'important');
-  }
-  const box = layer.getBoundingClientRect();
-  const under = view?.getComputedStyle(layer);
-  const settled =
-    under != null && hasTransform(under) ? untransform(box, layer, under) : box;
-  for (const [name, value, priority] of saved) {
-    if (value === '') {
-      layer.style.removeProperty(name);
-    } else {
-      layer.style.setProperty(name, value, priority);
-    }
-  }
-  return settled;
 }
 
 /**
@@ -1720,6 +1614,13 @@ function useLayerImplementation(
     [handleBeforeToggle],
   );
 
+  // An anchored layer that would run under the software keyboard keeps its
+  // block-start edge and ends clear of the keyboard.
+  const {cap: keyboardCap, followLayerElement} = useLayerKeyboardClearance(
+    isOpen && mode === 'context',
+    popoverRef,
+  );
+
   const popoverRefCallback = useCallback(
     (el: HTMLElement | null) => {
       popoverRef.current = el;
@@ -1736,7 +1637,9 @@ function useLayerImplementation(
         // Changing a portal target remounts the popover. Preserve the logical
         // open state without firing onShow again for the replacement element.
         // A show the browser refused during one of its own hides replays once
-        // that hide has ended, for the element still mounted then.
+        // that hide has ended, for the element still mounted then. The
+        // keyboard cap follows the replacement element too.
+        followLayerElement();
         if (showPopoverElement(el)) {
           if (keepsAnchorClear) {
             keepAnchorClear(el, triggerRef.current);
@@ -1764,6 +1667,7 @@ function useLayerImplementation(
       showPopoverElement,
       isCurrentContextPopover,
       keepsAnchorClear,
+      followLayerElement,
     ],
   );
 
@@ -1955,6 +1859,10 @@ function useLayerImplementation(
         layerStructureReset.reset,
         styles.base,
         overlayPaddingReset.reset,
+        styles.keyboardCap(
+          keyboardCap == null ? '100vh' : `${keyboardCap}px`,
+          keyboardCap == null ? 'visible' : 'auto',
+        ),
         viewportStyles,
         offsetStyle,
         xstyle,
@@ -1971,6 +1879,12 @@ function useLayerImplementation(
         <Container
           ref={popoverRefCallback}
           id={id}
+          // Anchor positioning, as this commit renders it: the software
+          // keyboard caps only an anchored layer, and reads this at
+          // measurement.
+          {...(positioning === 'anchor'
+            ? {[LAYER_ANCHORED_ATTRIBUTE]: ''}
+            : {})}
           role={role}
           aria-label={ariaLabel}
           popover={lightDismiss ? 'auto' : 'manual'}
@@ -2007,6 +1921,7 @@ function useLayerImplementation(
       id,
       isAnchorInView,
       keepsAnchorClear,
+      keyboardCap,
       lightDismiss,
       mountStore,
       popoverRefCallback,
@@ -2036,6 +1951,9 @@ function useLayerImplementation(
         layerStructureReset.reset,
         styles.base,
         overlayPaddingReset.reset,
+        // A fixed layer is never capped; it still sets its own limit so it is
+        // not clamped by a capped layer it sits in.
+        styles.keyboardCap('100vh', 'visible'),
         styles.fixed,
         xstyle,
       );
