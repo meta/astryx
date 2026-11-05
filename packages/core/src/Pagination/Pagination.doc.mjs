@@ -11,8 +11,7 @@ const anatomy = [
   {
     name: 'Page-size selector',
     required: false,
-    description:
-      'Optional Selector for choosing how many items appear per page.',
+    description: 'Optional Selector for choosing how many items appear per page.',
   },
   {
     name: 'First/last buttons',
@@ -41,7 +40,8 @@ const anatomy = [
   {
     name: 'Count readout',
     required: false,
-    description: 'Text showing the current item range and total item count.',
+    description:
+      'Text showing the current item range and total item count.',
   },
   {
     name: 'Compact readout',
@@ -77,16 +77,7 @@ export const docs = {
   name: 'Pagination',
   displayName: 'Pagination',
   category: 'Navigation',
-  keywords: [
-    'pagination',
-    'pager',
-    'paginator',
-    'pagenavigation',
-    'paging',
-    'paginate',
-    'pages',
-    'pagecontrol',
-  ],
+  keywords: ["pagination","pager","paginator","pagenavigation","paging","paginate","pages","pagecontrol"],
   props: [
     {
       name: 'page',
@@ -127,8 +118,7 @@ export const docs = {
     {
       name: 'pageSize',
       type: 'number',
-      description:
-        'Number of items per page. Coerced to a positive integer; non-finite values fall back to the default.',
+      description: 'Number of items per page. Coerced to a positive integer; non-finite values fall back to the default.',
       default: '10',
     },
     {
@@ -167,7 +157,7 @@ export const docs = {
       name: 'step',
       type: 'number',
       description:
-        "Number of pages the previous/next buttons advance per click. Clamped to the valid page range, so a step that would overshoot lands on the first/last page. When greater than 1, the buttons' accessible names reflect the stride. Non-integer or values < 1 fall back to 1.",
+        'Number of pages the previous/next buttons advance per click. Clamped to the valid page range, so a step that would overshoot lands on the first/last page. When greater than 1, the buttons\' accessible names reflect the stride. Non-integer or values < 1 fall back to 1.',
       default: '1',
     },
     {
@@ -205,11 +195,7 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-pagination', visualProps: ['size', 'variant']},
-      {
-        className: 'astryx-pagination-dot',
-        visualProps: ['size'],
-        states: ['active'],
-      },
+      {className: 'astryx-pagination-dot', visualProps: ['size'], states: ['active']},
       {className: 'astryx-pagination-input-label', visualProps: ['size']},
       {className: 'astryx-pagination-input-total', visualProps: ['size']},
     ],
@@ -227,46 +213,14 @@ export const docs = {
     description:
       'Pagination lets users step through pages of content. Place it below a table, list, or card grid so users can move forward and backward through results. Pick a variant to match the context: numbered pages for data tables, a count for large lists, compact for tight spaces, or dots for carousels.',
     bestPractices: [
-      {
-        guidance: true,
-        description:
-          'Place pagination below the content it controls so users see results before navigating.',
-      },
-      {
-        guidance: true,
-        description:
-          'Use the pages variant for data tables where users need to jump to a specific page.',
-      },
-      {
-        guidance: true,
-        description:
-          'Use the count variant with a page size selector when users need to control how many items they see at once.',
-      },
-      {
-        guidance: true,
-        description:
-          'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.',
-      },
-      {
-        guidance: true,
-        description:
-          'Pass totalItems when the total is known so users can see how much content remains.',
-      },
-      {
-        guidance: false,
-        description:
-          'Show pagination when all items fit on a single page; there is nothing to paginate.',
-      },
-      {
-        guidance: false,
-        description:
-          'Use the dots variant for more than about 10 pages; the dots become too small to be useful.',
-      },
-      {
-        guidance: false,
-        description:
-          'Place pagination above the content; users expect it at the bottom.',
-      },
+      { guidance: true, description: 'Place pagination below the content it controls so users see results before navigating.' },
+      { guidance: true, description: 'Use the pages variant for data tables where users need to jump to a specific page.' },
+      { guidance: true, description: 'Use the count variant with a page size selector when users need to control how many items they see at once.' },
+      { guidance: true, description: 'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.' },
+      { guidance: true, description: 'Pass totalItems when the total is known so users can see how much content remains.' },
+      { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
+      { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
+      { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
     ],
   },
 };
@@ -297,17 +251,20 @@ export const docsZh = {
     {
       name: 'totalItems',
       type: 'number',
-      description: '总项目数。用于计算页数。同时提供时优先于 totalPages。',
+      description:
+        '总项目数。用于计算页数。同时提供时优先于 totalPages。',
     },
     {
       name: 'totalPages',
       type: 'number',
-      description: '总页数。当你知道页数但不知道项目数时使用。',
+      description:
+        '总页数。当你知道页数但不知道项目数时使用。',
     },
     {
       name: 'hasMore',
       type: 'boolean',
-      description: '当前页之后是否还有更多页。用于总数未知的游标分页。',
+      description:
+        '当前页之后是否还有更多页。用于总数未知的游标分页。',
     },
     {
       name: 'pageSize',
@@ -318,12 +275,14 @@ export const docsZh = {
     {
       name: 'pageSizeOptions',
       type: 'number[]',
-      description: '可用的每页大小选项。提供时显示每页大小选择器下拉菜单。',
+      description:
+        '可用的每页大小选项。提供时显示每页大小选择器下拉菜单。',
     },
     {
       name: 'onPageSizeChange',
       type: '(pageSize: number) => void',
-      description: '每页大小变化时调用。自动重置到第 1 页。',
+      description:
+        '每页大小变化时调用。自动重置到第 1 页。',
     },
     {
       name: 'variant',
@@ -387,11 +346,7 @@ export const docsZh = {
   theming: {
     targets: [
       {className: 'astryx-pagination', visualProps: ['size', 'variant']},
-      {
-        className: 'astryx-pagination-dot',
-        visualProps: ['size'],
-        states: ['active'],
-      },
+      {className: 'astryx-pagination-dot', visualProps: ['size'], states: ['active']},
       {className: 'astryx-pagination-input-label', visualProps: ['size']},
       {className: 'astryx-pagination-input-total', visualProps: ['size']},
     ],
@@ -401,46 +356,14 @@ export const docsZh = {
     description:
       'Pagination lets users step through pages of content. Place it below a table, list, or card grid so users can move forward and backward through results. Pick a variant to match the context: numbered pages for data tables, a count for large lists, compact for tight spaces, or dots for carousels.',
     bestPractices: [
-      {
-        guidance: true,
-        description:
-          'Place pagination below the content it controls so users see results before navigating.',
-      },
-      {
-        guidance: true,
-        description:
-          'Use the pages variant for data tables where users need to jump to a specific page.',
-      },
-      {
-        guidance: true,
-        description:
-          'Use the count variant with a page size selector when users need to control how many items they see at once.',
-      },
-      {
-        guidance: true,
-        description:
-          'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.',
-      },
-      {
-        guidance: true,
-        description:
-          'Pass totalItems when the total is known so users can see how much content remains.',
-      },
-      {
-        guidance: false,
-        description:
-          'Show pagination when all items fit on a single page; there is nothing to paginate.',
-      },
-      {
-        guidance: false,
-        description:
-          'Use the dots variant for more than about 10 pages; the dots become too small to be useful.',
-      },
-      {
-        guidance: false,
-        description:
-          'Place pagination above the content; users expect it at the bottom.',
-      },
+      { guidance: true, description: 'Place pagination below the content it controls so users see results before navigating.' },
+      { guidance: true, description: 'Use the pages variant for data tables where users need to jump to a specific page.' },
+      { guidance: true, description: 'Use the count variant with a page size selector when users need to control how many items they see at once.' },
+      { guidance: true, description: 'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.' },
+      { guidance: true, description: 'Pass totalItems when the total is known so users can see how much content remains.' },
+      { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
+      { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
+      { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
     ],
   },
 };
@@ -454,46 +377,14 @@ export const docsDense = {
     description:
       'Pagination lets users step through pages of content. Place it below a table, list, or card grid so users can move forward and backward through results. Pick a variant to match the context: numbered pages for data tables, a count for large lists, compact for tight spaces, or dots for carousels.',
     bestPractices: [
-      {
-        guidance: true,
-        description:
-          'Place pagination below the content it controls so users see results before navigating.',
-      },
-      {
-        guidance: true,
-        description:
-          'Use the pages variant for data tables where users need to jump to a specific page.',
-      },
-      {
-        guidance: true,
-        description:
-          'Use the count variant with a page size selector when users need to control how many items they see at once.',
-      },
-      {
-        guidance: true,
-        description:
-          'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.',
-      },
-      {
-        guidance: true,
-        description:
-          'Pass totalItems when the total is known so users can see how much content remains.',
-      },
-      {
-        guidance: false,
-        description:
-          'Show pagination when all items fit on a single page; there is nothing to paginate.',
-      },
-      {
-        guidance: false,
-        description:
-          'Use the dots variant for more than about 10 pages; the dots become too small to be useful.',
-      },
-      {
-        guidance: false,
-        description:
-          'Place pagination above the content; users expect it at the bottom.',
-      },
+      { guidance: true, description: 'Place pagination below the content it controls so users see results before navigating.' },
+      { guidance: true, description: 'Use the pages variant for data tables where users need to jump to a specific page.' },
+      { guidance: true, description: 'Use the count variant with a page size selector when users need to control how many items they see at once.' },
+      { guidance: true, description: 'Use the dots variant for carousels and walkthroughs where the total is small and position matters more than a number.' },
+      { guidance: true, description: 'Pass totalItems when the total is known so users can see how much content remains.' },
+      { guidance: false, description: 'Show pagination when all items fit on a single page; there is nothing to paginate.' },
+      { guidance: false, description: 'Use the dots variant for more than about 10 pages; the dots become too small to be useful.' },
+      { guidance: false, description: 'Place pagination above the content; users expect it at the bottom.' },
     ],
   },
   propDescriptions: {
@@ -501,21 +392,15 @@ export const docsDense = {
     onChange: 'Called on page change.',
     changeAction:
       'Async action on page change. Fires after onChange; uses React transitions for loading.',
-    totalItems:
-      'Total items. Calculates page count. Precedence over totalPages.',
+    totalItems: 'Total items. Calculates page count. Precedence over totalPages.',
     totalPages: 'Total pages. Use when page count known but not item count.',
     hasMore: 'More pages exist after current. For cursor-based pagination.',
-    pageSize:
-      'Items per page; coerced to positive integer, non-finite falls back to default',
-    pageSizeOptions:
-      'Page size options. Shows selector dropdown when provided.',
+    pageSize: 'Items per page; coerced to positive integer, non-finite falls back to default',
+    pageSizeOptions: 'Page size options. Shows selector dropdown when provided.',
     onPageSizeChange: 'Called on page size change. Auto resets to page 1.',
-    variant:
-      "Display between prev/next. 'input' = 'Page [n] / N' + first/last.",
-    pageLabel:
-      "Noun before the 'input' box (e.g. 'Page' or 'Row'). Navigation stays page-based. Default localized 'Page'.",
-    hasFirstLast:
-      "Show first/last («/») buttons. 'input' default true; 'compact' default false (opt in). Other variants ignore. Omitted when total unknown.",
+    variant: "Display between prev/next. 'input' = 'Page [n] / N' + first/last.",
+    pageLabel: "Noun before the 'input' box (e.g. 'Page' or 'Row'). Navigation stays page-based. Default localized 'Page'.",
+    hasFirstLast: "Show first/last («/») buttons. 'input' default true; 'compact' default false (opt in). Other variants ignore. Omitted when total unknown.",
     step: 'Pages the prev/next buttons advance per click. Clamped to range; < 1 or non-integer falls back to 1.',
     siblingCount: "Page buttons each side of current; only variant='pages'.",
     size: 'Control size.',
