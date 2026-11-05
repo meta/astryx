@@ -17,11 +17,17 @@ import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {themeBuild} from './build.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../test-utils/linked-fixture.mjs';
 
 it('passes an inherited entry only its defining theme variants in a built child, as at runtime', async () => {
-  const tmpDir = fs.mkdtempSync(
-    path.resolve(import.meta.dirname, '../../..', '.tmp-icon-entry-variants-'),
-  );
+  const tmpDir = makeLinkedFixture('astryx-icon-entry-variants-', [
+    '@astryxdesign',
+    'react',
+    'react-dom',
+  ]);
   try {
     for (const directory of ['base', 'child', 'unlisted']) {
       fs.mkdirSync(path.join(tmpDir, directory));
@@ -129,6 +135,6 @@ process.stdout.write(JSON.stringify(result));`,
     });
     expect(result.unlistedBuilt).toEqual(result.unlistedRuntime);
   } finally {
-    fs.rmSync(tmpDir, {recursive: true, force: true});
+    removeLinkedFixture(tmpDir);
   }
 });

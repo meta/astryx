@@ -82,15 +82,31 @@ function msOf(value: string): number {
 
 /**
  * The private custom property a theme with a `tempo` writes beside its
- * duration tokens: the press release fade (`utils/interactionOverlay.stylex.ts`)
- * multiplies its clock by it.
+ * duration tokens, for a style that scales a clock of its own by it
+ * (ProgressBar's move). A press release needs none: it plays
+ * `--duration-exit`, which already follows the tempo.
  */
 export const MOTION_TEMPO_PROPERTY = '--_astryx-motion-tempo';
+
+/**
+ * The custom property a theme whose `reducedMotion` resolves to `'always'`
+ * sets to `1` on its root, and the root theme on `<html>`: styles that cannot
+ * key a selector on the mark read it in a value.
+ */
+export const REDUCED_MOTION_PROPERTY = '--_astryx-reduced-motion';
+
+/**
+ * A reference such as `--duration-exit` follows the token it names, so tempo
+ * writes no value for it.
+ */
+const TIMED_DURATION_DEFAULTS = Object.entries(durationDefaults).filter(
+  ([, value]) => !value.startsWith('var('),
+);
 
 /** The duration tokens at `tempo`: today's values times it, to the ms. */
 export function durationTokensAt(tempo: number): Record<string, string> {
   const tokens: Record<string, string> = {};
-  for (const [name, value] of Object.entries(durationDefaults)) {
+  for (const [name, value] of TIMED_DURATION_DEFAULTS) {
     tokens[name] = `${Math.round(msOf(value) * tempo)}ms`;
   }
   return tokens;
@@ -123,7 +139,7 @@ export function expandThemeMotion(
   const tokens: Record<string, string> = {};
   if (knobs.tempoIsSet) {
     Object.assign(tokens, durationTokensAt(knobs.tempo));
-    for (const [name, value] of Object.entries(durationDefaults)) {
+    for (const [name, value] of TIMED_DURATION_DEFAULTS) {
       tokens[preTempoName(name)] = value;
     }
     // The press release fade, a fixed clock in the stylesheet, scales by the

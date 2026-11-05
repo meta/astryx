@@ -168,6 +168,13 @@ beforeAll(async () => {
     fs.mkdirSync(path.dirname(path.join(pkg, rel)), {recursive: true});
     fs.writeFileSync(path.join(pkg, rel), text);
   };
+  // Its own TypeScript config, scoped to its own files: with none, it gets
+  // the repository's root config, as `tsc` reads it, and the components check
+  // compiles every file in the repository.
+  write(
+    'tsconfig.json',
+    `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
+  );
   write(
     'package.json',
     JSON.stringify({name: '@acme/widgets', version: '1.2.3'}),

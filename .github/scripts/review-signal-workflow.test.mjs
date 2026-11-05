@@ -622,3 +622,91 @@ describe('review-signal review-app approval for write-access authors', () => {
     ]);
   });
 });
+
+describe("a fork's held review run blocks nothing the owner command and a dispatch do not repeat (spec:AST-030 FR15)", () => {
+  // GitHub can hold a fork's pull_request_review run for approval, and its
+  // approve endpoint refuses that run. So every review-signal writer of the
+  // gate also runs on the owner command and on a dispatch, which GitHub does
+  // not hold, and review-clear's writer, which runs after a review run, is
+  // repeated by them.
+  const writers = Object.entries(parsed.jobs).filter(
+    ([, job]) => job.permissions?.statuses === 'write',
+  );
+
+  it('has gate writers, and each runs on the owner command and on a dispatch', () => {
+    expect(writers.map(([name]) => name).sort()).toEqual([
+      'flag',
+      'spec-owner',
+    ]);
+    expect(parsed.on.issue_comment).toBeDefined();
+    expect(parsed.on.workflow_dispatch.inputs.pr).toBeDefined();
+    for (const [, job] of writers) {
+      const condition = job.if.replace(/\s+/g, ' ');
+      expect(condition).toContain(
+        "startsWith(github.event.comment.body, '/approve-spec')",
+      );
+      // Neither writer requires a review event to run.
+      expect(condition).not.toMatch(
+        /^github\.event_name == 'pull_request_review'/,
+      );
+    }
+    expect(parsed.jobs.flag.if).toContain(
+      "github.event_name == 'workflow_dispatch'",
+    );
+    // spec-owner runs on a dispatch that names a pull request.
+    expect(parsed.jobs['spec-owner'].if).toContain(
+      "(github.event_name != 'workflow_dispatch' || github.event.inputs.pr != '')",
+    );
+  });
+
+  it("skips a fork's review event in every writer, so a held run blocks no write", () => {
+    const flag = parsed.jobs.flag.if.replace(/\s+/g, ' ');
+    expect(flag).not.toContain("'pull_request_review'");
+    expect(parsed.jobs['spec-owner'].if.replace(/\s+/g, ' ')).toContain(
+      "(github.event_name != 'pull_request_review' || github.event.pull_request.head.repo.full_name == github.repository)",
+    );
+  });
+
+  it('gives the review-event job no token, so nothing waits on its run but the code-half reconcile the command repeats', () => {
+    const reviewJobs = Object.entries(parsed.jobs).filter(([, job]) =>
+      String(job.if ?? '').includes(
+        "github.event_name == 'pull_request_review'",
+      ),
+    );
+    expect(reviewJobs.map(([name]) => name)).toEqual(['review-anchor']);
+    expect(parsed.jobs['review-anchor'].permissions).toEqual({});
+  });
+
+  it("pins review-clear's writer, the only one that waits on a review run, to that run's completion", () => {
+    const clear = YAML.parse(
+      fs.readFileSync(
+        path.join(root, '.github/workflows/review-clear.yml'),
+        'utf8',
+      ),
+    );
+    expect(clear.on).toEqual({
+      workflow_run: {workflows: ['Review signal'], types: ['completed']},
+    });
+    const clearWriters = Object.entries(clear.jobs).filter(
+      ([, job]) => job.permissions?.statuses === 'write',
+    );
+    expect(clearWriters.map(([name]) => name)).toEqual(['clear']);
+    // It reconciles only after a review event's run, which the owner command
+    // (flag on issue_comment) and a dispatch (flag on workflow_dispatch) repeat
+    // from the same reviews.
+    expect(clear.jobs.clear.if).toBe(
+      "github.event.workflow_run.event == 'pull_request_review'",
+    );
+  });
+
+  it('tells owners that only the review-clear reconcile waits on a held review run, and names the dispatch fallback', () => {
+    // One line per sentence, whatever the guide's wrapping.
+    const gate = fs
+      .readFileSync(path.join(root, '.github/REVIEW_GATE.md'), 'utf8')
+      .replace(/\s+/g, ' ');
+    expect(gate).toContain(
+      'Only the review-clear reconcile waits on the held review run',
+    );
+    expect(gate).toContain('run the "Review signal" workflow by hand');
+  });
+});

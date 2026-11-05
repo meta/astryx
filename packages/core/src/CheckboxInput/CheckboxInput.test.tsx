@@ -12,6 +12,7 @@
  * SYNC: When CheckboxInput.tsx changes, update tests to match new behavior
  */
 
+import {readFileSync} from 'node:fs';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -19,8 +20,11 @@ import {
   hasPressedArm,
   hasReleaseFade,
   readsPressStrength,
+  rulesDeclaredFor,
+  rulesWithSelector,
 } from '../__tests__/pressState';
 import {CheckboxInput} from './CheckboxInput';
+import * as publicMarkers from '../Indicator/indicator.markers.stylex';
 import {Theme} from '../theme/Theme';
 import {defineTheme} from '../theme/defineTheme';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
@@ -922,5 +926,85 @@ describe('pressed state', () => {
     expect(hasReleaseFade(row)).toBe(true);
     expect(readsPressStrength(wrapper, '[data-astryx-press="on"]')).toBe(true);
     expect(readsPressStrength(wrapper)).toBe(true);
+  });
+});
+
+describe('an indicator that paints its own press', () => {
+  it('keeps its marker internal: no public entry exports it, and the API report has no row', () => {
+    expect(Object.keys(publicMarkers)).not.toContain('indicatorPressScope');
+    const report = readFileSync('packages/core/api-report.md', 'utf8');
+    expect(report).not.toContain('indicatorPressScope');
+  });
+
+  const partsOf = (container: HTMLElement) => {
+    const box = container.querySelector('.astryx-checkbox-indicator');
+    const wrapper = box?.parentElement?.parentElement;
+    const row = wrapper?.parentElement;
+    if (wrapper == null || row == null) {
+      throw new Error('the checkbox has no indicator wrapper or row');
+    }
+    return {wrapper, row};
+  };
+
+  it('hands its touch press image down only in its own press states, as a private property only the row declares', () => {
+    const {container} = render(
+      <CheckboxInput label="Accept terms" value={false} onChange={() => {}} />,
+    );
+    const {row} = partsOf(container);
+    const rules = rulesDeclaredFor(row).filter(rule =>
+      rule.includes('--_indicator-press-image'),
+    );
+    const handing = rules.filter(rule =>
+      /--_indicator-press-image:\s*var\(--_press-paint-image\)/.test(rule),
+    );
+    expect(handing.length).toBeGreaterThan(0);
+    // A pressed ancestor row hands nothing down: only the row's own states do.
+    expect(
+      handing.every(rule => /\[data-astryx-press="(on|fading)"\]/.test(rule)),
+    ).toBe(true);
+    // No default of its own: a layered stylesheet ranks a default above arms.
+    expect(
+      rules.every(rule => /\[data-astryx-press="(on|fading)"\]/.test(rule)),
+    ).toBe(true);
+  });
+
+  it('hands nothing down from a disabled checkbox', () => {
+    const {container} = render(
+      <CheckboxInput
+        label="Unavailable"
+        value={false}
+        onChange={() => {}}
+        isDisabled
+      />,
+    );
+    const {row} = partsOf(container);
+    expect(
+      rulesDeclaredFor(row).some(rule =>
+        rule.includes('--_indicator-press-image'),
+      ),
+    ).toBe(false);
+  });
+
+  it('leaves its rounded-square press layer off over an indicator marked as painting its own press', () => {
+    const {container} = render(
+      <CheckboxInput label="Accept terms" value={false} onChange={() => {}} />,
+    );
+    const {wrapper} = partsOf(container);
+    // The layer reads the marked indicator as a descendant (`:has()`).
+    const off = rulesWithSelector(wrapper, ':has(');
+    expect(
+      off.some(
+        rule => rule.includes('::after') && /content:\s*none/.test(rule),
+      ),
+    ).toBe(true);
+    // Without such an indicator the layer stays on.
+    expect(
+      rulesDeclaredFor(wrapper).some(
+        rule =>
+          rule.includes('::after') &&
+          !rule.includes(':has(') &&
+          /content:\s*("")/.test(rule),
+      ),
+    ).toBe(true);
   });
 });

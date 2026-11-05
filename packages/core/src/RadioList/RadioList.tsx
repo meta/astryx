@@ -29,9 +29,10 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {Field} from '../Field/Field';
 import type {InputStatus} from '../Field/types';
-import {useTooltip} from '../Tooltip';
+import {useTooltip} from '../Tooltip/useTooltip';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import {composeEventHandlers, mergeProps} from '../utils';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {mergeProps} from '../utils/mergeProps';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
   type FieldInputBaseProps,
@@ -403,6 +404,10 @@ export function RadioList({
           disabledMessageTooltip.ref(el);
         }}
         role="radiogroup"
+        // Screen readers announce the whole group as unavailable. Its dimmed
+        // label then labels a disabled control. An enabled list keeps a
+        // caller's own value.
+        aria-disabled={isDisabled || rest['aria-disabled']}
         // A caller aria-labelledby names the group together with its label.
         aria-labelledby={joinAriaIDs(labelID, ariaLabelledByProp)}
         onFocus={composeEventHandlers(handleFocus, onFocus)}

@@ -737,6 +737,8 @@ export function Popover({
     };
   }, [measureOverflow, popover.contentRef]);
 
+  // Syncs the overflow measurement with the open surface. It measures, then
+  // observes resize and DOM changes until the surface closes.
   useIsomorphicLayoutEffect(() => {
     if (!popover.isOpen) {
       return;
@@ -788,6 +790,8 @@ export function Popover({
     };
   }, [measureOverflow, popover.isOpen, scheduleOverflowMeasurement]);
 
+  // Measures overflow again after the content changes while the surface is
+  // open.
   useIsomorphicLayoutEffect(() => {
     if (!popover.isOpen) {
       return;

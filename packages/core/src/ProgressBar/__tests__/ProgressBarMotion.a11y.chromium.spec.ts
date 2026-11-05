@@ -6,20 +6,19 @@
  *   the interaction harness's animation holds, storyboards and busy-window
  *   control)
  * @output Browser evidence that a determinate value change moves the fill on
- *   the compositor: it keeps moving while a script holds the main thread,
- *   lays out and paints nothing per frame, and its leading edge lands on the
- *   value (mirrored in RTL). Writes a storyboard (contact sheet + JSON trace)
- *   to test-results/progress-bar-motion/, the change held and seeked frame by
- *   frame.
- * @position Chromium proof for ProgressBar's sliding fill; the iOS Safari side
- *   of the same proof is a simulator recording attached to the pull request.
+ *   the compositor and lands on the value, and that under reduced motion the
+ *   indeterminate fill only pulses its opacity. Writes a storyboard to
+ *   test-results/progress-bar-motion/.
+ * @position Chromium proof for ProgressBar's sliding fill and its
+ *   reduced-motion pulse
  *
- * SYNC: Keep in step with ProgressBar.tsx (`styles.fill`, `styles.track`).
+ * SYNC: Keep in step with ProgressBar.tsx (`styles.fill`, `styles.track`,
+ * `styles.indeterminateFill`) and motion/uikit/progressBar.ts.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -36,6 +35,9 @@ import {
   trackMarker,
   type TrackedFrame,
 } from '@astryxdesign/interaction-harness';
+import {formatMotionRoleValue} from '../../motion/roles';
+import {progressBar} from '../../motion/uikit/progressBar';
+import {timing} from '../../motion/uikit/timing';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -54,6 +56,7 @@ const EVIDENCE = path.resolve(
     path.join('test-results', 'progress-bar-motion'),
 );
 const STORY = 'core-progressbar--default';
+const INDETERMINATE = 'core-progressbar--indeterminate-variants';
 const BLOCK_MS = 700;
 const DPR = 2;
 
@@ -571,6 +574,79 @@ for (const pointer of ['a mouse', 'a finger'] as const) {
         : {hasTouch: false, isMobile: false},
     );
 
+    test('under reduced motion the indeterminate fill spans the track and only pulses its opacity', async ({
+      page,
+    }) => {
+      await page.emulateMedia({reducedMotion: 'reduce'});
+      await page.goto(
+        `${storybook.origin}/iframe.html?id=${INDETERMINATE}&viewMode=story`,
+      );
+      await expect(page.getByRole('progressbar').first()).toBeVisible();
+      expect(
+        await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+      ).toBe(pointer === 'a finger');
+      const pulseMs = progressBar.reducedMotionPulseMs;
+      const bars = await page.evaluate(
+        passMs =>
+          Array.from(document.querySelectorAll('[role="progressbar"]')).map(
+            track => {
+              const fill = track.firstElementChild as HTMLElement;
+              const animations = fill.getAnimations();
+              const [pulse] = animations;
+              const timing = pulse.effect?.getTiming();
+              const t = track.getBoundingClientRect();
+              // Seek one pass: the box never moves, only the opacity changes.
+              const samples = [0, 0.25, 0.5, 1].map(share => {
+                pulse.currentTime = Math.min(share * passMs, passMs - 0.01);
+                const f = fill.getBoundingClientRect();
+                return {
+                  left: f.left - t.left,
+                  width: f.width,
+                  opacity: Number(getComputedStyle(fill).opacity),
+                };
+              });
+              return {
+                label: track.getAttribute('aria-labelledby'),
+                trackWidth: t.width,
+                count: animations.length,
+                duration: Number(timing?.duration),
+                direction: timing?.direction,
+                iterations: timing?.iterations,
+                curve: getComputedStyle(fill).animationTimingFunction,
+                samples,
+              };
+            },
+          ),
+        pulseMs,
+      );
+      expect(bars).toHaveLength(5);
+      const floor = progressBar.reducedMotionPulseFloor;
+      for (const bar of bars) {
+        expect(bar.count, bar.label ?? '').toBe(1);
+        // The progress.reducedMotionPulseMs role each way, alternating, on
+        // the timing.curves.move curve.
+        expect(bar.duration).toBe(pulseMs);
+        expect(bar.direction).toBe('alternate');
+        expect(bar.iterations).toBe(Infinity);
+        expect(bar.curve).toBe(
+          formatMotionRoleValue('curve', timing.curves.move),
+        );
+        for (const sample of bar.samples) {
+          expect(sample.left).toBeCloseTo(0, 1);
+          expect(sample.width).toBeCloseTo(bar.trackWidth, 1);
+        }
+        const [start, quarter, half, end] = bar.samples.map(
+          sample => sample.opacity,
+        );
+        expect(start).toBeCloseTo(1, 2);
+        expect(half).toBeCloseTo((1 + floor) / 2, 2);
+        expect(end).toBeCloseTo(floor, 2);
+        // Eased, not linear: a quarter of the way it has moved less than a
+        // quarter of the drop.
+        expect(quarter).toBeGreaterThan(1 - (1 - floor) / 4 + 0.005);
+      }
+    });
+
     test('under reduced motion a new value lands at once', async ({page}) => {
       // Both shared reduced-motion queries, a fine pointer's and a coarse
       // pointer's, set the fill's duration to 0 s.
@@ -619,6 +695,141 @@ for (const pointer of ['a mouse', 'a finger'] as const) {
     });
   });
 }
+
+test('a theme\u2019s tempo leaves the reduced-motion pulse unscaled', async ({
+  page,
+}) => {
+  // A busy loop: the pulse keeps its role's 2000 ms at a slower tempo.
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=${INDETERMINATE}&viewMode=story`,
+  );
+  await expect(page.getByRole('progressbar').first()).toBeVisible();
+  await page.addStyleTag({content: ':root { --_astryx-motion-tempo: 1.5; }'});
+  const durations = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('[role="progressbar"]')).map(track =>
+      Number(
+        (track.firstElementChild as HTMLElement)
+          .getAnimations()[0]
+          ?.effect?.getTiming().duration,
+      ),
+    ),
+  );
+  expect(durations).toEqual(
+    durations.map(() => progressBar.reducedMotionPulseMs),
+  );
+});
+
+test('at the pulse floor every tone with 3:1 against the track keeps it, light and dark, on the body and the surface', async ({
+  page,
+}) => {
+  // In the light and dark default themes: the base tokens, Storybook's "None"
+  // theme. Its muted track is translucent, so the body and the surface differ.
+  // The colors are composited from the browser's computed colors (hex, so the
+  // channels are exact). They are the page background and the muted track
+  // over it. Then the fill over the track: at full opacity, at the floor, and
+  // just below the floor.
+  const floor = progressBar.reducedMotionPulseFloor;
+  const rows: {
+    mode: string;
+    surface: string;
+    tone: string;
+    full: number;
+    atFloor: number;
+    below: number;
+  }[] = [];
+  for (const mode of ['light', 'dark'] as const) {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=${INDETERMINATE}&viewMode=story&globals=astryxTheme:none;colorMode:${mode}`,
+    );
+    await expect(page.getByRole('progressbar').first()).toBeVisible();
+    rows.push(
+      ...(await page.evaluate(
+        ({mode: m, opacities}) => {
+          const parse = (css: string): number[] => {
+            const rgb = /^rgba?\(([^)]+)\)$/.exec(css);
+            if (rgb != null) {
+              const [r, g, b, a = 1] = rgb[1]
+                .split(/[\s,/]+/)
+                .filter(Boolean)
+                .map(Number);
+              return [r / 255, g / 255, b / 255, a];
+            }
+            const srgb = /^color\(srgb ([^)]+)\)$/.exec(css);
+            if (srgb != null) {
+              const [r, g, b, a = 1] = srgb[1]
+                .split(/[\s/]+/)
+                .filter(Boolean)
+                .map(Number);
+              return [r, g, b, a];
+            }
+            throw new Error(`unparsed color ${css}`);
+          };
+          const over = (top: number[], alpha: number, under: number[]) =>
+            under.map((channel, i) =>
+              i < 3 ? top[i] * alpha + channel * (1 - alpha) : 1,
+            );
+          const luminance = (c: number[]) => {
+            const lin = c
+              .slice(0, 3)
+              .map(v =>
+                v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4,
+              );
+            return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+          };
+          const contrast = (a: number[], b: number[]) => {
+            const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+            return (hi + 0.05) / (lo + 0.05);
+          };
+          const tracks = Array.from(
+            document.querySelectorAll('[role="progressbar"]'),
+          );
+          const probe = document.createElement('div');
+          tracks[0].parentElement?.appendChild(probe);
+          const out = [];
+          for (const surface of ['body', 'surface']) {
+            probe.style.backgroundColor = `var(--color-background-${surface})`;
+            const page = parse(getComputedStyle(probe).backgroundColor);
+            for (const track of tracks) {
+              const fill = track.firstElementChild as HTMLElement;
+              const trackColor = parse(getComputedStyle(track).backgroundColor);
+              const fillColor = parse(getComputedStyle(fill).backgroundColor);
+              const base = over(trackColor, trackColor[3], page);
+              const at = (opacity: number) =>
+                contrast(over(fillColor, fillColor[3] * opacity, base), base);
+              const label = document.getElementById(
+                track.getAttribute('aria-labelledby') ?? '',
+              );
+              out.push({
+                mode: m,
+                surface,
+                tone: label?.textContent ?? '',
+                full: at(1),
+                atFloor: at(opacities.floor),
+                below: at(opacities.floor - 0.01),
+              });
+            }
+          }
+          probe.remove();
+          return out;
+        },
+        {mode, opacities: {floor}},
+      )),
+    );
+  }
+  expect(rows).toHaveLength(20);
+  const qualifying = rows.filter(row => row.full >= 3);
+  expect(qualifying.length).toBeGreaterThan(0);
+  for (const row of qualifying) {
+    expect(
+      row.atFloor,
+      `${row.tone}, ${row.mode}, ${row.surface}: ${row.atFloor.toFixed(3)}:1`,
+    ).toBeGreaterThanOrEqual(3);
+  }
+  // The floor is the lowest that holds: one step below, some tone drops.
+  expect(qualifying.some(row => row.below < 3)).toBe(true);
+});
 
 test('below one track height of fill, the leading end follows the track\u2019s curve', async ({
   page,
