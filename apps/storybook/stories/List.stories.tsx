@@ -7,7 +7,7 @@
  * @position Storybook demonstrations for List consumers
  */
 
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
 import {List, ListItem} from '@astryxdesign/core/List';
@@ -118,6 +118,254 @@ export const Compact: Story = {
       <ListItem label="Settings" onClick={() => {}} />
     </List>
   ),
+};
+
+/** How far a row's touch target reaches above and below its box, px. */
+interface TouchReach {
+  readonly label: string;
+  readonly above: number;
+  readonly below: number;
+}
+
+/** One striped band of a row's touch target, outside the row's own box. */
+interface TouchBand {
+  readonly key: string;
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+interface TouchTargets {
+  readonly bands: ReadonlyArray<TouchBand>;
+  readonly reach: ReadonlyArray<TouchReach>;
+}
+
+const TOUCH_TARGET_ROWS = ['Row 1', 'Row 2', 'Row 3', 'Row 4'];
+
+/** A length rounded to the nearest half pixel. */
+const toHalfPx = (value: number) => Math.round(value * 2) / 2;
+
+/**
+ * Reads each row's touch hit layer, the row's own `::after`, as the browser
+ * lays it out, and the bands of it past the row's box. Under a fine pointer a
+ * row has no layer, so nothing is read.
+ */
+function readTouchTargets(frame: HTMLElement): TouchTargets {
+  const origin = frame.getBoundingClientRect();
+  const bands: TouchBand[] = [];
+  const reach: TouchReach[] = [];
+  frame.querySelectorAll<HTMLElement>('ul > li').forEach((row, index) => {
+    const layer = getComputedStyle(row, '::after');
+    if (layer.position !== 'absolute') {
+      return;
+    }
+    const style = getComputedStyle(row);
+    const box = row.getBoundingClientRect();
+    // The layer's offsets start at the row's padding box, inside its border.
+    const top =
+      box.top + parseFloat(style.borderTopWidth) + parseFloat(layer.top);
+    const bottom =
+      box.bottom -
+      parseFloat(style.borderBottomWidth) -
+      parseFloat(layer.bottom);
+    const left =
+      box.left + parseFloat(style.borderLeftWidth) + parseFloat(layer.left);
+    const right =
+      box.right - parseFloat(style.borderRightWidth) - parseFloat(layer.right);
+    if (![top, bottom, left, right].every(Number.isFinite)) {
+      return;
+    }
+    const label = TOUCH_TARGET_ROWS[index] ?? `Row ${index + 1}`;
+    reach.push({
+      label,
+      above: toHalfPx(box.top - top),
+      below: toHalfPx(bottom - box.bottom),
+    });
+    const addBand = (
+      side: string,
+      fromX: number,
+      fromY: number,
+      toX: number,
+      toY: number,
+    ) => {
+      if (toX - fromX >= 0.5 && toY - fromY >= 0.5) {
+        bands.push({
+          key: `${label} ${side}`,
+          left: fromX - origin.left,
+          top: fromY - origin.top,
+          width: toX - fromX,
+          height: toY - fromY,
+        });
+      }
+    };
+    addBand('above', left, top, right, box.top);
+    addBand('below', left, box.bottom, right, bottom);
+    addBand('left', left, box.top, box.left, box.bottom);
+    addBand('right', box.right, box.top, right, box.bottom);
+  });
+  return {bands, reach};
+}
+
+const touchTargetStyles = stylex.create({
+  frame: {
+    position: 'relative',
+    padding: 24,
+  },
+  bands: {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+  },
+  band: {
+    position: 'absolute',
+    backgroundImage:
+      'repeating-linear-gradient(-45deg, color-mix(in srgb, var(--color-accent) 60%, transparent) 0 2px, transparent 2px 5px)',
+    outline:
+      '1px solid color-mix(in srgb, var(--color-accent) 80%, transparent)',
+    outlineOffset: -1,
+  },
+});
+
+function CompactTouchTargetsDemo() {
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  // Whether a row handled the click that the page is dispatching.
+  const rowFiredRef = useRef(false);
+  const [lastTapped, setLastTapped] = useState('nothing yet');
+  const [targets, setTargets] = useState<TouchTargets>({
+    bands: [],
+    reach: [],
+  });
+
+  // Syncs with the browser's layout and the page's clicks. Each row's hit insets
+  // arrive after the first frame and change with the page, so the bands follow
+  // them. A click that no row handles reads "none".
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (frame == null) {
+      return undefined;
+    }
+    let pending = 0;
+    const measure = () => {
+      pending = 0;
+      setTargets(readTouchTargets(frame));
+    };
+    const schedule = () => {
+      if (pending === 0) {
+        pending = requestAnimationFrame(measure);
+      }
+    };
+    const lists = frame.querySelectorAll('ul');
+    const insets = new MutationObserver(schedule);
+    const sizes = new ResizeObserver(schedule);
+    sizes.observe(frame);
+    lists.forEach(list => {
+      insets.observe(list, {
+        attributes: true,
+        attributeFilter: ['style'],
+        subtree: true,
+      });
+      sizes.observe(list);
+    });
+    const doc = frame.ownerDocument;
+    let verdict = 0;
+    // The capture phase hears every click, including one the shared hit area
+    // swallows. The check runs once the click's dispatch has ended.
+    const onAnyClick = () => {
+      rowFiredRef.current = false;
+      clearTimeout(verdict);
+      verdict = window.setTimeout(() => {
+        if (!rowFiredRef.current) {
+          setLastTapped('none');
+        }
+      });
+    };
+    doc.addEventListener('click', onAnyClick, true);
+    schedule();
+    return () => {
+      cancelAnimationFrame(pending);
+      clearTimeout(verdict);
+      insets.disconnect();
+      sizes.disconnect();
+      doc.removeEventListener('click', onAnyClick, true);
+    };
+  }, []);
+
+  const onRowClick = (label: string) => {
+    rowFiredRef.current = true;
+    setLastTapped(label);
+  };
+  const row = (label: string) => (
+    <ListItem key={label} label={label} onClick={() => onRowClick(label)} />
+  );
+  return (
+    <VStack gap={4}>
+      <div aria-live="polite">
+        <Text>Last tapped: {lastTapped}</Text>
+      </div>
+      <div ref={frameRef} {...stylex.props(touchTargetStyles.frame)}>
+        <VStack gap={2}>
+          <List density="compact" hasDividers>
+            {TOUCH_TARGET_ROWS.slice(0, 2).map(row)}
+          </List>
+          <List density="compact" hasDividers>
+            {TOUCH_TARGET_ROWS.slice(2).map(row)}
+          </List>
+        </VStack>
+        <div aria-hidden="true" {...stylex.props(touchTargetStyles.bands)}>
+          {targets.bands.map(band => (
+            <div
+              key={band.key}
+              {...stylex.props(touchTargetStyles.band)}
+              style={{
+                left: band.left,
+                top: band.top,
+                width: band.width,
+                height: band.height,
+              }}
+            />
+          ))}
+        </div>
+      </div>
+      <VStack gap={1}>
+        {targets.reach.length === 0 ? (
+          <Text color="secondary">
+            No bands with a mouse: a row&apos;s target is its own box. Open this
+            story on a touch screen.
+          </Text>
+        ) : (
+          targets.reach.map(({label, above, below}) => (
+            <Text key={label} color="secondary">
+              {label}: {above} px above, {below} px below
+            </Text>
+          ))
+        )}
+      </VStack>
+    </VStack>
+  );
+}
+
+/**
+ * Each compact row's touch target under a finger, drawn as a striped band
+ * past the row's box. The bands are read from the rows' own hit layers, and
+ * the readout names the row a tap fires, or "none".
+ */
+export const CompactTouchTargets: Story = {
+  render: () => <CompactTouchTargetsDemo />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Under a finger each compact row's touch target reaches past its " +
+          'box where nothing is near, up to 44 px tall. The striped bands ' +
+          "show that reach, read from the rows' own hit layers. They sit " +
+          'above the first row, below the last one, and halfway across the ' +
+          'gap between the two lists. Touching rows have no band between ' +
+          'them. The ' +
+          'readout names the row a tap fires, or "none".',
+      },
+    },
+  },
 };
 
 export const Spacious: Story = {

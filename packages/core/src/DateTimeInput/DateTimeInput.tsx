@@ -67,6 +67,7 @@ import {usePopover} from '../Popover';
 import {
   isFocusInsideOwnedLayer,
   isPressInsideOwnedLayer,
+  noteOutsideDismissal,
   useOutsidePress,
 } from '../Layer/outsidePress';
 import {useTooltip} from '../Tooltip';
@@ -1435,6 +1436,7 @@ function PointerDateTimeField({
           timePopover.id,
         )
       ) {
+        noteOutsideDismissal(e.currentTarget.ownerDocument);
         timePopover.hide();
       }
 
