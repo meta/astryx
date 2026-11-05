@@ -38,6 +38,7 @@ import {
   DATE_FORMAT_MONTH_YEAR,
   plainDateWeekFieldName,
   plainDateFormatToParts,
+  nearestAcceptedDate,
 } from './plainDate';
 import type {ISODateString} from './dateTypes';
 
@@ -1085,5 +1086,71 @@ describe('plainDateWeekdayNames', () => {
 
   it('returns null for a language the platform has no data for', () => {
     expect(plainDateWeekdayNames('xx-ZZ')).toBeNull();
+  });
+});
+
+describe('nearestAcceptedDate', () => {
+  const d = plainDateFromISO;
+  const isWeekend = (pd: PlainDate) =>
+    plainDateDayOfWeek(pd) === 0 || plainDateDayOfWeek(pd) === 6;
+
+  it('returns the target inside the bounds', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {
+        min: d('2026-01-01'),
+        max: d('2026-12-31'),
+      }),
+    ).toEqual(d('2026-11-04'));
+  });
+
+  it('clamps a target before min to min', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {min: d('2027-03-01')}),
+    ).toEqual(d('2027-03-01'));
+  });
+
+  it('clamps a target after max to max', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {max: d('2025-06-30')}),
+    ).toEqual(d('2025-06-30'));
+  });
+
+  it('moves a disabled target to the nearest enabled day', () => {
+    // 2026-11-07 is a Saturday: Friday is one day away, Monday two.
+    expect(
+      nearestAcceptedDate(d('2026-11-07'), {isDateDisabled: isWeekend}),
+    ).toEqual(d('2026-11-06'));
+    // 2026-11-08 is a Sunday: Monday is one day away, Friday two.
+    expect(
+      nearestAcceptedDate(d('2026-11-08'), {isDateDisabled: isWeekend}),
+    ).toEqual(d('2026-11-09'));
+  });
+
+  it('prefers the later day on a tie', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {
+        isDateDisabled: pd => plainDateIsEqual(pd, d('2026-11-04')),
+      }),
+    ).toEqual(d('2026-11-05'));
+  });
+
+  it('searches only inside the bounds', () => {
+    // max is a Saturday; the Sunday after it is outside the bounds.
+    expect(
+      nearestAcceptedDate(d('2026-12-01'), {
+        max: d('2026-11-07'),
+        isDateDisabled: pd => isWeekend(pd) || plainDateDayOfWeek(pd) === 5,
+      }),
+    ).toEqual(d('2026-11-05'));
+  });
+
+  it('returns the clamped date when every day in the window is disabled', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {
+        min: d('2026-11-10'),
+        isDateDisabled: () => true,
+        searchDays: 30,
+      }),
+    ).toEqual(d('2026-11-10'));
   });
 });
