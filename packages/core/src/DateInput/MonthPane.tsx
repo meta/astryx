@@ -290,6 +290,7 @@ export const MonthPane = memo(function MonthPane({
               !day.isOutside &&
               today != null &&
               plainDateIsEqual(day.date, today);
+            const isTabStop = hasTabStop && day.iso === tabbableISO;
 
             return (
               <div
@@ -301,7 +302,7 @@ export const MonthPane = memo(function MonthPane({
                   type="button"
                   data-date={day.iso}
                   data-outside={day.isOutside ? '' : undefined}
-                  tabIndex={hasTabStop && day.iso === tabbableISO ? 0 : -1}
+                  tabIndex={isTabStop ? 0 : -1}
                   aria-label={formatCalendarDate(
                     calendar,
                     day.date,
@@ -315,7 +316,13 @@ export const MonthPane = memo(function MonthPane({
                       onSelect(day.iso);
                     }
                   }}
-                  onFocus={() => onDayFocus(day.date)}
+                  onFocus={
+                    // The tab stop is already the day a recorded focus would
+                    // name, so its focus records nothing and costs no render.
+                    isTabStop && focusedDate == null
+                      ? undefined
+                      : () => onDayFocus(day.date)
+                  }
                   onKeyDown={event => onDayKeyDown(event, day.date)}
                   {...stylex.props(
                     styles.day,
