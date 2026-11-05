@@ -4,7 +4,8 @@
 
 /**
  * @file TimestampHoverCard.tsx
- * @input Uses React, HoverCard, IconButton, Icon, formatted lines
+ * @input Uses React, HoverCard, IconButton, the theme's `timestamp-copy` icon
+ *   slot, formatted lines
  * @output Default-exports the lazily-loaded copyable hover card for Timestamp
  * @position Split out of Timestamp so the overlay (HoverCard) and the copy
  *   affordance's Icon/IconButton load only when a card is actually shown — the
@@ -28,7 +29,7 @@ import {useCallback} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {HoverCard} from '../HoverCard/HoverCard';
 import {IconButton} from '../IconButton/IconButton';
-import {Icon} from '../Icon/Icon';
+import {ComponentIcon} from '../Icon/ComponentIcon';
 import {useClipboard} from '../hooks/useClipboard';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -137,7 +138,14 @@ function CopyButton({value}: {value: string}) {
     <IconButton
       variant="ghost"
       size="sm"
-      icon={<Icon icon={copied ? 'check' : 'copy'} size="sm" color="inherit" />}
+      icon={
+        <ComponentIcon
+          slot="timestamp-copy"
+          state={{copied}}
+          fallback={{icon: copied ? 'check' : 'copy', size: 'sm'}}
+          color="inherit"
+        />
+      }
       // Visible hover/focus hint via Button's built-in tooltip: 'Copy',
       // flipping to 'Copied' after a successful copy in step with the icon.
       // The full 'Copy <value>' string stays the aria-label for assistive tech.

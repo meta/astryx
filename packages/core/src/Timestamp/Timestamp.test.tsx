@@ -32,6 +32,11 @@ import {InternationalizationProvider} from '../i18n';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {withChineseTemporalAheadOfIntl} from '../__tests__/temporalAheadOfIntl';
 import {__resetDevWarnings} from '../utils/devWarning';
+import type {ComponentIconMap} from '../Icon/index';
+import {defineTheme} from '../theme/defineTheme';
+import {Theme} from '../theme/Theme';
+
+let slotThemeCount = 0;
 
 async function openTimestampHoverCard(): Promise<HTMLElement> {
   const timestamp = document.querySelector('time');
@@ -1012,6 +1017,80 @@ describe('Timestamp', () => {
           }),
         ).toBeInTheDocument(),
       );
+    });
+
+    describe('copy icon slot', () => {
+      // Label each shared icon's artwork, so a test reads which name rendered.
+      const icons = {
+        copy: <span data-icon="copy" />,
+        check: <span data-icon="check" />,
+        clock: <span data-icon="clock" />,
+        checkDouble: <span data-icon="checkDouble" />,
+      };
+
+      async function renderCard(componentIcons?: ComponentIconMap<never>) {
+        const theme = defineTheme({
+          name: `timestamp-copy-slot-${slotThemeCount++}`,
+          icons,
+          componentIcons,
+        });
+        render(
+          <Theme theme={theme}>
+            <Timestamp value={Date.now() / 1000 - 3600} format="relative" />
+          </Theme>,
+        );
+        const card = await openTimestampHoverCard();
+        return card.querySelector('button')!;
+      }
+
+      const glyph = (button: HTMLElement) =>
+        button.querySelector('[data-icon]')?.getAttribute('data-icon') ?? null;
+
+      async function copy(button: HTMLElement) {
+        fireEvent.click(button);
+        await waitFor(() => expect(button).toHaveAccessibleName('Copied'));
+      }
+
+      it('draws copy, then check while copied, when the theme maps nothing', async () => {
+        const button = await renderCard();
+        expect(glyph(button)).toBe('copy');
+        await copy(button);
+        expect(glyph(button)).toBe('check');
+      });
+
+      it('passes `copied` to a slot function and draws the name it returns', async () => {
+        const slot = vi.fn(({copied}: {copied: boolean}) => ({
+          icon: copied ? ('checkDouble' as const) : ('clock' as const),
+        }));
+        const button = await renderCard({'timestamp-copy': slot});
+
+        expect(glyph(button)).toBe('clock');
+        expect(slot).toHaveBeenLastCalledWith({copied: false});
+        await copy(button);
+        expect(glyph(button)).toBe('checkDouble');
+        expect(slot).toHaveBeenLastCalledWith({copied: true});
+      });
+
+      it('hides only the glyph for null; the button keeps its name and copy action', async () => {
+        const button = await renderCard({'timestamp-copy': null});
+
+        expect(button.querySelector('.astryx-icon')).toBeNull();
+        expect(button).toHaveClass('astryx-timestamp-copy-button');
+        expect(button.getAttribute('aria-label')).toMatch(/^Copy /);
+        await copy(button);
+        expect(navigator.clipboard.writeText).toHaveBeenCalled();
+      });
+
+      it('changes only the icon size for a size request, not the button', async () => {
+        const button = await renderCard({'timestamp-copy': {size: 'lg'}});
+
+        expect(button.querySelector('.astryx-icon')).toHaveAttribute(
+          'data-size',
+          'lg',
+        );
+        expect(glyph(button)).toBe('copy');
+        expect(button).toHaveAttribute('data-size', 'sm');
+      });
     });
   });
 

@@ -348,6 +348,7 @@ describe('component icon slot types', () => {
   it('types slot names, values, and the static view', () => {
     expectTypeOf<ComponentIconSlotName>().toEqualTypeOf<
       | 'code-block-copy'
+      | 'timestamp-copy'
       | 'table-sort-indicator'
       | 'example-panel-dismiss'
       | 'example-nav-item-leading'
