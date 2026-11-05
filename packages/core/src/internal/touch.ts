@@ -95,3 +95,8 @@ export {
 } from '../motion/uikit/springs';
 export {focusForLastInput, isFocusLost} from '../utils/focusReturn';
 export {useInteractionModalityTracking} from '../utils/interactionModality';
+
+// Lab's ChatVirtualizer reads whether its scroller's scroll is a finger's,
+// and flushes its held writes when that scroll ends.
+export {useFingerScroll} from '../gestures/useFingerScroll';
+export type {UseFingerScrollOptions} from '../gestures/useFingerScroll';
