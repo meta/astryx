@@ -31,6 +31,10 @@
  * The trigger wrapper is a `div` by default; `triggerAs` makes it an inline
  * `span`, so a reference inside prose can own a context menu without
  * breaking the text flow.
+ * `ContextMenuForTrigger` (internal, not exported from index.ts) runs the same
+ * menu against a trigger and cursor anchor its caller renders, so a caller can
+ * load the menu after its content without remounting that content (Table
+ * cells do; see Table/TableCellContextMenu.tsx).
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/ContextMenu/ContextMenu.doc.mjs
@@ -38,6 +42,8 @@
  * - /packages/core/src/ContextMenu/index.ts
  * - /apps/storybook/stories/ContextMenu.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/ContextMenu/ (showcase blocks)
+ * - /packages/core/src/Table/TableCellContextMenu.tsx (external trigger mirrors
+ *   the trigger and cursorAnchor styles)
  */
 
 import React, {
@@ -102,6 +108,7 @@ import type {
 } from '../DropdownMenu/DropdownMenu';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   useAdaptivePresentation,
   type AdaptivePresentation,
@@ -308,6 +315,37 @@ interface ContextMenuCompoundProps extends ContextMenuBaseProps {
 
 export type ContextMenuProps = ContextMenuDataProps | ContextMenuCompoundProps;
 
+/**
+ * The trigger's event handlers, published by `ContextMenuForTrigger` for the
+ * trigger element its caller renders.
+ */
+export interface ContextMenuTriggerHandlers {
+  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
+  onTouchStart: (event: React.TouchEvent<HTMLElement>) => void;
+  onTouchMove: (event: React.TouchEvent<HTMLElement>) => void;
+  onTouchEnd: (event: React.TouchEvent<HTMLElement>) => void;
+  onTouchCancel: (event: React.TouchEvent<HTMLElement>) => void;
+}
+
+/**
+ * A trigger rendered by the caller: the right-click target, the 1px cursor
+ * anchor inside it (positioned absolutely, as `ContextMenu` renders its own),
+ * and a callback that receives the trigger's handlers while the menu is
+ * mounted (and `null` once it unmounts).
+ */
+export interface ContextMenuExternalTrigger {
+  triggerRef: React.RefObject<HTMLElement | null>;
+  anchorRef: React.RefObject<HTMLSpanElement | null>;
+  onHandlersChange: (handlers: ContextMenuTriggerHandlers | null) => void;
+}
+
+export type ContextMenuForTriggerProps = Omit<
+  ContextMenuDataProps,
+  'children' | 'ref' | 'triggerAs' | 'triggerXstyle'
+> & {
+  trigger: ContextMenuExternalTrigger;
+};
+
 // =============================================================================
 // ContextMenu
 // =============================================================================
@@ -335,28 +373,51 @@ export type ContextMenuProps = ContextMenuDataProps | ContextMenuCompoundProps;
  * </ContextMenu>
  * ```
  */
-export function ContextMenu({
-  children,
-  menuWidth,
-  size = 'md',
-  label: labelFromProps,
-  isDisabled = false,
-  onOpenChange,
-  presentation = 'popover',
-  triggerAs = 'div',
-  ref,
-  className,
-  style,
-  xstyle,
-  triggerXstyle,
-  onContextMenu: onContextMenuProp,
-  onTouchStart: onTouchStartProp,
-  onTouchMove: onTouchMoveProp,
-  onTouchEnd: onTouchEndProp,
-  onTouchCancel: onTouchCancelProp,
-  'data-testid': testId,
-  ...rest
-}: ContextMenuProps) {
+export function ContextMenu(props: ContextMenuProps): ReactNode {
+  return useContextMenuElement(props, null);
+}
+
+ContextMenu.displayName = 'ContextMenu';
+
+/**
+ * Internal. `ContextMenu` without its own trigger: the menu opens from the
+ * trigger and cursor anchor in `trigger`, which the caller renders and keeps
+ * mounted, so the caller's content survives this component loading lazily.
+ * Until it mounts, the trigger has no handlers and right-click shows the
+ * browser's menu.
+ */
+export function ContextMenuForTrigger({
+  trigger,
+  ...props
+}: ContextMenuForTriggerProps): ReactNode {
+  return useContextMenuElement({...props, children: null}, trigger);
+}
+
+function useContextMenuElement(
+  {
+    children,
+    menuWidth,
+    size = 'md',
+    label: labelFromProps,
+    isDisabled = false,
+    onOpenChange,
+    presentation = 'popover',
+    triggerAs = 'div',
+    ref,
+    className,
+    style,
+    xstyle,
+    triggerXstyle,
+    onContextMenu: onContextMenuProp,
+    onTouchStart: onTouchStartProp,
+    onTouchMove: onTouchMoveProp,
+    onTouchEnd: onTouchEndProp,
+    onTouchCancel: onTouchCancelProp,
+    'data-testid': testId,
+    ...rest
+  }: ContextMenuProps,
+  externalTrigger: ContextMenuExternalTrigger | null,
+): ReactNode {
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.contextMenu.label');
   const backLabel = t('@astryx.dropdownMenu.back');
@@ -382,6 +443,8 @@ export function ContextMenu({
   // anchor element so the menu is positioned relative to the trigger context
   // — it scrolls with the content instead of sitting at a fixed viewport point.
   const positionRef = useRef({x: 0, y: 0});
+  // With an external trigger these mirror its elements (see the layout effect
+  // below the handlers).
   const cursorAnchorRef = useRef<HTMLSpanElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
   // Element focused before the menu opened, restored when it closes so focus
@@ -863,6 +926,73 @@ export function ContextMenu({
       renderedMenu
     );
 
+  const mergedTriggerRef = useMergedRefs(ref, triggerRef);
+  const mergedAnchorRef = useMergedRefs(cursorAnchorRef, layer.ref);
+
+  // An external trigger gets the handlers and the layer's anchor ref while
+  // this menu is mounted.
+  const triggerHandlers = useMemo<ContextMenuTriggerHandlers>(
+    () => ({
+      onContextMenu: handleTriggerContextMenu,
+      onTouchStart: handleTriggerTouchStart,
+      onTouchMove: handleTriggerTouchMove,
+      onTouchEnd: handleTriggerTouchEnd,
+      onTouchCancel: handleTriggerTouchCancel,
+    }),
+    [
+      handleTriggerContextMenu,
+      handleTriggerTouchStart,
+      handleTriggerTouchMove,
+      handleTriggerTouchEnd,
+      handleTriggerTouchCancel,
+    ],
+  );
+  const layerAnchorRef = layer.ref;
+  useIsomorphicLayoutEffect(() => {
+    if (externalTrigger == null) {
+      return;
+    }
+    const {onHandlersChange} = externalTrigger;
+    onHandlersChange(triggerHandlers);
+    return () => {
+      onHandlersChange(null);
+    };
+  }, [externalTrigger, triggerHandlers]);
+  useIsomorphicLayoutEffect(() => {
+    if (externalTrigger == null) {
+      return;
+    }
+    triggerRef.current = externalTrigger.triggerRef.current;
+    cursorAnchorRef.current = externalTrigger.anchorRef.current;
+    layerAnchorRef(externalTrigger.anchorRef.current);
+    return () => {
+      layerAnchorRef(null);
+      triggerRef.current = null;
+      cursorAnchorRef.current = null;
+    };
+  }, [externalTrigger, layerAnchorRef]);
+
+  const menuSurface = usesBottomSheet ? (
+    <Suspense fallback={null}>
+      <LazyMenuBottomSheet
+        isOpen={isOpen}
+        onOpenChange={updateOpenState}
+        label={sheetLabel}>
+        {renderedBottomSheetContent}
+      </LazyMenuBottomSheet>
+    </Suspense>
+  ) : (
+    layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
+      placement: 'below',
+      alignment: 'start',
+      xstyle: [popoverXstyle, layerAnimations.below],
+    })
+  );
+
+  if (externalTrigger != null) {
+    return menuSurface;
+  }
+
   // An inline trigger (`span`) lets prose own a context menu without
   // breaking its flow.
   const TriggerElement = triggerAs === 'div' ? 'div' : 'span';
@@ -870,7 +1000,7 @@ export function ContextMenu({
   return (
     <>
       <TriggerElement
-        ref={useMergedRefs(ref, triggerRef)}
+        ref={mergedTriggerRef}
         {...triggerProps}
         onContextMenu={handleTriggerContextMenu}
         onTouchStart={handleTriggerTouchStart}
@@ -888,7 +1018,7 @@ export function ContextMenu({
         )}>
         {children}
         <span
-          ref={useMergedRefs(cursorAnchorRef, layer.ref)}
+          ref={mergedAnchorRef}
           aria-hidden="true"
           {...mergeProps(stylex.props(styles.cursorAnchor), {
             style: {
@@ -898,25 +1028,7 @@ export function ContextMenu({
           })}
         />
       </TriggerElement>
-
-      {usesBottomSheet ? (
-        <Suspense fallback={null}>
-          <LazyMenuBottomSheet
-            isOpen={isOpen}
-            onOpenChange={updateOpenState}
-            label={sheetLabel}>
-            {renderedBottomSheetContent}
-          </LazyMenuBottomSheet>
-        </Suspense>
-      ) : (
-        layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
-          placement: 'below',
-          alignment: 'start',
-          xstyle: [popoverXstyle, layerAnimations.below],
-        })
-      )}
+      {menuSurface}
     </>
   );
 }
-
-ContextMenu.displayName = 'ContextMenu';

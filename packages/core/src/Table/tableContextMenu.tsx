@@ -5,7 +5,7 @@
 /**
  * @file tableContextMenu.tsx
  * @input React, ContextMenu, Icon, types
- * @output wrapInTableContextMenu helper, TableContextMenu component
+ * @output wrapInTableContextMenu helper, TableContextMenuForTrigger component
  * @position Renders the aggregated `contextMenuActions` for a header cell / row
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -17,6 +17,10 @@
 
 import {useState, type ReactNode} from 'react';
 import {ContextMenu, type ContextMenuOption} from '../ContextMenu';
+import {
+  ContextMenuForTrigger,
+  type ContextMenuExternalTrigger,
+} from '../ContextMenu/ContextMenu';
 import {Icon} from '../Icon';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextAction, TableContextActions} from './types';
@@ -146,17 +150,35 @@ export function wrapInTableContextMenu(
 }
 
 /**
- * `wrapInTableContextMenu` as a component, so TableCell and TableHeaderCell
- * can load the context menu lazily (see TableCellContextMenu).
+ * The menu for a cell whose trigger TableCellContextMenu renders. It loads
+ * lazily beside the cell's content, so the content never remounts. A getter
+ * is resolved when the menu opens, as in `wrapInTableContextMenu`.
  */
-export function TableContextMenu({
-  children,
+export function TableContextMenuForTrigger({
   actions,
-  triggerXstyle,
+  trigger,
 }: {
-  children: ReactNode;
-  actions: TableContextActions | undefined;
-  triggerXstyle?: StyleXStyles | StyleXStyles[];
+  actions: TableContextActions;
+  trigger: ContextMenuExternalTrigger;
 }): ReactNode {
-  return wrapInTableContextMenu(children, actions, triggerXstyle);
+  const [lazyOptions, setLazyOptions] = useState<ContextMenuOption[] | null>(
+    null,
+  );
+  if (typeof actions === 'function') {
+    return (
+      <ContextMenuForTrigger
+        trigger={trigger}
+        items={lazyOptions ?? []}
+        onOpenChange={open => {
+          setLazyOptions(open ? toContextMenuOptions(actions()) : null);
+        }}
+      />
+    );
+  }
+  return (
+    <ContextMenuForTrigger
+      trigger={trigger}
+      items={toContextMenuOptions(actions)}
+    />
+  );
 }

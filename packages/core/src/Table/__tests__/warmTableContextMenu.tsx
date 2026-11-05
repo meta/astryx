@@ -13,8 +13,11 @@
  * cell renders its menu synchronously. Call it from `beforeAll`.
  */
 
-import {act, cleanup, render, screen, waitFor} from '@testing-library/react';
-import {TableCellContextMenu} from '../TableCellContextMenu';
+import {act, cleanup, render} from '@testing-library/react';
+import {
+  TableCellContextMenu,
+  loadTableContextMenu,
+} from '../TableCellContextMenu';
 
 export async function warmTableContextMenu(): Promise<void> {
   try {
@@ -26,20 +29,14 @@ export async function warmTableContextMenu(): Promise<void> {
         </TableCellContextMenu>,
       );
     });
-    // The resolved menu adds its cursor anchor inside the trigger; the
-    // loading fallback is a bare wrapper. A cold import transforms the menu's
-    // module graph, so allow for it.
-    await waitFor(
-      () => {
-        if (
-          screen.getByText('Warm cell').querySelector('[aria-hidden="true"]') ==
-          null
-        ) {
-          throw new Error('table context menu not loaded yet');
-        }
-      },
-      {timeout: 15000},
-    );
+    // A cold import transforms the menu's module graph; once it settles, the
+    // lazy component resolves on the next tick.
+    await act(async () => {
+      await loadTableContextMenu();
+    });
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
   } finally {
     cleanup();
   }

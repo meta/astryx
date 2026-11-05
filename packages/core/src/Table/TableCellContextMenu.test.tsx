@@ -2,16 +2,19 @@
 
 /**
  * @file TableCellContextMenu.test.tsx
- * @output Tests that table cells load the context menu only when they have actions
+ * @output Tests that table cells load the context menu only when they have
+ *   actions, and that loading it leaves the cell's content in place
  * @position Validates the lazy boundary in TableCellContextMenu
  */
 
-import {describe, it, expect, vi} from 'vitest';
-import {act, render, screen, waitFor} from '@testing-library/react';
+import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {act, fireEvent, render, screen} from '@testing-library/react';
+import {useEffect, useState} from 'react';
 import {Table} from './Table';
 import {TableBody} from './TableBody';
 import {TableRow} from './TableRow';
 import {TableCell} from './TableCell';
+import {loadTableContextMenu} from './TableCellContextMenu';
 import type {TableContextAction} from './types';
 
 const loads = vi.hoisted(() => ({count: 0}));
@@ -20,20 +23,62 @@ vi.mock('./tableContextMenu', async importOriginal => {
   return importOriginal();
 });
 
-function renderCell(contextMenuActions?: TableContextAction[]) {
+// jsdom doesn't implement the Popover API; mirror the ContextMenu test's mock
+// so the menu can open and its items become queryable (as hidden).
+beforeEach(() => {
+  HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+    this.setAttribute('popover-open', '');
+    const event = new Event('toggle', {bubbles: false});
+    Object.defineProperty(event, 'newState', {value: 'open'});
+    this.dispatchEvent(event);
+  });
+  HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+    this.removeAttribute('popover-open');
+    const event = new Event('toggle', {bubbles: false});
+    Object.defineProperty(event, 'newState', {value: 'closed'});
+    this.dispatchEvent(event);
+  });
+});
+
+const copyAction: TableContextAction = {
+  id: 'copy',
+  label: 'Copy',
+  onSelect: () => {},
+};
+
+const mounts = {count: 0};
+
+function Counter() {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    mounts.count += 1;
+  }, []);
+  return (
+    <button type="button" onClick={() => setCount(c => c + 1)}>
+      Count {count}
+    </button>
+  );
+}
+
+function renderCell(
+  contextMenuActions?: TableContextAction[],
+  children: React.ReactNode = 'Cell',
+) {
   return render(
     <Table>
       <TableBody>
         <TableRow>
-          <TableCell contextMenuActions={contextMenuActions}>Cell</TableCell>
+          <TableCell contextMenuActions={contextMenuActions}>
+            {children}
+          </TableCell>
         </TableRow>
       </TableBody>
     </Table>,
   );
 }
 
-// Order matters: the module registry is per file, so the first test sees
-// whether anything has imported the menu yet.
+// Order matters: the module registry is per file, so the first two tests see
+// the menu before anything has loaded it.
 describe('TableCellContextMenu', () => {
   it('does not load the context menu for cells without actions', async () => {
     renderCell();
@@ -45,16 +90,38 @@ describe('TableCellContextMenu', () => {
     expect(loads.count).toBe(0);
   });
 
-  it('loads it for a cell with actions and keeps the content in place meanwhile', async () => {
-    renderCell([{id: 'copy', label: 'Copy', onSelect: () => {}}]);
-    expect(screen.getByText('Cell')).toBeTruthy();
-    await waitFor(() => expect(loads.count).toBe(1), {timeout: 15000});
-    await waitFor(
-      () =>
-        expect(
-          screen.getByText('Cell').querySelector('[aria-hidden="true"]'),
-        ).not.toBeNull(),
-      {timeout: 15000},
-    );
+  it('keeps the content node, focus and state while the menu loads', async () => {
+    mounts.count = 0;
+    renderCell([copyAction], <Counter />);
+    const button = screen.getByRole('button', {name: 'Count 0'});
+    fireEvent.click(button);
+    button.focus();
+    const trigger = button.parentElement as HTMLElement;
+    // Not loaded yet: right-click still shows the browser's menu.
+    expect(fireEvent.contextMenu(trigger)).toBe(true);
+
+    await act(async () => {
+      await loadTableContextMenu();
+    });
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+
+    expect(loads.count).toBe(1);
+    expect(screen.getByRole('button', {name: 'Count 1'})).toBe(button);
+    expect(document.activeElement).toBe(button);
+    expect(mounts.count).toBe(1);
+
+    // Loaded: the same trigger now opens the cell's menu.
+    expect(fireEvent.contextMenu(trigger)).toBe(false);
+    expect(
+      screen.getByRole('menuitem', {name: 'Copy', hidden: true}),
+    ).toBeTruthy();
+  });
+
+  it('renders a cell with actions synchronously once the menu has loaded', () => {
+    renderCell([copyAction], 'Loaded cell');
+    const trigger = screen.getByText('Loaded cell');
+    expect(fireEvent.contextMenu(trigger)).toBe(false);
   });
 });
