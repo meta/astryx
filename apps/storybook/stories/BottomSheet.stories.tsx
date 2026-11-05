@@ -1047,7 +1047,7 @@ export const ExitFocusControlDisabled: Story = {
 
 /**
  * A sheet rendered only while it is open. "Done" removes the sheet while it is
- * still open; focus returns to "Edit filters" (FR19).
+ * still open; focus returns to "Edit filters" (FR20).
  */
 export const RenderedWhileOpen: Story = {
   render: () => {
