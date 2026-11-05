@@ -225,8 +225,8 @@ export function formatTooltipLines(
       ? defaultTimezoneID
       : resolveTimezoneID(entry.timezoneID),
   );
-  // The pinned zone reads on the page beside the card, so it counts too: a
-  // viewer-zone row next to pinned text needs its label to tell them apart.
+  // A pinned zone counts as one zone: it reads on the page beside the
+  // card, so a viewer-zone row next to pinned text shows its abbreviation.
   const zoneKeys = new Set(resolved.map(zoneKey));
   if (defaultTimezoneID !== undefined) {
     zoneKeys.add(zoneKey(defaultTimezoneID));
