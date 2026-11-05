@@ -26,6 +26,7 @@ state-taxonomy records:
 | [Typography hierarchy](typography-hierarchy.md)                   | Legible, distinguishable text roles across themes and layouts                        |
 | [Iconography](iconography.md)                                     | Icon meaning, size, artwork, color, composition, and accessibility                   |
 | [Color emphasis](color-emphasis.md)                               | Semantic color roles, contrast intent, and local emphasis                            |
+| [Non-text contrast](non-text-contrast.md)                         | Which visual information carries the WCAG 1.4.11 non-text contrast threshold         |
 | [Motion](motion.md)                                               | Meaningful movement, timing hierarchy, and easing intent                             |
 | [Reduced motion](reduced-motion.md)                               | Cross-fade on touch and immediate change otherwise under reduced motion              |
 | [Ordered collection reordering](ordered-collection-reordering.md) | Drag preview, candidate insertion, commit, and settle intent for ordered collections |
