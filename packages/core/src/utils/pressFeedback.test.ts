@@ -12,7 +12,6 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {TEMPO_RANGE, expandThemeMotion} from '../theme/themeMotion';
 import {readFileSync} from 'node:fs';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -24,10 +23,8 @@ import {
   rulesDeclaredFor,
   rulesWithSelector,
 } from '../__tests__/pressState';
-import {
-  interactionOverlayStyles,
-  pressConsts,
-} from './interactionOverlay.stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {interactionOverlayStyles} from './interactionOverlay.stylex';
 import {
   installPressFeedback,
   PRESSABLE_ATTRIBUTE,
@@ -77,6 +74,18 @@ function pressable(tag = 'div'): HTMLElement {
   return element;
 }
 
+/** Make `element` a scroller with content to scroll, as jsdom lays out nothing. */
+function makeScroller(element: HTMLElement): void {
+  element.style.overflowY = 'auto';
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    value: 100,
+  });
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    value: 400,
+  });
+}
 /**
  * The primary pointer is coarse (a phone, a tablet) until the returned
  * restore runs: jsdom's matchMedia models a desktop, where touch work stays
@@ -111,6 +120,9 @@ beforeEach(() => {
     scroller.appendChild(row);
     rows.push(row);
   }
+  // The rows sit in a list that scrolls, as on a phone: a finger's press
+  // waits the content-touch delay there (`spec:AST-094` FR11).
+  makeScroller(scroller);
   document.body.appendChild(scroller);
   release = installPressFeedback();
 });
@@ -518,6 +530,140 @@ describe('a scroll takes it away and nothing brings it back', () => {
   });
 });
 
+describe('a finger waits only inside a scroller (spec:AST-094 FR11)', () => {
+  it('outside a scroller, paints in the frame the finger lands', () => {
+    const control = pressable('button');
+    document.body.appendChild(control);
+    press(control, 'pointerdown', 10, 10);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('inside a scroller, waits the content-touch delay', () => {
+    const control = pressable('button');
+    scroller.appendChild(control);
+    press(control, 'pointerdown', 10, 10);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('is cancelled by travel past the slop, with no fade', () => {
+    const control = pressable('button');
+    document.body.appendChild(control);
+    press(control, 'pointerdown', 10, 10);
+    press(control, 'pointermove', 10, 10 + PRESS_SLOP_PX + 1);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('slotted into a scroller inside a shadow tree, waits the content-touch delay', () => {
+    // The browser scrolls the flat tree: a slotted pressable sits in the
+    // shadow tree's scroller, not beside it in the light tree.
+    const host = document.createElement('div');
+    const shadowScroller = document.createElement('div');
+    makeScroller(shadowScroller);
+    shadowScroller.appendChild(document.createElement('slot'));
+    host.attachShadow({mode: 'open'}).appendChild(shadowScroller);
+    const control = pressable('button');
+    host.appendChild(control);
+    document.body.appendChild(host);
+    expect(control.assignedSlot).not.toBeNull();
+    press(control, 'pointerdown', 10, 10);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('in a fixed bar above a scrolling list, paints in the frame the finger lands', () => {
+    const bar = document.createElement('div');
+    bar.style.position = 'fixed';
+    const control = pressable('button');
+    bar.appendChild(control);
+    scroller.appendChild(bar);
+    press(control, 'pointerdown', 10, 10);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('fades at the lift, then leaves no attribute behind', () => {
+    const control = pressable('button');
+    document.body.appendChild(control);
+    press(control, 'pointerdown', 10, 10);
+    press(control, 'pointerup', 10, 10);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('a menu row in a menu that cannot scroll highlights at once (DEC-14)', () => {
+    // A menu whose rows fit: overflow set, but nothing to scroll.
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    menu.style.overflowY = 'auto';
+    Object.defineProperty(menu, 'clientHeight', {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(menu, 'scrollHeight', {
+      configurable: true,
+      value: 200,
+    });
+    const row = pressable('div');
+    row.setAttribute('role', 'menuitem');
+    menu.appendChild(row);
+    document.body.appendChild(menu);
+    press(row, 'pointerdown', 10, 10);
+    expect(row.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('a menu row in a menu that can scroll waits the content-touch delay (DEC-14)', () => {
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    makeScroller(menu);
+    const row = pressable('div');
+    row.setAttribute('role', 'menuitem');
+    menu.appendChild(row);
+    document.body.appendChild(menu);
+    press(row, 'pointerdown', 10, 10);
+    expect(row.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(row.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+});
+
+describe('the release clock without a theme', () => {
+  it("is the exit duration token's default, 175 ms (spec:AST-094 FR5)", () => {
+    expect(PRESS_FADE_MS).toBe(175);
+  });
+});
+
+/** The Reduce Motion fade, ms: the longest a finger's release plays there. */
+const REDUCED_FADE_MS = Number.parseFloat(reducedMotionFadeConsts.duration);
+
+/** Stubs `prefers-reduced-motion: reduce` on; `vi.unstubAllGlobals` undoes it. */
+function stubReducedMotion(): void {
+  vi.stubGlobal(
+    'matchMedia',
+    (query: string): MediaQueryList =>
+      ({
+        matches: /prefers-reduced-motion:\s*reduce/.test(query),
+        media: query,
+        onchange: null,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        dispatchEvent: () => false,
+      }) as MediaQueryList,
+  );
+}
+
+/** Declares `css` for the test's duration and returns the remover. */
+function addRules(css: string): () => void {
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.appendChild(style);
+  return () => style.remove();
+}
+
 describe('the release', () => {
   it('fades, then leaves no attribute behind', () => {
     press(rows[0], 'pointerdown', 10, 10);
@@ -528,68 +674,70 @@ describe('the release', () => {
     expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
-  it('scales the fade by the tempo its stylesheet reads, a theme\u2019s or an adaptation rule\u2019s (spec:AST-108 FR4, component:Button FR15)', () => {
-    // A rule writes the tempo (a media-query adaptation, say); browsers
-    // inherit it from the theme, jsdom only reads it where it is declared.
-    const style = document.createElement('style');
-    style.textContent = '.slow-row { --_astryx-motion-tempo: 1.5; }';
-    document.head.appendChild(style);
+  it("plays the theme's exit duration, however a rule sets it (spec:AST-094 FR5)", () => {
+    // Browsers inherit the token from the theme; jsdom only reads it where
+    // it is declared.
+    const remove = addRules('.slow-row { --duration-exit: 333ms; }');
     rows[0].classList.add('slow-row');
     try {
       press(rows[0], 'pointerdown', 10, 10);
       vi.advanceTimersByTime(PRESS_ONSET_MS);
       press(rows[0], 'pointerup', 10, 10);
-      vi.advanceTimersByTime(PRESS_FADE_MS);
+      vi.advanceTimersByTime(332);
       expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
-      vi.advanceTimersByTime(PRESS_FADE_MS / 2);
+      vi.advanceTimersByTime(1);
       expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
     } finally {
-      style.remove();
+      rows[0].classList.remove('slow-row');
+      remove();
     }
   });
 
-  it('under Reduce Motion a tempo may shorten the fade but never lengthens it past 200 ms (spec:AST-108 FR4)', () => {
-    vi.stubGlobal(
-      'matchMedia',
-      (query: string): MediaQueryList =>
-        ({
-          matches: /prefers-reduced-motion:\s*reduce/.test(query),
-          media: query,
-          onchange: null,
-          addListener: () => undefined,
-          removeListener: () => undefined,
-          addEventListener: () => undefined,
-          removeEventListener: () => undefined,
-          dispatchEvent: () => false,
-        }) as MediaQueryList,
+  it('reads an exit duration written in seconds', () => {
+    const remove = addRules('.slow-row { --duration-exit: 0.3s; }');
+    rows[0].classList.add('slow-row');
+    try {
+      press(rows[0], 'pointerdown', 10, 10);
+      vi.advanceTimersByTime(PRESS_ONSET_MS);
+      press(rows[0], 'pointerup', 10, 10);
+      vi.advanceTimersByTime(299);
+      expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(1);
+      expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      rows[0].classList.remove('slow-row');
+      remove();
+    }
+  });
+
+  it("under Reduce Motion a finger's release plays the exit duration, no longer than design:reduced-motion DR2's bound", () => {
+    stubReducedMotion();
+    const remove = addRules(
+      '.slow-row { --duration-exit: 333ms; } .quick-row { --duration-exit: 120ms; }',
     );
-    const style = document.createElement('style');
-    style.textContent =
-      '.slow-row { --_astryx-motion-tempo: 1.5; } .quick-row { --_astryx-motion-tempo: 0.75; }';
-    document.head.appendChild(style);
     try {
       rows[0].classList.add('slow-row');
       press(rows[0], 'pointerdown', 10, 10);
       vi.advanceTimersByTime(PRESS_ONSET_MS);
       press(rows[0], 'pointerup', 10, 10);
-      vi.advanceTimersByTime(PRESS_FADE_MS);
+      vi.advanceTimersByTime(REDUCED_FADE_MS - 1);
+      expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(1);
       expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
       rows[0].classList.replace('slow-row', 'quick-row');
       press(rows[0], 'pointerdown', 10, 10);
       vi.advanceTimersByTime(PRESS_ONSET_MS);
       press(rows[0], 'pointerup', 10, 10);
-      vi.advanceTimersByTime(PRESS_FADE_MS * 0.75);
+      vi.advanceTimersByTime(120);
       expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
     } finally {
       rows[0].classList.remove('slow-row', 'quick-row');
-      style.remove();
+      remove();
       vi.unstubAllGlobals();
     }
   });
 
-  it('bounds the release’s tempo at its own maximum, so the bound changes nothing', () => {
-    // The clock's 1.5 is TEMPO_RANGE.max, and every tempo a theme writes is
-    // clamped to it: a theme asking for 3 writes 1.5.
+  it("the stylesheet's release plays the exit tokens, with DR2's bound under Reduce Motion", () => {
     const source = readFileSync(
       join(
         dirname(fileURLToPath(import.meta.url)),
@@ -598,50 +746,17 @@ describe('the release', () => {
       'utf8',
     );
     expect(source).toContain(
-      `min(var(--_astryx-motion-tempo, 1), ${TEMPO_RANGE.max})`,
+      "const PRESS_RELEASE_DURATION = durationVars['--duration-exit'];",
     );
-    expect(expandThemeMotion({tempo: 3})['--_astryx-motion-tempo']).toBe(
-      String(TEMPO_RANGE.max),
+    expect(source).toContain(
+      "`min(${durationVars['--duration-exit']}, ${reducedMotionFadeConsts.duration})`",
     );
-  });
-
-  it('caps the stylesheet’s release fade under Reduce Motion', () => {
-    const source = readFileSync(
-      join(
-        dirname(fileURLToPath(import.meta.url)),
-        'interactionOverlay.stylex.ts',
-      ),
-      'utf8',
-    );
-    expect(source).toMatch(
-      /min\(\$\{pressConsts\.releaseMs\}ms, calc\(\$\{pressConsts\.releaseMs\}ms \* var\(--_astryx-motion-tempo, 1\)\)\)/,
-    );
+    expect(source).toContain("const RELEASE_EASE = easeVars['--ease-exit'];");
     expect(source).toMatch(
       /'@media \(prefers-reduced-motion: reduce\)': PRESS_RELEASE_DURATION_REDUCED/,
     );
-  });
-
-  it('keeps the 200 ms fade without a tempo', () => {
-    press(rows[0], 'pointerdown', 10, 10);
-    vi.advanceTimersByTime(PRESS_ONSET_MS);
-    press(rows[0], 'pointerup', 10, 10);
-    vi.advanceTimersByTime(PRESS_FADE_MS);
-    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
-  });
-
-  it('times the stylesheet’s release fade by the same tempo', () => {
-    // The animation the attribute drives, scaled by the custom property a
-    // theme with a tempo writes beside its duration tokens.
-    const source = readFileSync(
-      join(
-        dirname(fileURLToPath(import.meta.url)),
-        'interactionOverlay.stylex.ts',
-      ),
-      'utf8',
-    );
-    expect(source).toMatch(
-      /calc\(\$\{pressConsts\.releaseMs\}ms \* min\(var\(--_astryx-motion-tempo, 1\),/,
-    );
+    // No clock of its own: the tokens already follow the theme's tempo.
+    expect(source).not.toContain('--_astryx-motion-tempo');
   });
 
   it('answers a tap too quick for the delay, at the release', () => {
@@ -903,21 +1018,19 @@ describe('a phone or tablet paints a mouse or Space press itself', () => {
     expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
   });
 
-  it('fades a mouse press by the theme\u2019s tempo too (spec:AST-108 FR4, component:Button FR15)', () => {
-    const style = document.createElement('style');
-    style.textContent = '.slow-row { --_astryx-motion-tempo: 1.5; }';
-    document.head.appendChild(style);
+  it("fades a mouse press on the theme's exit duration too (spec:AST-094 FR5)", () => {
+    const remove = addRules('.slow-row { --duration-exit: 333ms; }');
     rows[1].classList.add('slow-row');
     try {
       press(rows[1], 'pointerdown', 10, 100, 'mouse');
       press(rows[1], 'pointerup', 10, 100, 'mouse');
-      vi.advanceTimersByTime(PRESS_FADE_MS);
+      vi.advanceTimersByTime(332);
       expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
-      vi.advanceTimersByTime(PRESS_FADE_MS / 2);
+      vi.advanceTimersByTime(1);
       expect(rows[1].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
     } finally {
       rows[1].classList.remove('slow-row');
-      style.remove();
+      remove();
     }
   });
 
@@ -1407,8 +1520,7 @@ describe('the release fades: the arms the controller writes to', () => {
     );
   });
 
-  it("the machine's clock is the stylesheet's constant: one number", () => {
-    expect(PRESS_FADE_MS).toBe(pressConsts.releaseMs);
+  it("without a theme, the stylesheet's release resolves to the machine's clock: the exit token's default", () => {
     expect(hasReleaseFade(surface(interactionOverlayStyles.pressedAlpha))).toBe(
       true,
     );

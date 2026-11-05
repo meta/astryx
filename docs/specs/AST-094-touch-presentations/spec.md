@@ -229,6 +229,10 @@ a measured, sourced difference exists.
   and MUST keep advancing at display rate through a main-thread block. It MUST
   NOT animate layout properties, and MUST NOT step a frame from script when the
   compositor can run the curve.
+  A press shows at once. Every press release that fades does so on the
+  theme's exit motion tokens (`--duration-exit`, `--ease-exit`), on every
+  device and pointer, by the owner's decision (2026-11-03); under Reduce
+  Motion, `design:reduced-motion` DR2 applies.
 - **FR6 — Motion is interruptible.** A finger MUST be able to catch any
   animation mid-flight at the value on screen. That value and its velocity
   MUST come from the curve, not from a layout read. A new target MUST keep the
@@ -662,8 +666,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   that grows only with its text, such as a Button whose label follows the
   16 px reading base:
   the 16 px mobile reading base (`design:mobile-typography` DR1, DR3) and the
-  16 px text-entry floor (`family:input-fields` FR9) are unaffected. Under a
-  coarse pointer, touch targets meet 44 px through an invisible hit area. A
+  16 px text-entry floor (`family:input-fields` FR9) are unaffected.
+  Under a coarse pointer, the touch target grows toward 44 × 44 px, up to halfway to a neighboring target, and is never smaller than the control's own box (owner decision, 2026-11-04; `spec:AST-094` FR42).
+  It grows through an invisible hit area. A
   hit-area expansion never overlaps a neighboring interactive element's own
   target: where neighbors are closer than 44 px, the expansion is clamped to
   half the gap, or skipped, so each element stays reachable; an expansion a

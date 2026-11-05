@@ -55,6 +55,7 @@ import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {useBackdropPress} from '../Layer/useBackdropPress';
+import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 import {useModalOutlet} from '../Layer/modalOutlet';
 import {
   colorVars,
@@ -549,6 +550,9 @@ export function Dialog({
     props['aria-label'] != null || props['aria-labelledby'] != null;
 
   const dialogRef = useRef<HTMLDialogElement>(null);
+  // Native showModal() lets Tab leave for the browser's own UI, so the shared
+  // module wraps it. An inline preview is not modal and contains nothing.
+  useFocusRegionContainment(dialogRef, isOpen && !isInline);
 
   // Callback ref on the <dialog>: sync the default aria-labelledby from the
   // DialogHeader title (if one rendered) in the same commit, with no second

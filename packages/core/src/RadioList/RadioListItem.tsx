@@ -18,7 +18,7 @@
  * - /packages/cli/assets/templates/blocks/components/RadioList/ (showcase blocks)
  */
 
-import React, {use, useId, useRef, type ReactNode} from 'react';
+import React, {use, useCallback, useId, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
@@ -32,6 +32,9 @@ import {rtlStyles} from '../utils/rtlStyles';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {watchHitArea, writeHitInsets} from '../utils/hitArea';
+import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
 import {useIndicator} from '../Indicator/useIndicator';
 import {Item, type ItemAlign} from '../Item/Item';
 import {themeProps} from '../utils/themeProps';
@@ -305,6 +308,21 @@ export function RadioListItem({
   // `<label htmlFor>` would double-fire under delegation.
   const radioRef = useRef<HTMLInputElement>(null);
 
+  // Under a coarse pointer an option's row grows toward 44 px through an
+  // invisible band, and the row keeps its size. A tap on the band lands on
+  // the row, which hands it to the radio. The watch lives as long as the row
+  // is attached: the ref's cleanup stops it.
+  const watchRowHitArea = useCallback(
+    (row: HTMLDivElement | null) => {
+      if (row == null || isDisabled) {
+        return;
+      }
+      return watchHitArea(row, insets => writeHitInsets(row, insets));
+    },
+    [isDisabled],
+  );
+  const mergedRowRef = useMergedRefs(ref, watchRowHitArea);
+
   const radioCircle = (
     <div
       {...stylex.props(
@@ -387,7 +405,7 @@ export function RadioListItem({
 
   return (
     <Item
-      ref={ref}
+      ref={mergedRowRef}
       {...(isDisabled ? undefined : pressable)}
       startContent={mediaContent}
       // Delegate row-surface clicks (label text, description, and the empty
@@ -419,6 +437,7 @@ export function RadioListItem({
           // still overrides it from the higher `astryx-theme` layer.
           rowStyles.root,
           !isDisabled && rowStyles.press,
+          !isDisabled && touchHitAreaStyles.layer,
           xstyle,
         ] as StyleXStyles
       }

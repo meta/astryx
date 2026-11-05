@@ -475,7 +475,7 @@ describe('the default check of the touched components', () => {
     expect(runner).toContain(
       'changedPaths: readLines(changedFilesFile) ?? changedPaths',
     );
-    expect(runner).toContain('seconds: readDurations(root)');
+    expect(runner).toContain('seconds: readDurations(root, policySha)');
     expect(runner).toContain('workers: contractWorkers()');
   });
 });

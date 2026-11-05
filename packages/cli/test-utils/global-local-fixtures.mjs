@@ -6,7 +6,8 @@
  * in every install layout the table names, and a package registry that runs
  * inside the test process.
  *
- * - `packedCli()` packs this package once per process (`npm pack`), and
+ * - `packedCli()` unpacks the tarball the node project's global setup packed
+ *   once for the run (`npm pack`), or packs one itself when no run did.
  *   `extractTarball` unpacks it with no external tool, so the copies hold
  *   exactly the published files.
  * - `placeCli(dir, version)` puts a copy at `dir`, labeled `version`: every
@@ -33,9 +34,10 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import * as zlib from 'node:zlib';
 import {createHash} from 'node:crypto';
-import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {inject} from 'vitest';
 import {releaseTree} from '../foundation/release/cache.mjs';
+import {packCli} from './pack-cli.mjs';
 import {installCore, tempDir, writeJson} from './release-fixtures.mjs';
 
 /** This CLI package's folder. */
@@ -97,23 +99,30 @@ export function extractTarball(file, dest) {
 let packed = null;
 
 /**
- * This CLI, packed once per process and unpacked.
+ * The tarball the node project's global setup packed for this run, or null
+ * when nothing provided one, as in another test config.
+ * @returns {string | null}
+ */
+function providedTarball() {
+  let tarball;
+  try {
+    tarball = inject('astryxPackedCliTarball');
+  } catch {
+    return null;
+  }
+  return typeof tarball === 'string' && fs.existsSync(tarball) ? tarball : null;
+}
+
+/**
+ * This CLI, packed once per run (or once per process when no run packed it)
+ * and unpacked once per process.
  * @returns {string} the unpacked package folder
  */
 export function packedCli() {
   if (packed) return packed;
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-packed-cli-'));
-  const result = spawnSync(
-    process.platform === 'win32' ? 'npm.cmd' : 'npm',
-    ['pack', '--ignore-scripts', '--json', '--pack-destination', out],
-    {cwd: CLI_DIR, encoding: 'utf8', shell: process.platform === 'win32'},
-  );
-  if (result.status !== 0) {
-    throw new Error(`npm pack failed: ${result.stderr}`);
-  }
-  const [{filename}] = JSON.parse(result.stdout);
+  packedTarball = providedTarball() ?? packCli(out);
   const dir = path.join(out, 'package');
-  packedTarball = path.join(out, filename);
   extractTarball(packedTarball, dir);
   packed = dir;
   packedRecord = treeRecord(dir, {contents: true});

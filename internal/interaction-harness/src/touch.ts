@@ -24,9 +24,10 @@
  *   events derived from them are trusted and cancelable, multi-touch works.
  *   Limits, measured with WebKit 26.5: no timestamp parameter (the page sees
  *   the real dispatch time, so velocity comes from real-time pacing: within
- *   ~1 ms on an idle runner, but a runner whose CPU quota stalls the process
- *   sends some steps late, and the ones behind them back to back, unless
- *   the play keeps the script's spacing: `pacing: 'spacing'`);
+ *   ~1 ms on an idle runner; after a slow dispatch each step waits for its
+ *   gap, less 2 ms, after WebKit answered the step before, so a stall
+ *   stretches the gesture instead of bunching it, unless a `'schedule'` play
+ *   watches each step, `onEvent`);
  *   integer coordinates only; no native scrolling, fling or pinch-zoom from
  *   these touches; a `touchstart` lists only the fingers that landed in it
  *   (pointer events are exact); no click synthesised from a raw touch sequence (use
@@ -56,13 +57,23 @@ export type Engine = 'chromium' | 'webkit';
 
 /**
  * How real-time pacing catches up after a slow dispatch (`PlayOptions.pacing`):
- * `'schedule'` sends each event at its scripted time from the start, so the
- * events behind a stalled command go out back to back; `'spacing'` sends each
- * event its scripted interval after the one before it left, or, when that
- * dispatch outlasted the interval (a stall), its interval after that dispatch
- * returned, so a stall shifts the rest of the gesture instead of bunching it.
+ * `'schedule'` sends each event at its scripted time from the start, and
+ * `'spacing'` its scripted interval after the event before it left. Under
+ * `'spacing'` an event also waits for its interval, less ANSWER_SLACK_MS,
+ * after the engine answered the event before. WebKit stamps a touch no later
+ * than its answer, so a stall stretches the gesture instead of bunching it.
+ * A WebKit `'schedule'` play waits for the answer too, unless it watches each
+ * step (`onEvent`).
  */
 export type TouchPacing = 'schedule' | 'spacing';
+
+/**
+ * The answer time, ms, under which a touch play keeps the script's spacing
+ * exactly; a slower answer stretches the next gap. A page that stamps
+ * touches on arrival reads no gap shorter than the script's by more than
+ * this (see `pacedDeadline`).
+ */
+export const ANSWER_SLACK_MS = 2;
 
 /**
  * The release filter's stillness interval, 40 ms: a contact that has not
@@ -95,9 +106,10 @@ export interface PlayOptions {
    * `'schedule'`; see `TouchPacing`). A proof whose result depends on a
    * release velocity (a flick, a coast) passes `'spacing'`: on a driver
    * without scripted timestamps the page reads the velocity from when events
-   * arrive, and a burst after a stalled command reads as a much faster
-   * finger. There, a paced play reads the release as the page did once its
-   * last event is out (the lift's `PlayedEvent.release`). It throws when the
+   * arrive, and `'spacing'` keeps each gap from the event before even in a
+   * play that watches each step. There, a paced play reads the release as
+   * the page did once its last event is out (the lift's
+   * `PlayedEvent.release`). It throws when the
    * page read a resting finger where the script moves, a throw where the
    * script rests, or fewer than two moves. Given `releaseTolerance`, it also
    * throws when the page's release strays further than that share. The error
@@ -181,13 +193,14 @@ async function until(deadline: number): Promise<void> {
 }
 
 /**
- * When event `index` of `steps` goes out (performance.now() ms): at its
- * scripted time from `origin`; or, under `'spacing'`, its scripted interval
- * after the event before it left, so the page reads the script's pace, unless
- * that dispatch outlasted the interval. WebKit answers a dispatch only once
- * the page has the event, so after such a stall the page may have received it
- * as late as the answer, and the next event leaves its interval after that:
- * never back to back.
+ * When event `index` of `steps` goes out, in performance.now() ms. Under
+ * `'schedule'` it goes at its scripted time from `origin`. Under `'spacing'`
+ * it goes its scripted interval after the event before it left. Under
+ * `'spacing'`, or with `keepsGaps`, it also waits for its interval, less
+ * ANSWER_SLACK_MS, after the engine answered the event before. WebKit stamps
+ * an event no later than it answers, and the next one no sooner than it
+ * leaves. So no gap reaches the page more than ANSWER_SLACK_MS short of the
+ * script's: a stall stretches the gesture.
  */
 export function pacedDeadline(
   pacing: TouchPacing,
@@ -195,14 +208,18 @@ export function pacedDeadline(
   steps: readonly {readonly t: number}[],
   index: number,
   previous: {readonly sentAt: number; readonly returnedAt: number} | null,
+  keepsGaps = false,
 ): number {
-  if (pacing === 'spacing' && index > 0 && previous != null) {
-    const interval = steps[index].t - steps[index - 1].t;
-    return previous.returnedAt - previous.sentAt <= interval
-      ? previous.sentAt + interval
-      : previous.returnedAt + interval;
+  const scripted = origin + steps[index].t;
+  if (index === 0 || previous == null) {
+    return scripted;
   }
-  return origin + steps[index].t;
+  const interval = steps[index].t - steps[index - 1].t;
+  const afterAnswer = previous.returnedAt + interval - ANSWER_SLACK_MS;
+  if (pacing === 'spacing') {
+    return Math.max(previous.sentAt + interval, afterAnswer);
+  }
+  return keepsGaps ? Math.max(scripted, afterAnswer) : scripted;
 }
 
 /** What the page saw of one touch event of a paced play. */
@@ -538,6 +555,9 @@ async function playSteps(
   // Only where the page reads a velocity from arrival times: scripted
   // timestamps carry it.
   const judges = probe != null && realtime && pacing === 'spacing';
+  // A driver gives a probe only where the page stamps touches on arrival. A
+  // play that watches each step keeps its scripted times.
+  const keepsGaps = probe != null && onEvent == null;
   if (judges) {
     await probe.arm();
   }
@@ -546,7 +566,9 @@ async function playSteps(
   let previous: {sentAt: number; returnedAt: number} | null = null;
   for (const [index, step] of steps.entries()) {
     if (realtime) {
-      await until(pacedDeadline(pacing, origin, steps, index, previous));
+      await until(
+        pacedDeadline(pacing, origin, steps, index, previous, keepsGaps),
+      );
     }
     const timestamp = stampFor(step.t);
     const dispatchedAt = Date.now();

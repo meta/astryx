@@ -152,7 +152,7 @@ table owns their semantic effect.
 
 | Output concept        | Meaning and lifetime                                                                                                                                                                                                            |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Trigger binding       | A ref binding establishes the anchor while attached; ARIA trigger state tracks the current role and open state; a stable anchor identifier supports advanced composition. Detaching the trigger removes its anchor association. |
+| Trigger binding       | While the popover shows or animates out, the attached trigger is its anchor; ARIA trigger state tracks the current role and open state; a stable anchor identifier supports advanced composition. Detaching removes the anchor. |
 | Visibility operations | `show`, `hide`, and `toggle` are the canonical operations for the mounted hook instance. Public signatures remain unchanged, and every opening path inherits same-gesture reopen protection.                                    |
 | Open state            | Reflects the hook's reconciled visibility. Browser-initiated close is observed on the queued native toggle event, so DOM visibility may lead React state briefly.                                                               |
 | Surface binding       | A content ref identifies the focus-trap surface while mounted.                                                                                                                                                                  |
@@ -161,8 +161,9 @@ table owns their semantic effect.
 
 ### Side effects and lifetime
 
-- Attaching the trigger ref assigns and removes the CSS anchor name used by the
-  Layer runtime.
+- While the popover is shown, and until its exit animations end, the attached
+  trigger carries the CSS anchor name used by the Layer runtime
+  (`architecture:layer-runtime` INV18). Detaching the trigger removes it.
 - Every opening path applies same-gesture reopen protection before changing
   visibility. A rejected opening does not invoke `onShow`.
 - Successful visibility operations call the browser popover methods when
