@@ -6,9 +6,10 @@
  * @file AlertDialog.tsx
  * @input Uses React, StyleX, Dialog, Layout, Heading, Text, Button and the
  *   touch presentation resolver. Also the action-group tracking
- *   (hooks/useActionGroupTracking), the press-group marker
- *   (privateAttributes/pressGroupItem.stylex), its touch motion
- *   (useAlertMotion) and the alert entries of the UIKit constants table
+ *   (hooks/useActionGroupTracking), the press-group context
+ *   (hooks/pressGroupContext), the group pointers
+ *   (hooks/useGroupPressTracking), its touch motion (useAlertMotion) and the
+ *   alert entries of the UIKit constants table
  * @output Exports AlertDialog component, AlertDialogProps type
  * @position Core implementation; consumed by index.ts, tested by AlertDialog.test.tsx
  *
@@ -46,16 +47,13 @@ import english from '../i18n/generated-english/AlertDialog/AlertDialog.generated
 import {useActionGroupTracking} from '../hooks/useActionGroupTracking';
 import {PressGroupContext} from '../hooks/pressGroupContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {GROUP_PRESS_POINTERS} from '../hooks/useGroupPressTracking';
 import {alertController} from '../motion/uikit/alert';
-import {pressGroupItemProps} from '../privateAttributes/pressGroupItem.stylex';
 import {durationVars, easeVars} from '../theme/tokens.stylex';
 import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {useAlertMotion} from './useAlertMotion';
 
 registerEnglishFallback(english);
-
-const SLIDING_POINTERS = ['touch', 'pen'] as const;
-const ACTION_TRACKING_PROPS = pressGroupItemProps(SLIDING_POINTERS);
 
 const SMALL_SCREEN_QUERY = '(max-width: 640px)';
 
@@ -267,9 +265,10 @@ export function AlertDialog({
     isOpen,
     isEnabled: isTouch && isInline !== true,
   });
-  // Each action carries the press-group marker from its first render, so the
-  // tracker is its only painter. Dialog holds a press during the entrance,
-  // and the exit's hold holds one while the alert leaves.
+  // Through the group's context, each action's Button writes the press-group
+  // marker from its first render. So the tracker is its only painter. Dialog
+  // holds a press during the entrance, and the exit's hold holds one while the
+  // alert leaves.
   const actionsRef = useRef<HTMLElement>(null);
   // Only under the touch presentation does a press slide across the
   // actions. A desktop press stays the native button's.
@@ -280,7 +279,7 @@ export function AlertDialog({
     highlightOnsetMs: alertController.actions.highlightOnsetMs,
     highlightExpansion: alertController.actions.highlightExpansion,
     // A mouse press acts as a native button's under any presentation.
-    pointerTypes: SLIDING_POINTERS,
+    pointerTypes: GROUP_PRESS_POINTERS,
     isEnabled: isTracking,
   });
   // A leaving alert takes no input, as UIKit's does: the exit's hold makes its
@@ -300,7 +299,6 @@ export function AlertDialog({
     [isLeaving, onOpenChange],
   );
   const mergedRef = useMergedRefs(ref, motion.ref);
-  const actionTrackingProps = isTracking ? ACTION_TRACKING_PROPS : undefined;
 
   const buttonActionStyle = [
     styles.action,
@@ -313,7 +311,6 @@ export function AlertDialog({
       label={cancelLabel}
       onClick={handleCancel}
       xstyle={buttonActionStyle}
-      {...actionTrackingProps}
       // Dialog focuses [data-autofocus] itself after showModal(), because
       // React's autoFocus runs during commit while the dialog is invisible.
       // Cancel is least destructive, so it remains the autofocus target even
@@ -329,7 +326,6 @@ export function AlertDialog({
       onClick={onAction}
       isLoading={isActionLoading}
       xstyle={buttonActionStyle}
-      {...actionTrackingProps}
     />
   );
 
@@ -382,7 +378,8 @@ export function AlertDialog({
               gap={2}
               hAlign={isSmallScreen ? 'stretch' : 'end'}
               wrap={isSmallScreen ? 'nowrap' : 'wrap'}>
-              <PressGroupContext value={isTracking}>
+              <PressGroupContext
+                value={isTracking ? GROUP_PRESS_POINTERS : null}>
                 {isSmallScreen
                   ? [actionButton, cancelButton]
                   : [cancelButton, actionButton]}

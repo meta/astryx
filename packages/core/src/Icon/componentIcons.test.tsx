@@ -350,6 +350,7 @@ describe('component icon slot types', () => {
       | 'code-block-copy'
       | 'timestamp-copy'
       | 'table-sort-indicator'
+      | 'table-row-expand'
       | 'example-panel-dismiss'
       | 'example-nav-item-leading'
     >();
