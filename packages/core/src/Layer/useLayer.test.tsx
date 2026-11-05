@@ -3458,7 +3458,7 @@ describe('show() anchor readiness (#5398)', () => {
   class FakeKeyframeEffect {
     constructor(public target: Element) {}
     getComputedTiming() {
-      return {iterations: 1};
+      return {iterations: 1, endTime: 300};
     }
   }
 
@@ -3632,7 +3632,28 @@ describe('show() anchor readiness (#5398)', () => {
     const trigger = getByTestId('a');
     animations.push({
       effect: new FakeKeyframeEffect(trigger.parentElement as Element),
+      timeline: document.timeline,
       playState: 'paused',
+      finished: new Promise(() => {}),
+    });
+
+    fireEvent.click(trigger);
+    boxes.set(trigger, {width: 80, height: 24});
+    signal();
+    flushFrame();
+
+    expect(getByTestId('state')).toHaveTextContent('open');
+  });
+
+  it('does not hold the layer closed for a scroll-driven animation on an ancestor', () => {
+    const {getByTestId} = render(<Harness target="a" />);
+    const trigger = getByTestId('a');
+    // A scroll() or view() timeline is not the document's, and its animation
+    // finishes only when the person scrolls to the end of its range.
+    animations.push({
+      effect: new FakeKeyframeEffect(trigger.parentElement as Element),
+      timeline: {},
+      playState: 'running',
       finished: new Promise(() => {}),
     });
 
@@ -3650,6 +3671,7 @@ describe('show() anchor readiness (#5398)', () => {
     let finish = () => {};
     animations.push({
       effect: new FakeKeyframeEffect(trigger.parentElement as Element),
+      timeline: document.timeline,
       playState: 'running',
       finished: new Promise<void>(resolve => {
         finish = resolve;
@@ -3881,6 +3903,7 @@ describe('show() anchor readiness (#5398)', () => {
     let finish = () => {};
     animations.push({
       effect: new FakeKeyframeEffect(trigger.parentElement as Element),
+      timeline: document.timeline,
       playState: 'running',
       finished: new Promise<void>(resolve => {
         finish = resolve;

@@ -552,6 +552,19 @@ function untransform(
 }
 
 /**
+ * Whether an animation is running and ends on its own. A paused or idle one
+ * never reaches its end by itself, and one with an infinite end time (an
+ * infinite iteration count, say) never finishes, so waiting on either would
+ * hold a layer for good.
+ */
+function endsOnItsOwn(animation: Animation): boolean {
+  return (
+    animation.playState === 'running' &&
+    animation.effect?.getComputedTiming().endTime !== Infinity
+  );
+}
+
+/**
  * The finite animations still running on `layer` and its content. A layer
  * that fades out keeps running them after the browser hides it, and it stays
  * placed against its anchor until they end.
@@ -560,13 +573,7 @@ function exitAnimations(layer: HTMLElement | null): Animation[] {
   if (layer == null || typeof layer.getAnimations !== 'function') {
     return [];
   }
-  return layer
-    .getAnimations({subtree: true})
-    .filter(
-      animation =>
-        animation.playState === 'running' &&
-        animation.effect?.getComputedTiming().endTime !== Infinity,
-    );
+  return layer.getAnimations({subtree: true}).filter(endsOnItsOwn);
 }
 
 /**
@@ -921,10 +928,11 @@ function isAnchorReady(anchor: HTMLElement): boolean {
  * zero animations and defeat the whole guard. One frame is enough for the UA
  * to have started it.
  *
- * Only a FINITE animation is waited on. `Animation.finished` never resolves
- * for one with `iterationCount: Infinity` (it never reaches the finished play
- * state), so a continuously-animating ancestor — `StatusDot`'s pulse, e.g. —
- * would otherwise block a layer that anchors to it from ever opening.
+ * Only an animation that ends on its own, on the document's timeline, is
+ * waited on. `Animation.finished` never resolves for one with
+ * `iterationCount: Infinity` (it never reaches the finished play state), so a
+ * continuously-animating ancestor — `StatusDot`'s pulse, e.g. — would
+ * otherwise block a layer that anchors to it from ever opening.
  */
 
 function waitForAncestorAnimations(
@@ -951,13 +959,12 @@ function waitForAncestorAnimations(
       ) {
         return false;
       }
-      // A paused or idle animation never reaches its end on its own, so
-      // waiting on it would hold the layer closed for good.
-      if (animation.playState !== 'running') {
+      // A scroll- or view-driven animation finishes only when the person
+      // scrolls to the end of its range, so it is not a settle to wait on.
+      if (animation.timeline !== document.timeline) {
         return false;
       }
-      const timing = animation.effect?.getComputedTiming();
-      return timing?.iterations !== Infinity;
+      return endsOnItsOwn(animation);
     });
     if (running.length === 0) {
       onReady();
