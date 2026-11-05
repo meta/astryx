@@ -12,6 +12,7 @@
 import {describe, it, expect, vi, afterEach} from 'vitest';
 import {useState} from 'react';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -187,7 +188,7 @@ describe('LineClamp', () => {
       // Move the link above the fold and force another render.
       rectMap.set(link, {top: 10, bottom: 26});
       rerender(
-        <LineClamp maxLines={2} data-testid="clamp" hasTooltip={false}>
+        <LineClamp maxLines={2} data-testid="clamp" hasTruncateTooltip={false}>
           Some text <a href="/more">Read more</a>
         </LineClamp>,
       );
@@ -241,7 +242,11 @@ describe('LineClamp', () => {
 
     it("never rewrites a caller's tabIndex or aria-hidden, clipped or not", () => {
       const rectMap = new Map<Element, {top: number; bottom: number}>();
-      const props = {maxLines: 2, 'data-testid': 'clamp', hasTooltip: false};
+      const props = {
+        maxLines: 2,
+        'data-testid': 'clamp',
+        hasTruncateTooltip: false,
+      };
       const link = (
         <a href="/more" tabIndex={-1} aria-hidden="true">
           Read more
@@ -271,7 +276,7 @@ describe('LineClamp', () => {
     it('hides a link that was clipped while it held focus once focus leaves it', () => {
       const rectMap = new Map<Element, {top: number; bottom: number}>();
       const {rerender} = render(
-        <LineClamp maxLines={2} data-testid="clamp" hasTooltip={false}>
+        <LineClamp maxLines={2} data-testid="clamp" hasTruncateTooltip={false}>
           <a href="/more">Read more</a>
         </LineClamp>,
       );
@@ -281,7 +286,7 @@ describe('LineClamp', () => {
       rectMap.set(link, {top: 40, bottom: 56});
       mockRects(rectMap);
       rerender(
-        <LineClamp maxLines={2} data-testid="clamp" hasTooltip={false}>
+        <LineClamp maxLines={2} data-testid="clamp" hasTruncateTooltip={false}>
           <a href="/more">Read more</a>
         </LineClamp>,
       );
@@ -292,9 +297,109 @@ describe('LineClamp', () => {
       expect(link).toHaveAttribute('inert');
     });
 
+    it('hides a clipped summary and a clipped contenteditable, which Core counts as focusable', () => {
+      const rectMap = new Map<Element, {top: number; bottom: number}>();
+      const props = {
+        maxLines: 2,
+        'data-testid': 'clamp',
+        hasTruncateTooltip: false,
+      };
+      const {rerender} = render(
+        <LineClamp {...props}>
+          <details>
+            <summary>More</summary>
+            Body
+          </details>
+          <span contentEditable suppressContentEditableWarning>
+            Edit
+          </span>
+        </LineClamp>,
+      );
+      const summary = screen.getByText('More');
+      const editable = screen.getByText('Edit');
+      rectMap.set(screen.getByTestId('clamp'), {top: 0, bottom: 40});
+      rectMap.set(summary, {top: 40, bottom: 56});
+      rectMap.set(editable, {top: 60, bottom: 76});
+      mockRects(rectMap);
+      rerender(
+        <LineClamp {...props}>
+          <details>
+            <summary>More</summary>
+            Body
+          </details>
+          <span contentEditable suppressContentEditableWarning>
+            Edit
+          </span>
+        </LineClamp>,
+      );
+
+      expect(summary).toHaveAttribute('inert');
+      expect(editable).toHaveAttribute('inert');
+    });
+
+    it('keeps a link inert that the clamp restored and hid again in one task', async () => {
+      const rectMap = new Map<Element, {top: number; bottom: number}>();
+      const props = {
+        maxLines: 2,
+        'data-testid': 'clamp',
+        hasTruncateTooltip: false,
+      };
+      // A fresh element each time, so React renders again and the clamp syncs.
+      const content = () => (
+        <LineClamp {...props}>
+          <a href="/more">Read more</a>
+        </LineClamp>
+      );
+      const {rerender} = render(content());
+      const link = screen.getByText('Read more');
+      rectMap.set(screen.getByTestId('clamp'), {top: 0, bottom: 40});
+      rectMap.set(link, {top: 40, bottom: 56});
+      mockRects(rectMap);
+      rerender(content());
+      await waitFor(() => {
+        expect(link).toHaveAttribute('inert');
+      });
+
+      // Visible and clipped again before the observer reports either write.
+      rectMap.set(link, {top: 10, bottom: 26});
+      rerender(content());
+      expect(link).not.toHaveAttribute('inert');
+      rectMap.set(link, {top: 40, bottom: 56});
+      rerender(content());
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(link).toHaveAttribute('inert');
+      expect(link).toHaveAttribute('data-line-clamp-hidden');
+
+      // Visible for good: the clamp still owns the attribute and takes it off.
+      rectMap.set(link, {top: 10, bottom: 26});
+      rerender(content());
+      expect(link).not.toHaveAttribute('inert');
+      expect(link).not.toHaveAttribute('data-line-clamp-hidden');
+    });
+
+    it('still calls a caller onBlur', () => {
+      const onBlur = vi.fn();
+      render(
+        <LineClamp maxLines={2} data-testid="clamp" onBlur={onBlur}>
+          <a href="/more">Read more</a>
+        </LineClamp>,
+      );
+
+      fireEvent.blur(screen.getByText('Read more'));
+
+      expect(onBlur).toHaveBeenCalledTimes(1);
+    });
+
     it("keeps a caller's inert that is set while the link is clipped", async () => {
       const rectMap = new Map<Element, {top: number; bottom: number}>();
-      const props = {maxLines: 2, 'data-testid': 'clamp', hasTooltip: false};
+      const props = {
+        maxLines: 2,
+        'data-testid': 'clamp',
+        hasTruncateTooltip: false,
+      };
       const {rerender} = render(
         <LineClamp {...props}>
           <a href="/more">Read more</a>
@@ -338,7 +443,7 @@ describe('LineClamp', () => {
     it('never hides the element that holds focus', () => {
       const rectMap = new Map<Element, {top: number; bottom: number}>();
       const {rerender} = render(
-        <LineClamp maxLines={2} data-testid="clamp" hasTooltip={false}>
+        <LineClamp maxLines={2} data-testid="clamp" hasTruncateTooltip={false}>
           <a href="/more">Read more</a>
         </LineClamp>,
       );
@@ -348,7 +453,7 @@ describe('LineClamp', () => {
       rectMap.set(link, {top: 40, bottom: 56});
       mockRects(rectMap);
       rerender(
-        <LineClamp maxLines={2} data-testid="clamp" hasTooltip={false}>
+        <LineClamp maxLines={2} data-testid="clamp" hasTruncateTooltip={false}>
           <a href="/more">Read more</a>
         </LineClamp>,
       );
@@ -434,7 +539,7 @@ describe('LineClamp', () => {
           <LineClamp maxLines={2} data-testid="own" tabIndex={-1}>
             Long text
           </LineClamp>
-          <LineClamp maxLines={2} data-testid="off" hasTooltip={false}>
+          <LineClamp maxLines={2} data-testid="off" hasTruncateTooltip={false}>
             Long text
           </LineClamp>
         </>,

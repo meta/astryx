@@ -31,7 +31,7 @@ export const docs = {
       required: true,
     },
     {
-      name: 'hasTooltip',
+      name: 'hasTruncateTooltip',
       type: "boolean | 'above' | 'below' | 'start' | 'end'",
       description:
         'Show a tooltip with the full text content on hover or keyboard focus when clamped. A clamped root is focusable (tabindex 0) so keyboard users can reach the tooltip; a tabIndex you pass wins. true shows at default position, false disables it, or pass a placement.',
@@ -61,7 +61,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Disable the tooltip (hasTooltip={false}) when the clamped content is already reachable elsewhere on the page, to avoid a redundant announcement.',
+          'Disable the tooltip (hasTruncateTooltip={false}) when the clamped content is already reachable elsewhere on the page, to avoid a redundant announcement.',
       },
       {
         guidance: true,
@@ -91,7 +91,7 @@ export const docsZh = {
       required: true,
     },
     {
-      name: 'hasTooltip',
+      name: 'hasTruncateTooltip',
       type: "boolean | 'above' | 'below' | 'start' | 'end'",
       description:
         '截断时在悬停或键盘聚焦时显示完整文本的工具提示；被截断的根元素可聚焦（tabindex 0），你传入的 tabIndex 优先。true 为默认位置显示，false 禁用，或传入具体位置。',
@@ -121,7 +121,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          '当截断内容已在页面其他位置可访问时，禁用工具提示（hasTooltip={false}）以避免重复播报。',
+          '当截断内容已在页面其他位置可访问时，禁用工具提示（hasTruncateTooltip={false}）以避免重复播报。',
       },
       {
         guidance: true,
@@ -165,7 +165,7 @@ export const docsDense = {
     children:
       'Content to clamp. Composable version of maxLines — wraps arbitrary children.',
     maxLines: 'Max lines before clamping with ellipsis.',
-    hasTooltip:
+    hasTruncateTooltip:
       'Tooltip with full text on hover or focus when clamped. Clamped root is focusable. true/false/placement.',
     as: "HTML element to render. Default 'div'.",
   },

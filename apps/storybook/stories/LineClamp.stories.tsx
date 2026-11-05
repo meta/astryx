@@ -15,7 +15,7 @@ const meta: Meta<typeof LineClamp> = {
       control: {type: 'number', min: 1, max: 6, step: 1},
       description: 'Maximum number of lines before clamping',
     },
-    hasTooltip: {
+    hasTruncateTooltip: {
       control: 'boolean',
       description: 'Show full content in a tooltip when clamped',
     },
@@ -61,7 +61,7 @@ export const SingleLine: Story = {
 export const WithoutTooltip: Story = {
   args: {
     maxLines: 2,
-    hasTooltip: false,
+    hasTruncateTooltip: false,
     children: LONG_TEXT,
   },
 };

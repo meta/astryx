@@ -4,7 +4,9 @@
 
 /**
  * @file LineClamp.tsx
- * @input Uses React, stylex, useTruncation + Tooltip + BaseProps from @astryxdesign/core
+ * @input Uses React, stylex, useTruncation + Tooltip + BaseProps from
+ *   @astryxdesign/core, and Core's canonical focusable selector and shared
+ *   mutation observer through `@astryxdesign/core/internal/line-clamp`
  * @output Exports LineClamp component, LineClampProps
  * @position Lab experiment (facebook/astryx#4180); consumed by index.ts
  *
@@ -18,9 +20,10 @@
 import {
   lazy,
   Suspense,
-  useEffect,
+  useCallback,
   useLayoutEffect,
   useRef,
+  type FocusEvent,
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -28,8 +31,17 @@ import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {useTruncation} from '@astryxdesign/core/Text';
 import type {LayerPlacement} from '@astryxdesign/core/Layer';
-import {mergeProps, themeProps, observeResize} from '@astryxdesign/core/utils';
+import {
+  composeEventHandlers,
+  mergeProps,
+  themeProps,
+  observeResize,
+} from '@astryxdesign/core/utils';
 import {useMergedRefs} from '@astryxdesign/core/hooks';
+import {
+  FOCUSABLE_SELECTOR,
+  observeMutations,
+} from '@astryxdesign/core/internal/line-clamp';
 
 const LazyTooltip = lazy(async () =>
   import('@astryxdesign/core/Tooltip').then(mod => ({default: mod.Tooltip})),
@@ -55,16 +67,27 @@ const styles = stylex.create({
   },
 });
 
-// Elements the browser's own tab order can reach inside clamped content.
-// `core`'s canonical FOCUSABLE_SELECTOR (see useFocusTrap) is an internal
-// implementation detail not exported from its public barrel, so this is its
-// own narrower list — the cases actually plausible inside clamped text
-// content, skipping already-inert (`tabindex="-1"`) elements so this effect
-// doesn't fight a consumer's own choice.
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
 const HIDDEN_ATTRIBUTE = 'data-line-clamp-hidden';
+
+// For each clamp root being observed, the `inert` writes the clamp made that
+// its observer has not reported yet, per element. The observer reports a write
+// of ours and a write of the caller's alike, so each report is checked against
+// this count first. A root that is not observed has no entry, so a write made
+// before the observer attaches is never counted, as no report will come for it.
+const ownInertWrites = new WeakMap<HTMLElement, WeakMap<Element, number>>();
+
+function setInert(container: HTMLElement, el: HTMLElement, isInert: boolean) {
+  if (el.hasAttribute('inert') === isInert) {
+    return;
+  }
+  const owed = ownInertWrites.get(container);
+  owed?.set(el, (owed.get(el) ?? 0) + 1);
+  if (isInert) {
+    el.setAttribute('inert', '');
+  } else {
+    el.removeAttribute('inert');
+  }
+}
 
 /**
  * Take a clipped descendant out of the tab order and the accessibility tree by
@@ -73,7 +96,7 @@ const HIDDEN_ATTRIBUTE = 'data-line-clamp-hidden';
  * whatever the clamp does, and there is nothing to restore but the one
  * attribute this adds.
  */
-function hideFromTabOrder(el: HTMLElement) {
+function hideFromTabOrder(container: HTMLElement, el: HTMLElement) {
   if (el.hasAttribute(HIDDEN_ATTRIBUTE)) {
     return;
   }
@@ -81,13 +104,13 @@ function hideFromTabOrder(el: HTMLElement) {
   if (el.hasAttribute('inert')) {
     return;
   }
-  el.setAttribute('inert', '');
+  setInert(container, el, true);
   el.setAttribute(HIDDEN_ATTRIBUTE, '');
 }
 
 /** Make a descendant this clamp hid reachable again. */
-function restoreFromClip(el: HTMLElement) {
-  el.removeAttribute('inert');
+function restoreFromClip(container: HTMLElement, el: HTMLElement) {
+  setInert(container, el, false);
   el.removeAttribute(HIDDEN_ATTRIBUTE);
 }
 
@@ -118,9 +141,9 @@ function syncFocusableClipping(
     const isClipped =
       !isFocused && el.getBoundingClientRect().top >= containerBottom;
     if (isClipped) {
-      hideFromTabOrder(el);
+      hideFromTabOrder(container, el);
     } else if (el.hasAttribute('data-line-clamp-hidden')) {
-      restoreFromClip(el);
+      restoreFromClip(container, el);
     }
   }
 }
@@ -129,69 +152,34 @@ const MUTATION_OPTIONS: MutationObserverInit = {
   childList: true,
   subtree: true,
   attributes: true,
-  attributeFilter: ['tabindex', 'disabled', 'href', 'inert'],
-  // An `inert` written while the attribute is already there is the caller's.
-  attributeOldValue: true,
+  attributeFilter: ['tabindex', 'disabled', 'href', 'inert', 'contenteditable'],
 };
 
-// One observer for every clamp on the page: a list of N clamps would
-// otherwise hold N observers. Each record is dispatched to the clamp roots
-// that contain its target.
-const mutationRoots = new Map<HTMLElement, () => void>();
-let sharedMutations: MutationObserver | null = null;
-
-function dispatchMutations(records: ReadonlyArray<MutationRecord>) {
-  const due = new Set<() => void>();
+/**
+ * A caller writing `inert` on a link this clamp had hidden, or taking it away,
+ * makes the attribute theirs: drop the clamp's marker, so un-clipping the link
+ * leaves it as they set it. The clamp's own writes are counted off first.
+ */
+function handBackCallerInert(
+  container: HTMLElement,
+  records: ReadonlyArray<MutationRecord>,
+) {
+  const owedWrites = ownInertWrites.get(container);
   for (const record of records) {
-    // The caller rendered `inert` on a link this clamp had already hidden: the
-    // attribute was present before the write, and this clamp only ever writes
-    // it when absent. Hand ownership back, so un-clipping the link leaves it
-    // inert as the caller asked.
     if (
-      record.type === 'attributes' &&
-      record.attributeName === 'inert' &&
-      record.oldValue !== null &&
-      record.target instanceof HTMLElement &&
-      record.target.hasAttribute(HIDDEN_ATTRIBUTE) &&
-      record.target.hasAttribute('inert')
+      record.type !== 'attributes' ||
+      record.attributeName !== 'inert' ||
+      !(record.target instanceof HTMLElement)
     ) {
+      continue;
+    }
+    const owed = owedWrites?.get(record.target) ?? 0;
+    if (owed > 0) {
+      owedWrites?.set(record.target, owed - 1);
+    } else {
       record.target.removeAttribute(HIDDEN_ATTRIBUTE);
     }
-    for (const [root, sync] of mutationRoots) {
-      if (root.contains(record.target)) {
-        due.add(sync);
-      }
-    }
   }
-  due.forEach(sync => sync());
-}
-
-function observeMutations(container: HTMLElement, sync: () => void) {
-  if (typeof MutationObserver === 'undefined') {
-    return () => {};
-  }
-  sharedMutations ??= new MutationObserver(dispatchMutations);
-  mutationRoots.set(container, sync);
-  sharedMutations.observe(container, MUTATION_OPTIONS);
-  return () => {
-    const observer = sharedMutations;
-    if (observer == null) {
-      return;
-    }
-    // An observer cannot unobserve one target, so drop it, hand over what it
-    // had already seen, and watch the roots that remain.
-    const pending = observer.takeRecords();
-    observer.disconnect();
-    mutationRoots.delete(container);
-    dispatchMutations(pending);
-    if (mutationRoots.size === 0) {
-      sharedMutations = null;
-      return;
-    }
-    for (const root of mutationRoots.keys()) {
-      observer.observe(root, MUTATION_OPTIONS);
-    }
-  };
 }
 
 export interface LineClampProps extends BaseProps<HTMLElement> {
@@ -215,7 +203,7 @@ export interface LineClampProps extends BaseProps<HTMLElement> {
    * - Position value: show tooltip at specific position
    * @default true
    */
-  hasTooltip?: boolean | LayerPlacement;
+  hasTruncateTooltip?: boolean | LayerPlacement;
   /**
    * HTML element to render.
    * @default 'div'
@@ -240,18 +228,19 @@ export interface LineClampProps extends BaseProps<HTMLElement> {
  * <LineClamp maxLines={2}>
  *   Some <strong>mixed</strong> inline content that may run long.
  * </LineClamp>
- * <LineClamp maxLines={3} hasTooltip={false}>{longDescription}</LineClamp>
+ * <LineClamp maxLines={3} hasTruncateTooltip={false}>{longDescription}</LineClamp>
  * ```
  */
 export function LineClamp({
   children,
   maxLines,
-  hasTooltip = true,
+  hasTruncateTooltip = true,
   as: Component = 'div',
   xstyle,
   className,
   style,
   ref,
+  onBlur,
   ...props
 }: LineClampProps): ReactNode {
   // The clamp is height-based at every line count, so a single line must be
@@ -263,35 +252,43 @@ export function LineClamp({
   });
   const elementRef = useRef<HTMLElement>(null);
 
-  // Keep the merged ref stable across rerenders.
-  const mergedRef = useMergedRefs(ref, truncation.ref, elementRef);
+  // A resize can move a descendant across the clip edge without a render, and
+  // a child can add or re-enable a focusable element past it, so the sync also
+  // runs from the shared observers. A callback ref attaches them with the root
+  // and releases them when it goes, including when `as` replaces it.
+  const observeRoot = useCallback((container: HTMLElement | null) => {
+    if (container == null) {
+      return;
+    }
+    const sync = () => syncFocusableClipping(container);
+    ownInertWrites.set(container, new WeakMap());
+    // The mutation observer goes first: `observeResize` runs `sync` as it
+    // registers, and the writes that makes have to be reported to be counted.
+    const unobserveMutations = observeMutations(
+      container,
+      MUTATION_OPTIONS,
+      records => {
+        handBackCallerInert(container, records);
+        sync();
+      },
+    );
+    const unobserveResize = observeResize(container, sync);
+    return () => {
+      unobserveResize();
+      unobserveMutations();
+      ownInertWrites.delete(container);
+    };
+  }, []);
+  const mergedRef = useMergedRefs(ref, truncation.ref, elementRef, observeRoot);
 
   const tooltipPlacement: LayerPlacement =
-    typeof hasTooltip === 'string' ? hasTooltip : 'above';
+    typeof hasTruncateTooltip === 'string' ? hasTruncateTooltip : 'above';
   const tooltipEnabled =
-    hasTooltip !== false && maxLines > 0 && truncation.isTruncated;
+    hasTruncateTooltip !== false && maxLines > 0 && truncation.isTruncated;
 
-  // A descendant on a visually clipped line (e.g. a trailing "Read more"
-  // link that lands past maxLines) is still in the DOM and still tabbable —
-  // `-webkit-line-clamp` only clips paint, it doesn't remove the underlying
-  // layout. Tab can land on something the reader cannot see. `overflow:
-  // clip` above stops the browser from scrolling the box to chase a focused
-  // descendant into view, but the descendant itself is still a real, if
-  // invisible, tab stop unless something removes it from the tab order.
-  // `syncFocusableClipping` (above) is what finds and hides exactly that
-  // set, by comparing each focusable descendant's rect against the clamp
-  // box's own (clipped) rect: the DOM layout underneath a clamp is always
-  // the full, unclamped height, so anything whose top falls at or past the
-  // box's clipped bottom edge is what the clamp is hiding.
-  //
-  // Runs from two places, because either alone misses a real case:
-  // - Every render (rerun on children/maxLines changing, or anything else
-  //   that reflows the content) — covers ordinary prop-driven updates.
-  // - The shared ResizeObserver `useTruncation` also uses, and a
-  //   MutationObserver for descendant changes, on any actual change — a window/container resize can change which lines a
-  //   descendant falls on without `truncation.isTruncated` ever flipping
-  //   (still truncated before and after), so a render-only check would
-  //   never re-run and a since-uncovered descendant would stay hidden.
+  // Line clamping clips paint only. A link on a clipped line stays in the Tab
+  // order, so mark it inert. This runs on every render; the observers above
+  // cover changes that do not render.
   useLayoutEffect(() => {
     const container = elementRef.current;
     if (container) {
@@ -299,33 +296,14 @@ export function LineClamp({
     }
   });
 
-  // Resubscribes when `as` swaps the root node, so the observers never stay
-  // attached to a node that has been replaced. The mutation observer covers
-  // what neither a render nor a resize does: a child component adding or
-  // re-enabling a focusable element past the fold on its own state change.
-  // A `focusout` re-runs the sync once focus has moved: the focused element
-  // was skipped while it held focus, so a link clipped in the meantime would
-  // otherwise stay an invisible tab stop.
-  useEffect(() => {
-    const container = elementRef.current;
-    if (!container) {
-      return;
-    }
-    const sync = () => syncFocusableClipping(container);
-    const onFocusOut = (event: FocusEvent) =>
-      syncFocusableClipping(
-        container,
-        event.relatedTarget instanceof Element ? event.relatedTarget : null,
-      );
-    const unobserve = observeResize(container, sync);
-    const unobserveMutations = observeMutations(container, sync);
-    container.addEventListener('focusout', onFocusOut);
-    return () => {
-      unobserve();
-      unobserveMutations();
-      container.removeEventListener('focusout', onFocusOut);
-    };
-  }, [Component]);
+  // Focus has moved by now, so a link that was skipped while it held focus can
+  // be hidden if it is clipped. `relatedTarget` is where focus is going.
+  const handleBlur = (event: FocusEvent<HTMLElement>) => {
+    syncFocusableClipping(
+      event.currentTarget,
+      event.relatedTarget instanceof Element ? event.relatedTarget : null,
+    );
+  };
 
   return (
     <>
@@ -341,6 +319,7 @@ export function LineClamp({
         // full text through the tooltip, which opens on focus. A caller's own
         // `tabIndex` wins.
         tabIndex={tooltipEnabled ? 0 : undefined}
+        onBlur={composeEventHandlers(handleBlur, onBlur)}
         {...props}>
         {children}
       </Component>
