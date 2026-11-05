@@ -2394,11 +2394,14 @@ describe('DateInput — month/year wheels', () => {
         button('Done'),
       ].map(isBlocked);
     const fadeEnd = async (which: 'calendar' | 'wheels') => {
-      const event = new Event('transitionend', {bubbles: true});
-      Object.assign(event, {propertyName: 'opacity'});
-      act(() => {
-        panel(which).dispatchEvent(event);
-      });
+      // The toggle's own fade: it runs, then ends.
+      for (const type of ['transitionrun', 'transitionend']) {
+        const event = new Event(type, {bubbles: true});
+        Object.assign(event, {propertyName: 'opacity'});
+        act(() => {
+          panel(which).dispatchEvent(event);
+        });
+      }
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 50));
       });

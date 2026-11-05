@@ -52,6 +52,21 @@ const FOCUS_FRAMES = 30;
  */
 const EXIT_PROPERTIES = new Set(['opacity', 'visibility']);
 
+/** Whether a transition of `property` runs on the element itself. */
+function isRunning(element: Element, property: string): boolean {
+  if (typeof element.getAnimations !== 'function') {
+    return false;
+  }
+  return element
+    .getAnimations()
+    .some(
+      animation =>
+        animation.playState === 'running' &&
+        (animation as {transitionProperty?: string}).transitionProperty ===
+          property,
+    );
+}
+
 /** Whether the panel's own exit transition is running. */
 function isExiting(element: Element): boolean {
   if (typeof element.getAnimations !== 'function') {
@@ -131,16 +146,40 @@ export function useFadeInert(
       );
     };
     // The cross-fade ends when either panel's own transition ends. The layer
-    // beneath may have none: it stays visible, covered.
+    // beneath may have none: it stays visible, covered. Only a transition
+    // that runs after the toggle counts. One already running ends on its own
+    // clock. The wheels' warm-up turns their `visibility` on, and a toggle
+    // soon after would otherwise settle at its end.
+    const started = new Set<string>();
+    const keyOf = (event: Event) => {
+      const index = panels.indexOf(event.target as HTMLElement);
+      const property = (event as TransitionEvent).propertyName;
+      return index >= 0 && EXIT_PROPERTIES.has(property)
+        ? `${index}:${property}`
+        : null;
+    };
+    const onRun = (event: Event) => {
+      const key = keyOf(event);
+      if (key != null) {
+        started.add(key);
+      }
+    };
+    // A cancel whose property runs again at once is a replacement, not an
+    // end: the replacement's own end ends the fade.
+    const isReplaced = (event: Event) =>
+      event.type === 'transitioncancel' &&
+      isRunning(
+        event.target as Element,
+        (event as TransitionEvent).propertyName,
+      );
     const onEnd = (event: Event) => {
-      if (
-        panels.includes(event.target as HTMLElement) &&
-        EXIT_PROPERTIES.has((event as TransitionEvent).propertyName)
-      ) {
+      const key = keyOf(event);
+      if (key != null && started.has(key) && !isReplaced(event)) {
         settle();
       }
     };
     for (const panel of panels) {
+      panel.addEventListener('transitionrun', onRun);
       panel.addEventListener('transitionend', onEnd);
       panel.addEventListener('transitioncancel', onEnd);
     }
@@ -155,6 +194,7 @@ export function useFadeInert(
     return () => {
       cancelAnimationFrame(frame);
       for (const panel of panels) {
+        panel.removeEventListener('transitionrun', onRun);
         panel.removeEventListener('transitionend', onEnd);
         panel.removeEventListener('transitioncancel', onEnd);
       }
