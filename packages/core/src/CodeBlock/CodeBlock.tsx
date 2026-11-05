@@ -3,7 +3,8 @@
 'use client';
 /**
  * @file CodeBlock.tsx
- * @input Uses React, StyleX, theme tokens, CSS Custom Highlight API, SyntaxTheme provider
+ * @input Uses React, StyleX, theme tokens, CSS Custom Highlight API, SyntaxTheme
+ *   provider, and the theme's `code-block-copy` icon slot
  * @output Exports CodeBlock component and CodeBlockProps
  * @position Core implementation; read-only syntax-highlighted code display
  */
@@ -36,6 +37,7 @@ import {isRenderable, mergeProps, rtlStyles} from '../utils';
 import {useClipboard} from '../hooks/useClipboard';
 import {useScrollableArea} from '../hooks/useScrollableArea';
 import {Icon} from '../Icon';
+import {ComponentIcon} from '../Icon/ComponentIcon';
 import {IconButton} from '../IconButton';
 import type {DiffLineKind} from './tokenizer';
 import {
@@ -1137,7 +1139,14 @@ export function CodeBlock({
     <IconButton
       variant="ghost"
       size="sm"
-      icon={<Icon icon={copied ? 'check' : 'copy'} size="sm" color="inherit" />}
+      icon={
+        <ComponentIcon
+          slot="code-block-copy"
+          state={{copied}}
+          fallback={{icon: copied ? 'check' : 'copy', size: 'sm'}}
+          color="inherit"
+        />
+      }
       // A visible "Copy" hover/focus hint via Button's built-in tooltip. It
       // stays "Copy" after copying — the copy → check icon flip is the
       // confirmation, not a tooltip change. The aria-label still swaps to the
