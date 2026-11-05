@@ -18,7 +18,7 @@
  */
 
 import {useCallback, useEffect, useRef} from 'react';
-import type {ReactNode} from 'react';
+import type {FocusEvent, ReactNode, RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
@@ -42,8 +42,14 @@ import type {
   ToastContentRenderFn,
 } from './types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import {useToastGesture, type ToastGestureDirection} from './useToastGesture';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Toast/Toast.generated';
+
+registerEnglishFallback(english);
 
 const SWIPE_INTERACTIVE_TARGET_SELECTOR = `${INTERACTIVE_SELECTORS},[tabindex],[contenteditable]:not([contenteditable="false"])`;
 
@@ -109,6 +115,8 @@ const styles = stylex.create({
     flex: 1,
     minWidth: 0,
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
   exiting: {
     opacity: 0,
@@ -146,6 +154,16 @@ export interface ToastProps {
 
 interface ToastSurfaceProps extends ToastProps {
   gestureDirection: ToastGestureDirection;
+  /**
+   * Changes when a uniqueID overwrite updates this card in place: the new
+   * toast's auto-hide timer starts over.
+   */
+  timerKey?: string;
+  /**
+   * False when the viewport announces the toast: the card then carries no
+   * live region of its own, so an update in place is announced once.
+   */
+  isLiveRegion?: boolean;
 }
 
 /**
@@ -172,6 +190,9 @@ export function Toast(props: ToastProps) {
   return <ToastSurface {...props} gestureDirection={1} />;
 }
 
+/** A condition that holds a toast's auto-hide timer. */
+type PauseSource = 'pointer' | 'focus' | 'gesture' | 'window';
+
 export function ToastSurface({
   type,
   body,
@@ -182,10 +203,18 @@ export function ToastSurface({
   onDismiss,
   renderContent,
   gestureDirection,
+  timerKey,
+  isLiveRegion = true,
 }: ToastSurfaceProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isPausedRef = useRef(false);
+  // Every condition that holds the auto-hide timer (pointer over the card,
+  // focus inside it, a touch or pen gesture, the window blurred) is tracked on
+  // its own, so one ending resumes the timer only when no other still holds.
+  const pauseSourcesRef = useRef<Set<PauseSource>>(new Set());
+  // The card's root, read when a hold ends to drop a focus hold whose focused
+  // control was removed: an unmounting control fires no blur.
+  const cardRootRef = useRef<RefObject<HTMLDivElement | null> | null>(null);
   const remainingRef = useRef(autoHideDuration);
   // Will be initialized by startTimer when actually used
   const startTimeRef = useRef<number | null>(null);
@@ -197,7 +226,7 @@ export function ToastSurface({
   onDismissRef.current = onDismiss;
 
   const startTimer = useCallback(() => {
-    if (!isAutoHide || isPausedRef.current) {
+    if (!isAutoHide || pauseSourcesRef.current.size > 0) {
       return;
     }
     if (timerRef.current) {
@@ -209,11 +238,16 @@ export function ToastSurface({
     }, remainingRef.current);
   }, [isAutoHide]);
 
-  const pauseTimer = useCallback(() => {
-    if (!isAutoHide || isPausedRef.current) {
+  // Pointer, focus and gesture holds are tracked whatever isAutoHide is: an
+  // overwrite can turn a toast that does not auto-hide into one that does
+  // while a hold is in place. The window hold leaves with its listeners.
+  const pauseTimer = useCallback((source: PauseSource) => {
+    const sources = pauseSourcesRef.current;
+    const wasRunning = sources.size === 0;
+    sources.add(source);
+    if (!wasRunning) {
       return;
     }
-    isPausedRef.current = true;
     if (timerRef.current) {
       clearTimeout(timerRef.current);
       timerRef.current = null;
@@ -222,27 +256,52 @@ export function ToastSurface({
       const elapsed = Date.now() - startTimeRef.current;
       remainingRef.current = Math.max(remainingRef.current - elapsed, 1000);
     }
-  }, [isAutoHide]);
+  }, []);
 
-  const resumeTimer = useCallback(() => {
-    if (!isAutoHide || !isPausedRef.current) {
-      return;
-    }
-    isPausedRef.current = false;
-    startTimer();
-  }, [isAutoHide, startTimer]);
+  const resumeTimer = useCallback(
+    (source: PauseSource) => {
+      const sources = pauseSourcesRef.current;
+      if (!sources.delete(source)) {
+        return;
+      }
+      const root = cardRootRef.current?.current;
+      if (
+        sources.has('focus') &&
+        root != null &&
+        !root.contains(document.activeElement)
+      ) {
+        sources.delete('focus');
+      }
+      if (sources.size > 0) {
+        return;
+      }
+      startTimer();
+    },
+    [startTimer],
+  );
 
   useEffect(() => {
     remainingRef.current = autoHideDuration;
+    // An update in place can remove the focused control, which fires no blur:
+    // a focus hold whose focus has left the card is stale.
+    const root = cardRootRef.current?.current;
+    if (
+      pauseSourcesRef.current.has('focus') &&
+      root != null &&
+      !root.contains(root.ownerDocument.activeElement)
+    ) {
+      pauseSourcesRef.current.delete('focus');
+    }
     startTimer();
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
     };
-    // startTimer's identity is stable per isAutoHide, so this runs on mount
-    // and on a genuine duration change — not on unrelated viewport renders.
-  }, [autoHideDuration, startTimer]);
+    // startTimer's identity is stable per isAutoHide, so this runs on mount,
+    // on a genuine duration change and on an overwrite (timerKey), not on
+    // unrelated viewport renders.
+  }, [autoHideDuration, startTimer, timerKey]);
 
   // Pause the auto-hide timer while the window is not focused, so a toast
   // doesn't silently expire while the user is in another window or tab.
@@ -250,15 +309,56 @@ export function ToastSurface({
     if (!isAutoHide) {
       return;
     }
-    window.addEventListener('blur', pauseTimer);
-    window.addEventListener('focus', resumeTimer);
+    const pauseSources = pauseSourcesRef.current;
+    const pauseForWindow = () => pauseTimer('window');
+    const resumeForWindow = () => resumeTimer('window');
+    window.addEventListener('blur', pauseForWindow);
+    window.addEventListener('focus', resumeForWindow);
+    // A toast raised while the window is already blurred gets no blur event,
+    // so it starts held, and the window's next focus resumes it.
+    if (!document.hasFocus()) {
+      pauseForWindow();
+    }
     return () => {
-      window.removeEventListener('blur', pauseTimer);
-      window.removeEventListener('focus', resumeTimer);
+      window.removeEventListener('blur', pauseForWindow);
+      window.removeEventListener('focus', resumeForWindow);
+      // With the listeners gone, no focus event would clear the window hold.
+      pauseSources.delete('window');
     };
   }, [isAutoHide, pauseTimer, resumeTimer]);
 
-  const isTimerPaused = useCallback(() => isPausedRef.current, []);
+  const isGesturePausing = useCallback(
+    () => pauseSourcesRef.current.has('gesture'),
+    [],
+  );
+  const pauseForGesture = useCallback(
+    () => pauseTimer('gesture'),
+    [pauseTimer],
+  );
+  const resumeForGesture = useCallback(
+    () => resumeTimer('gesture'),
+    [resumeTimer],
+  );
+  const pauseForPointer = useCallback(
+    () => pauseTimer('pointer'),
+    [pauseTimer],
+  );
+  const resumeForPointer = useCallback(
+    () => resumeTimer('pointer'),
+    [resumeTimer],
+  );
+  const pauseForFocus = useCallback(() => pauseTimer('focus'), [pauseTimer]);
+  const resumeForFocus = useCallback(
+    (event: FocusEvent<HTMLDivElement>) => {
+      // Focus moving between controls inside the card keeps it held.
+      const next = event.relatedTarget;
+      if (next instanceof Node && event.currentTarget.contains(next)) {
+        return;
+      }
+      resumeTimer('focus');
+    },
+    [resumeTimer],
+  );
   const dismissFromGesture = useCallback(() => {
     onDismissRef.current('manual');
   }, []);
@@ -266,12 +366,13 @@ export function ToastSurface({
     direction: gestureDirection,
     enabled: !isExiting,
     canPauseTimer: isAutoHide,
-    isTimerPaused,
-    pauseTimer,
-    resumeTimer,
+    isTimerPaused: isGesturePausing,
+    pauseTimer: pauseForGesture,
+    resumeTimer: resumeForGesture,
     dismiss: dismissFromGesture,
     shouldIgnoreTarget: isInteractiveTarget,
   });
+  cardRootRef.current = rootRef;
 
   const handleDismiss = useCallback(() => {
     onDismiss('manual');
@@ -287,13 +388,13 @@ export function ToastSurface({
   return (
     <div
       ref={rootRef}
-      role={isError ? 'alert' : 'status'}
-      aria-live={isError ? 'assertive' : 'polite'}
-      aria-atomic="true"
-      onMouseEnter={pauseTimer}
-      onMouseLeave={resumeTimer}
-      onFocusCapture={pauseTimer}
-      onBlurCapture={resumeTimer}
+      role={isLiveRegion ? (isError ? 'alert' : 'status') : undefined}
+      aria-live={isLiveRegion ? (isError ? 'assertive' : 'polite') : undefined}
+      aria-atomic={isLiveRegion ? 'true' : undefined}
+      onMouseEnter={pauseForPointer}
+      onMouseLeave={resumeForPointer}
+      onFocusCapture={pauseForFocus}
+      onBlurCapture={resumeForFocus}
       {...gestureBindings}
       {...mergeProps(
         themeProps('toast', {type}),

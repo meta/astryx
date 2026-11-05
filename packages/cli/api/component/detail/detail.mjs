@@ -19,5 +19,9 @@ import {withOwnership} from '../_adapter.mjs';
  * @returns {import('../component.type.mjs').ComponentDetailResponse}
  */
 export function componentDetail(docs, owner, componentName, coreDir) {
-  return {type: 'component.detail', data: withOwnership(docs, owner, componentName, coreDir)};
+  return {
+    type: 'component.detail',
+    package: owner.package,
+    data: withOwnership(docs, owner, componentName, coreDir),
+  };
 }

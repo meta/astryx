@@ -39,6 +39,10 @@
     "defaultMessage": "Сторінка",
     "description": "Visible label before the editable box in the input pagination variant. Example: \"Page [ 1 ] / 10\"."
   },
+  "@astryx.pagination.ofTotalPages": {
+    "defaultMessage": "/ {total, number}",
+    "description": "Visible total shown after the editable box in the input pagination variant. Example: the \"/ 10\" in \"Page [ 1 ] / 10\"."
+  },
   "@astryx.pagination.pageIndicators": {
     "defaultMessage": "Індикатори сторінок",
     "description": "Aria label for the dots-variant page-indicator group."
@@ -263,6 +267,10 @@
     "defaultMessage": "Перейти до вмісту",
     "description": "Text of the skip link — the first focusable element on the page, visible only while keyboard-focused. Activating it jumps focus past the navigation to the main content area. Imperative verb; keep short."
   },
+  "@astryx.avatar.nameWithStatus": {
+    "defaultMessage": "{name}, {status}",
+    "description": "Screen-reader accessible name for an Avatar showing a status indicator; composes the person's name with the status label, e.g. \"Jane Doe, Online\". {name} = the avatar's name/alt text, {status} = the status dot's label. Adjust separator and order per locale."
+  },
   "@astryx.avatarGroup.label": {
     "defaultMessage": "Аватари",
     "description": "Screen-reader-only fallback name for a horizontal cluster of user avatar images. Plural noun; consumers usually override with \"Team members\", \"Attendees\", etc."
@@ -278,6 +286,10 @@
   "@astryx.banner.dismiss": {
     "defaultMessage": "Закрити",
     "description": "\"Dismiss\" = close/hide this notification (not \"reject a person\"). Tooltip on the small X button on a Banner, and its aria label when the banner's title is not plain text."
+  },
+  "@astryx.banner.dismissTitled": {
+    "defaultMessage": "{dismiss} {title}",
+    "description": "Aria label on the small X button on a Banner, naming which banner it closes so stacked banners are distinguishable. `{dismiss}` is the already-translated tooltip text from `banner.dismiss`; keep it verbatim in the message so visible and accessible labels match. `{title}` is the banner's own title text — example: `Dismiss Upload failed`. Reorder the placeholders freely."
   },
   "@astryx.calendar.previousMonth": {
     "defaultMessage": "Попередній місяць",
@@ -315,6 +327,10 @@
     "defaultMessage": "Вибраний діапазон: з {start} до {end}.",
     "description": "Screen-reader announcement after the second pick completes a Calendar range selection. `{start}` and `{end}` are localized full dates in chronological order."
   },
+  "@astryx.calendar.rangeClearedAnnounce": {
+    "defaultMessage": "Початкову дату {date} очищено. Виберіть початкову дату.",
+    "description": "Screen-reader announcement when the user clicks the in-progress range start again, which clears it instead of completing a zero-length range. `{date}` is the localized full date."
+  },
   "@astryx.carousel.label": {
     "defaultMessage": "Карусель",
     "description": "Screen-reader-only fallback name for a horizontally-scrolling row of items. If \"carousel\" is unfamiliar in your locale, prefer the standard term (e.g. \"slider\")."
@@ -330,6 +346,22 @@
   "@astryx.carousel.slideLabel": {
     "defaultMessage": "Слайд {current, number} з {total, number}",
     "description": "Screen-reader accessible name for one slide in a Carousel, giving its position. `current` is the 1-based slide number; `total` is the slide count."
+  },
+  "@astryx.chart.label": {
+    "defaultMessage": "Діаграма",
+    "description": "Generic screen-reader name for a Chart with no primary series and no consumer-supplied title. Noun (a data visualization), not a verb."
+  },
+  "@astryx.chart.labelWithSeries": {
+    "defaultMessage": "Діаграма: {series} за {xKey}",
+    "description": "Generated screen-reader name for a Chart without a consumer-supplied title. `{series}` is a locale-formatted list of series labels; `{xKey}` is the consumer's horizontal data-field name."
+  },
+  "@astryx.chart.dataTableCaption": {
+    "defaultMessage": "Дані: {label}",
+    "description": "Screen-reader-only caption for the small-data table that mirrors a Chart. `{label}` is the Chart's resolved accessible name."
+  },
+  "@astryx.chartLegend.label": {
+    "defaultMessage": "Легенда діаграми",
+    "description": "Screen-reader-only accessible name for the list of series labels and swatches rendered by ChartLegend."
   },
   "@astryx.chat.status.sending": {
     "defaultMessage": "Надсилання",
@@ -361,7 +393,7 @@
   },
   "@astryx.checkboxList.item.checkbox": {
     "defaultMessage": "Прапорець",
-    "description": "Screen-reader-only last-ditch fallback name for a checkbox inside a list item when no label is provided. Should almost never render — consumers should supply a real label."
+    "description": "Localized hidden text used internally when a rich visible label names the checkbox through aria-labelledby. It does not become the computed name; callers must provide aria-label when rich content has no text."
   },
   "@astryx.commandPalette.emptySearch": {
     "defaultMessage": "Немає результатів",
@@ -377,7 +409,7 @@
   },
   "@astryx.commandPalette.noResultsFor": {
     "defaultMessage": "Немає результатів для {query}",
-    "description": "Screen-reader-only announcement when a CommandPalette query matches nothing. `{query}` is the user's verbatim search text; keep it last if your language allows so truncation-by-AT still conveys the outcome."
+    "description": "Not read by any component: CommandPalette announces its rendered empty-search message (`emptySearchText`) instead. Formerly the screen-reader-only announcement when a query matched nothing; `{query}` was the user's verbatim search text."
   },
   "@astryx.commandPalette.loading": {
     "defaultMessage": "Завантаження",
@@ -399,6 +431,10 @@
     "defaultMessage": "Меню",
     "description": "Screen-reader-only fallback name for a dropdown menu popover. Very generic; consumers usually override. Noun (\"a menu\"), not the imperative."
   },
+  "@astryx.dropdownMenu.back": {
+    "defaultMessage": "Назад",
+    "description": "Button label that returns from a nested action list to its parent inside a DropdownMenu bottom sheet. Imperative navigation action."
+  },
   "@astryx.lightbox.close": {
     "defaultMessage": "Закрити",
     "description": "\"Close\" = shut/dismiss (not \"nearby\"). Screen-reader-only label on the X button that dismisses a Lightbox."
@@ -410,6 +446,82 @@
   "@astryx.lightbox.next": {
     "defaultMessage": "Наступний",
     "description": "Screen-reader-only label on the right-arrow button in a Lightbox (navigates to next media item). Pairs with `lightbox.previous`."
+  },
+  "@astryx.chatTypingIndicator.one": {
+    "defaultMessage": "{name} пише…",
+    "description": "Politely announced status naming the single person currently typing in a chat. `name` is a display name supplied by the app. Present-progressive form; the trailing ellipsis is the single … character."
+  },
+  "@astryx.chatTypingIndicator.many": {
+    "defaultMessage": "{names} пишуть…",
+    "description": "Politely announced status when more than one person is typing in a chat. `names` is already joined for the locale by Intl.ListFormat, so translations must not add their own conjunction — place `{names}` where the joined list belongs."
+  },
+  "@astryx.chatTypingIndicator.others": {
+    "defaultMessage": "{count, number} {count, plural, one {інший} few {інші} many {інших} other {іншого}}",
+    "description": "Overflow element for the chat typing status when three or more people type: the first name is shown and the rest collapse into this phrase, which is then joined to the name by Intl.ListFormat. Renders as the last list item, e.g. \"Ana and 2 others\"."
+  },
+  "@astryx.listInput.emptyTitle": {
+    "defaultMessage": "Ще не додано {itemName}",
+    "description": "EmptyState title shown inside a lab ListInput when its collection has no records. `{itemName}` is the consumer's singular noun for one record (e.g. \"guest\"); the source appends a literal \"s\" to pluralize it, which only works for regular English plurals. If your language cannot pluralize an interpolated noun this way, rephrase around `{itemName}` instead (e.g. \"No {itemName} added yet\")."
+  },
+  "@astryx.listInput.emptyDescription": {
+    "defaultMessage": "Додайте {itemName}, щоб почати.",
+    "description": "EmptyState supporting text shown inside a lab ListInput when its collection has no records. `{itemName}` is the consumer's singular noun for one record (e.g. \"guest\")."
+  },
+  "@astryx.listInput.addItem": {
+    "defaultMessage": "Додати {itemName}",
+    "description": "Accessible label on the button that appends a new record to a lab ListInput. `{itemName}` is the consumer's singular noun for one record (e.g. \"guest\")."
+  },
+  "@astryx.listInput.removeItem": {
+    "defaultMessage": "Видалити {itemName} {position, number}",
+    "description": "Accessible label and tooltip on the button that deletes one record from a lab ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number (e.g. \"Remove guest 2\")."
+  },
+  "@astryx.listInput.removeUnavailable": {
+    "defaultMessage": "Видалення недоступне, коли список вимкнено",
+    "description": "Tooltip shown on the Remove button when the ListInput is disabled or loading, explaining why the action cannot be performed."
+  },
+  "@astryx.listInput.reorderItem": {
+    "defaultMessage": "Змінити порядок: {itemName} {position, number}",
+    "description": "Accessible label on the drag-handle button that reorders one record in a lab ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number (e.g. \"Reorder guest 2\")."
+  },
+  "@astryx.listInput.fieldLabelWithPosition": {
+    "defaultMessage": "{header}, {itemName} {position, number} з {total, number}",
+    "description": "Accessible name for a field inside a lab ListInput row after the first row, disambiguating repeated column labels. `{header}` is the column's own label (e.g. \"Name\"); `{itemName}` is the consumer's singular noun for one record; `{position}`/`{total}` are the row's 1-based index and the total row count (e.g. \"Name, guest 2 of 3\")."
+  },
+  "@astryx.listInput.reorderInstructions": {
+    "defaultMessage": "Використовуйте Arrow Up або Arrow Down, щоб перемістити цей елемент на одну позицію. Натисніть Space або Enter, щоб підняти його для розширеного перевпорядкування за допомогою клавіатури.",
+    "description": "Visually-hidden instructions describing how to use a lab ListInput row's keyboard reorder handle, referenced via aria-describedby from every reorder button."
+  },
+  "@astryx.listInput.announceAdded": {
+    "defaultMessage": "Додано {itemName} {position, number}.",
+    "description": "Screen-reader-only live announcement after a new record is appended to a lab ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is the new record's 1-based row number."
+  },
+  "@astryx.listInput.announceRemoved": {
+    "defaultMessage": "Видалено {itemName} {position, number}.",
+    "description": "Screen-reader-only live announcement after a record is deleted from a lab ListInput. `{itemName}` is the consumer's singular noun for one record; `{position}` is the removed record's former 1-based row number."
+  },
+  "@astryx.listInput.announceGrabbed": {
+    "defaultMessage": "Піднято {itemName} {position, number}. Використовуйте стрілки для переміщення, Space або Enter, щоб опустити, і Escape, щоб скасувати.",
+    "description": "Screen-reader-only live announcement when a lab ListInput record's keyboard reorder handle enters extended \"lift\" mode. `{itemName}` is the consumer's singular noun for one record; `{position}` is its 1-based row number."
+  },
+  "@astryx.listInput.announceMovedToPosition": {
+    "defaultMessage": "{itemName} переміщено на позицію {position, number} з {total, number}.",
+    "description": "Screen-reader-only live announcement each time a lab ListInput record's reorder position changes (arrow-key step, keyboard lift-mode preview, or pointer drag). `{itemName}` is the consumer's singular noun for one record; `{position}`/`{total}` are the record's new 1-based position and the total row count."
+  },
+  "@astryx.listInput.announceReorderCancelled": {
+    "defaultMessage": "Зміну порядку скасовано.",
+    "description": "Screen-reader-only live announcement when a lab ListInput reorder in progress is cancelled (Escape key, blur, or the collection becoming disabled/loading mid-drag)."
+  },
+  "@astryx.listInput.announceReturnedToPosition": {
+    "defaultMessage": "{itemName} повернуто на позицію {position, number}.",
+    "description": "Screen-reader-only live announcement when a lab ListInput reorder is committed without the record's position actually changing. `{itemName}` is the consumer's singular noun for one record; `{position}` is its unchanged 1-based row number."
+  },
+  "@astryx.listInput.announceDropped": {
+    "defaultMessage": "{itemName} розміщено на позиції {position, number} з {total, number}.",
+    "description": "Screen-reader-only live announcement when a lab ListInput reorder is committed with the record's position actually changing. `{itemName}` is the consumer's singular noun for one record; `{position}`/`{total}` are its new 1-based position and the total row count."
+  },
+  "@astryx.listInput.announceAlreadyAtBoundary": {
+    "defaultMessage": "{itemName} уже {boundary, select, first {на початку списку} last {у кінці списку} other {}}.",
+    "description": "Screen-reader-only live announcement when an arrow-key reorder attempt has no effect because the record is already at that end of the list. `{itemName}` is the consumer's singular noun for one record; `{boundary}` is always exactly \"first\" or \"last\"."
   },
   "@astryx.markdown.taskList": {
     "defaultMessage": "Список завдань",
@@ -435,6 +547,10 @@
     "defaultMessage": "Пошук параметрів",
     "description": "Screen-reader-only accessible name for that same search input inside a MultiSelector."
   },
+  "@astryx.multiSelector.empty": {
+    "defaultMessage": "Немає параметрів",
+    "description": "Shown in a MultiSelector's dropdown panel when it was given no options at all, and announced in a polite live region on open. Very short (2 words); neutral tone, not error-y."
+  },
   "@astryx.multiSelector.selectAllPartiallySelected": {
     "defaultMessage": "{label}, частково вибрано",
     "description": "Accessible name for the MultiSelector select-all option while only some options are selected. `{label}` is the visible select-all label (e.g. \"Select all\"). ARIA forbids aria-selected=\"mixed\" on options, so the indeterminate state is conveyed through the name instead. \"Partially\" = some but not all."
@@ -451,6 +567,10 @@
     "defaultMessage": "Пошук параметрів",
     "description": "\"Options\" = the list of choices in the dropdown. Screen-reader-only accessible name for the search input inside a Selector."
   },
+  "@astryx.selector.empty": {
+    "defaultMessage": "Немає параметрів",
+    "description": "Shown in a Selector's dropdown panel when it was given no options at all, and announced in a polite live region on open. Very short (2 words); neutral tone, not error-y."
+  },
   "@astryx.sideNav.label": {
     "defaultMessage": "Бічна навігація",
     "description": "Screen-reader-only accessible name for the primary vertical sidebar nav (usually on the left)."
@@ -460,7 +580,7 @@
     "description": "Screen-reader-only label on the vertical drag handle at the right edge of the SideNav that lets the user resize the sidebar's width."
   },
   "@astryx.sideNav.heading.openMenu": {
-    "defaultMessage": "Відкрити меню",
+    "defaultMessage": "{heading}, Відкрити меню",
     "description": "Screen-reader-only label on the `⋯` overflow-menu button embedded in a SideNav section heading. Same string as `topNav.heading.openMenu` — translations may share."
   },
   "@astryx.tabList.label": {
@@ -487,6 +607,10 @@
     "defaultMessage": "Застосувати",
     "description": "Primary button label inside a table's filter panel/popover; commits pending filter values. Imperative verb; pairs with `Reset`."
   },
+  "@astryx.table.rowStatus.columnHeader": {
+    "defaultMessage": "Стан рядка",
+    "description": "Screen-reader-only column header for the narrow status-indicator gutter a Table gains from useTableRowStatus. Sighted users see a blank gutter; assistive tech announces this as the column name."
+  },
   "@astryx.table.selection.selectAllRows": {
     "defaultMessage": "Вибрати всі рядки",
     "description": "Aria label for the \"select all rows\" checkbox in a Table header."
@@ -511,26 +635,6 @@
     "defaultMessage": "Очистити сортування",
     "description": "Screen-reader-only label on a column header button that will remove the current sort. \"Clear\" here means remove, not transparent. Part of the sort set."
   },
-  "@astryx.table.sort.direction.ascending": {
-    "defaultMessage": "за зростанням",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.direction.descending": {
-    "defaultMessage": "за спаданням",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.sortBy": {
-    "defaultMessage": "Сортувати за {label}",
-    "description": "Aria label for a sortable Table header button when the column is unsorted. `label` is the column header text."
-  },
-  "@astryx.table.sort.sortedBy": {
-    "defaultMessage": "Сортувати за {label}, відсортовано {direction}",
-    "description": "Aria label for a sorted Table header button. `direction` is the localized direction word from @astryx.table.sort.direction.*."
-  },
-  "@astryx.table.sort.sortedByWithPriority": {
-    "defaultMessage": "Сортувати за {label}, відсортовано {direction}, пріоритет {rank, number} з {total, number}",
-    "description": "Aria label for a sorted Table header button in multi-sort. `rank` is the 1-based position of this column in the sort order; `total` is the number of sorted columns."
-  },
   "@astryx.toast.dismiss": {
     "defaultMessage": "Закрити сповіщення",
     "description": "Screen-reader-only label on the X button of a Toast (transient notification popup). Distinct from `banner.dismiss` (persistent banner)."
@@ -544,7 +648,7 @@
     "description": "Label on the \"×\" button that removes every token/chip from a Tokenizer input. Imperative verb + determiner \"all\"; short."
   },
   "@astryx.topNav.heading.openMenu": {
-    "defaultMessage": "Відкрити меню",
+    "defaultMessage": "{hasHeading, select, true {{heading}, } other {}}Відкрити меню",
     "description": "Screen-reader-only label on the `⋯` overflow button in a TopNav section heading. Kept separate from `sideNav.heading.openMenu` so translations may diverge."
   },
   "@astryx.topNav.landmarkLabel": {
@@ -631,9 +735,49 @@
     "defaultMessage": "Очистити {label}",
     "description": "Aria label for the clear-value button in DateInput / DateRangeInput / DateTimeInput. `{label}` is the field's own label so screen readers announce e.g. 'Clear Start date'."
   },
+  "@astryx.dateInput.invalidDate": {
+    "defaultMessage": "Недійсна дата",
+    "description": "Screen-reader-only live-region alert in DateInput / DateTimeInput when the typed date cannot be parsed. The field silently reverts on blur, so this is the only rejection feedback a screen-reader user gets."
+  },
+  "@astryx.dateInput.resetPicking": {
+    "defaultMessage": "Скинути",
+    "description": "Ghost button in the mobile date picker's header, at the trailing corner beside the month arrows. Removes the chosen date AND returns the calendar to the current month — it undoes the picking done so far and puts the picker back to how it opens, so prefer a word covering both, not one that only means emptying a field. Not cancel: the picker stays open afterwards and nothing is dismissed. Keep it short; it shares one line with the month title and two arrows."
+  },
+  "@astryx.dateInput.savePicking": {
+    "defaultMessage": "Зберегти",
+    "description": "Full-width primary button that closes the mobile date picker, on the calendar. The date is already committed by the tap that chose it, so this only dismisses — but it is worded as saving because that is how the action reads to someone finishing a form. Use the word your platform uses for accepting and closing a sheet."
+  },
+  "@astryx.dateInput.doneChoosingMonth": {
+    "defaultMessage": "Готово",
+    "description": "Full-width button under the month and year wheels in the mobile date picker. It does NOT close the picker — it returns to the calendar, having set the month. Word it as finishing this step, not as finishing the whole task; the calendar's own button is the one that closes."
+  },
+  "@astryx.dateInput.chooseMonthYear": {
+    "defaultMessage": "{monthYear}, виберіть місяць і рік",
+    "description": "Accessible name for the mobile date picker's header button, which swaps the calendar for month and year wheels. {monthYear} is the currently shown month and year, already localized (e.g. \"March 2026\"). The whole label is one string so the separator and word order can change per locale."
+  },
+  "@astryx.dateInput.monthWheel": {
+    "defaultMessage": "Місяць",
+    "description": "Accessible name for the scrollable month column in the mobile date picker. Single word; a calendar month, not a duration."
+  },
+  "@astryx.dateInput.yearWheel": {
+    "defaultMessage": "Рік",
+    "description": "Accessible name for the scrollable year column in the mobile date picker. Single word; a calendar year, not a duration."
+  },
+  "@astryx.dateTimeInput.timeHint12h": {
+    "defaultMessage": "напр., 2:30 пп",
+    "description": "Placeholder hint shown in the DateTimeInput time field when focused and empty with 12-hour format. Gives an example of expected input format."
+  },
+  "@astryx.dateTimeInput.timeHint24h": {
+    "defaultMessage": "напр., 14:30",
+    "description": "Placeholder hint shown in the DateTimeInput time field when focused and empty with 24-hour format. Gives an example of expected input format."
+  },
   "@astryx.dateTimeInput.timeSuffix": {
     "defaultMessage": "час: {label}",
     "description": "Screen-reader-only accessible name for the time-of-day slot in a DateTimeInput. Example: `Start date time`; reorder freely (e.g. \"time of {label}\")."
+  },
+  "@astryx.dateTimeInput.timeOptionsLabel": {
+    "defaultMessage": "Варіанти для {label}",
+    "description": "Screen-reader-only accessible name for the list of preset times that drops down from a DateTimeInput's time slot. `{label}` is the accessible name of the time field itself, already ending in the word for time — example: `Meeting time options`. Plural: the list holds every selectable time."
   },
   "@astryx.dateRangeInput.placeholder": {
     "defaultMessage": "Виберіть діапазон дат",
@@ -646,6 +790,54 @@
   "@astryx.dateTimeInput.placeholder": {
     "defaultMessage": "Виберіть дату",
     "description": "Grey placeholder inside an empty DateTimeInput field. Note: the English says only \"date\" though the field is date+time — do not add \"and time\" unless natural."
+  },
+  "@astryx.dateTimeInput.dialogLabel": {
+    "defaultMessage": "Виберіть дату й час",
+    "description": "Screen-reader-only accessible name for the DateTimeInput picker dialog. On desktop this labels the date calendar popover inside the date+time field; on touch devices it labels the full Date/Time bottom sheet."
+  },
+  "@astryx.dateTimeInput.pickerMode": {
+    "defaultMessage": "Розділ дати й часу",
+    "description": "Screen-reader-only label for the segmented Date/Time switch at the top of the mobile DateTimeInput bottom sheet."
+  },
+  "@astryx.dateTimeInput.dateTab": {
+    "defaultMessage": "Дата",
+    "description": "Visible label for the Date segment in the mobile DateTimeInput bottom sheet."
+  },
+  "@astryx.dateTimeInput.timeTab": {
+    "defaultMessage": "Час",
+    "description": "Visible label for the Time segment in the mobile DateTimeInput bottom sheet."
+  },
+  "@astryx.dateTimeInput.openTimePicker": {
+    "defaultMessage": "Відкрити {label}",
+    "description": "Aria label for the clock button in the mobile DateTimeInput closed time segment. `{label}` is the accessible name of the time input, for example `Meeting time`."
+  },
+  "@astryx.dateTimeInput.saveDatePicking": {
+    "defaultMessage": "Зберегти дату",
+    "description": "Primary button at the bottom of the Date panel in the mobile DateTimeInput bottom sheet. It does not close the sheet; it accepts the date step and moves to the Time panel. Use sentence case in English and title case only when appropriate for the locale."
+  },
+  "@astryx.dateTimeInput.hourWheel": {
+    "defaultMessage": "Година",
+    "description": "Accessible name for the hour wheel in the mobile DateTimeInput bottom sheet."
+  },
+  "@astryx.dateTimeInput.minuteWheel": {
+    "defaultMessage": "Хвилина",
+    "description": "Accessible name for the minute wheel in the mobile DateTimeInput bottom sheet."
+  },
+  "@astryx.dateTimeInput.secondWheel": {
+    "defaultMessage": "Секунда",
+    "description": "Accessible name for the optional seconds wheel in the mobile DateTimeInput bottom sheet."
+  },
+  "@astryx.dateTimeInput.meridiemWheel": {
+    "defaultMessage": "дп/пп",
+    "description": "Accessible name for the AM/PM wheel in the mobile DateTimeInput bottom sheet when using 12-hour time."
+  },
+  "@astryx.dateTimeInput.meridiemAM": {
+    "defaultMessage": "дп",
+    "description": "Label for the morning half of the AM/PM wheel in the mobile DateTimeInput bottom sheet. Use the locale's concise ante-meridiem marker."
+  },
+  "@astryx.dateTimeInput.meridiemPM": {
+    "defaultMessage": "пп",
+    "description": "Label for the afternoon/evening half of the AM/PM wheel in the mobile DateTimeInput bottom sheet. Use the locale's concise post-meridiem marker."
   },
   "@astryx.link.newTab": {
     "defaultMessage": "(відкривається в новій вкладці)",
@@ -695,9 +887,25 @@
     "defaultMessage": "Нумерація сторінок таблиці",
     "description": "Screen-reader-only accessible name for a table's pagination `<nav>` (rendered below and/or above the table per the plugin's position config). Kept separate from `@astryx.pagination.label` so translations may diverge. When position='both', this string is interpolated as the {label} value into `@astryx.table.pagination.labelAbove`/`labelBelow` — keep it compatible with those suffix templates."
   },
+  "@astryx.table.pagination.labelAbove": {
+    "defaultMessage": "{label} (угорі)",
+    "description": "Accessible name for the pagination `<nav>` rendered above the table when position='both' renders two navs. `label` is the resolved base label (default \"Table pagination\" or consumer-supplied); the suffix keeps the two same-type landmarks distinguishable."
+  },
+  "@astryx.table.pagination.labelBelow": {
+    "defaultMessage": "{label} (унизу)",
+    "description": "Accessible name for the pagination `<nav>` rendered below the table when position='both' renders two navs. `label` is the resolved base label (default \"Table pagination\" or consumer-supplied); the suffix keeps the two same-type landmarks distinguishable."
+  },
   "@astryx.timeInput.placeholder": {
     "defaultMessage": "Виберіть час",
     "description": "\"Time\" = clock time (HH:MM), not duration or era. Grey placeholder inside an empty TimeInput field; imperative verb."
+  },
+  "@astryx.timeInput.invalidTime": {
+    "defaultMessage": "Недійсний час",
+    "description": "Screen-reader-only live-region alert in TimeInput / DateTimeInput when the typed time cannot be parsed. \"Time\" = clock time (HH:MM). The field silently reverts on blur, so this is the only rejection feedback a screen-reader user gets."
+  },
+  "@astryx.timeInput.openPicker": {
+    "defaultMessage": "Відкрити {label}",
+    "description": "Aria label for the clock button that opens TimeInput's browser/OS time picker. `{label}` is the field label, for example `Start time`."
   },
   "@astryx.topNav.heading.dialogLabel": {
     "defaultMessage": "Меню навігації",
@@ -718,6 +926,10 @@
   "@astryx.button.loading": {
     "defaultMessage": "Завантаження",
     "description": "Screen-reader-only live-region announcement while a Button is in its loading state (spinner shown, action in flight). Progressive sense (\"work in progress\"), not a noun. Kept separate from `typeahead.loading` — translations may diverge."
+  },
+  "@astryx.spinner.loading": {
+    "defaultMessage": "Завантаження",
+    "description": "Screen-reader-only default name for a standalone Spinner's role=\"status\" element, used when the consumer supplies neither `aria-label` nor a visible string label. Present-progressive form. Kept separate from `button.loading` and `typeahead.loading` — translations may diverge."
   },
   "@astryx.chatComposerDrawer.expand": {
     "defaultMessage": "Розгорнути {label}",
@@ -759,6 +971,22 @@
     "defaultMessage": "Помилка: {message}",
     "description": "Screen-reader text for a tool call that failed. {message} is the error detail."
   },
+  "@astryx.chatToolCalls.status.pending": {
+    "defaultMessage": "Очікування",
+    "description": "Screen-reader-only status label for a tool call that is waiting to begin."
+  },
+  "@astryx.chatToolCalls.status.running": {
+    "defaultMessage": "Виконується",
+    "description": "Screen-reader-only status label for a tool call that is currently running."
+  },
+  "@astryx.chatToolCalls.status.complete": {
+    "defaultMessage": "Завершено",
+    "description": "Screen-reader-only status label for a tool call that completed successfully."
+  },
+  "@astryx.chatToolCalls.status.error": {
+    "defaultMessage": "Помилка",
+    "description": "Screen-reader-only status label for a failed tool call when no error detail is supplied."
+  },
   "@astryx.chatToolCalls.groupLabel": {
     "defaultMessage": "Викликів інструментів: {count}",
     "description": "Summary label shown in the group header when multiple tool calls are expanded. {count} is the number of calls."
@@ -795,9 +1023,45 @@
     "defaultMessage": "Очистити {label}",
     "description": "Screen-reader-only label on the X that removes the selected file from a FileInput. Example: `Clear Attachment`, `Clear Résumé`."
   },
+  "@astryx.fileInput.dropHint": {
+    "defaultMessage": "Перетягніть файли сюди",
+    "description": "Text shown in the dropzone area when a user is dragging files over the FileInput."
+  },
+  "@astryx.fileInput.errorInvalidType": {
+    "defaultMessage": "Файл «{fileName}» має непідтримуваний тип",
+    "description": "Validation error shown when a selected file does not match the accepted types."
+  },
+  "@astryx.fileInput.errorMaxFiles": {
+    "defaultMessage": "Максимальна кількість файлів: {maxFiles}",
+    "description": "Validation error shown when the number of selected files exceeds the maximum."
+  },
+  "@astryx.fileInput.errorMaxSize": {
+    "defaultMessage": "Розмір файлу «{fileName}» перевищує ліміт {maxSize}",
+    "description": "Validation error shown when a selected file exceeds the maximum size. {maxSize} is a formatted size string like \"2.0 MB\"."
+  },
+  "@astryx.fileInput.fileSelected": {
+    "defaultMessage": "Вибрано 1 файл: {fileName}",
+    "description": "Live-region announcement when a single file is successfully selected."
+  },
+  "@astryx.fileInput.filesSelected": {
+    "defaultMessage": "Вибрано файлів: {count}",
+    "description": "Live-region announcement when multiple files are successfully selected."
+  },
+  "@astryx.fileInput.placeholder": {
+    "defaultMessage": "Виберіть файл",
+    "description": "Default placeholder text shown when no file is selected in a single-file FileInput."
+  },
+  "@astryx.fileInput.placeholderMultiple": {
+    "defaultMessage": "Виберіть файли",
+    "description": "Default placeholder text shown when no files are selected in a multi-file FileInput."
+  },
   "@astryx.fileInput.required": {
     "defaultMessage": "Обов’язково",
     "description": "Screen-reader-only description on the FileInput trigger indicating the field must be filled in. Mirrors the visible `Required` indicator next to the field label; conveyed via description because aria-required is not supported on role=\"button\"."
+  },
+  "@astryx.fileInput.triggerWithFiles": {
+    "defaultMessage": "{label}, {fileNames}",
+    "description": "Accessible name for a FileInput trigger that has files attached, composing the field label with the selected filenames. Example: `Attachments, report.pdf, notes.txt`."
   },
   "@astryx.keyboardHint.toNavigate": {
     "defaultMessage": "для навігації",
@@ -835,6 +1099,10 @@
     "defaultMessage": "Очистити все: {label}",
     "description": "Screen-reader-only label on the X that clears every selected value from a MultiSelector. Example: `Clear all Countries`. `{label}` is typically already plural in English."
   },
+  "@astryx.input.readOnly": {
+    "defaultMessage": "Лише для читання",
+    "description": "Screen-reader-only description appended to a read-only form control when the platform does not expose aria-readonly for that control's host element. Short state label, not an instruction."
+  },
   "@astryx.input.statusButton.error": {
     "defaultMessage": "Деталі помилки",
     "description": "Accessible name for the focusable status icon button inside an input when statusVariant is 'tooltip' and the status type is error. Activating or focusing the button reveals the error message in a tooltip. Keep it short — it labels an icon-only button."
@@ -850,6 +1118,14 @@
   "@astryx.numberInput.clearLabel": {
     "defaultMessage": "Очистити {label}",
     "description": "Screen-reader-only label on the X that clears the value from a NumberInput. Example: `Clear Age`, `Clear Quantity`."
+  },
+  "@astryx.numberInput.decrementLabel": {
+    "defaultMessage": "Зменшити {label}",
+    "description": "Accessible label for the NumberInput button that decreases the value by one configured step. Example: `Decrement Quantity`."
+  },
+  "@astryx.numberInput.incrementLabel": {
+    "defaultMessage": "Збільшити {label}",
+    "description": "Accessible label for the NumberInput button that increases the value by one configured step. Example: `Increment Quantity`."
   },
   "@astryx.selector.clearLabel": {
     "defaultMessage": "Очистити {label}",
@@ -871,6 +1147,10 @@
     "defaultMessage": "Згорнути {label}",
     "description": "Screen-reader-only label on the same chevron when the group is expanded. Example: `Collapse Settings`. Pairs with `sideNavItem.expand`."
   },
+  "@astryx.sideNavItem.submenuLabel": {
+    "defaultMessage": "Підменю {label}",
+    "description": "Accessible name for the flyout dialog that opens from a collapsed (icon-only) SideNav item to show its sub-items. {label} is the parent item's label. Example: `Settings submenu`."
+  },
   "@astryx.tableFiltering.filterByColumn": {
     "defaultMessage": "Фільтрувати {header}",
     "description": "Triple-use string on per-column filter controls: visible label, placeholder, AND aria label. `{header}` is the column header — example: `Filter Name`. Keep short."
@@ -891,6 +1171,10 @@
     "defaultMessage": "Розгорнути рядок",
     "description": "Screen-reader-only label on the row-expand chevron when the row is currently collapsed. Part of a four-way set with `collapseRow`, `expandAllRows`, `collapseAllRows`."
   },
+  "@astryx.tableRowExpansion.columnHeader": {
+    "defaultMessage": "Розгортання рядка",
+    "description": "Screen-reader-only header for the leading column that holds the per-row expand/collapse chevrons. The column shows no visible label."
+  },
   "@astryx.tableRowExpansion.collapseAllRows": {
     "defaultMessage": "Згорнути всі рядки",
     "description": "Screen-reader-only label on the same header button when every row is expanded. Part of the four-way set."
@@ -899,6 +1183,18 @@
     "defaultMessage": "Розгорнути всі рядки",
     "description": "Screen-reader-only label on the header expand-all/collapse-all button when at least one row is collapsed (clicking expands every expandable row). Part of the four-way set."
   },
+  "@astryx.stepper.label": {
+    "defaultMessage": "Прогрес",
+    "description": "Screen-reader-only fallback name for the Stepper's ordered list of steps, describing the sequence as a whole (e.g. `Progress`). Used as the aria-label when the consumer does not pass a `label`. Singular per ARIA convention."
+  },
+  "@astryx.stepper.previousStep": {
+    "defaultMessage": "Попередній крок",
+    "description": "Accessible name and tooltip for the button that moves a Stepper back one step. Only rendered when the stepper is narrow enough that step labels have collapsed, and only when the stepper is navigable at all."
+  },
+  "@astryx.stepper.nextStep": {
+    "defaultMessage": "Наступний крок",
+    "description": "Accessible name and tooltip for the button that moves a Stepper forward one step. Counterpart to `stepper.previousStep`; keep the two parallel."
+  },
   "@astryx.step.goToStep": {
     "defaultMessage": "Перейти до кроку {stepNumber, number}: {label}",
     "description": "Accessible name for a clickable step in the Stepper. {stepNumber} is the 1-based position, {label} is the step's visible label."
@@ -906,6 +1202,10 @@
   "@astryx.step.goToStepWithStatus": {
     "defaultMessage": "Перейти до кроку {stepNumber, number}: {label}, {status}",
     "description": "Accessible name for a clickable Stepper step that also carries a status. {status} is one of the translated `step.status.*` words (completed/warning/error). Keep the pattern parallel to `step.goToStep`."
+  },
+  "@astryx.step.optional": {
+    "defaultMessage": "Необов’язково",
+    "description": "Visible indicator appended after a Stepper step's label when the step is optional (isOptional). Very short; appears inline after the label text."
   },
   "@astryx.step.status.completed": {
     "defaultMessage": "завершено",
@@ -982,5 +1282,181 @@
   "@astryx.token.remove": {
     "defaultMessage": "Видалити {label}",
     "description": "Screen-reader-only label on the \"×\" on an individual Token/chip. Example: `Remove John Smith`, `Remove Active`. Imperative verb."
+  },
+  "@astryx.commandPalette.footer.navigate": {
+    "defaultMessage": "Навігація",
+    "description": "Keyboard hint in the CommandPalette footer, paired with up/down arrow key icons. Tells users arrow keys move between items."
+  },
+  "@astryx.commandPalette.footer.select": {
+    "defaultMessage": "Вибрати",
+    "description": "Keyboard hint in the CommandPalette footer, paired with the Enter key icon. Tells users Enter activates the highlighted item."
+  },
+  "@astryx.commandPalette.footer.close": {
+    "defaultMessage": "Закрити",
+    "description": "Keyboard hint in the CommandPalette footer, paired with the Escape key icon. Tells users Escape dismisses the palette."
+  },
+  "@astryx.multiSelector.selectionCleared": {
+    "defaultMessage": "Вибір очищено",
+    "description": "Polite screen-reader announcement after the last selected option in a MultiSelector is deselected. Live-region text, never shown on screen; past participle (\"has been cleared\")."
+  },
+  "@astryx.multiSelector.allSelected": {
+    "defaultMessage": "Вибрано все",
+    "description": "Polite screen-reader announcement after every option in a MultiSelector becomes selected. Live-region text, never shown on screen; \"all\" is a determiner (as in \"all the options\")."
+  },
+  "@astryx.multiSelector.selectionCount": {
+    "defaultMessage": "Вибрано {count, number} з {total, number}",
+    "description": "Polite screen-reader announcement of how many MultiSelector options are selected out of the total, spoken after each toggle. Live-region text, never shown on screen; example: `3 of 12 selected`."
+  },
+  "@astryx.multiSelector.emptySearchResults": {
+    "defaultMessage": "Результатів не знайдено",
+    "description": "Shown in a MultiSelector's dropdown panel when the search query matches no options, and announced in a polite live region at the same time. Short; neutral tone (not error-y)."
+  },
+  "@astryx.multiSelector.resultCount": {
+    "defaultMessage": "{count, number} {count, plural, one {результат} few {результати} many {результатів} other {результату}}",
+    "description": "Polite screen-reader announcement of how many MultiSelector options match the search query, spoken as the user types. Live-region text, never shown on screen; example: `1 result`, `12 results`."
+  },
+  "@astryx.selector.emptySearchResults": {
+    "defaultMessage": "Результатів не знайдено",
+    "description": "Shown in a Selector's dropdown panel when the search query matches no options, and announced in a polite live region at the same time. Short; neutral tone (not error-y)."
+  },
+  "@astryx.selector.resultCount": {
+    "defaultMessage": "{count, number} {count, plural, one {результат} few {результати} many {результатів} other {результату}}",
+    "description": "Polite screen-reader announcement of how many Selector options match the search query, spoken as the user types. Live-region text, never shown on screen; example: `1 result`, `12 results`."
+  },
+  "@astryx.typeahead.resultCount": {
+    "defaultMessage": "{count, number} {count, plural, one {результат} few {результати} many {результатів} other {результату}}",
+    "description": "Polite screen-reader announcement of how many suggestions a Typeahead search returned. Live-region text, never shown on screen; example: `1 result`, `12 results`."
+  },
+  "@astryx.tokenizer.tokenAdded": {
+    "defaultMessage": "Додано {label}",
+    "description": "Polite screen-reader announcement after a token is added to a Tokenizer, either picked from the suggestions or newly created. Live-region text, never shown on screen; `{label}` is the token's visible text."
+  },
+  "@astryx.tokenizer.tokenRemoved": {
+    "defaultMessage": "Видалено {label}",
+    "description": "Polite screen-reader announcement after a token is removed from a Tokenizer, by its × button or by Backspace. Live-region text, never shown on screen; `{label}` is the token's visible text."
+  },
+  "@astryx.lightbox.imagePosition": {
+    "defaultMessage": "Зображення {index, number} з {total, number}",
+    "description": "Polite screen-reader announcement when a Lightbox moves to a media item that has no alt text. Live-region text, never shown on screen; `{index}` is 1-based, example: `Image 3 of 12`."
+  },
+  "@astryx.lightbox.mediaPosition": {
+    "defaultMessage": "{alt}, {index, number} з {total, number}",
+    "description": "Polite screen-reader announcement when a Lightbox moves to a media item that has alt text, composing that alt with the item's position. Live-region text, never shown on screen; example: `Sunset over the bay, 3 of 12`."
+  },
+  "@astryx.transferList.selectedLabel": {
+    "defaultMessage": "Вибрані",
+    "description": "Default heading above the right-hand panel of a lab TransferList, which holds the options the user has chosen. Consumers usually override this with a domain noun (e.g. \"Shown columns\")."
+  },
+  "@astryx.transferList.availableLabel": {
+    "defaultMessage": "Доступні",
+    "description": "Default heading above the left-hand panel of a lab TransferList, which holds the options not yet chosen. Consumers usually override this with a domain noun (e.g. \"Hidden columns\")."
+  },
+  "@astryx.transferList.ungroupedLabel": {
+    "defaultMessage": "Інші",
+    "description": "Heading for the bucket of available options that have no `group` set, shown only when some options are grouped and some are not so the ungrouped ones still have a heading."
+  },
+  "@astryx.transferList.searchPlaceholder": {
+    "defaultMessage": "Пошук…",
+    "description": "Placeholder in the single search field that filters both panels of a lab TransferList. Same English as `selector.searchPlaceholder` but a separate key so it can be phrased for two lists."
+  },
+  "@astryx.transferList.searchLabel": {
+    "defaultMessage": "Пошук: {label}",
+    "description": "Screen-reader-only label on the search field of a lab TransferList, naming what is being searched. `{label}` is the component's own label (e.g. \"Search Table columns\")."
+  },
+  "@astryx.transferList.selectedEmpty": {
+    "defaultMessage": "Немає вибраних параметрів",
+    "description": "Message shown inside the selected panel of a lab TransferList when the user has chosen nothing yet."
+  },
+  "@astryx.transferList.availableEmpty": {
+    "defaultMessage": "Немає доступних параметрів",
+    "description": "Message shown inside the available panel of a lab TransferList when every option has already been moved to the selected panel."
+  },
+  "@astryx.transferList.noResults": {
+    "defaultMessage": "Немає результатів",
+    "description": "Message shown inside either panel of a lab TransferList when the search query matches nothing in that panel."
+  },
+  "@astryx.transferList.clear": {
+    "defaultMessage": "Очистити",
+    "description": "Label on the bulk action in a lab TransferList's selected-panel header that removes every option that is allowed to be removed. Locked options stay."
+  },
+  "@astryx.transferList.addAll": {
+    "defaultMessage": "Додати все",
+    "description": "Label on the bulk action in a lab TransferList's available-panel header that moves every remaining option into the selected panel."
+  },
+  "@astryx.transferList.addOption": {
+    "defaultMessage": "Додати {label}",
+    "description": "Accessible label on the per-row + button that moves one option into the selected panel of a lab TransferList. `{label}` is that option's visible text (e.g. \"Add Owner\")."
+  },
+  "@astryx.transferList.removeOption": {
+    "defaultMessage": "Видалити {label}",
+    "description": "Accessible label on the per-row × button that moves one option out of the selected panel of a lab TransferList. `{label}` is that option's visible text (e.g. \"Remove Name\")."
+  },
+  "@astryx.transferList.reorderOption": {
+    "defaultMessage": "Змінити порядок: {label}",
+    "description": "Accessible label on the per-row drag handle that reorders one option within the selected panel of a lab TransferList. `{label}` is that option's visible text (e.g. \"Reorder Name\")."
+  },
+  "@astryx.transferList.transferDisabled": {
+    "defaultMessage": "{label} не можна перемістити",
+    "description": "Default tooltip explaining why a locked option in a lab TransferList cannot be transferred between panels. `{label}` is the option's visible text. Consumers may override per option."
+  },
+  "@astryx.transferList.reorderDisabled": {
+    "defaultMessage": "Неможливо змінити порядок: {label}",
+    "description": "Default tooltip explaining why a locked option in a lab TransferList cannot be moved within the selected panel. `{label}` is the option's visible text. Consumers may override per option."
+  },
+  "@astryx.transferList.reorderInstructions": {
+    "defaultMessage": "Натисніть Space або Enter, щоб підняти елемент. Використовуйте Arrow Up, Arrow Down, Home або End для переміщення. Натисніть Space або Enter, щоб опустити, або Escape, щоб скасувати.",
+    "description": "Screen-reader-only instructions describing the keyboard reorder contract, referenced by every drag handle in a lab TransferList. Never shown on screen. Name the actual keys your locale's users press."
+  },
+  "@astryx.transferList.announceAdded": {
+    "defaultMessage": "Додано {label}. Вибрано {count, number} {count, plural, one {елемент} few {елементи} many {елементів} other {елемента}}.",
+    "description": "Polite screen-reader announcement after one option moves into the selected panel of a lab TransferList. Live-region text, never shown on screen; `{label}` is the option's visible text and `{count}` is the new selected total."
+  },
+  "@astryx.transferList.announceRemoved": {
+    "defaultMessage": "Видалено {label}. Вибрано {count, number} {count, plural, one {елемент} few {елементи} many {елементів} other {елемента}}.",
+    "description": "Polite screen-reader announcement after one option moves out of the selected panel of a lab TransferList. Live-region text, never shown on screen; `{label}` is the option's visible text and `{count}` is the new selected total."
+  },
+  "@astryx.transferList.announceBulkAdded": {
+    "defaultMessage": "Додано {count, number} {count, plural, one {елемент} few {елементи} many {елементів} other {елемента}}.",
+    "description": "Polite screen-reader announcement after the Add all bulk action in a lab TransferList. Live-region text, never shown on screen; `{count}` is how many options moved."
+  },
+  "@astryx.transferList.announceBulkRemoved": {
+    "defaultMessage": "Видалено {count, number} {count, plural, one {елемент} few {елементи} many {елементів} other {елемента}}.",
+    "description": "Polite screen-reader announcement after the Clear bulk action in a lab TransferList. Live-region text, never shown on screen; `{count}` is how many options moved."
+  },
+  "@astryx.transferList.announceGrabbed": {
+    "defaultMessage": "Піднято {label}, позиція {position, number} з {total, number}. Використовуйте стрілки для переміщення, Space або Enter, щоб опустити, або Escape, щоб скасувати.",
+    "description": "Polite screen-reader announcement when a lab TransferList row enters keyboard reorder mode. Live-region text, never shown on screen; `{position}` is 1-based within the selected panel."
+  },
+  "@astryx.transferList.announceMoveCancelled": {
+    "defaultMessage": "Переміщення {label} скасовано.",
+    "description": "Polite screen-reader announcement when a lab TransferList reorder is abandoned with Escape or a cancelled pointer drag, restoring the original order. Live-region text, never shown on screen."
+  },
+  "@astryx.transferList.announceDropped": {
+    "defaultMessage": "{label} опущено на позицію {position, number} з {total, number}.",
+    "description": "Polite screen-reader announcement when a lab TransferList reorder commits at a new position. Live-region text, never shown on screen; `{position}` is 1-based within the selected panel."
+  },
+  "@astryx.transferList.announceReturned": {
+    "defaultMessage": "{label} повернуто на позицію {position, number}.",
+    "description": "Polite screen-reader announcement when a lab TransferList pointer drag ends where it began, so the order did not change. Live-region text, never shown on screen; `{position}` is 1-based."
+  },
+  "@astryx.transferList.announceMovedToPosition": {
+    "defaultMessage": "{label}, позиція {position, number} з {total, number}.",
+    "description": "Polite screen-reader announcement after each arrow-key step of an in-progress lab TransferList reorder. Live-region text, never shown on screen; `{position}` is 1-based within the selected panel."
+  },
+  "@astryx.transferList.announceSearchResults": {
+    "defaultMessage": "Знайдено {count, number} {count, plural, one {елемент} few {елементи} many {елементів} other {елемента}}.",
+    "description": "Polite screen-reader announcement of how many options a lab TransferList search matched across both panels. Live-region text, never shown on screen."
+  },
+  "@astryx.transferListSelector.apply": {
+    "defaultMessage": "Застосувати",
+    "description": "Label on the button that commits the staged draft of a lab TransferListSelector and closes it. Only rendered in staged commit mode."
+  },
+  "@astryx.transferListSelector.cancel": {
+    "defaultMessage": "Скасувати",
+    "description": "Label on the button that discards the staged draft of a lab TransferListSelector and closes it. Only rendered in staged commit mode."
+  },
+  "@astryx.transferListSelector.triggerLabel": {
+    "defaultMessage": "Вибрано: {count, number}",
+    "description": "Default summary on the closed trigger of a lab TransferListSelector, stating how many options are currently chosen. Consumers usually override this with a domain phrase (e.g. \"7 columns\")."
   }
 }

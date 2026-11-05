@@ -1,0 +1,371 @@
+{
+  "recipe": "astryx-oklch-v1",
+  "vibrancy": 36,
+  "neutralProfile": "custom",
+  "modeStrategy": "dark-only",
+  "stops": [
+    0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90,
+    95, 100
+  ],
+  "families": [
+    {
+      "id": "neutral",
+      "name": "Gothic Neutral",
+      "seed": "#5d646b",
+      "kind": "neutral",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 10,
+          "color": "#101314",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 20,
+          "color": "#24292d",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 40,
+          "color": "#495056",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#96a0ab",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 95,
+          "color": "#e8f1f6",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "red",
+      "name": "Blood Crimson",
+      "seed": "#7d5e51",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 20,
+          "color": "#4a2520",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 30,
+          "color": "#5e3a35",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#a48581",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#c6a6a2",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "orange",
+      "name": "Rust Copper",
+      "seed": "#c87a4a",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 20,
+          "color": "#6e3812",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 30,
+          "color": "#8a4818",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#b6987d",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#d3b89a",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "yellow",
+      "name": "Aged Gold",
+      "seed": "#cca74c",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 20,
+          "color": "#6c5010",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 30,
+          "color": "#876515",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#b6a775",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 65,
+          "color": "#e6b85e",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#dec074",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#d3c490",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "green",
+      "name": "Forest Moss",
+      "seed": "#779e5d",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 20,
+          "color": "#244023",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 30,
+          "color": "#3a5e2c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#96a880",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#a3c987",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#b3c79a",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "teal",
+      "name": "Verdigris",
+      "seed": "#5aa091",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 20,
+          "color": "#174a40",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 30,
+          "color": "#1f5e52",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#86a499",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#7cc5b3",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#a3c2b6",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "cyan",
+      "name": "Cathedral Mist",
+      "seed": "#6a9eb1",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 20,
+          "color": "#204858",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 30,
+          "color": "#2a5e75",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#86a4b1",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#a3c2cf",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "blue",
+      "name": "Midnight Indigo",
+      "seed": "#6170bf",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 20,
+          "color": "#1f2c54",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 30,
+          "color": "#2a3b6e",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#8696b8",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 65,
+          "color": "#8aa1d8",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#a3b5d6",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "purple",
+      "name": "Cathedral Plum",
+      "seed": "#a363bd",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 20,
+          "color": "#481b58",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 30,
+          "color": "#5a2370",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#947da6",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#b29bc4",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 80,
+          "color": "#c39adb",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "pink",
+      "name": "Rose Madder",
+      "seed": "#b15876",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 20,
+          "color": "#71223c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 30,
+          "color": "#8d2d4c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#aa7d8e",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 65,
+          "color": "#d97580",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#c89aab",
+          "policy": "exact"
+        }
+      ]
+    }
+  ]
+}

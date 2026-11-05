@@ -134,6 +134,8 @@ export interface CheckAccessibilitySpecOptions<Facts> {
    * binding must begin recording before the subject can receive focus.
    */
   readonly initialFocusEntry?: () => Promise<InitialFocusEntryObservation>;
+  /** Perform one named public state transition required by the pattern. */
+  readonly transition?: (name: string) => Promise<void> | void;
   /**
    * Run only these expectation ids. Used by the contract's own mutation proof,
    * which asks one expectation at a time whether it notices its outcome being
@@ -265,6 +267,14 @@ export async function checkAccessibilitySpec<Facts>(
             );
           }
           return options.initialFocusEntry();
+        },
+        transition: async name => {
+          if (options.transition == null) {
+            throw new MissingBindingCapability(
+              `${expectation.id} requests the "${name}" transition, but this binding supplies no transition driver`,
+            );
+          }
+          await options.transition(name);
         },
       });
     } catch (error) {

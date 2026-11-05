@@ -87,7 +87,10 @@ wrapper, or a header-like visual treatment.
   painted surface, variant, and selected divider edges to Section.
 - `architecture:container-padding` owns inherited inset and bleed mechanics.
 - useResizable and ResizeHandle own resize state and interaction. LayoutPanel
-  only accepts their current size as an alternative width owner.
+  accepts their current size as an alternative width owner, lends its element
+  to the resize controller for the edge reveal on collapse and open, and owns
+  the focus move and inert state of a collapsing panel
+  (`component:LayoutPanel` FR7, AR2).
 
 ## Canonical concepts
 
@@ -107,12 +110,15 @@ wrapper, or a header-like visual treatment.
 
 - **FR1 — A region owns structure, not product meaning.** A member establishes a
   spatial boundary and renders caller content without adopting the content's
-  product semantics, state, or component contracts.
+  product semantics, state, or component contracts. Toolbar's press
+  tracking across its buttons (`family:action-groups` FR5) is the one
+  exception.
 - **FR2 — Region direction is logical.** Start and end follow writing direction.
   Divider placement and panel adjacency use the same logical region position.
 - **FR3 — Layout selects geometry from slot presence.** Header, Content, Footer,
   and Panel apply outer inset where they touch the Layout boundary and inner
-  inset where they meet another region. Omitted slots do not leave an area
+  inset where they meet another region. LayoutContent keeps its root as the
+  scroll, padding, and direct-child owner. Omitted slots do not leave an area
   wrapper. The inherited geometry republished to full-bleed descendants is
   subject to the current LayoutContent/LayoutPanel conformance gap in
   `architecture:container-padding`.
@@ -140,7 +146,9 @@ wrapper, or a header-like visual treatment.
 - **FR9 — Responsive substitution is not automatic.** Section and Toolbar keep
   their current presentation. Layout renders the regions supplied by the
   caller. AppShell, product composition, or another component-specific owner
-  decides when a region is omitted or replaced at a narrower width.
+  decides when a region is omitted or replaced at a narrower width. AppShell
+  keeps main content mounted (state preserved) when crossing the mobile
+  breakpoint.
 - **FR10 — Resize ownership remains delegated.** A LayoutPanel with `resizable`
   uses the hook-provided current size instead of its `width` prop. The region
   family does not redefine snapping, persistence, collapse, keyboard, or pointer
@@ -150,6 +158,15 @@ wrapper, or a header-like visual treatment.
   and capabilities, runtime `themeProps()` emits them, and
   `architecture:component-theming-surface` owns the cross-component rules. A
   component spec may add optional anatomy-mapping metadata when one exists.
+- **FR12 — Content width keeps the scrollbar at the open content edge.** When
+  `contentWidth` is set without panels, LayoutContent spans the available middle
+  area and aligns its direct children through context-aware inline insets. With
+  exactly one panel, that panel stays aligned to the centered frame while
+  LayoutContent extends through the opposite open side. The mirrored start/end
+  cases use the same rule. With both panels, the complete middle composition
+  stays constrained. Percentage and intrinsic width values, plus bare variables,
+  keep the constrained composition because they cannot safely share one alignment
+  basis; `calc(var(...))` is the explicit length-valued variable path.
 
 ## Allowed component variation
 
@@ -164,7 +181,8 @@ wrapper, or a header-like visual treatment.
 - **AV4 — Size model.** Layout owns fill/auto container height and content-width
   propagation; individual regions own applicable height, width, padding, and
   scroll props; Section owns its box-size props.
-- **AV5 — Interaction.** Toolbar owns roving focus and keyboard hints. Other
+- **AV5 — Interaction.** Toolbar owns roving focus, keyboard hints, and the
+  press tracking `family:action-groups` FR5 gives it across its buttons. Other
   members add no toolbar behavior. Resizable owns resize interaction.
 - **AV6 — Composition mechanism.** Members may use Stack utilities, direct CSS
   layout, contexts, or component composition. The observable region contract is
@@ -174,27 +192,27 @@ wrapper, or a header-like visual treatment.
 
 ## Representative matrix
 
-| Member and state                                 | Shared invariant                                                | Deliberate variation                                                                 |
-| ------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Section / default, transparent, or muted         | Owns one generic region and publishes its applied inset         | Variant and selected divider edges are Section-local                                 |
-| Layout / content only                            | Slot presence selects Layout-edge inset                         | Children are a shorthand for the content slot; explicit content wins                 |
-| Layout / all regions                             | Start/end stay logical; named regions receive outer/inner inset | Header, content, footer, and panels expose different size/scroll controls            |
-| LayoutHeader or LayoutFooter / divider inherited | One boundary owner and explicit landmark semantics              | Parent `defaultHasDividers` supplies the default; local false may override it        |
-| LayoutContent / scrollable or page-owned         | Region owns current overflow choice                             | `isScrollable={false}` supports parent/page scrolling and sticky descendants         |
-| LayoutPanel / fixed or resize-driven             | Panel position selects edge treatment                           | useResizable may replace width ownership; ResizeHandle retains interaction ownership |
-| Toolbar / two or three lanes                     | Contextual action region delegates its surface to Section       | Center content switches internal arrangement; toolbar alone owns keyboard behavior   |
+| Member and state                                 | Shared invariant                                                | Deliberate variation                                                                                                              |
+| ------------------------------------------------ | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Section / default, transparent, or muted         | Owns one generic region and publishes its applied inset         | Variant and selected divider edges are Section-local                                                                              |
+| Layout / content only                            | Slot presence selects Layout-edge inset                         | With `contentWidth`, LayoutContent spans the middle area, aligns children internally, and keeps its scrollbar at the Layout edge  |
+| Layout / all regions                             | Start/end stay logical; named regions receive outer/inner inset | With exactly one panel, content extends to the opposite open edge; with both panels, the complete composition remains constrained |
+| LayoutHeader or LayoutFooter / divider inherited | One boundary owner and explicit landmark semantics              | Parent `defaultHasDividers` supplies the default; local false may override it                                                     |
+| LayoutContent / scrollable or page-owned         | Region owns current overflow choice                             | `isScrollable={false}` supports parent/page scrolling and sticky descendants                                                      |
+| LayoutPanel / fixed or resize-driven             | Panel position selects edge treatment                           | useResizable may replace width ownership; ResizeHandle retains interaction ownership                                              |
+| Toolbar / two or three lanes                     | Contextual action region delegates its surface to Section       | Center content switches internal arrangement; toolbar alone owns keyboard behavior                                                |
 
 ## Adoption and exceptions
 
-| Component or concern | Adoption                                                          | Current gap or exception                                                                                                                                                             |
-| -------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Section              | Generic region and container-padding publisher                    | Its nested escape is always inline but only first/last child on the block axis                                                                                                       |
-| Layout container     | Five-slot region owner with slot contexts                         | Source applies `contentWidth` to the middle row and propagates it to header/footer wrappers, but tests do not prove contentWidth-specific style or rendered panel/content allocation |
-| LayoutContent        | Reads slot presence and applies outer/inner inset                 | Its no-start path writes the outer value to both inline geometry variables, while no-end changes padding without the matching variable update                                        |
-| LayoutPanel          | Applies position-aware padding and may accept resize-driven width | Automatic Layout-edge padding leaves baseline inner geometry variables; an adjacent `ResizeHandle hasDivider` can double the line unless the caller sets panel `hasDivider={false}`  |
-| LayoutHeader/Footer  | Region-specific inset, boundary, and landmarks                    | Cross-region computed-style parity is not covered by one browser matrix                                                                                                              |
-| Toolbar              | Section-backed surface plus toolbar behavior                      | Inline inset and edge compensation follow the composed Section's current padding context                                                                                             |
-| Responsive regions   | Caller/AppShell composition                                       | LayoutPanel has no current shared responsive visibility contract                                                                                                                     |
+| Component or concern | Adoption                                                          | Current gap or exception                                                                                                                                                                                                                                                                                                                                                    |
+| -------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Section              | Generic region and container-padding publisher                    | Its nested escape is always inline but only first/last child on the block axis                                                                                                                                                                                                                                                                                              |
+| Layout container     | Five-slot region owner with slot contexts                         | Content-only LayoutContent stays full width and aligns direct children through insets. With exactly one panel, the panel remains aligned while content extends to the opposite open edge. With both panels or intrinsic content widths, the middle composition stays constrained. Tests cover topology; browser evidence covers mirrored alignment and scrollbar placement. |
+| LayoutContent        | Reads slot presence and applies outer/inner inset                 | Its no-start path writes the outer value to both inline geometry variables, so with only an end panel the inline-end variable differs from the applied inner inset; beside a header or footer without a divider the block edge applies zero but publishes the inner inset                                                                                                   |
+| LayoutPanel          | Applies position-aware padding and may accept resize-driven width | Automatic Layout-edge padding leaves baseline inner geometry variables; an adjacent `ResizeHandle hasDivider` can double the line unless the caller sets panel `hasDivider={false}`                                                                                                                                                                                         |
+| LayoutHeader/Footer  | Region-specific inset, boundary, and landmarks                    | Cross-region computed-style parity is not covered by one browser matrix                                                                                                                                                                                                                                                                                                     |
+| Toolbar              | Section-backed surface plus toolbar behavior                      | Inline inset and edge compensation follow the composed Section's current padding context                                                                                                                                                                                                                                                                                    |
+| Responsive regions   | Caller/AppShell composition                                       | LayoutPanel has no current shared responsive visibility contract                                                                                                                                                                                                                                                                                                            |
 
 These rows describe shipped behavior and verification gaps. They are not approved
 exceptions to silently change in a documentation pull request.
@@ -220,18 +238,18 @@ exceptions to silently change in a documentation pull request.
 
 ## Verification map
 
-| Contract             | Verification                                                  | What the evidence proves                                                                                                     | Missing evidence                                                                                                                                                                             |
-| -------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1                  | Section/Layout/Toolbar render and slot tests                  | Caller content renders inside the current region structure; Toolbar exposes its current lanes                                | Tests do not independently prove that product semantics remain caller-owned                                                                                                                  |
-| FR2                  | Logical-property source review plus Layout area-context tests | Start/end slots are identified logically and source selects logical divider/padding properties                               | No real-browser LTR/RTL geometry matrix covers every region                                                                                                                                  |
-| FR3                  | `Layout.test.tsx` and `childrenAsContent.test.tsx`            | Slot presence/context and content precedence are pinned; omitted slots do not render area providers                          | Tests do not assert computed outer/inner inset or exact descendant geometry; the published-variable mismatch is a named conformance gap                                                      |
-| FR4                  | Section padding class-set tests and Layout region source      | Section's explicit edge overrides move matching variables; region source has automatic, explicit, and zero-padding branches  | Layout tests mostly assert acceptance/rendering, not computed padding or automatic-variable parity                                                                                           |
-| FR5, FR6             | `Layout.test.tsx` and `LayoutSlots.test.tsx`                  | Header/footer divider defaults and explicit false overrides are reflected in `data-divider`; source contains collapse styles | No rendered test prevents a LayoutPanel and adjacent ResizeHandle from both drawing a divider, or proves computed collapse spacing                                                           |
-| FR7                  | LayoutContent/LayoutPanel source and local class/render tests | The two regions expose their current `isScrollable` branches; Layout exposes fill/auto state                                 | No browser test proves scroll ownership across every shell/region composition                                                                                                                |
-| FR8                  | `LayoutSlots.test.tsx` landmark assertions                    | Supplied roles and labels reach Header, Content, Footer, and Panel elements                                                  | No family-wide accessibility-tree test covers repeated landmarks                                                                                                                             |
-| Layout content width | `contentWidth.test.tsx`                                       | Header/footer always have distinct inner wrappers, and divider state remains on their outer region elements                  | The middle-row assertion checks only for a truthy class and does not prove contentWidth-specific style; computed width, panel/content allocation, and consumer-doc wording remain unverified |
-| Toolbar variation    | `Toolbar.test.tsx`                                            | Lanes, role/name/orientation, Section variant delegation, and current keyboard behavior have focused assertions              | No computed inset/edge-compensation test covers non-default parent padding                                                                                                                   |
-| FR10                 | LayoutPanel coverage in `LayoutSlots.test.tsx`                | Hook-provided `_size` overrides the fixed width prop                                                                         | Resize interaction, persistence, snapping, and collapse are verified only by Resizable's own tests                                                                                           |
+| Contract             | Verification                                                     | What the evidence proves                                                                                                                                                                                              | Missing evidence                                                                                                                        |
+| -------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1                  | Section/Layout/Toolbar render and slot tests                     | Caller content renders inside the current region structure; Toolbar exposes its current lanes                                                                                                                         | Tests do not independently prove that product semantics remain caller-owned                                                             |
+| FR2                  | Logical-property source review plus Layout area-context tests    | Start/end slots are identified logically and source selects logical divider/padding properties                                                                                                                        | No real-browser LTR/RTL geometry matrix covers every region                                                                             |
+| FR3                  | `Layout.test.tsx` and `childrenAsContent.test.tsx`               | Slot presence/context and content precedence are pinned; omitted slots do not render area providers                                                                                                                   | Tests do not assert computed outer/inner inset or exact descendant geometry; the published-variable mismatch is a named conformance gap |
+| FR4                  | Section padding class-set tests and Layout region source         | Section's explicit edge overrides move matching variables; region source has automatic, explicit, and zero-padding branches                                                                                           | Layout tests mostly assert acceptance/rendering, not computed padding or automatic-variable parity                                      |
+| FR5, FR6             | `Layout.test.tsx` and `LayoutSlots.test.tsx`                     | Header/footer divider defaults and explicit false overrides are reflected in `data-divider`; source contains collapse styles                                                                                          | No rendered test prevents a LayoutPanel and adjacent ResizeHandle from both drawing a divider, or proves computed collapse spacing      |
+| FR7                  | LayoutContent/LayoutPanel source and local class/render tests    | The two regions expose their current `isScrollable` branches; Layout exposes fill/auto state                                                                                                                          | No browser test proves scroll ownership across every shell/region composition                                                           |
+| FR8                  | `LayoutSlots.test.tsx` landmark assertions                       | Supplied roles and labels reach Header, Content, Footer, and Panel elements                                                                                                                                           | No family-wide accessibility-tree test covers repeated landmarks                                                                        |
+| Layout content width | `contentWidth.test.tsx` and Storybook scrollbar-placement states | Header/footer retain aligned wrappers; no-panel LayoutContent owns a full-width scroll region; either single-panel state mirrors content through the opposite open edge; both panels keep the composition constrained | Real-browser evidence verifies computed content alignment and scrollbar placement across the four panel states                          |
+| Toolbar variation    | `Toolbar.test.tsx`                                               | Lanes, role/name/orientation, Section variant delegation, and current keyboard behavior have focused assertions                                                                                                       | No computed inset/edge-compensation test covers non-default parent padding                                                              |
+| FR10                 | LayoutPanel coverage in `LayoutSlots.test.tsx`                   | Hook-provided `_size` overrides the fixed width prop                                                                                                                                                                  | Resize interaction, persistence, snapping, and collapse are verified only by Resizable's own tests                                      |
 
 The current tests prove selected structure, attributes, callbacks, and class/style
 branches. They do not prove one computed visual alignment across every Section,
@@ -257,6 +275,19 @@ AppShell owns the page shell and application-navigation composition. Layout is
 the general five-slot primitive used to arrange `header`, `start`, `content`,
 `end`, and `footer` regions within a page or bounded container. The broader
 container-padding participants retain their own component ownership.
+
+### DEC-3 — Content-only width alignment stays inside the content scrollport
+
+**Decider:** `cixzhang`, `2026-09-09`
+
+When `contentWidth` is set without panels, LayoutContent spans the available
+middle area and aligns its direct children through context-aware inline insets.
+With exactly one panel, that panel remains aligned to the centered frame while
+LayoutContent extends through the opposite open side. Logical start and end
+mirror. With both panels, or when the width is percentage-based, intrinsic, or
+an unresolved bare variable and cannot safely share one CSS arithmetic basis, the
+complete middle composition stays constrained. A guaranteed length-valued
+variable uses `calc(var(...))` to opt into edge scrolling.
 
 ## Open questions
 

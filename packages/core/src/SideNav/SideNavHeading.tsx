@@ -4,7 +4,8 @@
 
 /**
  * @file SideNavHeading.tsx
- * @input Uses React, useRef, useCallback, ReactNode, StyleX, usePopover
+ * @input Uses React, useRef, useCallback, ReactNode, StyleX, usePopover,
+ *        useMenuHover
  * @output Exports SideNavHeading component and SideNavHeadingProps
  * @position Core implementation; used inside SideNav header slot
  *
@@ -38,6 +39,7 @@ import {Tooltip} from '../Tooltip';
 import {navItemStyles} from '../NavItem/navItemStyles.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useSideNavCollapse} from './SideNavCollapseContext';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
@@ -45,13 +47,31 @@ import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {useMenuHover} from '../hooks/useMenuHover';
-import {NavHeadingCloseContext} from '../NavMenu/NavMenuContext';
+import {useMenuPress} from '../hooks/useMenuPress';
+import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
+import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
+import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
+import {
+  NavHeadingCloseContext,
+  NavHeadingDismissContext,
+} from '../NavMenu/NavMenuContext';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/SideNav/SideNavHeading.generated';
+import {isRenderable} from '../utils/isRenderable';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Styles
 // =============================================================================
+
+/** The rows a press can act on in the heading's menu. */
+const HEADING_MENU_ITEM_SELECTOR =
+  '[role="menuitem"]:not([aria-disabled="true"])';
 
 const styles = stylex.create({
   root: {
@@ -187,6 +207,17 @@ const styles = stylex.create({
     // today. The 28px min box still wins over Icon's width/height.
     fontSize: 'inherit',
   },
+  // The link part of a whole-heading link row that also has end content.
+  linkBesideEndContent: {
+    display: 'flex',
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    gap: spacingVars['--spacing-2'],
+    flexGrow: 1,
+    minWidth: 0,
+    textDecoration: 'none',
+    color: 'inherit',
+  },
   headerEndContent: {
     flexShrink: 0,
     display: 'flex',
@@ -204,7 +235,8 @@ const styles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
     width: '100%',
-    border: 'none',
+    borderWidth: 0,
+    borderStyle: 'none',
     backgroundColor: 'transparent',
     fontFamily: 'inherit',
     fontSize: 'inherit',
@@ -367,7 +399,8 @@ export function SideNavHeading({
   ref,
   ...props
 }: SideNavHeadingProps) {
-  const t = useTranslator();
+  const pressable = usePressFeedback();
+  const t = useComponentTranslator();
   const LinkComponent = useLinkComponent(as);
   const {isCollapsed} = useSideNavCollapse();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -394,7 +427,35 @@ export function SideNavHeading({
     isOpen: popover.isOpen,
     isEnabled: !!menu,
     showDelay: 0,
+    // Collapsed, the flyout opens beside the icon button, so a press on the
+    // button lands outside the auto popover and the browser would light-dismiss
+    // a hover-open before the click guard can confirm it. Expanded, the panel
+    // overlaps the heading, and the trigger is a <div> whose click must not be
+    // default-prevented: it holds the heading's own links.
+    popoverId: isCollapsed ? popover.id : undefined,
   });
+
+  // A press that slides across the menu's items acts on the item it lifts on,
+  // the highlight following the pointer (`family:action-groups` FR1-FR3,
+  // FR5); a mouse released outside closes it. Only the role="menu" region is
+  // tracked, not the heading button above it.
+  const headingMenuRef = useRef<HTMLDivElement>(null);
+  const headingMenuPress = useMenuPress({
+    menuRef: headingMenuRef,
+    itemSelector: HEADING_MENU_ITEM_SELECTOR,
+    onDismiss: closeMenu,
+    isEnabled: !!menu,
+  });
+  const headingMenuPointerDown = pressOnItemsOnly(
+    headingMenuPress.menuProps.onPointerDown,
+    HEADING_MENU_ITEM_SELECTOR,
+  );
+  const dismissCtx = useMemo(() => ({dismiss: closeMenu}), [closeMenu]);
+  const headingMenuTouch = stylex.props(
+    useMenuOverflow(headingMenuRef, menu, popover.isOpen)
+      ? menuTouchActionStyles.scrolls
+      : menuTouchActionStyles.fits,
+  );
 
   const closeMenuCtx = useMemo(() => ({closeMenu}), [closeMenu]);
 
@@ -414,11 +475,13 @@ export function SideNavHeading({
     menu ? setTriggerEl : undefined,
   );
 
-  // In collapsed mode: hide if no icon, show icon-only if has icon
-  if (isCollapsed && !icon) {
+  // In collapsed mode: hide if no icon, show icon-only if has icon. Icon
+  // presence follows `isRenderable` (`architecture:react-component-runtime`
+  // INV16), so `0` is an icon like any other content.
+  if (isCollapsed && !isRenderable(icon)) {
     return null;
   }
-  if (isCollapsed && icon) {
+  if (isCollapsed) {
     const collapsedIcon = <span {...stylex.props(styles.icon)}>{icon}</span>;
 
     let collapsedElement: ReactNode;
@@ -429,6 +492,7 @@ export function SideNavHeading({
           ref={collapsedSetRef as React.Ref<HTMLAnchorElement>}
           href={headingHref}
           aria-label={heading}
+          {...pressable}
           data-testid={testId}
           {...mergeProps(
             themeProps('side-nav-heading'),
@@ -451,6 +515,7 @@ export function SideNavHeading({
             ref={collapsedSetRef}
             type="button"
             aria-label={heading}
+            {...pressable}
             data-testid={testId}
             {...popover.triggerProps}
             {...triggerProps}
@@ -478,7 +543,9 @@ export function SideNavHeading({
                 {...focusOutlineProps.focusVisible(styles.popoverHeading)}
                 // A close affordance, not the trigger: dismiss only.
                 onClick={closeMenu}>
-                {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+                {isRenderable(icon) && (
+                  <span {...stylex.props(styles.icon)}>{icon}</span>
+                )}
                 <span {...stylex.props(styles.textContainer)}>
                   {superheading && (
                     <span {...stylex.props(styles.superheading)}>
@@ -510,7 +577,13 @@ export function SideNavHeading({
               {/* The menu role is scoped to the actual menu items so the
                   heading button above stays a valid sibling, not an invalid
                   child of a role="menu" element. */}
-              <div role="menu" aria-label={heading}>
+              <div
+                ref={headingMenuRef}
+                role="menu"
+                aria-label={heading}
+                {...headingMenuPress.menuProps}
+                onPointerDown={headingMenuPointerDown}
+                {...headingMenuTouch}>
                 <NavHeadingCloseContext value={closeMenuCtx}>
                   {menu}
                 </NavHeadingCloseContext>
@@ -604,7 +677,7 @@ export function SideNavHeading({
     />
   );
 
-  const headerEndContentElement = headerEndContent && (
+  const headerEndContentElement = isRenderable(headerEndContent) && (
     <span {...stylex.props(styles.headerEndContent)}>{headerEndContent}</span>
   );
 
@@ -616,7 +689,7 @@ export function SideNavHeading({
       {...focusOutlineProps.focusVisible(styles.popoverHeading)}
       // A close affordance, not the trigger: dismiss only.
       onClick={closeMenu}>
-      {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+      {isRenderable(icon) && <span {...stylex.props(styles.icon)}>{icon}</span>}
       {renderTextContent(
         <Icon
           icon="chevronDown"
@@ -627,6 +700,38 @@ export function SideNavHeading({
       )}
     </button>
   );
+
+  // Whole heading is a link (no menu, single headingHref). End content may
+  // be a control, which must not sit inside the link (no interactive content
+  // in an <a>), so with end content the row is a div holding the link and the
+  // end content side by side, as the mixed mode does.
+  if (isWholeHeadingLink && headingHref && headerEndContentElement) {
+    return (
+      <div
+        ref={ref}
+        data-testid={testId}
+        {...mergeProps(
+          themeProps('side-nav-heading'),
+          stylex.props(styles.root, xstyle),
+          className,
+          style,
+        )}>
+        <LinkComponent
+          href={headingHref}
+          {...focusOutlineProps.focusVisible(
+            styles.linkBesideEndContent,
+            styles.menuTrigger,
+          )}
+          {...(props as React.AnchorHTMLAttributes<HTMLAnchorElement>)}>
+          {isRenderable(icon) && (
+            <span {...stylex.props(styles.icon)}>{icon}</span>
+          )}
+          {renderTextContent()}
+        </LinkComponent>
+        {headerEndContentElement}
+      </div>
+    );
+  }
 
   // Whole heading is a link (no menu, single headingHref)
   if (isWholeHeadingLink && headingHref) {
@@ -646,7 +751,9 @@ export function SideNavHeading({
           style,
         )}
         {...(props as React.AnchorHTMLAttributes<HTMLAnchorElement>)}>
-        {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+        {isRenderable(icon) && (
+          <span {...stylex.props(styles.icon)}>{icon}</span>
+        )}
         {renderTextContent()}
         {headerEndContentElement}
         {chevronElement}
@@ -668,12 +775,14 @@ export function SideNavHeading({
             className,
             style,
           )}>
-          {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+          {isRenderable(icon) && (
+            <span {...stylex.props(styles.icon)}>{icon}</span>
+          )}
           {renderTextContent(
             <button
               ref={setTriggerEl}
               type="button"
-              aria-label={t('@astryx.sideNav.heading.openMenu')}
+              aria-label={t('@astryx.sideNav.heading.openMenu', {heading})}
               onClick={e => {
                 e.stopPropagation();
                 triggerProps.onClick();
@@ -702,8 +811,16 @@ export function SideNavHeading({
             {/* The menu role is scoped to the actual menu items so the
                 heading button above stays a valid sibling, not an invalid
                 child of a role="menu" element. */}
-            <div role="menu" aria-label={heading}>
-              {menu}
+            <div
+              ref={headingMenuRef}
+              role="menu"
+              aria-label={heading}
+              {...headingMenuPress.menuProps}
+              onPointerDown={headingMenuPointerDown}
+              {...headingMenuTouch}>
+              <NavHeadingDismissContext value={dismissCtx}>
+                {menu}
+              </NavHeadingDismissContext>
             </div>
           </div>,
           {
@@ -732,7 +849,7 @@ export function SideNavHeading({
             className,
             style,
           )}>
-          {icon &&
+          {isRenderable(icon) &&
             (headingHref ? (
               <LinkComponent
                 href={headingHref}
@@ -748,7 +865,7 @@ export function SideNavHeading({
               <button
                 ref={setTriggerEl}
                 type="button"
-                aria-label={t('@astryx.sideNav.heading.openMenu')}
+                aria-label={t('@astryx.sideNav.heading.openMenu', {heading})}
                 onClick={e => {
                   e.stopPropagation();
                   triggerProps.onClick();
@@ -778,8 +895,16 @@ export function SideNavHeading({
             {/* The menu role is scoped to the actual menu items so the
                 heading button above stays a valid sibling, not an invalid
                 child of a role="menu" element. */}
-            <div role="menu" aria-label={heading}>
-              {menu}
+            <div
+              ref={headingMenuRef}
+              role="menu"
+              aria-label={heading}
+              {...headingMenuPress.menuProps}
+              onPointerDown={headingMenuPointerDown}
+              {...headingMenuTouch}>
+              <NavHeadingDismissContext value={dismissCtx}>
+                {menu}
+              </NavHeadingDismissContext>
             </div>
           </div>,
           {
@@ -805,7 +930,7 @@ export function SideNavHeading({
           style,
         )}
         {...props}>
-        {icon &&
+        {isRenderable(icon) &&
           (headingHref ? (
             <LinkComponent
               href={headingHref}
@@ -865,7 +990,7 @@ export function SideNavHeading({
         style,
       )}
       {...props}>
-      {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+      {isRenderable(icon) && <span {...stylex.props(styles.icon)}>{icon}</span>}
       {renderTextContent()}
       {headerEndContentElement}
       {chevronElement}

@@ -117,8 +117,8 @@ export const docs = {
         {
           name: 'isCurrent',
           type: 'boolean',
-          description: 'Marks this item as the current page, applying aria-current="page".',
-          default: 'false',
+          description:
+            'Marks this item as the current page, applying aria-current="page". When omitted, the last item is auto-detected if no item is explicitly current; pass false to opt out.',
         },
         {
           name: 'startIcon',

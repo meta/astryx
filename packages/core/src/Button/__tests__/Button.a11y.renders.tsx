@@ -88,12 +88,19 @@ export const BUTTON_STATE_RENDERS: Record<ButtonStateId, StateRender> = {
   ),
 
   'clickable-card': activate => (
-    <ClickableCard label="Open billing settings" onClick={activate}>
+    <ClickableCard
+      data-a11y-pointer-target
+      label="Open billing settings"
+      onClick={activate}>
       <div>Billing</div>
     </ClickableCard>
   ),
   'clickable-card-disabled': activate => (
-    <ClickableCard label="Open billing settings" isDisabled onClick={activate}>
+    <ClickableCard
+      data-a11y-pointer-target
+      label="Open billing settings"
+      isDisabled
+      onClick={activate}>
       <div>Billing</div>
     </ClickableCard>
   ),

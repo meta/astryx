@@ -54,13 +54,9 @@ function targetKey(className) {
  * not take out theme validation or the listing.
  *
  * @param {string} coreSrc - absolute path to `<core>/src`
- * @param {{includeDeprecated?: boolean}} [options] - preserve the CLI's full listing by default; ownership checks can request active targets only
  * @returns {Promise<ThemingTarget[]>}
  */
-export async function collectThemingTargets(
-  coreSrc,
-  {includeDeprecated = true} = {},
-) {
+export async function collectThemingTargets(coreSrc) {
   if (!coreSrc || !fs.existsSync(coreSrc)) return [];
 
   /** @type {Array<ThemingTarget & {parent: string|null}>} */
@@ -91,7 +87,6 @@ export async function collectThemingTargets(
           : path.basename(path.dirname(full));
 
       for (const target of doc?.theming?.targets || []) {
-        if (!includeDeprecated && target?.deprecatedFor != null) continue;
         const className = target?.className;
         if (typeof className !== 'string') continue;
         const key = targetKey(className);
@@ -113,7 +108,8 @@ export async function collectThemingTargets(
 
   const canonical = canonicalizeParentTargets(targets);
   canonical.sort(
-    (a, b) => a.key.localeCompare(b.key) || a.component.localeCompare(b.component),
+    (a, b) =>
+      a.key.localeCompare(b.key) || a.component.localeCompare(b.component),
   );
   return canonical;
 }
@@ -146,7 +142,8 @@ function canonicalizeParentTargets(targets) {
   for (const target of targets) {
     if (target.parent == null) continue;
     const roots =
-      rootsByComponentAndClass.get(`${target.parent}\0${target.className}`) ?? [];
+      rootsByComponentAndClass.get(`${target.parent}\0${target.className}`) ??
+      [];
     if (roots.length !== 1) continue;
 
     const canonical = roots[0];
@@ -238,7 +235,9 @@ export function targetsByKey(targets) {
   /** @type {Record<string, string[]>} */
   const byKey = {};
   for (const t of targets) {
-    byKey[t.key] = [...new Set([...(byKey[t.key] || []), ...t.props, ...t.states])];
+    byKey[t.key] = [
+      ...new Set([...(byKey[t.key] || []), ...t.props, ...t.states]),
+    ];
   }
   return byKey;
 }

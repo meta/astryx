@@ -14,7 +14,9 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {render, act} from '@testing-library/react';
+import {renderToString} from 'react-dom/server';
 import {scaleLinear, scaleBand} from 'd3-scale';
+import {MediaTheme, Theme, defineTheme} from '@astryxdesign/core';
 import {ChartTooltip} from './ChartTooltip';
 import {ChartProvider} from './ChartContext';
 import type {
@@ -29,6 +31,15 @@ const DATA = [
   {month: 'Feb', sales: 7, profit: 2},
   {month: 'Mar', sales: 5, profit: 4},
 ];
+
+const OUTER_THEME = defineTheme({
+  name: 'chart-tooltip-outer-test',
+  tokens: {'--color-accent': '#112233'},
+});
+const INNER_THEME = defineTheme({
+  name: 'chart-tooltip-inner-test',
+  tokens: {'--color-accent': '#445566'},
+});
 
 const SALES_POINTS: ResolvedPoint[] = [
   {px: 50, py: 120, py0: 200, dataIndex: 0},
@@ -97,7 +108,7 @@ function renderTooltip(
 ) {
   return render(
     <ChartProvider value={harness.ctx}>
-      <svg>
+      <svg ref={harness.ctx.svgRef}>
         <g>
           <ChartTooltip series={[makeSeries()]} {...props} />
         </g>
@@ -113,6 +124,19 @@ const hoverAt = (index: number): ChartPointerEvent => ({
   active: false,
 });
 
+const staleHover: ChartPointerEvent = {
+  x: 0,
+  y: 0,
+  nearest: {
+    px: 50,
+    py: 120,
+    py0: 200,
+    dataIndex: 99,
+    seriesKey: 'sales',
+  },
+  active: false,
+};
+
 const pointerLeave: ChartPointerEvent = {
   x: -1,
   y: -1,
@@ -121,16 +145,48 @@ const pointerLeave: ChartPointerEvent = {
 };
 
 const card = () => document.querySelector('[role="tooltip"]') as HTMLElement;
+const layerHost = () => card().parentElement as HTMLElement;
 
 describe('ChartTooltip card', () => {
-  it('portals an initially empty tooltip card into document.body', () => {
+  it('portals the fixed Layer host to the nearest chart HTML container', () => {
     const harness = makeHarness();
     const {container} = renderTooltip(harness);
+    const svg = container.querySelector('svg');
+
     expect(card()).not.toBeNull();
-    expect(card().parentElement).toBe(document.body);
-    // The card lives outside the chart subtree.
-    expect(container.querySelector('[role="tooltip"]')).toBeNull();
+    expect(layerHost()).toHaveAttribute('popover', 'manual');
+    expect(layerHost().parentElement).toBe(svg?.parentElement);
+    // The card keeps local CSS inheritance without becoming invalid SVG.
+    expect(svg?.contains(card())).toBe(false);
     expect(card().textContent).toBe('');
+  });
+
+  it('keeps the Layer host inside nested Theme and MediaTheme scopes', () => {
+    const harness = makeHarness();
+    const {container} = render(
+      <Theme theme={OUTER_THEME}>
+        <Theme theme={INNER_THEME}>
+          <MediaTheme mode="dark">
+            <ChartProvider value={harness.ctx}>
+              <svg ref={harness.ctx.svgRef}>
+                <g>
+                  <ChartTooltip series={[makeSeries()]} />
+                </g>
+              </svg>
+            </ChartProvider>
+          </MediaTheme>
+        </Theme>
+      </Theme>,
+    );
+
+    const innerTheme = container.querySelector(
+      '[data-astryx-theme="chart-tooltip-inner-test"]',
+    );
+    const mediaTheme = container.querySelector('[data-astryx-media="dark"]');
+    expect(innerTheme).not.toBeNull();
+    expect(mediaTheme).not.toBeNull();
+    expect(innerTheme?.contains(layerHost())).toBe(true);
+    expect(mediaTheme?.contains(layerHost())).toBe(true);
   });
 
   it('shows the hovered x value and the bare value for a single series', () => {
@@ -167,15 +223,162 @@ describe('ChartTooltip card', () => {
   });
 
   it('reveals the card on hover and hides it again when the pointer leaves', () => {
+    const showSpy = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    const hideSpy = vi.spyOn(HTMLElement.prototype, 'hidePopover');
     const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     const harness = makeHarness({svgRef: {current: svgEl}});
-    renderTooltip(harness);
 
-    harness.dispatch(hoverAt(0));
-    expect(card().style.display).toBe('block');
+    try {
+      renderTooltip(harness);
+      harness.dispatch(hoverAt(0));
+      expect(showSpy).toHaveBeenCalledOnce();
 
-    harness.dispatch(pointerLeave);
-    expect(card().style.display).toBe('none');
+      harness.dispatch(pointerLeave);
+      expect(hideSpy).toHaveBeenCalledOnce();
+    } finally {
+      showSpy.mockRestore();
+      hideSpy.mockRestore();
+    }
+  });
+
+  it('keeps the Layer open while moving between valid data points', () => {
+    const showSpy = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    const hideSpy = vi.spyOn(HTMLElement.prototype, 'hidePopover');
+    const harness = makeHarness();
+
+    try {
+      renderTooltip(harness);
+      harness.dispatch(hoverAt(0));
+      const openHost = layerHost();
+      expect(card().textContent).toContain('Jan');
+
+      harness.dispatch(hoverAt(1));
+
+      expect(layerHost()).toBe(openHost);
+      expect(card().textContent).toContain('Feb');
+      expect(showSpy).toHaveBeenCalledOnce();
+      expect(hideSpy).not.toHaveBeenCalled();
+
+      harness.dispatch(pointerLeave);
+      expect(hideSpy).toHaveBeenCalledOnce();
+
+      harness.dispatch(hoverAt(2));
+      expect(layerHost()).toBe(openHost);
+      expect(card().textContent).toContain('Mar');
+      expect(showSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      showSpy.mockRestore();
+      hideSpy.mockRestore();
+    }
+  });
+
+  it('measures native Popover geometry after revealing the first card', () => {
+    const showSpy = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    const widthSpy = vi
+      .spyOn(HTMLElement.prototype, 'offsetWidth', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return this.hasAttribute('popover') && this.style.display !== 'none'
+          ? 120
+          : 0;
+      });
+    const heightSpy = vi
+      .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return this.hasAttribute('popover') && this.style.display !== 'none'
+          ? 40
+          : 0;
+      });
+    const harness = makeHarness();
+
+    try {
+      renderTooltip(harness, {placement: 'left'});
+      harness.dispatch(hoverAt(1));
+
+      expect(showSpy).toHaveBeenCalledOnce();
+      // svgLeft(0) + marginLeft(48) + px(250) - width(120) - gap(8)
+      expect(layerHost().style.left).toBe('170px');
+    } finally {
+      showSpy.mockRestore();
+      widthSpy.mockRestore();
+      heightSpy.mockRestore();
+    }
+  });
+
+  it('keeps the non-Popover fallback hidden until hover', async () => {
+    const showDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'showPopover',
+    );
+    const hideDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      'hidePopover',
+    );
+    Object.defineProperty(HTMLElement.prototype, 'showPopover', {
+      configurable: true,
+      value: undefined,
+      writable: true,
+    });
+    Object.defineProperty(HTMLElement.prototype, 'hidePopover', {
+      configurable: true,
+      value: undefined,
+      writable: true,
+    });
+    const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const harness = makeHarness({svgRef: {current: svgEl}});
+
+    try {
+      renderTooltip(harness);
+      expect(layerHost().style.display).toBe('none');
+
+      harness.dispatch(hoverAt(0));
+      const openHost = layerHost();
+      expect(openHost.style.display).not.toBe('none');
+      expect(card().textContent).toContain('Jan');
+
+      const priorStyles: Array<string | null> = [];
+      const observer = new MutationObserver(records => {
+        for (const record of records) {
+          priorStyles.push(record.oldValue);
+        }
+      });
+      observer.observe(openHost, {
+        attributeFilter: ['style'],
+        attributeOldValue: true,
+        attributes: true,
+      });
+
+      harness.dispatch(hoverAt(1));
+      await Promise.resolve();
+      observer.disconnect();
+      expect(layerHost()).toBe(openHost);
+      expect(card().textContent).toContain('Feb');
+      expect(openHost.style.display).not.toBe('none');
+      expect(priorStyles.some(style => style?.includes('display: none'))).toBe(
+        false,
+      );
+
+      harness.dispatch(pointerLeave);
+      expect(openHost.style.display).toBe('none');
+    } finally {
+      if (showDescriptor) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          'showPopover',
+          showDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'showPopover');
+      }
+      if (hideDescriptor) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          'hidePopover',
+          hideDescriptor,
+        );
+      } else {
+        Reflect.deleteProperty(HTMLElement.prototype, 'hidePopover');
+      }
+    }
   });
 
   it('pins the card beside the hovered point for placement="right"', () => {
@@ -185,22 +388,47 @@ describe('ChartTooltip card', () => {
     harness.dispatch(hoverAt(1));
     // jsdom rects are zero, so left = svgLeft(0) + margin.left(48) + px(250)
     // + the 8px gap.
-    expect(card().style.display).toBe('block');
-    expect(card().style.left).toBe('306px');
+    expect(layerHost().style.left).toBe('306px');
   });
 
-  it('hides the card when the hovered index no longer exists in data', () => {
-    const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    const harness = makeHarness({svgRef: {current: svgEl}});
-    renderTooltip(harness);
-    harness.dispatch({
-      x: 0,
-      y: 0,
-      nearest: {px: 50, py: 120, py0: 200, dataIndex: 99, seriesKey: 'sales'},
-      active: false,
-    });
-    expect(card().textContent).toBe('');
-    expect(card().style.display).toBe('none');
+  it('does not open the card when the hovered index no longer exists in data', () => {
+    const showSpy = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    const hideSpy = vi.spyOn(HTMLElement.prototype, 'hidePopover');
+    const harness = makeHarness();
+
+    try {
+      renderTooltip(harness);
+      harness.dispatch(staleHover);
+      expect(card().textContent).toBe('');
+      expect(showSpy).not.toHaveBeenCalled();
+      expect(hideSpy).not.toHaveBeenCalled();
+    } finally {
+      showSpy.mockRestore();
+      hideSpy.mockRestore();
+    }
+  });
+
+  it('closes an open card for a stale index and reopens for later valid data', () => {
+    const showSpy = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    const hideSpy = vi.spyOn(HTMLElement.prototype, 'hidePopover');
+    const harness = makeHarness();
+
+    try {
+      renderTooltip(harness);
+      harness.dispatch(hoverAt(0));
+      expect(card().textContent).toContain('Jan');
+
+      harness.dispatch(staleHover);
+      expect(card().textContent).toBe('');
+      expect(hideSpy).toHaveBeenCalledOnce();
+
+      harness.dispatch(hoverAt(1));
+      expect(card().textContent).toContain('Feb');
+      expect(showSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      showSpy.mockRestore();
+      hideSpy.mockRestore();
+    }
   });
 });
 
@@ -260,13 +488,78 @@ describe('ChartTooltip custom render', () => {
     ]);
   });
 
-  it('hides the card when the custom render opts out by returning null', () => {
-    const svgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    const harness = makeHarness({svgRef: {current: svgEl}});
-    renderTooltip(harness, {render: () => null});
-    harness.dispatch(hoverAt(1));
-    expect(card().textContent).toBe('');
-    expect(card().style.display).toBe('none');
+  it('never opens the card when the custom render opts out with null', () => {
+    const showSpy = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    const hideSpy = vi.spyOn(HTMLElement.prototype, 'hidePopover');
+    const harness = makeHarness();
+
+    try {
+      renderTooltip(harness, {render: () => null});
+      harness.dispatch(hoverAt(1));
+      expect(card().textContent).toBe('');
+      expect(showSpy).not.toHaveBeenCalled();
+      expect(hideSpy).not.toHaveBeenCalled();
+    } finally {
+      showSpy.mockRestore();
+      hideSpy.mockRestore();
+    }
+  });
+
+  it('closes for custom null content and reopens for later content', () => {
+    const showSpy = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    const hideSpy = vi.spyOn(HTMLElement.prototype, 'hidePopover');
+    const harness = makeHarness();
+
+    try {
+      renderTooltip(harness, {
+        render: xValue =>
+          xValue === 'Feb' ? null : <span>{String(xValue)}</span>,
+      });
+      harness.dispatch(hoverAt(0));
+      expect(card().textContent).toBe('Jan');
+
+      harness.dispatch(hoverAt(1));
+      expect(card().textContent).toBe('');
+      expect(hideSpy).toHaveBeenCalledOnce();
+
+      harness.dispatch(hoverAt(2));
+      expect(card().textContent).toBe('Mar');
+      expect(showSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      showSpy.mockRestore();
+      hideSpy.mockRestore();
+    }
+  });
+});
+
+describe('ChartTooltip server rendering', () => {
+  it('omits the browser-only layer without a document', () => {
+    const harness = makeHarness();
+    const documentDescriptor = Object.getOwnPropertyDescriptor(
+      globalThis,
+      'document',
+    );
+
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: undefined,
+    });
+    try {
+      const markup = renderToString(
+        <ChartProvider value={harness.ctx}>
+          <svg>
+            <g>
+              <ChartTooltip series={[makeSeries()]} />
+            </g>
+          </svg>
+        </ChartProvider>,
+      );
+      expect(markup).not.toContain('role="tooltip"');
+    } finally {
+      if (documentDescriptor) {
+        Object.defineProperty(globalThis, 'document', documentDescriptor);
+      }
+    }
   });
 });
 

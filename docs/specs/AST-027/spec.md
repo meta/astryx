@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 4
 template_version: 1
 kind: system-spec
 id: spec:AST-027
@@ -18,6 +18,17 @@ affects_consumer_docs: []
 ---
 
 # Local stacking and browser top-layer routing system spec
+
+<!-- review-applicability:v1 -->
+
+```json
+{
+  "scope": "global",
+  "triggers": {
+    "layering": ["DEC-1", "DEC-2", "DEC-3", "DEC-4", "FR11"]
+  }
+}
+```
 
 ## Intent
 
@@ -183,14 +194,14 @@ production declarations across 40 files and these current gaps:
 | CLI-emitted page templates                                                                             | Dashboard alert rail and Settings dialog use local `1`; Table filter uses reorder `2`; Kanban renders a fixed drag clone at `1000`                                                                                                      | **Generated leaks.** New consumer apps inherit implicit local boundaries and, for Kanban, a page-level floating band                                               | Add explicit surface isolation to local template relationships; route the Kanban drag clone through a visual-only Layer/top-layer host                           |
 | Popover, Lightbox, and modal panel internals                                                           | Small values order arrows, controls, handles, panels, and tints inside native Popover or dialog hosts                                                                                                                                   | **Correct cross-page mechanism; local ownership still requires proof.** The browser host, not the number, places the surface above page content                    | Preserve top-layer hosting and add or identify an explicit isolation owner for each internal relationship                                                        |
 | ToastViewport                                                                                          | The viewport enters `popover="manual"` but also carries `z-index: 500`                                                                                                                                                                  | **Redundant page-band value plus the AST-003 hosting gap.** Native promotion, not `500`, owns page-content order; current Toast can still sit behind a later modal | Complete AST-003's global host first or in the same change, then remove `500` and keep any internal ordering beneath an isolated viewport surface                |
-| BottomSheet, BottomSheetSwitcher, and Lab Drawer non-modal paths                                       | Non-modal `dialog.show()` paths use static or dynamic values beginning at `1000`                                                                                                                                                        | **Confirmed global leaks.** A page band cannot provide dialog-layer semantics                                                                                      | Route non-modal hosting through Layer/native top-layer infrastructure; keep panel, handle, tint, action, and stack ordering locally isolated inside the host     |
+| BottomSheet and BottomSheetSwitcher non-modal paths                                                    | Non-modal `dialog.show()` paths use static or dynamic values beginning at `1000`                                                                                                                                                        | **Confirmed global leaks.** A page band cannot provide dialog-layer semantics                                                                                      | Route non-modal hosting through Layer/native top-layer infrastructure; keep panel, handle, tint, action, and stack ordering locally isolated inside the host     |
 
 Current source already routes Tooltip, HoverCard, Popover, DropdownMenu and its
-submenus, ContextMenu, CommandPalette, modal Dialog, Lightbox, MobileNav, Tour,
-Date-input layers, and RadialTooltip through Layer, native Popover, or
-`showModal()`. Their cross-page mechanism is directionally conforming. The
-confirmed exceptions are ChartTooltip and the non-modal BottomSheet,
-BottomSheetSwitcher, and Drawer paths. Toast is promoted but still has the
+submenus, ContextMenu, CommandPalette, modal Dialog, Drawer, Lightbox,
+MobileNav, Tour, Date-input layers, and RadialTooltip through Layer, native
+Popover, or `showModal()`. Their cross-page mechanism is directionally
+conforming. The confirmed exceptions are ChartTooltip and the non-modal
+BottomSheet and BottomSheetSwitcher paths. Toast is promoted but still has the
 global-host limitation already owned by AST-003.
 
 This table is an impact inventory, not an implementation approval. Each row still

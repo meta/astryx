@@ -2,19 +2,24 @@
 
 /**
  * @file ChartLegend.tsx
+ * @input Legend items plus logical position and alignment
  * @output Standalone chart legend component
  * @position Can be used inside Chart via the `legend` prop, or independently
  *
  * @example
- * // Via Chart
- * <Chart legend={{position: 'top', alignment: 'start'}} ... />
- *
- * // Standalone
- * <ChartLegend items={[{label: 'Revenue', color: '#3b82f6'}]} />
+ * ```
+ * <Chart
+ *   data={data}
+ *   xKey="month"
+ *   series={series}
+ *   legend={{position: 'top', alignment: 'start'}}
+ * />
+ * ```
  */
 
-import {Text} from '@astryxdesign/core';
-import {VStack, HStack} from '@astryxdesign/core';
+'use client';
+
+import {HStack, Text, useTranslator, VStack} from '@astryxdesign/core';
 import {ChartSwatch, swatchVariantForType} from './ChartSwatch';
 import type {LegendItem} from './legend';
 
@@ -37,6 +42,8 @@ export function ChartLegend({
   position = 'bottom',
   alignment = 'start',
 }: ChartLegendProps) {
+  const t = useTranslator();
+
   if (items.length === 0) {
     return null;
   }
@@ -57,7 +64,11 @@ export function ChartLegend({
 
   if (isVertical) {
     return (
-      <VStack gap={2} hAlign={alignment} role="list" aria-label="Chart legend">
+      <VStack
+        gap={2}
+        hAlign={alignment}
+        role="list"
+        aria-label={t('@astryx.chartLegend.label')}>
         {legendItems}
       </VStack>
     );
@@ -70,7 +81,7 @@ export function ChartLegend({
       vAlign="center"
       wrap="wrap"
       role="list"
-      aria-label="Chart legend">
+      aria-label={t('@astryx.chartLegend.label')}>
       {legendItems}
     </HStack>
   );

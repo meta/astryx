@@ -182,6 +182,8 @@ export interface ExpectationContext<Facts> {
    * a missing observation into a contract result.
    */
   readonly initialFocusEntry: () => Promise<InitialFocusEntryObservation>;
+  /** Ask the binding to perform one named public state transition. */
+  readonly transition: (name: string) => Promise<void>;
 }
 
 export interface Expectation<Facts> {

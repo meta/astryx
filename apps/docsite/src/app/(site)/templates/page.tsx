@@ -2,14 +2,14 @@
 
 /**
  * @file Templates gallery index.
- * @input Uses generated template metadata, URL preview state, and live template thumbnails.
- * @output Renders the filterable gallery and query-synced preview dialog.
+ * @input Uses generated template metadata, URL preview state, live thumbnails, and a lazy preview dialog.
+ * @output Renders a wide, three-column filterable gallery with scaled 1440×900 previews and loads the query-synced preview dialog on first open.
  * @position Public `/templates` docsite route.
  */
 
 'use client';
 
-import {Suspense, useCallback, useEffect, useMemo, useState} from 'react';
+import {Suspense, lazy, useCallback, useEffect, useMemo, useState} from 'react';
 import type {CSSProperties} from 'react';
 import {useSearchParams, useRouter, usePathname} from 'next/navigation';
 import * as stylex from '@stylexjs/stylex';
@@ -22,13 +22,19 @@ import {Grid} from '@astryxdesign/core/Grid';
 import {Button} from '@astryxdesign/core/Button';
 import {Overlay} from '@astryxdesign/core/Overlay';
 import {ToggleButton, ToggleButtonGroup} from '@astryxdesign/core/ToggleButton';
-import {templates} from '../../../generated/templateRegistry';
+import {templateMetadata as templates} from '../../../generated/templateMetadataRegistry';
 import {TemplateThumbnail} from '../../../components/TemplateThumbnail';
 import {buildTemplatePlaygroundHref} from '../../../components/playgroundLink';
-import {TemplatePreviewDialog} from '../../../components/TemplatePreviewDialog';
+import {buildTemplatePreviewHref} from '../../../components/templatePreviewUrl';
+import {sortTemplatesByTitle} from '../../../components/templateGalleryOrder';
 import type {TemplatePreviewItem} from '../../../components/TemplatePreviewDialog';
 import {trackOpenPlayground, trackView} from '../../../lib/analytics';
-import {layout} from '../../../layout.stylex';
+
+const LazyTemplatePreviewDialog = lazy(() =>
+  import('../../../components/TemplatePreviewDialog').then(module => ({
+    default: module.TemplatePreviewDialog,
+  })),
+);
 
 const CARD_STYLE: CSSProperties & {'--color-overlay': string} = {
   '--color-overlay':
@@ -115,13 +121,21 @@ function TemplatePreviewURLSync({
   onSlugChange,
 }: TemplatePreviewURLSyncProps) {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const previewSlug = searchParams.get('preview');
   const openSlug =
     previewSlug != null && indexBySlug.has(previewSlug) ? previewSlug : null;
 
   useEffect(() => {
     onSlugChange(openSlug);
-  }, [onSlugChange, openSlug]);
+    if (previewSlug != null && openSlug == null) {
+      router.replace(
+        buildTemplatePreviewHref(pathname, searchParams.toString(), null),
+        {scroll: false},
+      );
+    }
+  }, [onSlugChange, openSlug, pathname, previewSlug, router, searchParams]);
 
   return null;
 }
@@ -163,13 +177,13 @@ function TemplatesGallery() {
     return ['All', ...present];
   }, [items]);
 
-  const filteredItems = useMemo(
-    () =>
+  const filteredItems = useMemo(() => {
+    const visibleItems =
       activeCategory === 'All'
         ? items
-        : items.filter(i => groupOf(i.category) === activeCategory),
-    [items, activeCategory],
-  );
+        : items.filter(i => groupOf(i.category) === activeCategory);
+    return sortTemplatesByTitle(visibleItems);
+  }, [items, activeCategory]);
 
   // Flattened display-order list backing the preview dialog's prev/next
   // navigation, plus a slug -> index lookup for opening at a given card.
@@ -192,21 +206,27 @@ function TemplatesGallery() {
   const router = useRouter();
   const pathname = usePathname();
   const [openSlug, setOpenSlug] = useState<string | null>(null);
+  const [hasLoadedPreview, setHasLoadedPreview] = useState(false);
+  const handlePreviewSlugChange = useCallback((slug: string | null) => {
+    if (slug !== null) {
+      setHasLoadedPreview(true);
+    }
+    setOpenSlug(slug);
+  }, []);
   const openIndex =
     openSlug != null ? (indexBySlug.get(openSlug) ?? null) : null;
 
   const setOpenIndex = useCallback(
     (index: number | null) => {
       const nextSlug = index !== null ? (flatItems[index]?.slug ?? null) : null;
-      setOpenSlug(nextSlug);
-      const params = new URLSearchParams(window.location.search);
       if (nextSlug !== null) {
-        params.set('preview', nextSlug);
-      } else {
-        params.delete('preview');
+        setHasLoadedPreview(true);
       }
-      const qs = params.toString();
-      router.replace(`${pathname}${qs ? `?${qs}` : ''}`, {scroll: false});
+      setOpenSlug(nextSlug);
+      router.replace(
+        buildTemplatePreviewHref(pathname, window.location.search, nextSlug),
+        {scroll: false},
+      );
     },
     [flatItems, router, pathname],
   );
@@ -228,10 +248,7 @@ function TemplatesGallery() {
   );
 
   return (
-    <Section
-      maxWidth={layout.contentMaxWidth}
-      padding={6}
-      style={{marginInline: 'auto'}}>
+    <Section maxWidth={1600} padding={6} style={{marginInline: 'auto'}}>
       <VStack gap={10}>
         {/* Header */}
         <VStack gap={6} align="stretch">
@@ -255,14 +272,24 @@ function TemplatesGallery() {
         </VStack>
 
         {/* Body */}
-        <Grid columns={{minWidth: isMobile ? 280 : 420}} gap={4} width="100%">
+        <Grid
+          columns={{minWidth: isMobile ? 280 : 360, max: 3}}
+          gap={6}
+          width="100%">
           {filteredItems.map(item => {
-            const templateContent = <TemplateThumbnail slug={item.slug} />;
+            const templateContent = (
+              <TemplateThumbnail
+                slug={item.slug}
+                renderWidth={1440}
+                aspectRatio="16/10"
+              />
+            );
 
             return (
               <ClickableCard
                 key={item.slug}
                 padding={0}
+                width="100%"
                 maxWidth="100%"
                 label={`Preview ${item.name}`}
                 onClick={() => openPreview(item.slug)}
@@ -321,22 +348,26 @@ function TemplatesGallery() {
       <Suspense fallback={null}>
         <TemplatePreviewURLSync
           indexBySlug={indexBySlug}
-          onSlugChange={setOpenSlug}
+          onSlugChange={handlePreviewSlugChange}
         />
       </Suspense>
 
-      <TemplatePreviewDialog
-        items={flatItems}
-        index={openIndex ?? 0}
-        isOpen={openIndex !== null}
-        onOpenChange={open => {
-          if (!open) {
-            setOpenIndex(null);
-          }
-        }}
-        onIndexChange={setOpenIndex}
-        variant={isMobile ? 'fullscreen' : undefined}
-      />
+      {hasLoadedPreview ? (
+        <Suspense fallback={null}>
+          <LazyTemplatePreviewDialog
+            items={flatItems}
+            index={openIndex ?? 0}
+            isOpen={openIndex !== null}
+            onOpenChange={open => {
+              if (!open) {
+                setOpenIndex(null);
+              }
+            }}
+            onIndexChange={setOpenIndex}
+            variant={isMobile ? 'fullscreen' : undefined}
+          />
+        </Suspense>
+      ) : null}
     </Section>
   );
 }

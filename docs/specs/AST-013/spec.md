@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 4
 template_version: 1
 kind: system-spec
 id: spec:AST-013
@@ -14,10 +14,33 @@ affects_architecture:
   [architecture:layer-runtime, architecture:public-component-api]
 affects_families: [family:overlay-dismissal]
 affects_contributing: [contributing:api-conventions]
-affects_consumer_docs: [browser-support, useLayer, Popover, Toast, Dialog]
+affects_consumer_docs:
+  [browser-support, useLayer, Popover, Toast, Dialog, useEntryAnimation]
 ---
 
 # Browser and platform support system spec
+
+<!-- review-applicability:v1 -->
+
+```json
+{
+  "scope": "global",
+  "triggers": {
+    "platform": [
+      "FR1",
+      "FR3",
+      "FR5",
+      "FR6",
+      "FR7",
+      "FR8",
+      "FR9",
+      "FR10",
+      "FR12",
+      "FR13"
+    ]
+  }
+}
+```
 
 ## Intent
 
@@ -49,10 +72,12 @@ requirements. Assistive-technology evidence remains separately owned.
   public [Browser Support guide](../../../packages/cli/assets/docs/browser-support.doc.mjs)
   and record their source and refresh date. TypeScript targets, build targets, and
   feature tables are not support evidence.
-- **FR3 — Two explicit browser support rows are always included.** Independently
+- **FR3 — Explicit browser support rows are always included.** Independently
   of the generated Baseline coverage, Astryx explicitly supports:
-  - the latest stable Chrome release on desktop; and
-  - Safari on the latest stable iOS release.
+  - the latest stable Chrome release on desktop;
+  - Safari on the latest stable iOS release; and
+  - for touch presentations, Chrome on the latest stable Android release
+    (`spec:AST-094`).
 
   “Latest” means the current stable release identified and refreshed from
   authoritative browser release data, not a handwritten version. Other browsers
@@ -82,11 +107,15 @@ requirements. Assistive-technology evidence remains separately owned.
   or `NaN` geometry, hide essential content, make controls unreachable, orphan or
   trap focus, block the surrounding page, corrupt controlled state, remain stuck
   pending, or flash a false open, closed, loading, positioned, or styled state.
-- **FR9 — SSR and hydration are consistent.** SSR-capable components do not read
-  browser capability, geometry, input modality, or user-agent state during server
-  render. The first client render matches the server contract. Post-hydration
-  enhancement begins from a usable state and introduces no mismatch, broken
-  intermediate state, or visible false state.
+- **FR9 — SSR and hydration are consistent.** A Core component is SSR-capable
+  unless its component spec records an FR12 exception. A client directive does
+  not exempt a component, because frameworks render client components on the
+  server. SSR-capable components do not read browser capability, geometry, input
+  modality, paint timing, or user-agent state during server render or during the
+  client render that hydrates server markup. The hydrating render produces the
+  same markup as the server. Post-hydration enhancement begins from a usable
+  state and introduces no mismatch, broken intermediate state, or visible false
+  state.
 - **FR10 — Browser-owned behavior needs real-browser evidence.** Source, unit, and
   jsdom tests may prove guards and deterministic state. Changes to layout, paint,
   focus, native Popover or Dialog behavior, top-layer order, browser event timing,
@@ -104,14 +133,21 @@ requirements. Assistive-technology evidence remains separately owned.
 
 - **FR11 — Raising the floor is compatibility work.** Removing a supported browser,
   moving it from full behavior to reduced fallback, or removing a documented
-  fallback requires owner approval, a Changeset, user-impact and migration notes,
-  updated generated rows, actual-browser evidence for the browsers affected by the
+  fallback requires owner approval, the classification and lifecycle required by
+  [`spec:AST-017`](../AST-017/spec.md), user-impact and migration notes, updated
+  generated rows, actual-browser evidence for the browsers affected by the
   compatibility claim, and evidence that every remaining full-support and named
   explicit support row still receives full required behavior.
 - **FR12 — Component specs inherit the baseline.** Component specs link
   `spec:AST-013` and record only stricter requirements or explicit exceptions. An
   exception names the affected capability, observable reduction, preserved
   FR7–FR9 obligations, evidence, owner, and review condition.
+- **FR13 — Server-rendered elements skip their mount animation.** An element present in
+  server markup hydrates in its settled state and does not play the animation it
+  plays when it mounts (its entry animation). That mount animation plays only for
+  an element the client mounts after hydration, or in a client-only root after
+  the first paint. Later open, show, and state transitions of a hydrated element
+  are outside this requirement, and reduced-motion behavior is unchanged.
 
 ### Platform support
 
@@ -133,19 +169,30 @@ support. Routine changes may land with evidence appropriate to their claims.
 Defects reproduced in an explicitly supported browser remain actionable whether
 or not an automated lane exists.
 
+`useEntryAnimation`, and FieldStatus through it, decides whether to animate from a
+first-paint flag captured on its first render. When markup hydrates after the
+page paints, the hydrating render produces entry-animation classes the server did
+not send, and the hook's consumer documentation says it does not support server
+rendering.
+
+Other known FR9 and FR13 gaps: CodeBlock's collapse chevron plays its reveal
+animation on page load; and CodeBlock chooses between token-span and Highlight
+API markup from browser capability and user-agent checks during render, so the
+hydrating render can differ from the server's markup.
+
 ## Verification
 
-| Contract  | Required evidence                                                                                                                               | Failure signal                                                                                                                                                 |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1–FR5   | Generated-row check plus guide/package/support/test reconciliation                                                                              | A handwritten/build version becomes a support claim, explicit support rows disappear, or supported behavior is reduced                                         |
-| FR6–FR8   | Feature-present/absent tests and active fallback fixtures                                                                                       | Browser sniffing selects ordinary behavior, or fallback is unusable, inaccessible, unstable, or visibly broken                                                 |
-| FR9       | Server render, hydration, and post-hydration browser fixture                                                                                    | Markup diverges, browser state is read on the server, or a false/broken state flashes                                                                          |
-| FR10      | Real-browser evidence for browser-owned behavior; the actual named browser for specific claims, browser-only defects, and compatibility changes | Browser-owned behavior is credited to jsdom, another engine stands in for a named-browser claim, or a supported-browser defect is dismissed for lack of a lane |
-| FR11–FR12 | Release review and knowledge-record checks                                                                                                      | A floor/fallback disappears without compatibility treatment, or a component silently overrides the baseline                                                    |
+| Contract  | Required evidence                                                                                                                                                                                                                                            | Failure signal                                                                                                                                                 |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1–FR5   | Generated-row check plus guide/package/support/test reconciliation                                                                                                                                                                                           | A handwritten/build version becomes a support claim, explicit support rows disappear, or supported behavior is reduced                                         |
+| FR6–FR8   | Feature-present/absent tests and active fallback fixtures                                                                                                                                                                                                    | Browser sniffing selects ordinary behavior, or fallback is unusable, inaccessible, unstable, or visibly broken                                                 |
+| FR9, FR13 | Server render then hydrate: no hydration warning or recoverable error, hydrated attributes equal the server markup, a client mount after hydration still plays its mount animation, plus a real-browser server render, hydration, and post-hydration fixture | Markup diverges, browser state is read on the server or while hydrating, a server-rendered element plays its mount animation, or a false/broken state flashes  |
+| FR10      | Real-browser evidence for browser-owned behavior; the actual named browser for specific claims, browser-only defects, and compatibility changes                                                                                                              | Browser-owned behavior is credited to jsdom, another engine stands in for a named-browser claim, or a supported-browser defect is dismissed for lack of a lane |
+| FR11–FR12 | Release review and knowledge-record checks                                                                                                                                                                                                                   | A floor/fallback disappears without compatibility treatment, or a component silently overrides the baseline                                                    |
 
 ## Decision log
 
-### DEC-1 — Rolling Baseline tiers plus two official browser rows
+### DEC-1 — Rolling Baseline tiers plus official browser rows
 
 **Reference:** `spec:AST-013/DEC-1`
 **Decider:** `cixzhang`, `2026-09-01`
@@ -153,7 +200,8 @@ or not an automated lane exists.
 Astryx uses current Web Platform Baseline for full support, Baseline minus two
 years for reduced fallback, and no promise below that tier. Latest stable Chrome
 on desktop and Safari on latest stable iOS are always included as official support
-and test rows independently of generated Baseline coverage. Generated compatibility
+and test rows independently of generated Baseline coverage, and touch
+presentations add Chrome on the latest stable Android (`spec:AST-094`). Generated compatibility
 rows and the named official test matrix remain distinct public facts.
 
 ### DEC-2 — Explicit support does not require proof on every change
@@ -161,13 +209,25 @@ rows and the named official test matrix remain distinct public facts.
 **Reference:** `spec:AST-013/DEC-2`
 **Decider:** `cixzhang`, `2026-09-02`
 
-DEC-1's two named browser rows are explicit support rows, not a required automated
+DEC-1's named browser rows are explicit support rows, not a required automated
 or per-change test matrix. Astryx investigates and fixes defects reproduced in
 those browsers, but routine changes do not need to prove every supported browser
 before landing. Actual-browser evidence is required when the change makes a
 browser-specific claim, fixes a defect reproduced only there, or changes
 compatibility. Missing automation neither narrows support nor justifies dismissing
 a reproduced defect.
+
+### DEC-3 — Core hydrates to the server markup; server-rendered elements skip their mount animation
+
+**Reference:** `spec:AST-013/DEC-3`
+**Decider:** `cixzhang`, `2026-10-15`
+
+Core components render the same markup on the server and in the hydrating client
+render, including client components, and a server-rendered element stays settled
+rather than playing its mount animation. Rejected: consumer-doc "does not support
+SSR" exceptions, because FR12 records exceptions only in component specs.
+Rejected: a "has painted" snapshot that turns true after hydration, because it
+animates elements present on page load.
 
 ## Open questions
 

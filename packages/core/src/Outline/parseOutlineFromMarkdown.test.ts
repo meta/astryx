@@ -1,7 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
+import {renderHook} from '@testing-library/react';
 import {parseOutlineFromMarkdown} from './parseOutlineFromMarkdown';
+import {useOutlineFromMarkdown} from './useOutlineFromMarkdown';
+import {createMarkdownHeadingLinks} from '../Markdown/plugins/headingLinks';
+
+const headingLinks = createMarkdownHeadingLinks();
 
 describe('parseOutlineFromMarkdown', () => {
   it('returns an empty outline for content with no headings', () => {
@@ -47,6 +52,25 @@ describe('parseOutlineFromMarkdown', () => {
     expect(outline.map(i => i.id)).toEqual(['setup', 'setup-1', 'setup-2']);
     // labels stay unchanged even as ids are disambiguated
     expect(outline.every(i => i.label === 'Setup')).toBe(true);
+  });
+
+  it('lets nested headings consume ids without adding them to the outline', () => {
+    const source = '> # Quoted\n\n# Quoted';
+    expect(parseOutlineFromMarkdown(source, {plugins: [headingLinks]})).toEqual(
+      [{id: 'quoted-1', label: 'Quoted', level: 1}],
+    );
+  });
+
+  it('updates the hook result when the plugin namespace changes', () => {
+    const first = [createMarkdownHeadingLinks({headingIdPrefix: 'first'})];
+    const second = [createMarkdownHeadingLinks({headingIdPrefix: 'second'})];
+    const {result, rerender} = renderHook(
+      ({plugins}) => useOutlineFromMarkdown('# Overview', {plugins}),
+      {initialProps: {plugins: first}},
+    );
+    expect(result.current[0].id).toBe('first--overview');
+    rerender({plugins: second});
+    expect(result.current[0].id).toBe('second--overview');
   });
 
   it('falls back to "section" when a heading slugifies to empty', () => {

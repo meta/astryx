@@ -1,8 +1,11 @@
 # Engineering owners for the Astryx repository
 #
 # This checked-in list defines engineering owners for spec-owner reconciliation.
-# The review-signal workflows read the matching ENGOWNERS repository variable
-# instead; keep that variable synchronized with this file when membership changes.
+# Any ENGOWNER may approve every current knowledge-record kind; an approval binds
+# the pull request's spec content (architecture:knowledge-contracts DEC-14). The
+# review-signal workflows read the matching ENGOWNERS repository
+# variable instead; keep that variable synchronized with this file when membership
+# changes.
 #
 # Distinct from CODEOWNERS on purpose: CODEOWNERS is the review-duty subset that
 # GitHub auto-requests as default reviewers on every PR; being here does NOT put

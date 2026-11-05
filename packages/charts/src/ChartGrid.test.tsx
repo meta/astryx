@@ -4,7 +4,8 @@
  * @file ChartGrid.test.tsx
  * @input Uses vitest, @testing-library/react, Chart, ChartGrid, bar mark
  * @output Functional tests for grid lines — horizontal default, the skipped
- *         y=0 line, and vertical lines at band centers
+ *         y=0 line, vertical lines at band/continuous positions, combined
+ *         directions, and safe continuous tick-count handling
  * @position Colocated test for ChartGrid.tsx (issue #4295 viz coverage)
  */
 
@@ -93,6 +94,24 @@ describe('ChartGrid', () => {
   it('combines horizontal and vertical lines when both are enabled', () => {
     const {lines} = renderGrid(<ChartGrid horizontal vertical />);
     expect(lines).toHaveLength(8); // 5 horizontal + 3 vertical
+  });
+
+  it('uses zero to request no continuous grid lines', () => {
+    const {lines} = renderGrid(<ChartGrid tickCount={0} />);
+    expect(lines).toHaveLength(0);
+  });
+
+  it('falls back to the default density for a non-finite tick count', () => {
+    const {lines} = renderGrid(
+      <ChartGrid tickCount={Number.POSITIVE_INFINITY} />,
+    );
+    expect(lines).toHaveLength(5);
+  });
+
+  it('caps a huge continuous tick request without throwing', () => {
+    const {lines} = renderGrid(<ChartGrid tickCount={1e9} />);
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.length).toBeLessThanOrEqual(1001);
   });
 
   it('places vertical lines at d3 tick values on a linear x scale', () => {

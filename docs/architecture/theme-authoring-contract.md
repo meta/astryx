@@ -18,6 +18,8 @@ applies_to:
     packages/core/src/theme/expandTypeScale.ts,
     packages/core/src/theme/expandRadiusScale.ts,
     packages/core/src/theme/expandMotionScale.ts,
+    packages/core/src/theme/themeMotion.ts,
+    packages/core/src/theme/motionKnobs.ts,
     packages/core/src/theme/mergeComponents.ts,
     packages/core/src/theme/onMediaTokens.ts,
     packages/core/src/theme/localTokens.ts,
@@ -33,6 +35,7 @@ verified_by:
     packages/core/src/theme/expandTypeScale.test.ts,
     packages/core/src/theme/expandRadiusScale.test.ts,
     packages/core/src/theme/expandMotionScale.test.ts,
+    packages/core/src/theme/themeMotion.test.ts,
     packages/core/src/theme/onMediaTokens.test.ts,
     scripts/check-theme-template.test.mjs,
   ]
@@ -48,10 +51,35 @@ deciding_specs:
     spec:AST-012/DEC-3,
     spec:AST-012/DEC-4,
     spec:AST-017/DEC-1,
+    spec:AST-087/DEC-2,
+    spec:AST-087/DEC-7,
+    spec:AST-087/DEC-9,
+    spec:AST-087/DEC-10,
+    spec:AST-108/DEC-1,
   ]
 ---
 
 # Theme authoring contract
+
+<!-- review-applicability:v1 -->
+
+```json
+{
+  "scope": "global",
+  "triggers": {
+    "theming": [
+      "INV1",
+      "INV3",
+      "INV8",
+      "INV9",
+      "INV11",
+      "INV12",
+      "INV13",
+      "INV14"
+    ]
+  }
+}
+```
 
 This record defines what a theme author may express and how `defineTheme`
 normalizes that input into one self-contained theme representation.
@@ -71,14 +99,15 @@ source configuration independently.
 - explicit semantic token overrides;
 - optional theme-family-local token declarations;
 - component target/style-key overrides;
-- icon and indicator registries;
+- icon and indicator registries, the `componentIcons` slot map, and the
+  `iconVariants` list;
 - syntax tokens;
 - `onDark` / `onLight` surface overrides; and
 - ordered environmental `adaptations` with a fixed named width map.
 
 `defineTheme` resolves that input into a flat `DefinedTheme`. An extended theme
-contains the resolved values it inherits, so a build does not need the base
-stylesheet at runtime.
+contains the resolved values it inherits, so its normalized representation is
+complete. A standalone build does not need the base stylesheet.
 
 Normalization follows one precedence order:
 
@@ -89,10 +118,28 @@ Normalization follows one precedence order:
 5. inherited and explicit media-surface overrides;
 6. inherited and explicit theme-local declarations, validated against the
    resolved token, component, and media surfaces; and
-7. inherited and explicit icon/indicator registry entries.
+7. inherited and explicit icon/indicator registry entries, `componentIcons`
+   entries, and the `iconVariants` list.
 
 Explicit values win within their surface. Component maps merge by component,
 style key, and CSS property rather than replacing the entire inherited target.
+An explicit icon, indicator, or `componentIcons` entry replaces the inherited
+entry for the same key whole. An explicit `iconVariants` list replaces the
+inherited list; an omitted list is inherited. An inherited function entry keeps
+the list of the theme that defined it, so it receives a requested variant only
+when both that list and the active theme's list contain it, and `undefined`
+otherwise.
+
+An `icons` entry is a React node or a pure synchronous function of
+`{size, variant}`, and a stateful `componentIcons` entry may be a pure
+synchronous function of the slot's state. The normalized theme keeps those
+functions for Astryx resolution. Its public reads stay plain:
+`DefinedTheme['icons']` is node-valued, with each function read at
+`{size: 'md'}`; `DefinedTheme['componentIcons']` is a static view of names,
+`null`, and static requests, with resolver slots omitted; and
+`DefinedTheme['iconVariants']` is the theme's list. Inside `defineTheme`, entry
+functions receive `variant`, and static slot requests and slot functions return
+it, typed as that theme's listed names.
 
 ## Boundaries and invariants
 
@@ -101,9 +148,11 @@ style key, and CSS property rather than replacing the entire inherited target.
   semantics.
 - **INV2 — Precedence is deterministic.** A value's winner follows the documented
   order and does not depend on object traversal outside that order.
-- **INV3 — Extension is flattened.** `extends` accepts a real `DefinedTheme`,
-  carries forward its resolved tokens, component rules, media surfaces, icons,
-  and indicators, and produces a self-contained child.
+- **INV3 — Extension is semantically flattened.** `extends` accepts a real
+  `DefinedTheme` and carries forward its resolved tokens, local-token owner and
+  lineage metadata, component rules, media surfaces, adaptations and axes, icons,
+  indicators, `componentIcons`, and `iconVariants`. The normalized child is
+  complete.
 - **INV4 — Invalid bases fail loudly.** An undefined, namespace, or plain object
   passed to `extends` cannot produce a plausible partial theme.
 - **INV5 — Explicit tokens override generated scales.** Generated values provide
@@ -112,12 +161,15 @@ style key, and CSS property rather than replacing the entire inherited target.
   inherited properties on the same component/style key.
 - **INV7 — Surface overrides inherit coherently.** `onDark` and `onLight` combine
   system defaults, inherited surface values, and local overrides in that order.
-- **INV8 — Local-token enrollment is explicit and closed.** Supplying
+- **INV8 — Local-token enrollment is explicit and owner-tracked.** Supplying
   `localTokens`, or extending an exact enrolled base, produces a flattened local
-  declaration map plus ownership and lineage metadata. Enrolled themes validate
-  exact namespaces, case-insensitive `var()` references, cycles—including cycles
-  reachable only after co-matching adaptation rules cascade—and collisions with
-  `tokens`; unenrolled themes retain their legacy behavior.
+  declaration map plus exact ownership and lineage metadata. Every declared key is a
+  valid CSS custom-property name and no key collides with `tokens`; ownership is never
+  inferred from a prefix. Exact `var()` matches to an effective enrolled declaration
+  are owned edges on the validated local-token, component, media-surface, and
+  adaptation surfaces. Non-exact references remain external. Enrolled themes retain
+  exact owner, lineage, collision, and cycle validation; unenrolled themes retain
+  their legacy behavior.
 - **INV9 — Authoring and output are separate systems.** This record owns the
   normalized theme definition. The shared compiler owns turning it into styles;
   runtime and build own using or saving that output.
@@ -135,6 +187,33 @@ style key, and CSS property rather than replacing the entire inherited target.
   derive, or normalize input into a durable typed theme value used by a current
   supported consumer; validating and returning the exact input unchanged is
   insufficient.
+- **INV13 — Theme functions stay behind resolution.** Function icon entries and
+  slot functions are pure and synchronous. Astryx icon resolution and build
+  tooling that enumerates a theme's icon requests (`architecture:theme-compilation`
+  INV15) call icon entries; only slot resolution calls slot functions. Public
+  theme reads return nodes, static slot values, and the variant list, never a
+  function.
+- **INV14 — The variant list is theme-level.** `iconVariants` lists the variant
+  names the whole theme supports. It is never per icon and never combined with
+  another theme's list.
+- **INV15 — Motion is three knobs beside the duration scale.** `motion` takes
+  `tempo` (clamped to 0.75–1.5), `character` (`crisp`, `standard`,
+  `expressive`), and `reducedMotion` (`system`, `always`) beside the duration
+  scale. `tempo` scales every duration token and `character` sets
+  `--ease-entrance` and `--ease-move`; with tempo 1 and `standard` the tokens
+  are the defaults. A duration scale's durations win over `tempo`, and
+  explicit tokens win over both. An extending theme inherits motion field by
+  field: a duration-scale field or knob the child leaves unset keeps its
+  base's value. Each duration's
+  value before `tempo` is kept for busy-indicator loops, which never follow
+  `tempo`. Neither `tempo` nor `character` moves finger tracking, momentum,
+  the rubber band, the on-screen keyboard, the press model's onset delay,
+  cancel distance and tap flash, hover-intent delays, gesture thresholds,
+  busy-indicator loops, or the 200 ms Reduce Motion cap (`spec:AST-108` FR4).
+  `reducedMotion: 'always'` marks the theme's root, and what keys
+  reduced motion on `prefers-reduced-motion` keys it on that mark as well
+  (`spec:AST-108` FR6). An adaptation rule may set `tempo` and `character`,
+  never `reducedMotion`.
 
 This record does not own:
 
@@ -170,10 +249,11 @@ public surface belongs to
   helper, or export that causes that failure is a real compatibility cost, not
   harmless metadata. A targeted, coordinated break may proceed only through that
   compatibility owner; this record does not define its remedy.
-- A local-token change preserves explicit enrollment, exact owner namespaces,
-  source/built lineage parity, and the separation from portable `tokens`. One
-  name cannot appear in both maps because CSS output and portable token helpers
-  would otherwise resolve different values.
+- A local-token change preserves explicit enrollment, valid exact custom-property
+  names, exact owner metadata, source/built lineage parity, and the separation from
+  portable `tokens`. Prefixes are owner conventions only: they do not grant, reserve,
+  or restrict ownership. One name cannot appear in both maps because CSS output and
+  portable token helpers would otherwise resolve different values.
 - Changing precedence is a compatibility decision because existing themes may
   contain both generated and explicit values.
 - Changing `ComponentStyleMap` merge behavior verifies base, generated, explicit,
@@ -191,6 +271,9 @@ public surface belongs to
 
 ## Owning code
 
+- An internal, pure `resolveThemeMotion(theme)` returns a theme's motion
+  knobs, durations, and easings for the animator and for server code; it
+  touches no DOM and has no import-time side effects (`spec:AST-108` FR6).
 - `packages/core/src/theme/defineTheme.ts` owns the public input, normalized IR,
   orchestration, and extension behavior.
 - `themeAdaptations.ts` owns the fixed breakpoint/condition vocabulary,
@@ -199,33 +282,64 @@ public surface belongs to
   adopts their tokens.
 - `expandColorScale.ts`, `expandTypeScale.ts`, `expandRadiusScale.ts`, and
   `expandMotionScale.ts` own their derived token/component values.
+- `motionKnobs.ts` owns the motion knobs' types, defaults and clamping;
+  `themeMotion.ts` owns the tokens and pre-tempo durations they generate, and
+  `resolveThemeMotion`, the pure read the animator and server code use.
 - `mergeComponents.ts` owns the shared deep-merge rule.
 - `onMediaTokens.ts` owns normalization of inverted-surface overrides.
-- `localTokens.ts` owns opt-in enrollment, exact namespaces, reference closure,
-  cycle detection, cross-map collision rejection, and flattened lineage.
+- `localTokens.ts` owns opt-in enrollment, valid CSS custom-property names, exact
+  owner metadata, reference closure, cycle detection, cross-map collision rejection,
+  and flattened lineage. It does not infer ownership from prefixes.
 - `packages/cli/assets/theme.template.ts` is an author-facing projection and must
   remain aligned; it does not define additional semantics.
 
 ## Deciding specs
 
 AST-006 decisions 1–4 and 6 establish the shipped theme-local authoring shape,
-exact naming and inheritance rules, enrolled-only validation, and shared value
-contract. AST-012 decisions 1–4 establish the fixed width map, named closed
-conditions, ordered rule cascade, and source/built adaptation metadata parity.
-AST-017 decision 1 owns released compatibility classification and migration; this
-record identifies only the theme/Core trigger that enters that path.
+enrollment, exact-name preservation, inheritance, shared validation, and value contract.
+Its 2026-09-12 amendment makes key validity and ownership prefix-independent while
+retaining exact owner metadata, lineage, collisions, cycles, and legacy unenrolled
+behavior. AST-012 decisions 1–4 establish the fixed width map, named closed conditions,
+ordered rule cascade, and source/built adaptation metadata parity. AST-017 decision 1
+owns released compatibility classification and migration. AST-087 decisions 2, 7, 9,
+and 10 establish function icon entries, node-valued public reads, the theme-level
+`iconVariants` list, and the static public view of `componentIcons`. AST-108
+decision 1 establishes the three motion knobs and keeps per-role motion values
+internal.
+
+## Known conformance and verification gaps
+
+Prefix-independent `localTokens` key acceptance is accepted but unshipped. The current
+validator still requires the original theme-derived prefix and uses that prefix to
+classify local references. Until the implementation lands, INV8's prefix-independent
+clauses are current authority but not enforcement. Existing explicit enrollment,
+owner, lineage, collision, cycle, and legacy-unenrolled behavior remains shipped.
+
+`resolveThemeMotion`'s role tables are accepted but unshipped (`spec:AST-108`
+FR6): no spring reads the motion knobs yet. Until they land, that part of FR6
+is current authority but not enforcement.
+
+`reducedMotion: 'always'` is accepted but unshipped (`spec:AST-108` FR6,
+INV15): the public `motion` type has no `reducedMotion` field, every theme
+follows each person's setting as `'system'` does, and nothing marks a
+theme's root, until component styles, the animator, script readers of
+`prefers-reduced-motion`, and motion-keyed adaptation rules key reduced motion
+on the mark. Until then, that part of INV15 and FR6 is current authority but
+not enforcement.
 
 ## Verification
 
-| Invariant                | Evidence                                                                                                | Failure signal                                                                                      |
-| ------------------------ | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| INV1, INV2, INV5         | `defineTheme.test.ts` plus representative runtime/build parity                                          | Runtime and build interpret one input differently, or generated values beat explicit tokens         |
-| INV3, INV4               | extension and invalid-base tests                                                                        | Child themes require a base stylesheet or silently accept a non-theme base                          |
-| INV6                     | component merge tests across base/generated/explicit rules                                              | Restating one property drops inherited component styles                                             |
-| INV7                     | `onMediaTokens.test.ts` and generated surface-rule tests                                                | A child loses inherited surface customization or surface precedence changes                         |
-| INV8                     | `defineTheme.test.ts` and CLI source/built inheritance tests                                            | Enrollment, validation, or lineage differs across runtime and static authoring paths                |
-| INV10                    | `themeAdaptations.test.ts` and CLI build fixtures                                                       | Width metadata, rule order, or child re-resolution diverges across source and built themes          |
-| INV11                    | `DefineThemeInput`/output diff plus runtime/build fixtures                                              | Validation-only data enters the normalized theme, or productive input loses construction validation |
-| INV12                    | Core theme export diff, constructed-value evidence, and current-consumer callsite                       | A theme `define*` helper only checks input and returns that exact input unchanged                   |
-| Theme/Core compatibility | Maintained theme source/build against the minimum Core in its currently supported peer/dependency range | A theme update silently requires newer in-range Core or bypasses the `spec:AST-017` path            |
-| Authoring projection     | `scripts/check-theme-template.test.mjs`                                                                 | A supported authoring concept is missing or misstated in the template                               |
+| Invariant                | Evidence                                                                                                | Failure signal                                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| INV1, INV2, INV5         | `defineTheme.test.ts` plus representative runtime/build parity                                          | Runtime and build interpret one input differently, or generated values beat explicit tokens                               |
+| INV3, INV4               | extension and invalid-base tests                                                                        | Child themes require a base stylesheet or silently accept a non-theme base                                                |
+| INV6                     | component merge tests across base/generated/explicit rules                                              | Restating one property drops inherited component styles                                                                   |
+| INV7                     | `onMediaTokens.test.ts` and generated surface-rule tests                                                | A child loses inherited surface customization or surface precedence changes                                               |
+| INV8                     | AST-006 runtime/static validator and source/built inheritance tests                                     | A valid name fails because of its prefix, ownership follows spelling, or lineage/reference/collision/cycle checks diverge |
+| INV10                    | `themeAdaptations.test.ts` and CLI build fixtures                                                       | Width metadata, rule order, or child re-resolution diverges across source and built themes                                |
+| INV11                    | `DefineThemeInput`/output diff plus runtime/build fixtures                                              | Validation-only data enters the normalized theme, or productive input loses construction validation                       |
+| INV12                    | Core theme export diff, constructed-value evidence, and current-consumer callsite                       | A theme `define*` helper only checks input and returns that exact input unchanged                                         |
+| INV13, INV14             | `defineTheme.test.ts` type and normalization tests for function entries, slot functions, and the list   | A public read returns a function, a child merges variant lists, or an entry sees another theme's names                    |
+| INV15                    | `themeMotion.test.ts` over tempo bounds, characters, a duration scale, explicit tokens, and extension   | A token off its knob, a knob beating a scale or explicit token, a lost inherited knob, or a loop following `tempo`        |
+| Theme/Core compatibility | Maintained theme source/build against the minimum Core in its currently supported peer/dependency range | A theme update silently requires newer in-range Core or bypasses the `spec:AST-017` path                                  |
+| Authoring projection     | `scripts/check-theme-template.test.mjs`                                                                 | A supported authoring concept is missing or misstated in the template                                                     |

@@ -11,7 +11,8 @@
 // `interact()` function before measurement.
 //
 // All strategy code is inlined into a single browserside function
-// (STRATEGY_FN_SOURCE) which is stringified and executed via page.evaluate.
+// (see buildMeasureSource) which is stringified and executed via
+// page.evaluate. The geometry helpers below are injected into that source.
 
 export const STRATEGY_NAMES = [
   'visibleText',
@@ -23,7 +24,118 @@ export const STRATEGY_NAMES = [
   'footerButton',
   'srOnlyLabel',
   'srOnlyReveal',
+  'textRun',
+  'liveRegionReveal',
 ];
+
+// Strategies that inject a reveal bubble, so they also run before the
+// screenshot. Idempotent: measuring returns the rect recorded at injection.
+export const MUTATING_STRATEGIES = ['srOnlyReveal', 'liveRegionReveal'];
+
+// Gap in CSS px between a reveal bubble and the widget it labels — a little
+// wider beside the widget than above or below it.
+export const REVEAL_BUBBLE_GAP = {block: 4, inline: 6};
+
+// Layout coordinates carry float error, so an edge mathematically on the
+// boundary can measure a fraction past it.
+const EDGE_EPSILON = 1e-6;
+
+/**
+ * True when the capture contains the whole rect.
+ *
+ * Crowdin validates every tag against its image, so containment is part of
+ * whether a DOM match is usable at all — a match below the fold is not a
+ * match, and a later candidate may still be a good one. Partial rects are
+ * rejected rather than trimmed; nothing here scrolls.
+ */
+export function rectWithinViewport(rect, viewport) {
+  if (!rect) return false;
+  if (!(rect.width > 0) || !(rect.height > 0)) return false;
+  return (
+    rect.x >= -EDGE_EPSILON &&
+    rect.y >= -EDGE_EPSILON &&
+    rect.x + rect.width <= viewport.width + EDGE_EPSILON &&
+    rect.y + rect.height <= viewport.height + EDGE_EPSILON
+  );
+}
+
+/**
+ * Viewport-space rect for a reveal bubble of `bubbleSize` placed at
+ * `placement` beside `widgetRect`, clamped inside the viewport on both axes.
+ *
+ * Clamping slides the bubble along the edge it would have crossed, so the tag
+ * still labels the widget it was placed against. A bubble larger than the
+ * viewport is pinned at the origin and `rectWithinViewport` then rejects it.
+ */
+export function placeRevealBubble(widgetRect, bubbleSize, placement, viewport) {
+  const {width, height} = bubbleSize;
+  const centeredX = widgetRect.x + widgetRect.width / 2 - width / 2;
+  const centeredY = widgetRect.y + widgetRect.height / 2 - height / 2;
+  let x;
+  let y;
+  switch (placement) {
+    case 'below':
+      x = centeredX;
+      y = widgetRect.y + widgetRect.height + REVEAL_BUBBLE_GAP.block;
+      break;
+    case 'above':
+      x = centeredX;
+      y = widgetRect.y - height - REVEAL_BUBBLE_GAP.block;
+      break;
+    case 'left':
+      x = widgetRect.x - width - REVEAL_BUBBLE_GAP.inline;
+      y = centeredY;
+      break;
+    case 'right':
+    default:
+      x = widgetRect.x + widgetRect.width + REVEAL_BUBBLE_GAP.inline;
+      y = centeredY;
+  }
+  return {
+    x: Math.min(Math.max(x, 0), Math.max(0, viewport.width - width)),
+    y: Math.min(Math.max(y, 0), Math.max(0, viewport.height - height)),
+    width,
+    height,
+  };
+}
+
+/**
+ * CSS pixels → the integer device pixels Crowdin stores a tag in.
+ *
+ * Both EDGES are rounded and the size derived from them: rounding position
+ * and size independently can push `x + width` a pixel past the capture.
+ */
+export function toDevicePixelRect(rect, dpr) {
+  const x = Math.round(rect.x * dpr);
+  const y = Math.round(rect.y * dpr);
+  return {
+    x,
+    y,
+    width: Math.round((rect.x + rect.width) * dpr) - x,
+    height: Math.round((rect.y + rect.height) * dpr) - y,
+  };
+}
+
+// Free variables the stringified browser function reads from module scope.
+// Anything it uses has to be listed here to reach the page.
+const BROWSER_HELPERS = [rectWithinViewport, placeRevealBubble];
+const BROWSER_CONSTANTS = {REVEAL_BUBBLE_GAP, EDGE_EPSILON};
+
+/**
+ * Source for `page.evaluate`: an expression evaluating to the `measure`
+ * function, with the geometry helpers inlined.
+ */
+export function buildMeasureSource() {
+  return [
+    '(() => {',
+    ...Object.entries(BROWSER_CONSTANTS).map(
+      ([name, value]) => `const ${name} = ${JSON.stringify(value)};`,
+    ),
+    ...BROWSER_HELPERS.map(fn => fn.toString()),
+    `return (${browserSideMeasure.toString()})();`,
+    '})()',
+  ].join('\n');
+}
 
 // This function is stringified and evaluated in the browser. Do not import
 // anything from Node.js in here. `strategy` is the strategy name, `args` is
@@ -38,7 +150,16 @@ export function browserSideMeasure() {
       if (!visible(el)) return null;
       const r = el.getBoundingClientRect();
       if (r.width <= 0 || r.height <= 0) return null;
-      return {x: r.x, y: r.y, width: r.width, height: r.height};
+      const rect = {x: r.x, y: r.y, width: r.width, height: r.height};
+      return inViewport(rect) ? rect : null;
+    }
+    // The screenshot is the viewport, so a rect the viewport does not
+    // contain cannot be tagged on it.
+    function inViewport(rect) {
+      return rectWithinViewport(rect, {
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
     }
     // Matches when trimmed `actual === want`, or (when tolerance > 0) when
     // `actual.startsWith(want)` and the extra suffix is <= `tolerance` chars.
@@ -104,6 +225,7 @@ export function browserSideMeasure() {
         // Callers that specifically want sr-only labels should use
         // the srOnlyLabel strategy instead.
         if (r.width < 6 || r.height < 6) continue;
+        if (!inViewport(r)) continue;
         // Prefer the SMALLEST matching element — it's the most specific
         // (avoids picking up giant wrapper divs whose textContent happens
         // to equal the target text because they contain only that node).
@@ -114,6 +236,108 @@ export function browserSideMeasure() {
       if (!best) return null;
       return {x: best.x, y: best.y, width: best.w, height: best.h};
     }
+    // Reveal bubbles — shared by srOnlyReveal and liveRegionReveal. -----------
+
+    // Idempotent: a bubble injected by the pre-screenshot pass reports the
+    // rect recorded when it was placed. That recorded rect is the authority —
+    // re-deriving it from the DOM would have to redo positionBubble's
+    // containing-block correction.
+    function readCachedRect(el) {
+      if (!el) return null;
+      const cx = parseFloat(el.getAttribute('data-crowdin-vx') || '');
+      const cy = parseFloat(el.getAttribute('data-crowdin-vy') || '');
+      const cw = parseFloat(el.getAttribute('data-crowdin-vw') || '');
+      const ch = parseFloat(el.getAttribute('data-crowdin-vh') || '');
+      if (Number.isFinite(cx) && Number.isFinite(cy) &&
+          Number.isFinite(cw) && Number.isFinite(ch)) {
+        return {x: cx, y: cy, width: cw, height: ch};
+      }
+      return null;
+    }
+    function cacheRect(bubble, rect) {
+      bubble.setAttribute('data-crowdin-vx', String(rect.x));
+      bubble.setAttribute('data-crowdin-vy', String(rect.y));
+      bubble.setAttribute('data-crowdin-vw', String(rect.width));
+      bubble.setAttribute('data-crowdin-vh', String(rect.height));
+    }
+    function existingBubbleRect(text) {
+      const existing = document.querySelector(
+        `[data-crowdin-reveal-text="${CSS.escape(text)}"]`,
+      );
+      if (!existing) return undefined;
+      const cached = readCachedRect(existing);
+      if (!cached) return undefined;
+      return inViewport(cached) ? cached : null;
+    }
+    function applyBubbleStyle(bubble, t) {
+      bubble.setAttribute('data-crowdin-reveal', '1');
+      bubble.setAttribute('data-crowdin-reveal-text', t);
+      bubble.textContent = t;
+      const S = bubble.style;
+      S.position = 'fixed';
+      S.background = '#ffe680';
+      S.border = '1px solid #b8860b';
+      S.borderRadius = '4px';
+      S.padding = '2px 6px';
+      S.font =
+        '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
+      S.color = '#654200';
+      S.zIndex = '99999';
+      S.whiteSpace = 'nowrap';
+      S.pointerEvents = 'none';
+      S.lineHeight = '14px';
+    }
+    // Place the bubble at `place`, clamped inside the viewport, and return the
+    // rect it occupies in the screenshot. `position: fixed` resolves against a
+    // transformed ancestor or the top layer, not always the viewport, so write
+    // viewport coordinates, read back where the browser painted, and correct
+    // by the difference.
+    function positionBubble(bubble, widgetRect, place) {
+      const b = bubble.getBoundingClientRect();
+      const target = placeRevealBubble(
+        widgetRect,
+        {width: b.width, height: b.height},
+        place,
+        {width: window.innerWidth, height: window.innerHeight},
+      );
+      bubble.style.left = `${target.x}px`;
+      bubble.style.top = `${target.y}px`;
+      const painted = bubble.getBoundingClientRect();
+      const dx = target.x - painted.x;
+      const dy = target.y - painted.y;
+      if (Math.abs(dx) >= 0.5 || Math.abs(dy) >= 0.5) {
+        bubble.style.left = `${target.x + dx}px`;
+        bubble.style.top = `${target.y + dy}px`;
+      }
+      return target;
+    }
+    // Inject one bubble reading `text` beside each widget in `anchors`, and
+    // return the last placed rect. A widget outside the capture gets no
+    // bubble: clamping one into view would park a tag on whatever is at the
+    // edge.
+    function injectRevealBubbles(text, anchors, place) {
+      let lastRect = null;
+      for (const anc of anchors) {
+        const pr = anc.getBoundingClientRect();
+        if (!inViewport(pr)) continue;
+        const bubble = document.createElement('div');
+        applyBubbleStyle(bubble, text);
+        // Native <dialog>.showModal() renders inside the browser's "top
+        // layer" above all other content. Elements in the normal DOM tree are
+        // painted UNDER the dialog regardless of z-index. If the widget is
+        // inside a modal dialog, attach the bubble to that dialog so it also
+        // renders in the top layer.
+        const modalHost =
+          anc.closest('dialog[open]') || anc.closest('[popover]');
+        (modalHost || document.body).appendChild(bubble);
+        const rect = positionBubble(bubble, pr, place);
+        cacheRect(bubble, rect);
+        lastRect = rect;
+      }
+      // A bubble larger than the viewport cannot be placed legally.
+      return inViewport(lastRect) ? lastRect : null;
+    }
+
     // Returns true if `el` is the topmost element at its own center — i.e.
     // NOT covered by an overlapping popover/dropdown. Guards against
     // tagging positions of buttons that are hidden behind an open
@@ -224,6 +448,7 @@ export function browserSideMeasure() {
           if (!rects.length) continue;
           const r = rects[0];
           if (r.width <= 0 || r.height <= 0) continue;
+          if (!inViewport(r)) continue;
           return {x: r.x, y: r.y, width: r.width, height: r.height};
         }
       }
@@ -279,6 +504,7 @@ export function browserSideMeasure() {
         if (!isVisibleAtCenter(b)) continue;
         const r = b.getBoundingClientRect();
         if (r.width <= 0 || r.height <= 0) continue;
+        if (!inViewport(r)) continue;
         // Pick the smallest — typically the actual footer button (larger
         // matches would be wrapper divs with the same text).
         if (!best || r.width * r.height < best.w * best.h) {
@@ -322,43 +548,8 @@ export function browserSideMeasure() {
     function srOnlyReveal(text, placement) {
       const place = placement || 'right';
 
-      // Idempotent: if a reveal bubble for this text already exists (from
-      // a pre-screenshot pass), just return its rect instead of injecting
-      // another one. We stash the viewport-relative paint rect at
-      // injection time as data-* attrs, because getBoundingClientRect()
-      // on top-layer descendants can shift between calls
-      // (containing-block vs viewport) in some browsers.
-      function readCachedRect(el) {
-        if (!el) return null;
-        const cx = parseFloat(el.getAttribute('data-crowdin-vx') || '');
-        const cy = parseFloat(el.getAttribute('data-crowdin-vy') || '');
-        const cw = parseFloat(el.getAttribute('data-crowdin-vw') || '');
-        const ch = parseFloat(el.getAttribute('data-crowdin-vh') || '');
-        if (Number.isFinite(cx) && Number.isFinite(cy) &&
-            Number.isFinite(cw) && Number.isFinite(ch)) {
-          return {x: cx, y: cy, width: cw, height: ch};
-        }
-        return null;
-      }
-      function cachePaintRect(bubble) {
-        const p = bubble.getBoundingClientRect();
-        bubble.setAttribute('data-crowdin-vx', String(p.x));
-        bubble.setAttribute('data-crowdin-vy', String(p.y));
-        bubble.setAttribute('data-crowdin-vw', String(p.width));
-        bubble.setAttribute('data-crowdin-vh', String(p.height));
-      }
-
-      const existing = document.querySelector(
-        `[data-crowdin-reveal-text="${CSS.escape(text)}"]`,
-      );
-      if (existing) {
-        const cached = readCachedRect(existing);
-        if (cached) return cached;
-        const er = existing.getBoundingClientRect();
-        if (er.width > 0 && er.height > 0) {
-          return {x: er.x, y: er.y, width: er.width, height: er.height};
-        }
-      }
+      const cached = existingBubbleRect(text);
+      if (cached !== undefined) return cached;
 
       // Two match paths (deduped):
       // (1) sr-only label/span/aria-hidden element whose textContent is `text`
@@ -414,85 +605,63 @@ export function browserSideMeasure() {
         return unique;
       }
 
-      function applyBubbleStyle(bubble, t) {
-        bubble.setAttribute('data-crowdin-reveal', '1');
-        bubble.setAttribute('data-crowdin-reveal-text', t);
-        bubble.textContent = t;
-        const S = bubble.style;
-        S.position = 'fixed';
-        S.background = '#ffe680';
-        S.border = '1px solid #b8860b';
-        S.borderRadius = '4px';
-        S.padding = '2px 6px';
-        S.font =
-          '600 11px system-ui, -apple-system, BlinkMacSystemFont, sans-serif';
-        S.color = '#654200';
-        S.zIndex = '99999';
-        S.whiteSpace = 'nowrap';
-        S.pointerEvents = 'none';
-        S.lineHeight = '14px';
-      }
-
-      // Compute viewport-space left/top for the bubble at `place`, then
-      // translate to containing-block-space when parented to a top-layer
-      // element (native <dialog>/[popover]) whose `position: fixed`
-      // descendants are scoped to the dialog's origin.
-      function positionBubble(bubble, widgetRect, place, modalHost) {
-        const b = bubble.getBoundingClientRect();
-        let left = 0;
-        let top = 0;
-        switch (place) {
-          case 'below':
-            left = widgetRect.left + widgetRect.width / 2 - b.width / 2;
-            top = widgetRect.bottom + 4;
-            break;
-          case 'above':
-            left = widgetRect.left + widgetRect.width / 2 - b.width / 2;
-            top = widgetRect.top - b.height - 4;
-            break;
-          case 'left':
-            left = widgetRect.left - b.width - 6;
-            top = widgetRect.top + widgetRect.height / 2 - b.height / 2;
-            break;
-          case 'right':
-          default:
-            left = widgetRect.right + 6;
-            top = widgetRect.top + widgetRect.height / 2 - b.height / 2;
-        }
-        if (modalHost) {
-          const mr = modalHost.getBoundingClientRect();
-          left -= mr.left;
-          top -= mr.top;
-        }
-        bubble.style.left = `${Math.max(0, Math.round(left))}px`;
-        bubble.style.top = `${Math.max(0, Math.round(top))}px`;
-      }
-
       const uniqueWidgets = findWidgetsForRevealText(text);
       if (uniqueWidgets.length === 0) return null;
 
-      // Inject one bubble per widget so translators see the reveal for
-      // every occurrence (e.g. "Expand row" on multiple rows).
-      let lastBubble = null;
-      for (const anc of uniqueWidgets) {
-        const pr = anc.getBoundingClientRect();
-        const bubble = document.createElement('div');
-        applyBubbleStyle(bubble, text);
-        // Native <dialog>.showModal() renders inside the browser's "top
-        // layer" above all other content. Elements in the normal DOM tree
-        // are painted UNDER the dialog regardless of z-index. If the
-        // widget is inside a modal dialog, attach the bubble to that
-        // dialog so it also renders in the top layer.
-        const modalHost =
-          anc.closest('dialog[open]') || anc.closest('[popover]');
-        const host = modalHost || document.body;
-        host.appendChild(bubble);
-        positionBubble(bubble, pr, place, modalHost);
-        cachePaintRect(bubble);
-        lastBubble = bubble;
+      // One bubble per widget, so translators see the reveal for every
+      // occurrence (e.g. "Expand row" on multiple rows).
+      return injectRevealBubbles(text, uniqueWidgets, place);
+    }
+
+    // textRun(text) — Range-measure a bare text node reading `text`, for a
+    // string sharing its element with other content ("↑↓" + "Navigate").
+    function textRun(text) {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let node;
+      let best = null;
+      while ((node = walker.nextNode())) {
+        const value = node.nodeValue || '';
+        if (value.trim() !== text) continue;
+        const parent = node.parentElement;
+        if (!visible(parent)) continue;
+        const range = document.createRange();
+        // Skip surrounding whitespace so the rect hugs the words.
+        const start = value.indexOf(text);
+        range.setStart(node, start);
+        range.setEnd(node, start + text.length);
+        const r = range.getBoundingClientRect();
+        if (r.width <= 0 || r.height <= 0) continue;
+        if (!inViewport(r)) continue;
+        // Smallest wins, matching findByExactText — the most specific match.
+        if (!best || r.width * r.height < best.width * best.height) {
+          best = {x: r.x, y: r.y, width: r.width, height: r.height};
+        }
       }
-      if (!lastBubble) return null;
-      return readCachedRect(lastBubble);
+      return best;
+    }
+
+    // liveRegionReveal(text, anchorSelector, placement?) — reveal a live
+    // region announcement, which has no pixels, beside the widget it is about.
+    // The announcement is transient, so injection has to happen while it lives.
+    function liveRegionReveal(text, anchorSelector, placement) {
+      const place = placement || 'below';
+
+      const cached = existingBubbleRect(text);
+      if (cached !== undefined) return cached;
+
+      const regions = Array.from(
+        document.querySelectorAll('[aria-live], [role="status"], [role="alert"]'),
+      );
+      if (!regions.some(el => (el.textContent || '').trim() === text)) return null;
+
+      const anchor = anchorSelector
+        ? document.querySelector(anchorSelector)
+        : null;
+      if (!anchor) return null;
+      const widget = expandToMeasurableSelf(anchor, 6);
+      if (!widget) return null;
+
+      return injectRevealBubbles(text, [widget], place);
     }
 
     // Dispatcher --------------------------------------------------------------
@@ -506,6 +675,8 @@ export function browserSideMeasure() {
       case 'footerButton': return footerButton(args[0]);
       case 'srOnlyLabel': return srOnlyLabel(args[0]);
       case 'srOnlyReveal': return srOnlyReveal(args[0], args[1]);
+      case 'textRun': return textRun(args[0]);
+      case 'liveRegionReveal': return liveRegionReveal(args[0], args[1], args[2]);
       default: return null;
     }
   };

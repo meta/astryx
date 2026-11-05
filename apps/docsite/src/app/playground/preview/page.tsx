@@ -1,5 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file page.tsx
+ * @input Attested preview channel, editor code, and active theme
+ * @output Isolated live preview with native navigation in production, or a
+ *   compile error sent to the playground when the compiler bootstrap fails
+ * @position Playground runner; platform restrictions never grant parent privileges.
+ */
+
 'use client';
 
 import React, {
@@ -20,10 +28,32 @@ import {
   refreshTargetLabels,
   setActiveSiteMode,
   setCleanSource,
+  setPostToParent,
 } from '../propertyEditor/targetingOverlay';
-import {runCode, setTypeScript} from './runner';
-import {isTrustedPreviewMessage, trustedPreviewOrigin} from '../previewChannel';
+import {runCode, setTypeScript, type LocalModules} from './runner';
+import {loadPostModules} from './postModules';
+import {
+  acceptPreviewConnect,
+  announcePreview,
+  readPreviewNonce,
+} from '../previewChannel';
 import type * as TS from 'typescript';
+import NextLink from 'next/link';
+import {LinkProvider} from '@astryxdesign/core/Link';
+
+// Next's client router mutates history, which an opaque-origin document cannot
+// do for another path. Native links keep fragment navigation usable and let
+// full document navigation reach the existing replacement/recovery boundary.
+const PreviewLink = process.env.NODE_ENV === 'development' ? NextLink : 'a';
+
+// How long after the compiler is ready the readiness announcement waits for
+// this document's own `load` event before giving up on it. The wait exists so
+// no previewed code runs before the frame's first load event (see
+// previewChannel.ts, "The handshake", step 4); the cap keeps a stalled
+// third-party subresource from stalling the preview. Past the cap only
+// recovery from hostile code that navigates away within its first
+// milliseconds is at stake, never isolation.
+const DOCUMENT_LOAD_WAIT_MS = 5000;
 
 const FALLBACK_THEME =
   themeByValue[DEFAULT_PLAYGROUND_THEME] ?? Object.values(themeByValue)[0];
@@ -34,8 +64,14 @@ const useIsomorphicLayoutEffect =
   typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 type PreviewMessage =
-  | {type: 'preview-ping'}
-  | {type: 'preview-code'; code: string; source: string}
+  | {
+      type: 'preview-code';
+      code: string;
+      source: string;
+      // A blog post's live example (spec:AST-033 FR22): the post whose
+      // post-local example assets the code may import by relative path.
+      post?: string;
+    }
   | {type: 'preview-clear'}
   | {
       type: 'preview-theme';
@@ -90,13 +126,23 @@ export default function PreviewPage() {
   const [customTheme, setCustomTheme] = useState<DefinedTheme | null>(null);
   const [resetKey, setResetKey] = useState(0);
   const [tsReady, setTsReady] = useState(false);
+  const [compilerError, setCompilerError] = useState<string | null>(null);
+  // Whether this document's own `load` event has fired (or the wait for it
+  // ran out); readiness is announced only after it.
+  const [documentLoaded, setDocumentLoaded] = useState(false);
+  // The channel adopted from the playground's connect handshake.
+  const [port, setPort] = useState<MessagePort | null>(null);
   // Whether the rendered output should fill the stage (full-page templates) vs
   // be centered as a small example. Defaults to fill so templates are never
   // shrunk; the layout effect downgrades small content to centered.
   const [fill, setFill] = useState(true);
-  const readyRef = useRef(false);
+  // The port readiness was last announced on.
+  const readyRef = useRef<MessagePort | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  // Counts code messages, so a run that waits on a post's example assets
+  // never lands after a newer message.
+  const codeRunRef = useRef(0);
 
   // Load the TypeScript compiler from public/vendor — self-hosted because
   // corpnet blocks external CDNs. The UMD sets window.ts in the browser
@@ -104,32 +150,41 @@ export default function PreviewPage() {
   useEffect(() => {
     const script = document.createElement('script');
     script.src = '/vendor/typescript.js';
+    const fail = () => setCompilerError('TypeScript compiler failed to load');
     script.onload = () => {
       const w = window as unknown as {ts?: typeof TS};
       if (w.ts) {
         setTypeScript(w.ts);
         setTsReady(true);
+      } else {
+        fail();
       }
     };
+    script.onerror = fail;
     document.head.appendChild(script);
+    return () => script.remove();
   }, []);
 
   const theme = customTheme ?? themeByValue[themeName] ?? FALLBACK_THEME;
 
+  // Everything back to the playground travels over the adopted port (see
+  // previewChannel.ts); until the handshake lands there is nobody to talk to.
+  const portRef = useRef<MessagePort | null>(null);
   const postToParent = useCallback((msg: Record<string, unknown>) => {
-    window.parent.postMessage(msg, trustedPreviewOrigin());
+    portRef.current?.postMessage(msg);
   }, []);
 
   const targetingRef = useRef<ReturnType<
     typeof createTargetingController
   > | null>(null);
   if (targetingRef.current == null && typeof window !== 'undefined') {
+    setPostToParent(postToParent);
     targetingRef.current = createTargetingController(postToParent);
   }
 
   const handleCode = useCallback(
-    (code: string) => {
-      const result = runCode(code);
+    (code: string, localModules?: LocalModules) => {
+      const result = runCode(code, localModules);
       if (result.Component) {
         setComponent(() => result.Component);
         setError(null);
@@ -192,35 +247,116 @@ export default function PreviewPage() {
     [],
   );
 
+  // Prove to the playground that this document is the one it navigated the
+  // frame to, and adopt the channel it answers with. Attached from mount (not
+  // gated on tsReady) so the answer is never missed — the ready reply below
+  // waits for tsReady instead.
   useEffect(() => {
-    if (!tsReady) {
+    function onWindowMessage(event: MessageEvent) {
+      // The port handler below evaluates attacker-controllable source, so a
+      // port is adopted only from a connect handshake sent by our own parent
+      // window (see previewChannel.ts) — nothing else on the window is heard.
+      const next = acceptPreviewConnect(event, window.parent);
+      if (next == null) {
+        return;
+      }
+      portRef.current?.close();
+      portRef.current = next;
+      setPort(next);
+    }
+    window.addEventListener('message', onWindowMessage);
+    // The nonce came in with the navigation the playground issued; echoing it
+    // is what earns this document a port. A document that reached the frame
+    // any other way holds a nonce the playground has already spent.
+    announcePreview(window.parent, readPreviewNonce(window.location.hash));
+    return () => window.removeEventListener('message', onWindowMessage);
+  }, []);
+
+  // Track this document's own load so readiness — and with it the first run
+  // of previewed code — waits for it (see DOCUMENT_LOAD_WAIT_MS).
+  useEffect(() => {
+    if (document.readyState === 'complete') {
+      setDocumentLoaded(true);
+      return;
+    }
+    const onLoad = () => setDocumentLoaded(true);
+    window.addEventListener('load', onLoad);
+    return () => window.removeEventListener('load', onLoad);
+  }, []);
+
+  useEffect(() => {
+    if (!tsReady || documentLoaded) {
+      return;
+    }
+    const timer = setTimeout(
+      () => setDocumentLoaded(true),
+      DOCUMENT_LOAD_WAIT_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [tsReady, documentLoaded]);
+
+  useEffect(() => {
+    if (
+      !documentLoaded ||
+      port == null ||
+      (!tsReady && compilerError == null)
+    ) {
+      return;
+    }
+
+    if (compilerError != null) {
+      postToParent({
+        type: 'preview-error',
+        error: compilerError,
+        phase: 'compile',
+      });
       return;
     }
 
     function onMessage(event: MessageEvent) {
-      // The switch below evaluates attacker-controllable source, so nothing is
-      // read off `event` until the sender is known to be our own playground.
-      if (
-        !isTrustedPreviewMessage(event, trustedPreviewOrigin(), window.parent)
-      ) {
-        return;
-      }
       if (!isPreviewMessage(event.data)) {
         return;
       }
 
       switch (event.data.type) {
-        case 'preview-ping':
-          postToParent({type: 'preview-ready'});
-          break;
         case 'preview-code':
           // Keep the clean source current for the badge popover, then refresh
           // any live badges so an open popover re-parses against it.
           setCleanSource(event.data.source ?? event.data.code);
           refreshTargetLabels();
-          handleCode(event.data.code);
+          {
+            const {code, post} = event.data;
+            const run = ++codeRunRef.current;
+            if (typeof post === 'string') {
+              // Load the post's own example assets first; a newer code
+              // message supersedes this run.
+              void loadPostModules(post).then(
+                modules => {
+                  if (run === codeRunRef.current) {
+                    handleCode(code, modules);
+                  }
+                },
+                (err: unknown) => {
+                  if (run === codeRunRef.current) {
+                    const message =
+                      err instanceof Error ? err.message : String(err);
+                    setComponent(null);
+                    setError(`[compile] ${message}`);
+                    postToParent({
+                      type: 'preview-error',
+                      error: message,
+                      phase: 'compile',
+                    });
+                  }
+                },
+              );
+            } else {
+              handleCode(code);
+            }
+          }
           break;
         case 'preview-clear':
+          codeRunRef.current += 1;
           handleClear();
           break;
         case 'preview-theme':
@@ -235,15 +371,31 @@ export default function PreviewPage() {
       }
     }
 
-    window.addEventListener('message', onMessage);
+    port.onmessage = onMessage;
 
-    if (!readyRef.current) {
-      readyRef.current = true;
+    // Announce readiness once per adopted port. The playground flushes the
+    // current code on hearing it, so this is the moment previewed code first
+    // runs — after this document's own load, by the effect's guard.
+    if (readyRef.current !== port) {
+      readyRef.current = port;
       postToParent({type: 'preview-ready'});
     }
 
-    return () => window.removeEventListener('message', onMessage);
-  }, [tsReady, postToParent, handleCode, handleClear, handleTheme]);
+    return () => {
+      if (port.onmessage === onMessage) {
+        port.onmessage = null;
+      }
+    };
+  }, [
+    tsReady,
+    compilerError,
+    documentLoaded,
+    port,
+    postToParent,
+    handleCode,
+    handleClear,
+    handleTheme,
+  ]);
 
   // After each successful render (measured in fill/block layout), decide
   // whether the content is a small example that should be centered. Full-page
@@ -290,7 +442,9 @@ export default function PreviewPage() {
         {Component && (
           <div ref={contentRef} {...stylex.props(fill && styles.contentFill)}>
             <ErrorBoundary resetKey={resetKey} onError={handleBoundaryError}>
-              <Component />
+              <LinkProvider component={PreviewLink}>
+                <Component />
+              </LinkProvider>
             </ErrorBoundary>
           </div>
         )}

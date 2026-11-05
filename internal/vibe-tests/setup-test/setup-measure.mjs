@@ -66,15 +66,28 @@ export function parseLayerOrder(css) {
  * `CI=true` and piped stdio keep it non-interactive: a package manager or
  * bundler that finds no TTY must not stop to ask anything, and a spinner that
  * probes for one must not error out. Measurement is unattended by definition.
+ *
+ * pnpm is a .cmd (batch) file on Windows; spawnSync can only run a batch
+ * file through a shell, so shell out through cmd.exe /c directly rather than
+ * spawnSync's shell:true. See internal/vibe-tests/src/fixture-suite.mjs for
+ * the same pattern.
  */
 function build(appDir) {
   const started = Date.now();
-  const result = spawnSync('pnpm', ['build'], {
-    cwd: appDir,
-    encoding: 'utf8',
-    env: {...process.env, CI: 'true'},
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  const result =
+    process.platform === 'win32'
+      ? spawnSync('cmd.exe', ['/d', '/s', '/c', 'pnpm', 'build'], {
+          cwd: appDir,
+          encoding: 'utf8',
+          env: {...process.env, CI: 'true'},
+          stdio: ['ignore', 'pipe', 'pipe'],
+        })
+      : spawnSync('pnpm', ['build'], {
+          cwd: appDir,
+          encoding: 'utf8',
+          env: {...process.env, CI: 'true'},
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
   return {
     ok: result.status === 0,
     status: result.status ?? -1,

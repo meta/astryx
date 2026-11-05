@@ -17,6 +17,7 @@ export default function TimeInputConstrained() {
         max={'22:00' as never}
         description="Evening seating: 5 PM – 10 PM"
         placeholder="Select reservation time"
+        presentation="adaptive-bottom-sheet"
         value={evening as never}
         onChange={setEvening as never}
         hasClear

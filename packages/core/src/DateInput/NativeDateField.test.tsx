@@ -20,7 +20,7 @@
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {render, screen, fireEvent, act} from '@testing-library/react';
 import {DateInput} from './DateInput';
 import type * as NativeDateSegments from './nativeDateSegments';
 import {
@@ -194,6 +194,52 @@ describe('DateInput nativePicker', () => {
     fireEvent.change(getInput(), {target: {value: '2026-03-21'}});
 
     expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-03-21');
+  });
+
+  it('runs changeAction after onChange and exposes the pending state', async () => {
+    stubPointer(true);
+    const calls: string[] = [];
+    let resolveAction: () => void = () => {};
+    const changeAction = vi.fn(
+      async () =>
+        new Promise<void>(resolve => {
+          calls.push('changeAction');
+          resolveAction = resolve;
+        }),
+    );
+    const onChange = vi.fn(() => calls.push('onChange'));
+    render(
+      <DateInput
+        label="Date"
+        onChange={onChange}
+        changeAction={changeAction}
+      />,
+    );
+
+    fireEvent.change(getInput(), {target: {value: '2026-03-21'}});
+
+    expect(calls).toEqual(['onChange', 'changeAction']);
+    expect(changeAction).toHaveBeenCalledExactlyOnceWith('2026-03-21');
+    expect(getInput()).not.toBeDisabled();
+    expect(getInput()).toHaveAttribute('aria-busy', 'true');
+    // The busy Spinner is decorative (spec:AST-086 FR8).
+    expect(document.querySelector('.astryx-spinner')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+    expect(screen.getByText('March 21, 2026')).toBeInTheDocument();
+
+    fireEvent.change(getInput(), {target: {value: '2026-03-22'}});
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(changeAction).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('March 21, 2026')).toBeInTheDocument();
+
+    await act(async () => resolveAction());
+
+    fireEvent.change(getInput(), {target: {value: '2026-03-22'}});
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(changeAction).toHaveBeenNthCalledWith(2, '2026-03-22');
+    await act(async () => resolveAction());
   });
 
   it('fires onChange with undefined when the control is emptied', () => {
@@ -529,12 +575,72 @@ describe('DateInput nativePicker', () => {
     expect(getInput()).not.toHaveFocus();
   });
 
-  it('disables the control and its toggle when isDisabled', () => {
+  it('runs clear through changeAction after onChange', async () => {
+    stubPointer(true);
+    const calls: string[] = [];
+    let resolveAction: () => void = () => {};
+    const changeAction = vi.fn(
+      async () =>
+        new Promise<void>(resolve => {
+          calls.push('changeAction');
+          resolveAction = resolve;
+        }),
+    );
+    const onChange = vi.fn(() => calls.push('onChange'));
+    render(
+      <DateInput
+        label="Date"
+        value="2026-03-21"
+        hasClear
+        onChange={onChange}
+        changeAction={changeAction}
+      />,
+    );
+
+    fireEvent.click(screen.getByLabelText('Clear Date'));
+
+    expect(calls).toEqual(['onChange', 'changeAction']);
+    expect(changeAction).toHaveBeenCalledExactlyOnceWith(undefined);
+    // The busy Spinner is decorative (spec:AST-086 FR8).
+    expect(document.querySelector('.astryx-spinner')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
+    await act(async () => resolveAction());
+  });
+
+  it('keeps a disabled control focusable and its toggle inert (AST-085 FR1, FR2)', () => {
     stubPointer(true);
     render(<DateInput label="Date" isDisabled onChange={() => {}} />);
 
-    expect(getInput()).toBeDisabled();
-    expect(screen.getByLabelText('Open calendar')).toBeDisabled();
+    const input = getInput();
+    expect(input).not.toHaveAttribute('disabled');
+    expect(input).toHaveAttribute('aria-disabled', 'true');
+    expect(input).toHaveAttribute('readonly');
+    input.focus();
+    expect(input).toHaveFocus();
+    const toggle = screen.getByLabelText('Open calendar');
+    expect(toggle).not.toHaveAttribute('disabled');
+    expect(toggle).toHaveAttribute('aria-disabled', 'true');
+    const showPicker = vi.fn();
+    Object.defineProperty(input, 'showPicker', {value: showPicker});
+    fireEvent.click(toggle);
+    expect(showPicker).not.toHaveBeenCalled();
+  });
+
+  it('does not call a caller onClick while disabled (AST-085 FR2)', () => {
+    stubPointer(true);
+    const onClick = vi.fn();
+    render(
+      <DateInput
+        label="Date"
+        isDisabled
+        onClick={onClick}
+        onChange={() => {}}
+      />,
+    );
+    fireEvent.click(getInput());
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it('ignores a change while disabled', () => {

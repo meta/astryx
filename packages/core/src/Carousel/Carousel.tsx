@@ -14,7 +14,9 @@
  *   scroll control. Exposes APG
  *   carousel semantics: the root is a labelled region with
  *   aria-roledescription="carousel" and each item wrapper is a group with
- *   aria-roledescription="slide" named "Slide N of M".
+ *   aria-roledescription="slide" named "Slide N of M". The scroll area is a
+ *   group named like the carousel and a tab stop only while its content
+ *   overflows (AST-025 FR12).
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Carousel/index.ts (exports)
@@ -49,9 +51,15 @@ import type {BaseProps} from '../BaseProps';
 import {mergeProps, rtlStyles} from '../utils';
 import type {SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Carousel/Carousel.generated';
+
+registerEnglishFallback(english);
 /**
  * Imperative control surface for the Carousel, accessed via the `handleRef`
  * prop. Methods drive the same native-scroll machinery as the built-in
@@ -338,7 +346,7 @@ export function Carousel({
   'data-testid': testId,
   ...htmlProps
 }: CarouselProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.carousel.label');
   const scrollElRef = useRef<HTMLElement | null>(null);
   const startButtonRef = useRef<HTMLButtonElement>(null);
@@ -361,6 +369,7 @@ export function Carousel({
     lightDismiss: false,
   });
 
+  // Syncs the layer with `hasButtons`.
   useEffect(() => {
     if (hasButtons) {
       layer.show();
@@ -504,9 +513,7 @@ export function Carousel({
   // the scroll, the position before it plus the step, and the settled position
   // reported by `scrollend` -- were each wrong somewhere, under reduced motion,
   // under mandatory scroll-snap, and on a browser that never fires the event.
-  // Running after the commit also makes the opposite button a valid receiver,
-  // which it is not during the press: at that moment it is still disabled and
-  // focus() on a disabled control does nothing. Ruled acceptable by the
+  // Ruled acceptable by the
   // maintainer, 2026-08-27, on the conditions encoded below: it acts only on
   // the transition that newly disables the focused button, it moves focus and
   // nothing else, and it cannot fire twice for one transition.
@@ -543,21 +550,16 @@ export function Carousel({
       return;
     }
 
-    const opposite =
-      side === 'start' ? endButtonRef.current : startButtonRef.current;
-    // The opposite button is the receiver. It is disabled only when the
-    // carousel stopped overflowing entirely, which happens when its content
-    // shrinks; the scroll container is then the nearest tab stop still inside
-    // the labelled region.
-    const receiver =
-      opposite != null && !opposite.disabled ? opposite : scrollElRef.current;
+    // The scroll area is the receiver (component:Carousel FR2). It takes focus
+    // programmatically even when it is out of the tab order.
+    const receiver = scrollElRef.current;
     if (receiver == null) {
       return;
     }
 
     // One move per transition: clearing the tracker first means a re-render or
     // a StrictMode double-invoke re-runs this and returns at the `side == null`
-    // guard above. Focusing the receiver sets it again, to the other side.
+    // guard above.
     focusedNavRef.current = null;
     // preventScroll: a plain focus() scrolls its element into view, which on
     // the scroll container cancels the scroll the press just started.
@@ -598,7 +600,13 @@ export function Carousel({
       aria-roledescription="carousel">
       <div
         ref={composedRef}
-        tabIndex={0}
+        // The scroll area takes keyboard scrolling (spec:AST-025 FR12): a
+        // group named like the carousel, in the tab order only while its
+        // content overflows. While it fits it still takes focus
+        // programmatically, for the edge buttons' hand-off (FR2).
+        role="group"
+        aria-label={ariaLabel}
+        tabIndex={hasOverflow ? 0 : -1}
         onWheel={handleWheel}
         {...mergeProps(
           themeProps('carousel-scroller', {
@@ -661,7 +669,7 @@ export function Carousel({
                 // button mounted (stable layout) but removes it from the tab
                 // order and a11y tree while it's visually hidden, so keyboard
                 // users don't land on an invisible control. The Effect above
-                // hands focus to the other button when the state behind this
+                // hands focus to the scroll area when the state behind this
                 // one flips it disabled.
                 isDisabled={!canScrollStart}
                 onFocus={() => {

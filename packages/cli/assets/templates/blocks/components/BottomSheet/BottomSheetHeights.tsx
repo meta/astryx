@@ -34,7 +34,7 @@ export default function BottomSheetHeights() {
         onOpenChange={isOpen => !isOpen && setHeight(null)}
         label={`${height ?? 'Hug'} height`}
         height={height ?? 'hug'}>
-        <VStack gap={4} style={{padding: 'var(--spacing-4)'}}>
+        <VStack gap={4}>
           <Heading level={3}>{height ?? 'Hug'} height</Heading>
           <Divider />
           <Text type="body">{descriptions[height ?? 'hug']}</Text>

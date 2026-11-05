@@ -28,6 +28,9 @@ export interface ExpectAccessibilitySpecOptions<Facts> extends Omit<
   readonly render: () => Promise<void> | void;
   /** Resolve the role-bearing element the specification checks. */
   readonly subject: () => Promise<Element> | Element;
+  readonly related?: () =>
+    | Promise<Readonly<Record<string, Element>>>
+    | Readonly<Record<string, Element>>;
   /** Remove the rendered state between expectations. */
   readonly cleanup?: () => Promise<void> | void;
 }
@@ -39,13 +42,16 @@ export interface ExpectAccessibilitySpecOptions<Facts> extends Omit<
 export async function expectAccessibilitySpec<Facts>(
   options: ExpectAccessibilitySpecOptions<Facts>,
 ): Promise<BindingResult> {
-  const {spec, render, subject, cleanup, ...binding} = options;
+  const {spec, render, subject, related, cleanup, ...binding} = options;
   const result = await checkAccessibilitySpec({
     ...binding,
     spec,
     mount: async () => {
       await render();
-      return createJsdomHarness({subject: await subject()});
+      return createJsdomHarness({
+        subject: await subject(),
+        related: await related?.(),
+      });
     },
     unmount: cleanup,
   });

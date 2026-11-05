@@ -68,6 +68,9 @@
  */
 
 import {createRequire} from 'node:module';
+import * as path from 'node:path';
+
+import {findInstalledPackage} from '../../../foundation/fs/paths.mjs';
 
 /**
  * Marks a theme object with the raw input it was resolved from. Enumerable on
@@ -76,6 +79,8 @@ import {createRequire} from 'node:module';
  */
 export const THEME_LINEAGE = Symbol.for('astryx.theme.lineage');
 
+/** Complete private capture retained for cached exports and repeated checks. */
+const retainedLineageByReference = new WeakMap();
 /**
  * @typedef {object} ThemeLineage
  * @property {any} input - The raw `defineTheme()` argument.
@@ -87,6 +92,9 @@ export const THEME_LINEAGE = Symbol.for('astryx.theme.lineage');
  *
  * @typedef {object} CoreInterception
  * @property {Record<string, unknown>} modules - `virtualModules` for jiti.
+ * @property {(theme: any) => boolean} observed - Whether authored input was captured.
+ * @property {(theme: any) => void} retain - Retain capture before stripping.
+ * @property {(theme: any) => any} parentOf - Exact authored `extends` value.
  * @property {(theme: any) => any[]} lineageOf - Every raw input that fed a
  *   theme, following its own `extends` chain and spread provenance.
  * @property {(theme: any) => any[]} unobservedIn - Lineage members this
@@ -102,17 +110,16 @@ export const THEME_LINEAGE = Symbol.for('astryx.theme.lineage');
  */
 
 /**
- * Was this theme produced by a `defineTheme()` call the recorder saw?
- * Must be asked BEFORE `strip` — that is what removes the evidence.
+ * Was this theme produced by a `defineTheme()` call the recorder saw? The
+ * temporary symbol must be read before `strip`; retained WeakMap capture remains
+ * available for cached retries.
  *
  * @param {any} value
  * @param {WeakMap<object, ThemeLineage>} byReference
  * @returns {boolean}
  */
-function wasObserved(value, byReference) {
-  if (!value || typeof value !== 'object') return false;
-  return byReference.has(value) || value[THEME_LINEAGE] !== undefined;
-}
+// prettier-ignore
+function wasObserved(value, byReference) { return Boolean(value && typeof value === 'object' && (byReference.has(value) || retainedLineageByReference.has(value) || value[THEME_LINEAGE] !== undefined)); }
 
 const GENERATIVE_AXIS_KEYS = ['typography', 'color', 'radius', 'motion'];
 
@@ -225,11 +232,12 @@ function mergeGenerativeAxes(inherited, own) {
  * silently delete every one of those exports from a theme file that imports a
  * component. Every real export is preserved on each; one function is wrapped.
  *
- * A core that already compiles adaptations should never be wrapped — it
- * reports its own — but wrapping is harmless if it is.
+ * Current-Core family builds also use this private recorder for exact parents;
+ * standalone builds with current Core do not.
  *
  * @param {any} coreThemeModule - The installed `@astryxdesign/core/theme` namespace.
- * @param {any} [coreRootModule] - The installed `@astryxdesign/core` namespace.
+ * @param {any} [coreRootModule] - The installed `@astryxdesign/core` namespace,
+ *   or a function that loads it. A function is called once, on first use.
  * @returns {CoreInterception}
  */
 export function interceptCore(coreThemeModule, coreRootModule) {
@@ -240,6 +248,7 @@ export function interceptCore(coreThemeModule, coreRootModule) {
   const mark = (value, lineage) => {
     if (!value || typeof value !== 'object') return;
     byReference.set(value, lineage);
+    retainedLineageByReference.set(value, lineage);
     try {
       // Enumerable so a spread of this theme carries it; configurable so it
       // can be removed again before the theme is used for output.
@@ -255,10 +264,8 @@ export function interceptCore(coreThemeModule, coreRootModule) {
   };
 
   /** @param {any} value @returns {ThemeLineage | undefined} */
-  const lineageFor = value => {
-    if (!value || typeof value !== 'object') return undefined;
-    return byReference.get(value) ?? value[THEME_LINEAGE];
-  };
+  // prettier-ignore
+  const lineageFor = value => value && typeof value === 'object' ? byReference.get(value) ?? retainedLineageByReference.get(value) ?? value[THEME_LINEAGE] : undefined;
 
   /**
    * One namespace, spread so exports this file does not know about still
@@ -281,15 +288,38 @@ export function interceptCore(coreThemeModule, coreRootModule) {
     };
   };
 
-  return {
-    modules: {
-      '@astryxdesign/core/theme': wrapNamespace(coreThemeModule),
+  const modules = {
+    '@astryxdesign/core/theme': wrapNamespace(coreThemeModule),
+  };
+  /** @type {any} */
+  let wrappedRoot;
+  // jiti reads a virtual module only when a theme imports its specifier. So
+  // the root, which loads all of Core, loads only for a theme that asks.
+  Object.defineProperty(modules, '@astryxdesign/core', {
+    enumerable: true,
+    configurable: true,
+    get() {
+      const root =
+        typeof coreRootModule === 'function'
+          ? coreRootModule()
+          : coreRootModule;
       // Falls back to the theme namespace only when the root could not be
       // imported at all; a partial root is better than none, and a core
       // missing its own root entry is already broken.
-      '@astryxdesign/core': wrapNamespace(coreRootModule ?? coreThemeModule),
+      wrappedRoot ??= wrapNamespace(root ?? coreThemeModule);
+      return wrappedRoot;
     },
+  });
 
+  return {
+    modules,
+
+    // prettier-ignore
+    observed(theme) { return wasObserved(theme, byReference); },
+    // prettier-ignore
+    retain(theme) { const lineage = lineageFor(theme); if (lineage && theme && typeof theme === 'object') retainedLineageByReference.set(theme, lineage); },
+    // prettier-ignore
+    parentOf(theme) { const input = lineageFor(theme)?.input; return input && typeof input === 'object' && 'extends' in input ? input.extends : theme && typeof theme === 'object' ? theme.extends : undefined; },
     lineageOf(theme) {
       /** @type {any[]} */
       const inputs = [];
@@ -324,8 +354,8 @@ export function interceptCore(coreThemeModule, coreRootModule) {
     unobservedIn(theme) {
       // Lineage members this recorder never saw AND that carry no adaptation
       // metadata of their own. On a degraded load these are exactly the
-      // themes whose adaptations, if any, were erased unobserved. Must be
-      // called before `strip`.
+      // themes whose adaptations, if any, were erased unobserved. Retained
+      // WeakMap capture keeps this answer stable after a cached retry.
       //
       // A RAW INPUT reached through an observed result is itself evidence —
       // it is the very object the recorder captured, and only the result
@@ -401,6 +431,7 @@ export function interceptCore(coreThemeModule, coreRootModule) {
         if (!value || typeof value !== 'object' || seen.has(value)) continue;
         seen.add(value);
         const lineage = lineageFor(value);
+        if (lineage) retainedLineageByReference.set(value, lineage);
         if (Object.hasOwn(value, THEME_LINEAGE)) {
           try {
             delete value[THEME_LINEAGE];
@@ -427,6 +458,17 @@ export function interceptCore(coreThemeModule, coreRootModule) {
       /** @type {Array<() => void>} */
       const undo = [];
       let covered = true;
+
+      // Only a core the theme's OWN node_modules chain can reach is one a
+      // `.cjs` source dependency beside it could require. `require` also folds
+      // NODE_PATH in, and pnpm's isolated layout puts every package in
+      // `node_modules/.pnpm/node_modules` — which Vitest puts on NODE_PATH.
+      // An ambient hit there belongs to no dependency here, so wrapping it
+      // proves nothing and failing to wrap it gaps nothing.
+      if (!findInstalledPackage(path.dirname(fromFile), '@astryxdesign/core')) {
+        return {covered, undo: () => {}};
+      }
+
       for (const specifier of [
         '@astryxdesign/core/theme',
         '@astryxdesign/core',

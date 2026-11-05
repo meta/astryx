@@ -22,6 +22,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
+import changeScope from './change-scope.cjs';
+
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../..',
@@ -39,13 +41,26 @@ function readPackage(repoRoot, file, manifests) {
   return fs.existsSync(absolute) ? readJSON(absolute) : null;
 }
 
+/** A Changeset is release notes: it renders nothing. */
+const CHANGESET = /^\.changeset\/(?!README\.md$)[^/]+\.md$/;
+
 /**
  * @param {string[]} files
  * @param {string} repoRoot
  * @param {Record<string, object>} manifests - trusted snapshots keyed by repo-relative path
+ * @param {{scoped?: boolean}} options - `scoped`: a pull request whose CI runs
+ *   what it reaches (spec:AST-030 FR13); a Core module outside every
+ *   component folder is audited through its reverse dependents, not the
+ *   whole plan
  */
-export function classifyVisualScope(files, repoRoot = ROOT, manifests = {}) {
+export function classifyVisualScope(
+  files,
+  repoRoot = ROOT,
+  manifests = {},
+  {scoped = false} = {},
+) {
   const paths = files.map(file => file.trim()).filter(Boolean);
+  const rendered = paths.filter(file => !CHANGESET.test(file));
   const stableCoreFiles = paths.filter(
     file =>
       /^packages\/core\/src\/.*\.(ts|tsx|css)$/.test(file) &&
@@ -55,12 +70,23 @@ export function classifyVisualScope(files, repoRoot = ROOT, manifests = {}) {
   const stableThemes = new Set();
   const stableComponents = new Set();
   const canaryPackages = new Set();
-  let broadStableVisual = false;
+  // Reuse the accepted surface taxonomy: unknown/shared inputs and the build
+  // pipeline cannot rely on a daily backup once this is the only visual owner.
+  const {surfaces} = changeScope.classifyChanges(rendered);
+  const stableVisualInfrastructure =
+    paths.length === 0 ||
+    surfaces.some(surface =>
+      ['shared-or-unknown', 'storybook-visual', 'runtime:build'].includes(
+        surface,
+      ),
+    ) ||
+    paths.includes('packages/core/package.json');
+  let broadStableVisual = stableVisualInfrastructure;
 
   for (const file of stableCoreFiles) {
     const match = file.match(/^packages\/core\/src\/([^/]+)\//);
     if (match && /^[A-Z]/.test(match[1])) stableComponents.add(match[1]);
-    else broadStableVisual = true;
+    else if (!scoped) broadStableVisual = true;
   }
 
   for (const file of paths) {
@@ -117,7 +143,10 @@ export function classifyVisualScope(files, repoRoot = ROOT, manifests = {}) {
   }
 
   return {
-    hasStableVisual: stableCoreFiles.length > 0 || stableThemes.size > 0,
+    hasStableVisual:
+      stableVisualInfrastructure ||
+      stableCoreFiles.length > 0 ||
+      stableThemes.size > 0,
     broadStableVisual,
     stableComponents: [...stableComponents].sort(),
     stableCoreFiles,
@@ -133,7 +162,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     manifestsFlag === -1
       ? {}
       : readJSON(path.resolve(process.argv[manifestsFlag + 1]));
-  const result = classifyVisualScope(files, ROOT, manifests);
+  const result = classifyVisualScope(files, ROOT, manifests, {
+    scoped: process.argv.includes('--scoped'),
+  });
   process.stdout.write(`${JSON.stringify(result)}\n`);
 
   const output = process.argv[process.argv.indexOf('--github-output') + 1];
@@ -150,6 +181,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
         `stable_themes=${outputValue(result.stableThemes)}`,
         `canary_packages=${outputValue(result.canaryPackages)}`,
         `has_stable_visual=${result.hasStableVisual}`,
+        `broad_stable_visual=${result.broadStableVisual}`,
       ].join('\n') + '\n',
     );
   }

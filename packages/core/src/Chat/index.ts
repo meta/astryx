@@ -25,6 +25,7 @@ export {ChatComposerInput, ChatComposerTokenElement} from './ChatComposerInput';
 export type {
   ChatComposerInputProps,
   ChatComposerInputHandle,
+  ChatComposerTokenElementProps,
   ChatComposerToken,
   ChatComposerTrigger,
   ChatComposerTriggerItem,

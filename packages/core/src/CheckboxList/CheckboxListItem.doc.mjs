@@ -8,7 +8,7 @@ export const docs = {
   displayName: 'Checkbox List Item',
   isHiddenFromOverview: true,
   description:
-    'Individual checkbox item with label, description, and end content slot. Works in collection mode (inside CheckboxList) or standalone mode (inside List).',
+    'Individual checkbox item with label, description, and end content slot. Works in collection mode (inside a CheckboxList with a value array) or standalone mode (inside List, or inside a CheckboxList without value, such as a select-all item). On a touch screen (a coarse primary pointer), a toggleable row is one press target: a touch on the label, the description or the box itself shows the pressed state on the row and its checkbox together. Where the primary pointer is fine, the box keeps its own press.',
   props: [
     {
       name: 'label',
@@ -26,12 +26,14 @@ export const docs = {
     {
       name: 'value',
       type: 'string',
-      description: 'Identity key (required inside CheckboxList).',
+      description:
+        'Identity key. Required when the parent CheckboxList has a value array; the item throws without it there.',
     },
     {
       name: 'description',
       type: 'ReactNode',
-      description: 'Secondary content below the label. String or ReactNode.',
+      description:
+        "Secondary content below the label. String or ReactNode. Exposed as the checkbox's accessible description through aria-describedby, so assistive technology can tell it is the explanation for that choice.",
     },
     {
       name: 'endContent',
@@ -54,6 +56,13 @@ export const docs = {
       ],
     },
     {
+      name: 'align',
+      type: "'center' | 'start' | 'first-line'",
+      description:
+        'Vertical alignment of the start and end content against the label, passed through to Item unchanged. `first-line` keeps a small mark (a checkbox) level with the first line of a wrapped label. See Item.align.',
+      default: "'center'",
+    },
+    {
       name: 'isDisabled',
       type: 'boolean',
       description: 'Whether this individual item is disabled.',
@@ -69,12 +78,14 @@ export const docs = {
     {
       name: 'isChecked',
       type: "boolean | 'indeterminate'",
-      description: 'Direct checked state (standalone mode only).',
+      description:
+        'Direct checked state in standalone mode: inside List, or inside a CheckboxList without value (for example, a select-all item). Ignored when the parent CheckboxList has a value array.',
     },
     {
       name: 'onCheck',
       type: '(checked: boolean) => void',
-      description: 'Direct check handler (standalone mode only).',
+      description:
+        "Direct check handler in standalone mode: inside List, or inside a CheckboxList without value. Ignored when the parent CheckboxList has a value array; that list's onChange receives the change.",
     },
   ],
   examples: [
@@ -94,7 +105,7 @@ export const docsZh = {
   isHiddenFromOverview: true,
   displayName: 'Checkbox List Item',
   description:
-    '单个复选框选项，包含标签、描述和尾部内容插槽。可在集合模式或独立模式下使用。',
+    '单个复选框选项，包含标签、描述和尾部内容插槽。可在集合模式（位于带 value 数组的 CheckboxList 内）或独立模式（位于 List 内，或位于不带 value 的 CheckboxList 内，例如“全选”选项）下使用。在触摸屏上，可切换的行是一个整体的按压目标：手指按在标签、描述或复选框本身上，行与其复选框会一起显示按下状态。主指针为精细指针时，复选框保留自己的按下效果。',
   props: [
     {
       name: 'label',
@@ -112,17 +123,26 @@ export const docsZh = {
     {
       name: 'value',
       type: 'string',
-      description: '标识键（在 CheckboxList 内为必填）。',
+      description:
+        '标识键。当父级 CheckboxList 带有 value 数组时为必填；缺少时该选项会抛出错误。',
     },
     {
       name: 'description',
       type: 'ReactNode',
-      description: '标签下方的辅助内容。可为字符串或 ReactNode。',
+      description:
+        '标签下方的辅助内容。可为字符串或 ReactNode。会通过 aria-describedby 作为复选框的无障碍描述暴露，便于辅助技术识别它是该选项的说明。',
     },
     {
       name: 'endContent',
       type: 'ReactNode',
       description: '在标签区域后渲染的内容。',
+    },
+    {
+      name: 'align',
+      type: "'center' | 'start' | 'first-line'",
+      description:
+        '起始和结束内容相对于标签的垂直对齐方式，原样传递给 Item。`first-line` 让小标记（复选框）与换行标签的第一行保持水平。参见 Item.align。',
+      default: "'center'",
     },
     {
       name: 'isDisabled',
@@ -140,12 +160,14 @@ export const docsZh = {
     {
       name: 'isChecked',
       type: "boolean | 'indeterminate'",
-      description: '直接选中状态（仅独立模式）。',
+      description:
+        '独立模式下的直接选中状态：位于 List 内，或位于不带 value 的 CheckboxList 内（例如“全选”选项）。当父级 CheckboxList 带有 value 数组时忽略。',
     },
     {
       name: 'onCheck',
       type: '(checked: boolean) => void',
-      description: '直接选中处理器（仅独立模式）。',
+      description:
+        '独立模式下的直接选中处理函数：位于 List 内，或位于不带 value 的 CheckboxList 内。当父级 CheckboxList 带有 value 数组时忽略，改由该列表的 onChange 接收变更。',
     },
   ],
 };
@@ -155,19 +177,25 @@ export const docsDense = {
   isHiddenFromOverview: true,
   displayName: 'Checkbox List Item',
   description:
-    'Individual checkbox item w/ label, description, end content slot.',
+    'Individual checkbox item w/ label, description, end content slot. Collection mode inside CheckboxList with value; standalone inside List or CheckboxList without value. On a touch screen a toggleable row presses as one target, box included; with a fine primary pointer the box keeps its own press.',
   propDescriptions: {
+    align:
+      "Start/end content alignment, passed to Item: 'center' (default), 'start', or 'first-line' (centered on the label's first line).",
     label:
       'Primary label. String or ReactNode; nested controls keep their behavior. A ReactNode names the checkbox from its visible text.',
     'aria-label':
       'Plain-text checkbox name replacing the one derived from label. Use when visible text is absent; otherwise retain every visible label word.',
-    value: 'Identity key (required inside CheckboxList).',
-    description: 'Secondary content below label. String or ReactNode.',
+    value:
+      'Identity key. Required when parent CheckboxList has a value array (throws without it).',
+    description:
+      "Secondary content below label. String or ReactNode. Exposed as the checkbox's accessible description via aria-describedby.",
     endContent: 'Content rendered after label area.',
-    isDisabled: 'Whether this individual item disabled.',
+    isDisabled: 'Whether this individual item is disabled.',
     isLoading:
       'Item loading: spinner inside checkbox + blocks interaction. Auto-set on toggled item while parent changeAction pending.',
-    isChecked: 'Direct checked state (standalone mode only).',
-    onCheck: 'Direct check handler (standalone mode only).',
+    isChecked:
+      'Direct checked state in standalone mode (inside List, or CheckboxList without value). Ignored when parent CheckboxList has a value array.',
+    onCheck:
+      'Direct check handler in standalone mode (inside List, or CheckboxList without value). Ignored when parent CheckboxList has a value array; its onChange gets the change.',
   },
 };

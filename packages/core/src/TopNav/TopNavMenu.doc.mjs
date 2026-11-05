@@ -27,7 +27,7 @@ export const docs = {
     {
       name: 'items',
       type: 'TopNavMenuItemData[]',
-      description: 'Menu items to display in the hover popover.',
+      description: 'Menu items to display in the hover popover. Item href values follow the shared navigation rule described on Link; rejected destinations remain visible without navigation.',
       required: true,
     },
     {
@@ -83,7 +83,7 @@ export const docsDense = {
   description: 'Nav item w/ hover-triggered popover menu containing rich items w/ icon, title, optional description.',
   propDescriptions: {
     label: 'Trigger button visible label.',
-    items: 'Menu items in hover popover.',
+    items: 'Menu items in hover popover. href follows the Link navigation rule; rejected destinations do not navigate.',
     delay: 'Show delay ms on hover.',
     hideDelay: 'Hide delay ms after mouse leaves.',
   },

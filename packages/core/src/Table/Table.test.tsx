@@ -10,7 +10,7 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {act, render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {BaseTable} from './BaseTable';
 import {Table} from './Table';
@@ -24,7 +24,9 @@ import {
   pixel,
   generateColumns,
   resolveColumnWidths,
+  resolveTableMinWidth,
   capitalize,
+  DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH,
   DEFAULT_MIN_COLUMN_WIDTH,
 } from './columnUtils';
 import type {TablePlugin, TableColumn, ProportionalWidth} from './types';
@@ -452,17 +454,70 @@ describe('BaseTable', () => {
       );
     });
 
-    it('lets a consumer style.minWidth survive when columns compute none', () => {
-      const plain: TableColumn<User>[] = [{key: 'name'}, {key: 'age'}];
-      render(<Table data={users} columns={plain} style={{minWidth: '10px'}} />);
+    it('lets a consumer style.minWidth survive when no columns are resolved', () => {
+      render(
+        <Table style={{minWidth: '10px'}}>
+          <tbody>
+            <TableRow>
+              <TableCell>Cell</TableCell>
+            </TableRow>
+          </tbody>
+        </Table>,
+      );
       expect(screen.getByRole('table').style.minWidth).toBe('10px');
     });
 
-    it('keeps the astryx theme classes alongside a consumer className', () => {
+    it('keeps a larger consumer style.minWidth beside width-less column floors', () => {
+      const plain: TableColumn<User>[] = [
+        {key: 'name'},
+        {key: 'age'},
+        {key: 'email'},
+        {key: 'role'},
+      ];
+      render(<Table data={users} columns={plain} style={{minWidth: 900}} />);
+      expect(screen.getByRole('table').style.minWidth).toBe('900px');
+    });
+
+    it.each([
+      [undefined, '240px'],
+      [900, '900px'],
+      [100, '240px'],
+      [0, '240px'],
+      ['900px', '900px'],
+      ['10px', '240px'],
+      ['0', '240px'],
+      ['0rem', '240px'],
+      ['', '240px'],
+      ['60rem', 'max(60rem, 240px)'],
+      ['50%', 'max(50%, 240px)'],
+      ['calc(100% - 2rem)', 'max(calc(100% - 2rem), 240px)'],
+      ['var(--table-min)', 'max(var(--table-min), 240px)'],
+      ['auto', '240px'],
+      ['max-content', '240px'],
+      ['min-content', '240px'],
+      ['fit-content', '240px'],
+      ['inherit', '240px'],
+      ['12', '240px'],
+    ] as const)(
+      'resolves a consumer minWidth of %j beside a 240px floor to %s',
+      (consumer, expected) => {
+        expect(resolveTableMinWidth(consumer, 240)).toBe(expected);
+      },
+    );
+
+    it('raises a smaller consumer style.minWidth to the column floors', () => {
+      const plain: TableColumn<User>[] = [{key: 'name'}, {key: 'age'}];
+      render(<Table data={users} columns={plain} style={{minWidth: '10px'}} />);
+      expect(screen.getByRole('table').style.minWidth).toBe(
+        `${DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH * 2}px`,
+      );
+    });
+
+    it('keeps the canonical theme class alongside a consumer className', () => {
       render(<Table data={users} columns={columns} className="custom-table" />);
       const table = screen.getByRole('table');
-      expect(table.className).toContain('astryx-base-table');
       expect(table.className).toContain('astryx-table');
+      expect(table.className).not.toContain('astryx-base-table');
       expect(table.className).toContain('custom-table');
     });
 
@@ -745,18 +800,70 @@ describe('BaseTable', () => {
       }
     });
 
-    it('does not apply minWidth on columns with no explicit width', () => {
+    it('keeps width-less columns flexible with a compact readability floor', () => {
       const cols: TableColumn<User>[] = [
         {key: 'name', header: 'Name'},
         {key: 'age', header: 'Age'},
       ];
       render(<BaseTable data={users} columns={cols} />);
       const headers = screen.getAllByRole('columnheader');
-      expect(headers[0]).not.toHaveStyle({
-        minWidth: `${DEFAULT_MIN_COLUMN_WIDTH}px`,
+      expect(headers[0]).toHaveStyle({
+        width: '50%',
+        minWidth: `${DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH}px`,
       });
-      expect(headers[1]).not.toHaveStyle({
-        minWidth: `${DEFAULT_MIN_COLUMN_WIDTH}px`,
+      expect(headers[1]).toHaveStyle({
+        width: '50%',
+        minWidth: `${DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH}px`,
+      });
+      expect(screen.getByRole('table')).toHaveStyle({
+        minWidth: `${DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH * 2}px`,
+      });
+    });
+
+    it('lets one column set its own floor with proportional minWidth', () => {
+      const cols: TableColumn<User>[] = [
+        {key: 'name', header: 'Name', width: proportional(1, {minWidth: 96})},
+        {key: 'age', header: 'Age', width: proportional(1, {minWidth: 40})},
+        {key: 'email', header: 'Email'},
+      ];
+      render(<BaseTable data={users} columns={cols} />);
+      const headers = screen.getAllByRole('columnheader');
+      // A larger and a smaller authored floor both replace the 60px default
+      // for their own column; the width-less column keeps the compact floor.
+      expect(headers[0]).toHaveStyle({minWidth: '96px'});
+      expect(headers[1]).toHaveStyle({minWidth: '40px'});
+      expect(headers[2]).toHaveStyle({
+        minWidth: `${DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH}px`,
+      });
+      expect(screen.getByRole('table')).toHaveStyle({
+        minWidth: `${Math.max(96, 40, DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH) * 3}px`,
+      });
+    });
+
+    it('keeps the width-less floor stable when row content changes', () => {
+      const cols: TableColumn<User>[] = [
+        {key: 'name', header: 'Name'},
+        {key: 'age', header: 'Age'},
+      ];
+      const {rerender} = render(<BaseTable data={[]} columns={cols} />);
+      const table = screen.getByRole('table');
+      expect(table).toHaveStyle({
+        minWidth: `${DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH * 2}px`,
+      });
+
+      rerender(
+        <BaseTable
+          data={[
+            {
+              ...users[0],
+              name: 'one-unbreakable-token-that-must-not-change-column-sizing',
+            },
+          ]}
+          columns={cols}
+        />,
+      );
+      expect(table).toHaveStyle({
+        minWidth: `${DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH * 2}px`,
       });
     });
 
@@ -837,22 +944,127 @@ describe('Table', () => {
     expect(screen.getAllByRole('row')).toHaveLength(4);
   });
 
-  it('wraps table in a scroll container', () => {
+  it('wraps the table in an observed scroll content box', () => {
     render(<Table data={users} columns={columns} />);
     const table = screen.getByRole('table');
-    const wrapper = table.parentElement;
+    const content = table.parentElement;
+    const wrapper = content?.parentElement;
+    expect(content).toHaveAttribute('data-scroll-content');
     expect(wrapper).toBeTruthy();
     expect(wrapper!.className).toContain('astryx-table-scroll-wrapper');
   });
 
-  it('makes the scroll container keyboard-focusable', () => {
+  it('keeps a fitting scroll container out of the keyboard order', () => {
     render(<Table data={users} columns={columns} />);
-    const table = screen.getByRole('table');
-    const wrapper = table.parentElement;
-    expect(wrapper).toBeTruthy();
-    expect(wrapper!).toHaveAttribute('tabindex', '0');
-    expect(wrapper!).toHaveAttribute('role', 'group');
-    expect(wrapper!).toHaveAttribute('aria-label', 'Table');
+    const wrapper = screen.getByRole('group', {name: 'Table'});
+    expect(wrapper).not.toHaveAttribute('tabindex');
+    expect(wrapper.style.overscrollBehaviorX).toBe('auto');
+  });
+
+  it('names the scroll region after its table, not a generic "Table" (AST-025)', () => {
+    render(
+      <>
+        <Table aria-label="Orders" data={users} columns={columns} />
+        <h2 id="refunds-title">Refunds</h2>
+        <Table aria-labelledby="refunds-title" data={users} columns={columns} />
+        <h2 id="returns-title">Returns</h2>
+        <Table
+          aria-label="Ignored label"
+          aria-labelledby="returns-title"
+          data={users}
+          columns={columns}
+        />
+        <Table data={users} columns={columns} />
+      </>,
+    );
+    expect(screen.getByRole('group', {name: 'Orders'})).toBeInTheDocument();
+    expect(screen.getByRole('group', {name: 'Refunds'})).toHaveAttribute(
+      'aria-labelledby',
+      'refunds-title',
+    );
+    // With both, the region is named as the table is: by aria-labelledby.
+    expect(screen.getByRole('table', {name: 'Returns'})).toBeInTheDocument();
+    const returns = screen.getByRole('group', {name: 'Returns'});
+    expect(returns).not.toHaveAttribute('aria-label');
+    expect(
+      screen.queryByRole('group', {name: 'Ignored label'}),
+    ).not.toBeInTheDocument();
+    // An unnamed table keeps the generic fallback.
+    expect(screen.getAllByRole('group', {name: 'Table'})).toHaveLength(1);
+  });
+
+  it('preserves scroll-wrapper HTML attributes from plugins', () => {
+    const plugin: TablePlugin<User> = {
+      transformScrollWrapper: props => ({
+        ...props,
+        htmlProps: {
+          ...props.htmlProps,
+          role: 'region',
+          'aria-label': 'Orders',
+          tabIndex: 2,
+        },
+      }),
+    };
+    render(<Table data={users} columns={columns} plugins={{custom: plugin}} />);
+    const wrapper = screen.getByRole('region', {name: 'Orders'});
+    expect(wrapper).toHaveAttribute('tabindex', '2');
+  });
+
+  it('contains overscroll only while the table scrolls', () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        frames.push(callback);
+        return frames.length;
+      }),
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    try {
+      render(<Table data={users} columns={columns} />);
+      const wrapper = screen.getByRole('group', {name: 'Table'});
+      Object.assign(wrapper.style, {overflowX: 'auto'});
+      for (const [key, value] of Object.entries({
+        clientWidth: 100,
+        clientHeight: 100,
+        scrollWidth: 180,
+        scrollHeight: 100,
+        scrollLeft: 0,
+        scrollTop: 0,
+      })) {
+        Object.defineProperty(wrapper, key, {
+          configurable: true,
+          value,
+          writable: true,
+        });
+      }
+
+      act(() => {
+        wrapper.dispatchEvent(new Event('scroll'));
+        frames.splice(0).forEach(callback => callback(performance.now()));
+      });
+
+      expect(wrapper).toHaveAttribute('tabindex', '0');
+      expect(wrapper).toHaveAttribute('data-scrollable-inline', 'true');
+      expect(wrapper.style.overscrollBehaviorX).toBe('contain');
+
+      Object.defineProperty(wrapper, 'scrollWidth', {
+        configurable: true,
+        value: 100,
+        writable: true,
+      });
+      act(() => {
+        wrapper.dispatchEvent(new Event('scroll'));
+        frames.splice(0).forEach(callback => callback(performance.now()));
+      });
+
+      expect(wrapper).not.toHaveAttribute('tabindex');
+      expect(wrapper).not.toHaveAttribute('data-scrollable-inline');
+      expect(wrapper.style.overscrollBehaviorX).toBe('auto');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('uses table-layout: auto in children mode', () => {

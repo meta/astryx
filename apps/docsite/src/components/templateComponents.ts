@@ -30,6 +30,10 @@ export const TEMPLATE_COMPONENTS: Record<
   blank: lazy(
     () => import('../../../../packages/cli/assets/templates/pages/blank/page'),
   ),
+  'canvas-editor': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/canvas-editor/page'),
+  ),
   'centered-hero': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/centered-hero/page'),
@@ -50,9 +54,29 @@ export const TEMPLATE_COMPONENTS: Record<
     () =>
       import('../../../../packages/cli/assets/templates/pages/dashboard/page'),
   ),
+  'dashboard-alert-rail': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/dashboard-alert-rail/page'),
+  ),
+  'dashboard-cohort-funnel': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/dashboard-cohort-funnel/page'),
+  ),
+  'dashboard-comparison': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/dashboard-comparison/page'),
+  ),
   'dashboard-composition': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/dashboard-composition/page'),
+  ),
+  'dashboard-progress': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/dashboard-progress/page'),
+  ),
+  'dashboard-scorecard': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/dashboard-scorecard/page'),
   ),
   'detail-page': lazy(
     () =>
@@ -174,9 +198,17 @@ export const TEMPLATE_COMPONENTS: Record<
   table: lazy(
     () => import('../../../../packages/cli/assets/templates/pages/table/page'),
   ),
+  'table-comparison': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/table-comparison/page'),
+  ),
   'table-filter': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/table-filter/page'),
+  ),
+  'table-collapsible': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/table-collapsible/page'),
   ),
   'table-grouped': lazy(
     () =>
@@ -189,6 +221,14 @@ export const TEMPLATE_COMPONENTS: Record<
   'table-page': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/table-page/page'),
+  ),
+  'table-tree': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/table-tree/page'),
+  ),
+  'work-item-detail': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/work-item-detail/page'),
   ),
 };
 

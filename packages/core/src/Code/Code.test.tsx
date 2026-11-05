@@ -11,7 +11,14 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
+import * as stylex from '@stylexjs/stylex';
 import {Code} from './Code';
+
+const testStyles = stylex.create({
+  root: {
+    marginTop: 1,
+  },
+});
 
 describe('Code', () => {
   it('renders children inside a <code> element', () => {
@@ -44,14 +51,25 @@ describe('Code', () => {
     expect(screen.getByText('code')).toHaveAttribute('data-color', 'inherit');
   });
 
-  it('adds a size class when size="inherit" (font-size + line-height inherit)', () => {
-    const {rerender} = render(<Code>code</Code>);
-    const defaultClass = screen.getByText('code').getAttribute('class');
+  it('forwards supported root props and composes styling inputs', () => {
+    render(
+      <Code
+        aria-label="Code sample"
+        className="consumer-class"
+        data-testid="code"
+        style={{opacity: 0.5}}
+        xstyle={testStyles.root}>
+        code
+      </Code>,
+    );
 
-    rerender(<Code size="inherit">code</Code>);
-    const inheritClass = screen.getByText('code').getAttribute('class');
+    const element = screen.getByTestId('code');
+    const xstyleClassName = stylex.props(testStyles.root).className;
 
-    // size="inherit" adds an extra StyleX class beyond the default rendering.
-    expect(inheritClass).not.toEqual(defaultClass);
+    expect(element).toHaveAttribute('aria-label', 'Code sample');
+    expect(element).toHaveClass('consumer-class');
+    expect(xstyleClassName).toBeTypeOf('string');
+    expect(element).toHaveClass(xstyleClassName as string);
+    expect(element).toHaveStyle({opacity: '0.5'});
   });
 });

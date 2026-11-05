@@ -28,11 +28,28 @@ const CONTRAST_PROBES = [
   ['destructive action', 'destructive-action'],
 ];
 
-function run(command, args, cwd) {
-  const result = spawnSync(command, args, {cwd, encoding: 'utf8'});
+/**
+ * pnpm is a .cmd (batch) file on Windows. spawnSync can only run a batch
+ * file through a shell — a bare 'pnpm' fails with ENOENT and an explicit
+ * 'pnpm.cmd' still fails with EINVAL (batch files need a shell even named
+ * exactly). Shelling out through cmd.exe /c directly, rather than
+ * spawnSync's shell:true, avoids Node's shell-argument-escaping deprecation
+ * warning (DEP0190) — every argument here is a hardcoded literal, never
+ * user input, so we build the argv ourselves instead of asking spawnSync to
+ * build a shell string. See internal/vibe-tests/src/fixture-suite.mjs for
+ * the same pattern.
+ */
+function runPnpm(args, cwd) {
+  const result =
+    process.platform === 'win32'
+      ? spawnSync('cmd.exe', ['/d', '/s', '/c', 'pnpm', ...args], {
+          cwd,
+          encoding: 'utf8',
+        })
+      : spawnSync('pnpm', args, {cwd, encoding: 'utf8'});
   if (result.status !== 0) {
     throw new Error(
-      `${command} ${args.join(' ')} failed in ${cwd}\n${result.stdout}${result.stderr}`,
+      `pnpm ${args.join(' ')} failed in ${cwd}\n${result.stdout ?? ''}${result.stderr ?? result.error?.message ?? ''}`,
     );
   }
 }
@@ -221,9 +238,9 @@ async function main() {
   let browser;
   try {
     copyFixture(FIXTURE_ID, sandbox);
-    run('pnpm', ['install', '--frozen-lockfile', '--ignore-scripts'], sandbox);
-    run('pnpm', ['typecheck'], sandbox);
-    run('pnpm', ['build'], sandbox);
+    runPnpm(['install', '--frozen-lockfile', '--ignore-scripts'], sandbox);
+    runPnpm(['typecheck'], sandbox);
+    runPnpm(['build'], sandbox);
     server = await preview({
       root: sandbox,
       logLevel: 'silent',

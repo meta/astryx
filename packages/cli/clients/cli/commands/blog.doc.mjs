@@ -12,7 +12,7 @@ export const doc = {
   type: 'command',
   name: 'blog',
   displayName: 'astryx blog',
-  namespace: 'cli',
+  namespace: 'cli/commands',
   summary: 'Read the Astryx blog from the published feed',
   description:
     'Reads the design-system blog over its published RSS feed (never the source ' +
@@ -24,6 +24,7 @@ export const doc = {
     {label: 'List posts', cli: 'astryx blog'},
     {label: 'Read one post', cli: 'astryx blog introducing-astryx --json'},
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success'},
     {code: 1, when: 'unknown slug, or the feed or a post cannot be fetched'},

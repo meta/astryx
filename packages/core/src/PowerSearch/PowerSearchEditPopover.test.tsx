@@ -10,10 +10,18 @@ import {
   afterAll,
   afterEach,
 } from 'vitest';
-import {render, screen, fireEvent, act} from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+  within,
+} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React, {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {spacingVars} from '../theme/tokens.stylex';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {PowerSearch} from './PowerSearch';
 import {PowerSearchEditPopover} from './PowerSearchEditPopover';
 import {useInternalConfig} from './useInternalConfig';
@@ -168,6 +176,148 @@ describe('PowerSearch', () => {
     const popoverText = getEditPopoverText(container);
     expect(popoverText).toContain('Priority');
     expect(popoverText).toContain('equals');
+  });
+
+  describe('value editor identity follows the field and operator', () => {
+    // Two fields with the same value type, so an unkeyed editor would be
+    // reused across the switch and keep the first field's menu contents.
+    const sameTypeConfig: PowerSearchConfig = {
+      name: 'test-same-type',
+      fields: [
+        {
+          key: 'creator',
+          label: 'Creator',
+          operators: [
+            {
+              key: 'is_any_of',
+              label: 'is any of',
+              value: {
+                type: 'enum_list',
+                values: [{value: 'creator-1', label: 'Creator Person'}],
+              },
+            },
+          ],
+        },
+        {
+          key: 'owner',
+          label: 'Owner',
+          operators: [
+            {
+              key: 'is_any_of',
+              label: 'is any of',
+              value: {
+                type: 'enum_list',
+                values: [{value: 'owner-1', label: 'Owner Person'}],
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const creatorOption = () =>
+      screen.queryByRole('option', {name: 'Creator Person', hidden: true});
+    const ownerOption = () =>
+      screen.queryByRole('option', {name: 'Owner Person', hidden: true});
+
+    it('replaces an open value menu when the field changes', async () => {
+      function Harness() {
+        const internalConfig = useInternalConfig(sameTypeConfig);
+        return (
+          <PowerSearchEditPopover
+            config={internalConfig}
+            filter={{
+              field: 'creator',
+              operator: 'is_any_of',
+              value: {type: 'enum_list', value: []},
+            }}
+            mode="edit"
+            onSave={() => {}}
+            onCancel={() => {}}
+          />
+        );
+      }
+
+      render(<Harness />);
+
+      // Open the Creator value menu and leave it open.
+      fireEvent.focus(screen.getByRole('combobox', {name: 'Values'}));
+      await waitFor(() => expect(creatorOption()).toBeInTheDocument());
+
+      // Switch the field underneath the open menu.
+      fireEvent.click(screen.getByRole('combobox', {name: 'Field'}));
+      fireEvent.click(
+        screen.getByRole('option', {name: 'Owner', hidden: true}),
+      );
+      act(() => flushRAF());
+
+      // The old field's options are gone, the new field's are shown.
+      expect(creatorOption()).not.toBeInTheDocument();
+      await waitFor(() => expect(ownerOption()).toBeInTheDocument());
+    });
+
+    it('replaces an open value menu on a nested sub-filter row', async () => {
+      const nestedConfig: PowerSearchConfig = {
+        name: 'test-nested-same-type',
+        fields: [
+          {
+            key: 'group',
+            label: 'Group',
+            operators: [
+              {key: 'all_of', label: 'all of', value: {type: 'nested'}},
+            ],
+          },
+          ...sameTypeConfig.fields,
+        ],
+      };
+
+      function Harness() {
+        const internalConfig = useInternalConfig(nestedConfig);
+        return (
+          <PowerSearchEditPopover
+            config={internalConfig}
+            filter={{
+              field: 'group',
+              operator: 'all_of',
+              value: {
+                type: 'nested',
+                value: [
+                  {
+                    field: 'creator',
+                    operator: 'is_any_of',
+                    value: {type: 'enum_list', value: []},
+                  },
+                ],
+              },
+            }}
+            mode="edit"
+            onSave={() => {}}
+            onCancel={() => {}}
+          />
+        );
+      }
+
+      render(<Harness />);
+
+      fireEvent.focus(screen.getByRole('combobox', {name: 'Values'}));
+      await waitFor(() => expect(creatorOption()).toBeInTheDocument());
+
+      // The nested row's own field selector is the one currently on
+      // "Creator"; the root selector stays on "Group".
+      const rowField = screen
+        .getAllByRole('combobox', {name: 'Field'})
+        .find(el => el.textContent === 'Creator');
+      expect(rowField).toBeDefined();
+      fireEvent.click(rowField!);
+      const rowListbox = document.getElementById(
+        rowField!.getAttribute('aria-controls')!,
+      )!;
+      fireEvent.click(
+        within(rowListbox).getByRole('option', {name: 'Owner', hidden: true}),
+      );
+
+      expect(creatorOption()).not.toBeInTheDocument();
+    });
   });
 
   it('edit popover shows correct filter after removing a preceding filter', () => {
@@ -430,7 +580,10 @@ const CHIP_ROW_COLLAPSE = '@container (max-width: 399px)';
 
 const probe = stylex.create({
   responsiveLayerMinWidth: {
-    minWidth: `min(400px, calc(100% - ${spacingVars['--spacing-4']}))`,
+    minWidth: stylex.firstThatWorks(
+      `min(400px, ${layerViewportInset.maxInlineSize})`,
+      `min(400px, ${layerViewportInset.maxInlineSizeFallback})`,
+    ),
   },
   fixedLayerMinWidth: {minWidth: 400},
   queryContainer: {containerType: 'inline-size'},
@@ -606,11 +759,432 @@ describe('narrow-width layout (#4761)', () => {
       .closest('[popover]') as HTMLElement;
     expect(layer).not.toBeNull();
 
-    // The fixed 400px floor is replaced by one clamped to the available
-    // inline space, so the popover never opens wider than the screen.
+    // The fixed 400px floor is clamped by the layer runtime's viewport cap
+    // (spec:AST-059 FR7), so the popover never opens wider than the screen.
     expectProbeClasses(layer, probe.responsiveLayerMinWidth);
     for (const cls of atomicClasses(probe.fixedLayerMinWidth)) {
       expect(layer).not.toHaveClass(cls);
     }
+  });
+});
+
+describe('value save', () => {
+  const enumConfig: PowerSearchConfig = {
+    name: 'test-enum',
+    fields: [
+      {
+        key: 'status',
+        label: 'Status',
+        operators: [
+          {
+            key: 'is',
+            label: 'is',
+            value: {
+              type: 'enum',
+              values: [
+                {value: 'open', label: 'Open'},
+                {value: 'closed', label: 'Closed'},
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  function Harness({
+    onSave,
+  }: {
+    onSave: (filter: PowerSearchFilter | null) => void;
+  }) {
+    const config = useInternalConfig(enumConfig);
+    return (
+      <PowerSearchEditPopover
+        config={config}
+        filter={{field: 'status', operator: 'is', value: undefined}}
+        mode="create"
+        onSave={onSave}
+        onCancel={() => {}}
+      />
+    );
+  }
+
+  it('saves exactly once when a value that saves on choice is picked', () => {
+    const onSave = vi.fn();
+    render(
+      <React.StrictMode>
+        <Harness onSave={onSave} />
+      </React.StrictMode>,
+    );
+    fireEvent.click(screen.getByRole('combobox', {name: 'Value'}));
+    fireEvent.click(screen.getByRole('option', {name: 'Closed', hidden: true}));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith({
+      field: 'status',
+      operator: 'is',
+      value: {type: 'enum', value: 'closed'},
+    });
+  });
+});
+
+describe('empty-operator save', () => {
+  const emptyConfig: PowerSearchConfig = {
+    name: 'test-empty',
+    fields: [
+      {
+        key: 'title',
+        label: 'Title',
+        operators: [
+          {key: 'contains', label: 'contains', value: {type: 'string'}},
+          {key: 'is_empty', label: 'is empty', value: {type: 'empty'}},
+        ],
+      },
+      {
+        key: 'assignee',
+        label: 'Assignee',
+        defaultOperator: 'is_unset',
+        operators: [
+          {key: 'is_unset', label: 'is unset', value: {type: 'empty'}},
+          {key: 'is', label: 'is', value: {type: 'string'}},
+        ],
+      },
+    ],
+  };
+
+  type HarnessProps = {
+    filter: React.ComponentProps<typeof PowerSearchEditPopover>['filter'];
+    onSave: (filter: PowerSearchFilter | null) => void;
+  };
+
+  // A parent that keeps the editor mounted and re-renders with a fresh
+  // onSave identity on every render, as an un-memoized consumer does.
+  function Harness({filter, onSave}: HarnessProps) {
+    const config = useInternalConfig(emptyConfig);
+    const [, setTick] = useState(0);
+    return (
+      <>
+        <button type="button" onClick={() => setTick(n => n + 1)}>
+          Rerender
+        </button>
+        <PowerSearchEditPopover
+          config={config}
+          filter={filter}
+          mode="edit"
+          onSave={saved => onSave(saved)}
+          onCancel={() => {}}
+        />
+      </>
+    );
+  }
+
+  // The save is queued as a microtask after the choice; flush it.
+  const selectOption = async (comboboxName: string, optionName: string) => {
+    fireEvent.click(screen.getByRole('combobox', {name: comboboxName}));
+    fireEvent.click(
+      screen.getByRole('option', {name: optionName, hidden: true}),
+    );
+    await act(async () => {});
+  };
+
+  it('saves exactly once when an empty operator is chosen', async () => {
+    const onSave = vi.fn();
+    render(
+      <React.StrictMode>
+        <Harness
+          filter={{field: 'title', operator: 'contains', value: undefined}}
+          onSave={onSave}
+        />
+      </React.StrictMode>,
+    );
+    expect(onSave).not.toHaveBeenCalled();
+
+    await selectOption('Operator', 'is empty');
+    fireEvent.click(screen.getByRole('button', {name: 'Rerender'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Rerender'}));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith({
+      field: 'title',
+      operator: 'is_empty',
+      value: {type: 'empty'},
+    });
+  });
+
+  it('saves exactly once when the field switches to one whose default operator is empty', async () => {
+    const onSave = vi.fn();
+    render(
+      <React.StrictMode>
+        <Harness
+          filter={{field: 'title', operator: 'contains', value: undefined}}
+          onSave={onSave}
+        />
+      </React.StrictMode>,
+    );
+
+    await selectOption('Field', 'Assignee');
+    fireEvent.click(screen.getByRole('button', {name: 'Rerender'}));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith({
+      field: 'assignee',
+      operator: 'is_unset',
+      value: {type: 'empty'},
+    });
+  });
+
+  it('does not save again when the current empty operator or field is re-chosen', async () => {
+    const onSave = vi.fn();
+    render(
+      <React.StrictMode>
+        <Harness
+          filter={{field: 'title', operator: 'contains', value: undefined}}
+          onSave={onSave}
+        />
+      </React.StrictMode>,
+    );
+
+    await selectOption('Operator', 'is empty');
+    expect(onSave).toHaveBeenCalledTimes(1);
+    await selectOption('Operator', 'is empty');
+    expect(onSave).toHaveBeenCalledTimes(1);
+
+    await selectOption('Field', 'Assignee');
+    expect(onSave).toHaveBeenCalledTimes(2);
+    await selectOption('Field', 'Assignee');
+    expect(onSave).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not save just because it opens on a complete empty-operator filter', async () => {
+    const onSave = vi.fn();
+    render(
+      <React.StrictMode>
+        <Harness
+          filter={{field: 'title', operator: 'is_empty', value: undefined}}
+          onSave={onSave}
+        />
+      </React.StrictMode>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Rerender'}));
+    await act(async () => {});
+
+    expect(onSave).not.toHaveBeenCalled();
+  });
+});
+
+describe('empty-operator choices inside PowerSearch', () => {
+  const emptyConfig: PowerSearchConfig = {
+    name: 'test-empty-ps',
+    fields: [
+      {
+        key: 'title',
+        label: 'Title',
+        operators: [
+          {key: 'contains', label: 'contains', value: {type: 'string'}},
+          {key: 'is_empty', label: 'is empty', value: {type: 'empty'}},
+        ],
+      },
+    ],
+  };
+
+  function Harness({
+    initial,
+    onChange,
+  }: {
+    initial: PowerSearchFilter[];
+    onChange: (
+      filters: ReadonlyArray<PowerSearchFilter>,
+      type: string,
+      index: number,
+    ) => void;
+  }) {
+    const [filters, setFilters] = useState(initial);
+    return (
+      <PowerSearch
+        config={emptyConfig}
+        filters={filters}
+        onChange={(next, type, index) => {
+          onChange(next, type, index);
+          setFilters([...next]);
+        }}
+      />
+    );
+  }
+
+  it('returns focus to the search input after an empty operator is chosen', async () => {
+    const onChange = vi.fn();
+    render(
+      <Harness
+        initial={[
+          {
+            field: 'title',
+            operator: 'contains',
+            value: {type: 'string', value: 'x'},
+          },
+        ]}
+        onChange={onChange}
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Title: contains'));
+      flushRAF();
+    });
+    fireEvent.click(
+      screen.getByRole('combobox', {name: 'Operator', hidden: true}),
+    );
+    fireEvent.click(
+      screen.getByRole('option', {name: 'is empty', hidden: true}),
+    );
+    await act(async () => {});
+    act(() => flushRAF());
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][1]).toBe('edit');
+    expect(document.activeElement).not.toBe(document.body);
+    expect(screen.getAllByRole('combobox')[0]).toHaveFocus();
+  });
+
+  it('commits a clicked empty-operator token once without opening the editor', () => {
+    const onChange = vi.fn();
+    const {container} = render(
+      <Harness
+        initial={[
+          {field: 'title', operator: 'is_empty', value: {type: 'empty'}},
+        ]}
+        onChange={onChange}
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText(/Title: is empty/));
+      flushRAF();
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith(
+      [{field: 'title', operator: 'is_empty', value: {type: 'empty'}}],
+      'edit',
+      0,
+    );
+    expect(getEditPopoverText(container)).toBe('');
+  });
+});
+
+describe('empty-operator token with an Editor override', () => {
+  it('opens the consumer empty Editor instead of committing', () => {
+    const onChange = vi.fn();
+    const EmptyEditor = ({onCancel}: {onCancel: () => void}) => (
+      <div data-testid="custom-empty-editor">
+        <button type="button" onClick={onCancel}>
+          Close custom
+        </button>
+      </div>
+    );
+    const overrideConfig: PowerSearchConfig = {
+      name: 'test-empty-override',
+      fields: [
+        {
+          key: 'title',
+          label: 'Title',
+          operators: [
+            {key: 'contains', label: 'contains', value: {type: 'string'}},
+            {key: 'is_empty', label: 'is empty', value: {type: 'empty'}},
+          ],
+        },
+      ],
+    };
+    render(
+      <PowerSearch
+        config={overrideConfig}
+        filters={[
+          {field: 'title', operator: 'is_empty', value: {type: 'empty'}},
+        ]}
+        onChange={onChange}
+        components={{empty: {Editor: EmptyEditor}}}
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText(/Title: is empty/));
+      flushRAF();
+    });
+
+    expect(screen.getByTestId('custom-empty-editor')).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('Enter on a focused footer button (#7437)', () => {
+  const validFilter: PowerSearchFilter = {
+    field: 'status',
+    operator: 'is',
+    value: {type: 'string', value: 'example'},
+  };
+
+  function Harness({
+    onSave,
+    onCancel,
+  }: {
+    onSave: (filter: PowerSearchFilter | null) => void;
+    onCancel: () => void;
+  }) {
+    const internalConfig = useInternalConfig(testConfig);
+    return (
+      <PowerSearchEditPopover
+        config={internalConfig}
+        filter={validFilter}
+        mode="edit"
+        onSave={onSave}
+        onCancel={onCancel}
+      />
+    );
+  }
+
+  it('cancels without saving when Cancel has focus', async () => {
+    const onSave = vi.fn();
+    const onCancel = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onSave={onSave} onCancel={onCancel} />);
+
+    screen.getByRole('button', {name: 'Cancel'}).focus();
+    await user.keyboard('{Enter}');
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('deletes the filter when Delete has focus', async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onSave={onSave} onCancel={() => {}} />);
+
+    screen.getByRole('button', {name: 'Delete'}).focus();
+    await user.keyboard('{Enter}');
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith(null);
+  });
+
+  it('saves once when Apply has focus', async () => {
+    const onSave = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onSave={onSave} onCancel={() => {}} />);
+
+    screen.getByRole('button', {name: 'Apply'}).focus();
+    await user.keyboard('{Enter}');
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledWith(validFilter);
+  });
+
+  it('still cancels on Escape when a button has focus', async () => {
+    const onSave = vi.fn();
+    const onCancel = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness onSave={onSave} onCancel={onCancel} />);
+
+    screen.getByRole('button', {name: 'Delete'}).focus();
+    await user.keyboard('{Escape}');
+
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

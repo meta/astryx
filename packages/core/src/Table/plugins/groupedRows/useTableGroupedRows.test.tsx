@@ -1,5 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file useTableGroupedRows.test.tsx
+ * @input Table, grouped-row plugin, React testing utilities
+ * @output Behavioral, accessibility, composition, and layout regression coverage
+ * @position Focused tests for useTableGroupedRows
+ */
+
 import {describe, it, expect} from 'vitest';
 import {render, screen, fireEvent, within} from '@testing-library/react';
 import {useState, useCallback} from 'react';
@@ -24,6 +31,41 @@ const people: Person[] = [
 const columns: TableColumn<Person>[] = [{key: 'name', header: 'Name'}];
 
 const EMPTY = new Set<string>();
+
+/** Read the StyleX declarations applied to an element under Vitest. */
+function cssDeclarationsOf(element: Element): string[] {
+  const classes = new Set(
+    (element as HTMLElement).className.split(/\s+/).filter(Boolean),
+  );
+  const declarations: string[] = [];
+
+  for (const sheet of Array.from(document.styleSheets)) {
+    for (const rule of Array.from(sheet.cssRules)) {
+      const text = rule.cssText;
+      const brace = text.indexOf('{');
+      if (brace === -1) {
+        continue;
+      }
+      const selector = text.slice(0, brace).replaceAll(':not(#\\#)', '').trim();
+      const match = /^\.([\w-]+)(.*)$/.exec(selector);
+      if (!match || !classes.has(match[1])) {
+        continue;
+      }
+      declarations.push(
+        text
+          .slice(brace + 1, text.lastIndexOf('}'))
+          .trim()
+          .replace(/;$/, ''),
+      );
+    }
+  }
+
+  return declarations;
+}
+
+function hasDeclaration(element: Element, declaration: string): boolean {
+  return cssDeclarationsOf(element).some(value => value.includes(declaration));
+}
 
 function Harness({
   rows = people,
@@ -120,12 +162,21 @@ describe('useTableGroupedRows', () => {
     expect(coreToggle).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('sets aria-expanded on the header row reflecting collapse state', () => {
+  it('keeps disclosure state on the button, not the native header row', () => {
     render(<Harness initialCollapsed={new Set(['Core'])} />);
     const rows = screen.getAllByRole('row');
     // rows[1] = Core header (collapsed), rows[2] = Infra header (expanded).
-    expect(rows[1]).toHaveAttribute('aria-expanded', 'false');
-    expect(rows[2]).toHaveAttribute('aria-expanded', 'true');
+    expect(rows[1]).not.toHaveAttribute('aria-expanded');
+    expect(rows[2]).not.toHaveAttribute('aria-expanded');
+
+    const coreToggle = screen.getByRole('button', {
+      name: 'Expand group Core',
+    });
+    expect(coreToggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(coreToggle);
+    expect(
+      screen.getByRole('button', {name: 'Collapse group Core'}),
+    ).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('respects groupOrder in the flattened data', () => {
@@ -165,6 +216,32 @@ describe('useTableGroupedRows', () => {
     );
     expect(screen.getByText('Core::2::open')).toBeInTheDocument();
     expect(screen.getByText('Infra::1::open')).toBeInTheDocument();
+  });
+
+  it('keeps custom group headers full-width while pinning their chevron', () => {
+    const builtIn = render(<Harness />);
+    const builtInToggle = screen.getByRole('button', {
+      name: 'Collapse group Core',
+    });
+    const builtInWrapper = builtInToggle.parentElement;
+    expect(builtInWrapper).not.toBeNull();
+    expect(hasDeclaration(builtInWrapper!, 'position: sticky')).toBe(true);
+    expect(hasDeclaration(builtInWrapper!, 'width: fit-content')).toBe(true);
+    builtIn.unmount();
+
+    render(<Harness renderGroupHeader={key => <span>{key}</span>} />);
+    const customToggle = screen.getByRole('button', {
+      name: 'Collapse group Core',
+    });
+    const customWrapper = customToggle.parentElement;
+    expect(customWrapper).not.toBeNull();
+
+    // Preserve the custom renderer's full-row containing block. Only the
+    // plugin-owned chevron is sticky, so it remains reachable on horizontal
+    // scroll without constraining custom content to fit-content.
+    expect(hasDeclaration(customWrapper!, 'position: sticky')).toBe(false);
+    expect(hasDeclaration(customWrapper!, 'width: fit-content')).toBe(false);
+    expect(hasDeclaration(customToggle, 'position: sticky')).toBe(true);
   });
 
   it('renders nothing (no group headers) for empty data', () => {

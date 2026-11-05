@@ -1,8 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {Activity, type ReactNode} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {ClickableCard} from './ClickableCard';
+import {LinkProvider} from '../Link';
+import {
+  afterPaintsPress,
+  hasReleaseFade,
+  pressArmsShadowedByDefault,
+  readsPressStrength,
+} from '../__tests__/pressState';
 
 describe('ClickableCard', () => {
   it('renders children', () => {
@@ -47,6 +56,47 @@ describe('ClickableCard', () => {
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
+  it('calls onClick once when the accessible control itself is clicked', () => {
+    const handleClick = vi.fn();
+    render(
+      <ClickableCard label="Test card" onClick={handleClick}>
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    // Pointer activation aimed at the element carrying the role — what
+    // speech input, assistive technology, and automation dispatch.
+    fireEvent.click(screen.getByRole('button', {name: 'Test card'}));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes the card surface as currentTarget for surface clicks', () => {
+    const seen: EventTarget[] = [];
+    render(
+      <ClickableCard
+        label="Test card"
+        onClick={e => seen.push(e.currentTarget)}>
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    fireEvent.click(screen.getByText('Content'));
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toBe(screen.getByText('Content').parentElement);
+  });
+
+  it('calls onClick exactly once when the surface of an href card is clicked without preventDefault', () => {
+    const handleClick = vi.fn();
+    render(
+      <ClickableCard label="Nav card" href="/settings" onClick={handleClick}>
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    // The container hook proxies the surface click to the link with
+    // `link.click()`; that synthetic click bubbles back through the card and
+    // must not run the consumer callback a second time.
+    fireEvent.click(screen.getByText('Content'));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
   it('does NOT call onClick when a nested button is clicked', () => {
     const handleCardClick = vi.fn();
     const handleButtonClick = vi.fn();
@@ -86,25 +136,179 @@ describe('ClickableCard', () => {
     expect(link).toHaveAttribute('target', '_blank');
   });
 
-  it('disabled button is disabled', () => {
+  it('disabled button stays focusable and the surface runs nothing', () => {
     const handleClick = vi.fn();
     render(
       <ClickableCard label="Disabled" onClick={handleClick} isDisabled>
-        Content
+        <span>Content</span>
       </ClickableCard>,
     );
     const button = screen.getByRole('button', {name: 'Disabled'});
-    expect(button).toBeDisabled();
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(screen.getByText('Content'));
+    fireEvent.click(button);
+    expect(handleClick).not.toHaveBeenCalled();
   });
 
-  it('disabled link has aria-disabled', () => {
+  it('disabled link has no live destination, keeps its tab stop, and runs nothing', () => {
+    const handleClick = vi.fn();
     render(
-      <ClickableCard label="Disabled link" href="/settings" isDisabled>
-        Content
+      <ClickableCard
+        label="Disabled link"
+        href="/settings"
+        target="_blank"
+        onClick={handleClick}
+        isDisabled>
+        <span>Content</span>
       </ClickableCard>,
     );
     const link = screen.getByRole('link', {name: 'Disabled link'});
     expect(link).toHaveAttribute('aria-disabled', 'true');
+    expect(link).toHaveAttribute('tabindex', '0');
+    expect(link).not.toHaveAttribute('href');
+    expect(link).not.toHaveAttribute('target');
+    expect(fireEvent.click(link)).toBe(false);
+    fireEvent.click(screen.getByText('Content'));
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it('does not render a disabled link through the router link component', () => {
+    function RouterLink({
+      href,
+      children,
+    }: {
+      href?: string;
+      children?: ReactNode;
+    }) {
+      if (href == null) {
+        throw new Error('Router link requires an href');
+      }
+      return <a href={href}>{children}</a>;
+    }
+
+    render(
+      <LinkProvider component={RouterLink}>
+        <ClickableCard label="Disabled link" href="/settings" isDisabled>
+          <span>Content</span>
+        </ClickableCard>
+      </LinkProvider>,
+    );
+
+    const link = screen.getByRole('link', {name: 'Disabled link'});
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+    expect(link).not.toHaveAttribute('href');
+  });
+
+  it('keeps focus when a focused link card toggles its disabled state', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(
+      <ClickableCard label="Focus card" href="/settings">
+        <span>Content</span>
+      </ClickableCard>,
+    );
+
+    await user.tab();
+    expect(screen.getByRole('link', {name: 'Focus card'})).toHaveFocus();
+
+    rerender(
+      <ClickableCard label="Focus card" href="/settings" isDisabled>
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    expect(screen.getByRole('link', {name: 'Focus card'})).toHaveFocus();
+
+    rerender(
+      <ClickableCard label="Focus card" href="/settings">
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    expect(screen.getByRole('link', {name: 'Focus card'})).toHaveFocus();
+  });
+
+  it('leaves focus where the person put it when a hidden card is revealed', async () => {
+    const user = userEvent.setup();
+    function Harness({isHidden}: {isHidden: boolean}) {
+      return (
+        <>
+          <Activity mode={isHidden ? 'hidden' : 'visible'}>
+            <ClickableCard label="Hidden card" href="/settings">
+              <span>Content</span>
+            </ClickableCard>
+          </Activity>
+          <button type="button">Elsewhere</button>
+        </>
+      );
+    }
+    const {rerender} = render(<Harness isHidden={false} />);
+    await user.tab();
+    expect(screen.getByRole('link', {name: 'Hidden card'})).toHaveFocus();
+    rerender(<Harness isHidden />);
+    screen.getByRole('button', {name: 'Elsewhere'}).focus();
+    rerender(<Harness isHidden={false} />);
+    expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
+  });
+
+  it('takes focus back without scrolling the page', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(
+      <ClickableCard label="Scroll card" href="/settings">
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    await user.tab();
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    rerender(
+      <ClickableCard label="Scroll card" href="/settings" isDisabled>
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    expect(focus).toHaveBeenCalledWith({preventScroll: true});
+    focus.mockRestore();
+  });
+
+  it('runs onClick once from the keyboard via the hidden button', async () => {
+    const user = userEvent.setup();
+    const handleClick = vi.fn();
+    render(
+      <ClickableCard label="Test card" onClick={handleClick}>
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'Test card'})).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    expect(handleClick).toHaveBeenCalledTimes(2);
+  });
+
+  it('does NOT call onClick when a nested input is clicked', () => {
+    const handleCardClick = vi.fn();
+    render(
+      <ClickableCard label="Test card" onClick={handleCardClick}>
+        <input aria-label="Quantity" readOnly value="1" />
+      </ClickableCard>,
+    );
+    fireEvent.click(screen.getByRole('textbox', {name: 'Quantity'}));
+    expect(handleCardClick).not.toHaveBeenCalled();
+  });
+
+  it('does NOT call onClick when text inside the card is selected', () => {
+    const handleClick = vi.fn();
+    render(
+      <ClickableCard label="Test card" onClick={handleClick}>
+        <span>Selectable body text</span>
+      </ClickableCard>,
+    );
+    const text = screen.getByText('Selectable body text');
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    const selection = document.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    fireEvent.click(text);
+    expect(handleClick).not.toHaveBeenCalled();
+    selection.removeAllRanges();
   });
 
   describe('elevation', () => {
@@ -139,5 +343,40 @@ describe('ClickableCard', () => {
         none.firstElementChild!.className,
       );
     });
+  });
+});
+
+describe('ClickableCard pressed state (touch)', () => {
+  it('fades the touch press out on the card, whose overlay layer reads its strength', () => {
+    const {container} = render(
+      <ClickableCard label="Test card" onClick={() => {}}>
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    const card = container.querySelector('[data-astryx-pressable]');
+    if (card == null) {
+      throw new Error('the card carries no pressable marker');
+    }
+    // The controller writes the card; the card owns the strength and its
+    // release, and its `::after` paints the pressed token at that strength
+    // as its image on both arms, its hover and mouse colour yielding.
+    expect(hasReleaseFade(card)).toBe(true);
+    expect(readsPressStrength(card, '[data-astryx-press="on"]')).toBe(true);
+    expect(readsPressStrength(card)).toBe(true);
+    expect(afterPaintsPress(card, '[data-astryx-press="on"]')).toBe(true);
+    expect(afterPaintsPress(card)).toBe(true);
+    // No press arm sits on a custom property the card also declares without
+    // it: in a layered stylesheet that declaration wins and the press never
+    // paints.
+    expect(pressArmsShadowedByDefault(card)).toEqual([]);
+  });
+
+  it('carries none of it when disabled', () => {
+    const {container} = render(
+      <ClickableCard label="Test card" onClick={() => {}} isDisabled>
+        <span>Content</span>
+      </ClickableCard>,
+    );
+    expect(container.querySelector('[data-astryx-pressable]')).toBeNull();
   });
 });

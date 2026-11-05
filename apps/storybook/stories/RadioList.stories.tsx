@@ -401,3 +401,43 @@ export const DisabledWithMessage: Story = {
     disabledMessage: 'Upgrade your account to change preferences',
   },
 };
+
+export const PressedState: Story = {
+  name: 'Pressed state',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Press and hold an enabled option row to paint the system's `--color-overlay-pressed` layer on its indicator. Selected and unselected indicators both respond; the disabled example and the SMS row's nested link remain visually independent and cannot change selection.",
+      },
+    },
+  },
+  render: () => {
+    const [value, setValue] = useState('email');
+    return (
+      <RadioList
+        label="Notification preference"
+        value={value}
+        onChange={setValue}>
+        <RadioListItem label="Email — selected, press and hold" value="email" />
+        <RadioListItem
+          label={
+            <>
+              <span data-testid="radio-row-press-target">
+                SMS — press and hold
+              </span>{' '}
+              <Link href="#details">Details — independent link</Link>
+            </>
+          }
+          aria-label="SMS — press and hold"
+          value="sms"
+        />
+        <RadioListItem
+          label="Push — disabled, no pressed state"
+          value="push"
+          isDisabled
+        />
+      </RadioList>
+    );
+  },
+};

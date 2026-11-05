@@ -1,6 +1,6 @@
 ---
-schema_version: 1
-template_version: 1
+schema_version: 4
+template_version: 2
 kind: system-spec
 id: spec:AST-000
 authority: draft
@@ -18,28 +18,42 @@ affects_consumer_docs: [<doc-id>]
 
 # <Change> system spec
 
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
+
 ## Intent
+
+<!-- State the person/task and the durable observable outcome this spec owns. -->
 
 ## Non-goals
 
-- `<non-goal>`
+- `<adjacent behavior this decision does not settle>`
+- Equivalent internal implementations remain valid when they satisfy this contract.
+- Internal modules, files, function names, algorithms, data structures, storage
+  layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
+  topology belong in architecture or implementation unless callers or
+  interoperating systems intentionally depend on that exact mechanism as a public
+  protocol. In that case, state who depends on it and why an equivalent
+  implementation would not satisfy the contract.
 
 ## Requirements
 
-- **FR1 — `<behavior>`.** `<The system MUST …>`
-- **IR1 — `<constraint>`.** `<The implementation MUST …>`
+<!-- Contract supported inputs, observable outputs/states, failure or degradation behavior, defaults, exceptions, compatibility, and caller-visible ownership. -->
+
+- **FR1 — `<observable behavior>`.** `<The system MUST expose or preserve …>`
 
 ### Platform support
 
 - Supported feature/engine floor: `<matrix or canonical consumer-doc link>`
 - Unsupported behavior: `<required fallback, graceful degradation, or prohibition>`
-- Browser evidence: `<real browser requirement; do not substitute Playwright WebKit for Safari>`
+- Browser evidence: `<evidence layer needed to prove the observable claim; do not prescribe a CI job or workflow name>`
 
 ## Current-state impact
 
-<!-- Name every architecture, family, contributing, and consumer-doc surface changed when this ships. -->
+<!-- Name every architecture, family, contributing, and consumer-doc surface changed when this ships. Link architecture records that own internal seams; do not duplicate their mechanisms here. -->
 
 ## Verification
+
+<!-- Verification proves the observable contract. It does not authorize an internal architecture or CI topology. -->
 
 | Contract | Verification         | Representative states | Mutation or failure expectation       |
 | -------- | -------------------- | --------------------- | ------------------------------------- |
@@ -47,14 +61,15 @@ affects_consumer_docs: [<doc-id>]
 
 ## Decision log
 
-### DEC-1 — `<decision>`
+### DEC-1 — `<behavioral decision>`
 
 **Reference:** `spec:AST-000/DEC-1`
 **Decider:** `<person>`, `<YYYY-MM-DD>`
 
-`<Reason and user impact.>`
+`<Reason, user impact, and observable contract.>`
 
-Rejected: `<alternative — why>`.
+Rejected: `<consequential behavioral alternative — why>`. Do not record a private
+implementation merely because it supplied the evidence.
 
 ## Open questions
 

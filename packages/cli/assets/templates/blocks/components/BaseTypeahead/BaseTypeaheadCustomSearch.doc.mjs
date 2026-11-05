@@ -7,8 +7,10 @@ export const doc = {
   name: 'BaseTypeahead — Custom Search Bar',
   displayName: 'BaseTypeahead — Custom Search Bar',
   description:
-    'BaseTypeahead embedded inside a custom-styled wrapper. The wrapper provides its own border and icon chrome; anchorRef positions the dropdown relative to it. Use this pattern when Typeahead\'s built-in field layout does not fit your composition.',
+    "BaseTypeahead embedded inside a custom-styled wrapper. The wrapper provides its own border and icon chrome; anchorRef positions the dropdown relative to it. Use this pattern when Typeahead's built-in field layout does not fit your composition.",
   isReady: true,
+  isShowcase: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['BaseTypeahead', 'Icon', 'Layout', 'Text'],
+  icons: {MagnifyingGlassIcon: 'search'},
 };

@@ -6,7 +6,8 @@
  * response envelope). Colocated as a `.doc.mjs` next to the schema it describes.
  */
 
-import type {ReferenceContentBlock} from '../reference/type';
+import type {AuthoredDocGraphFields} from '../base/type.js';
+import type {ReferenceContentBlock} from '../reference/type.js';
 
 /**
  * One documented field of a schema. Object fields nest via `fields`, so a whole
@@ -27,6 +28,10 @@ export interface SchemaFieldDoc {
   example?: string;
   /** Deprecation reason, if the field is deprecated. */
   deprecated?: string;
+  /** Set on a field of an experimental surface (spec:AST-017 FR27). The
+   *  schema's own section leaves it out; the experimental feature's docs,
+   *  under `astryx docs cli/experimental`, document it. */
+  stability?: 'experimental';
   /** Nested object fields, for object-typed fields. */
   fields?: SchemaFieldDoc[];
 }
@@ -37,7 +42,7 @@ export interface SchemaFieldDoc {
  *   /\*\* @type {import('@astryxdesign/cli/authoring').SchemaDoc} \*\/
  *   export const doc = { type: 'schema', name: 'config', ... };
  */
-export interface SchemaDoc {
+export interface SchemaDoc extends AuthoredDocGraphFields {
   /** Doc-kind discriminant. */
   type?: 'schema';
   /** URL-safe identifier, used as the docs slug within its namespace. */
@@ -46,8 +51,7 @@ export interface SchemaDoc {
   displayName: string;
   /** One-line summary shown in listings. */
   description: string;
-  /** Docs namespace path (e.g. 'cli' | 'authoring'). Defaults are applied by
-   *  the docs index; set explicitly to place the schema. */
+  /** The group that reads this doc: 'authoring' for a file an author writes (a section of `astryx docs authoring`), or 'cli/api' for a shape the CLI returns (the docs tree adopts it by kind, as the leaf `cli/api/schemas/<name>`). Every schema doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that nothing reads. */
   namespace?: string;
   /** Alternate slugs that also resolve to this doc (back-compat). */
   aliases?: string[];

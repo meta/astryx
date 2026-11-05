@@ -2,6 +2,7 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
 # scripts/prune-branches.sh — Delete remote branches with merged/closed PRs
+# (an `assets/pr-<n>` branch the PR report created goes with PR #<n>)
 #
 # Usage:
 #   ./scripts/prune-branches.sh          # dry run (default)
@@ -12,8 +13,7 @@
 
 set -euo pipefail
 
-REPO="facebook/astryx"
-PROTECTED="main|gh-pages"
+REPO="meta/astryx"
 MODE="${1:-dry-run}"
 PARALLEL=15
 STALE_DAYS=60  # branches with no PR older than this are also flagged
@@ -33,13 +33,36 @@ echo ""
 echo -e "${DIM}Fetching and pruning remote refs...${NC}"
 git fetch origin --prune --quiet 2>/dev/null
 
+# Active release branches are protected by their checked-in marker. A release/*
+# branch without a readable matching marker is uncertainty, not permission to
+# delete: stop the entire cleanup before producing a kill list.
+release_branches=()
+while IFS= read -r b; do
+  [ -n "$b" ] || continue
+  if ! marker=$(node scripts/release/active-release.mjs inspect-ref --ref "origin/$b"); then
+    echo "Refusing branch cleanup: $b lacks a valid release marker." >&2
+    exit 1
+  fi
+  state=$(node -e 'console.log(JSON.parse(process.argv[1]).state)' "$marker")
+  [ "$state" = active ] && release_branches+=("$b")
+done < <(git branch -r | sed 's|^[[:space:]]*origin/||' | grep '^release/v' || true)
+
+is_protected_branch() {
+  case "$1" in main|gh-pages) return 0 ;; esac
+  local protected
+  for protected in "${release_branches[@]}"; do
+    [ "$1" = "$protected" ] && return 0
+  done
+  return 1
+}
+
 # Get all remote branches, excluding protected
 branches=()
 while IFS= read -r b; do
-  branches+=("$b")
-done < <(git branch -r | grep -v HEAD | sed 's|  origin/||' | grep -Ev "^($PROTECTED)$")
+  is_protected_branch "$b" || branches+=("$b")
+done < <(git branch -r | grep -v HEAD | sed 's|  origin/||')
 total=${#branches[@]}
-echo -e "Found ${BOLD}$total${NC} remote branches (excluding $PROTECTED)"
+echo -e "Found ${BOLD}$total${NC} remote branches (active release branches protected)"
 echo ""
 
 # Temp dirs — one file per branch avoids concurrent write corruption
@@ -68,7 +91,15 @@ stale_cutoff="$3"
 repo="$4"
 safe_name=$(echo "$branch" | tr '/' '_')
 
-state=$(gh pr list --repo "$repo" --head "$branch" --state all --json state --jq '.[0].state // "none"' 2>/dev/null || echo "error")
+# An `assets/pr-<n>` branch the PR report created (it carries the
+# `.pr-report-frames` marker) goes with PR #<n>. Every other branch, including
+# assets branches pushed by hand, keeps the rule below.
+if [[ "$branch" =~ ^assets/pr-([0-9]+)$ ]] && git cat-file -e "origin/$branch:.pr-report-frames" 2>/dev/null; then
+  state=$(gh pr view "${BASH_REMATCH[1]}" --repo "$repo" --json state --jq '.state' 2>/dev/null || echo "error")
+  [ "$state" = "error" ] && state="OPEN"
+else
+  state=$(gh pr list --repo "$repo" --head "$branch" --state all --json state --jq '.[0].state // "none"' 2>/dev/null || echo "error")
+fi
 
 if [ "$state" = "MERGED" ] || [ "$state" = "CLOSED" ]; then
   echo "$branch" > "$tmp_dir/delete/$safe_name"

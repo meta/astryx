@@ -1,11 +1,10 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-# Crowdin upload — push the canonical English source strings to Crowdin whenever
-# packages/core/locales/en.json changes on main. Translators pick up new strings
-# from Crowdin; translations flow back via crowdin-download.yml.
-#
-# Uses the Crowdin CLI action (mastodon-style) rather than the Crowdin GitHub
-# App, so the whole integration lives in this repo as reviewable YAML.
+# Crowdin file context — Crowdin's native GitHub integration syncs
+# packages/core/locales/en.json into Crowdin's `main` branch on every push to
+# main, so this workflow no longer uploads sources itself (that would just
+# duplicate the native sync). It only keeps that branch-managed source file's
+# Crowdin context note current, which the native integration has no setting for.
 name: Crowdin Upload
 
 on:
@@ -13,31 +12,51 @@ on:
     branches: [main]
     paths:
       - 'packages/core/locales/en.json'
+      - '.github/workflows/crowdin-upload.yml'
   workflow_dispatch:
 
 permissions: {}
 
-concurrency:
-  group: crowdin-upload
-  cancel-in-progress: false
-
 jobs:
   upload:
-    runs-on: 4-core-ubuntu
-    permissions:
-      contents: read
+    runs-on: ubuntu-latest
+    permissions: {}
     steps:
-      - uses: actions/checkout@v7
-
-      # crowdin/github-action@v2.16.4 — pinned by SHA per repo policy.
-      - name: Upload sources to Crowdin
-        uses: crowdin/github-action@c7af9bc98b01694653031fef2a0dc6c7888ce9bc
-        with:
-          upload_sources: true
-          upload_translations: false
-          download_translations: false
-          push_translations: false
-          create_pull_request: false
+      # File-level context is a field on the Crowdin file record, and a
+      # crowdin.yml `files:` entry has no key for it, so nothing that syncs
+      # the source file — native or CLI — can carry it. Tone and terminology
+      # belong in the Crowdin style guide, not here.
+      - name: Set file-level context
         env:
           CROWDIN_PROJECT_ID: ${{ vars.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          # Crowdin prefixes file paths with the integration branch name.
+          SOURCE_PATH: /main/packages/core/locales/en.json
+          CONTEXT: >-
+            English source strings for Astryx's reusable React UI components.
+            They appear in product-neutral controls across many host
+            applications, including compact visible controls and screen-reader
+            labels. Use the key's component segment, per-string description,
+            and tagged screenshots to identify each surface. Preserve ICU
+            placeholders and rich-text tags exactly.
+        run: |
+          set -euo pipefail
+          api="https://api.crowdin.com/api/v2/projects/$CROWDIN_PROJECT_ID/files"
+          auth="Authorization: Bearer $CROWDIN_PERSONAL_TOKEN"
+          files=$(curl --fail-with-body -sS -H "$auth" "$api?limit=500") ||
+            { echo "::error::$files"; exit 1; }
+          file=$(jq --arg p "$SOURCE_PATH" '[.data[].data | select(.path == $p)][0]' <<<"$files")
+          id=$(jq -r '.id // empty' <<<"$file")
+          if [ -z "$id" ]; then
+            echo "::error::no file at $SOURCE_PATH — upload sources first"
+            exit 1
+          fi
+          if [ "$(jq -r '.context // ""' <<<"$file")" = "$CONTEXT" ]; then
+            echo "file $id already carries this context"
+            exit 0
+          fi
+          patch=$(jq -n --arg c "$CONTEXT" '[{op: "replace", path: "/context", value: $c}]')
+          out=$(curl --fail-with-body -sS -X PATCH "$api/$id" \
+            -H "$auth" -H 'Content-Type: application/json' --data "$patch") ||
+            { echo "::error::$out"; exit 1; }
+          echo "set context on file $id"

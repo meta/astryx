@@ -176,8 +176,8 @@ export interface DebugEventEnv {
   /** Legacy broad detector, retained for compatibility with existing consumers. */
   agent: string | null;
   /**
-   * Coding-agent identity from `ASTRYX_AGENT_ID`, `AGENT`,
-   * `ASTRYX_AGENT_METADATA`, or a known public agent signal. Scrubbed.
+   * Coding-agent identity from `AGENT` or a known public agent signal.
+   * Scrubbed.
    */
   agentIdentity: string | null;
   /**

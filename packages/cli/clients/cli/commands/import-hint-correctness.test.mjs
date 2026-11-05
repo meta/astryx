@@ -15,13 +15,14 @@
 
 import {describe, it, expect} from 'vitest';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
   resolveImportPath,
   discoverComponents,
   findComponentSource,
-} from './component/index.mjs';
+} from './component.mjs';
 import {findCoreDir} from '../../../foundation/fs/paths.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 
@@ -85,7 +86,7 @@ describe('import hint correctness', () => {
     }
   });
 
-  describe('CLI --detail brief shows correct import path', () => {
+  describe('CLI --detail compact shows correct import path', () => {
     // Test a representative set across different patterns
     const representative = [
       {name: 'Button', expected: '@astryxdesign/core/Button'},
@@ -101,8 +102,8 @@ describe('import hint correctness', () => {
     ];
 
     for (const {name, expected} of representative) {
-      it(`npx astryx component ${name} --detail brief shows ${expected}`, async () => {
-        const result = await runCli(['component', name, '--detail', 'brief'], REPO_ROOT);
+      it(`npx astryx component ${name} --detail compact shows ${expected}`, async () => {
+        const result = await runCli(['component', name, '--detail', 'compact'], REPO_ROOT);
         expect(result.code).toBe(0);
         expect(result.stdout).toContain(expected);
       });
@@ -121,6 +122,120 @@ describe('import hint correctness', () => {
         expect(result.stdout).toContain('@astryxdesign/core');
       });
     }
+  });
+
+  describe('integration-owned components show their own package as the import hint', () => {
+    /**
+     * @param {{exports?: Record<string, string>}} [opts]
+     * @returns {string} the fixture's project root (pass as runCli's cwd)
+     */
+    function createIntegrationFixture({exports: pkgExports} = {}) {
+      // Outside the source tree: a scan of the repo's docs (docs-drift)
+      // running at the same time must never find this fixture's doc.
+      const fixtureDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'astryx-import-hint-integration-'),
+      );
+
+      fs.mkdirSync(path.join(fixtureDir, 'packages'), {recursive: true});
+      fs.symlinkSync(coreDir, path.join(fixtureDir, 'packages', 'core'));
+      fs.writeFileSync(
+        path.join(fixtureDir, 'package.json'),
+        JSON.stringify({name: 'fixture-app', version: '1.0.0'}),
+      );
+      fs.writeFileSync(
+        path.join(fixtureDir, 'astryx.config.mjs'),
+        "export default { integrations: ['@test/widgets'] };",
+      );
+
+      const intDir = path.join(fixtureDir, 'node_modules', '@test', 'widgets');
+      const compDir = path.join(intDir, 'components', 'Widget');
+      fs.mkdirSync(compDir, {recursive: true});
+      fs.writeFileSync(
+        path.join(intDir, 'package.json'),
+        JSON.stringify({
+          name: '@test/widgets',
+          version: '1.0.0',
+          ...(pkgExports ? {exports: pkgExports} : {}),
+        }),
+      );
+      fs.writeFileSync(
+        path.join(intDir, 'astryx.integration.mjs'),
+        "export default { components: './components' };",
+      );
+      fs.writeFileSync(
+        path.join(compDir, 'Widget.doc.mjs'),
+        "export const docs = {\n  name: 'Widget',\n  usage: { description: 'A test widget.' },\n  props: [{ name: 'label', type: 'string', description: 'Label text' }],\n};\n",
+      );
+
+      return fixtureDir;
+    }
+
+    it('component <Name> (full) shows the integration package, not @astryxdesign/core', async () => {
+      const fixtureDir = createIntegrationFixture();
+      try {
+        const result = await runCli(['component', 'Widget'], fixtureDir);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toContain("from '@test/widgets';");
+        expect(result.stdout).not.toContain('@astryxdesign/core');
+      } finally {
+        fs.rmSync(fixtureDir, {recursive: true, force: true});
+      }
+    });
+
+    it('component <Name> --detail compact also shows the integration package', async () => {
+      const fixtureDir = createIntegrationFixture();
+      try {
+        const result = await runCli(
+          ['component', 'Widget', '--detail', 'compact'],
+          fixtureDir,
+        );
+        expect(result.code).toBe(0);
+        expect(result.stdout).toContain('@test/widgets');
+        expect(result.stdout).not.toContain('@astryxdesign/core');
+      } finally {
+        fs.rmSync(fixtureDir, {recursive: true, force: true});
+      }
+    });
+
+    it('resolves to a subpath when the integration exports one for the component', async () => {
+      const fixtureDir = createIntegrationFixture({
+        exports: {
+          '.': './index.js',
+          './Widget': './components/Widget/index.js',
+        },
+      });
+      try {
+        const result = await runCli(['component', 'Widget'], fixtureDir);
+        expect(result.code).toBe(0);
+        expect(result.stdout).toContain("from '@test/widgets/Widget';");
+      } finally {
+        fs.rmSync(fixtureDir, {recursive: true, force: true});
+      }
+    });
+
+    it('builds its fixture where a scan of the repo\u2019s docs running at the same time never finds it', async () => {
+      // The docs-drift scan walks packages/cli/clients/cli/commands for
+      // .doc.mjs files. A fixture built there handed it this test's Widget
+      // doc, which could vanish before the scan imported it. The scan's walk
+      // decides what it finds, so the case reads the walk and imports no doc.
+      const fixtureDir = createIntegrationFixture();
+      try {
+        const {docFiles} = await import('../../../test/drift/docs-drift.mjs');
+        const files = docFiles();
+        expect(files).toContain(
+          path.join(
+            REPO_ROOT,
+            'packages/cli/clients/cli/commands/component.doc.mjs',
+          ),
+        );
+        const found = files.filter(file =>
+          file.startsWith(fixtureDir + path.sep),
+        );
+        expect(found).toEqual([]);
+      } finally {
+        fs.rmSync(fixtureDir, {recursive: true, force: true});
+      }
+    });
   });
 
   describe('group names do NOT resolve to incorrect import paths', () => {
@@ -159,5 +274,28 @@ describe('import hint correctness', () => {
         expect(subpath.toLowerCase()).toBe(topDir.toLowerCase());
       });
     }
+  });
+
+  describe('CLI --detail brief text output for a single component', () => {
+    it('brief text output names the component and its package', async () => {
+      const result = await runCli(['component', 'Button', '--detail', 'brief'], REPO_ROOT);
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain('Button');
+      expect(result.stdout).toContain('@astryxdesign/core');
+    });
+
+    it('brief text is shorter than compact text', async () => {
+      const brief = await runCli(['component', 'Button', '--detail', 'brief'], REPO_ROOT);
+      const compact = await runCli(['component', 'Button', '--detail', 'compact'], REPO_ROOT);
+      expect(brief.code).toBe(0);
+      expect(compact.code).toBe(0);
+      expect(brief.stdout.length).toBeLessThan(compact.stdout.length);
+    });
+
+    it('brief text shows the import path in the signature line', async () => {
+      const result = await runCli(['component', 'Button', '--detail', 'brief'], REPO_ROOT);
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain('@astryxdesign/core/Button');
+    });
   });
 });

@@ -16,14 +16,24 @@ describe('themeTargets (api/theme/targets)', () => {
     expect(result.data.filter).toBeNull();
     expect(result.data.targets.length).toBeGreaterThan(100);
     expect(result.data.componentCount).toBeGreaterThan(50);
-    for (const t of result.data.targets) {
-      expect(Object.keys(t).sort()).toEqual([
-        'className',
-        'component',
-        'key',
-        'props',
-        'states',
-      ]);
+    const allowedKeys = new Set([
+      'className',
+      'component',
+      'key',
+      'props',
+      'states',
+    ]);
+    for (const target of result.data.targets) {
+      expect(target).toMatchObject({
+        className: expect.any(String),
+        component: expect.any(String),
+        key: expect.any(String),
+        props: expect.any(Array),
+        states: expect.any(Array),
+      });
+      expect(Object.keys(target).filter(key => !allowedKeys.has(key))).toEqual(
+        [],
+      );
     }
   }, 60_000);
 

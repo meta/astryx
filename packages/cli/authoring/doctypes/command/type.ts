@@ -9,7 +9,8 @@
  * `--help`. Colocated at `clients/cli/commands/<name>.doc.mjs`.
  */
 
-import type {ReferenceContentBlock} from '../reference/type';
+import type {AuthoredDocGraphFields} from '../base/type.js';
+import type {ReferenceContentBlock} from '../reference/type.js';
 
 /** A positional argument. `param` links it to a FunctionDoc param for its description. */
 export interface CommandArgDoc {
@@ -39,6 +40,18 @@ export interface CommandOptionDoc {
   cliOnly?: boolean;
 }
 
+/**
+ * What a command does in a folder outside any project:
+ * - `same`: it gives the answer it gives in a new project, reading the Core
+ *   the answering release carries.
+ * - `refuse`: it writes nothing and fails before doing any work, naming the app
+ *   project or integration package it needs.
+ * - `own`: it does something else.
+ * Every `refuse` and `own` command also carries an `In global mode:` note
+ * in its `notes`, for readers.
+ */
+export type CommandOutsideProject = 'same' | 'refuse' | 'own';
+
 export interface CommandExampleDoc {
   label?: string;
   /** A full terminal invocation, e.g. 'astryx search button --json'. */
@@ -53,7 +66,7 @@ export interface CommandExampleDoc {
  *   /\*\* @type {import('@astryxdesign/cli/authoring').CommandDoc} \*\/
  *   export const doc = { type: 'command', name: 'search', fn: 'search', ... };
  */
-export interface CommandDoc {
+export interface CommandDoc extends AuthoredDocGraphFields {
   /** Doc-kind discriminant. */
   type?: 'command';
   /** Command path, e.g. 'search' | 'theme build'. */
@@ -64,7 +77,7 @@ export interface CommandDoc {
   summary: string;
   /** Longer help body / when-to-use. */
   description?: string;
-  /** Docs namespace path. Defaults to 'cli' when applied by the docs index. */
+  /** The group that reads this doc. The CLI's commands use 'cli/commands', which the docs tree adopts: each is the leaf `cli/commands/<name>`. Every command doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that nothing reads. */
   namespace?: string;
   /** Alternate slugs that also resolve to this doc. */
   aliases?: string[];
@@ -80,7 +93,11 @@ export interface CommandDoc {
   examples?: CommandExampleDoc[];
   /** Documented exit codes. */
   exitCodes?: {code: number; when: string}[];
-  /** Related command names. */
+  /** What the command does outside a project: `same`, `refuse`, or `own`. Every command and subcommand declares one, and `astryx manifest` publishes it; a command that only groups subcommands declares none. */
+  outsideProject?: CommandOutsideProject;
+  /** Deprecation notice — a DEP-* id and the replacement. */
+  deprecated?: string;
+  /** Related command names; the CLI links each to its doc. */
   related?: string[];
   /** Freeform prose/notes. */
   notes?: ReferenceContentBlock[];

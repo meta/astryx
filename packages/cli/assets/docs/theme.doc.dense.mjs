@@ -3,170 +3,44 @@
 /** @type {import('@astryxdesign/cli/authoring').ReferenceTranslationDoc} */
 
 export const docsDense = {
-  description: 'Theme provider, custom themes, light/dark, component overrides',
+  description: 'use + create themes: see use-a-theme and author-a-theme.',
   sections: [
     {
-      section: 'Quick Start',
-      title: 'Quick Start',
+      section: 'Wrap your app in a theme',
+      title: 'Quick start',
       content: [
-        null,
-        null,
-        null,
-        null,
-        {
-          type: 'prose',
-          text: 'default import = runtime injection. /built import = pre-compiled CSS (pair with theme.css).',
-        },
+        {type: 'prose', text: "Install a theme, wrap in `<Theme>` (`import {Theme} from '@astryxdesign/core/theme'`). {@link generic:use-a-theme} for full guide."},
       ],
     },
     {
-      section: 'Available Themes',
-      title: 'Themes',
+      section: 'Create a custom theme',
+      title: 'Custom themes',
       content: [
+        {type: 'prose', text: '`defineTheme` + token overrides + component overrides. {@link generic:author-a-theme} for full guide.'},
         null,
-        null,
-        {
-          type: 'prose',
-          text: 'published: neutral (start here), butter, chocolate, gothic (dark-only), matcha, stone, y2k. @astryxdesign/theme-{name} = source (runtime). @astryxdesign/theme-{name}/built = optimized (+ theme.css).',
-        },
-      ],
-    },
-    {section: 'Theme Props', title: 'Props', content: [null]},
-    {
-      section: 'Creating a Custom Theme',
-      title: 'Custom Theme',
-      content: [
-        {
-          type: 'prose',
-          text: '`theme list` + `theme add <slug>` to start from a shipped theme, or defineTheme from scratch. only override tokens that differ.',
-        },
-        null,
-        {
-          type: 'prose',
-          text: '`astryx theme template` writes theme.template.ts: every defineTheme field + token families + override syntax, annotated, with the CLI command that prints each reference.',
-        },
+        {type: 'prose', text: "new palette: `astryx theme palette generate palette.config.json --out palette.generated.ts` → review + commit module and receipt → `import {palette} from './palette.generated';` → map semantic tokens to stable stops such as `palette.neutral.light[100]` / `palette.neutral.dark[15]`. regeneration updates mapped roles; generation does not rewrite the theme."},
       ],
     },
     {
-      section: 'defineTheme',
-      title: 'defineTheme',
+      section: 'Icon sizes',
+      title: 'Icon sizes',
       content: [
-        {
-          type: 'prose',
-          text: 'scale configs (color, typography, radius, motion) + explicit token overrides + component overrides. color derives full palette from accent via HCT; accent = hex or [light, dark] tuple (per-scheme palettes). tokens overrides win token-by-token; --color-on-accent stays baked from color.accent, so prefer a tuple accent over overriding --color-accent.',
-        },
-        null,
+        {type: 'prose', text: "theme sets each Icon size's glyph dimension: `width` + `height` on `components.icon['size:sm']` (or xsm/md/lg); semantic names + SVG components alike. px or rem only: a semantic icon takes its font size from the dimension, so em also grows its box. unstyled: xsm/sm/md/lg = 12/16/20/24px at 16px root, scale w/ root font size (rem keeps it). size names are fixed."},
         null,
       ],
     },
     {
-      section: 'Theme Adaptations',
-      title: 'Adaptations',
+      section: 'Dark mode',
+      title: 'Dark mode',
       content: [
-        {
-          type: 'prose',
-          text: 'adaptations = ordered {when,value} rules over width/pointer/contrast/motion. widthBreakpoints fixed sm|md|lg|xl|2xl defaults 640|768|1024|1280|1536; map alone emits no CSS. width.from inclusive, width.below exclusive; condition fields AND. root first, then matching rules in authored order (later writes win), then onDark/onLight. rules can write typography/color/radius/motion/tokens/localTokens/components; local names belong on root. Component writes validate exactly like root components (same targets/axes/domains); only difference: a rule cannot be the sole enroller of a custom value (type augmentation is unconditional) — declare it on root, then restyle. Built-ins need no root declaration. Co-matching token/localToken writes are validated together; any reachable var() cycle fails. extends inherits breakpoints + ordered rules, appends child rules, re-resolves against child axes. CSS-only; use built themes for SSR first paint.',
-        },
-        null,
-        null,
+        {type: 'prose', text: "[light, dark] tuples, mode='system'. {@link generic:use-a-theme} for full guide."},
       ],
     },
     {
-      section: 'Component Style Overrides',
-      title: 'Component Overrides',
+      section: 'Integration themes',
+      title: 'Integration themes',
       content: [
-        {
-          type: 'prose',
-          text: 'components field uses semantic component keys + style keys (base, variant:value, stateName), not raw selectors. for external CSS, prefer data-* selectors from `astryx docs styling`. write standard CSS (borderRadius, padding) — pipeline expands to internal vars. public vars (--button-focus-offset etc) set directly. private vars (--_*) cannot be set — use CSS properties. run `astryx theme targets [Name]` to enumerate every themeable key (--json for lint), `astryx component <Name>` for one component.',
-        },
-        null,
-        null,
-        null,
-        null,
-      ],
-    },
-    {
-      section: 'Custom Variants',
-      title: 'Custom Variants',
-      content: [
-        {
-          type: 'prose',
-          text: 'any unknown prop:value in components becomes a new variant. astryx theme build generates TS augmentations. works on any extensible prop axis (variant, status, etc).',
-        },
-        null,
-        null,
-        null,
-        null,
-      ],
-    },
-    {
-      section: 'Building Themes for Production',
-      title: 'Build for Production',
-      content: [
-        {
-          type: 'prose',
-          text: 'astryx theme build compiles defineTheme to static CSS. outputs .css + .js (__built:true) + .d.ts.',
-        },
-        null,
-        null,
-        null,
-        {
-          type: 'prose',
-          text: 'current build detects named imports used by icons:. registry module is not compiled. inline/local registries accepted by defineTheme are omitted from built output; move them to a separate module and import by name.',
-        },
-        null,
-        {
-          type: 'prose',
-          text: '--out dist/theme.css --icons-specifier ./icons.mjs requires dist/icons.mjs. skipping its compilation can leave theme build successful but breaks loading and bundling. flag changes the import; it does not create/verify the file. keep react + icon library external.',
-        },
-        {
-          type: 'prose',
-          text: 'without --icons-specifier, source import is copied unchanged. default flow without --out: bundlers can resolve ./icons to neighboring icons.tsx; Node ESM fails with ERR_MODULE_NOT_FOUND. moving output changes relative import resolution.',
-        },
-        null,
-        null,
-        null,
-      ],
-    },
-    {
-      section: 'Runtime vs Built Themes',
-      title: 'Runtime vs Built',
-      content: [
-        {
-          type: 'prose',
-          text: 'runtime: useInsertionEffect injects styles client-side. built: static CSS on first paint. USE /built + theme.css FOR SSR.',
-        },
-        null,
-        null,
-        null,
-      ],
-    },
-    {
-      section: 'Light/Dark Mode',
-      title: 'Light/Dark',
-      content: [
-        {
-          type: 'prose',
-          text: 'light-dark() in token values via [light, dark] tuples. mode=system follows OS.',
-        },
-        null,
-        null,
-      ],
-    },
-    {
-      section: 'Nesting Themes',
-      title: 'Nesting',
-      content: [
-        {type: 'prose', text: 'wrap sections in separate <Theme> providers'},
-        null,
-      ],
-    },
-    {
-      section: 'useTheme Hook',
-      title: 'useTheme',
-      content: [
-        null,
-        {type: 'prose', text: 'read-only. manage state at app level.'},
+        {type: 'prose', text: 'Install integration. `astryx theme add` imports, and `theme eject` forks source. {@link generic:use-a-theme} for full guide.'},
       ],
     },
   ],

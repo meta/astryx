@@ -21,7 +21,7 @@
  * which is the order they are meant to be read in.
  */
 
-import {usePathname} from 'next/navigation';
+import {usePathname} from '../../../../router';
 import {useEffect, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -30,6 +30,8 @@ import {
   LayoutPanel,
   VStack,
 } from '@astryxdesign/core/Layout';
+import {Collapsible} from '@astryxdesign/core/Collapsible';
+import {useMediaQuery} from '@astryxdesign/core/hooks';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {Text} from '@astryxdesign/core/Text';
 import {useMotionLab} from './MotionLabStore';
@@ -53,19 +55,25 @@ const sx = stylex.create({
   firstGroupLabel: {
     paddingBlockStart: '2px',
   },
+  narrowNav: {
+    paddingInline: '12px',
+    borderBlockEndWidth: '1px',
+    borderBlockEndStyle: 'solid',
+    borderBlockEndColor: 'var(--color-border)',
+  },
 });
 
 /**
- * Hrefs here are written WITHOUT the deployed basePath, and must stay that way.
- *
- * The sandbox deploys under a prefix (`/astryx/pr/<n>/sandbox` on a preview),
- * and `next/link` prepends it exactly once. LinkProvider in layout.tsx routes
- * every Astryx `Link` and `ListItem` in this section through `next/link`, so
- * the prefix is already handled — applying it here as well produces a
- * double-prefixed URL that 404s, which is how this was found.
- *
- * `usePathname()` also returns the path without the prefix, so the
- * current-page comparison below matches these hrefs directly.
+ * Below this width the 228px page panel would leave the lab's cards a
+ * column too narrow to read, so the pages fold into a collapsible list above
+ * the content instead.
+ */
+const NARROW_QUERY = '(max-width: 719px)';
+
+/**
+ * Hrefs stay unprefixed: SandboxLink applies the Vite base path once in the
+ * LinkProvider, and usePathname() returns the path within that base path.
+ * A second prefix here would break navigation on the staged /sandbox/ build.
  */
 
 /** The export sets `trailingSlash: true`, so normalise before comparing. */
@@ -109,6 +117,10 @@ function LabNav() {
 export function MotionLabShell({children}: {children: ReactNode}) {
   const {registerScope, reducedMotion} = useMotionLab();
   const ref = useRef<HTMLDivElement | null>(null);
+  const isNarrow = useMediaQuery(NARROW_QUERY);
+  // The shell outlives a page change; keying the folded list by page closes
+  // it after a pick, so the chosen page starts on screen.
+  const pathname = usePathname();
 
   useEffect(() => {
     registerScope(ref.current);
@@ -124,13 +136,25 @@ export function MotionLabShell({children}: {children: ReactNode}) {
       <Layout
         height="fill"
         start={
-          <LayoutPanel hasDivider width={228} padding={0} role="navigation">
-            <LabNav />
-          </LayoutPanel>
+          isNarrow ? undefined : (
+            <LayoutPanel hasDivider width={228} padding={0} role="navigation">
+              <LabNav />
+            </LayoutPanel>
+          )
         }
         content={
           <LayoutContent padding={0}>
             <VStack gap={0}>
+              {isNarrow && (
+                <div {...stylex.props(sx.narrowNav)}>
+                  <Collapsible
+                    key={pathname}
+                    trigger="Motion Lab pages"
+                    defaultIsOpen={false}>
+                    <LabNav />
+                  </Collapsible>
+                </div>
+              )}
               <MotionControlRail />
               {children}
             </VStack>

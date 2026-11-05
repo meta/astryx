@@ -116,6 +116,23 @@ describe('searchComponents', () => {
     }
   });
 
+  it('suggests a component whose whole name is a run of the needle\'s words when nothing else matches', async () => {
+    const results = await searchComponents('FancyWidgetPanel', NO_CORE, {
+      g: ['Panel', 'Widget', 'Sheet'],
+    });
+    expect(results.map(r => r.name)).toEqual(['Panel']);
+    expect(results[0].reason).toBe('name part "panel"');
+    expect(results.every(r => r.score < 20)).toBe(true);
+  });
+
+  it('adds no name-part matches when another signal matched', async () => {
+    const results = await searchComponents('Panl', NO_CORE, {
+      g: ['Panel', 'Sheet'],
+    });
+    expect(results.map(r => r.name)).toEqual(['Panel']);
+    expect(results[0].score).toBe(80);
+  });
+
   it('breaks a score tie alphabetically', async () => {
     // Both names are edit-distance 2 from "bcd" -> both score 40 -> alpha order.
     const results = await searchComponents('bcd', NO_CORE, {g: ['Xbc', 'Abc']});

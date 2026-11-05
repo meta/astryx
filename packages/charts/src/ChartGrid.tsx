@@ -2,6 +2,7 @@
 
 /**
  * @file ChartGrid.tsx (v2)
+ * @input Chart context scales and dimensions, guide visibility, and tick density
  * @output Grid lines behind chart marks
  * @position Child of Chart v2; reads scales from chart context
  */

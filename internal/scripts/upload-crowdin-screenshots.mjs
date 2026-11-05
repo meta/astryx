@@ -21,7 +21,8 @@
 //      packages/core/locales/en.json (warn+skip unknowns).
 //   3. Start a local static server, launch chromium.
 //   4. For each target: navigate, interact, screenshot, measure each
-//      declared tag's rect using its named strategy.
+//      declared tag's rect using its named strategy. A rect the capture
+//      does not contain is reported unresolved, never tagged.
 //   5. Upload the PNG to Crowdin (WITHOUT --auto-tag), then POST manual
 //      tags for the rects we measured.
 //
@@ -50,7 +51,12 @@ import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {browserSideMeasure, STRATEGY_NAMES} from './lib/crowdin-strategies.mjs';
+import {
+  buildMeasureSource,
+  MUTATING_STRATEGIES,
+  STRATEGY_NAMES,
+  toDevicePixelRect,
+} from './lib/crowdin-strategies.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
@@ -210,7 +216,7 @@ function serveStatic(dir) {
 //
 // Per-strategy convention for which arg slot is the "text" arg:
 //   visibleText / option / placeholder / ariaLabel / footerButton /
-//   srOnlyLabel / srOnlyReveal   → args[0]
+//   srOnlyLabel / srOnlyReveal / textRun / liveRegionReveal   → args[0]
 //   chipOperator                  → args[1]  (args[0] = field name)
 //   filterInput                   → no text arg (kind string only)
 const TEXT_ARG_INDEX = {
@@ -223,6 +229,8 @@ const TEXT_ARG_INDEX = {
   footerButton: 0,
   srOnlyLabel: 0,
   srOnlyReveal: 0,
+  textRun: 0,
+  liveRegionReveal: 0,
 };
 
 function t(key, strategy, ...args) {
@@ -232,6 +240,13 @@ function t(key, strategy, ...args) {
     if (def != null) args[idx] = def;
   }
   return {key, strategy, args};
+}
+
+// Every palette capture starts by opening the modal behind the trigger.
+async function openCommandPalette(page) {
+  await page.getByRole('button', {name: 'Open'}).click();
+  await page.waitForSelector('dialog[open]', {timeout: 3000});
+  await page.waitForTimeout(400);
 }
 
 const TARGETS = [
@@ -688,15 +703,15 @@ const TARGETS = [
   {
     name: 'table-sort-headers',
     // The sort-direction strings (`Sort ascending`, `Sort descending`,
-    // `Clear sort`) are NOT the column header aria-labels — those use the
-    // compound `sortBy` / `sortedBy` templates. The three strings we care
-    // about live in the header context menu, which opens on right-click.
+    // `Clear sort`) are not the column header buttons' names, which are the
+    // column text. The three strings we care about live in the header
+    // context menu, which opens on right-click.
     // Right-clicking the currently-sorted column (Name) reveals all three
     // options in one popover.
     storyId: 'core-tablesortable--single-sort',
     viewport: {width: 1100, height: 500},
     interact: async page => {
-      const header = page.getByRole('button', {name: /^Sort by Name/}).first();
+      const header = page.getByRole('button', {name: 'Name', exact: true}).first();
       await header.waitFor({state: 'visible', timeout: 5000});
       await header.click({button: 'right'});
       // Wait for context menu.
@@ -785,6 +800,686 @@ const TARGETS = [
       t('astryx.tableGroupedRows.expandGroup', 'srOnlyReveal', 'Expand group Infra', 'right'),
     ],
   },
+
+  // ==========================================================================
+  // Catalog-coverage targets
+  //
+  // One target per story that renders strings the targets above do not
+  // already tag. A (key, story, strategy) triple is only valid when the
+  // story's own component is the one that REFERENCES the key — six
+  // components own a `Clear {label}`, so a text match alone is a
+  // coincidence. Strings reachable only inside a closed overlay are
+  // deliberately absent.
+  //
+  // These use the non-mutating strategies rather than srOnlyReveal: several
+  // injected bubbles on one target would overlap each other.
+  // ==========================================================================
+  {
+    name: 'transferlist-default',
+    storyId: 'lab-transferlist--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.transferList.addAll', 'visibleText'),
+      t('astryx.transferList.addOption', 'visibleText', "Add all"),
+      t('astryx.transferList.clear', 'visibleText'),
+      t('astryx.transferList.removeOption', 'ariaLabel', "Remove Name"),
+      t('astryx.transferList.reorderInstructions', 'srOnlyLabel'),
+      t('astryx.transferList.reorderOption', 'ariaLabel', "Reorder Name"),
+      t('astryx.transferListSelector.triggerLabel', 'visibleText', "Move fields between the panels. The selected order is the display order."),
+    ],
+  },
+  {
+    name: 'dateinput-default',
+    storyId: 'core-dateinput--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.dateInput.closeCalendar', 'srOnlyLabel'),
+      t('astryx.dateInput.openCalendar', 'ariaLabel'),
+      t('astryx.dateInput.placeholder', 'placeholder'),
+      t('astryx.dateInput.toggleCalendarClose', 'srOnlyLabel'),
+    ],
+  },
+  {
+    name: 'datetimeinput-default',
+    storyId: 'core-datetimeinput--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.dateTimeInput.openTimePicker', 'ariaLabel', "Open calendar"),
+      t('astryx.dateTimeInput.timePlaceholder', 'placeholder'),
+    ],
+  },
+  {
+    name: 'listinput-loading',
+    storyId: 'lab-listinput--loading',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.listInput.removeItem', 'ariaLabel', "Remove tag 1"),
+      t('astryx.listInput.reorderItem', 'ariaLabel', "Reorder tag 1"),
+    ],
+  },
+  {
+    name: 'pagination-default',
+    storyId: 'core-pagination--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.pagination.goToPage', 'ariaLabel', "Go to page 1"),
+      t('astryx.pagination.label', 'ariaLabel'),
+      t('astryx.pagination.next', 'ariaLabel'),
+      t('astryx.pagination.previous', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'stepper-default',
+    storyId: 'core-stepper--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.step.goToStep', 'ariaLabel', "Go to step 1: Create workspace, completed"),
+      t('astryx.step.goToStepWithStatus', 'ariaLabel', "Go to step 1: Create workspace, completed"),
+      t('astryx.step.status.completed', 'srOnlyLabel'),
+      t('astryx.stepper.label', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'carousel-default',
+    storyId: 'core-carousel--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.carousel.scrollLeft', 'ariaLabel'),
+      t('astryx.carousel.scrollRight', 'ariaLabel'),
+      t('astryx.carousel.slideLabel', 'ariaLabel', "Slide 1 of 8"),
+    ],
+  },
+  {
+    name: 'listinput-empty-mailing-list',
+    storyId: 'lab-listinput--empty-mailing-list',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.listInput.addItem', 'visibleText', "Add a subscriber to get started."),
+      t('astryx.listInput.emptyDescription', 'visibleText', "Add a subscriber to get started."),
+      t('astryx.listInput.emptyTitle', 'visibleText', "No subscribers yet"),
+    ],
+  },
+  {
+    name: 'calendar-default',
+    storyId: 'core-calendar--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.calendar.nextMonth', 'ariaLabel'),
+      t('astryx.calendar.previousMonth', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'daterangeinput-default',
+    storyId: 'core-daterangeinput--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.dateRangeInput.placeholder', 'visibleText'),
+    ],
+  },
+  {
+    name: 'fileinput-required',
+    storyId: 'core-fileinput--required',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.fileInput.placeholder', 'visibleText'),
+    ],
+  },
+  {
+    name: 'markdown-default',
+    storyId: 'core-markdown--default',
+    // 800 tall leaves the task list below the fold, so it goes untagged.
+    viewport: {width: 1200, height: 1000},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.markdown.table', 'visibleText'),
+      t('astryx.markdown.taskList', 'srOnlyLabel'),
+    ],
+  },
+  {
+    name: 'multiselector-empty-states',
+    storyId: 'core-multiselector--empty-states',
+    viewport: {width: 1200, height: 800},
+    // The options panel only exists once the trigger is clicked.
+    interact: async page => {
+      await page.locator('button:visible').first().click({timeout: 3000});
+      await page.waitForTimeout(500);
+    },
+    selector: null,
+    manualTags: [
+      t('astryx.multiSelector.empty', 'visibleText'),
+      t('astryx.multiSelector.selectPlaceholder', 'visibleText'),
+    ],
+  },
+  {
+    name: 'multiselector-searchable-sections',
+    storyId: 'core-multiselector--searchable-sections',
+    viewport: {width: 1200, height: 800},
+    // The options panel only exists once the trigger is clicked.
+    interact: async page => {
+      await page.locator('button:visible').first().click({timeout: 3000});
+      await page.waitForTimeout(500);
+    },
+    selector: null,
+    manualTags: [
+      t('astryx.multiSelector.searchOptions', 'ariaLabel'),
+      t('astryx.multiSelector.searchPlaceholder', 'placeholder'),
+    ],
+  },
+  {
+    name: 'numberinput-with-number-steppers',
+    storyId: 'core-numberinput--with-number-steppers',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.numberInput.decrementLabel', 'ariaLabel', "Decrement Quantity"),
+      t('astryx.numberInput.incrementLabel', 'ariaLabel', "Increment Quantity"),
+    ],
+  },
+  {
+    name: 'selector-empty-states',
+    storyId: 'core-selector--empty-states',
+    viewport: {width: 1200, height: 800},
+    // The options panel only exists once the trigger is clicked.
+    interact: async page => {
+      await page.locator('button:visible').first().click({timeout: 3000});
+      await page.waitForTimeout(500);
+    },
+    selector: null,
+    manualTags: [
+      t('astryx.selector.empty', 'visibleText'),
+      t('astryx.selector.placeholder', 'visibleText'),
+    ],
+  },
+  {
+    name: 'selector-searchable-with-sections',
+    storyId: 'core-selector--searchable-with-sections',
+    viewport: {width: 1200, height: 800},
+    // The options panel only exists once the trigger is clicked.
+    interact: async page => {
+      await page.locator('button:visible').first().click({timeout: 3000});
+      await page.waitForTimeout(500);
+    },
+    selector: null,
+    manualTags: [
+      t('astryx.selector.searchOptions', 'ariaLabel'),
+      t('astryx.selector.searchPlaceholder', 'placeholder'),
+    ],
+  },
+  {
+    name: 'stepper-status-vertical',
+    storyId: 'core-stepper--status-vertical',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.step.optional', 'visibleText'),
+      t('astryx.step.status.error', 'srOnlyLabel'),
+    ],
+  },
+  {
+    name: 'transferlist-searchable',
+    storyId: 'lab-transferlist--searchable',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.transferList.availableLabel', 'visibleText'),
+      t('astryx.transferList.searchLabel', 'placeholder', "Search 200 fields"),
+    ],
+  },
+  {
+    name: 'avatargroup-default',
+    storyId: 'core-avatargroup--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.avatarGroup.label', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'avatargroup-server-side-count',
+    storyId: 'core-avatargroup--server-side-count',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.avatarGroup.overflow', 'ariaLabel', "44 more"),
+    ],
+  },
+  {
+    name: 'breadcrumbs-default',
+    storyId: 'core-breadcrumbs--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.breadcrumbs.label', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'button-loading',
+    storyId: 'core-button--loading',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.button.loading', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'calendar-with-selected-date',
+    storyId: 'core-calendar--with-selected-date',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.calendar.daySelected', 'ariaLabel', "Thursday, January 15, 2026, selected"),
+    ],
+  },
+  {
+    name: 'chat-default',
+    storyId: 'core-chat--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.chatMessage.messageFrom', 'ariaLabel', "Message from user"),
+    ],
+  },
+  {
+    name: 'chat-message-status',
+    storyId: 'core-chat--message-status',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.chatToolCalls.status.error', 'visibleText'),
+    ],
+  },
+  {
+    name: 'citation-label',
+    storyId: 'core-citation--label',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.citation.label', 'ariaLabel', "Citation 1: React Documentation"),
+    ],
+  },
+  {
+    name: 'codeblock-default',
+    storyId: 'core-codeblock--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.codeBlock.copyCode', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'daterangeinput-with-warning-status',
+    storyId: 'core-daterangeinput--with-warning-status',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.dateInput.clear', 'ariaLabel', "Clear Date range"),
+    ],
+  },
+  {
+    name: 'dropdownmenu-compact-drill-in-presentation',
+    storyId: 'core-dropdownmenu--compact-drill-in-presentation',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.dropdownMenu.back', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'fileinput-multiple-files',
+    storyId: 'core-fileinput--multiple-files',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.fileInput.placeholderMultiple', 'visibleText'),
+    ],
+  },
+  {
+    name: 'metadatalist-show-more',
+    storyId: 'core-metadatalist--show-more',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.metadataList.showMore', 'visibleText'),
+    ],
+  },
+  {
+    name: 'moremenu-default',
+    storyId: 'core-moremenu--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.moreMenu.label', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'multiselector-searchable',
+    storyId: 'core-multiselector--searchable',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.multiSelector.selectAll', 'srOnlyLabel'),
+    ],
+  },
+  {
+    name: 'multiselector-default',
+    storyId: 'core-multiselector--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.multiSelector.selectionCount', 'visibleText', "2 selected"),
+    ],
+  },
+  {
+    name: 'outline-compact',
+    storyId: 'core-outline--compact',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.outline.label', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'pagination-compact-variant',
+    storyId: 'core-pagination--compact-variant',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.pagination.pageAnnounce', 'visibleText', "Page 1 of 10"),
+    ],
+  },
+  {
+    name: 'pagination-dots-variant',
+    storyId: 'core-pagination--dots-variant',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.pagination.pageIndicators', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'popover-default',
+    storyId: 'core-popover--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.popover.close', 'srOnlyLabel'),
+    ],
+  },
+  {
+    name: 'powersearch-default',
+    storyId: 'core-powersearch--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.powersearch.label', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'sidenav-with-header-menu',
+    storyId: 'core-sidenav--with-header-menu',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.sideNav.heading.openMenu', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'sidenav-default',
+    storyId: 'core-sidenav--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.sideNav.label', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'spinner-default',
+    storyId: 'core-spinner--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.spinner.loading', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'stepper-status-all-states',
+    storyId: 'core-stepper--status-all-states',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.step.status.warning', 'srOnlyLabel'),
+    ],
+  },
+  {
+    name: 'tablist-default',
+    storyId: 'core-tablist--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.tabList.label', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'table-default',
+    storyId: 'core-table--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.table.label', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'thumbnail-with-remove',
+    storyId: 'core-thumbnail--with-remove',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.thumbnail.remove', 'ariaLabel', "Remove photo.png — Removable thumbnail"),
+    ],
+  },
+  {
+    name: 'timeinput-with-clear-button',
+    storyId: 'core-timeinput--with-clear-button',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.timeInput.clearLabel', 'ariaLabel', "Clear Start time"),
+    ],
+  },
+  {
+    name: 'timeinput-native-picker-modes',
+    storyId: 'core-timeinput--native-picker-modes',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.timeInput.openPicker', 'ariaLabel', "Open nativePicker='always'"),
+    ],
+  },
+  {
+    name: 'timeinput-default',
+    storyId: 'core-timeinput--default',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.timeInput.placeholder', 'placeholder'),
+    ],
+  },
+  {
+    name: 'token-with-remove',
+    storyId: 'core-token--with-remove',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.token.remove', 'ariaLabel', "Remove Removable"),
+    ],
+  },
+  {
+    name: 'treelist-fully-expanded',
+    storyId: 'core-treelist--fully-expanded',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.treeList.toggleChildren', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'typeahead-status-variant-comparison',
+    storyId: 'core-typeahead--status-variant-comparison',
+    viewport: {width: 1200, height: 800},
+    interact: async () => {},
+    selector: null,
+    manualTags: [
+      t('astryx.typeahead.searchPlaceholder', 'placeholder'),
+    ],
+  },
+
+  // ==========================================================================
+  // CommandPalette
+  // ==========================================================================
+  // Four moments of one flow on the BuiltInStrings story, which overrides no
+  // string. Each announcement replaces the one before it, so each needs its
+  // own capture.
+  {
+    name: 'commandpalette-bootstrap-empty',
+    storyId: 'core-commandpalette--built-in-strings',
+    viewport: {width: 900, height: 700},
+    interact: openCommandPalette,
+    selector: null,
+    manualTags: [
+      t('astryx.commandPalette.input.placeholder', 'placeholder'),
+      t('astryx.commandPalette.emptyBootstrap', 'visibleText'),
+      // Each hint is `<span><Kbd/>Navigate</span>`, so tag the text node.
+      t('astryx.commandPalette.footer.navigate', 'textRun'),
+      t('astryx.commandPalette.footer.select', 'textRun'),
+      t('astryx.commandPalette.footer.close', 'textRun'),
+      // aria-label only, but on surfaces a translator can see and identify.
+      t('astryx.commandPalette.label', 'ariaLabel'),
+      t('astryx.commandPalette.list.label', 'ariaLabel'),
+    ],
+  },
+  {
+    name: 'commandpalette-no-results',
+    storyId: 'core-commandpalette--built-in-strings',
+    viewport: {width: 900, height: 700},
+    interact: async page => {
+      await openCommandPalette(page);
+      await page.locator('dialog[open] input').first().fill('zzz');
+      await page.waitForTimeout(1100);
+    },
+    selector: null,
+    manualTags: [
+      t('astryx.commandPalette.emptySearch', 'visibleText'),
+      // "No results for {query}" — the story's query is "zzz".
+      t(
+        'astryx.commandPalette.noResultsFor',
+        'liveRegionReveal',
+        'No results for zzz',
+        '.astryx-command-palette-input',
+        'below',
+      ),
+    ],
+  },
+  {
+    name: 'commandpalette-result-count',
+    storyId: 'core-commandpalette--built-in-strings',
+    viewport: {width: 900, height: 700},
+    interact: async page => {
+      await openCommandPalette(page);
+      await page.locator('dialog[open] input').first().fill('e');
+      await page.waitForTimeout(1100);
+    },
+    selector: null,
+    manualTags: [
+      // All three of the story's commands match "e".
+      t(
+        'astryx.commandPalette.resultCount',
+        'liveRegionReveal',
+        '3 results',
+        '.astryx-command-palette-input',
+        'below',
+      ),
+    ],
+  },
+  {
+    name: 'commandpalette-loading',
+    storyId: 'core-commandpalette--built-in-strings',
+    viewport: {width: 900, height: 700},
+    interact: async page => {
+      await openCommandPalette(page);
+      // Capture inside the story's 600ms in-flight window.
+      await page.locator('dialog[open] input').first().fill('e');
+      await page.waitForTimeout(120);
+    },
+    selector: null,
+    manualTags: [
+      t(
+        'astryx.commandPalette.loading',
+        'liveRegionReveal',
+        undefined,
+        '.astryx-command-palette-input',
+        'below',
+      ),
+    ],
+  },
 ];
 
 // ---------- validation ----------
@@ -858,7 +1553,7 @@ async function main() {
     if (missing.length) warn(`⚠ --only names not found in TARGETS: ${missing.join(', ')}`);
   }
 
-  const measureFnSource = `(${browserSideMeasure.toString()})()`;
+  const measureFnSource = buildMeasureSource();
 
   try {
     for (const target of targets) {
@@ -883,8 +1578,9 @@ async function main() {
       // screenshot is captured. Strategies are idempotent: the same call
       // during the measurement pass below returns the already-injected
       // rect instead of duplicating.
-      const revealTags =
-        (target.manualTags || []).filter(t => t.strategy === 'srOnlyReveal');
+      const revealTags = (target.manualTags || []).filter(t =>
+        MUTATING_STRATEGIES.includes(t.strategy),
+      );
       if (revealTags.length) {
         for (const tag of revealTags) {
           await page.evaluate(
@@ -898,6 +1594,9 @@ async function main() {
       }
 
       const outPath = path.join(OUT_DIR, `${target.name}.png`);
+      // A viewport capture is the viewport at the device pixel ratio.
+      const imageWidth = target.viewport.width * DPR;
+      const imageHeight = target.viewport.height * DPR;
       if (target.selector) {
         await page.locator(target.selector).first().screenshot({path: outPath});
       } else {
@@ -927,19 +1626,20 @@ async function main() {
             measured.push({
               key: tag.key,
               strategy: tag.strategy,
-              position: {
-                x: Math.round(rect.x * DPR),
-                y: Math.round(rect.y * DPR),
-                width: Math.round(rect.width * DPR),
-                height: Math.round(rect.height * DPR),
-              },
+              position: toDevicePixelRect(rect, DPR),
             });
           }
         }
         const hit = measured.filter(m => m.position).length;
         log(`  ↳ measured ${hit}/${measured.length} tag positions`);
         for (const m of measured) {
-          if (!m.position) warn(`     · skip ${m.key} (${m.reason}${m.strategy ? ` via ${m.strategy}` : ''})`);
+          if (!m.position) {
+            warn(`     · skip ${m.key} (${m.reason}${m.strategy ? ` via ${m.strategy}` : ''})`);
+          } else if (DRY_RUN || SKIP_UPLOAD) {
+            // Print the rect against the image size on inspectable runs.
+            const p = m.position;
+            log(`     · ${m.key} [${p.x},${p.y} ${p.width}×${p.height}] → ${p.x + p.width},${p.y + p.height} of ${imageWidth}×${imageHeight}`);
+          }
         }
       }
 

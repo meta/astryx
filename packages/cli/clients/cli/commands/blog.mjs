@@ -14,7 +14,7 @@
  *   astryx blog --json             Structured list/detail envelope
  */
 
-import {getRunPrefix} from '../../../foundation/env/package-manager.mjs';
+import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {emit, section, text, record, records, code} from '../formatters/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
@@ -24,6 +24,18 @@ import {resultSet} from '../../../foundation/debug/index.mjs';
 import {doc as blogCommand} from './blog.doc.mjs';
 import {doc as blogFn} from '../../../api/blog/blog.doc.mjs';
 
+/** Every field of a post in the JSON, in order; record() skips empty ones. */
+const POST_FIELDS = [
+  'slug',
+  'title',
+  'description',
+  'date',
+  'type',
+  'authors',
+  'link',
+  'textUrl',
+];
+
 /**
  * @param {import('commander').Command} program
  */
@@ -31,7 +43,7 @@ export function registerBlog(program) {
   defineCommand(program, blogCommand, {
     fn: blogFn,
     action: async (/** @type {string | undefined} */ slug) => {
-      const run = getRunPrefix();
+      const run = getCliInvocation();
       /** @type {import('../../../api/blog/blog.type.mjs').BlogListResponse | import('../../../api/blog/blog.type.mjs').BlogDetailResponse} */
       let result;
       try {
@@ -62,22 +74,25 @@ export function registerBlog(program) {
         const {feedUrl, posts} = result.data;
         if (posts.length === 0) {
           emit(
-            section('Astryx blog', `feed: ${feedUrl}`),
+            section('Astryx blog'),
+            record({feedUrl}),
             text('No posts found in the feed.'),
           );
           return answered;
         }
-        // One record per post — fields mirror the JSON post shape; empty
-        // fields (type/textUrl) are skipped by record().
         emit(
-          section('Astryx blog', `feed: ${feedUrl}`),
-          records(posts, {fields: ['slug', 'title', 'type', 'textUrl']}),
-          text(`Read one: ${run} astryx blog <slug>`),
+          section('Astryx blog'),
+          record({feedUrl}),
+          records(posts, {fields: POST_FIELDS}),
+          text(`Read one: ${run} blog <slug>`),
         );
       } else {
-        // blog.detail — the feed URL, then the post body emitted verbatim
-        // (code() so article typography/spacing isn't ASCII-normalized).
-        emit(record({feed: result.data.feedUrl}), code(result.data.text));
+        // blog.detail — the post's fields and the feed URL, then the body
+        // verbatim (code() so article typography/spacing isn't ASCII-normalized).
+        emit(
+          record(result.data, {fields: [...POST_FIELDS, 'feedUrl']}),
+          code(result.data.text),
+        );
       }
       return answered;
     },

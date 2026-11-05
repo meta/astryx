@@ -22,6 +22,7 @@ import {components} from '../../generated/componentRegistry';
 import {docTopics} from '../../generated/docsRegistry';
 import {blocks} from '../../generated/blockRegistry';
 import {templates} from '../../generated/templateRegistry';
+import {buildKeywordIndex, resolveKeywords} from './keywordIndex';
 
 import type {ComponentEntry} from '../../generated/componentRegistry';
 import type {DocTopic} from '../../generated/docsRegistry';
@@ -46,18 +47,7 @@ function componentInstall(comp: ComponentEntry): string {
 // Built from the `keywords` field on each component's .doc.mjs file.
 // Inverts keyword[] → component name so natural language queries resolve
 // to the right components without a hardcoded alias map.
-const keywordIndex: Record<string, string[]> = {};
-for (const comp of visibleComponents) {
-  for (const kw of comp.keywords) {
-    const lower = kw.toLowerCase();
-    if (!keywordIndex[lower]) {
-      keywordIndex[lower] = [];
-    }
-    if (!keywordIndex[lower].includes(comp.name)) {
-      keywordIndex[lower].push(comp.name);
-    }
-  }
-}
+const keywordIndex = buildKeywordIndex(visibleComponents);
 
 // ── Scoring ────────────────────────────────────────────────────────────
 
@@ -100,21 +90,6 @@ function score(text: string, query: string): number {
   return 0;
 }
 
-/** Resolve keywords from component docs to boost matching components */
-function resolveKeywords(query: string): string[] {
-  const lower = query.toLowerCase();
-  const resolved: string[] = [];
-
-  // Check each keyword in the index
-  for (const [keyword, componentNames] of Object.entries(keywordIndex)) {
-    if (lower.includes(keyword) || keyword.includes(lower)) {
-      resolved.push(...componentNames);
-    }
-  }
-
-  return [...new Set(resolved)];
-}
-
 // ── Context Budget ─────────────────────────────────────────────────────
 const MAX_TOPIC_BRIEF_CHARS = 4000;
 
@@ -135,7 +110,7 @@ const handler = createMcpHandler(
         limit: z.number().optional().describe('Max results (default 8).'),
       },
       async ({query, limit = 8}) => {
-        const keywordMatches = resolveKeywords(query);
+        const keywordMatches = resolveKeywords(keywordIndex, query);
 
         const scored: Array<{
           item: ComponentEntry | DocTopic | TemplateEntry;
@@ -340,13 +315,16 @@ const handler = createMcpHandler(
 
           const showcase = blocks.find(
             (b: BlockEntry) =>
-              exampleNames.includes(b.exampleFor.toLowerCase()) && b.isShowcase,
+              b.exampleFor != null &&
+              exampleNames.includes(b.exampleFor.toLowerCase()) &&
+              b.isShowcase,
           );
 
           // Find related blocks (non-showcase, limit 1 for budget)
           const relatedBlocks = blocks
             .filter(
               (b: BlockEntry) =>
+                b.exampleFor != null &&
                 exampleNames.includes(b.exampleFor.toLowerCase()) &&
                 !b.isShowcase,
             )
@@ -527,7 +505,7 @@ const handler = createMcpHandler(
         }
 
         // ── Fuzzy fallback with keyword awareness ──────────────────────
-        const keywordResolved = resolveKeywords(name);
+        const keywordResolved = resolveKeywords(keywordIndex, name);
         const keywordComponents =
           keywordResolved.length > 0
             ? visibleComponents

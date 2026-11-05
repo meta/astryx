@@ -19,11 +19,24 @@ import {colorVars} from '../../../theme/tokens.stylex';
 import type {
   TablePlugin,
   HeaderCellRenderProps,
+  HeaderRowRenderProps,
   TableColumn,
   ColumnWidth,
+  ScrollWrapperRenderProps,
 } from '../../types';
-import {DEFAULT_MIN_COLUMN_WIDTH} from '../../columnUtils';
+import {
+  DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH,
+  DEFAULT_MIN_COLUMN_WIDTH,
+} from '../../columnUtils';
 import {observeResize} from '../../../utils/sharedResizeObserver';
+import {getNodeText} from '../../../utils/getNodeText';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/columnResize/useTableColumnResize.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Config Type
@@ -87,6 +100,13 @@ export interface UseTableColumnResizeConfig {
 const FALLBACK_MIN_WIDTH = 50;
 const KEYBOARD_STEP = 10;
 const KEYBOARD_LARGE_STEP = 50;
+/**
+ * How long after the last scroll event the disclosure gate stays closed, where
+ * `scrollend` is unavailable. Long enough to bridge the gaps between events in
+ * a momentum scroll, short enough that a deliberate hover right after one is
+ * not left waiting.
+ */
+const SCROLL_SETTLE_MS = 120;
 
 // =============================================================================
 // Width Helpers
@@ -96,7 +116,8 @@ const KEYBOARD_LARGE_STEP = 50;
  * Derive the effective minimum width for a column based on its width config.
  * - Proportional columns: use their declared minWidth (default 120px)
  * - Pixel columns: use their declared value (you set 200px, min is 200px)
- * - No width / unknown: use DEFAULT_MIN_COLUMN_WIDTH
+ * - No width: use the compact flexible-column floor (60px)
+ * - Unknown: use the legacy 50px fallback
  *
  * A global override (from config.minWidth) takes precedence when set.
  */
@@ -108,7 +129,7 @@ function resolveColumnMinWidth(
     return globalOverride;
   }
   if (!colWidth) {
-    return DEFAULT_MIN_COLUMN_WIDTH;
+    return DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH;
   }
   if (colWidth.type === 'proportional') {
     return colWidth.minWidth ?? DEFAULT_MIN_COLUMN_WIDTH;
@@ -197,10 +218,17 @@ const handleStyles = stylex.create({
     top: 0,
     // Extend the handle the full height of the table, not just the header.
     // The <th> has overflow:visible (from headerCellRelative), so the handle
-    // visually reaches through the body rows. The CSS variable is set by
-    // the plugin's ResizeObserver — falls back to 100% (header only) when
-    // the observer hasn't fired yet.
-    height: 'var(--table-resize-height, 100%)',
+    // visually reaches through the body rows. Both variables are set by the
+    // plugin's ResizeObserver — they fall back to header-height when it
+    // hasn't fired yet.
+    //
+    // `top: 0` does not land on the table's top edge: the handle hangs from
+    // its cell's content box, and the header's vertical centring shifts that
+    // box down by an amount that depends on how tall its own content is.
+    // Subtracting that drop keeps the handle from hanging past the last row
+    // and forcing the scroll wrapper to scroll.
+    height:
+      'calc(var(--table-resize-height, 100%) - var(--table-resize-offset, 0px))',
     // Wide transparent hit area; the visible indicator uses ::after to span
     // the full handle height independently of the border box.
     width: '8px',
@@ -214,14 +242,42 @@ const handleStyles = stylex.create({
     // Drive the indicator color via a CSS variable that ::after reads.
     // The parent handle is the hover/focus target — pseudo-elements
     // can't receive :hover directly.
+    /*
+     * The resting value is inherited rather than fixed: the header row sets
+     * `--resize-hint` while it is hovered, which reveals every boundary at
+     * once so the columns can advertise that they move. Reading it as the
+     * default (instead of matching the row's hover from down here) keeps this
+     * element's own :hover a plain same-element override — an ancestor
+     * selector would outrank it and the handle under the pointer would never
+     * reach accent.
+     *
+     * The pointer arm passes through the same `--resize-hint-gate` as the row
+     * hint: horizontal scrolling drags columns under a still pointer, so a
+     * boundary arriving beneath it mid-scroll is no more intentional than the
+     * row-level reveal (FR10). Focus-visible is ungated — focus is always
+     * deliberate.
+     */
     '--indicator-color': {
-      default: 'transparent',
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))':
-        colorVars['--color-accent'],
+      default: 'var(--resize-hint, transparent)',
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': `var(--resize-hint-gate, ${colorVars['--color-accent']})`,
       ':focus-visible': colorVars['--color-accent'],
     },
+    /*
+     * Pointer capability gates the REVEAL, not the control (DEC-3). The
+     * handle stays rendered and focusable wherever any input can drive it, so
+     * a coarse-primary device with a keyboard keeps its tab stop, its
+     * accessible name, and arrow-key resize (FR6, FR8, AR6).
+     *
+     * What coarse pointers lose is pointer interaction: dragging a hairline
+     * boundary by finger is a non-goal (DEC-4), and an invisible 8px strip
+     * that swallows touches on the header is worse than no target at all.
+     * `pointer-events: none` removes it from touch without removing it from
+     * the accessibility tree the way `display: none` did. The hover reveal is
+     * already gated separately on the header row, so at rest there is nothing
+     * drawn here to explain.
+     */
     '@media (pointer: coarse)': {
-      display: 'none',
+      pointerEvents: 'none',
     },
   },
   /**
@@ -243,6 +299,33 @@ const handleStyles = stylex.create({
       width: 'var(--indicator-width, 1px)',
       backgroundColor: 'var(--indicator-color, transparent)',
       transition: 'background-color 150ms ease, width 150ms ease',
+    },
+  },
+});
+
+/**
+ * Publishes the hint colour the handles read at rest. Hover has to be caught
+ * on the row so that entering the header anywhere reveals every boundary, not
+ * only the cell under the pointer. Pointer-only — there is no hover to lead
+ * with on touch, and the handles ignore touch there regardless.
+ *
+ * `--resize-hint-gate` is the scroll gate (FR10): the scroll listener sets it
+ * to `transparent` on the scroll wrapper while the region is moving, which
+ * wins here because a set custom property beats the fallback arm of `var()`.
+ * Hover keeps resolving underneath — the gate just hides its result until the
+ * region settles, so nothing has to be recomputed when it clears.
+ *
+ * Focus is deliberately absent: focusing a boundary emphasizes that one
+ * boundary and never raises this row-level hint (FR9, DEC-5).
+ */
+const headerRowStyles = stylex.create({
+  base: {
+    '--resize-hint': {
+      default: 'transparent',
+      '@media (hover: hover)': {
+        default: 'transparent',
+        ':hover:where(:not(:disabled,[aria-disabled="true"]))': `var(--resize-hint-gate, ${colorVars['--color-border']})`,
+      },
     },
   },
 });
@@ -309,6 +392,7 @@ function ResizeHandle({
   isDraggingRef,
   tableRef,
 }: ResizeHandleProps) {
+  const t = useComponentTranslator();
   const setTableDragging = useCallback(
     (dragging: boolean) => {
       const table = tableRef.current;
@@ -668,10 +752,11 @@ function ResizeHandle({
     ],
   );
 
-  const ariaLabel =
-    typeof columnHeader === 'string'
-      ? `Resize column ${columnHeader}`
-      : `Resize column ${columnKey}`;
+  // Named by the column's visible text, also when its header is a node; the
+  // key is the fallback only for a header with no reachable text (AR1).
+  const ariaLabel = t('@astryx.table.columnResize.resizeColumn', {
+    label: getNodeText(columnHeader) || columnKey,
+  });
 
   return (
     <div
@@ -684,6 +769,9 @@ function ResizeHandle({
       aria-valuemax={maxWidth === Infinity ? undefined : maxWidth}
       aria-label={ariaLabel}
       tabIndex={0}
+      // Lets the height observer find its own handles without matching any
+      // separator a consumer happens to render inside the table.
+      data-resize-handle=""
       onPointerDown={handlePointerDown}
       onKeyDown={handleKeyDown}
       {...stylex.props(handleStyles.base, handleStyles.indicator)}
@@ -703,6 +791,13 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
 
   const dragStateRef = useRef<DragState | null>(null);
   const isDraggingRef = useRef(false);
+  // The scroll container's merged ref, kept while the inner ref is the same,
+  // so React does not detach and re-attach it (and every plugin's listeners
+  // on it) on every render.
+  const mergedScrollWrapperRef = useRef<{
+    inner: ScrollWrapperRenderProps['htmlProps']['ref'] | null;
+    merged: (node: HTMLDivElement | null) => void;
+  } | null>(null);
   const tableRef = useRef<HTMLTableElement | null>(null);
 
   const globalMinWidth = config.minWidth;
@@ -721,8 +816,9 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
   );
 
   // Measure the table height via ResizeObserver and expose as
-  // --table-resize-height on the <table> element. This is initialized
-  // entirely by the resize plugin — the base table has no knowledge of it.
+  // --table-resize-height on the <table> element, alongside the distance the
+  // handles start below that top edge. Both are initialized entirely by the
+  // resize plugin — the base table has no knowledge of either.
   const observedTableRef = useRef<HTMLTableElement | null>(null);
   const unobserveTableRef = useRef<(() => void) | null>(null);
 
@@ -741,18 +837,108 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
 
     if (table && typeof ResizeObserver !== 'undefined') {
       unobserveTableRef.current = observeResize(table, () => {
-        const height = table.getBoundingClientRect().height;
-        table.style.setProperty('--table-resize-height', `${height}px`);
+        const rect = table.getBoundingClientRect();
+        table.style.setProperty('--table-resize-height', `${rect.height}px`);
+
+        /*
+         * Each handle hangs from its own cell's content box, so they do not
+         * all start at the same y. Publish the largest drop: every handle then
+         * ends at or just above the table's bottom edge, where ending a
+         * fraction short is invisible but overhanging is not — it shows up as
+         * a few px of stray scrolling in the wrapper.
+         *
+         * Reading the handles here cannot feed back into this observer: they
+         * are absolutely positioned, so their height never moves the table.
+         */
+        let offset = 0;
+        for (const handle of table.querySelectorAll<HTMLElement>(
+          '[data-resize-handle]',
+        )) {
+          offset = Math.max(
+            offset,
+            handle.getBoundingClientRect().top - rect.top,
+          );
+        }
+        table.style.setProperty('--table-resize-offset', `${offset}px`);
       });
       observedTableRef.current = table;
     }
   }, []);
 
-  // Clean up observer on unmount
+  // Releases the table resize observer on unmount.
   useEffect(() => {
     return () => {
       unobserveTableRef.current?.();
       unobserveTableRef.current = null;
+    };
+  }, []);
+
+  /*
+   * Scroll gate (FR10). A pointer that ends up over a header because the
+   * columns moved under it has not asked for anything, so disclosure holds
+   * while the region scrolls and resumes once it settles.
+   *
+   * This runs entirely outside React: the listener writes `--resize-hint-gate`
+   * straight onto the scroll wrapper, where it inherits down to the header row
+   * and the handles, and clears it on settle. No state, no rerender, no
+   * observer — PR1's one permitted listener, plus the `scrollend` signal that
+   * tells it when to stop.
+   *
+   * `scrollend` is the correct settle signal but is not everywhere yet, so a
+   * single shared timeout stands in where it is missing. Only one of the two
+   * paths is ever armed.
+   */
+  const gateCleanupRef = useRef<(() => void) | null>(null);
+
+  const attachScrollGate = useCallback((el: HTMLDivElement | null) => {
+    gateCleanupRef.current?.();
+    gateCleanupRef.current = null;
+    if (!el) {
+      return;
+    }
+
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    const supportsScrollEnd = 'onscrollend' in el;
+
+    const clear = () => {
+      el.style.removeProperty('--resize-hint-gate');
+    };
+
+    const onScroll = () => {
+      // Idempotent: setting the same value on every scroll tick costs a style
+      // recalc the scroll itself already pays for, and never a React render.
+      el.style.setProperty('--resize-hint-gate', 'transparent');
+      if (supportsScrollEnd) {
+        return;
+      }
+      if (settleTimer != null) {
+        clearTimeout(settleTimer);
+      }
+      settleTimer = setTimeout(clear, SCROLL_SETTLE_MS);
+    };
+
+    el.addEventListener('scroll', onScroll, {passive: true});
+    if (supportsScrollEnd) {
+      el.addEventListener('scrollend', clear, {passive: true});
+    }
+
+    gateCleanupRef.current = () => {
+      el.removeEventListener('scroll', onScroll);
+      if (supportsScrollEnd) {
+        el.removeEventListener('scrollend', clear);
+      }
+      if (settleTimer != null) {
+        clearTimeout(settleTimer);
+      }
+      clear();
+    };
+  }, []);
+
+  // Releases the resize gate on unmount.
+  useEffect(() => {
+    return () => {
+      gateCleanupRef.current?.();
+      gateCleanupRef.current = null;
     };
   }, []);
 
@@ -764,6 +950,36 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
             {children}
           </div>
         );
+      },
+      transformHeaderRow(props: HeaderRowRenderProps): HeaderRowRenderProps {
+        return {...props, xstyle: [...props.xstyle, headerRowStyles.base]};
+      },
+      transformScrollWrapper(
+        props: ScrollWrapperRenderProps,
+      ): ScrollWrapperRenderProps {
+        // Compose with any ref a prior plugin (e.g. sticky columns,
+        // virtualization) already set on the scroll container.
+        const existingRef = props.htmlProps.ref ?? null;
+        const cached = mergedScrollWrapperRef.current;
+        const mergedRef =
+          cached != null && cached.inner === existingRef
+            ? cached.merged
+            : (node: HTMLDivElement | null) => {
+                attachScrollGate(node);
+                if (typeof existingRef === 'function') {
+                  existingRef(node);
+                } else if (existingRef != null) {
+                  existingRef.current = node;
+                }
+              };
+        mergedScrollWrapperRef.current = {
+          inner: existingRef,
+          merged: mergedRef,
+        };
+        return {
+          ...props,
+          htmlProps: {...props.htmlProps, ref: mergedRef},
+        };
       },
       transformHeaderCell(
         props: HeaderCellRenderProps,
@@ -861,6 +1077,13 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
         };
       },
     }),
-    [columnWidths, globalMinWidth, maxWidth, resizableColumns, measureRef],
+    [
+      columnWidths,
+      globalMinWidth,
+      maxWidth,
+      resizableColumns,
+      measureRef,
+      attachScrollGate,
+    ],
   );
 }

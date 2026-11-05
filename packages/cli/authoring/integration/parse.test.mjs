@@ -28,6 +28,12 @@ describe('parseIntegration (load boundary)', () => {
       components: './src',
     });
     expect(parseIntegration({docs: './docs'})).toEqual({docs: './docs'});
+    expect(parseIntegration({providerId: '@acme/legacy-widgets'})).toEqual({
+      providerId: '@acme/legacy-widgets',
+    });
+    expect(parseIntegration({themes: './themes'})).toEqual({
+      themes: './themes',
+    });
     expect(() =>
       parseIntegration({components: './c', issuesUrl: 'https://example.com/i'}),
     ).not.toThrow();
@@ -38,12 +44,14 @@ describe('parseIntegration (load boundary)', () => {
     // integration is published once and installed against many CLI versions.
     // Rejecting the manifest took the whole package's contributions down with
     // it, silently, on every older consumer (#5119).
-    expect(parseIntegration({components: './src', futureRoot: './future'})).toEqual({
+    expect(
+      parseIntegration({components: './src', futureRoot: './future'}),
+    ).toEqual({
       components: './src',
     });
-    expect(unknownIntegrationKeys({components: './src', futureRoot: './future'})).toEqual([
-      'futureRoot',
-    ]);
+    expect(
+      unknownIntegrationKeys({components: './src', futureRoot: './future'}),
+    ).toEqual(['futureRoot']);
     expect(unknownIntegrationKeys({components: './src'})).toEqual([]);
     // Not a manifest at all — nothing to report, and the parser owns the error.
     expect(unknownIntegrationKeys(null)).toEqual([]);
@@ -61,7 +69,9 @@ describe('parseIntegration (load boundary)', () => {
           ? 'https://example.com/issues'
           : key === 'agentDocs'
             ? {}
-            : './x',
+            : key === 'providerId'
+              ? '@acme/widgets'
+              : './x',
       ]),
     );
     expect(unknownIntegrationKeys(everyKnownKey)).toEqual([]);
@@ -75,6 +85,31 @@ describe('parseIntegration (load boundary)', () => {
 
   it('rejects a non-URL issuesUrl', () => {
     expect(reason({issuesUrl: 'nope'})).toContain('issuesUrl');
+  });
+
+  it('accepts a docsiteUrl as a known key', () => {
+    const manifest = {docsiteUrl: 'https://widgets.example.com'};
+    expect(parseIntegration(manifest)).toEqual(manifest);
+    expect(unknownIntegrationKeys(manifest)).toEqual([]);
+  });
+
+  it('rejects a non-URL docsiteUrl', () => {
+    expect(reason({docsiteUrl: 'nope'})).toContain('docsiteUrl');
+  });
+
+  it('accepts a cliCommand and rejects one that is not a single clean line', () => {
+    expect(parseIntegration({cliCommand: 'acme astryx'})).toEqual({
+      cliCommand: 'acme astryx',
+    });
+    expect(reason({cliCommand: ''})).toContain('cliCommand');
+    expect(reason({cliCommand: ' acme astryx'})).toContain('cliCommand');
+    expect(reason({cliCommand: 'acme\nastryx'})).toContain('cliCommand');
+    expect(reason({cliCommand: 'a'.repeat(121)})).toContain('120');
+    expect(reason({cliCommand: 42})).toContain('cliCommand');
+  });
+
+  it('rejects a noncanonical providerId', () => {
+    expect(reason({providerId: 'Acme Widgets'})).toContain('providerId');
   });
 
   it('accepts an optional append array as manifest data', () => {

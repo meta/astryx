@@ -15,6 +15,8 @@ import {assertPublicArtifactSafe} from '../src/public-artifact.mjs';
 import {analyzeSetupIntegrity} from './setup-integrity.mjs';
 // @ts-expect-error -- setup-workspace.mjs intentionally has no declaration output.
 import {manifestDifferences, treeManifest} from './setup-workspace.mjs';
+// @ts-expect-error -- linkDirectory.mjs intentionally has no declaration output.
+import {linkDirectory} from './linkDirectory.mjs';
 import {
   passesAcceptance,
   scoreArm,
@@ -62,6 +64,31 @@ function run(command: string, args: string[], cwd: string) {
   });
 }
 
+// pnpm is a .cmd (batch) file on Windows. execFileSync, like spawnSync, can
+// only run a batch file through a shell — a bare 'pnpm' fails with ENOENT
+// and an explicit 'pnpm.cmd' still fails with EINVAL (batch files need a
+// shell even named exactly). Shelling out through cmd.exe /c directly,
+// rather than execFileSync's shell:true, avoids Node's
+// shell-argument-escaping deprecation warning (DEP0190) — every argument
+// here is a hardcoded literal, never user input, so we build the argv
+// ourselves instead of asking execFileSync to build a shell string. See
+// internal/vibe-tests/src/fixture-suite.mjs for the same pattern.
+function runPnpm(args: string[], cwd: string) {
+  return process.platform === 'win32'
+    ? run('cmd.exe', ['/d', '/s', '/c', 'pnpm', ...args], cwd)
+    : run('pnpm', args, cwd);
+}
+
+// The non-throwing counterpart to runPnpm, for the cases below where a
+// failing pnpm invocation is the assertion under test, not an error: same
+// cmd.exe routing on win32, but returns spawnSync's result object instead of
+// throwing on a non-zero exit.
+function spawnPnpm(args: string[], options: Parameters<typeof spawnSync>[2]) {
+  return process.platform === 'win32'
+    ? spawnSync('cmd.exe', ['/d', '/s', '/c', 'pnpm', ...args], options)
+    : spawnSync('pnpm', args, options);
+}
+
 function edit(file: string, transform: (source: string) => string) {
   const source = fs.readFileSync(file, 'utf8');
   const next = transform(source);
@@ -75,14 +102,14 @@ function ensurePackageBuilds() {
   if (
     !fs.existsSync(path.join(REPO_ROOT, 'packages/core/dist/Button/index.js'))
   ) {
-    run('pnpm', ['-F', '@astryxdesign/core', 'build'], REPO_ROOT);
+    runPnpm(['-F', '@astryxdesign/core', 'build'], REPO_ROOT);
   }
   if (
     !fs.existsSync(
       path.join(REPO_ROOT, 'packages/themes/neutral/dist/theme.css'),
     )
   ) {
-    run('pnpm', ['-F', '@astryxdesign/theme-neutral', 'build'], REPO_ROOT);
+    runPnpm(['-F', '@astryxdesign/theme-neutral', 'build'], REPO_ROOT);
   }
 }
 
@@ -97,7 +124,7 @@ function dependencyRoot(fixture: string) {
   temporaryDirectories.push(parent);
   const root = path.join(parent, 'app');
   copyFixture(fixture, root);
-  run('pnpm', ['install', '--frozen-lockfile', '--ignore-scripts'], root);
+  runPnpm(['install', '--frozen-lockfile', '--ignore-scripts'], root);
   dependencyRoots.set(fixture, root);
   return root;
 }
@@ -112,14 +139,9 @@ function preparePair(fixture: string) {
   const arm = path.join(root, 'arm');
   for (const destination of [baseline, arm]) {
     copyFixture(fixture, destination);
-    run(
-      'cp',
-      [
-        '-al',
-        path.join(deps, 'node_modules'),
-        path.join(destination, 'node_modules'),
-      ],
-      root,
+    linkDirectory(
+      path.join(deps, 'node_modules'),
+      path.join(destination, 'node_modules'),
     );
   }
 
@@ -629,9 +651,12 @@ function applyEnterpriseComposition(arm: string) {
     if (start === -1 || end === -1) {
       throw new Error('canonical enterprise dialog edit did not apply');
     }
+    // AST-038 makes inherited typography an explicit root-level choice. This
+    // host-owned composition deliberately keeps its established host type.
     next = `${next.slice(0, start)}      {dialogOpen ? (
         <Dialog
           aria-labelledby="service-dialog-title"
+          style={{fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit'}}
           className="fixture-shell block z-[50] rounded-lg border border-border bg-panel p-6 text-foreground shadow-2xl"
           data-guest-design-system
           data-mode={mode}
@@ -2123,7 +2148,7 @@ describeCanonical('canonical pnpm build approval', () => {
   // spawnSync rather than execFileSync's throwing form: a failing install is
   // the assertion in half these cases, not an error.
   const install = (app: string) =>
-    spawnSync('pnpm', ['install'], {
+    spawnPnpm(['install'], {
       cwd: app,
       encoding: 'utf8',
       env: {...process.env, CI: 'true'},
@@ -2147,7 +2172,7 @@ describeCanonical('canonical pnpm build approval', () => {
     expect(
       fs.existsSync(path.join(app, 'node_modules', PACKAGE, 'package.json')),
     ).toBe(true);
-    const built = spawnSync('pnpm', ['build'], {
+    const built = spawnPnpm(['build'], {
       cwd: app,
       encoding: 'utf8',
       env: {...process.env, CI: 'true'},

@@ -16,7 +16,9 @@ import {
   easeVars,
   radiusVars,
 } from '../theme/tokens.stylex';
-import {isRenderable, mergeProps, themeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
 import {indicatorScope} from './indicator.markers.stylex';
 import type {IndicatorProps} from './types';
 
@@ -159,11 +161,11 @@ const indeterminateSizeStyles = stylex.create({
  * indeterminate bar.
  *
  * Decorative and non-interactive — it renders `aria-hidden` and owns no input,
- * role, or focus behavior. The focus ring lives on the owner's control wrapper
- * (see CheckboxInput), so a theme that replaces this component keeps a visible
- * focus indicator for free. Themes replace it wholesale through
- * `defineTheme({indicators: {checkbox: MyCheckbox}})`, or restyle it through
- * the `checkbox` theme target like any other component.
+ * role, or focus behavior. The owning control keeps focus semantics and paints its
+ * standard focus ring onto this indicator element (see CheckboxInput), so a
+ * replacement's root radius determines the ring shape. Themes replace it
+ * wholesale through `defineTheme({indicators: {checkbox: MyCheckbox}})`, or
+ * restyle it through the canonical `checkbox-indicator` theme target.
  *
  * @example
  * ```
@@ -195,21 +197,15 @@ export function CheckboxIndicator({
       ref={ref}
       aria-hidden="true"
       {...mergeProps(
-        themeProps(
-          'checkbox-indicator',
-          {
-            size,
-            checked: isChecked
-              ? 'checked'
-              : isIndeterminate
-                ? 'indeterminate'
-                : null,
-            disabled: isDisabled ? 'disabled' : null,
-          },
-          // `checkbox` was the target before indicators existed; themes
-          // styling it keep working until the next major.
-          {legacyNames: ['checkbox']},
-        ),
+        themeProps('checkbox-indicator', {
+          size,
+          checked: isChecked
+            ? 'checked'
+            : isIndeterminate
+              ? 'indeterminate'
+              : null,
+          disabled: isDisabled ? 'disabled' : null,
+        }),
         stylex.props(
           styles.box,
           boxSizeStyles[size],

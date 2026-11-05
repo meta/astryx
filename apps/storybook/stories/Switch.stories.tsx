@@ -620,3 +620,89 @@ export const Loading: Story = {
     isLoading: true,
   },
 };
+
+export const PressedState: Story = {
+  name: 'Pressed state',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "Press and hold an enabled switch to paint the system's `--color-overlay-pressed` layer on its track and thumb together. The disabled example remains visually unchanged and cannot toggle.",
+      },
+    },
+  },
+  render: () => {
+    const [off, setOff] = useState(false);
+    const [on, setOn] = useState(true);
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
+        <Switch label="Off — press and hold" value={off} onChange={setOff} />
+        <Switch label="On — press and hold" value={on} onChange={setOn} />
+        <Switch
+          label="Disabled — no pressed state"
+          value={false}
+          onChange={() => {}}
+          isDisabled
+        />
+      </div>
+    );
+  },
+};
+
+export const BesideALink: Story = {
+  name: 'Beside a link',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A small switch 8 px from a link. Under a coarse pointer the switch’s invisible hit area grows toward 44 × 44 px but stops halfway to the link, so a tap on the link opens it and a tap nearer the switch toggles it.',
+      },
+    },
+  },
+  render: () => {
+    const [value, setValue] = useState(false);
+    return (
+      <div style={{display: 'flex', alignItems: 'center', gap: 8}}>
+        <Switch
+          label="Wi-Fi"
+          isLabelHidden
+          size="sm"
+          value={value}
+          onChange={setValue}
+        />
+        <a href="#wifi-details">Details</a>
+      </div>
+    );
+  },
+};
+
+export const InScrollingList: Story = {
+  name: 'In a scrolling list',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Switches in rows of a list taller than the screen, as in a settings page. Under a finger, a vertical drag scrolls the page and changes nothing, even after the finger rests on a switch; a horizontal drag moves the thumb, and a tap toggles.',
+      },
+    },
+  },
+  render: () => {
+    const [values, setValues] = useState<boolean[]>(() =>
+      Array.from({length: 24}, (_, i) => i % 3 === 0),
+    );
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 20}}>
+        {values.map((value, i) => (
+          <Switch
+            key={i}
+            label={`Setting ${i + 1}`}
+            value={value}
+            onChange={next =>
+              setValues(current => current.map((v, j) => (j === i ? next : v)))
+            }
+          />
+        ))}
+      </div>
+    );
+  },
+};

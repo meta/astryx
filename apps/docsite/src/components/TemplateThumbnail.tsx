@@ -1,14 +1,30 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Renders a scaled live template preview inside a gallery tile.
+ * @input Uses the template slug, theme mode, visibility, and measured tile size.
+ * @output Renders visible previews in a normalized viewport and releases the global queue after each committed render.
+ * @position Client-side live preview for template gallery cards.
+ */
+
 'use client';
 
-import {Suspense, useRef, useState, useEffect, useCallback} from 'react';
+import {
+  Suspense,
+  startTransition,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Skeleton} from '@astryxdesign/core/Skeleton';
 import {Theme} from '@astryxdesign/core/theme';
 import {neutralTheme} from '@astryxdesign/theme-neutral/built';
 import {useThemeMode} from '../app/providers';
 import {TEMPLATE_COMPONENTS} from './templateComponents';
+import {scheduleThumbnailRender} from './thumbnailRenderScheduler';
+import previewCss from './TemplatePreviewSurface.module.css';
 
 const FIXED_SCALE = 0.5;
 
@@ -47,6 +63,13 @@ const styles = stylex.create({
   },
 });
 
+function ThumbnailRenderSettled({onSettled}: {onSettled: () => void}) {
+  useEffect(() => {
+    onSettled();
+  }, [onSettled]);
+  return null;
+}
+
 export function TemplateThumbnail({
   slug,
   aspectRatio,
@@ -74,6 +97,17 @@ export function TemplateThumbnail({
   const containerRef = useRef<HTMLDivElement>(null);
   const [tileWidth, setTileWidth] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
+  const [isRenderReady, setIsRenderReady] = useState(false);
+  const isVisibleRef = useRef(false);
+  const isRenderReadyRef = useRef(false);
+  const resolveRenderRef = useRef<(() => void) | null>(null);
+  const Component = TEMPLATE_COMPONENTS[slug];
+
+  const settleRender = useCallback(() => {
+    const resolve = resolveRenderRef.current;
+    resolveRenderRef.current = null;
+    resolve?.();
+  }, []);
 
   const updateWidth = useCallback(() => {
     if (containerRef.current) {
@@ -88,7 +122,8 @@ export function TemplateThumbnail({
   // Scale so the rendered width fits the tile width.
   const scale = renderWidth > 0 ? tileWidth / renderWidth : FIXED_SCALE;
 
-  // Intersection observer: track visibility for Activity mode
+  // Only visible tiles join the activation queue. A zero root margin avoids
+  // importing heavy template dependencies before their tiles enter the viewport.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) {
@@ -96,12 +131,54 @@ export function TemplateThumbnail({
     }
 
     const observer = new IntersectionObserver(
-      ([entry]) => setIsVisible(entry.isIntersecting),
-      {rootMargin: '200px'},
+      ([entry]) => {
+        const nextIsVisible = entry.isIntersecting;
+        isVisibleRef.current = nextIsVisible;
+        setIsVisible(nextIsVisible);
+        if (!nextIsVisible) {
+          isRenderReadyRef.current = false;
+          setIsRenderReady(false);
+        }
+      },
+      {rootMargin: '0px'},
     );
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  // The queue does not release the next thumbnail until this preview commits.
+  // That keeps lazy imports and chart rendering sequential, not just state updates.
+  useEffect(() => {
+    if (!isVisible || isRenderReadyRef.current || !Component) {
+      return;
+    }
+
+    let isActive = true;
+    const cancel = scheduleThumbnailRender(
+      () =>
+        new Promise<void>(resolve => {
+          if (!isActive || !isVisibleRef.current) {
+            resolve();
+            return;
+          }
+          resolveRenderRef.current = resolve;
+          startTransition(() => {
+            if (isVisibleRef.current) {
+              isRenderReadyRef.current = true;
+              setIsRenderReady(true);
+            } else {
+              settleRender();
+            }
+          });
+        }),
+    );
+
+    return () => {
+      isActive = false;
+      cancel();
+      settleRender();
+    };
+  }, [Component, isVisible, settleRender]);
 
   // Measure container width to compute render width
   useEffect(() => {
@@ -115,7 +192,6 @@ export function TemplateThumbnail({
     return () => ro.disconnect();
   }, [updateWidth]);
 
-  const Component = TEMPLATE_COMPONENTS[slug];
   if (!Component) {
     return null;
   }
@@ -133,26 +209,35 @@ export function TemplateThumbnail({
           : undefined
       }
       inert>
-      {tileWidth > 0 && isVisible && (
-        <div
-          {...stylex.props(styles.scaler)}
-          style={{
-            width: renderWidth,
-            height: `${100 / scale}%`,
-            transform: `scale(${scale})`,
-          }}>
-          <Suspense
-            fallback={
-              <div {...stylex.props(styles.skeleton)}>
-                <Skeleton width="100%" height="100%" />
-              </div>
-            }>
-            <Theme theme={neutralTheme} mode={mode}>
-              <Component />
-            </Theme>
-          </Suspense>
-        </div>
-      )}
+      {tileWidth > 0 &&
+        isVisible &&
+        (isRenderReady ? (
+          <div
+            {...stylex.props(styles.scaler)}
+            style={{
+              width: renderWidth,
+              height: `${100 / scale}%`,
+              transform: `scale(${scale})`,
+            }}>
+            <Suspense
+              fallback={
+                <div {...stylex.props(styles.skeleton)}>
+                  <Skeleton width="100%" height="100%" />
+                </div>
+              }>
+              <Theme theme={neutralTheme} mode={mode}>
+                <div className={previewCss.viewport}>
+                  <Component />
+                  <ThumbnailRenderSettled onSettled={settleRender} />
+                </div>
+              </Theme>
+            </Suspense>
+          </div>
+        ) : (
+          <div {...stylex.props(styles.skeleton)}>
+            <Skeleton width="100%" height="100%" />
+          </div>
+        ))}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect} from 'vitest';
+import {describe, expect, it} from 'vitest';
 import {themeDataAttributes, themeProps} from './themeProps';
 
 describe('themeProps', () => {
@@ -8,19 +8,26 @@ describe('themeProps', () => {
     expect(themeProps('card').className).toBe('astryx-card');
   });
 
-  it('does not emit bare prop-value classes', () => {
+  it('emits only the stable target class while reflecting props and state', () => {
     expect(
       themeProps('button', {variant: 'secondary', size: 'sm'}).className,
     ).toBe('astryx-button');
-    expect(themeProps('heading', {level: 1}).className).toBe('astryx-heading');
+    expect(themeProps('switch', {checked: 'checked'}).className).toBe(
+      'astryx-switch',
+    );
   });
 
-  it('continues to emit deprecated target-name aliases when requested', () => {
+  it('does not turn numeric values into classes', () => {
+    expect(themeProps('heading', {level: 1}).className).toBe('astryx-heading');
+    expect(themeProps('heading', {level: '3'}).className).toBe(
+      'astryx-heading',
+    );
+  });
+
+  it('ignores nullish reflected values in the class name', () => {
     expect(
-      themeProps('progress-bar', undefined, {
-        legacyNames: ['progressbar'],
-      }).className,
-    ).toBe('astryx-progress-bar astryx-progressbar');
+      themeProps('button', {variant: 'primary', size: undefined}).className,
+    ).toBe('astryx-button');
   });
 
   it('reflects visual props as data attributes', () => {
@@ -45,7 +52,7 @@ describe('themeProps', () => {
     });
   });
 
-  it('returns the target class and data attributes together', () => {
+  it('returns the stable target and canonical data attributes together', () => {
     expect(themeProps('button', {variant: 'primary', size: 'sm'})).toEqual({
       className: 'astryx-button',
       'data-variant': 'primary',

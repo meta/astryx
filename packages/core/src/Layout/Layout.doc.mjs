@@ -135,13 +135,13 @@ export const docs = {
       name: 'contentWidth',
       type: 'SizeValue',
       description:
-        'Maximum width of the content within each slot (header, content, footer, panels), centered when narrower than the available space. Dividers stay full-bleed. Numbers are treated as pixels, strings are used as-is (e.g. `60ch`). Common page widths: 640 for forms, settings, and text-focused pages; 960 for content pages and wider layouts.',
+        'Maximum width of the aligned content within each slot (header, content, footer, panels), centered when narrower than the available space. Without panels, LayoutContent spans the available width so its scrollbar stays at the outer edge while its children align internally to contentWidth. With exactly one panel, the panel stays aligned to the contentWidth frame while LayoutContent extends to the opposite open edge. With both panels, contentWidth includes the complete middle composition. Percentage widths—including percentage-bearing calc(), min(), max(), and clamp() values—and intrinsic widths, plus bare var(...) values, retain the constrained composition; use calc(var(...)) for a variable guaranteed to resolve to a length. Dividers stay full-bleed. Numbers are treated as pixels, strings are used as-is (e.g. `60ch`). Common page widths: 640 for forms, settings, and text-focused pages; 960 for content pages and wider layouts.',
     },
     {
       name: 'padding',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
       description:
-        "Padding at the layout's outer edges using the spacing scale.",
+        "Padding at the layout's outer edges using the spacing scale. Applies to this Layout's own header, footer, panels, and content. A nested Layout does not inherit it: without `padding`, its regions use the enclosing Card, Section, or Dialog padding, or the default inset (spacing 4). That keeps a page Layout inside AppShell inset even though AppShell's own regions are full bleed.",
     },
     {
       name: 'defaultHasDividers',
@@ -169,6 +169,56 @@ export const docs = {
     ],
     anatomy,
   },
+  examples: [
+    {
+      label: 'Page with a details panel inside AppShell',
+      code: `
+function OrdersPage() {
+  return (
+    <AppShell
+      sideNav={
+        <SideNav>
+          <SideNavItem label="Orders" isSelected />
+          <SideNavItem label="Customers" />
+          <SideNavItem label="Settings" />
+        </SideNav>
+      }>
+      {/* No padding props needed: the page Layout's regions keep their
+          default inset inside AppShell's full-bleed content area. */}
+      <Layout
+        header={
+          <LayoutHeader hasDivider>
+            <Heading level={1}>Orders</Heading>
+          </LayoutHeader>
+        }
+        end={
+          <LayoutPanel
+            hasDivider
+            width={320}
+            role="complementary"
+            label="Order details">
+            <VStack gap={2}>
+              <Heading level={2}>Order #1042</Heading>
+              <Text type="body" color="secondary">
+                Shipped · 3 items · $184.00
+              </Text>
+            </VStack>
+          </LayoutPanel>
+        }
+        content={
+          <LayoutContent>
+            <Text type="body">
+              Select an order to see its shipping and payment details.
+            </Text>
+          </LayoutContent>
+        }
+      />
+    </AppShell>
+  );
+}
+`,
+    },
+  ],
 };
 
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */

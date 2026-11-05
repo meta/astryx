@@ -8,7 +8,7 @@ export const docs = {
   displayName: 'Radio List Item',
   isHiddenFromOverview: true,
   description:
-    'Individual radio item with label, description, and content slots.',
+    'Individual radio item with label, description, and content slots. Under a coarse pointer an enabled option’s target grows toward 44 px through an invisible hit area. It never shrinks below the row and stops at half the gap to a closer neighbour; the row keeps its size. That hit area is the row’s `::after`, so decorate a row with a child.',
   // RadioListItem requires RadioList context; wrap it so the preview doesn't throw.
   playground: {
     defaults: {value: 'option-1', label: 'Option'},
@@ -42,6 +42,13 @@ export const docs = {
       type: 'ReactNode',
       description:
         'Secondary content displayed below the label. Links and buttons keep their own click behaviour — the row only delegates clicks from its non-interactive surface to the radio.',
+    },
+    {
+      name: 'align',
+      type: "'center' | 'start' | 'first-line'",
+      description:
+        'Vertical alignment of the start and end content against the label, passed through to Item unchanged. `first-line` keeps a small mark (a radio) level with the first line of a wrapped label. See Item.align.',
+      default: "'center'",
     },
     {
       name: 'isDisabled',
@@ -90,7 +97,8 @@ export const docsZh = {
   name: 'RadioListItem',
   isHiddenFromOverview: true,
   displayName: 'Radio List Item',
-  description: '单个单选选项，包含标签、描述和内容插槽。',
+  description:
+    '单个单选选项，包含标签、描述和内容插槽。在粗指针（触摸）下，已启用选项的目标通过不可见的点击区域向 44 px 扩展。它不小于所在行，与相邻控件较近时止于间距的一半；行尺寸不变。该点击区域是行的 `::after`，因此请用子元素装饰行。',
   props: [
     {
       name: 'label',
@@ -118,6 +126,13 @@ export const docsZh = {
         '显示在标签下方的次要内容。链接和按钮保留自身的点击行为——整行仅将非交互区域的点击委派给单选框。',
     },
     {
+      name: 'align',
+      type: "'center' | 'start' | 'first-line'",
+      description:
+        '起始和结束内容相对于标签的垂直对齐方式，原样传递给 Item。`first-line` 让小标记（单选按钮）与换行标签的第一行保持水平。参见 Item.align。',
+      default: "'center'",
+    },
+    {
       name: 'isDisabled',
       type: 'boolean',
       description: '是否禁用此单个单选选项。',
@@ -142,6 +157,8 @@ export const docsDense = {
   displayName: 'Radio List Item',
   description: 'Individual radio item w/ label, description, content slots.',
   propDescriptions: {
+    align:
+      "Start/end content alignment, passed to Item: 'center' (default), 'start', or 'first-line' (centered on the label's first line).",
     label:
       'Primary label. String or ReactNode; nested controls keep their behavior.',
     'aria-label':

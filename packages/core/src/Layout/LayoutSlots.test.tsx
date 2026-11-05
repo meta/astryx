@@ -208,6 +208,18 @@ describe('LayoutContent', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps the public root as the scroll and direct-child owner', () => {
+    const {container} = render(<LayoutContent>Body</LayoutContent>);
+    const root = container.querySelector(
+      '.astryx-layout-content',
+    ) as HTMLElement;
+
+    expect(getComputedStyle(root).overflow).toBe('auto');
+    expect(root).toHaveTextContent('Body');
+    expect(root.childNodes).toHaveLength(1);
+    expect(root.querySelector('[data-layout-content-inner]')).toBeNull();
+  });
+
   it('exposes the main landmark role with an accessible name', () => {
     render(
       <LayoutContent role="main" label="Main content">

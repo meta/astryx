@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 4
 template_version: 1
 kind: system-spec
 id: spec:AST-002
@@ -7,7 +7,7 @@ authority: current
 archive_reason: null
 superseded_by: null
 approved_by: cixzhang
-approved_at: 2026-09-01
+approved_at: 2026-10-03
 phase: accepted
 owners: [cixzhang, imdreamrunner]
 affects_architecture: []
@@ -17,6 +17,26 @@ affects_consumer_docs: []
 ---
 
 # Public API admission and operation shape
+
+<!-- review-applicability:v1 -->
+
+```json
+{
+  "scope": "global",
+  "triggers": {
+    "public-api": [
+      "FR4",
+      "FR15",
+      "DEC-1",
+      "DEC-2",
+      "DEC-3",
+      "DEC-6",
+      "DEC-7",
+      "DEC-8"
+    ]
+  }
+}
+```
 
 ## Intent
 
@@ -151,10 +171,22 @@ A public API proposal is admitted only when it passes both gates:
 - **FR19 — Bug fixes do not smuggle API design.** A bug fix that can restore current
   behavior without changing public API or behavior beyond current authority MUST do
   so. Any additional public delta follows `architecture:knowledge-contracts`
-  independently: existing current authority may already settle it, and only absent
-  authority requires a new owner decision. Implementation convenience, removal of
-  an internal wrapper, or exposure of existing internal fields is not evidence that
-  an API should exist.
+  independently. A separable contradictory or unsettled tagalong MUST be removed or
+  split before review asks the repair to carry a new owner decision, except an
+  undeclared public API row, which goes to human review for an owner's decision
+  rather than being removed or split by review (`architecture:knowledge-contracts`
+  change coupling step 6). Existing current authority may settle an intentional
+  remaining delta; only a surviving, intentional gap, or an undeclared public API
+  row, requires owner judgment. Implementation convenience, removal of an internal
+  wrapper, or exposure of existing internal fields is not evidence that an API
+  should exist.
+- **FR20 — Callsite impact and decision burden are explicit.** A public API change
+  shows representative before and after callsites, including defaults and
+  compatibility, and names every new choice the caller must understand or make. That
+  burden is admitted only when FR1 proves the distinction is caller-owned, the
+  component cannot derive it under FR2, and the choice has predictable meaning under
+  FR7–FR10. Review-generated impact prose is context only; it cannot supply missing
+  caller ownership or authorize the API.
 
 ### Platform support
 
@@ -179,6 +211,10 @@ A public API proposal is admitted only when it passes both gates:
   hooks and utilities they explicitly co-own. Family, architecture, and system
   records own their respective shared semantics. The component's `.doc.mjs`
   remains the consumer syntax and reference authority.
+- `module:Markdown/headingLinks` applies FR18 and DEC-8 to one admitted public
+  module: its factory returns an opaque entry for the existing plugin list rather
+  than adding a broad Markdown prop. The module record owns the API and behavior;
+  this system record owns only that admission result.
 - Component specs inherit current family contracts and record only local public
   concepts, additions, and explicit exceptions; they do not copy shared rules.
 - Public module and utility function review compares the verb with the function's
@@ -191,8 +227,10 @@ A public API proposal is admitted only when it passes both gates:
 
 For every public API or public behavior delta, identify the canonical owner and
 apply the routing defined by `architecture:knowledge-contracts`. This spec owns
-API admission and semantic-shape requirements; it does not copy review outcomes
-or pull-request disposition.
+API admission and semantic-shape requirements; the
+[Release compatibility and versioning spec](../AST-017/spec.md) owns lifecycle,
+classification, deprecation, correction, and release treatment. Neither record copies
+review outcomes or pull-request disposition.
 
 A draft record may provide context and route the unresolved question, but it
 cannot clear current authority. Exact-head owner discussion supplies decision
@@ -213,7 +251,7 @@ still determine whether the implementation satisfies it.
   or other behavior its mechanism cannot perform. Solve the component behavior
   first; consider API only when a clear, enforceable caller-owned distinction
   remains.
-- [PR #5373](https://github.com/facebook/astryx/pull/5373) is evidence that
+- [PR #5373](https://github.com/meta/astryx/pull/5373) is evidence that
   parallel public and package-internal operations for one semantic action create
   avoidable surface area. Its particular operation names and options are not
   policy.
@@ -228,22 +266,23 @@ still determine whether the implementation satisfies it.
 
 ## Verification
 
-| Contract   | Verification                                                                                           | Representative states                                                                         | Mutation or failure expectation                                                                                                                        |
-| ---------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR1, FR5   | Blinded historical API review benchmark                                                                | recent utility, mid-range, and composition API additions                                      | Reviewer accepts a prop without identifying caller-owned semantic variation                                                                            |
-| FR2, FR3   | Component tests and real-browser layout evidence                                                       | content, container, viewport, parent context, and platform variation                          | Public API exposes a value the component can derive reliably                                                                                           |
-| FR4, FR6   | API surface review for utility, mid-range, and composition components                                  | existing slot, theme, style, layout, and behavior seams                                       | High-level component accumulates one-off tuning props instead of using its owning layer                                                                |
-| FR7, FR8   | Consumer examples and behavior tests                                                                   | default, each public value, composed use, and unsupported use                                 | Meaning depends on implementation knowledge or tests assert only classes/data attributes                                                               |
-| FR9, FR10  | Component ownership and accessibility review                                                           | owned content, external sibling content, missing or incorrect context                         | A state is correct only when the caller fulfills a promise the component cannot verify                                                                 |
-| FR11       | Public and package-internal operation inventory; PR #5373                                              | one component module and one semantic action                                                  | One semantic action gains parallel operation names distinguished only by implementation needs                                                          |
-| FR12, FR13 | Public-delta/canonical-owner check and exact authority routing                                         | missing delta/update; matching, contradictory, draft-only, or absent authority                | Missing delta/owner update passes, contradiction is accepted, draft becomes policy, or automation decides semantics                                    |
-| FR14       | Focused regression tests against the current contract or standard                                      | defect state, representative unchanged states, and any adjacent public delta                  | A restoration invents a new decision, lacks regression evidence, or hides an additional public change under a bug-fix label                            |
-| FR15       | Type-level constraints plus runtime validation and behavior tests                                      | invalid values, unsupported combinations, and legitimate composition                          | The API silently renders a broken state or prevents a valid composition                                                                                |
-| FR16       | Full value-domain, input-shape, and parallel-combination contract review                               | semantic variants, raw or palette values, explicit overrides, and defaults                    | One value or shape switches the controlled axis, or a parallel input silently changes precedence                                                       |
-| FR17       | Public module/utility export inventory plus implementation, test, consumer, and release-history review | construction, inspection, lookup, conversion, registration, hooks, and released compatibility | A verb hides the returned value or side effect, two public roles are fused, a non-hook utility uses `use*`, or a released mismatch is silently renamed |
-| FR18       | Multi-caller composition scenarios plus owning-contract review                                         | shared semantic operation, internal-only mechanism, and two representative consumers          | Product builders cannot compose stable behavior, or implementation fields are exposed without caller-owned semantics                                   |
-| FR19       | Bug-fix before/after authority diff plus public-surface and behavior inventory                         | pure restoration, restoration plus novel API, and internal-wrapper removal                    | A bug-fix label bypasses human hold, or internal mechanics become public because exposure is convenient                                                |
-| Burden     | Benchmark classification: allow, correct pause, false block, not applicable                            | recent accepted and rejected API changes                                                      | Clearly justified APIs are repeatedly paused or blocked without surfacing a real decision                                                              |
+| Contract   | Verification                                                                                           | Representative states                                                                              | Mutation or failure expectation                                                                                                                        |
+| ---------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FR1, FR5   | Blinded historical API review benchmark                                                                | recent utility, mid-range, and composition API additions                                           | Reviewer accepts a prop without identifying caller-owned semantic variation                                                                            |
+| FR2, FR3   | Component tests and real-browser layout evidence                                                       | content, container, viewport, parent context, and platform variation                               | Public API exposes a value the component can derive reliably                                                                                           |
+| FR4, FR6   | API surface review for utility, mid-range, and composition components                                  | existing slot, theme, style, layout, and behavior seams                                            | High-level component accumulates one-off tuning props instead of using its owning layer                                                                |
+| FR7, FR8   | Consumer examples and behavior tests                                                                   | default, each public value, composed use, and unsupported use                                      | Meaning depends on implementation knowledge or tests assert only classes/data attributes                                                               |
+| FR9, FR10  | Component ownership and accessibility review                                                           | owned content, external sibling content, missing or incorrect context                              | A state is correct only when the caller fulfills a promise the component cannot verify                                                                 |
+| FR11       | Public and package-internal operation inventory; PR #5373                                              | one component module and one semantic action                                                       | One semantic action gains parallel operation names distinguished only by implementation needs                                                          |
+| FR12, FR13 | Public-delta/canonical-owner check and exact authority routing                                         | missing delta/update; matching, contradictory, draft-only, or absent authority                     | Missing delta/owner update passes, contradiction is accepted, draft becomes policy, or automation decides semantics                                    |
+| FR14       | Focused regression tests against the current contract or standard                                      | defect state, representative unchanged states, and any adjacent public delta                       | A restoration invents a new decision, lacks regression evidence, or hides an additional public change under a bug-fix label                            |
+| FR15       | Type-level constraints plus runtime validation and behavior tests                                      | invalid values, unsupported combinations, and legitimate composition                               | The API silently renders a broken state or prevents a valid composition                                                                                |
+| FR16       | Full value-domain, input-shape, and parallel-combination contract review                               | semantic variants, raw or palette values, explicit overrides, and defaults                         | One value or shape switches the controlled axis, or a parallel input silently changes precedence                                                       |
+| FR17       | Public module/utility export inventory plus implementation, test, consumer, and release-history review | construction, inspection, lookup, conversion, registration, hooks, and released compatibility      | A verb hides the returned value or side effect, two public roles are fused, a non-hook utility uses `use*`, or a released mismatch is silently renamed |
+| FR20       | Public callsite and caller-burden review                                                               | representative before/after callsites, defaults, compatibility, and every caller-owned choice      | A new caller decision is hidden, derivable, unpredictable, or justified only by review prose                                                           |
+| FR18       | Multi-caller composition scenarios plus owning-contract review                                         | shared semantic operation, internal-only mechanism, and two representative consumers               | Product builders cannot compose stable behavior, or implementation fields are exposed without caller-owned semantics                                   |
+| FR19       | Bug-fix before/after authority diff plus public-surface and behavior inventory                         | pure restoration, restoration plus separable novel API/visual change, and internal-wrapper removal | A bug-fix label bypasses authority, a removable tagalong forces a broader spec, or internal mechanics become public because exposure is convenient     |
+| Burden     | Benchmark classification: allow, correct pause, false block, not applicable                            | recent accepted and rejected API changes                                                           | Clearly justified APIs are repeatedly paused or blocked without surfacing a real decision                                                              |
 
 ## Decision log
 
@@ -393,14 +432,31 @@ contract as current before accepting the public surface.
 
 A bug fix does not create an exception. When it restores current authority, keep
 its API and behavior within that contract. Any additional public primitive or
-observable behavior follows `architecture:knowledge-contracts`: reuse an existing
-current decision when one settles the delta, and ask the owner only when authority
-is absent.
+observable behavior follows `architecture:knowledge-contracts`: first conform,
+remove, or split a separable contradiction or unsettled tagalong; then reuse an
+existing current decision when one settles an intentional surviving delta. Ask the
+owner only for a surviving decision the team actually wants to pursue. An
+undeclared public API row is the exception: change coupling step 6 of
+`architecture:knowledge-contracts` sends it to human review for an owner's
+decision, and review does not remove or split it.
 
 Rejected: promoting internal focus targets, gesture memory, DOM slots, timers, or
 other existing fields merely because removing an internal wrapper or fixing one
 path becomes easier. Existing implementation is evidence of mechanics, not intent
 for permanent public API.
+
+### DEC-9 — Caller decision burden must be visible and justified
+
+**Reference:** `spec:AST-002/DEC-9`
+**Decider:** `cixzhang`, `2026-09-12`
+
+A public API proposal shows the callsite before and after the change and names each
+new decision a caller must make. The decision is admitted only when it represents
+caller-owned intent the component cannot derive and its outcome remains predictable
+across defaults, combinations, and supported states.
+
+Rejected: treating a shorter implementation, a persuasive user-impact summary, or
+a completed review checklist as proof that callers should own another choice.
 
 ## Open questions
 

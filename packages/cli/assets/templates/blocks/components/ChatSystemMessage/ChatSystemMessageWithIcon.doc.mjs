@@ -10,4 +10,10 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Chat', 'Icon', 'Layout', 'Text'],
+  icons: {
+    LockClosedIcon: 'lock',
+    ShieldCheckIcon: 'shield',
+    SparklesIcon: 'sparkles',
+    UserPlusIcon: 'userAdd',
+  },
 };

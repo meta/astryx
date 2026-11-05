@@ -11,4 +11,5 @@ export const doc = {
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['Section', 'Layout', 'Text', 'Button', 'Icon'],
+  icons: {CheckIcon: 'check'},
 };

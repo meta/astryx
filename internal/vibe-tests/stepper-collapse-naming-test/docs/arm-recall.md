@@ -13,15 +13,15 @@ A vertical stepper never collapses.
 
 ## Props
 
-| prop                | type                                    | default        |
-| ------------------- | --------------------------------------- | -------------- |
-| `activeStep`        | `number`                                | —              |
-| `children`          | `ReactNode`                             | —              |
-| `onStepClick`       | `(index: number) => void`               | —              |
-| `label`             | `string`                                | `'Progress'`   |
-| `orientation`       | `'horizontal' \| 'vertical'`            | `'horizontal'` |
-| `density`           | `'compact' \| 'balanced' \| 'spacious'` | `'balanced'`   |
-| `indicatorPosition` | `'separated' \| 'on-track'`             | `'separated'`  |
+| prop | type | default |
+| --- | --- | --- |
+| `activeStep` | `number` | — |
+| `children` | `ReactNode` | — |
+| `onStepClick` | `(index: number) => void` | — |
+| `label` | `string` | `'Progress'` |
+| `orientation` | `'horizontal' \| 'vertical'` | `'horizontal'` |
+| `density` | `'compact' \| 'balanced' \| 'spacious'` | `'balanced'` |
+| `indicatorPosition` | `'separated' \| 'on-track'` | `'separated'` |
 
 `activeStep` is the zero-based index of the current step. `onStepClick` makes
 steps clickable for non-linear navigation.
@@ -54,9 +54,7 @@ Don't hide the collapsed row with CSS:
 
 ```css
 /* Don't do this */
-[data-astryx-stepper-summary] {
-  display: none;
-}
+[data-astryx-stepper-summary] { display: none; }
 ```
 
 It leaves the controls in the tab order with nothing visible to show for them.

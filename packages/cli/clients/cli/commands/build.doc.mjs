@@ -12,13 +12,14 @@ export const doc = {
   type: 'command',
   name: 'build',
   displayName: 'astryx build',
-  namespace: 'cli',
+  namespace: 'cli/commands',
   summary:
-    'Build a page: composition kit for an idea, or the workflow playbook (no args)',
+    'Build a page: the template to start from, or the workflow playbook (no query)',
   description:
-    'The assemble-a-page entry point. With no query it returns the how-to-build-a-page ' +
-    'playbook; with a query it groups the unified search hits into a composition kit: ' +
-    'the closest templates, drop-in blocks, and idea-specific components and hooks.',
+    'The build-a-page entry point. With no query it returns the how-to-build-a-page ' +
+    'playbook; with a query it names the page template to start from (always one: the ' +
+    'closest page template, or the app shell when none matches), the next two templates, and the ' +
+    'drop-in blocks and idea-specific components and hooks around it.',
   fn: 'build',
   args: [{name: 'query', param: 'query', required: false}],
   options: [
@@ -35,16 +36,24 @@ export const doc = {
     },
     {
       flag: '--verbose',
-      description: 'Verbose output (include import paths and match reason)',
+      description:
+        'Verbose output (every block and component, full descriptions, import paths and match reason)',
     },
   ],
   examples: [
     {label: 'Get the playbook', cli: 'astryx build'},
-    {label: 'Compose a page', cli: 'astryx build "analytics dashboard" --json'},
+    {
+      label: 'Find the template to start from',
+      cli: 'astryx build "analytics dashboard" --json',
+    },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success (including zero matches)'},
-    {code: 1, when: 'invalid --type or a non-positive --limit'},
+    {
+      code: 1,
+      when: 'invalid --type, a --limit that is not a positive integer, or a query when @astryxdesign/core cannot be found (the playbook needs no core)',
+    },
   ],
   related: ['search', 'template', 'component', 'hook', 'init'],
 };

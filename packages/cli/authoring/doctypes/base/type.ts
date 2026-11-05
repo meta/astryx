@@ -4,6 +4,73 @@
  * @file Shared leaf primitives used across the doc types.
  */
 
+/** Every authored documentation kind accepted by `parseDoc`. */
+export type AuthoredDocKind =
+  | 'component'
+  | 'function'
+  | 'generic'
+  | 'page'
+  | 'block'
+  | 'schema'
+  | 'command'
+  | 'enum'
+  | 'namespace'
+  /**
+   * An icon definition (spec:AST-084 FR4).
+   * @experimental May change or be removed in a patch release.
+   */
+  | 'icon-definition';
+
+/** Visibility of an authored doc in a compiled audience-specific bundle. */
+export type DocAudience = 'public' | 'internal';
+
+/**
+ * Optional canonical placement request. The compiler resolves `parent` as a
+ * stable doc reference. `slot` selects one parent-owned slot, and `order`
+ * provides deterministic sibling ordering inside that slot.
+ */
+export interface DocPlacement {
+  parent: string;
+  slot?: string;
+  order?: number;
+}
+
+/**
+ * Tree metadata shared by every authored doc kind. The docs tree reads
+ * `placement` for every guide, the CLI's and each integration's
+ * (spec:AST-046); nothing reads `aliases` or `audience` yet. A reference topic
+ * outside the docs tree that sets one fails to load.
+ */
+export interface AuthoredDocGraphFields {
+  /** The doc's one parent in the docs tree: a namespace of its own package. */
+  placement?: DocPlacement;
+  /** Reserved: prior routes or names the docs tree will keep resolving.
+   *  Nothing reads it yet. */
+  aliases?: string[];
+  /** Reserved: docs bundle audience; omit for public docs. Nothing reads it
+   *  yet. */
+  audience?: DocAudience;
+  /** Set on the doc of an experimental surface (spec:AST-017 FR21, FR27),
+   *  whose text then says it may change or be removed in a patch release. A
+   *  command's help shows it as `[experimental]`. Omit for stable surfaces. */
+  stability?: 'experimental';
+}
+
+/**
+ * Stable public identity for generated registry resources.
+ *
+ * The converter derives a slug from the doc's stable `name` by default. Set
+ * `slug` only when the public URL must differ from that derived value. When a
+ * published slug changes, keep prior relative paths in `aliases` so existing
+ * install commands continue to work.
+ */
+export interface RegistryDocIdentity {
+  /** Lowercase kebab-case leaf slug override. */
+  slug?: string;
+  /** Prior paths within the item's kind root, without `.json`. */
+  aliases?: string[];
+}
+
 /**
  * Documents one element in a component's anatomy breakdown.
  * Anatomy describes the visual/structural parts that make up a component
@@ -325,6 +392,12 @@ export interface ComponentPropDoc {
    *  ```
    */
   slotElements?: ComponentSlotElement[];
+  /** Lifecycle marker for a prop outside the stable compatibility promise
+   *  (spec:AST-017 FR21). Set `'experimental'` on a stable component's
+   *  optional `experimental` prop object, and say in `description` that its
+   *  contents may change or be removed in a patch release. Omit for stable
+   *  props. */
+  stability?: 'experimental';
 }
 
 /**
@@ -442,15 +515,6 @@ export interface ComponentThemingTarget {
    *  selectors such as `[data-checked="checked"]`. Omit if the element has no
    *  state-driven selectors. */
   states?: string[];
-  /** Set when this target has been RENAMED and this entry is the old name.
-   *  The component still emits the class (via `themeProps`'s `legacyNames`),
-   *  so existing themes keep working, but the docsite should steer readers to
-   *  the replacement. The value is the class name that supersedes this one,
-   *  without the `astryx-` prefix — e.g. `"checkbox-indicator"`.
-   *
-   *  A theme target is public API; renaming one without this is a silent
-   *  break for every theme styling it. */
-  deprecatedFor?: string;
 }
 
 /**

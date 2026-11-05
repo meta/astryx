@@ -2,6 +2,13 @@
 
 'use client';
 
+/**
+ * @file DocsShell.tsx
+ * @input Route metadata, the server-built docs nav model, and the AppShell header
+ * @output Docs navigation with a stable sidebar offset before hydration
+ * @position Docsite-only shell
+ */
+
 import {useState, useMemo} from 'react';
 import {usePathname} from 'next/navigation';
 import {Search, FlaskConical} from 'lucide-react';
@@ -11,20 +18,19 @@ import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Icon} from '@astryxdesign/core/Icon';
 import {SharedTopNav} from './SharedTopNav';
-import {CanaryBanner} from './CanaryBanner';
-import {CURRENT_TARGET} from '../lib/docsVersions';
-import type {PackageMeta} from '../generated/packageRegistry';
-import type {DocTopic} from '../generated/docsRegistry';
-import {
-  getComponentSidebarData,
-  type ComponentSidebarEntry,
-  type ComponentSidebarItem,
-} from './componentSidebarData';
+import {HeaderHeightSeed} from './HeaderHeightSeed';
+import {DocsBanner} from './InternalDocsPrompt';
+import type {
+  DocsNav,
+  DocsNavEntry,
+  DocsNavItem,
+  DocsNavPackage,
+  DocsNavTopic,
+} from './docsNav';
 
 interface DocsShellProps {
   children: React.ReactNode;
-  packages: PackageMeta[];
-  docTopics: DocTopic[];
+  nav: DocsNav;
 }
 
 const styles = stylex.create({
@@ -46,7 +52,7 @@ function CanaryCategoryMarker() {
 }
 
 /** Foundations: tokens first, then alphabetical */
-const foundationsSort = (a: DocTopic, b: DocTopic) => {
+const foundationsSort = (a: DocsNavTopic, b: DocsNavTopic) => {
   if (a.topic === 'tokens') {
     return -1;
   }
@@ -58,18 +64,18 @@ const foundationsSort = (a: DocTopic, b: DocTopic) => {
 
 // ── Shell ──────────────────────────────────────────────────────────────
 
-export function DocsShell({children, packages, docTopics}: DocsShellProps) {
+export function DocsShell({children, nav}: DocsShellProps) {
   const pathname = usePathname();
   const [componentQuery, setComponentQuery] = useState('');
 
-  const {componentItems, utilities, canaryCategories} =
-    getComponentSidebarData();
+  const {packages, docTopics, componentItems, utilities, canaryCategories} =
+    nav;
 
   const q = componentQuery.trim().toLowerCase();
 
   // When searching, flatten every readiness category to individual entries so
   // results are all at the same level with no nesting.
-  const flatSearchResults = useMemo<ComponentSidebarEntry[]>(() => {
+  const flatSearchResults = useMemo<DocsNavEntry[]>(() => {
     if (!q) {
       return [];
     }
@@ -96,7 +102,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
   }, [canaryCategories, utilities, q]);
 
   // Classify packages
-  const isTheme = (p: PackageMeta) => p.name.includes('theme-');
+  const isTheme = (p: DocsNavPackage) => p.name.includes('theme-');
   const libraryPackages = packages.filter(p => !isTheme(p) && !p.canaryOnly);
   const canaryPackages = packages.filter(p => !isTheme(p) && p.canaryOnly);
 
@@ -127,7 +133,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
     />
   );
 
-  const renderComponentItems = (items: ComponentSidebarItem[]) =>
+  const renderComponentItems = (items: DocsNavItem[]) =>
     items.map(item =>
       item.type === 'entry' ? (
         <SideNavItem
@@ -157,10 +163,16 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
 
   return (
     <AppShell
+      className="astryx-docs-shell"
       variant="surface"
       height="auto"
-      banner={CURRENT_TARGET === 'canary' ? <CanaryBanner /> : undefined}
-      topNav={<SharedTopNav />}
+      banner={<DocsBanner />}
+      topNav={
+        <>
+          <SharedTopNav />
+          <HeaderHeightSeed />
+        </>
+      }
       sideNav={
         <SideNav topContent={isOnComponentsRoute ? componentSearch : undefined}>
           {!isOnComponentsRoute && (

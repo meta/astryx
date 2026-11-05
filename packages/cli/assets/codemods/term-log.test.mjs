@@ -51,12 +51,30 @@ describe('sanity: helpers are live in human mode', () => {
     setJsonMode(false);
     p.log.success('done');
     expect(logSpy).toHaveBeenCalledTimes(1);
-    expect(logSpy).toHaveBeenCalledWith('✓ done');
+    expect(logSpy).toHaveBeenCalledWith('[ok] done');
   });
 
   it('every log helper emits exactly one stdout line in human mode', () => {
     setJsonMode(false);
     callAllLogHelpers(); // 6 emitters -> 6 console.log calls
     expect(logSpy).toHaveBeenCalledTimes(6);
+  });
+});
+
+describe('ASCII output', () => {
+  it('prints ASCII level prefixes and transliterates glyphs in messages', () => {
+    setJsonMode(false);
+    p.log.success('src/a.tsx');
+    p.log.warn('stale \u2014 refresh');
+    p.log.error('    \u2717 src/b.tsx \u2014 rename \u2192 failed');
+    p.log.info('  \u2022 name \u2014 title\u2026');
+    const lines = logSpy.mock.calls.map(call => call.join(' '));
+    expect(lines).toEqual([
+      '[ok] src/a.tsx',
+      '! stale - refresh',
+      '!!     !! src/b.tsx - rename -> failed',
+      '  - name - title...',
+    ]);
+    for (const line of lines) expect(line).not.toMatch(/[\u0080-\uFFFF]/);
   });
 });

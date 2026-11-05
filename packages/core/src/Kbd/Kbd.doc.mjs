@@ -27,7 +27,7 @@ export const docs = {
       name: 'keys',
       type: 'string',
       description:
-        'Keyboard shortcut string. Use "+" to separate keys. Special keys: mod (Cmd on Mac), ctrl, alt, shift, enter, backspace, escape, tab, up, down, left, right.',
+        'Keyboard shortcut string. Use "+" to separate keys. Special keys: mod (Cmd on Mac), ctrl, alt, shift, enter, backspace, escape, tab, up, down, left, right, plus. Aliases: esc for escape and return for enter.',
       required: true,
     },
     {
@@ -72,7 +72,7 @@ export const docsZh = {
       name: 'keys',
       type: 'string',
       description:
-        '键盘快捷键字符串。使用 "+" 分隔各按键。特殊按键：mod（Mac 上为 Cmd）、ctrl、alt、shift、enter、backspace、escape、tab、up、down、left、right。',
+        '键盘快捷键字符串。使用 "+" 分隔各按键。特殊按键：mod（Mac 上为 Cmd）、ctrl、alt、shift、enter、backspace、escape、tab、up、down、left、right、plus。别名：esc 等同于 escape，return 等同于 enter。',
       required: true,
     },
     {
@@ -122,7 +122,7 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    keys: 'Shortcut string. "+" separates keys. Special: mod (Cmd on Mac), ctrl, alt, shift, enter, backspace, escape, tab, up, down, left, right.',
+    keys: 'Shortcut string. "+" separates keys. Special: mod (Cmd on Mac), ctrl, alt, shift, enter, backspace, escape, tab, up, down, left, right, plus. Aliases: esc for escape, return for enter.',
     xstyle: 'StyleX styles for layout customization. Must be stylex.create() value.',
     className: 'CSS class for root element. Prefer xstyle; className for non-StyleX integration.',
     style: 'Inline styles for root element. Prefer xstyle; inline styles bypass StyleX optimization.',

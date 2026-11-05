@@ -10,4 +10,15 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['ToggleButton', 'Layout', 'Text', 'Icon'],
+  icons: {
+    BellIcon: 'notification',
+    BoldIcon: 'bold',
+    BookmarkIcon: 'bookmark',
+    HeartIcon: 'heart',
+    ItalicIcon: 'italic',
+    LinkIcon: 'link',
+    StarIcon: 'star',
+    StrikethroughIcon: 'strikethrough',
+    UnderlineIcon: 'underline',
+  },
 };

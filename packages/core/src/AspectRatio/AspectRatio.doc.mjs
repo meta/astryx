@@ -11,7 +11,7 @@ export const docs = {
     description:
       'Maintains a fixed width-to-height ratio for its children as its container resizes. Use it for media containers like videos, images, thumbnails, or any content that needs consistent proportions. It takes its width from the container and derives its height from the ratio, so it needs an ancestor with a definite width.',
     bestPractices: [
-      {guidance: true, description: 'Express the ratio as a fraction like `16/9` or `4/3` for readability.'},
+      {guidance: true, description: 'Express the ratio as a fraction for readability — `ratio={16 / 9}` rather than `ratio={1.78}`. It is a number, so the string form `ratio="16/9"` is a type error.'},
       {guidance: true, description: 'Use for media that needs consistent proportions across screen sizes.'},
       {guidance: true, description: 'Use `fit="cover"` for images and video so the component sizes the child; the child should not repeat `width`/`height`/`objectFit` styles.'},
       {guidance: true, description: 'Pass one child. With `fit` set, every direct child is stretched to fill the box, so put an overlay or caption inside a single wrapper child rather than passing it as a second child.'},
@@ -79,7 +79,7 @@ export const docsZh = {
     description:
       'Maintains a fixed width-to-height ratio for its children as its container resizes. Use it for media containers like videos, images, thumbnails, or any content that needs consistent proportions. It takes its width from the container and derives its height from the ratio, so it needs an ancestor with a definite width.',
     bestPractices: [
-      {guidance: true, description: 'Express the ratio as a fraction like `16/9` or `4/3` for readability.'},
+      {guidance: true, description: 'Express the ratio as a fraction for readability — `ratio={16 / 9}` rather than `ratio={1.78}`. It is a number, so the string form `ratio="16/9"` is a type error.'},
       {guidance: true, description: 'Use for media that needs consistent proportions across screen sizes.'},
       {guidance: true, description: 'Use `fit="cover"` for images and video so the component sizes the child; the child should not repeat `width`/`height`/`objectFit` styles.'},
       {guidance: true, description: 'Pass one child. With `fit` set, every direct child is stretched to fill the box, so put an overlay or caption inside a single wrapper child rather than passing it as a second child.'},
@@ -130,7 +130,7 @@ export const docsDense = {
     description:
       'Maintains a fixed width-to-height ratio for its children as its container resizes. Use it for media containers like videos, images, thumbnails, or any content that needs consistent proportions. It takes its width from the container and derives its height from the ratio, so it needs an ancestor with a definite width.',
     bestPractices: [
-      {guidance: true, description: 'Express the ratio as a fraction like `16/9` or `4/3` for readability.'},
+      {guidance: true, description: 'Express the ratio as a fraction for readability — `ratio={16 / 9}` rather than `ratio={1.78}`. It is a number, so the string form `ratio="16/9"` is a type error.'},
       {guidance: true, description: 'Use for media that needs consistent proportions across screen sizes.'},
       {guidance: true, description: 'Use `fit="cover"` for images and video so the component sizes the child; the child should not repeat `width`/`height`/`objectFit` styles.'},
       {guidance: true, description: 'Pass one child. With `fit` set, every direct child is stretched to fill the box, so put an overlay or caption inside a single wrapper child rather than passing it as a second child.'},

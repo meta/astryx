@@ -2,6 +2,7 @@
 
 /**
  * @file ChartCandlestick.tsx
+ * @input Chart context plus public StyleX data variables and optional colors
  * @output Renders candlestick/box-whisker marks for OHLC or statistical data
  * @position Child of Chart; reads scales from context
  *
@@ -10,6 +11,7 @@
  * - `'bar'` — OHLC bar — vertical line with open/close ticks
  */
 
+import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
 import {useChart} from './ChartContext';
 import {isBandScale} from './utils';
 
@@ -96,8 +98,8 @@ export function ChartCandlestick({
         const fill =
           color ??
           (isUp
-            ? (upColor ?? 'var(--color-data-categorical-green)')
-            : (downColor ?? 'var(--color-data-categorical-red)'));
+            ? (upColor ?? dataVars['--color-data-categorical-green'])
+            : (downColor ?? dataVars['--color-data-categorical-red']));
         const centerX = xVal + bw / 2;
 
         const yHigh = yScale(hVal);

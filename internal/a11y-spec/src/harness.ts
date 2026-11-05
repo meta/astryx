@@ -48,8 +48,19 @@ export interface ComputedNode {
   readonly name: string;
   /** Computed accessible description. */
   readonly description: string;
+  /** Text descendants the engine keeps in this node's accessibility subtree. */
+  readonly accessibleText: string;
+  /** Computed live-region channel, or null when this node is not live. */
+  readonly live: 'off' | 'polite' | 'assertive' | null;
+  /** Whether the accessibility tree exposes the live region as atomic. */
+  readonly atomic: boolean | null;
   /** Computed text value, or null when the node exposes no value. */
   readonly value: string | null;
+  /** Numeric range value when the accessibility node exposes one. */
+  readonly rangeValue: number | null;
+  readonly rangeMin: number | null;
+  readonly rangeMax: number | null;
+  readonly valueText: string | null;
   /** Whether the engine exposes the subject as modal. */
   readonly modal: boolean | null;
   /** Whether the engine exposes the textbox as multi-line. */
@@ -58,8 +69,12 @@ export interface ComputedNode {
   readonly readOnly: boolean | null;
   /** Whether the engine exposes the control as required. */
   readonly required: boolean | null;
+  /** Computed pressed state for toggle buttons, or null when none is exposed. */
+  readonly pressed: 'true' | 'false' | 'mixed' | null;
   /** Computed checked state, or null when the node exposes none. */
   readonly checked: 'true' | 'false' | 'mixed' | null;
+  /** Computed selected state, or null when the node exposes none. */
+  readonly selected: boolean | null;
   readonly disabled: boolean;
   readonly invalid: boolean;
 }
@@ -80,6 +95,18 @@ export interface Subject {
   labelText(): Promise<string | null>;
   /** DOM/runtime layer: the live value of a native text control, if this is one. */
   textValue(): Promise<string | null>;
+  /** DOM layer: the subject's authored text content, whitespace-normalized. */
+  textContent(): Promise<string>;
+  /**
+   * DOM layer: how many descendants match a CSS selector (`:scope` names the
+   * subject). Structure contracts count rows and cells with it; it never
+   * reaches into component-private markup beyond ARIA roles and attributes.
+   */
+  descendantCount(selector: string): Promise<number>;
+  /** DOM layer: whether a current semantic subject resolves after an update. */
+  currentExists(): Promise<boolean>;
+  /** DOM layer: whether the originally designated subject is still connected. */
+  isConnected(): Promise<boolean>;
   /** Accessibility-tree layer: what the engine computes for this node. */
   computed(): Promise<ComputedNode>;
   /**
@@ -99,6 +126,8 @@ export interface Subject {
    * a design system's private structure.
    */
   visibleLabelText(): Promise<string | null>;
+  /** Real-browser layer: whether this node is rendered and visible. */
+  isVisible(): Promise<boolean>;
   /** Real-browser layer: whether this node currently holds focus. */
   isFocused(): Promise<boolean>;
   /** Real-browser layer: whether focus is on this node or one of its descendants. */
@@ -112,7 +141,19 @@ export interface Subject {
 }
 
 /** A key an expectation can send. Spelled by intent, not by engine syntax. */
-export type Key = 'Space' | 'Enter' | 'Tab';
+export type Key =
+  | 'Space'
+  | 'Enter'
+  | 'Tab'
+  | 'ArrowLeft'
+  | 'ArrowRight'
+  | 'ArrowUp'
+  | 'ArrowDown'
+  | 'Home'
+  | 'End'
+  | 'PageUp'
+  | 'PageDown'
+  | 'Escape';
 
 /**
  * A mounted binding, observed at whatever layers this runtime can honestly see.
@@ -130,6 +171,19 @@ export interface Harness {
    * contracts never query component-private structure.
    */
   related(name: string): Promise<Subject>;
+  /** DOM layer: whether one semantic subject contains another. */
+  contains(container: Subject, candidate: Subject): Promise<boolean>;
+  /** Accessibility-tree layer: whether one semantic subject owns another. */
+  containsSemantically(
+    container: Subject,
+    candidate: Subject,
+  ): Promise<boolean>;
+  /** DOM layer: whether an IDREF attribute resolves to the exact target subject. */
+  references(
+    source: Subject,
+    attribute: string,
+    target: Subject,
+  ): Promise<boolean>;
   /**
    * Real-browser layer: click the subject the way a pointer user would,
    * including the browser's own judgement that the control is there to be
@@ -147,6 +201,23 @@ export interface Harness {
    * press, slide off, let go.
    */
   abortedPress(subject: Subject): Promise<void>;
+  /**
+   * Real-browser layer: click just outside the subject's box, the way a
+   * person clicks the dimmed page beside a modal surface. What that click
+   * lands on (a backdrop, an inert page) is the subject's own business; the
+   * harness only puts the pointer there.
+   */
+  clickBeside(subject: Subject): Promise<void>;
+  /**
+   * Real-browser layer: move a mouse pointer onto the subject and leave it
+   * resting there, the way a mouse user hovers a control to see its hint.
+   */
+  hover(subject: Subject): Promise<void>;
+  /**
+   * Real-browser layer: move the pointer to a point in the viewport that is
+   * off the subject and every related subject, the way a mouse user moves on.
+   */
+  pointerAway(): Promise<void>;
   /** Real-browser layer: type text into the focused subject. */
   typeText(subject: Subject, text: string): Promise<void>;
   /** Real-browser layer: select and delete all text from the subject. */

@@ -9,7 +9,10 @@
  * - Brief: signature line with import hint, description, key params
  */
 
-import {discoverHooks, findHookDoc} from '../../../foundation/discovery/hook-discovery.mjs';
+import {
+  discoverHooks,
+  findHookDoc,
+} from '../../../foundation/discovery/hook-discovery.mjs';
 import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
 import {formatAccessibility, mdCell} from './component-format.mjs';
 
@@ -23,7 +26,9 @@ function buildSignature(docs) {
   const name = docs.name;
 
   // Build params string — only top-level params (skip options.foo nested params)
-  const topParams = (docs.params || []).filter((/** @type {any} */ p) => !p.name.includes('.'));
+  const topParams = (docs.params || []).filter(
+    (/** @type {any} */ p) => !p.name.includes('.'),
+  );
   const paramStr = topParams
     .map((/** @type {any} */ p) => {
       const opt = p.required ? '' : '?';
@@ -57,7 +62,7 @@ function formatParamsTable(params) {
   lines.push('| Param | Type | Default | Description |');
   lines.push('|-------|------|---------|-------------|');
   for (const p of params) {
-    const def = p.default ? `\`${mdCell(p.default)}\`` : '\u2014';
+    const def = p.default ? `\`${mdCell(p.default)}\`` : '-';
     const req = p.required ? ' **(required)**' : '';
     lines.push(
       `| \`${mdCell(p.name)}\` | \`${mdCell(p.type)}\` | ${def} | ${mdCell(p.description)}${req} |`,
@@ -150,7 +155,9 @@ export function formatHookCompact(docs, importPath) {
   const imp = importPath || docs.importPath;
   if (imp) {
     sections.push('## Import\n');
-    sections.push(`\`\`\`tsx\nimport { ${docs.name} } from '${imp}';\n\`\`\`\n`);
+    sections.push(
+      `\`\`\`tsx\nimport { ${docs.name} } from '${imp}';\n\`\`\`\n`,
+    );
   }
 
   // Best Practices (matches component compact)
@@ -198,7 +205,7 @@ export function formatHookCompact(docs, importPath) {
 /**
  * Format a brief, LLM-optimized hook summary.
  * Matches component formatBrief conventions:
- *   signature  ← from 'import/path'
+ *   signature  <- from 'import/path'
  *   description
  *   key params
  * @param {any} docs
@@ -211,7 +218,7 @@ export function formatHookBrief(docs) {
   // Signature line with import hint (matches component brief)
   const sig = buildSignature(docs);
   const imp = docs.importPath;
-  output.push(imp ? `${sig}  \u2190 from '${imp}'` : sig);
+  output.push(imp ? `${sig}  <- from '${imp}'` : sig);
 
   // Description (shortened, matches component brief)
   const desc = docs.usage?.description || '';
@@ -225,12 +232,14 @@ export function formatHookBrief(docs) {
     output.push(`  Related: ${docs.relatedComponents.join(', ')}`);
   }
 
-  // Key params (matches component brief 'prop · prop' line)
+  // Key params (matches component brief 'prop, prop' line)
   const paramNames = (docs.params || [])
     .filter((/** @type {any} */ p) => !p.name.includes('.'))
-    .map((/** @type {any} */ p) => p.required ? `${p.name}: ${p.type.split('|')[0].trim()}` : p.name);
+    .map((/** @type {any} */ p) =>
+      p.required ? `${p.name}: ${p.type.split('|')[0].trim()}` : p.name,
+    );
   if (paramNames.length > 0) {
-    output.push(`  ${paramNames.join(' \u00b7 ')}`);
+    output.push(`  ${paramNames.join(', ')}`);
   }
 
   return output.join('\n') + '\n';
@@ -253,7 +262,7 @@ export async function formatHookBriefAll(coreDir) {
       const docPath = findHookDoc(coreDir, hookName);
       if (docPath) {
         try {
-          const docs = await loadDocs(docPath);
+          const docs = await loadDocs(docPath, {root: 'hooks'});
           output.push(formatHookBrief(docs));
         } catch {
           output.push(`${hookName}\n  (no docs)\n`);

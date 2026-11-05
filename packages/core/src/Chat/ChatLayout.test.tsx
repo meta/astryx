@@ -2,6 +2,7 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, render, screen} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {ChatLayout} from './ChatLayout';
 import {ChatMessageList} from './ChatMessageList';
 import {ChatMessage} from './ChatMessage';
@@ -100,6 +101,33 @@ describe('ChatLayout', () => {
       </ChatLayout>,
     );
     expect(screen.queryByRole('button')).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Keyboard reachability of the default scroll-to-bottom button
+//
+// At rest the layout is neither scrolled up nor holding new messages, so the
+// default ChatLayoutScrollButton renders in its hidden state. It is still in
+// the DOM, and it is the first control in the dock — ahead of the composer.
+// A control nobody can see must not be a tab stop: WCAG 2.2 SC 2.4.7 requires
+// a visible focus indicator wherever focus can land, and the hidden pill paints
+// nothing. `opacity: 0` and `pointer-events: none` do not remove an element
+// from sequential focus navigation; only visibility/display/inert do.
+// ---------------------------------------------------------------------------
+
+describe('ChatLayout — default scroll button keyboard reachability', () => {
+  it('does not make the resting scroll-to-bottom button the first tab stop', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChatLayout composer={<button type="button">Send</button>}>
+        <div>msg</div>
+      </ChatLayout>,
+    );
+
+    await user.tab();
+
+    expect(screen.getByRole('button', {name: 'Send'})).toHaveFocus();
   });
 });
 

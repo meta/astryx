@@ -1,9 +1,18 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
 import {Badge} from '@astryxdesign/core/Badge';
+import {Card} from '@astryxdesign/core/Card';
+import {Heading} from '@astryxdesign/core/Heading';
+import {HStack} from '@astryxdesign/core/HStack';
+import {Icon} from '@astryxdesign/core/Icon';
+import {IconButton} from '@astryxdesign/core/IconButton';
+import {StackItem} from '@astryxdesign/core/Stack';
+import {TextInput} from '@astryxdesign/core/TextInput';
+import {VStack} from '@astryxdesign/core/VStack';
 import {Cog6ToothIcon, TrashIcon} from '@heroicons/react/24/outline';
 
 const buttonStoryStyles = stylex.create({
@@ -133,8 +142,14 @@ export const IconWithText: Story = {
       <Button
         label="Settings"
         variant="secondary"
-        icon={<Cog6ToothIcon style={{width: 16, height: 16}} />}
-      />
+        icon={
+          <Cog6ToothIcon
+            data-testid="button-leading-icon"
+            style={{width: 16, height: 16}}
+          />
+        }>
+        <span data-testid="button-label">Settings</span>
+      </Button>
       <Button
         label="Delete"
         variant="destructive"
@@ -370,6 +385,78 @@ export const Truncation: Story = {
           icon={<Cog6ToothIcon style={{width: 16, height: 16}} />}
         />
       </div>
+    </div>
+  ),
+};
+
+function ReviewersCard() {
+  const [emails, setEmails] = useState('');
+  return (
+    <Card maxWidth={560}>
+      <VStack gap={4}>
+        <HStack gap={2} vAlign="center">
+          <StackItem size="fill">
+            <Heading level={3} maxLines={1}>
+              Design review
+            </Heading>
+          </StackItem>
+          <Button label="Request review from the design team" size="sm" />
+          <IconButton
+            label="More review options"
+            icon={<Icon icon="moreHorizontal" />}
+            variant="ghost"
+            size="sm"
+          />
+        </HStack>
+        <TextInput
+          label="Reviewer emails"
+          placeholder="name@example.com"
+          value={emails}
+          onChange={setEmails}
+        />
+        <HStack gap={2} hAlign="end">
+          <StackItem size="static">
+            <Button label="Cancel" variant="secondary" />
+          </StackItem>
+          <Button
+            label="Send invitations to all 12 reviewers"
+            variant="primary"
+          />
+        </HStack>
+      </VStack>
+    </Card>
+  );
+}
+
+/**
+ * The Button.doc.mjs "Actions in narrow rows" example at a 320px form width,
+ * a 390px phone width, and a roomy 600px width. In the narrow frames the long
+ * labels truncate with an ellipsis inside the card instead of overflowing or
+ * being clipped; the icon-only button stays square; the roomy frame renders
+ * every button at its natural width.
+ */
+export const NarrowRows: Story = {
+  render: () => (
+    <div
+      style={{
+        display: 'flex',
+        gap: 24,
+        flexWrap: 'wrap',
+        alignItems: 'flex-start',
+      }}>
+      {[320, 390, 600].map(width => (
+        <div key={width} style={{width}}>
+          <p
+            style={{
+              fontSize: 12,
+              color: 'var(--color-text-secondary)',
+              marginBottom: 8,
+            }}>
+            {width}px
+          </p>
+          <ReviewersCard />
+        </div>
+      ))}
     </div>
   ),
 };

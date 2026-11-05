@@ -2,22 +2,28 @@
 
 /**
  * @file main.test.ts
+ * @input Storybook config, workspace alias table, and app package dependencies.
+ * @output Regression coverage for source aliases and cold-clone config loading.
+ * @position Node tests beside the Storybook configuration.
  * @description Guards two things that both keep `storybook dev` working from
  *   a cold clone, at two different resolution stages.
  *
- *   1. Vite's module graph: every `@astryxdesign/*` dependency of this app
+ *   1. Vite's module graph: every runtime `@astryxdesign/*` dependency
  *      must be aliased to package source in `.storybook/main.ts`. Without an
  *      alias, Vite resolves the workspace link through the package's export
  *      map, which points at `dist/` build output that does not exist in a
  *      fresh worktree — `storybook dev` then fails its dependency scan
- *      (#5092: `@astryxdesign/richtext`).
+ *      (#5092: `@astryxdesign/richtext`). The same table feeds StyleX while
+ *      preserving theme wildcard-only aliases and Vega's lack of StyleX imports.
  *   2. Storybook's own config loader: `main.ts` is evaluated by Node's ESM
  *      resolver before any alias from it is in play, so the specifiers
  *      `main.ts` itself imports must also resolve unbuilt (#5128:
  *      `@astryxdesign/build/vite` → `dist/vite.mjs`).
  */
 
-import {describe, it, expect} from 'vitest';
+import {afterAll, beforeAll, describe, it, expect, vi} from 'vitest';
+import * as build from '../../../packages/build/src/vite.ts';
+import config, {workspaceAliases} from './main.ts';
 import {existsSync, readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -29,9 +35,11 @@ const pkg = JSON.parse(
   readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'),
 ) as {dependencies?: Record<string, string>};
 
-// The Vite `resolve.alias` block only — the StyleX `aliases` block above it
-// carries the same keys but does not drive Vite's dev-mode resolution.
-const viteAliasBlock = mainTs.slice(mainTs.indexOf('alias: {'));
+const rootDir = path.resolve(__dirname, '../../..');
+// viteFinal only consumes Vite's config; the Storybook loader options are unused.
+const storybookOptions = {} as Parameters<
+  NonNullable<typeof config.viteFinal>
+>[1];
 
 const workspaceDeps = Object.keys(pkg.dependencies ?? {}).filter(name =>
   name.startsWith('@astryxdesign/'),
@@ -47,15 +55,77 @@ const runtimeImports = [
 ].map(match => match[1]);
 
 describe('storybook main.ts workspace source aliases', () => {
-  it('sees the @astryxdesign workspace dependencies', () => {
-    expect(workspaceDeps).not.toHaveLength(0);
+  let viteAliases: Record<string, string>;
+  let stylexAliases: Record<string, string[]>;
+  const stylexSpy = vi.spyOn(build, 'astryxStylex');
+
+  beforeAll(async () => {
+    // Call through to the real plugin so these assertions cover the options
+    // consumed by StyleX as well as the config Vite receives.
+    const viteConfig = await config.viteFinal!({}, storybookOptions);
+    viteAliases = viteConfig.resolve!.alias as Record<string, string>;
+    const options = stylexSpy.mock.lastCall![0];
+    if (!options || !('stylexOptions' in options)) {
+      throw new Error('Expected the Storybook StyleX options');
+    }
+    stylexAliases = options.stylexOptions!.aliases as Record<string, string[]>;
   });
 
-  it.each(workspaceDeps)('aliases %s to source', dep => {
-    // Each workspace dependency must appear as a bare alias key in Vite's
-    // `resolve.alias` so dev-mode resolution never falls back to the export
-    // map's dist/ entry point, which is missing until the package is built.
-    expect(viteAliasBlock).toContain(`'${dep}':`);
+  afterAll(() => stylexSpy.mockRestore());
+
+  it('declares every runtime workspace dependency exactly once', () => {
+    expect(workspaceDeps).not.toHaveLength(0);
+    expect(workspaceAliases.map(({pkg}) => pkg).sort()).toEqual(
+      [...workspaceDeps].sort(),
+    );
+  });
+
+  it.each(workspaceDeps)(
+    'resolves %s through the intended source entries',
+    dep => {
+      const packageName = dep.slice('@astryxdesign/'.length);
+      const isTheme = packageName.startsWith('theme-');
+      const packageDir = isTheme
+        ? `themes/${packageName.slice('theme-'.length)}`
+        : packageName;
+      const source = path.join(rootDir, 'packages', packageDir, 'src');
+
+      expect(viteAliases[dep]).toBe(
+        isTheme ? path.join(source, 'source.ts') : source,
+      );
+      expect(existsSync(viteAliases[dep])).toBe(true);
+
+      if (packageName === 'vega') {
+        expect(stylexAliases).not.toHaveProperty(dep);
+        expect(stylexAliases).not.toHaveProperty(`${dep}/*`);
+      } else {
+        expect(stylexAliases[`${dep}/*`]).toEqual([path.join(source, '*')]);
+        if (isTheme) {
+          expect(stylexAliases).not.toHaveProperty(dep);
+        } else {
+          expect(stylexAliases[dep]).toEqual([source]);
+        }
+      }
+    },
+  );
+
+  it('preserves other Vite aliases while overriding workspace build entries', async () => {
+    const viteConfig = await config.viteFinal!(
+      {
+        resolve: {
+          alias: {
+            'storybook-fixture': '/fixture.ts',
+            '@astryxdesign/core': '/packages/core/dist',
+          },
+        },
+      },
+      storybookOptions,
+    );
+
+    expect(viteConfig.resolve!.alias).toMatchObject({
+      'storybook-fixture': '/fixture.ts',
+      '@astryxdesign/core': path.join(rootDir, 'packages/core/src'),
+    });
   });
 });
 

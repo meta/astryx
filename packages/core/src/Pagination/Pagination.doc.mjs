@@ -137,7 +137,7 @@ export const docs = {
       name: 'variant',
       type: "'pages' | 'count' | 'compact' | 'dots' | 'input' | 'none'",
       description:
-        "Visual variant controlling what appears between prev/next buttons. 'pages' shows page number buttons with ellipsis, 'count' shows 'X-Y of Z' text, 'compact' shows 'Page X of Y', 'dots' shows dot indicators, 'input' shows an editable page-number box with a leading label ('Page [ n ] / N') flanked by first/last buttons by default (the box needs a known total to clamp against, so it is disabled in cursor/hasMore mode), 'none' shows just prev/next buttons.",
+        "Visual variant controlling what appears between prev/next buttons. 'pages' shows page number buttons with ellipsis, 'count' shows 'X-Y of Z' text, 'compact' shows 'Page X of Y' (add first/last buttons with hasFirstLast), 'dots' shows dot indicators, 'input' shows an editable page-number box with a leading label ('Page [ n ] / N') flanked by first/last buttons by default (the box needs a known total to clamp against, so it is disabled in cursor/hasMore mode), 'none' shows just prev/next buttons.",
       default: "'pages'",
     },
     {
@@ -150,8 +150,8 @@ export const docs = {
       name: 'hasFirstLast',
       type: 'boolean',
       description:
-        "Whether to show first/last («/») double-chevron buttons flanking prev/next. Only applies to the 'input' variant; omitted when the page count is unknown (cursor/hasMore pagination).",
-      default: 'true',
+        "Whether to show first/last («/») double-chevron buttons flanking prev/next. Applies to the 'input' variant (shown unless false) and the 'compact' variant (shown only when true); other variants ignore it. Omitted when the page count is unknown (cursor/hasMore pagination).",
+      default: "true for 'input'; false for 'compact'",
     },
     {
       name: 'step',
@@ -288,7 +288,7 @@ export const docsZh = {
       name: 'variant',
       type: "'pages' | 'count' | 'compact' | 'dots' | 'input' | 'none'",
       description:
-        "控制上一页/下一页按钮之间显示内容的视觉变体。'pages' 显示带省略号的页码按钮，'count' 显示 'X-Y of Z' 文本，'compact' 显示 'Page X of Y'，'dots' 显示点指示器，'input' 显示带前置标签的可编辑页码框——'Page [ n ] / N'——默认两侧带首页/末页按钮，'none' 仅显示上一页/下一页按钮。",
+        "控制上一页/下一页按钮之间显示内容的视觉变体。'pages' 显示带省略号的页码按钮，'count' 显示 'X-Y of Z' 文本，'compact' 显示 'Page X of Y'（可通过 hasFirstLast 添加首页/末页按钮），'dots' 显示点指示器，'input' 显示带前置标签的可编辑页码框——'Page [ n ] / N'——默认两侧带首页/末页按钮，'none' 仅显示上一页/下一页按钮。",
       default: "'pages'",
     },
     {
@@ -301,8 +301,8 @@ export const docsZh = {
       name: 'hasFirstLast',
       type: 'boolean',
       description:
-        "是否显示首页/末页（«/»）双箭头按钮，位于上一页/下一页两侧。仅适用于 'input' 变体；当页数未知（游标/hasMore 分页）时省略。",
-      default: 'true',
+        "是否显示首页/末页（«/»）双箭头按钮，位于上一页/下一页两侧。适用于 'input' 变体（除非设为 false 否则显示）和 'compact' 变体（仅在设为 true 时显示）；其他变体忽略此项。当页数未知（游标/hasMore 分页）时省略。",
+      default: "'input' 为 true；'compact' 为 false",
     },
     {
       name: 'step',
@@ -400,7 +400,7 @@ export const docsDense = {
     onPageSizeChange: 'Called on page size change. Auto resets to page 1.',
     variant: "Display between prev/next. 'input' = 'Page [n] / N' + first/last.",
     pageLabel: "Noun before the 'input' box (e.g. 'Page' or 'Row'). Navigation stays page-based. Default localized 'Page'.",
-    hasFirstLast: "Show first/last («/») buttons in the 'input' variant. Omitted when total unknown.",
+    hasFirstLast: "Show first/last («/») buttons. 'input' default true; 'compact' default false (opt in). Other variants ignore. Omitted when total unknown.",
     step: 'Pages the prev/next buttons advance per click. Clamped to range; < 1 or non-integer falls back to 1.',
     siblingCount: "Page buttons each side of current; only variant='pages'.",
     size: 'Control size.',

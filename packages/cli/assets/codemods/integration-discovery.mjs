@@ -33,6 +33,40 @@ import {semverCompare} from '../../foundation/env/semver.mjs';
 const CODEMOD_EXTENSIONS = ['.ts', '.mjs', '.js'];
 
 /**
+ * Directories never walked for codemods: a test directory beside a transform is
+ * the natural place to put its test, and every file found here is loaded and
+ * validated as a codemod.
+ */
+const SKIP_DIRS = new Set([
+  'node_modules',
+  '.git',
+  '__tests__',
+  '__fixtures__',
+]);
+
+/**
+ * Whether a file name is a test or fixture rather than a codemod.
+ *
+ * The trap this closes: EVERY `.ts`/`.mjs`/`.js` under a version folder used to
+ * be loaded as a codemod, so a test file colocated with its transform failed
+ * validation and — because a definition error is a hard error — took every
+ * codemod in that package's version with it. `astryx upgrade` then applied no
+ * transforms and reported success, which is the worst shape a failure can take.
+ *
+ * Core's own codemods never hit this: they are enumerated in a registry, and
+ * their colocated tests are simply not in it. Only integrations are discovered
+ * by walking a directory, so only integrations carry the landmine — which is why
+ * this is a loader fix and not a documentation one. It protects the integrations
+ * that already exist, which no authoring tool can reach.
+ *
+ * @param {string} name a file's base name
+ * @returns {boolean}
+ */
+function isTestFile(name) {
+  return /\.(test|spec)\.[^.]+$/.test(name) || /\.fixture\.[^.]+$/.test(name);
+}
+
+/**
  * Recursively collect codemod module files under a version folder. Returns
  * entries of {id, file} where id is the extension-less relative path
  * (POSIX-style) under `versionDir`.
@@ -49,14 +83,18 @@ function collectCodemodFiles(versionDir) {
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        if (entry.name === 'node_modules' || entry.name === '.git') continue;
+        if (SKIP_DIRS.has(entry.name)) continue;
         walk(full);
         continue;
       }
       const ext = path.extname(entry.name);
       if (!CODEMOD_EXTENSIONS.includes(ext)) continue;
+      if (isTestFile(entry.name)) continue;
       const rel = path.relative(versionDir, full);
-      const id = rel.slice(0, rel.length - ext.length).split(path.sep).join('/');
+      const id = rel
+        .slice(0, rel.length - ext.length)
+        .split(path.sep)
+        .join('/');
       out.push({id, file: full});
     }
   }
@@ -68,7 +106,7 @@ function collectCodemodFiles(versionDir) {
 /**
  * Discover file-based codemods contributed by configured integrations.
  *
- * @param {Array<{name?: string, codemods?: string, __spec?: string}>} loadedIntegrations
+ * @param {Array<{name?: string, codemods?: string, __spec?: string, __packageDir?: string}>} loadedIntegrations
  * @returns {Promise<Map<string, Array<{id: string, type: 'code'|'config', codemod: object, package: string}>>>}
  *   Map keyed by version string; each value is the list of discovered codemods
  *   for that version (across all integrations).
@@ -91,7 +129,7 @@ export async function discoverIntegrationCodemods(loadedIntegrations = []) {
 
     const versionFolders = fs
       .readdirSync(root, {withFileTypes: true})
-      .filter(entry => entry.isDirectory())
+      .filter(entry => entry.isDirectory() && !SKIP_DIRS.has(entry.name))
       .map(entry => entry.name);
 
     // Track ids seen ACROSS versions within this package — duplicate id across
@@ -107,7 +145,13 @@ export async function discoverIntegrationCodemods(loadedIntegrations = []) {
       const seenInVersion = new Set();
 
       for (const {id, file} of files) {
-        const label = `Integration "${pkgLabel}" codemod ${version}/${id} (${file})`;
+        const shown = integration.__packageDir
+          ? path
+              .relative(integration.__packageDir, file)
+              .split(path.sep)
+              .join('/')
+          : file;
+        const label = `Integration "${pkgLabel}" codemod ${version}/${id} (${shown})`;
 
         if (seenInVersion.has(id)) {
           throw new Error(

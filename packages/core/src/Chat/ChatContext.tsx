@@ -4,7 +4,7 @@
 
 /**
  * @file ChatContext.tsx
- * @input Uses React createContext
+ * @input Layer-scoped React context
  * @output Exports Chat message/list/composer/layout contexts. The composer
  *   context (value + input-control registration) is public composition API,
  *   re-exported from Chat/index.ts for custom inputs.
@@ -13,6 +13,7 @@
  */
 
 import {createContext, use, type RefObject} from 'react';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 export type ChatMessageSender = 'user' | 'assistant' | 'system';
 export type ChatDensity = 'compact' | 'balanced' | 'spacious';
@@ -22,9 +23,8 @@ export interface ChatMessageContextValue {
   density: ChatDensity;
 }
 
-export const ChatMessageContext = createContext<ChatMessageContextValue | null>(
-  null,
-);
+export const ChatMessageContext =
+  createLayerScopedContext<ChatMessageContextValue | null>(null);
 ChatMessageContext.displayName = 'ChatMessageContext';
 
 export function useChatMessageContext(): ChatMessageContextValue | null {
@@ -35,7 +35,8 @@ export interface ChatListContextValue {
   density: ChatDensity;
 }
 
-export const ChatListContext = createContext<ChatListContextValue | null>(null);
+export const ChatListContext =
+  createLayerScopedContext<ChatListContextValue | null>(null);
 ChatListContext.displayName = 'ChatListContext';
 
 export function useChatListContext(): ChatListContextValue | null {

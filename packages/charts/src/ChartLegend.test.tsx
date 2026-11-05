@@ -3,13 +3,14 @@
 /**
  * @file ChartLegend.test.tsx
  * @input Uses vitest, @testing-library/react, ChartLegend
- * @output Functional tests for the standalone chart legend
+ * @output Functional tests for chart legend semantics, localization, and layout
  * @position Colocated test for ChartLegend.tsx (issue #4295 viz coverage)
  */
 
 import {describe, it, expect} from 'vitest';
 import {render, screen, within} from '@testing-library/react';
 import {ChartLegend} from './ChartLegend';
+import {InternationalizationProvider} from '@astryxdesign/core';
 
 const items = [
   {label: 'Revenue', color: '#ff0000', type: 'bar'},
@@ -24,6 +25,26 @@ describe('ChartLegend', () => {
     expect(rows).toHaveLength(2);
     expect(within(rows[0]).getByText('Revenue')).toBeInTheDocument();
     expect(within(rows[1]).getByText('Profit')).toBeInTheDocument();
+  });
+
+  it('localizes the list label', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        messages={{
+          fr: {
+            '@astryx.chartLegend.label': {
+              defaultMessage: 'Légende du graphique',
+            },
+          },
+        }}>
+        <ChartLegend items={items} />
+      </InternationalizationProvider>,
+    );
+
+    expect(
+      screen.getByRole('list', {name: 'Légende du graphique'}),
+    ).toBeInTheDocument();
   });
 
   it('renders a decorative swatch in each entry with the item color', () => {

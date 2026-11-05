@@ -5,7 +5,8 @@
  *
  * Validates that the generated playground scope includes every public
  * component exported from @astryxdesign/core/package.json, plus the expected
- * non-component scope entries (themes, icons, stylex, react, next/image).
+ * non-component scope entries and editor declarations used by page templates
+ * and the imports needed by registered integration example blocks.
  *
  * This test reads the generated file as text (rather than importing it)
  * because the scope imports @astryxdesign/core/* which requires a prior build step.
@@ -17,10 +18,21 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {describe, it, expect, beforeAll} from 'vitest';
+import docsiteConfig from '../../astryx.config.mjs';
+import {blocks} from '../generated/blockRegistry';
 
 const GENERATED_SCOPE_PATH = path.resolve(
   __dirname,
   '../generated/playground-scope.ts',
+);
+
+const PLAYGROUND_TYPES_PATH = path.resolve(
+  __dirname,
+  '../../public/playground-types.json',
+);
+const MONACO_SETUP_PATH = path.resolve(
+  __dirname,
+  '../app/playground/monacoSetup.ts',
 );
 
 const CORE_PKG_PATH = path.resolve(
@@ -28,12 +40,48 @@ const CORE_PKG_PATH = path.resolve(
   '../../../../packages/core/package.json',
 );
 
+const TEMPLATE_PAGES_DIR = path.resolve(
+  __dirname,
+  '../../../../packages/cli/assets/templates/pages',
+);
+
+/** Mirrors the runner's asset list — those are stubbed, not scoped. */
+const ASSET_RE =
+  /\.(png|jpe?g|gif|svg|webp|ico|bmp|css|scss|less|sass|woff2?|ttf|eot|otf|mp4|webm|ogg|mp3|wav)$/i;
+
+/**
+ * Real import statements only. Anchored to the start of a line and required to
+ * end there, so the `from '...'` inside a code sample a template renders as a
+ * string — documentation-technical has one — is not mistaken for a dependency.
+ * The `}` branch catches the closing line of a multi-line import.
+ */
+const IMPORT_RE = /^\s*(?:import\b[^'"]*?|\}\s*)from\s+'([^']+)';?\s*$/gm;
+
+/**
+ * Top-level keys of the generated `scope` object. Quoted for anything with a
+ * slash or dash, bare where the name is a valid identifier. Lowercased to
+ * match how the runner builds `scopeLookup`.
+ */
+function getScopeKeys(content: string): Set<string> {
+  const keys = new Set<string>();
+  for (const match of content.matchAll(/^ {2}'([^']+)':/gm)) {
+    keys.add(match[1].toLowerCase());
+  }
+  for (const match of content.matchAll(/^ {2}([A-Za-z][\w-]*):/gm)) {
+    keys.add(match[1].toLowerCase());
+  }
+  return keys;
+}
+
 /**
  * Same skip pattern as generate-scope.mjs — non-component exports like
  * CSS files, utils, hooks, theme, etc.
  */
 const SKIP =
   /\.(css|stylex)$|\/utils$|^\.\/(theme|hooks|utils|syntax|docs|groups|reset)|\.$/;
+
+const COMPONENT_NAME = /^[A-Z][A-Za-z0-9]*$/;
+const NESTED_MODULE_NAME = /^[A-Z][A-Za-z0-9]*(?:\/[A-Za-z0-9][A-Za-z0-9-]*)+$/;
 
 function getExpectedComponents(): string[] {
   const pkg = JSON.parse(fs.readFileSync(CORE_PKG_PATH, 'utf-8'));
@@ -43,9 +91,25 @@ function getExpectedComponents(): string[] {
         return false;
       }
       const name = k.replace('./', '');
-      return /^[A-Z]/.test(name);
+      return COMPONENT_NAME.test(name);
     })
     .map(k => k.replace('./', ''));
+}
+
+function getExpectedNestedModules(): string[] {
+  const pkg = JSON.parse(fs.readFileSync(CORE_PKG_PATH, 'utf-8'));
+  return Object.keys(pkg.exports ?? {})
+    .filter(k => {
+      if (SKIP.test(k)) {
+        return false;
+      }
+      return NESTED_MODULE_NAME.test(k.replace('./', ''));
+    })
+    .map(k => k.replace('./', ''));
+}
+
+function nestedModuleIdentifier(name: string): string {
+  return `Core_${name.replace(/[^A-Za-z0-9_$]/g, '_')}`;
 }
 
 describe('playground-scope', () => {
@@ -79,6 +143,20 @@ describe('playground-scope', () => {
     expect(missing).toEqual([]);
   });
 
+  it('imports nested modules with valid local identifiers', () => {
+    const missing = getExpectedNestedModules().filter(name => {
+      const identifier = nestedModuleIdentifier(name);
+      return (
+        !scopeContent.includes(
+          `import * as ${identifier} from '@astryxdesign/core/${name}';`,
+        ) ||
+        !scopeContent.includes(`'@astryxdesign/core/${name}': ${identifier},`)
+      );
+    });
+    expect(missing).toEqual([]);
+    expect(scopeContent).not.toMatch(/^import \* as [^\s;]*\//m);
+  });
+
   it('has a scope entry for every component', () => {
     const missing = expectedComponents.filter(
       name => !scopeContent.includes(`'@astryxdesign/core/${name}': ${name},`),
@@ -98,7 +176,9 @@ describe('playground-scope', () => {
     const importLines = scopeContent
       .split('\n')
       .filter(l =>
-        l.match(/^import \* as \w+ from '@astryxdesign\/core\/[A-Z]/),
+        l.match(
+          /^import \* as [A-Z][A-Za-z0-9]* from '@astryxdesign\/core\/[A-Z][A-Za-z0-9]*';$/,
+        ),
       );
     expect(importLines.length).toBe(expectedComponents.length);
   });
@@ -143,6 +223,24 @@ describe('playground-scope', () => {
     );
   });
 
+  it('includes Recharts for template previews', () => {
+    expect(scopeContent).toContain("import * as Recharts from 'recharts';");
+    expect(scopeContent).toContain('recharts: Recharts,');
+
+    const playgroundTypes = JSON.parse(
+      fs.readFileSync(PLAYGROUND_TYPES_PATH, 'utf-8'),
+    );
+    expect(playgroundTypes.recharts['index.d.ts']).toContain(
+      "declare module 'recharts'",
+    );
+    expect(playgroundTypes.recharts['index.d.ts']).toContain(
+      'export const LineChart: any;',
+    );
+    expect(fs.readFileSync(MONACO_SETUP_PATH, 'utf-8')).toContain(
+      'packages.recharts',
+    );
+  });
+
   it('includes all heroicon variants', () => {
     expect(scopeContent).toContain(
       "'@heroicons/react/16/solid': Heroicons16Solid,",
@@ -161,5 +259,176 @@ describe('playground-scope', () => {
   it('includes next/image stub', () => {
     expect(scopeContent).toContain("'next/image':");
     expect(scopeContent).toContain("React.createElement('img', props)");
+  });
+
+  // ── What the editor can type-check ─────────────────────────────────────
+
+  it('declares every module in the preview scope for the editor', () => {
+    // The scope says what the preview can require; the types bundle says
+    // what Monaco can resolve. They are generated by two scripts, and a
+    // module present in one but not the other shows up as a red squiggle on
+    // an import that renders fine (lucide-react, the theme packages and
+    // next/image all sat in that state). Model the editor's registration:
+    // ambient `declare module` blocks resolve by name; core files resolve
+    // by path, mounted by monacoSetup at `@astryxdesign/core/<rel>`, so a
+    // subpath resolves to `<rel>.d.ts` or `<rel>/index.d.ts`.
+    const playgroundTypes: Record<string, Record<string, string>> = JSON.parse(
+      fs.readFileSync(PLAYGROUND_TYPES_PATH, 'utf-8'),
+    );
+    const declared = new Set<string>(['@astryxdesign/core']);
+    for (const [pkg, files] of Object.entries(playgroundTypes)) {
+      for (const [fileName, content] of Object.entries(files)) {
+        if (pkg === '@astryxdesign/core') {
+          declared.add(`${pkg}/${fileName.replace(/(\/index)?\.d\.ts$/, '')}`);
+          continue;
+        }
+        for (const match of content.matchAll(/declare module '([^']+)'/g)) {
+          declared.add(match[1]);
+        }
+      }
+    }
+
+    // Only the `scope` object's own keys: other top-level consts (the StyleX
+    // mock, the theme table) also indent their members by two spaces.
+    const scopeBody = scopeContent.slice(
+      scopeContent.indexOf('export const scope'),
+    );
+    const scopeKeys = [
+      ...[...scopeBody.matchAll(/^ {2}'([^']+)':/gm)].map(m => m[1]),
+      ...[...scopeBody.matchAll(/^ {2}([A-Za-z][\w-]*):/gm)].map(m => m[1]),
+    ];
+    expect(scopeKeys.length).toBeGreaterThan(100);
+    const missing = scopeKeys.filter(key => !declared.has(key)).sort();
+    expect(missing).toEqual([]);
+
+    // The path model above is only true while monacoSetup mounts each core
+    // file at the package root; mounting index files alone left flat
+    // subpaths such as `BaseProps` unreachable.
+    expect(fs.readFileSync(MONACO_SETUP_PATH, 'utf-8')).toContain(
+      'file:///node_modules/@astryxdesign/core/${relPath}',
+    );
+  });
+
+  it('exposes lucide-react icons as named exports in the editor', () => {
+    const playgroundTypes = JSON.parse(
+      fs.readFileSync(PLAYGROUND_TYPES_PATH, 'utf-8'),
+    );
+    const lucide = playgroundTypes['lucide-react']['index.d.ts'];
+    expect(lucide).toContain("declare module 'lucide-react'");
+    // An index-signature stub gives TypeScript no named members, so every
+    // `import {Smartphone} from 'lucide-react'` was TS2305. Pin one icon,
+    // its `*Icon` alias, and that no such stub is left in monacoSetup.
+    expect(lucide).toContain('export const Smartphone: LucideIcon;');
+    expect(lucide).toContain('export const SmartphoneIcon: LucideIcon;');
+    expect(fs.readFileSync(MONACO_SETUP_PATH, 'utf-8')).not.toContain(
+      'Record<string, React.ComponentType',
+    );
+  });
+
+  // ── Integration packages (canary whole-package bridge) ─────────────────
+
+  it('maps every configured integration package under its own namespace', () => {
+    // Whole-package admission is the contract: a NEW component exported by a
+    // configured integration is playground-importable with no scope edits.
+    // Each package gets a DISTINCT namespace import, so qualified imports
+    // (`import {Chart} from '@astryxdesign/charts'`) keep package identity
+    // even where packages share export names (@astryxdesign/lab and
+    // @astryxdesign/charts currently share 14, e.g. Chart/ChartAxis/useChart).
+    docsiteConfig.integrations.forEach((pkg: string, index: number) => {
+      expect(scopeContent).toContain(
+        `import * as Integration${index} from '${pkg}';`,
+      );
+      expect(scopeContent).toContain(`'${pkg}': Integration${index},`);
+    });
+  });
+
+  it('orders integration scope entries after recharts, in config order, before Core', () => {
+    // The preview runner builds UNQUALIFIED globals by iterating the scope
+    // map in insertion order with later-wins (runner.ts buildGlobalScope),
+    // so this order IS the collision policy: among integrations the
+    // later-configured package owns a shared unqualified name (charts
+    // shadows lab for their 14 shared exports), and Core's entries shadow
+    // every integration. Qualified imports are unaffected.
+    const mapStart = scopeContent.indexOf('export const scope');
+    expect(mapStart).toBeGreaterThan(-1);
+    const scopeMap = scopeContent.slice(mapStart);
+
+    const integrationPositions = docsiteConfig.integrations.map(
+      (pkg: string, index: number) =>
+        scopeMap.indexOf(`'${pkg}': Integration${index},`),
+    );
+    for (const position of integrationPositions) {
+      expect(position).toBeGreaterThan(-1);
+    }
+    expect([...integrationPositions].sort((a, b) => a - b)).toEqual(
+      integrationPositions,
+    );
+
+    const rechartsPosition = scopeMap.indexOf('recharts: Recharts,');
+    expect(rechartsPosition).toBeGreaterThan(-1);
+    expect(Math.min(...integrationPositions)).toBeGreaterThan(rechartsPosition);
+
+    const firstCorePosition = scopeMap.indexOf("'@astryxdesign/core");
+    expect(firstCorePosition).toBeGreaterThan(-1);
+    expect(firstCorePosition).toBeGreaterThan(
+      Math.max(...integrationPositions),
+    );
+  });
+
+  // ── What the templates actually import ─────────────────────────────────
+
+  it('resolves every bare import in registered integration example blocks', () => {
+    const scopedModules = getScopeKeys(scopeContent);
+    const missing = new Set<string>();
+    for (const block of blocks.filter(entry => entry.sourcePackage)) {
+      for (const match of block.source.matchAll(IMPORT_RE)) {
+        const id = match[1];
+        if (
+          !id.startsWith('.') &&
+          !ASSET_RE.test(id) &&
+          !scopedModules.has(id.toLowerCase())
+        ) {
+          missing.add(id);
+        }
+      }
+    }
+    expect([...missing].sort()).toEqual([]);
+  });
+
+  it('resolves every bare import in the page templates', () => {
+    // The assertions above are an allowlist, and an allowlist only covers what
+    // someone remembered to add. Recharts was missing from the scope for as
+    // long as the dashboard templates existed, and nothing here noticed,
+    // because nothing asked the templates what they need. The runner's
+    // fallback makes that silent: an unresolved module yields a proxy whose
+    // every export is `() => null`, so the charts vanished while the legends
+    // around them kept painting. Ask the templates instead.
+    const specifiers = new Set<string>();
+    for (const dir of fs.readdirSync(TEMPLATE_PAGES_DIR)) {
+      const page = path.join(TEMPLATE_PAGES_DIR, dir, 'page.tsx');
+      if (!fs.existsSync(page)) {
+        continue;
+      }
+      const source = fs.readFileSync(page, 'utf-8');
+      for (const match of source.matchAll(IMPORT_RE)) {
+        const id = match[1];
+        // Relative paths resolve within the template, and assets are stubbed
+        // by the runner on purpose.
+        if (id.startsWith('.') || ASSET_RE.test(id)) {
+          continue;
+        }
+        specifiers.add(id);
+      }
+    }
+
+    expect(specifiers.size).toBeGreaterThan(5);
+    // The runner lowercases both sides when resolving, so '@astryxdesign/
+    // core/Theme' finds the 'theme' entry. Match that here or the test
+    // reports gaps the playground does not actually have.
+    const keys = getScopeKeys(scopeContent);
+    const missing = [...specifiers]
+      .filter(id => !keys.has(id.toLowerCase()))
+      .sort();
+    expect(missing).toEqual([]);
   });
 });

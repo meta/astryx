@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file Button.a11y.chromium.spec.ts
@@ -21,7 +22,13 @@
  *   ./Button.a11y.known-failures.ts, both shared with the jsdom lane.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type CDPSession,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   BUTTON_PATTERN,
   blockingResults,
@@ -93,6 +100,14 @@ async function activationsOn(page: Page): Promise<number> {
   return Number(raw ?? '0');
 }
 
+function pointerTargetFor(
+  page: Page,
+  state: ButtonBindingRow,
+): Locator | undefined {
+  const selector = (state as ButtonBindingState).pointerTargetSelector;
+  return selector == null ? undefined : page.locator(selector).first();
+}
+
 async function runState(
   page: Page,
   cdp: CDPSession,
@@ -111,6 +126,7 @@ async function runState(
       return createChromiumHarness({
         page,
         subject: page.locator('#storybook-root').getByRole('button').first(),
+        pointerTarget: pointerTargetFor(page, state),
         cdp,
       });
     },
@@ -306,6 +322,7 @@ test('every expectation is exercised by at least one bound state', async ({
               .locator('#storybook-root')
               .getByRole('button')
               .first(),
+            pointerTarget: pointerTargetFor(page, state),
             cdp,
           });
         },

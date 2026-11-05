@@ -9,7 +9,8 @@
  * @position Thin wrapper over Button; adds controlled toggle pattern
  *
  * ToggleButton wraps Button with `isPressed` and adds:
- * - `onPressedChange` controlled toggle callback
+ * - `onPressedChange` from internal `onClick`, after any caller `onClick`;
+ *   `pressedChangeAction` via Button
  * - `pressedIcon` for outline-to-filled icon swap
  * - Font weight shift on press with width reservation to prevent layout shift
  * - Group integration via ToggleButtonGroupContext
@@ -28,7 +29,8 @@ import {Button, type ButtonSize} from '../Button';
 import type {Elevation} from '../utils/types';
 import {useToggleButtonGroup} from './ToggleButtonGroup';
 import type {BaseProps} from '../BaseProps';
-import {themeProps} from '../utils/themeProps';
+import {themeDataAttributes, themeProps} from '../utils/themeProps';
+import {mergeProps} from '../utils/mergeProps';
 
 // =============================================================================
 // Styles
@@ -116,10 +118,12 @@ export interface ToggleButtonProps extends BaseProps<HTMLButtonElement> {
   ) => void;
 
   /**
-   * Action handler for API- or navigation-backed toggles, run inside a
-   * transition by Button. The button shows a loading spinner while the action
-   * is pending — whether it returns a promise or synchronously triggers a
-   * suspending update (e.g. a router navigation that suspends on data).
+   * Action handler for API- or navigation-backed toggles, run through Button's
+   * clickAction transition after onPressedChange unless that callback prevents
+   * default. It also runs without a callback. Omit it for callback-only toggles
+   * that need no Action transition. The button shows a loading spinner while
+   * the action is pending, including synchronous actions that suspend.
+   * Ignored when a value identifies this button as a ToggleButtonGroup member.
    *
    * @example
    * ```
@@ -154,7 +158,8 @@ export interface ToggleButtonProps extends BaseProps<HTMLButtonElement> {
 
   /**
    * Whether the button is disabled.
-   * When used inside ToggleButtonGroup, the group's isDisabled overrides this.
+   * When used inside ToggleButtonGroup, a disabled group disables this button
+   * too, but an enabled group does not re-enable a button that disables itself.
    * @default false
    */
   isDisabled?: boolean;
@@ -252,8 +257,9 @@ export function ToggleButton({
   tooltip,
   value,
   xstyle,
-  className: _className,
+  className,
   style,
+  onClick: onClickProp,
   ...props
 }: ToggleButtonProps): ReactNode {
   const group = useToggleButtonGroup();
@@ -263,57 +269,57 @@ export function ToggleButton({
       ? group.selectedValues.has(value)
       : (isPressedProp ?? false);
   const size = sizeProp ?? group?.size ?? 'md';
-  const isDisabled = group?.isDisabled ?? isDisabledProp;
+  // Either source disabling this button is enough. `??` could not express that:
+  // the group always supplies a boolean (its own prop defaults to false), so the
+  // fallback never ran and an enabled group handed a member that had disabled
+  // itself its availability back. A group still disables everything it contains
+  // — that is the half `??` got right — but it cannot re-enable a member
+  // (family:buttons FR3).
+  const isDisabled = (group?.isDisabled ?? false) || isDisabledProp;
 
-  // Track the pressed state optimistically so the button reflects the intended
-  // state immediately while an async action is pending. The optimistic update
-  // is applied inside Button's clickAction transition (below), satisfying
-  // React's "useOptimistic must run in a transition" rule.
   const [optimisticPressed, setOptimisticPressed] =
     useOptimistic(committedPressed);
   const isPressed = optimisticPressed;
-
-  // Next state derives from the *optimistic* value, not the committed one, so a
-  // re-click while an action is pending reads the in-flight intent and toggles
-  // (true -> false -> true) rather than recomputing from the stale committed
-  // state. handleClick and clickAction share this so the callback and the
-  // optimistic update always agree within a single click.
+  // Both paths use the same in-flight intent, so re-clicks reverse a pending
+  // toggle rather than deriving from the stale controlled value.
   const nextPressed = !isPressed;
-
   const resolvedIcon = isPressed && pressedIcon ? pressedIcon : icon;
 
-  // Synchronous part of the toggle. Button calls onClick before clickAction and
-  // skips clickAction when the event is defaultPrevented, so calling
-  // preventDefault() inside onPressedChange opts out of pressedChangeAction.
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     if (isDisabled) {
       return;
     }
+    // A caller onClick (a trigger wrapper often supplies one) runs first and
+    // never replaces the toggle's own request (family:buttons FR5, FR11).
+    const wasPrevented = event.defaultPrevented;
+    onClickProp?.(event);
     if (group && value != null) {
-      // Group mode delegates selection to the group; no async-action path.
       group.toggle(value);
       event.preventDefault();
       return;
     }
+    // A standalone toggle is cancelled only by the caller's own
+    // preventDefault(); Button then skips pressedChangeAction too.
+    if (!wasPrevented && event.defaultPrevented) {
+      return;
+    }
+
     onPressedChangeProp?.(nextPressed, event);
   };
 
-  // Async part of the toggle, run inside Button's transition (so the optimistic
-  // update is valid and Button's isPending drives the pending spinner). Skipped
-  // automatically by Button when handleClick called preventDefault, and never
-  // wired in group mode (where there is no async action). Button is rendered
-  // interruptible, so it stays clickable while pending and a re-click starts a
-  // fresh transition that interrupts the previous one.
+  // Button runs onClick first and skips clickAction when the callback prevents
+  // default. Its transition owns both the optimistic update and pending UI.
   const clickAction =
-    group && value != null
-      ? undefined
-      : async () => {
+    pressedChangeAction && !(group && value != null)
+      ? async () => {
           setOptimisticPressed(nextPressed);
-          await pressedChangeAction?.(nextPressed);
-        };
+          await pressedChangeAction(nextPressed);
+        }
+      : undefined;
 
   // isIconOnly prop is the source of truth for icon-only rendering.
   const labelContent =
+    // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- switching to isRenderable would show `label` for children of '', false or true, a visible change that needs a decision
     children != null ? (
       <span {...stylex.props(labelStyles.wrapper)}>
         <span {...stylex.props(isPressed && labelStyles.pressed)}>
@@ -347,18 +353,27 @@ export function ToggleButton({
       isLoading={isLoading}
       isInterruptible
       isIconOnly={isIconOnly}
-      aria-pressed={isPressed}
       icon={resolvedIcon}
       tooltip={tooltip}
-      {...themeProps('toggle-button', {
-        isPressed: isPressed ? 'true' : 'false',
-        elevation,
-      })}
+      {...mergeProps(
+        themeProps('toggle-button', {
+          isPressed: isPressed ? 'true' : 'false',
+          elevation,
+        }),
+        className,
+      )}
       xstyle={[isPressed ? pressedStyles.background : undefined, xstyle]}
       style={style}
       onClick={handleClick}
       clickAction={clickAction}
-      {...props}>
+      {...props}
+      // The pressed state this component owns wins over a caller's
+      // same-named attributes (public-component-api INV5).
+      aria-pressed={isPressed}
+      {...themeDataAttributes({
+        isPressed: isPressed ? 'true' : 'false',
+        elevation,
+      })}>
       {labelContent}
     </Button>
   );

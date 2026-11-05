@@ -10,7 +10,10 @@ import {assertPublicArtifactSafe} from '../src/public-artifact.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../..');
-const TSX = path.join(REPO_ROOT, 'node_modules', '.bin', 'tsx');
+const PACKAGE_ROOT = path.resolve(HERE, '..');
+// tsx is this package's own devDependency, so its bin is here. The repo root
+// only ever had one because shamefullyHoist published every bin there.
+const TSX = path.join(PACKAGE_ROOT, 'node_modules', '.bin', 'tsx');
 const SETUP_AGGREGATE = path.join(HERE, 'setup-aggregate.ts');
 const UNIVERSAL_AGGREGATE = path.join(
   REPO_ROOT,

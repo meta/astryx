@@ -45,7 +45,7 @@ function formatIssue(issue) {
 
 /**
  * Validate an expression and return both canonical surfaces — the browser
- * twin of `layout check`. Never throws on invalid input; returns the errors.
+ * browser twin of the XLE validator. Never throws on invalid input; returns the errors.
  *
  * @param {string} expression
  * @param {import('./xle-ast').Registry | import('./browser').SerializedRegistry | object} registry - serialized or hydrated
@@ -85,7 +85,7 @@ export function checkExpression(expression, registry, opts = {}) {
 }
 
 /**
- * Validate + expand to TSX — the browser twin of `layout expand`.
+ * Validate + expand to TSX — the browser twin of the XLE expander.
  * Returns either {code, ...} or {errors} (never writes files).
  *
  * @param {string} expression

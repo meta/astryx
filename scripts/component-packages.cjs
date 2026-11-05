@@ -5,7 +5,8 @@
 
 /**
  * @file Shared registry of component-bearing Astryx packages and their layouts.
- * @input Repository package names, source roots, public barrels, and component docs.
+ * @input Repository package names, source roots, public barrels, component docs,
+ *   and Storybook routing namespaces.
  * @output Package metadata and public component discovery helpers.
  * @position Single registry used by audit rosters and component knowledge paths.
  */
@@ -23,11 +24,41 @@ const path = require('node:path');
  * the package barrel.
  */
 const COMPONENT_PACKAGES = Object.freeze([
-  {name: 'core', src: 'packages/core/src', layout: 'nested'},
-  {name: 'lab', src: 'packages/lab/src', layout: 'nested'},
-  {name: 'charts', src: 'packages/charts/src', layout: 'flat'},
-  {name: 'richtext', src: 'packages/richtext/src', layout: 'flat'},
-  {name: 'vega', src: 'packages/vega/src', layout: 'flat'},
+  {
+    name: 'core',
+    src: 'packages/core/src',
+    layout: 'nested',
+    storyPrefixes: ['core-'],
+    storyNamespaces: ['Core'],
+  },
+  {
+    name: 'lab',
+    src: 'packages/lab/src',
+    layout: 'nested',
+    storyPrefixes: ['lab-'],
+    storyNamespaces: ['Lab'],
+  },
+  {
+    name: 'charts',
+    src: 'packages/charts/src',
+    layout: 'flat',
+    storyPrefixes: ['charts-'],
+    storyNamespaces: ['Charts'],
+  },
+  {
+    name: 'richtext',
+    src: 'packages/richtext/src',
+    layout: 'flat',
+    storyPrefixes: ['richtext-'],
+    storyNamespaces: ['RichText'],
+  },
+  {
+    name: 'vega',
+    src: 'packages/vega/src',
+    layout: 'flat',
+    storyPrefixes: ['vega-'],
+    storyNamespaces: ['Vega'],
+  },
 ]);
 
 const COMPONENT_PACKAGE_NAMES = Object.freeze(
@@ -152,6 +183,27 @@ function flatPackageComponentNames(repoRoot, packageConfig) {
   return exportedComponentNames(path.join(repoRoot, packageConfig.src));
 }
 
+/** Names one component directory's current consumer docs declare. */
+function documentedComponentNames(componentDir) {
+  const names = new Set();
+  let files;
+  try {
+    files = fs.readdirSync(componentDir, {withFileTypes: true});
+  } catch {
+    return [];
+  }
+  for (const file of files) {
+    if (!file.isFile() || !file.name.endsWith('.doc.mjs')) continue;
+    const content = fs.readFileSync(path.join(componentDir, file.name), 'utf8');
+    for (const match of content.matchAll(
+      /\bname:\s*['"]([A-Z][A-Za-z0-9]*)['"]/g,
+    )) {
+      names.add(match[1]);
+    }
+  }
+  return [...names];
+}
+
 /** Names current consumer docs identify as independent public components. */
 function documentedNestedComponentNames(sourceDir) {
   let entries;
@@ -164,18 +216,10 @@ function documentedNestedComponentNames(sourceDir) {
   const names = new Set();
   for (const entry of entries) {
     if (!entry.isDirectory() || !COMPONENT_NAME.test(entry.name)) continue;
-    const componentDir = path.join(sourceDir, entry.name);
-    for (const file of fs.readdirSync(componentDir, {withFileTypes: true})) {
-      if (!file.isFile() || !file.name.endsWith('.doc.mjs')) continue;
-      const content = fs.readFileSync(
-        path.join(componentDir, file.name),
-        'utf8',
-      );
-      for (const match of content.matchAll(
-        /\bname:\s*['"]([A-Z][A-Za-z0-9]*)['"]/g,
-      )) {
-        names.add(match[1]);
-      }
+    for (const name of documentedComponentNames(
+      path.join(sourceDir, entry.name),
+    )) {
+      names.add(name);
     }
   }
   return [...names];
@@ -195,6 +239,37 @@ function nestedPackageComponentNames(repoRoot, packageConfig) {
     .sort();
 }
 
+/**
+ * Documented, exported components that live outside PascalCase directories in
+ * a nested package (Core's `theme/` holds Theme, MediaTheme and SyntaxTheme;
+ * `i18n/` holds InternationalizationProvider), which
+ * `nestedPackageComponentNames` does not reach. Flat packages have none.
+ */
+function documentedComponentsOutsideComponentDirectories(
+  repoRoot,
+  packageConfig,
+) {
+  if (packageConfig.layout === 'flat') return [];
+  const sourceDir = path.join(repoRoot, packageConfig.src);
+  let entries;
+  try {
+    entries = fs.readdirSync(sourceDir, {withFileTypes: true});
+  } catch {
+    return [];
+  }
+  const exported = new Set(exportedComponentNames(sourceDir));
+  const names = new Set();
+  for (const entry of entries) {
+    if (!entry.isDirectory() || COMPONENT_NAME.test(entry.name)) continue;
+    for (const name of documentedComponentNames(
+      path.join(sourceDir, entry.name),
+    )) {
+      if (exported.has(name)) names.add(name);
+    }
+  }
+  return [...names].sort();
+}
+
 function packageHasPublicComponent(repoRoot, packageName, componentName) {
   const packageConfig = componentPackage(packageName);
   if (!packageConfig) return false;
@@ -210,6 +285,8 @@ module.exports = {
   COMPONENT_PACKAGE_NAMES,
   componentExportsFromBarrel,
   componentPackage,
+  documentedComponentNames,
+  documentedComponentsOutsideComponentDirectories,
   documentedNestedComponentNames,
   exportedComponentNames,
   flatPackageComponentNames,

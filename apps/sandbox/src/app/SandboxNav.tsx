@@ -11,8 +11,8 @@
 
 import {useEffect, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {usePathname} from 'next/navigation';
-import Link from 'next/link';
+import {usePathname} from '../router';
+import Link from '../router';
 import {
   SideNav,
   SideNavHeading,

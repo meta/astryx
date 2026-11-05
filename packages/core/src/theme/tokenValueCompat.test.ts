@@ -22,7 +22,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {defineTheme} from './defineTheme';
+import {defineTheme, generateThemeCSS} from './defineTheme';
 import {resolveTokenValue} from './resolveThemeValues';
 
 /** Exactly what the pre-extraction implementation did with each shape. */
@@ -43,6 +43,9 @@ describe('root token values keep their historical acceptance', () => {
     });
 
     expect(theme.tokens['--color-background-body']).toBe(expected);
+    expect(generateThemeCSS(theme).component).toContain(
+      `--color-background-body: ${String(expected)};`,
+    );
   });
 
   it('still resolves the documented shapes', () => {

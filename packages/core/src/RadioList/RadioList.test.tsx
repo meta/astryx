@@ -3,8 +3,11 @@
 /**
  * @file RadioList.test.tsx
  * @input Uses vitest, @testing-library/react, RadioList, RadioListItem
- * @output Unit tests for RadioList and RadioListItem behavior
- * @position Testing; validates RadioList.tsx and RadioListItem.tsx implementation
+ * @output Component-specific callback, form, composition, layout, and styling
+ *   tests. Shared radio-group role, name, state, focus, and interaction outcomes
+ *   live in __tests__/RadioGroup.a11y.test.tsx and its Chromium twin.
+ * @position Component-owned regression tests that do not duplicate the reusable
+ *   radio-group contract.
  *
  * SYNC: When RadioList.tsx or RadioListItem.tsx changes, update tests to match new behavior
  */
@@ -12,9 +15,16 @@
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {
+  hasReleaseFade,
+  readsPressStrength,
+  rulesDeclaredFor,
+  rulesWithSelector,
+} from '../__tests__/pressState';
 import {RadioList} from './RadioList';
 import {RadioListItem} from './RadioListItem';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
 // Mock showPopover/hidePopover (not implemented in jsdom) so the tooltip layer
 // reflects its open state via a `popover-open` attribute the tests can assert.
@@ -64,29 +74,6 @@ describe('RadioList', () => {
     expect(screen.getAllByRole('radio')).toHaveLength(3);
   });
 
-  it('renders radiogroup role', () => {
-    render(
-      <RadioList label="Preference" value="" onChange={() => {}}>
-        <RadioListItem label="Option A" value="a" />
-      </RadioList>,
-    );
-    expect(screen.getByRole('radiogroup')).toBeInTheDocument();
-  });
-
-  it('selects the correct radio based on value prop', () => {
-    render(
-      <RadioList label="Preference" value="b" onChange={() => {}}>
-        <RadioListItem label="Option A" value="a" />
-        <RadioListItem label="Option B" value="b" />
-        <RadioListItem label="Option C" value="c" />
-      </RadioList>,
-    );
-    const radios = screen.getAllByRole('radio');
-    expect(radios[0]).not.toBeChecked();
-    expect(radios[1]).toBeChecked();
-    expect(radios[2]).not.toBeChecked();
-  });
-
   it('calls onChange with value string when clicking a radio', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
@@ -132,18 +119,6 @@ describe('RadioList', () => {
     expect(handleChange).toHaveBeenCalledWith('b');
   });
 
-  it('disables all radios when group isDisabled is true', () => {
-    render(
-      <RadioList label="Preference" value="" onChange={() => {}} isDisabled>
-        <RadioListItem label="Option A" value="a" />
-        <RadioListItem label="Option B" value="b" />
-      </RadioList>,
-    );
-    const radios = screen.getAllByRole('radio');
-    expect(radios[0]).toBeDisabled();
-    expect(radios[1]).toBeDisabled();
-  });
-
   it('does not call onChange when group is disabled', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
@@ -161,18 +136,6 @@ describe('RadioList', () => {
       /pointer-events/i,
     );
     expect(handleChange).not.toHaveBeenCalled();
-  });
-
-  it('disables individual item when item isDisabled is true', () => {
-    render(
-      <RadioList label="Preference" value="" onChange={() => {}}>
-        <RadioListItem label="Option A" value="a" />
-        <RadioListItem label="Option B" value="b" isDisabled />
-      </RadioList>,
-    );
-    const radios = screen.getAllByRole('radio');
-    expect(radios[0]).not.toBeDisabled();
-    expect(radios[1]).toBeDisabled();
   });
 
   it('does not call onChange when individual item is disabled', async () => {
@@ -201,6 +164,34 @@ describe('RadioList', () => {
       </RadioList>,
     );
     expect(screen.getByText(/Required/)).toBeInTheDocument();
+  });
+
+  it('keeps required radios valid until the group shows an error', () => {
+    const {rerender} = render(
+      <RadioList label="Preference" value="" onChange={() => {}} isRequired>
+        <RadioListItem label="Option A" value="a" />
+        <RadioListItem label="Option B" value="b" />
+      </RadioList>,
+    );
+    // Native required alone makes Chromium report every radio invalid.
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio).toBeRequired();
+      expect(radio).toHaveAttribute('aria-invalid', 'false');
+    }
+    rerender(
+      <RadioList
+        label="Preference"
+        value=""
+        onChange={() => {}}
+        isRequired
+        status={{type: 'error', message: 'Pick one'}}>
+        <RadioListItem label="Option A" value="a" />
+        <RadioListItem label="Option B" value="b" />
+      </RadioList>,
+    );
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio).toHaveAttribute('aria-invalid', 'true');
+    }
   });
 
   it('shows Optional indicator when isOptional is true', () => {
@@ -249,22 +240,6 @@ describe('RadioList', () => {
       </RadioList>,
     );
     expect(screen.getByText('Great choice!')).toBeInTheDocument();
-  });
-
-  it('sets aria-invalid on radiogroup when status is error', () => {
-    render(
-      <RadioList
-        label="Preference"
-        value=""
-        onChange={() => {}}
-        status={{type: 'error', message: 'Required'}}>
-        <RadioListItem label="Option A" value="a" />
-      </RadioList>,
-    );
-    expect(screen.getByRole('radiogroup')).toHaveAttribute(
-      'aria-invalid',
-      'true',
-    );
   });
 
   it('renders startContent', () => {
@@ -398,59 +373,7 @@ describe('RadioList', () => {
     expect(screen.getAllByRole('radio')).toHaveLength(2);
   });
 
-  it('sets aria-required on radiogroup when isRequired is true', () => {
-    render(
-      <RadioList label="Preference" value="" onChange={() => {}} isRequired>
-        <RadioListItem label="Option A" value="a" />
-      </RadioList>,
-    );
-    expect(screen.getByRole('radiogroup')).toHaveAttribute(
-      'aria-required',
-      'true',
-    );
-  });
-
   describe('focus management (no-selection tab stop)', () => {
-    it('keeps focus on the selected radio when a value is selected', () => {
-      render(
-        <RadioList label="Preference" value="b" onChange={() => {}}>
-          <RadioListItem label="Option A" value="a" />
-          <RadioListItem label="Option B" value="b" />
-          <RadioListItem label="Option C" value="c" />
-        </RadioList>,
-      );
-      const selected = screen.getByLabelText('Option B');
-      // A selected value provides a deterministic native tab stop; focusing it
-      // must not be redirected elsewhere.
-      selected.focus();
-      expect(selected).toHaveFocus();
-    });
-
-    it('redirects to the first radio when focus enters an unselected group forward', () => {
-      render(
-        <>
-          <button type="button">before</button>
-          <RadioList label="Preference" value="" onChange={() => {}}>
-            <RadioListItem label="Option A" value="a" />
-            <RadioListItem label="Option B" value="b" />
-            <RadioListItem label="Option C" value="c" />
-          </RadioList>
-        </>,
-      );
-      const radios = screen.getAllByRole('radio');
-      const outside = screen.getByText('before');
-      outside.focus();
-      // Forward entry: the browser lands on a leading radio; the group keeps the
-      // first radio as the deterministic tab stop.
-      radios[0].focus();
-      expect(radios[0]).toHaveFocus();
-
-      // Landing on a middle radio from outside is normalized to the first.
-      outside.focus();
-      radios[1].focus();
-      expect(radios[0]).toHaveFocus();
-    });
-
     it('redirects to the last radio when focus enters an unselected group backward', () => {
       render(
         <>
@@ -548,6 +471,96 @@ describe('RadioList', () => {
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
     });
 
+    it('describes each radio with the reason, as well as the radiogroup', () => {
+      renderGroup();
+      const tooltip = screen.getByRole('tooltip', h);
+      for (const name of ['Free', 'Pro']) {
+        const radio = screen.getByRole('radio', {name});
+        expect(radio.getAttribute('aria-describedby')?.split(' ')).toContain(
+          tooltip.id,
+        );
+        expect(radio).toHaveAccessibleDescription(
+          'Upgrade your account to change plans',
+        );
+      }
+      expect(
+        screen
+          .getByRole('radiogroup')
+          .getAttribute('aria-describedby')
+          ?.split(' '),
+      ).toContain(tooltip.id);
+    });
+
+    it("keeps a radio's own description ahead of the reason", () => {
+      render(
+        <RadioList
+          label="Plan"
+          value="free"
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Upgrade your account to change plans">
+          <RadioListItem
+            label="Free"
+            value="free"
+            description="Up to 3 projects"
+          />
+        </RadioList>,
+      );
+      const tooltip = screen.getByRole('tooltip', h);
+      const radio = screen.getByRole('radio', {name: 'Free'});
+      const ids = radio.getAttribute('aria-describedby')!.split(' ');
+      expect(ids).toHaveLength(2);
+      expect(ids[1]).toBe(tooltip.id);
+      expect(radio).toHaveAccessibleDescription(
+        'Up to 3 projects Upgrade your account to change plans',
+      );
+    });
+
+    // spec:AST-085 FR5: a keyboard user hears the reason on the radio that
+    // takes focus.
+    it('describes the focused radio with the reason when Tab enters the group', async () => {
+      const user = userEvent.setup();
+      renderGroup();
+      await user.tab();
+      const free = screen.getByRole('radio', {name: 'Free'});
+      expect(free).toHaveFocus();
+      expect(free).toHaveAccessibleDescription(
+        'Upgrade your account to change plans',
+      );
+    });
+
+    it('opens the reason on a tap and selects nothing', async () => {
+      __resetInteractionModalityForTest();
+      const onChange = vi.fn();
+      renderGroup({onChange});
+      const tooltip = screen.getByRole('tooltip', h);
+      const pro = screen.getByRole('radio', {name: 'Pro'});
+      // A tap, in the order a browser dispatches it.
+      fireEvent.pointerEnter(pro, {pointerType: 'touch'});
+      fireEvent.pointerDown(pro, {pointerType: 'touch'});
+      fireEvent.pointerUp(pro, {pointerType: 'touch'});
+      fireEvent.mouseEnter(pro);
+      fireEvent.click(pro);
+      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      expect(onChange).not.toHaveBeenCalled();
+      expect(pro).not.toBeChecked();
+    });
+
+    it('adds no reason to the radios of a group that is not disabled', () => {
+      render(
+        <RadioList
+          label="Plan"
+          value="free"
+          onChange={() => {}}
+          disabledMessage="Upgrade your account to change plans">
+          <RadioListItem label="Free" value="free" />
+        </RadioList>,
+      );
+      expect(screen.getByRole('radio', {name: 'Free'})).not.toHaveAttribute(
+        'aria-describedby',
+      );
+    });
+
     it('does not render a tooltip when not disabled', () => {
       render(
         <RadioList
@@ -570,21 +583,6 @@ describe('RadioList', () => {
       expect(screen.queryByRole('tooltip', h)).not.toBeInTheDocument();
     });
 
-    it('keeps radios focusable via aria-disabled when a reason is provided', () => {
-      renderGroup();
-      for (const radio of screen.getAllByRole('radio', h)) {
-        expect(radio).not.toBeDisabled();
-        expect(radio).toHaveAttribute('aria-disabled', 'true');
-      }
-    });
-
-    it('links the reason tooltip from the group via aria-describedby', () => {
-      renderGroup();
-      const group = screen.getByRole('radiogroup');
-      const tooltip = screen.getByRole('tooltip', h);
-      expect(group.getAttribute('aria-describedby')).toContain(tooltip.id);
-    });
-
     it('blocks selection while focusable-disabled', () => {
       const onChange = vi.fn();
       renderGroup({onChange});
@@ -593,16 +591,60 @@ describe('RadioList', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('keeps radios natively disabled when disabled without a reason', () => {
+    it('does not run a caller onClick while focusable-disabled', () => {
+      const onClick = vi.fn();
       render(
-        <RadioList label="Plan" value="free" onChange={() => {}} isDisabled>
-          <RadioListItem label="Free" value="free" />
-          <RadioListItem label="Pro" value="pro" />
+        <RadioList
+          label="Plan"
+          value="free"
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Upgrade your account to change plans">
+          <RadioListItem label="Free" value="free" onClick={onClick} />
+          <RadioListItem label="Pro" value="pro" onClick={onClick} />
         </RadioList>,
       );
-      for (const radio of screen.getAllByRole('radio', h)) {
-        expect(radio).toBeDisabled();
-      }
+      fireEvent.click(screen.getByRole('radio', {name: 'Pro', hidden: true}));
+      fireEvent.click(screen.getByRole('radio', {name: 'Free', hidden: true}));
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('does not run a caller onClick from the keyboard while focusable-disabled', async () => {
+      const user = userEvent.setup();
+      const onClick = vi.fn();
+      render(
+        <RadioList
+          label="Plan"
+          value="free"
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Upgrade your account to change plans">
+          <RadioListItem label="Free" value="free" onClick={onClick} />
+          <RadioListItem label="Pro" value="pro" onClick={onClick} />
+        </RadioList>,
+      );
+      await user.tab();
+      expect(
+        screen.getByRole('radio', {name: 'Free', hidden: true}),
+      ).toHaveFocus();
+      // Space activates the focused radio.
+      await user.keyboard(' ');
+      expect(onClick).not.toHaveBeenCalled();
+      // An arrow key moves onto the next radio, and the browser clicks it.
+      await user.keyboard('{ArrowDown}');
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('still runs a caller onClick on an enabled radio', () => {
+      const onClick = vi.fn();
+      render(
+        <RadioList label="Plan" value="free" onChange={() => {}}>
+          <RadioListItem label="Free" value="free" />
+          <RadioListItem label="Pro" value="pro" onClick={onClick} />
+        </RadioList>,
+      );
+      fireEvent.click(screen.getByRole('radio', {name: 'Pro'}));
+      expect(onClick).toHaveBeenCalledTimes(1);
     });
   });
   describe('form participation', () => {
@@ -658,6 +700,28 @@ describe('RadioList', () => {
   });
 
   describe('RadioListItem rest forwarding', () => {
+    it('forwards align to its Item row unchanged', () => {
+      render(
+        <RadioList label="Preference" value="" onChange={() => {}}>
+          <RadioListItem label="Option A" value="a" data-testid="item-a" />
+          <RadioListItem
+            label="Option B"
+            value="b"
+            align="first-line"
+            data-testid="item-b"
+          />
+        </RadioList>,
+      );
+      expect(screen.getByTestId('item-a')).toHaveAttribute(
+        'data-align',
+        'center',
+      );
+      expect(screen.getByTestId('item-b')).toHaveAttribute(
+        'data-align',
+        'first-line',
+      );
+    });
+
     it('forwards data-testid, id, and aria-* to the item root element', () => {
       render(
         <RadioList label="Preference" value="" onChange={() => {}}>
@@ -993,5 +1057,127 @@ describe('forced colors (WCAG 1.4.11)', () => {
     // The painted inner dot would be stripped to Canvas (invisible), making
     // checked and unchecked radios identical; CanvasText keeps it perceivable.
     expect(getForcedColorsRules()).toContain('background-color: canvastext;');
+  });
+});
+
+/** Does the element's own CSS paint the row's mouse press (`--_radio-row-press`)? */
+function readsRowPress(el: Element): boolean {
+  return rulesDeclaredFor(el).some(rule =>
+    rule.includes('var(--_radio-row-press'),
+  );
+}
+
+/**
+ * Does the row declare the mouse press's paint while pressed, but not while a
+ * nested link or button is the pressed one?
+ */
+function declaresRowPress(el: Element): boolean {
+  return rulesWithSelector(el, ':active').some(
+    rule =>
+      rule.includes('--_radio-row-press:') &&
+      rule.includes('var(--color-overlay-pressed)') &&
+      /:not\(:has\(a:active, ?button:active/.test(rule),
+  );
+}
+
+describe('pressed state', () => {
+  it('paints the pressed overlay over the radio indicator while the row is pressed', () => {
+    const {container} = render(
+      <RadioList label="Plan" value="a" onChange={() => {}}>
+        <RadioListItem label="Option A" value="a" />
+        <RadioListItem label="Option B" value="b" />
+      </RadioList>,
+    );
+    const circle = container.querySelector('.astryx-radio-indicator');
+    const wrapper = circle?.parentElement?.parentElement;
+    const row = circle?.closest('[data-astryx-pressable]');
+    if (wrapper == null || row == null) {
+      throw new Error('the radio has no pressable row or indicator wrapper');
+    }
+    // The row declares the mouse press's paint while it is pressed, and the
+    // layer over the circle reads it.
+    expect(declaresRowPress(row)).toBe(true);
+    expect(readsRowPress(wrapper)).toBe(true);
+  });
+
+  it('does not expose a pressed arm on a disabled radio', () => {
+    const {container} = render(
+      <RadioList label="Plan" value="a" onChange={() => {}}>
+        <RadioListItem label="Unavailable" value="b" isDisabled />
+      </RadioList>,
+    );
+    const circle = container.querySelector('.astryx-radio-indicator');
+    const wrapper = circle?.parentElement?.parentElement;
+    const row = wrapper?.closest('.astryx-item');
+    if (wrapper == null || row == null) {
+      throw new Error('the radio has no row or indicator wrapper');
+    }
+    expect(declaresRowPress(row)).toBe(false);
+    expect(readsRowPress(wrapper)).toBe(false);
+  });
+
+  it('fades the touch press out from the row, with the overlay reading its strength', () => {
+    const {container} = render(
+      <RadioList label="Plan" value="a" onChange={() => {}}>
+        <RadioListItem label="Option A" value="a" />
+        <RadioListItem label="Option B" value="b" />
+      </RadioList>,
+    );
+    const circle = container.querySelector('.astryx-radio-indicator');
+    const wrapper = circle?.parentElement?.parentElement;
+    const row = circle?.closest('[data-astryx-pressable]');
+    if (wrapper == null || row == null) {
+      throw new Error('the radio has no pressable row or indicator wrapper');
+    }
+    // The controller writes the row; the row owns the strength and its
+    // release, and the owner-drawn layer over the circle paints the pressed
+    // token at that strength on both touch arms.
+    expect(hasReleaseFade(row)).toBe(true);
+    expect(readsPressStrength(wrapper, '[data-astryx-press="on"]')).toBe(true);
+    expect(readsPressStrength(wrapper)).toBe(true);
+    // The row itself paints nothing under a finger, as under a mouse: only
+    // the circle answers.
+    expect(readsPressStrength(row, '[data-astryx-press="on"]')).toBe(false);
+  });
+});
+
+describe('RadioList group disabled state', () => {
+  it('marks a disabled radiogroup aria-disabled', () => {
+    render(
+      <RadioList label="Size" isDisabled value="small" onChange={() => {}}>
+        <RadioListItem value="small" label="Small" />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radiogroup', {name: 'Size'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('leaves an enabled radiogroup without aria-disabled', () => {
+    render(
+      <RadioList label="Size" value="small" onChange={() => {}}>
+        <RadioListItem value="small" label="Small" />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radiogroup', {name: 'Size'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
+  });
+
+  it("keeps a caller's own aria-disabled on an enabled radiogroup (FR8)", () => {
+    render(
+      <RadioList
+        label="Size"
+        value="small"
+        onChange={() => {}}
+        aria-disabled="true">
+        <RadioListItem value="small" label="Small" />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radiogroup', {name: 'Size'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 });

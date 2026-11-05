@@ -4,8 +4,8 @@
  * @file ChartAxis.test.tsx
  * @input Uses vitest, @testing-library/react, Chart, ChartAxis, bar mark
  * @output Functional tests for axis rendering — group semantics, band/linear
- *         tick labels, default edge-line rules, custom formatting, truncation,
- *         and label capping
+ *         tick labels, physical edge placement, default edge-line rules,
+ *         custom formatting, grapheme-safe truncation and density, and label capping
  * @position Colocated test for ChartAxis.tsx (issue #4295 viz coverage)
  */
 
@@ -88,6 +88,52 @@ describe('ChartAxis bottom (band scale)', () => {
     expect(within(axis).queryByText('Feb')).not.toBeInTheDocument();
   });
 
+  it('automatically reduces categorical labels as the plot narrows', () => {
+    const denseData = Array.from({length: 20}, (_, index) => ({
+      month: `Period ${index + 1}`,
+      sales: index,
+    }));
+    renderChart(<ChartAxis position="bottom" />, denseData);
+    const axis = screen.getByRole('group', {name: 'bottom axis'});
+    const wideLabelCount = axis.querySelectorAll('text').length;
+
+    reportWidth(120);
+
+    const narrowLabelCount = axis.querySelectorAll('text').length;
+    expect(narrowLabelCount).toBeGreaterThan(0);
+    expect(narrowLabelCount).toBeLessThan(wideLabelCount);
+  });
+
+  it('keeps the same auto-thinned labels after ASCII and Unicode truncation', () => {
+    const asciiData = Array.from({length: 9}, (_, index) => ({
+      month: `${index + 1}AB`,
+      sales: index,
+    }));
+    const clusters = ['👨‍👩‍👧‍👦', '🇯🇵', '👩🏽‍🚀'];
+    const unicodeData = Array.from({length: 9}, (_, index) => ({
+      month: `${index + 1}${clusters[index % clusters.length]}X`,
+      sales: index,
+    }));
+
+    const retainedIndexes = (data: typeof asciiData) => {
+      const {unmount} = renderChart(
+        <ChartAxis position="bottom" truncate={2} />,
+        data,
+      );
+      reportWidth(300);
+      const indexes = Array.from(
+        screen
+          .getByRole('group', {name: 'bottom axis'})
+          .querySelectorAll('text'),
+        label => Number(label.textContent?.match(/^(\d+)/)?.[1]),
+      );
+      unmount();
+      return indexes;
+    };
+
+    expect(retainedIndexes(unicodeData)).toEqual(retainedIndexes(asciiData));
+  });
+
   it('truncates long category labels with an ellipsis', () => {
     renderChart(<ChartAxis position="bottom" truncate={4} />, [
       {month: 'January', sales: 4},
@@ -97,6 +143,15 @@ describe('ChartAxis bottom (band scale)', () => {
     expect(within(axis).getByText('Janu…')).toBeInTheDocument();
     // Short labels are left alone.
     expect(within(axis).getByText('Feb')).toBeInTheDocument();
+  });
+
+  it('preserves whole grapheme clusters when truncating labels', () => {
+    const family = '👨‍👩‍👧‍👦';
+    renderChart(<ChartAxis position="bottom" truncate={1} />, [
+      {month: `${family}Q`, sales: 4},
+    ]);
+    const axis = screen.getByRole('group', {name: 'bottom axis'});
+    expect(within(axis).getByText(`${family}…`)).toBeInTheDocument();
   });
 });
 
@@ -127,5 +182,28 @@ describe('ChartAxis left (linear scale)', () => {
     const lines = axis.querySelectorAll('line');
     // 6 ticks (0..10 by 2) + the forced edge line.
     expect(lines).toHaveLength(7);
+  });
+});
+
+describe('ChartAxis top and right positions', () => {
+  it('places both axes on their physical plot edges with outward labels', () => {
+    renderChart(
+      <>
+        <ChartAxis position="top" showTicks />
+        <ChartAxis position="right" showTicks />
+      </>,
+    );
+
+    const top = screen.getByRole('group', {name: 'top axis'});
+    expect(top).not.toHaveAttribute('transform');
+    expect(within(top).getByText('Jan')).toHaveAttribute('y', '-10');
+
+    const right = screen.getByRole('group', {name: 'right axis'});
+    expect(right).toHaveAttribute('transform', 'translate(528,0)');
+    expect(within(right).getByText('0')).toHaveAttribute('x', '10');
+    expect(within(right).getByText('0')).toHaveAttribute(
+      'text-anchor',
+      'start',
+    );
   });
 });

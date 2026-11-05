@@ -9,12 +9,12 @@ export const doc = {
   type: 'command',
   name: 'doctor integration',
   displayName: 'astryx doctor integration',
-  namespace: 'cli',
+  namespace: 'cli/commands',
   summary: 'Check an integration package while authoring it',
   description:
     'The integration-authoring diagnostics group. Validate a manifest and all ' +
     'contributions with `validate`, or check templates, components, and docs ' +
-    'against built-in Core identities before publishing.',
+    'against built-in Core identities before publishing. Theme catalogs are checked by validate.',
   subcommands: ['validate', 'templates', 'components', 'docs'],
   examples: [
     {

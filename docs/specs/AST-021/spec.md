@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 4
 template_version: 1
 kind: system-spec
 id: spec:AST-021
@@ -152,7 +152,7 @@ implementation-specific regression coverage.
   explicitly unrun; jsdom success does not clear it.
 - Browser evidence: component changes that can affect browser-owned pattern behavior
   run the relevant real-browser binding. Real-AT outcomes follow
-  [AST-009](../AST-009/spec.md) and keep their durable receipts and release boundary.
+  [AST-009](../AST-009/spec.md) as recommended follow-up with durable receipts.
 
 ## Current-state impact
 

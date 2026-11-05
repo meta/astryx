@@ -21,7 +21,7 @@ import {SITE_URL} from '../lib/siteConfig';
 import {flattenComponentSidebarEntries} from '../components/componentSidebarData';
 import {docTopics} from '../generated/docsRegistry';
 import {packages} from '../generated/packageRegistry';
-import {templates} from '../generated/templateRegistry';
+import {templateMetadata as templates} from '../generated/templateMetadataRegistry';
 import {blogPosts} from '../generated/blogRegistry';
 
 const entries = await sitemap();

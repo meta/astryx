@@ -16,11 +16,14 @@
 import {z} from 'zod';
 import {formatZodError} from '../_shared/errors.mjs';
 
-/** @typedef {import('./type').AstryxIntegration} AstryxIntegration */
+/** @typedef {import('./type.js').AstryxIntegration} AstryxIntegration */
 
 const MAX_AGENT_DOC_LINES = 8;
+const MAX_CLI_COMMAND_CODE_POINTS = 120;
 const MAX_AGENT_DOC_LINE_CODE_POINTS = 240;
 const MANAGED_MARKER_TEXT = /(?:ASTRYX|XDS):(START|END)/u;
+const PROVIDER_ID_RE =
+  /^(?:@[a-z0-9][a-z0-9._~!*'()-]*\/)?[a-z0-9][a-z0-9._~!*'()-]*$/u;
 
 /**
  * @param {string} value
@@ -49,6 +52,21 @@ function invalidAgentDocLine(value) {
   return null;
 }
 
+export const cliCommandSchema = z.string().superRefine((value, ctx) => {
+  const message = invalidAgentDocLine(value);
+  if (message) {
+    ctx.addIssue({code: 'custom', message});
+    return;
+  }
+  const codePoints = [...value].length;
+  if (codePoints > MAX_CLI_COMMAND_CODE_POINTS) {
+    ctx.addIssue({
+      code: 'custom',
+      message: `must contain at most ${MAX_CLI_COMMAND_CODE_POINTS} Unicode code points (received ${codePoints})`,
+    });
+  }
+});
+
 const agentDocLineSchema = z.string().superRefine((value, ctx) => {
   const message = invalidAgentDocLine(value);
   if (message) ctx.addIssue({code: 'custom', message});
@@ -66,11 +84,21 @@ export const agentDocsSchema = z.object({
 });
 
 export const integrationBaseSchema = z.object({
+  providerId: z
+    .string()
+    .regex(PROVIDER_ID_RE, 'providerId must be a canonical npm package name')
+    .optional(),
   components: z.string().optional(),
   templates: z.string().optional(),
   codemods: z.string().optional(),
   docs: z.string().optional(),
+  themes: z.string().optional(),
+  // Experimental roots (spec:AST-017 FR27). An unknown key inside is
+  // stripped, as unknown top-level keys are, so a newer CLI's experiment
+  // never fails an older CLI's parse.
+  experimental: z.object({iconSets: z.string().optional()}).optional(),
   issuesUrl: z.string().url().optional(),
+  docsiteUrl: z.string().url().optional(),
 });
 
 // Unknown top-level keys are stripped rather than rejected. `.strict()` made a key from a
@@ -84,14 +112,15 @@ export const integrationBaseSchema = z.object({
 // IS an authoring mistake and still fails here.
 export const integrationSchema = integrationBaseSchema.extend({
   agentDocs: agentDocsSchema.optional(),
+  cliCommand: cliCommandSchema.optional(),
 });
 
 /**
  * Parse every default-manifest field except the independently isolated
- * `agentDocs` contribution.
+ * `agentDocs` and `cliCommand` fields.
  * @param {unknown} input
  * @param {string} label
- * @returns {Omit<AstryxIntegration, 'agentDocs'>}
+ * @returns {Omit<AstryxIntegration, 'agentDocs' | 'cliCommand'>}
  */
 export function parseIntegrationBase(input, label) {
   const result = integrationBaseSchema.safeParse(input);
@@ -112,10 +141,24 @@ export function parseAgentDocsField(input, label) {
 }
 
 /**
+ * Parse only the optional `cliCommand` field. Isolated like `agentDocs`: an
+ * invalid command is ignored with a warning, and the rest of the manifest
+ * still contributes.
+ * @param {unknown} input
+ * @param {string} label
+ * @returns {string}
+ */
+export function parseCliCommandField(input, label) {
+  const result = cliCommandSchema.safeParse(input);
+  if (!result.success) throw new Error(formatZodError(label, result.error));
+  return result.data;
+}
+
+/**
  * Compile-time drift-lock: sealed schema must infer exactly {@link AstryxIntegration}.
  *
- * @typedef {import('../_shared/contract').Expect<
- *   import('../_shared/contract').Equal<z.infer<typeof integrationSchema>, AstryxIntegration>
+ * @typedef {import('../_shared/contract.js').Expect<
+ *   import('../_shared/contract.js').Equal<z.infer<typeof integrationSchema>, AstryxIntegration>
  * >} _IntegrationDriftLock
  */
 

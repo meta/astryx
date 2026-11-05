@@ -4,14 +4,15 @@
 
 /**
  * @file TabListContext.ts
- * @input React createContext, use
+ * @input Layer-scoped React context, use
  * @output Exports TabListContext, useTabListContext, TabListPattern
  * @position Context provider; consumed by Tab.tsx, TabMenu.tsx
  *
  * SYNC: When modified, update /packages/core/src/TabList/TabList.doc.mjs
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 
 /**
  * Size variants for tab list items.

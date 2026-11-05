@@ -14,6 +14,7 @@ import {render, screen, waitFor} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {FieldStatus} from './FieldStatus';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {getForcedColorsRules} from '../__tests__/forcedColors';
 
 const testStyles = stylex.create({
   custom: {color: 'rebeccapurple'},
@@ -53,7 +54,8 @@ describe('FieldStatus', () => {
       expect(el).not.toHaveAttribute('aria-live');
     });
 
-    // Errors are urgent — they interrupt via the assertive channel.
+    // These remain local because they exercise FieldStatus's first-use hook
+    // routing. The shared binding starts from an already established channel.
     it('announces error messages assertively, including on first mount', async () => {
       render(<FieldStatus type="error" message="This field is required" />);
       await waitFor(() => {
@@ -62,7 +64,7 @@ describe('FieldStatus', () => {
       expect(politeRegion()).toHaveTextContent('');
     });
 
-    it('announces warning messages politely', async () => {
+    it('announces warning messages politely on first mount', async () => {
       render(<FieldStatus type="warning" message="Check this value" />);
       await waitFor(() => {
         expect(politeRegion()).toHaveTextContent('Check this value');
@@ -70,14 +72,14 @@ describe('FieldStatus', () => {
       expect(assertiveRegion()).toHaveTextContent('');
     });
 
-    it('announces success messages politely', async () => {
+    it('announces success messages politely on first mount', async () => {
       render(<FieldStatus type="success" message="Looks good" />);
       await waitFor(() => {
         expect(politeRegion()).toHaveTextContent('Looks good');
       });
     });
 
-    it('announces message changes', async () => {
+    it('announces message changes through the component hook', async () => {
       const {rerender} = render(<FieldStatus type="error" message="First" />);
       await waitFor(() => {
         expect(assertiveRegion()).toHaveTextContent('First');
@@ -88,7 +90,8 @@ describe('FieldStatus', () => {
       });
     });
 
-    // Severity changes re-route the announcement to the matching channel.
+    // The generic contract checks each fixed urgency. This local test protects
+    // the component-specific same-instance type reroute.
     it('re-routes to the polite channel when type changes from error', async () => {
       const {rerender} = render(<FieldStatus type="error" message="msg" />);
       await waitFor(() => {
@@ -464,5 +467,16 @@ describe('FieldStatus', () => {
 
   it('exposes a displayName for devtools', () => {
     expect(FieldStatus.displayName).toBe('FieldStatus');
+  });
+});
+
+// jsdom cannot emulate forced colors, so this asserts the compiled rule the
+// status fill relies on (architecture:theme-tokens INV11).
+describe('FieldStatus forced colors', () => {
+  it('keeps a visible boundary on the status fill', () => {
+    render(<FieldStatus type="error" message="Required" />);
+    const css = getForcedColorsRules();
+    expect(css).toContain('outline-style: solid;');
+    expect(css).toContain('outline-color: canvastext;');
   });
 });

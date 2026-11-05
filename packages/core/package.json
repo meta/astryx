@@ -1,18 +1,18 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.5.4",
+  "version": "0.7.9",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
   "license": "MIT",
-  "homepage": "https://github.com/facebook/astryx#readme",
+  "homepage": "https://github.com/meta/astryx#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/astryx.git",
+    "url": "git+https://github.com/meta/astryx.git",
     "directory": "packages/core"
   },
   "bugs": {
-    "url": "https://github.com/facebook/astryx/issues"
+    "url": "https://github.com/meta/astryx/issues"
   },
   "keywords": [
     "astryx",
@@ -71,14 +71,104 @@
       "types": "./dist/theme/tokens.stylex.d.ts",
       "default": "./dist/theme/tokens.stylex.js"
     },
+    "./theme/dataTokens.stylex": {
+      "source": "./src/theme/dataTokens.stylex.ts",
+      "types": "./dist/theme/dataTokens.stylex.d.ts",
+      "default": "./dist/theme/dataTokens.stylex.js"
+    },
     "./theme/syntax": {
       "source": "./src/theme/syntax/index.ts",
       "types": "./dist/theme/syntax/index.d.ts",
       "default": "./dist/theme/syntax/index.js"
     },
+    "./DateInput/tokens.stylex": {
+      "source": "./src/DateInput/tokens.stylex.ts",
+      "types": "./dist/DateInput/tokens.stylex.d.ts",
+      "default": "./dist/DateInput/tokens.stylex.js"
+    },
+    "./Icon/IconSize.stylex": {
+      "source": "./src/Icon/IconSize.stylex.ts",
+      "types": "./dist/Icon/IconSize.stylex.d.ts",
+      "default": "./dist/Icon/IconSize.stylex.js"
+    },
+    "./Indicator/indicator.markers.stylex": {
+      "source": "./src/Indicator/indicator.markers.stylex.ts",
+      "types": "./dist/Indicator/indicator.markers.stylex.d.ts",
+      "default": "./dist/Indicator/indicator.markers.stylex.js"
+    },
+    "./Layer/layerAnimations.stylex": {
+      "source": "./src/Layer/layerAnimations.stylex.ts",
+      "types": "./dist/Layer/layerAnimations.stylex.d.ts",
+      "default": "./dist/Layer/layerAnimations.stylex.js"
+    },
+    "./Layer/layerTextReset.stylex": {
+      "source": "./src/Layer/layerTextReset.stylex.ts",
+      "types": "./dist/Layer/layerTextReset.stylex.d.ts",
+      "default": "./dist/Layer/layerTextReset.stylex.js"
+    },
+    "./Layer/layerViewportInset.stylex": {
+      "source": "./src/Layer/layerViewportInset.stylex.ts",
+      "types": "./dist/Layer/layerViewportInset.stylex.d.ts",
+      "default": "./dist/Layer/layerViewportInset.stylex.js"
+    },
+    "./Layout/container.stylex": {
+      "source": "./src/Layout/container.stylex.ts",
+      "types": "./dist/Layout/container.stylex.d.ts",
+      "default": "./dist/Layout/container.stylex.js"
+    },
+    "./Layout/edgeCompensation.stylex": {
+      "source": "./src/Layout/edgeCompensation.stylex.ts",
+      "types": "./dist/Layout/edgeCompensation.stylex.d.ts",
+      "default": "./dist/Layout/edgeCompensation.stylex.js"
+    },
+    "./Layout/padding.stylex": {
+      "source": "./src/Layout/padding.stylex.ts",
+      "types": "./dist/Layout/padding.stylex.d.ts",
+      "default": "./dist/Layout/padding.stylex.js"
+    },
+    "./NavItem/navItemStyles.stylex": {
+      "source": "./src/NavItem/navItemStyles.stylex.ts",
+      "types": "./dist/NavItem/navItemStyles.stylex.d.ts",
+      "default": "./dist/NavItem/navItemStyles.stylex.js"
+    },
+    "./Selector/selectorPresentation.stylex": {
+      "source": "./src/Selector/selectorPresentation.stylex.ts",
+      "types": "./dist/Selector/selectorPresentation.stylex.d.ts",
+      "default": "./dist/Selector/selectorPresentation.stylex.js"
+    },
+    "./Stack/stack.stylex": {
+      "source": "./src/Stack/stack.stylex.ts",
+      "types": "./dist/Stack/stack.stylex.d.ts",
+      "default": "./dist/Stack/stack.stylex.js"
+    },
+    "./Stack/stackItem.stylex": {
+      "source": "./src/Stack/stackItem.stylex.ts",
+      "types": "./dist/Stack/stackItem.stylex.d.ts",
+      "default": "./dist/Stack/stackItem.stylex.js"
+    },
+    "./Text/text.stylex": {
+      "source": "./src/Text/text.stylex.ts",
+      "types": "./dist/Text/text.stylex.d.ts",
+      "default": "./dist/Text/text.stylex.js"
+    },
+    "./utils/focusOutline.stylex": {
+      "source": "./src/utils/focusOutline.stylex.ts",
+      "types": "./dist/utils/focusOutline.stylex.d.ts",
+      "default": "./dist/utils/focusOutline.stylex.js"
+    },
+    "./utils/interactionOverlay.stylex": {
+      "source": "./src/utils/interactionOverlay.stylex.ts",
+      "types": "./dist/utils/interactionOverlay.stylex.d.ts",
+      "default": "./dist/utils/interactionOverlay.stylex.js"
+    },
     "./docs.mjs": "./docs.mjs",
     "./groups.doc.mjs": "./groups.doc.mjs",
     "./locales/*.json": "./locales/*.json",
+    "./locales/*.generated.js": {
+      "source": "./src/i18n/generated-locales/*.generated.ts",
+      "types": "./dist/i18n/generated-locales/*.generated.d.ts",
+      "default": "./dist/i18n/generated-locales/*.generated.js"
+    },
     "./AlertDialog": {
       "source": "./src/AlertDialog/index.ts",
       "types": "./dist/AlertDialog/index.d.ts",
@@ -239,6 +329,11 @@
       "types": "./dist/Divider/index.d.ts",
       "default": "./dist/Divider/index.js"
     },
+    "./Drawer": {
+      "source": "./src/Drawer/index.ts",
+      "types": "./dist/Drawer/index.d.ts",
+      "default": "./dist/Drawer/index.js"
+    },
     "./DropdownMenu": {
       "source": "./src/DropdownMenu/index.ts",
       "types": "./dist/DropdownMenu/index.d.ts",
@@ -303,6 +398,11 @@
       "source": "./src/Indicator/index.ts",
       "types": "./dist/Indicator/index.d.ts",
       "default": "./dist/Indicator/index.js"
+    },
+    "./InfoTip": {
+      "source": "./src/InfoTip/index.ts",
+      "types": "./dist/InfoTip/index.d.ts",
+      "default": "./dist/InfoTip/index.js"
     },
     "./InputGroup": {
       "source": "./src/InputGroup/index.ts",
@@ -434,6 +534,11 @@
       "types": "./dist/Resizable/index.d.ts",
       "default": "./dist/Resizable/index.js"
     },
+    "./ScrollableArea": {
+      "source": "./src/ScrollableArea/index.ts",
+      "types": "./dist/ScrollableArea/index.d.ts",
+      "default": "./dist/ScrollableArea/index.js"
+    },
     "./Section": {
       "source": "./src/Section/index.ts",
       "types": "./dist/Section/index.d.ts",
@@ -534,6 +639,11 @@
       "types": "./dist/TimeInput/index.d.ts",
       "default": "./dist/TimeInput/index.js"
     },
+    "./Timer": {
+      "source": "./src/Timer/index.ts",
+      "types": "./dist/Timer/index.d.ts",
+      "default": "./dist/Timer/index.js"
+    },
     "./Timestamp": {
       "source": "./src/Timestamp/index.ts",
       "types": "./dist/Timestamp/index.d.ts",
@@ -614,6 +724,21 @@
       "types": "./dist/utils/index.d.ts",
       "default": "./dist/utils/index.js"
     },
+    "./Markdown/plugins": {
+      "source": "./src/Markdown/plugins/index.ts",
+      "types": "./dist/Markdown/plugins/index.d.ts",
+      "default": "./dist/Markdown/plugins/index.js"
+    },
+    "./Markdown/plugin-renderer": {
+      "source": "./src/Markdown/plugin-renderer/index.ts",
+      "types": "./dist/Markdown/plugin-renderer/index.d.ts",
+      "default": "./dist/Markdown/plugin-renderer/index.js"
+    },
+    "./Markdown/parser": {
+      "source": "./src/Markdown/parser/index.ts",
+      "types": "./dist/Markdown/parser/index.d.ts",
+      "default": "./dist/Markdown/parser/index.js"
+    },
     "./Calendar/utils": {
       "source": "./src/Calendar/utils.ts",
       "types": "./dist/Calendar/utils.d.ts",
@@ -648,6 +773,81 @@
       "source": "./src/Typeahead/utils.ts",
       "types": "./dist/Typeahead/utils.d.ts",
       "default": "./dist/Typeahead/utils.js"
+    },
+    "./CodeBlock/languages/dockerfile": {
+      "source": "./src/CodeBlock/languages/dockerfile.ts",
+      "types": "./dist/CodeBlock/languages/dockerfile.d.ts",
+      "default": "./dist/CodeBlock/languages/dockerfile.js"
+    },
+    "./CodeBlock/languages/graphql": {
+      "source": "./src/CodeBlock/languages/graphql.ts",
+      "types": "./dist/CodeBlock/languages/graphql.d.ts",
+      "default": "./dist/CodeBlock/languages/graphql.js"
+    },
+    "./CodeBlock/languages/java": {
+      "source": "./src/CodeBlock/languages/java.ts",
+      "types": "./dist/CodeBlock/languages/java.d.ts",
+      "default": "./dist/CodeBlock/languages/java.js"
+    },
+    "./CodeBlock/languages/lua": {
+      "source": "./src/CodeBlock/languages/lua.ts",
+      "types": "./dist/CodeBlock/languages/lua.d.ts",
+      "default": "./dist/CodeBlock/languages/lua.js"
+    },
+    "./CodeBlock/languages/objective-c": {
+      "source": "./src/CodeBlock/languages/objective-c.ts",
+      "types": "./dist/CodeBlock/languages/objective-c.d.ts",
+      "default": "./dist/CodeBlock/languages/objective-c.js"
+    },
+    "./CodeBlock/languages/powershell": {
+      "source": "./src/CodeBlock/languages/powershell.ts",
+      "types": "./dist/CodeBlock/languages/powershell.d.ts",
+      "default": "./dist/CodeBlock/languages/powershell.js"
+    },
+    "./CodeBlock/languages/ruby": {
+      "source": "./src/CodeBlock/languages/ruby.ts",
+      "types": "./dist/CodeBlock/languages/ruby.d.ts",
+      "default": "./dist/CodeBlock/languages/ruby.js"
+    },
+    "./CodeBlock/languages/thrift": {
+      "source": "./src/CodeBlock/languages/thrift.ts",
+      "types": "./dist/CodeBlock/languages/thrift.d.ts",
+      "default": "./dist/CodeBlock/languages/thrift.js"
+    },
+    "./CodeBlock/languages/toml": {
+      "source": "./src/CodeBlock/languages/toml.ts",
+      "types": "./dist/CodeBlock/languages/toml.d.ts",
+      "default": "./dist/CodeBlock/languages/toml.js"
+    },
+    "./Markdown/remark": {
+      "source": "./src/Markdown/remark.ts",
+      "types": "./dist/Markdown/remark.d.ts",
+      "default": "./dist/Markdown/remark.js"
+    },
+    "./internal/indicatorPress.stylex": {
+      "source": "./src/internal/indicatorPress.stylex.ts",
+      "types": "./dist/internal/indicatorPress.stylex.d.ts",
+      "default": "./dist/internal/indicatorPress.stylex.js"
+    },
+    "./internal/touch": {
+      "source": "./src/internal/touch.ts",
+      "types": "./dist/internal/touch.d.ts",
+      "default": "./dist/internal/touch.js"
+    },
+    "./internal/selectable-card": {
+      "source": "./src/internal/selectable-card.ts",
+      "types": "./dist/internal/selectable-card.d.ts",
+      "default": "./dist/internal/selectable-card.js"
+    },
+    "./internal/spinner-rotor": {
+      "source": "./src/internal/spinner-rotor.ts",
+      "types": "./dist/internal/spinner-rotor.d.ts",
+      "default": "./dist/internal/spinner-rotor.js"
+    },
+    "./internal/calendar-system": {
+      "source": "./src/internal/calendar-system.ts",
+      "types": "./dist/internal/calendar-system.d.ts",
+      "default": "./dist/internal/calendar-system.js"
     }
   },
   "files": [
@@ -659,21 +859,36 @@
     "docs.mjs",
     "groups.doc.mjs",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
+    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "prepack": "pnpm build",
     "postinstall": "node scripts/postinstall.mjs",
-    "build": "node ../../scripts/clean-dist.mjs && pnpm build:i18n && pnpm build:esm && tsc --project tsconfig.build.json && pnpm build:css && node ../../scripts/check-no-dev-jsx.mjs && node ../../scripts/check-fully-specified.mjs",
-    "build:i18n": "node scripts/build-pseudo-locale.mjs",
+    "build": "node ../../scripts/clean-dist.mjs && pnpm build:i18n && pnpm build:esm && tsc --project tsconfig.build.json && node ../../scripts/add-declaration-extensions.mjs && pnpm build:css && node ../../scripts/check-no-dev-jsx.mjs && node ../../scripts/check-fully-specified.mjs",
+    "build:i18n": "node ../../scripts/generate-i18n-runtime.mjs && node scripts/build-pseudo-locale.mjs",
     "build:esm": "babel src --out-dir dist --extensions .ts,.tsx --out-file-extension .js --ignore \"**/*.test.ts,**/*.test.tsx,**/__tests__/**,**/*.perf.test.*,**/*.doc.mjs,**/*.d.ts,**/*.css,**/*.css.d.ts\" --config-file ./babel.config.json",
     "build:css": "node ../../scripts/build-css.mjs",
     "dev": "babel src --watch --out-dir dist --extensions .ts,.tsx --out-file-extension .js --ignore \"**/*.test.*,**/*.doc.mjs,**/*.d.ts,**/*.css*\" --config-file ./babel.config.json",
+    "dev:i18n": "babel src/i18n/generated-locales --watch --out-dir dist/i18n/generated-locales --extensions .ts --out-file-extension .js --config-file ./babel.config.json",
     "test": "vitest run --root ../..",
     "test:watch": "vitest --root ../..",
     "lint": "eslint src",
     "typecheck:docs": "tsc --project tsconfig.docs.json",
-    "typecheck": "tsc --project tsconfig.json --noEmit"
+    "typecheck": "tsc --project tsconfig.json --noEmit && pnpm typecheck:docs"
   },
   "peerDependencies": {
     "@stylexjs/stylex": "^0.19.0",
@@ -683,14 +898,19 @@
   "devDependencies": {
     "@astryxdesign/a11y-spec": "workspace:*",
     "@astryxdesign/cli": "workspace:*",
-    "@babel/cli": "^8.0.4",
-    "@babel/core": "^7.29.7",
-    "@babel/preset-react": "^8.0.1",
-    "@babel/preset-typescript": "^7.29.7",
+    "@astryxdesign/interaction-harness": "workspace:*",
+    "@babel/cli": "catalog:",
+    "@babel/core": "catalog:",
+    "@babel/preset-react": "catalog:",
+    "@babel/preset-typescript": "catalog:",
+    "@heroicons/react": "^2.2.0",
     "@stylexjs/babel-plugin": "catalog:",
     "@testing-library/dom": "^10.0.0",
-    "@testing-library/jest-dom": "^6.6.0",
-    "@testing-library/react": "^16.3.2"
+    "@testing-library/jest-dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@types/babel__core": "^7.20.5",
+    "tailwindcss": "^4.3.2",
+    "temporal-polyfill": "^1.0.6"
   },
   "dependencies": {
     "intl-messageformat": "^11.2.9"

@@ -117,9 +117,12 @@ const UNSAFE_HOSTS = new Set([
  *   the trigger as the popover's invoker `source`, which pins focus order to
  *   the invoker in browsers that support it.)
  *
- * The outermost unsafe ancestor matters. A safe div may itself sit inside an
- * anchor; stopping at that div would still put the layer's buttons inside the
- * link. Walking the whole chain ensures the target is outside both.
+ * The outermost unsafe ancestor matters up to the nearest native dialog. A safe
+ * div may itself sit inside an anchor; stopping at that div would still put the
+ * layer's buttons inside the link. A dialog is the opposite boundary: portaling
+ * beyond it removes the layer from the browser's modal top layer and makes the
+ * layer inert. Walking the chain within that boundary keeps the target outside
+ * every relevant unsafe ancestor and inside its nearest dialog.
  */
 export function resolveLayerPortalTarget(
   inlineParent: HTMLElement | null,
@@ -131,7 +134,11 @@ export function resolveLayerPortalTarget(
   let outermostUnsafe: HTMLElement | null = null;
   let node: HTMLElement | null = inlineParent;
   while (node) {
-    if (UNSAFE_HOSTS.has(node.tagName.toLowerCase())) {
+    const tagName = node.tagName.toLowerCase();
+    if (tagName === 'dialog') {
+      break;
+    }
+    if (UNSAFE_HOSTS.has(tagName)) {
       outermostUnsafe = node;
     }
     node = node.parentElement;

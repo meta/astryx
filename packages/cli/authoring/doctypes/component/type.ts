@@ -5,6 +5,7 @@
  */
 
 import type {
+  AuthoredDocGraphFields,
   ComponentAccessibilityRequirement,
   ComponentAnatomyElement,
   ComponentBestPractice,
@@ -16,21 +17,38 @@ import type {
   ComponentThemingVar,
   HookParamDoc,
   HookReturnDoc,
+  RegistryDocIdentity,
   UsageDoc,
-} from '../base/type';
+} from '../base/type.js';
+
+/** What replaces a deprecated component (`ComponentBaseDoc.deprecated`). */
+export interface ComponentDeprecation {
+  /** `name` of the documented component to use instead, e.g. `'BottomSheet'`. */
+  replacement: string;
+  /** The modernization route in a sentence or two: what to write instead,
+   *  and where the migration is described. */
+  description: string;
+}
 
 /**
  * Shared fields between single-component and multi-component docs.
  * Do not use this interface directly — use `ComponentDoc` (the union type).
  */
-export interface ComponentBaseDoc {
+export interface ComponentBaseDoc extends AuthoredDocGraphFields {
   /** Doc-kind discriminant for the stamped default-export format
    *  (`export default { type: 'component', ... }`). Optional: legacy
    *  `export const docs = {...}` docs omit it, and `parseDoc` falls back to
    *  shape-sniffing when it is absent. */
   type?: 'component';
-  /** Directory name without the Astryx prefix, PascalCase.
-   *  e.g. `"Button"`, `"Table"`, `"TextInput"`, `"AppShell"` */
+  /**
+   * Stable machine identity and directory name without the Astryx prefix,
+   * PascalCase (for example `Button`, `Table`, or `AppShell`). For an
+   * integration component it is the export apps import: the doc sits beside
+   * the file that exports it, and when that file exports nothing under its own
+   * name, `name` may name the export it does have. Do not change this to edit
+   * the visible label; use `displayName` for that. Registry URLs derive from
+   * this value by default.
+   */
   name: string;
   /** Human-readable display name with spaces between words, used by the
    *  docsite gallery and sidebar. Matches the import name visually (so
@@ -40,9 +58,30 @@ export interface ComponentBaseDoc {
    *  regex derivation. Backfill with
    *  `apps/docsite/scripts/backfill-display-name.mjs`. */
   displayName: string;
+  /** Exact consumer import specifier for integration-owned components. */
+  import?: string;
+  /** Integration components only: the exact `name` of the Core ComponentDoc
+   *  this component takes over for unqualified lookup, so every app that loads
+   *  the integration gets this component from component detail, component
+   *  lists, search, `swizzle <Name>`, and issue routing; `swizzle --list` keeps
+   *  listing Core names. The Core original stays reachable with
+   *  `--package @astryxdesign/core`. Set it only to intentionally own a Core
+   *  identity; give an alternative or variant its own name instead. It takes
+   *  effect only when the package's peer range starts at the release that
+   *  applies it, `"@astryxdesign/cli": ">=0.6.7"` or later; without such a
+   *  range, and on older CLIs that do not read `replaces`, the component keeps
+   *  its own name. */
+  replaces?: string;
+  /** Marks a deprecated component (spec:AST-017 FR26, FR29b): it keeps
+   *  working and stays documented, labeled with its replacement. The docsite
+   *  shows a Deprecated badge in its page header and index tile, labels its
+   *  search result, and adds a notice that links the replacement; `astryx
+   *  search` results and `astryx build` kit entries carry the field. Omit for
+   *  a component that is not deprecated. */
+  deprecated?: ComponentDeprecation;
   /** Search keywords for CLI discovery. Terms a developer might type when
    *  looking for this component: synonyms, related UI concepts, and common
-   *  names from other design systems (MUI, Chakra, Radix, shadcn).
+   *  names from other design systems (MUI, Chakra, Radix, and others).
    *  Lowercase only. Used by `astryx component <term>` for fuzzy matching.
    *  e.g. `['accordion', 'expand', 'toggle', 'disclosure']` for Collapsible */
   keywords?: string[];
@@ -100,6 +139,8 @@ export interface ComponentBaseDoc {
    *  only make sense within a parent (e.g. BreadcrumbItem, DialogHeader)
    *  or internal primitives that shouldn't appear in the gallery. */
   isHiddenFromOverview?: boolean;
+  /** Optional stable slug override and prior aliases for registry output. */
+  registry?: RegistryDocIdentity;
   /** Theming configuration. Documents the stable selector surface rendered
    *  by this component: `xds-*` classes plus data-attribute reflections that
    *  themes can target via `@scope` selectors in `defineTheme`. */
@@ -136,10 +177,10 @@ export interface ComponentBaseDoc {
 /**
  * The documentation type for a component directory's {Name}.doc.mjs file.
  *
- * Every .doc.mjs must export a single `docs` constant of this type:
+ * Every new .doc.mjs default-exports a stamped object of this type:
  *
  *   /\*\* \@type \{import('@astryxdesign/cli/authoring').ComponentDoc\} *\/
- *   export const docs = \{ ... \};
+ *   export default \{ type: 'component', ... \};
  *
  * Use SingleComponentDoc (with `props`) for single-component directories.
  * Use MultiComponentDoc (with `components`) for multi-component directories.
@@ -171,6 +212,8 @@ export interface ComponentEntry {
   /** One-sentence description of what this specific component does.
    *  For sub-components, explain the role within the parent composition. */
   description: string;
+  /** Optional stable slug override and prior aliases for this entry. */
+  registry?: RegistryDocIdentity;
   /** All public props for this component. Omit for hook entries. */
   props?: ComponentPropDoc[];
   /** Hook parameters or options object fields. Use for `use*` entries. */
@@ -246,6 +289,14 @@ export interface ComponentRef {
  * Used by both `docsZh` (Chinese translation) and `docsDense` (compressed format).
  */
 export interface ComponentTranslationDoc {
+  /** Optional exact name from the base doc. Allowed so an overlay can say
+   *  which component it translates; the overlay renders through the base
+   *  doc, so this field is ignored at render time. */
+  name?: string;
+  /** Optional translated displayName. Allowed so the displayName backfill
+   *  codemod (which adds `displayName` next to every `name:` field) does not
+   *  break translation overlays. Ignored at render time. */
+  displayName?: string;
   /** Compressed/translated component description. */
   description?: string;
   /** Prop descriptions keyed by prop name. Only include props that have descriptions. */
@@ -311,15 +362,17 @@ export interface SingleComponentDoc extends ComponentBaseDoc {
  * `subComponentOf` field, which names the parent component.
  *
  * A sub-component owns its `description`, `props`, and (optionally) its own
- * `usage`. Family-level fields (`group`, `category`, `keywords`, `theming`,
- * `playground`) are inherited from the directory's primary doc unless
- * overridden here. The generated registry entry is identical to the legacy
- * inline `components[]` expansion — this is purely a file-structure change.
+ * `usage`. The CLI does not copy family-level fields (`group`, `category`,
+ * `keywords`, `theming`, `playground`) from the parent to an integration's
+ * sub-component: its detail, list group and search use only what its own doc
+ * sets. Set any the child needs in its own doc. The generated registry entry
+ * is identical to the legacy inline `components[]` expansion — this is purely
+ * a file-structure change.
  */
 export interface SubComponentDoc extends Omit<ComponentBaseDoc, 'usage'> {
   /** Name of the parent component this sub-component belongs to, matching the
    *  parent doc's `name` (e.g. `"Chat"`). Marks this file as a sub-component
-   *  doc so the pipeline parents and inherits family fields correctly. */
+   *  doc. The CLI does not copy the parent's family fields to it. */
   subComponentOf: string;
   /** One-sentence description of what this sub-component does and its role
    *  within the parent composition. */

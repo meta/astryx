@@ -3,17 +3,20 @@
 /**
  * @file Chart.test.tsx
  * @input Uses vitest, @testing-library/react, Chart root + bar/line marks
- * @output Unit tests for Chart accessibility (WCAG 1.1.1) and the chart
- *         root's functional contract — measurement gate, per-series render
+ * @output Unit tests for Chart accessibility (WCAG 1.1.1), localized fallback
+ *         text, root DOM/ref passthrough, and the chart root's functional
+ *         contract — measurement gate, per-series render
  *         delegation, event layer geometry, palette assignment, and the
  *         declarative legend/tooltip slots (issue #4295 viz coverage)
  * @position Testing; validates Chart.tsx accessible name + data-table fallback
  */
 
+import {createRef} from 'react';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
-import {render, screen, act, within} from '@testing-library/react';
+import {render, screen, act, within, fireEvent} from '@testing-library/react';
 import {Chart} from './Chart';
 import {bar, line} from './marks';
+import {InternationalizationProvider} from '@astryxdesign/core';
 
 const data = [
   {month: 'Jan', revenue: 100, profit: 20},
@@ -23,16 +26,20 @@ const data = [
 
 // Capture the ResizeObserver callback so tests can drive the reported width.
 let resizeCallback: ResizeObserverCallback | undefined;
+let observedElement: Element | undefined;
 
 beforeEach(() => {
   resizeCallback = undefined;
+  observedElement = undefined;
   vi.stubGlobal(
     'ResizeObserver',
     class {
       constructor(cb: ResizeObserverCallback) {
         resizeCallback = cb;
       }
-      observe() {}
+      observe(element: Element) {
+        observedElement = element;
+      }
       unobserve() {}
       disconnect() {}
     },
@@ -44,9 +51,17 @@ afterEach(() => {
 });
 
 function reportWidth(width: number) {
+  if (!observedElement) {
+    throw new Error('Chart did not subscribe to ResizeObserver');
+  }
   act(() => {
     resizeCallback?.(
-      [{contentRect: {width}} as unknown as ResizeObserverEntry],
+      [
+        {
+          target: observedElement,
+          contentRect: {width},
+        } as unknown as ResizeObserverEntry,
+      ],
       {} as ResizeObserver,
     );
   });
@@ -64,7 +79,7 @@ describe('Chart accessible name', () => {
     reportWidth(600);
 
     expect(
-      screen.getByRole('img', {name: 'Chart of revenue, profit by month'}),
+      screen.getByRole('img', {name: 'Chart of revenue and profit by month'}),
     ).toBeInTheDocument();
   });
 
@@ -101,6 +116,37 @@ describe('Chart accessible name', () => {
     const desc = svg.querySelector('desc')!;
     expect(desc.textContent).toBe('Revenue per month');
     expect(svg.getAttribute('aria-describedby')).toBe(desc.id);
+  });
+
+  it('localizes the generated name, list, and data-table caption', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        messages={{
+          fr: {
+            '@astryx.chart.label': {defaultMessage: 'Graphique'},
+            '@astryx.chart.labelWithSeries': {
+              defaultMessage: 'Graphique de {series} par {xKey}',
+            },
+            '@astryx.chart.dataTableCaption': {
+              defaultMessage: 'Données pour {label}',
+            },
+          },
+        }}>
+        <Chart
+          data={data}
+          xKey="month"
+          series={[bar('revenue'), bar('profit')]}
+        />
+      </InternationalizationProvider>,
+    );
+    reportWidth(600);
+
+    const label = 'Graphique de revenue et profit par month';
+    expect(screen.getByRole('img', {name: label})).toBeInTheDocument();
+    expect(screen.getByRole('table')).toHaveAccessibleName(
+      `Données pour ${label}`,
+    );
   });
 });
 
@@ -161,6 +207,35 @@ describe('Chart measurement gate', () => {
     expect(placeholder.tagName).toBe('DIV');
     expect(placeholder.style.height).toBe('300px');
     expect(placeholder.childElementCount).toBe(0);
+  });
+});
+
+describe('Chart root contract', () => {
+  it('forwards DOM props and the ref to the root container', () => {
+    const ref = createRef<HTMLDivElement>();
+    const onClick = vi.fn();
+
+    render(
+      <Chart
+        ref={ref}
+        data-testid="chart-root"
+        className="consumer-chart"
+        style={{maxWidth: 480}}
+        onClick={onClick}
+        data={data}
+        xKey="month"
+        series={[bar('revenue')]}
+      />,
+    );
+    reportWidth(600);
+
+    const root = screen.getByTestId('chart-root');
+    expect(ref.current).toBe(root);
+    expect(root).toHaveClass('consumer-chart');
+    expect(root).toHaveStyle({maxWidth: '480px'});
+
+    fireEvent.click(root);
+    expect(onClick).toHaveBeenCalledOnce();
   });
 });
 

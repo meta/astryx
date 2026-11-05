@@ -29,7 +29,7 @@ const theme = defineTheme({
 const selector = '.astryx-button[data-variant="primary"]';
 
 describe('public theme helper selector contract', () => {
-  it('keeps themeProps shape while removing bare value classes', () => {
+  it('keeps canonical data attributes without bare compatibility classes', () => {
     expect(themeProps('button', {variant: 'primary', size: 'sm'})).toEqual({
       className: 'astryx-button',
       'data-variant': 'primary',

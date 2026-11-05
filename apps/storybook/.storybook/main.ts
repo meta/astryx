@@ -1,5 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @input Workspace source entries, Storybook's Vite config, Astryx StyleX plugin.
+ * @output Storybook config with Vite and StyleX aliases from one package table.
+ * @position Storybook configuration; keeps workspace packages usable unbuilt.
+ */
+
 import type {StorybookConfig} from '@storybook/react-vite';
 // Source, not the `@astryxdesign/build/vite` export: Storybook evaluates this
 // file with Node's ESM resolver before any alias below it applies, and that
@@ -9,10 +15,110 @@ import type {StorybookConfig} from '@storybook/react-vite';
 // tsconfig already resolves for typecheck.
 import {astryxStylex} from '../../../packages/build/src/vite.ts';
 import path from 'node:path';
+import stylexResolution from '../../../scripts/stylex-module-resolution.cjs';
 import {fileURLToPath} from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '../../..');
+
+interface WorkspaceAlias {
+  pkg: string;
+  src: string;
+  stylex: 'both' | 'wildcard' | 'none';
+  vite?: string;
+}
+
+// Every runtime workspace dependency belongs here. Themes expose authored
+// source.ts to Vite, while StyleX only needs their token-module subpaths.
+export const workspaceAliases: WorkspaceAlias[] = [
+  {
+    pkg: '@astryxdesign/core',
+    src: 'packages/core/src',
+    stylex: 'both',
+  },
+  {
+    pkg: '@astryxdesign/lab',
+    src: 'packages/lab/src',
+    stylex: 'both',
+  },
+  {
+    pkg: '@astryxdesign/charts',
+    src: 'packages/charts/src',
+    stylex: 'both',
+  },
+  {
+    pkg: '@astryxdesign/richtext',
+    src: 'packages/richtext/src',
+    stylex: 'both',
+  },
+  {
+    pkg: '@astryxdesign/theme-butter',
+    src: 'packages/themes/butter/src',
+    stylex: 'wildcard',
+    vite: 'packages/themes/butter/src/source.ts',
+  },
+  {
+    pkg: '@astryxdesign/theme-chocolate',
+    src: 'packages/themes/chocolate/src',
+    stylex: 'wildcard',
+    vite: 'packages/themes/chocolate/src/source.ts',
+  },
+  {
+    pkg: '@astryxdesign/theme-gothic',
+    src: 'packages/themes/gothic/src',
+    stylex: 'wildcard',
+    vite: 'packages/themes/gothic/src/source.ts',
+  },
+  {
+    pkg: '@astryxdesign/theme-matcha',
+    src: 'packages/themes/matcha/src',
+    stylex: 'wildcard',
+    vite: 'packages/themes/matcha/src/source.ts',
+  },
+  {
+    pkg: '@astryxdesign/theme-neutral',
+    src: 'packages/themes/neutral/src',
+    stylex: 'wildcard',
+    vite: 'packages/themes/neutral/src/source.ts',
+  },
+  {
+    pkg: '@astryxdesign/theme-probe',
+    src: 'packages/themes/probe/src',
+    stylex: 'wildcard',
+    vite: 'packages/themes/probe/src/source.ts',
+  },
+  {
+    pkg: '@astryxdesign/theme-stone',
+    src: 'packages/themes/stone/src',
+    stylex: 'wildcard',
+    vite: 'packages/themes/stone/src/source.ts',
+  },
+  {
+    pkg: '@astryxdesign/theme-y2k',
+    src: 'packages/themes/y2k/src',
+    stylex: 'wildcard',
+    vite: 'packages/themes/y2k/src/source.ts',
+  },
+  {
+    pkg: '@astryxdesign/vega',
+    src: 'packages/vega/src',
+    // Vega has no StyleX imports.
+    stylex: 'none',
+  },
+];
+
+const stylexAliases: Record<string, string[]> = {};
+const viteAliases: Record<string, string> = {};
+for (const {pkg, src, stylex, vite} of workspaceAliases) {
+  const source = path.resolve(rootDir, src);
+  viteAliases[pkg] = vite ? path.resolve(rootDir, vite) : source;
+  if (stylex !== 'none') {
+    stylexAliases[`${pkg}/*`] = [path.join(source, '*')];
+  }
+  if (stylex === 'both') {
+    stylexAliases[pkg] = [source];
+  }
+}
 
 const lightningcssTargets = {
   chrome: 123 << 16,
@@ -85,54 +191,8 @@ const config: StorybookConfig = {
           stylexOptions: {
             dev: false,
             styleResolution: 'application-order',
-            aliases: {
-              '@astryxdesign/core/*': [
-                path.join(rootDir, 'packages/core/src/*'),
-              ],
-              '@astryxdesign/core': [path.join(rootDir, 'packages/core/src')],
-              '@astryxdesign/lab/*': [path.join(rootDir, 'packages/lab/src/*')],
-              '@astryxdesign/lab': [path.join(rootDir, 'packages/lab/src')],
-              '@astryxdesign/charts/*': [
-                path.join(rootDir, 'packages/charts/src/*'),
-              ],
-              '@astryxdesign/charts': [
-                path.join(rootDir, 'packages/charts/src'),
-              ],
-              '@astryxdesign/richtext/*': [
-                path.join(rootDir, 'packages/richtext/src/*'),
-              ],
-              '@astryxdesign/richtext': [
-                path.join(rootDir, 'packages/richtext/src'),
-              ],
-              '@astryxdesign/theme-butter/*': [
-                path.join(rootDir, 'packages/themes/butter/src/*'),
-              ],
-              '@astryxdesign/theme-chocolate/*': [
-                path.join(rootDir, 'packages/themes/chocolate/src/*'),
-              ],
-              '@astryxdesign/theme-gothic/*': [
-                path.join(rootDir, 'packages/themes/gothic/src/*'),
-              ],
-              '@astryxdesign/theme-matcha/*': [
-                path.join(rootDir, 'packages/themes/matcha/src/*'),
-              ],
-              '@astryxdesign/theme-neutral/*': [
-                path.join(rootDir, 'packages/themes/neutral/src/*'),
-              ],
-              '@astryxdesign/theme-probe/*': [
-                path.join(rootDir, 'packages/themes/probe/src/*'),
-              ],
-              '@astryxdesign/theme-stone/*': [
-                path.join(rootDir, 'packages/themes/stone/src/*'),
-              ],
-              '@astryxdesign/theme-y2k/*': [
-                path.join(rootDir, 'packages/themes/y2k/src/*'),
-              ],
-            },
-            unstable_moduleResolution: {
-              type: 'commonJS',
-              rootDir: rootDir,
-            },
+            aliases: stylexAliases,
+            unstable_moduleResolution: stylexResolution.stylexModuleResolution,
             lightningcssOptions: {
               targets: lightningcssTargets,
             },
@@ -144,46 +204,7 @@ const config: StorybookConfig = {
         ...config.resolve,
         alias: {
           ...config.resolve?.alias,
-          '@astryxdesign/core': path.resolve(rootDir, 'packages/core/src'),
-          '@astryxdesign/lab': path.resolve(rootDir, 'packages/lab/src'),
-          '@astryxdesign/charts': path.resolve(rootDir, 'packages/charts/src'),
-          '@astryxdesign/richtext': path.resolve(
-            rootDir,
-            'packages/richtext/src',
-          ),
-          '@astryxdesign/theme-butter': path.resolve(
-            rootDir,
-            'packages/themes/butter/src/source.ts',
-          ),
-          '@astryxdesign/theme-chocolate': path.resolve(
-            rootDir,
-            'packages/themes/chocolate/src/source.ts',
-          ),
-          '@astryxdesign/theme-gothic': path.resolve(
-            rootDir,
-            'packages/themes/gothic/src/source.ts',
-          ),
-          '@astryxdesign/theme-matcha': path.resolve(
-            rootDir,
-            'packages/themes/matcha/src/source.ts',
-          ),
-          '@astryxdesign/theme-neutral': path.resolve(
-            rootDir,
-            'packages/themes/neutral/src/source.ts',
-          ),
-          '@astryxdesign/theme-probe': path.resolve(
-            rootDir,
-            'packages/themes/probe/src/source.ts',
-          ),
-          '@astryxdesign/theme-stone': path.resolve(
-            rootDir,
-            'packages/themes/stone/src/source.ts',
-          ),
-          '@astryxdesign/theme-y2k': path.resolve(
-            rootDir,
-            'packages/themes/y2k/src/source.ts',
-          ),
-          '@astryxdesign/vega': path.resolve(rootDir, 'packages/vega/src'),
+          ...viteAliases,
         },
       },
       css: {

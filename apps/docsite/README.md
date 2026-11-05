@@ -117,18 +117,28 @@ them. Check the theme's `## Fonts` section for the specific Google Fonts URL.
 
 1. Create the package under `packages/<name>/`
 2. Add `"@astryxdesign/<name>": "*"` to `apps/docsite/package.json` dependencies
-3. For a canary-only component package, set `astryx.canaryOnly: true` in its
-   `package.json`, add `astryx.integration.mjs` with `components: './src'`,
-   include that file in the package's `files`, and list the package in
-   `apps/docsite/astryx.config.mjs`. Keep optional showcase blocks in the
-   package too and expose their directory through the integration's `templates`
-   field; the docsite retrieves them through the CLI template API.
+3. For a component package other than Core, add `astryx.integration.mjs` with
+   `components: './src'`, include that file (and `src`) in the package's
+   `files`, and list the package in `apps/docsite/astryx.config.mjs`. Keep
+   optional showcase blocks in the package too and expose their directory
+   through the integration's `templates` field; the docsite retrieves them
+   through the CLI template API. A package that publishes only canaries also
+   sets `astryx.canaryOnly: true` in its `package.json`. A package that
+   publishes stable releases joins the Changesets `fixed` group in
+   `.changeset/config.json` so it versions with Core: the production snapshot
+   fetches every documented package at Core's published version, and a stable
+   integration on its own version would fail production builds as a partly
+   published release.
 4. Run `pnpm generate`
 
 The package appears in the sidebar, the libraries section, and gets its own
 `/docs/<name>` detail page. If the package contains `.doc.mjs` files,
 its components are extracted into `componentRegistry.ts` as well. Canary-only
 packages and components appear only on canary builds and carry a flask icon.
+A configured package that is a stable release (neither `private` nor
+`astryx.canaryOnly`) is documented on the production site too, from its
+published tarball, starting with its first stable release
+(`scripts/resolve-content-root.mjs`).
 
 ## Adding a Blog Post
 
@@ -181,8 +191,42 @@ apps/docsite/
 | `pnpm test`       | Run vitest                                      |
 | `pnpm test:watch` | Run vitest in watch mode                        |
 
+## Playground preview restrictions
+
+The playground is for trying Astryx code, not saving its runtime data.
+Production previews (including deployed PR previews) are **ephemeral** and run
+with `sandbox="allow-scripts"`: Docsite origin-bound storage and parent-page DOM
+access are unavailable. Local storage may throw; previewed code has no
+persistence guarantee. In-memory interaction still works; the AI Chat template's
+resizable panel already falls back when its storage is unavailable. Reloading or
+replacing the preview resets its runtime state, then restores the editor's current
+code, theme, and mode.
+
+Production Chromium tests also characterize these browser consequences of the
+opaque origin; they do not establish separate playground capability policy:
+
+- **Clipboard and microphone:** Chromium's permission policy denies clipboard
+  writes and microphone access in the preview. Copy did not report success;
+  readable text can still be selected for manual copying. Dictation remained idle
+  while typing worked.
+- **Native pickers:** cross-origin `showPicker()` is restricted for date/time
+  controls; typed entry and Astryx's `nativePicker="never"` surface remain usable.
+  File and color controls have browser-defined exceptions and can still respond
+  to a user gesture. The sandbox is not a blanket ban on every native picker.
+- **Navigation:** previewed Astryx links use native anchors instead of inheriting
+  the docsite's Next router. Fragment links stay in the current document. A
+  non-fragment navigation replaces the document and triggers preview recovery.
+
+`next dev` retains the original same-origin sandbox so development assets load.
+It is not evidence for the production security boundary. Do not add
+`allow-same-origin` to make a production demo work.
+
 ## Testing
 
 Tests live in `src/__tests__/data-extraction.test.ts` and validate the generated
 registries: package discovery, component extraction, theme wiring, etc. Run
 `pnpm generate` before running tests since they import from `src/generated/`.
+
+Browser contracts for the playground preview live in `e2e/` and run with
+`pnpm test:docsite-browser` from the repo root against a production build
+(`pnpm build` at the root, then `pnpm build` here); see `playwright.config.ts`.

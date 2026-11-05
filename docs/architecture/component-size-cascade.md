@@ -30,6 +30,17 @@ deciding_specs: []
 
 # Component size cascade architecture
 
+<!-- review-applicability:v1 -->
+
+```json
+{
+  "scope": "global",
+  "triggers": {
+    "layout": ["INV1", "INV2", "INV3", "INV4", "INV5", "INV9"]
+  }
+}
+```
+
 ## Purpose
 
 A person should encounter coherent control sizing inside a component-owned group

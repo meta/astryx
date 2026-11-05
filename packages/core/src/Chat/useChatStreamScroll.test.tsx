@@ -16,7 +16,8 @@ import {
 // scroll paths (instant positioning, lock state, rAF scheduling decisions).
 // The spring physics itself (frame-by-frame integration, scrollend re-lock,
 // user-scroll detection) is layout/browser-dependent and is verified
-// manually via Storybook — mocking it here would only test the mock.
+// by useChatStreamScroll.a11y.chromium.spec.ts — mocking it here would only
+// test the mock.
 // ---------------------------------------------------------------------------
 
 let rafQueue: {id: number; cb: FrameRequestCallback}[] = [];

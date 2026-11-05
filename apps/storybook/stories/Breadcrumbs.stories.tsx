@@ -94,14 +94,12 @@ export const CustomSeparator: Story = {
 export const WithIcons: Story = {
   render: () => (
     <Breadcrumbs>
-      <BreadcrumbItem
-        href="/"
-        startIcon={<HomeIcon width={16} height={16} aria-hidden="true" />}>
+      <BreadcrumbItem href="/" startIcon={<Icon icon={HomeIcon} size="sm" />}>
         Home
       </BreadcrumbItem>
       <BreadcrumbItem
         href="/settings"
-        startIcon={<Cog6ToothIcon width={16} height={16} aria-hidden="true" />}>
+        startIcon={<Icon icon={Cog6ToothIcon} size="sm" />}>
         Settings
       </BreadcrumbItem>
       <BreadcrumbItem isCurrent>Profile</BreadcrumbItem>
@@ -162,14 +160,12 @@ export const SupportingWithIcons: Story = {
   name: 'Supporting Variant with Icons',
   render: () => (
     <Breadcrumbs variant="supporting">
-      <BreadcrumbItem
-        href="/"
-        startIcon={<HomeIcon width={14} height={14} aria-hidden="true" />}>
+      <BreadcrumbItem href="/" startIcon={<Icon icon={HomeIcon} size="xsm" />}>
         Home
       </BreadcrumbItem>
       <BreadcrumbItem
         href="/projects"
-        startIcon={<FolderIcon width={14} height={14} aria-hidden="true" />}>
+        startIcon={<Icon icon={FolderIcon} size="xsm" />}>
         Projects
       </BreadcrumbItem>
       <BreadcrumbItem isCurrent>My Project</BreadcrumbItem>

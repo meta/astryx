@@ -11,6 +11,7 @@ export const doc = {
   type: 'function',
   kind: 'api',
   name: 'hook',
+  namespace: 'cli/api',
   displayName: 'hook()',
   summary:
     'Resolve a hook by name, or list the catalog, with an optional params-only slice.',
@@ -33,6 +34,7 @@ export const doc = {
       name: 'options.cwd',
       type: 'string',
       description: 'Directory to resolve @astryxdesign/core from.',
+      default: 'process.cwd()',
     },
     {
       name: 'options.list',
@@ -42,7 +44,8 @@ export const doc = {
     {
       name: 'options.category',
       type: 'string',
-      description: 'List only hooks in this category.',
+      description:
+        "List only the hooks in this category, a key of the unfiltered list such as 'Media' or 'Focus'.",
     },
     {
       name: 'options.params',
@@ -53,7 +56,8 @@ export const doc = {
       name: 'options.detail',
       type: "'full' | 'compact' | 'brief'",
       description: 'Detail level for list views.',
-      default: "'full' for a named hook, 'brief' for list views",
+      default:
+        "'full' for a named hook; 'brief' for lists (returned as data.detail: 'names')",
     },
     {
       name: 'options.lang',
@@ -87,6 +91,10 @@ export const doc = {
       when: '@astryxdesign/core cannot be resolved from cwd',
     },
     {
+      code: 'ERR_VERSIONS_UNAVAILABLE',
+      when: 'outside a project, or in a project with nothing installed, the Core of the release that answers is not beside it or cached, and cannot be installed into the per-user cache (offline, a registry without it, or an unwritable cache)',
+    },
+    {
       code: 'ERR_UNKNOWN_CATEGORY',
       when: 'options.category is not a string or matches no known category',
     },
@@ -103,7 +111,7 @@ export const doc = {
     },
     {
       label: 'Browse a category',
-      code: "await hook(undefined, {category: 'State', detail: 'compact'});",
+      code: "await hook(undefined, {category: 'Media', detail: 'compact'});",
     },
   ],
   command: 'hook',

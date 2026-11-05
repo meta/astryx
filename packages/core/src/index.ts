@@ -43,6 +43,7 @@ export * from './CheckboxList';
 export * from './Collapsible';
 export * from './RadioList';
 export * from './Resizable';
+export * from './ScrollableArea';
 export * from './Divider';
 export * from './VisuallyHidden';
 export * from './EmptyState';
@@ -70,6 +71,7 @@ export * from './SelectableCard';
 export * from './Selector';
 export * from './MultiSelector';
 export * from './Icon';
+export * from './InfoTip';
 export * from './Indicator';
 export * from './InputGroup';
 export * from './Item';
@@ -94,6 +96,7 @@ export * from './AlertDialog';
 export * from './Dialog';
 export * from './ContextMenu';
 export * from './DropdownMenu';
+export * from './Drawer';
 export * from './MoreMenu';
 export * from './InteractiveRoleContext';
 export * from './SizeContext';
@@ -122,7 +125,7 @@ export type {
 
 // Layer provider
 export {LayerProvider} from './Layer';
-export type {LayerProviderProps, LayerToastConfig} from './Layer';
+export type {LayerProviderProps, LayerInset, LayerToastConfig} from './Layer';
 
 // Toast
 export {Toast, useToast} from './Toast';
@@ -160,6 +163,9 @@ export * from './Spinner';
 // Timestamp display
 export * from './Timestamp';
 
+// Elapsed timer display
+export * from './Timer';
+
 // Overlay
 export * from './Overlay';
 export * from './Outline';
@@ -167,8 +173,23 @@ export * from './Outline';
 // Overflow list
 export * from './OverflowList';
 
+// Animating one element: from the package root only, since one API has one
+// entry. Its hook ships from './hooks'.
+export {
+  createAnimator,
+  type Animator,
+  type AnimatorAnimateOptions,
+  type AnimatorChannel,
+  type AnimatorDecayVelocity,
+  type AnimatorHandle,
+  type AnimatorSnapshot,
+  type AnimatorValues,
+} from './animator/createAnimator';
+
 // Hooks
 export * from './hooks';
+
+export {createPanGesture} from './gestures/createPanGesture';
 
 // Utilities
 export * from './utils';

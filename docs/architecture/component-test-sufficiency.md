@@ -23,6 +23,27 @@ deciding_specs: []
 
 # Component test sufficiency architecture
 
+<!-- review-applicability:v1 -->
+
+```json
+{
+  "scope": "global",
+  "triggers": {
+    "testing": [
+      "INV1",
+      "INV2",
+      "INV3",
+      "INV4",
+      "INV5",
+      "INV6",
+      "INV7",
+      "INV10",
+      "INV11"
+    ]
+  }
+}
+```
+
 ## Purpose
 
 Astryx component tests should give maintainers confidence that current promised

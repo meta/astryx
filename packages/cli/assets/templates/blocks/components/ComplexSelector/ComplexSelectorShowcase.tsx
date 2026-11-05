@@ -184,7 +184,7 @@ export default function ComplexSelectorShowcase() {
       value={value}
       onChange={setValue}
       triggerLabel={`${value.fruit} · ${value.ripeness}`}
-      style={{width: 280}}>
+      controlStyle={{width: 280}}>
       {(selectedValue, onChange, close) => (
         <FruitRipenessGrid
           value={selectedValue}

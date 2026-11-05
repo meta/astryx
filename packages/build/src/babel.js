@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-"use strict";
+'use strict';
 
 /**
  * @astryxdesign/build/babel
@@ -28,9 +28,20 @@ module.exports = function astryxBabelPlugin(api, options) {
     ...stylexOptions
   } = options;
 
+  // StyleX's upstream default is `silent`, which turns unsupported declarations
+  // into missing CSS. Astryx fails closed by default so consumer builds point at
+  // the declaration and the supported replacement instead.
+  const validatedStylexOptions = {
+    propertyValidationMode: 'throw',
+    ...stylexOptions,
+  };
+
   // Build the two sets of options — only classNamePrefix differs
-  const libraryOpts = {...stylexOptions, classNamePrefix: libraryPrefix};
-  const productOpts = {...stylexOptions, classNamePrefix};
+  const libraryOpts = {
+    ...validatedStylexOptions,
+    classNamePrefix: libraryPrefix,
+  };
+  const productOpts = {...validatedStylexOptions, classNamePrefix};
 
   // Create two plugin instances
   const libraryPlugin = stylexPlugin(api, libraryOpts);
@@ -82,18 +93,18 @@ module.exports = function astryxBabelPlugin(api, options) {
       // enter/exit form (Program uses this)
       visitor[key] = {};
       if (sample.enter) {
-        visitor[key].enter = function(path, state) {
+        visitor[key].enter = function (path, state) {
           callVisitor.call(this, 'enter', key, path, state);
         };
       }
       if (sample.exit) {
-        visitor[key].exit = function(path, state) {
+        visitor[key].exit = function (path, state) {
           callVisitor.call(this, 'exit', key, path, state);
         };
       }
     } else {
       // Simple function visitor
-      visitor[key] = function(path, state) {
+      visitor[key] = function (path, state) {
         callVisitor.call(this, 'enter', key, path, state);
       };
     }

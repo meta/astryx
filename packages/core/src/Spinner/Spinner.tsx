@@ -4,13 +4,13 @@
 
 /**
  * @file Spinner.tsx
- * @input Uses React, StyleX, SVG rendering
+ * @input Uses React, i18n (useComponentTranslator), StyleX, SVG rendering
  * @output Exports Spinner component, SpinnerProps, SpinnerSize, SpinnerShade types
  * @position Core implementation of spinner loading indicator
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Spinner/Spinner.doc.mjs
- * - /packages/core/src/Spinner/Spinner.test.tsx
+ * - /packages/core/src/Spinner/Spinner.test.tsx and __tests__/SpinnerMotion.a11y.chromium.spec.ts (rotor timing)
  * - /packages/core/src/Spinner/index.ts
  * - /apps/storybook/stories/Spinner.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/Spinner/ (showcase blocks)
@@ -18,31 +18,36 @@
 
 import {useId, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, durationVars, spacingVars} from '../theme/tokens.stylex';
+import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {Text} from '../Text/Text';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Spinner/Spinner.generated';
+import {spinnerRotorStyles, syncRotationPhase} from './spinnerRotor';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Constants
 // =============================================================================
 
 /**
- * Fraction of the ring the moving arc covers. The canvas ring this replaces
- * swept 135deg, not the 270deg its constant's comment claimed.
+ * The fraction of the ring the arc covers: SPINNER_ARC_FRACTION. StyleX reads
+ * only a literal in this file, and a test pins the two together.
+ *
+ * Themeable via `--spinner-arc-fraction`, declared alongside the other public
+ * vars in `sizeStyles` below. Only the inline `strokeDasharray` attribute
+ * (the pre-stylesheet render) still reads the constant directly; the CSS side
+ * composes the dash from the live var.
  */
 const ARC_FRACTION = 0.375;
 
-/**
- * The dash pattern, per unit of diameter: one arc, then the gap that closes
- * the circle. The circumference is `pi x diameter`, so multiplying the
- * resolved diameter by these two constants gives exactly the lengths the
- * default render has always used, and scales them with a themed diameter.
- */
 const PI = 3.141592653589793;
-const ARC_DASH = PI * ARC_FRACTION;
-const ARC_GAP = PI * (1 - ARC_FRACTION);
 
 const SIZES = {
   sm: {diameter: 10, border: 2},
@@ -148,70 +153,6 @@ function registerSpinnerVars(): void {
 // elide.
 registerSpinnerVars();
 
-/**
- * Pin every ring's rotation to the document timeline's origin instead of its
- * own start time, so spinners mounted seconds apart turn in phase.
- *
- * Setting `startTime` is exact where arithmetic on a clock read is not: a
- * negative `animation-delay` computed at mount is only as good as the gap
- * between reading the clock and the frame the animation starts in, which at
- * 10x CPU throttling measured 116deg of drift.
- *
- * Rings are collected and pinned in one frame because `getAnimations()`
- * resolves style and `startTime` dirties it again, so pinning them one at a
- * time makes each mount re-force what the previous one invalidated — 53 style
- * recalcs for 38 spinners against 19 batched.
- */
-const pendingRings = new Set<SVGSVGElement>();
-let flushScheduled = false;
-
-function pinRingsToTimelineOrigin(): void {
-  flushScheduled = false;
-  const animations: Animation[] = [];
-  for (const svg of pendingRings) {
-    animations.push(...svg.getAnimations());
-  }
-  pendingRings.clear();
-  for (const animation of animations) {
-    animation.startTime = 0;
-  }
-}
-
-/**
- * Ref callback for the ring: the one place a mounted ring touches the DOM.
- *
- * It reads nothing back — the geometry is resolved by the cascade, not in JS.
- */
-function syncRotationPhase(
-  svg: SVGSVGElement | null,
-): (() => void) | undefined {
-  if (svg == null) {
-    return undefined;
-  }
-  // jsdom implements no Web Animations, and this runs in every consumer's
-  // component tests.
-  if (typeof svg.getAnimations !== 'function') {
-    return undefined;
-  }
-  pendingRings.add(svg);
-  if (!flushScheduled) {
-    flushScheduled = true;
-    requestAnimationFrame(pinRingsToTimelineOrigin);
-  }
-  return () => {
-    pendingRings.delete(svg);
-  };
-}
-
-// =============================================================================
-// Animation
-// =============================================================================
-
-const rotation = stylex.keyframes({
-  '0%': {transform: 'rotate(0deg)'},
-  '100%': {transform: 'rotate(360deg)'},
-});
-
 // =============================================================================
 // Styles
 // =============================================================================
@@ -265,6 +206,8 @@ const styles = stylex.create({
   ring: {
     backfaceVisibility: 'hidden',
     display: 'block',
+    // The track and the rotor share the one grid cell, stacked and centred.
+    gridArea: '1 / 1',
     // The frame is the box, read from the same composed var the span is sized
     // from — not from the size constant, which a theme cannot reach, and not
     // from a percentage, which needs the grid area to be a definite size in
@@ -273,7 +216,6 @@ const styles = stylex.create({
     // One expression, one source of truth, resolves in any layout.
     width: `var(${BOX_SIZE})`,
     height: `var(${BOX_SIZE})`,
-    willChange: 'transform',
     // The svg is sized in CSS (100% of the span) rather than from the size
     // constant, so one user unit is one CSS pixel AND the frame follows a
     // themed diameter: the span's box is `diameter + 2 x stroke`, both public
@@ -282,16 +224,13 @@ const styles = stylex.create({
     // diameter — an overflowing grid item aligns to start rather than centre,
     // which put the ring 1.5-3.3px off across the four sizes.
     overflow: 'visible',
-    // Slow the rotation dramatically under reduced-motion rather than freezing
-    // it (a frozen spinner reads as broken), matching ProgressBar's approach.
-    // The role="status" + "Loading" label still convey busy state (obs-6).
-    animationDuration: {
-      default: durationVars['--duration-slow-min'],
-      '@media (prefers-reduced-motion: reduce)': '3s',
-    },
-    animationIterationCount: 'infinite',
-    animationName: rotation,
-    animationTimingFunction: 'linear',
+  },
+  // The rotor is the frame's size, so it turns about the ring's centre.
+  rotor: {
+    display: 'block',
+    gridArea: '1 / 1',
+    width: `var(${BOX_SIZE})`,
+    height: `var(${BOX_SIZE})`,
   },
   circle: {
     fill: 'none',
@@ -322,10 +261,16 @@ const styles = stylex.create({
   // of the circle — 87.398 against the 87.965 of pi x 28 — which shortens the
   // default arc by 0.64% and moves the cap by half a pixel. Composing the
   // lengths keeps the default byte-identical to what it drew before.
+  //
+  // The fraction itself also rides a public var (`--spinner-arc-fraction`),
+  // unregistered like the other three color/geometry public vars — it is
+  // read as a bare `<number>` multiplier here, never summed with a unitless
+  // `0` the way the registered length pair guards against, so it needs no
+  // registration.
   arc: {
     stroke: 'var(--spinner-color)',
     transform: 'rotate(-90deg)',
-    strokeDasharray: `calc(var(${RESOLVED_DIAMETER}) * ${ARC_DASH}) calc(var(${RESOLVED_DIAMETER}) * ${ARC_GAP})`,
+    strokeDasharray: `calc(var(${RESOLVED_DIAMETER}) * ${PI} * var(--spinner-arc-fraction)) calc(var(${RESOLVED_DIAMETER}) * ${PI} * (1 - var(--spinner-arc-fraction)))`,
   },
   track: {stroke: 'var(--spinner-track-color)'},
 });
@@ -348,22 +293,30 @@ const styles = stylex.create({
 // cost of its own — with nothing declaring the var,
 // `theme-var-reachability.js` cannot find an element to check, so a documented
 // var reads as unreachable.
+// Arc fraction is not itself size-dependent, but it declares alongside the
+// two vars that are, on the same per-size condition (`!hasLabel` gate at the
+// call site) — it needs a home on whichever element carries the theme
+// target, and this is the object already wired to be there.
 const sizeStyles = stylex.create({
   sm: {
     '--spinner-diameter': `${SIZES.sm.diameter}px`,
     '--spinner-stroke-width': `${SIZES.sm.border}px`,
+    '--spinner-arc-fraction': `${ARC_FRACTION}`,
   },
   md: {
     '--spinner-diameter': `${SIZES.md.diameter}px`,
     '--spinner-stroke-width': `${SIZES.md.border}px`,
+    '--spinner-arc-fraction': `${ARC_FRACTION}`,
   },
   lg: {
     '--spinner-diameter': `${SIZES.lg.diameter}px`,
     '--spinner-stroke-width': `${SIZES.lg.border}px`,
+    '--spinner-arc-fraction': `${ARC_FRACTION}`,
   },
   xl: {
     '--spinner-diameter': `${SIZES.xl.diameter}px`,
     '--spinner-stroke-width': `${SIZES.xl.border}px`,
+    '--spinner-arc-fraction': `${ARC_FRACTION}`,
   },
 });
 
@@ -484,6 +437,7 @@ export function Spinner({
   const arcLength = circumference * ARC_FRACTION;
   const hasLabel = label != null;
   const labelId = useId();
+  const t = useComponentTranslator();
 
   // When a visible string label renders (and no explicit aria-label is set),
   // name the status element from the visible Text via aria-labelledby instead
@@ -492,9 +446,13 @@ export function Spinner({
   const namedByVisibleLabel =
     hasLabel && typeof label === 'string' && ariaLabel == null;
 
-  // Resolve accessible name: explicit aria-label > string label > "Loading"
+  // Resolve accessible name: explicit aria-label > string label > the
+  // localized default. The fallback is AT-facing text, so it goes through the
+  // translation runtime like visible text does.
   const resolvedAriaLabel =
-    ariaLabel ?? (typeof label === 'string' ? label : undefined) ?? 'Loading';
+    ariaLabel ??
+    (typeof label === 'string' ? label : undefined) ??
+    t('@astryx.spinner.loading');
 
   const spinner = (
     <span
@@ -531,10 +489,12 @@ export function Spinner({
           height: `var(${BOX_SIZE}, ${frameSize}px)`,
         },
       )}>
+      {/* The track is zero-sized by attribute. With no stylesheet, the
+          rotor's arc alone fills the box, instead of two discs side by side.
+          `ring` sizes both to the box. */}
       <svg
-        ref={syncRotationPhase}
-        width={frameSize}
-        height={frameSize}
+        width={0}
+        height={0}
         aria-hidden="true"
         {...stylex.props(styles.ring)}>
         <circle
@@ -548,18 +508,28 @@ export function Spinner({
             trackOpacityStyles[shade],
           )}
         />
-        <circle
-          cx="50%"
-          cy="50%"
-          r={diameter / 2}
-          strokeWidth={border}
-          // The size's own dash, for the render with no stylesheet. The rule
-          // above composes the same lengths from the resolved diameter, so a
-          // themed ring keeps this fraction of arc rather than this length.
-          strokeDasharray={`${arcLength} ${circumference - arcLength}`}
-          {...stylex.props(styles.circle, styles.arc)}
-        />
       </svg>
+      <span
+        ref={syncRotationPhase}
+        aria-hidden="true"
+        {...stylex.props(styles.rotor, spinnerRotorStyles.turn)}>
+        <svg
+          width={frameSize}
+          height={frameSize}
+          {...stylex.props(styles.ring)}>
+          <circle
+            cx="50%"
+            cy="50%"
+            r={diameter / 2}
+            strokeWidth={border}
+            // The size's own dash, for the render with no stylesheet. The rule
+            // above composes the same lengths from the resolved diameter, so a
+            // themed ring keeps this fraction of arc rather than this length.
+            strokeDasharray={`${arcLength} ${circumference - arcLength}`}
+            {...stylex.props(styles.circle, styles.arc)}
+          />
+        </svg>
+      </span>
     </span>
   );
 

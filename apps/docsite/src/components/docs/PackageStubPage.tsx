@@ -9,6 +9,7 @@ import {Text, Heading} from '@astryxdesign/core/Text';
 import {Markdown} from '@astryxdesign/core/Markdown';
 import {Divider} from '@astryxdesign/core/Divider';
 import {parseOutlineFromMarkdown} from '@astryxdesign/core/Outline';
+import {stripHtmlComments} from './stripHtmlComments';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {DocPageLayout} from './DocPageLayout';
 import {PackageActions, type InstallStep} from './PackageActions';
@@ -82,7 +83,7 @@ export function PackageStubPage({
   stripSections,
   stripIntro,
 }: PackageStubPageProps) {
-  let body = readme ? readme.replace(/^# .+\n+/, '') : null;
+  let body = readme ? stripHtmlComments(readme).replace(/^# .+\n+/, '') : null;
 
   if (body && stripIntro) {
     // Remove leading prose up to the first ## section heading.

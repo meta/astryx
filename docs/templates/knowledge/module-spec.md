@@ -1,6 +1,6 @@
 ---
 schema_version: 3
-template_version: 1
+template_version: 4
 kind: module
 id: module:<ParentComponent>/<PublicName>
 authority: draft
@@ -17,9 +17,27 @@ references: [architecture:<surface>, design:<surface>, spec:AST-000/DEC-0]
 
 # <PublicName> module contract
 
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
+
+## Contract at a glance
+
+| Area                    | Contract                                                                                                                                           |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `<Exact public API, concept, or syntax delta; write “None” when none changes.>`                                                                    |
+| Behavior                | `<Observable governing behavior, including the decisive default, boundary, or precedence rule.>`                                                   |
+| End-user impact         | `<Who is affected, in what state, and what improves, worsens, or remains unchanged.>`                                                              |
+| Builder impact          | `<Migration and each new caller choice; write “None” when there is no new burden.>`                                                                |
+| Compatibility/readiness | `<Default compatibility; additive/breaking status; authority and implementation state; material evidence still pending.>`                          |
+| Review checks           | `<Reject specific contradictions, invalid states, wrong-owner APIs, or lost boundaries/precedence/evidence distinctions already forbidden below.>` |
+| Governing rules         | `<Canonical owners and only the current clauses needed to justify this projection.>`                                                               |
+
+This table is a review projection; the body below is authoritative.
+
+<!-- Keep each cell compact. Review checks project settled body rules; they do not create policy. Link AST-002 list-item clauses with an exact visible label and the canonical file URL, never an invented fragment. -->
+
 ## Intent
 
-<!-- Why this public semantic module exists and the component-local job it owns. Private implementation helpers do not need records. Consumer usage belongs in the module's .doc.mjs. -->
+<!-- Why this public semantic module exists and the component-local job it owns. Private implementation helpers do not need records. Consumer usage belongs in the module's .doc.mjs. A current module record may contract one named semantic slice; state that boundary and leave adjacent behavior uncontracted rather than filling it for completeness. -->
 
 ## Compatibility and migration
 
@@ -71,6 +89,20 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Anatomy or state | Design requirement     | Representation authority                     | Module contract     |
 | ---------------- | ---------------------- | -------------------------------------------- | ------------------- |
 | `<role/state>`   | `design:<surface>/DR1` | `<prescribed, human-selected, or unsettled>` | `<FR/AR reference>` |
+
+Use the optional table below only for durable module-local visual intent that a
+future redesign must reconsider. Reuse or amend an existing row before adding
+one. Exact pixel tuning normally stays in code and visual evidence. Put shared or
+cross-component rules in `docs/design/` and link them from the relationship table
+above. Use `DD1`, `DD2`, and so on; IDs remain stable and unique within this
+record.
+
+### Design decisions
+
+<!-- design-decisions:v1 -->
+
+| ID  | Decision | Intent or reason | Applies to | Allowed variation |
+| --- | -------- | ---------------- | ---------- | ----------------- |
 
 ### Theming anatomy
 

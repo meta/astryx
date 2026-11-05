@@ -1,0 +1,20 @@
+package: @acme/kit
+
+# AcmeCard
+
+A zorblax card that groups one topic.
+
+**Import:** `import {AcmeCard} from '@acme/kit';`
+
+## Best Practices
+
+- **Do:** Keep one idea per card.
+- **Don't:** Do not nest cards.
+
+## Props
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `title` | `string` | - | Heading text. **(required)** |
+| `tone` | `'calm' \| 'loud'` | `'calm'` | Visual weight. |
+

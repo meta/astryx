@@ -19,7 +19,7 @@
  * next one is covered without touching this file.
  *
  * Asserted on the receipt's `warnings` rather than on a rejection: a private
- * var is reported (logged `✗`, collected into the receipt) and the build then
+ * var is reported (logged `[error]`, collected into the receipt) and the build then
  * emits its CSS and resolves anyway. Asserting a throw would pass for the
  * wrong reason — it never throws, which is why a throwaway build read as a
  * pass on the first version of #5214.

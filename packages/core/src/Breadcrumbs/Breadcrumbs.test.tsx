@@ -1,18 +1,31 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {render, screen, waitFor, fireEvent} from '@testing-library/react';
+import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
+import {__resetMenuPressForTest} from '../hooks/useMenuPress';
+import {expectNativeLinkClicks} from '../hooks/__tests__/menuLinkClicks';
 import userEvent from '@testing-library/user-event';
 import {Breadcrumbs} from './Breadcrumbs';
 import {BreadcrumbItem} from './BreadcrumbItem';
 import {
   BreadcrumbMenuItem,
+  BreadcrumbMenuDivider,
+  BreadcrumbMenuGroup,
   BreadcrumbMenuCheckboxItem,
   BreadcrumbMenuRadioGroup,
   BreadcrumbMenuRadioItem,
 } from './index';
-import type {BreadcrumbMenuOption} from './index';
+import type {BreadcrumbMenuDividerProps, BreadcrumbMenuOption} from './index';
 import {LinkProvider} from '../Link/LinkProvider';
+import {AppShellMobileContext} from '../AppShell/AppShellMobileContext';
+import {
+  SideNavRenderContext,
+  type SideNavRenderMode,
+} from '../SideNav/SideNavRenderContext';
+import {
+  TopNavRenderContext,
+  type TopNavRenderMode,
+} from '../TopNav/TopNavRenderContext';
 
 function CustomLink({
   children,
@@ -97,18 +110,6 @@ describe('Breadcrumbs', () => {
     // Custom separator content is nested inside the aria-hidden span
     // First item's separator is hidden via CSS, but still in the DOM
     expect(separators[1].textContent).toBe('›');
-  });
-
-  it('separators are aria-hidden', () => {
-    const {container} = render(
-      <Breadcrumbs>
-        <BreadcrumbItem href="/">Home</BreadcrumbItem>
-        <BreadcrumbItem isCurrent>Page</BreadcrumbItem>
-      </Breadcrumbs>,
-    );
-    const separators = container.querySelectorAll('span[aria-hidden="true"]');
-    expect(separators.length).toBeGreaterThan(0);
-    expect(separators[0]).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('forwards ref to the nav element', () => {
@@ -379,6 +380,122 @@ describe('BreadcrumbItem', () => {
   });
 });
 
+describe('BreadcrumbItem in the AppShell mobile drawer', () => {
+  function renderInDrawer(
+    crumbs: React.ReactNode,
+    {
+      topNavMode = 'drawer',
+      sideNavMode = 'default',
+    }: {
+      topNavMode?: TopNavRenderMode;
+      sideNavMode?: SideNavRenderMode;
+    } = {},
+  ) {
+    const calls: string[] = [];
+    const closeMobileNav = vi.fn(() => calls.push('close'));
+    render(
+      <AppShellMobileContext
+        value={{
+          isMobile: true,
+          isMobileNavOpen: true,
+          toggleMobileNav: () => {},
+          openMobileNav: () => {},
+          closeMobileNav,
+          isMobileNavEnabled: true,
+          hasAutoToggle: true,
+        }}>
+        <SideNavRenderContext value={sideNavMode}>
+          <TopNavRenderContext value={topNavMode}>
+            <Breadcrumbs>{crumbs}</Breadcrumbs>
+          </TopNavRenderContext>
+        </SideNavRenderContext>
+      </AppShellMobileContext>,
+    );
+    return {calls, closeMobileNav};
+  }
+
+  it('a crumb link calls onClick and then closes the drawer', () => {
+    const {calls} = renderInDrawer(
+      <>
+        <BreadcrumbItem
+          href="#/projects"
+          onClick={event => {
+            event.preventDefault();
+            calls.push('onClick');
+          }}>
+          Projects
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}));
+    expect(calls).toEqual(['onClick', 'close']);
+  });
+
+  it('a crumb button calls onClick and then closes the drawer', () => {
+    const {calls} = renderInDrawer(
+      <>
+        <BreadcrumbItem onClick={() => calls.push('onClick')}>
+          Projects
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Projects'}));
+    expect(calls).toEqual(['onClick', 'close']);
+  });
+
+  it('a crumb marked isCurrent leaves the drawer open', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <>
+        <BreadcrumbItem href="#/projects">Projects</BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByText('Detail'));
+    expect(closeMobileNav).not.toHaveBeenCalled();
+  });
+
+  it('a last crumb that is current only by position is still a link and closes the drawer', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <>
+        <BreadcrumbItem href="#/projects">Projects</BreadcrumbItem>
+        <BreadcrumbItem
+          href="#/projects/detail"
+          onClick={e => e.preventDefault()}>
+          Detail
+        </BreadcrumbItem>
+      </>,
+    );
+    const last = screen.getByRole('link', {name: 'Detail'});
+    expect(last).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(last);
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
+  });
+
+  it('a crumb link in the side navigation drawer closes it too', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <BreadcrumbItem href="#/projects" onClick={e => e.preventDefault()}>
+        Projects
+      </BreadcrumbItem>,
+      {topNavMode: 'default', sideNavMode: 'drawer-content'},
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}));
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
+  });
+
+  it('a crumb outside the drawer does not touch it', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <BreadcrumbItem href="#/projects" onClick={e => e.preventDefault()}>
+        Projects
+      </BreadcrumbItem>,
+      {topNavMode: 'mobile-bar'},
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}));
+    expect(closeMobileNav).not.toHaveBeenCalled();
+  });
+});
+
 describe('BreadcrumbItem menu', () => {
   // Mock the native Popover API — jsdom doesn't implement showPopover/
   // hidePopover or the :popover-open match. Mirrors DropdownMenu's test setup.
@@ -427,6 +544,80 @@ describe('BreadcrumbItem menu', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('labels the menu from non-string trigger content', async () => {
+    const user = userEvent.setup();
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem menu={items}>
+          <span>Teams</span>
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+
+    await user.click(screen.getByRole('button', {name: 'Teams'}));
+
+    expect(screen.getByRole('menu', {hidden: true})).toHaveAccessibleName(
+      'Teams',
+    );
+  });
+
+  it('leaves a Ctrl-, Cmd-, Shift- or middle click on a link item in its menu to the browser', async () => {
+    __resetMenuPressForTest();
+    const user = userEvent.setup();
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem
+          menu={[
+            {label: 'Design', href: '/design'},
+            {label: 'Engineering', href: '/engineering'},
+          ]}>
+          Teams
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Teams'}));
+    const row = screen.getByRole('menuitem', {name: 'Design', hidden: true});
+    expectNativeLinkClicks(row.closest('a') ?? row);
+  });
+
+  it('acts on the menu item a press slid across the menu lifts on, once (family:action-groups FR1, FR2, FR5)', async () => {
+    __resetMenuPressForTest();
+    const user = userEvent.setup();
+    const onFirst = vi.fn();
+    const onSecond = vi.fn();
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem
+          menu={[
+            {label: 'Design', onClick: onFirst},
+            {label: 'Engineering', onClick: onSecond},
+          ]}>
+          Teams
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Teams'}));
+    const FIRST = 'Design';
+    const SECOND = 'Engineering';
+    const item = (name: string) =>
+      screen.getByRole('menuitem', {name, hidden: true});
+    for (const pointer of [
+      {pointerType: 'touch', pointerId: 1},
+      {pointerType: 'mouse', pointerId: 2, button: 0},
+    ]) {
+      onFirst.mockClear();
+      onSecond.mockClear();
+      fireEvent.pointerDown(item(FIRST), pointer);
+      fireEvent.pointerMove(item(SECOND), pointer);
+      fireEvent.pointerUp(item(SECOND), pointer);
+      expect(onSecond).toHaveBeenCalledTimes(1);
+      expect(onFirst).not.toHaveBeenCalled();
+    }
+  });
+
   it('portability: a DropdownMenuOption[] renders its items on open', async () => {
     const user = userEvent.setup();
     render(
@@ -437,7 +628,7 @@ describe('BreadcrumbItem menu', () => {
     );
     await user.click(screen.getByRole('button', {name: 'Teams'}));
     const menu = screen.getByRole('menu', {hidden: true});
-    expect(menu).toHaveAttribute('aria-label', 'Teams');
+    expect(menu).toHaveAccessibleName('Teams');
     expect(
       screen.getByRole('menuitem', {name: 'Design', hidden: true}),
     ).toBeInTheDocument();
@@ -447,6 +638,38 @@ describe('BreadcrumbItem menu', () => {
     expect(
       screen.getByRole('menuitem', {name: 'Data', hidden: true}),
     ).toBeInTheDocument();
+  });
+
+  it('after a pointer open, a row the mouse rests on takes focus without :focus-visible', async () => {
+    // Nothing else in this file activates the shared modality tracking, so
+    // the menu crumb must activate it for its rows to follow the last input
+    // (architecture:interaction-modality INV1).
+    const user = userEvent.setup();
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem menu={items}>Teams</BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Teams'}));
+    // The open focuses the first row in the next frame; let it land first,
+    // so the row the mouse moves onto is one that does not have focus yet.
+    await act(async () => {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    });
+    const design = screen.getByRole('menuitem', {name: 'Design', hidden: true});
+    expect(design).toHaveFocus();
+    const engineering = screen.getByRole('menuitem', {
+      name: 'Engineering',
+      hidden: true,
+    });
+    const focusSpy = vi.spyOn(engineering, 'focus');
+    fireEvent.pointerMove(engineering, {pointerType: 'mouse'});
+    expect(engineering).toHaveFocus();
+    expect(focusSpy).toHaveBeenCalledWith({
+      preventScroll: true,
+      focusVisible: false,
+    });
   });
 
   it('fires the item onClick and closes the menu on select', async () => {
@@ -576,6 +799,43 @@ describe('BreadcrumbItem menu', () => {
     expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
     await waitFor(() => {
       expect(trigger).toHaveFocus();
+    });
+  });
+
+  it('preserves outside focus after a browser light dismiss', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <Breadcrumbs>
+          <BreadcrumbItem menu={items}>Teams</BreadcrumbItem>
+          <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+        </Breadcrumbs>
+        <button type="button">Outside action</button>
+      </>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Teams'});
+    await user.click(trigger);
+    const menu = screen.getByRole('menu', {hidden: true});
+    const outside = screen.getByRole('button', {name: 'Outside action'});
+    // The menu takes focus in the frame after it opens. Wait for it: jsdom
+    // does not hide a closed popover, so a later frame could still focus an
+    // item in it, where a browser cannot.
+    await waitFor(() => {
+      expect(menu).toContainElement(
+        document.activeElement as HTMLElement | null,
+      );
+    });
+
+    outside.focus();
+    expect(outside).toHaveFocus();
+    const popover = menu.closest('[popover]');
+    expect(popover).not.toBeNull();
+    await act(async () => {
+      (popover as HTMLElement).hidePopover();
+    });
+
+    await waitFor(() => {
+      expect(outside).toHaveFocus();
     });
   });
 
@@ -733,5 +993,62 @@ describe('BreadcrumbItem menu', () => {
       'ol > li > span[aria-hidden="true"]',
     );
     expect(separators).toHaveLength(3);
+  });
+
+  it('renders the separator and props types through the BreadcrumbMenuDivider aliases', async () => {
+    const user = userEvent.setup();
+    const dividerProps: BreadcrumbMenuDividerProps = {
+      'data-testid': 'breadcrumb-menu-divider',
+    };
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem
+          menu={
+            <>
+              <BreadcrumbMenuItem label="Overview" />
+              <BreadcrumbMenuDivider {...dividerProps} />
+              <BreadcrumbMenuItem label="Settings" />
+            </>
+          }>
+          Project
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Current</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Project'}));
+
+    expect(screen.getByTestId('breadcrumb-menu-divider')).toHaveAttribute(
+      'role',
+      'separator',
+    );
+  });
+
+  it('carries the group semantics through the BreadcrumbMenuGroup alias', async () => {
+    // The alias must bring the semantics, not just the component: a group
+    // that renders but is not named leaves a screen reader with a run of
+    // loose rows where a sighted user sees a cluster.
+    const user = userEvent.setup();
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem
+          menu={
+            <BreadcrumbMenuGroup title="Recent">
+              <BreadcrumbMenuItem label="Overview" onClick={() => {}} />
+              <BreadcrumbMenuItem label="Settings" onClick={() => {}} />
+            </BreadcrumbMenuGroup>
+          }>
+          Project
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Current</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Project'}));
+
+    const group = screen.getByRole('group', {name: 'Recent', hidden: true});
+    const heading = screen.getByText('Recent');
+    expect(group).toHaveAttribute('aria-labelledby', heading.id);
+    expect(group).toContainElement(
+      screen.getByRole('menuitem', {name: 'Overview', hidden: true}),
+    );
   });
 });
