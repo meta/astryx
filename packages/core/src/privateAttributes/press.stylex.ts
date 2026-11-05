@@ -8,7 +8,8 @@
  * @input StyleX, the overlay color tokens, the touch press strength
  *   (`pressVars`) and the row layer's clocks (utils/rowPressLayer.stylex.ts)
  * @output `rowPressLayerStyles`, the compositor press layer for list rows
- *   (`cell`, `cellOnImage` for a `backgroundImage` row), and
+ *   (`cell`, `cellOnImage` for a `backgroundImage` row,
+ *   `cellOnImagePressOnly` for a row whose fill is the hover tone), and
  *   `rowPressPaintStyles`, a CheckboxList row's press paint for its box
  * @position Owner module of the private press attribute: the press controller
  *   (utils/pressFeedback.ts) writes it, and this file reads it. No package
@@ -234,6 +235,25 @@ export const rowPressLayerStyles = stylex.create({
           default: null,
           ':hover': hoverImage,
           ':active': pressedImage,
+        },
+        [PRESSED_ON]: {default: pressedOverlayImage, [COARSE]: 'none'},
+        [PRESSED_FADING]: {default: pressedOverlayImage, [COARSE]: 'none'},
+      },
+    },
+  },
+  /**
+   * `cellOnImage` without the hover arm, for a row whose fill is already the
+   * hover tone (a highlighted Item row). A hover layer on it would match a
+   * pressed row, so the row shows only its press.
+   */
+  cellOnImagePressOnly: {
+    backgroundImage: {
+      default: null,
+      [ENABLED]: {
+        default: null,
+        ':active': {
+          default: pressedImage,
+          [COARSE]: 'none',
         },
         [PRESSED_ON]: {default: pressedOverlayImage, [COARSE]: 'none'},
         [PRESSED_FADING]: {default: pressedOverlayImage, [COARSE]: 'none'},

@@ -46,9 +46,12 @@ async function colourAt(page: Page, x: number, y: number): Promise<Rgb> {
 const differs = (a: Rgb, b: Rgb) => a.some((channel, i) => channel !== b[i]);
 
 for (const mode of ['light', 'dark'] as const) {
-  // Rest is the control: a row with no state fill, which has always painted both.
+  // Rest is the control: a row with no state fill, which has always painted
+  // both. A highlighted row's fill is already the hover tone, so it shows
+  // only its press.
   for (const label of ['Rest', 'Highlighted', 'Selected']) {
-    test(`a ${label.toLowerCase()} row paints hover and press over its fill (${mode})`, async ({
+    const showsHover = label !== 'Highlighted';
+    test(`a ${label.toLowerCase()} row paints ${showsHover ? 'hover and press' : 'press, not hover,'} over its fill (${mode})`, async ({
       page,
     }) => {
       await page.goto(
@@ -69,9 +72,15 @@ for (const mode of ['light', 'dark'] as const) {
       await page.mouse.move(1, 470);
       const rest = await colourAt(page, x, y);
       await page.mouse.move(x, y);
-      await expect
-        .poll(async () => differs(await colourAt(page, x, y), rest))
-        .toBe(true);
+      if (showsHover) {
+        await expect
+          .poll(async () => differs(await colourAt(page, x, y), rest))
+          .toBe(true);
+      } else {
+        // Give a hover transition time to show before reading no change.
+        await page.waitForTimeout(400);
+        expect(differs(await colourAt(page, x, y), rest)).toBe(false);
+      }
       const hover = await colourAt(page, x, y);
       await page.mouse.down();
       await expect

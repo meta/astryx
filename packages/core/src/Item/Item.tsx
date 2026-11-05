@@ -1030,7 +1030,13 @@ export function Item({
           // own touch paint it turns off): the release keeps fading while
           // script runs.
           isInteractive && rowPressLayerStyles.cell,
-          isInteractive && hasStateFill && rowPressLayerStyles.cellOnImage,
+          // A highlighted row's fill is already the hover tone, so it shows
+          // only its press. A selected row also shows its hover.
+          isInteractive &&
+            hasStateFill &&
+            (isSelected
+              ? rowPressLayerStyles.cellOnImage
+              : rowPressLayerStyles.cellOnImagePressOnly),
           isLinkRoot && styles.linkRoot,
           isHighlighted && styles.highlighted,
           isSelected && styles.selected,
