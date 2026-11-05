@@ -428,7 +428,45 @@ describe('LineClamp', () => {
       expect(link).not.toHaveAttribute('data-line-clamp-hidden');
     });
 
-    it("keeps its own inert writes straight through a caller's inline callback ref", async () => {
+    it('releases a link in a clamp that mounts inside one already on screen', async () => {
+      const rectMap = new Map<Element, {top: number; bottom: number}>();
+      const content = (withInner: boolean) => (
+        <LineClamp maxLines={5} data-testid="outer" hasTruncateTooltip={false}>
+          Text
+          {withInner && (
+            <LineClamp
+              maxLines={2}
+              data-testid="inner"
+              hasTruncateTooltip={false}>
+              <a href="/more">Read more</a>
+            </LineClamp>
+          )}
+        </LineClamp>
+      );
+      const {rerender} = render(content(false));
+      rectMap.set(screen.getByTestId('outer'), {top: 0, bottom: 200});
+      mockRects(rectMap);
+      // The inner clamp mounts clipped, so it writes `inert` as it mounts.
+      rerender(content(true));
+      const link = screen.getByText('Read more');
+      rectMap.set(screen.getByTestId('inner'), {top: 0, bottom: 40});
+      rectMap.set(link, {top: 40, bottom: 56});
+      rerender(content(true));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(link).toHaveAttribute('inert');
+
+      // It scrolls into view: the clamp still owns the attribute.
+      rectMap.set(link, {top: 10, bottom: 26});
+      rerender(content(true));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(link).not.toHaveAttribute('inert');
+    });
+
+    it("still releases a link it hid across renders with a caller's inline callback ref", async () => {
       const rectMap = new Map<Element, {top: number; bottom: number}>();
       // A new function every render, so the merged ref changes every render.
       const content = () => (
@@ -450,19 +488,11 @@ describe('LineClamp', () => {
       rectMap.set(screen.getByTestId('clamp'), {top: 0, bottom: 40});
       rectMap.set(link, {top: 10, bottom: 26});
       mockRects(rectMap);
-      const observe = vi.spyOn(MutationObserver.prototype, 'observe');
       rerender(content());
       await act(async () => {
         await Promise.resolve();
       });
       expect(link).not.toHaveAttribute('inert');
-      // Renders do not detach and re-attach the clamp's own observer, the one
-      // that watches attributes.
-      const clampObservations = observe.mock.calls.filter(
-        ([, options]) => options?.attributes,
-      );
-      expect(clampObservations).toHaveLength(0);
-
       // Hide the link, then render again before the observer reports the write.
       rectMap.set(link, {top: 40, bottom: 56});
       rerender(content());

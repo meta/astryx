@@ -20,9 +20,9 @@
 import {
   lazy,
   Suspense,
+  useCallback,
   useLayoutEffect,
   useRef,
-  useState,
   type FocusEvent,
   type ReactNode,
 } from 'react';
@@ -80,26 +80,6 @@ function isOwnedBy(container: HTMLElement, el: Element): boolean {
   return el.parentElement?.closest(`[${ROOT_ATTRIBUTE}]`) === container;
 }
 
-// For each clamp root being observed, the `inert` writes the clamp made that
-// its observer has not reported yet, per element. The observer reports a write
-// of ours and a write of the caller's alike, so each report is checked against
-// this count first. A root that is not observed has no entry, so a write made
-// before the observer attaches is never counted, as no report will come for it.
-const ownInertWrites = new WeakMap<HTMLElement, WeakMap<Element, number>>();
-
-function setInert(container: HTMLElement, el: HTMLElement, isInert: boolean) {
-  if (el.hasAttribute('inert') === isInert) {
-    return;
-  }
-  const owed = ownInertWrites.get(container);
-  owed?.set(el, (owed.get(el) ?? 0) + 1);
-  if (isInert) {
-    el.setAttribute('inert', '');
-  } else {
-    el.removeAttribute('inert');
-  }
-}
-
 /**
  * Take a clipped descendant out of the tab order and the accessibility tree by
  * marking it `inert`. The element's own `tabindex` and `aria-hidden` are never
@@ -107,7 +87,7 @@ function setInert(container: HTMLElement, el: HTMLElement, isInert: boolean) {
  * whatever the clamp does, and there is nothing to restore but the one
  * attribute this adds.
  */
-function hideFromTabOrder(container: HTMLElement, el: HTMLElement) {
+function hideFromTabOrder(el: HTMLElement) {
   if (el.hasAttribute(HIDDEN_ATTRIBUTE)) {
     return;
   }
@@ -115,13 +95,13 @@ function hideFromTabOrder(container: HTMLElement, el: HTMLElement) {
   if (el.hasAttribute('inert')) {
     return;
   }
-  setInert(container, el, true);
+  el.setAttribute('inert', '');
   el.setAttribute(HIDDEN_ATTRIBUTE, '');
 }
 
 /** Make a descendant this clamp hid reachable again. */
-function restoreFromClip(container: HTMLElement, el: HTMLElement) {
-  setInert(container, el, false);
+function restoreFromClip(el: HTMLElement) {
+  el.removeAttribute('inert');
   el.removeAttribute(HIDDEN_ATTRIBUTE);
 }
 
@@ -155,9 +135,9 @@ function syncFocusableClipping(
     const isClipped =
       !isFocused && el.getBoundingClientRect().top >= containerBottom;
     if (isClipped) {
-      hideFromTabOrder(container, el);
+      hideFromTabOrder(el);
     } else if (el.hasAttribute('data-line-clamp-hidden')) {
-      restoreFromClip(container, el);
+      restoreFromClip(el);
     }
   }
 }
@@ -166,32 +146,45 @@ const MUTATION_OPTIONS: MutationObserverInit = {
   childList: true,
   subtree: true,
   attributes: true,
+  attributeOldValue: true,
   attributeFilter: ['tabindex', 'disabled', 'href', 'inert', 'contenteditable'],
 };
 
 /**
- * A caller writing `inert` on a link this clamp had hidden, or taking it away,
- * makes the attribute theirs: drop the clamp's marker, so un-clipping the link
- * leaves it as they set it. The clamp's own writes are counted off first.
+ * A caller writing `inert` on a link this clamp had hidden makes the attribute
+ * theirs: drop the clamp's marker, so un-clipping the link leaves it as they
+ * set it. The clamp's own writes are told apart by what they do rather than
+ * counted, so this does not depend on when the observer attached. It only ever
+ * adds or removes the attribute, so a record that goes from present to present
+ * is the caller writing it again, and a hidden link left without it had it
+ * taken away.
  */
 function handBackCallerInert(
   container: HTMLElement,
   records: ReadonlyArray<MutationRecord>,
 ) {
-  const owedWrites = ownInertWrites.get(container);
-  for (const record of records) {
-    if (
-      record.type !== 'attributes' ||
-      record.attributeName !== 'inert' ||
-      !(record.target instanceof HTMLElement) ||
-      !isOwnedBy(container, record.target)
-    ) {
-      continue;
+  const inertRecords = records.filter(
+    (record): record is MutationRecord & {target: HTMLElement} =>
+      record.type === 'attributes' &&
+      record.attributeName === 'inert' &&
+      record.target instanceof HTMLElement &&
+      isOwnedBy(container, record.target),
+  );
+  for (const [index, record] of inertRecords.entries()) {
+    const target = record.target;
+    // What the attribute was set to by this record: the next record for the
+    // same element reports it as its old value, and the last one is the
+    // element's current state.
+    const next = inertRecords
+      .slice(index + 1)
+      .find(candidate => candidate.target === target);
+    const value = next ? next.oldValue : target.getAttribute('inert');
+    if (record.oldValue != null && value != null) {
+      target.removeAttribute(HIDDEN_ATTRIBUTE);
     }
-    const owed = owedWrites?.get(record.target) ?? 0;
-    if (owed > 0) {
-      owedWrites?.set(record.target, owed - 1);
-    } else {
+  }
+  for (const record of inertRecords) {
+    if (!record.target.hasAttribute('inert')) {
       record.target.removeAttribute(HIDDEN_ATTRIBUTE);
     }
   }
@@ -269,36 +262,28 @@ export function LineClamp({
 
   // A resize can move a descendant across the clip edge without a render, and
   // a child can add or re-enable a focusable element past it, so the sync also
-  // runs from the shared observers. They attach to the root element held in
-  // state, so they stay put through renders and are released only when the root
-  // goes, including when `as` replaces it. A caller's inline callback ref
-  // changes the merged ref on every render, which re-attaches a callback ref
-  // each time; the state setter is stable, so it does not.
-  const [root, setRoot] = useState<HTMLElement | null>(null);
-  useLayoutEffect(() => {
-    if (root == null) {
+  // runs from the shared observers. A callback ref attaches them with the root
+  // and releases them when it goes, including when `as` replaces it.
+  const observeRoot = useCallback((container: HTMLElement | null) => {
+    if (container == null) {
       return;
     }
-    const sync = () => syncFocusableClipping(root);
-    ownInertWrites.set(root, new WeakMap());
-    // The mutation observer goes first: `observeResize` runs `sync` as it
-    // registers, and the writes that makes have to be reported to be counted.
+    const sync = () => syncFocusableClipping(container);
     const unobserveMutations = observeMutations(
-      root,
+      container,
       MUTATION_OPTIONS,
       records => {
-        handBackCallerInert(root, records);
+        handBackCallerInert(container, records);
         sync();
       },
     );
-    const unobserveResize = observeResize(root, sync);
+    const unobserveResize = observeResize(container, sync);
     return () => {
       unobserveResize();
       unobserveMutations();
-      ownInertWrites.delete(root);
     };
-  }, [root]);
-  const mergedRef = useMergedRefs(ref, truncation.ref, elementRef, setRoot);
+  }, []);
+  const mergedRef = useMergedRefs(ref, truncation.ref, elementRef, observeRoot);
 
   const tooltipPlacement: LayerPlacement =
     typeof hasTruncateTooltip === 'string' ? hasTruncateTooltip : 'above';
