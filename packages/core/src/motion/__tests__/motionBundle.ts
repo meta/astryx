@@ -8,7 +8,7 @@
  *   (global `Motion`), and the type of that global
  */
 
-export {createMotionAnimator} from '../animator';
+export {createMotionEngine} from '../animator';
 export {solveSpring, toSpring} from '../spring';
 export {registerSpringsTable, springs} from '../uikit/springs';
 export {motionRoleOf} from '../roles';
