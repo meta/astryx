@@ -1219,7 +1219,7 @@ export function DropdownMenuSubMenu(
         ref={triggerRowRef}
         id={triggerId}
         role="menuitem"
-        tabIndex={isDisabled ? undefined : -1}
+        tabIndex={-1}
         aria-haspopup={hasRegions ? 'dialog' : 'menu'}
         aria-expanded={isOpen}
         aria-controls={isOpen ? (hasRegions ? frameId : contentId) : undefined}

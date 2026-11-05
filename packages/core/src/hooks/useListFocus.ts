@@ -481,7 +481,6 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
     [isItemDisabled],
   );
 
-  /** Whether the navigation keys pass over an item. */
   const isSkippedByKeys = useCallback(
     (el: HTMLElement): boolean => !reachesDisabledItems && isItemDisabled(el),
     [reachesDisabledItems, isItemDisabled],
