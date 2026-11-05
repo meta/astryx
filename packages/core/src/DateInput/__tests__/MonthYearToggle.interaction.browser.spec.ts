@@ -566,8 +566,8 @@ test('Reduced Motion: the wheels cross-fade in at most 200 ms and the chevron di
     }
     expect(animation.duration).toBeLessThanOrEqual(200);
   }
-  // The chevron dips; its turn is a zero-length transition at the dip's
-  // middle, an instant change rather than travel.
+  // The chevron dips; its turn is no transition but an instant change that
+  // lands at the dip's middle, while the glyph is transparent.
   const chevron = (
     await runningAnimations(page, '[data-title="month-year"] .astryx-icon')
   ).filter(animation => animation.duration > 0);
@@ -576,15 +576,49 @@ test('Reduced Motion: the wheels cross-fade in at most 200 ms and the chevron di
     expect(animation.properties).toEqual(['opacity']);
     expect(animation.duration).toBeLessThanOrEqual(200);
   }
-  const turn = await page
-    .locator('[data-title="month-year"] .astryx-icon')
-    .first()
-    .evaluate(element => {
-      const style = getComputedStyle(element);
-      return {duration: style.transitionDuration, delay: style.transitionDelay};
-    });
-  expect(turn).toEqual({duration: '0s', delay: '0.1s'});
+  const icon = page.locator('[data-title="month-year"] .astryx-icon').first();
+  const turn = await icon.evaluate(element => {
+    const style = getComputedStyle(element);
+    return {duration: style.transitionDuration, delay: style.transitionDelay};
+  });
+  expect(turn).toEqual({duration: '0s', delay: '0s'});
   await waitForRest(wheels);
+  // Once the dip has landed, the chevron shows the turn: it points down.
+  expect(
+    await icon.evaluate(element => getComputedStyle(element).transform),
+  ).toBe('matrix(1, 0, 0, 1, 0, 0)');
+});
+
+test('DateTimeInput: Done hands focus to the shown month’s day once the calendar can take focus', async ({
+  page,
+}) => {
+  await openStory(page, storybook(), DTI_STORY);
+  const driver = await touchDriver(page);
+  const tapCenter = async (selector: string) => {
+    const box = await page.locator(selector).first().boundingBox();
+    if (box == null) {
+      throw new Error(`no ${selector}`);
+    }
+    await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
+  };
+  await tapCenter('button[aria-label^="Open "]');
+  await waitForRest(
+    page.getByRole('dialog').locator('.astryx-bottom-sheet').first(),
+  );
+  await tapCenter('button[aria-label$="Choose month and year"]');
+  const wheels = page.locator('[data-date-surface="wheels"]').first();
+  await waitForRest(wheels);
+  // Done from the keyboard: focus sits in the wheels' footer.
+  const done = wheels.getByRole('button', {name: 'Done', exact: true});
+  await done.focus();
+  await page.keyboard.press('Enter');
+  // The story's value is March 15, 2026: the shown month's tab stop.
+  const day = page.locator(
+    'button[data-date="2026-03-15"]:not([data-outside])',
+  );
+  await expect(day).toBeFocused();
+  await expect(day).toHaveAttribute('tabindex', '0');
+  await expect(day).toBeInViewport();
 });
 
 test('in RTL the chevron points left, and turns to point down', async ({

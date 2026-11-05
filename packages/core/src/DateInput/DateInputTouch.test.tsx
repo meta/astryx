@@ -3822,7 +3822,7 @@ describe('DateInput — scroll CSS (definition-level)', () => {
       "default: 'rotate(0deg)'",
     );
     expect(source).toContain(
-      'const chevronDipRef = useChevronDip(isWheelOpen)',
+      'const {ref: chevronRef, dip: dipChevron} = useChevronDip()',
     );
   });
 
@@ -3852,9 +3852,10 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     expect(chevron).toContain(
       "'@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s'",
     );
-    expect(chevron).toContain('RM_DIP_HALF');
+    // The turn lands at the dip's middle (useChevronDip), not on a delay.
+    expect(chevron.includes('transitionDelay')).toBe(false);
     expect(source).toContain(
-      'const chevronDipRef = useChevronDip(isWheelOpen)',
+      'const {ref: chevronRef, dip: dipChevron} = useChevronDip()',
     );
   });
 

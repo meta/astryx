@@ -198,8 +198,6 @@ const HORIZONTAL_SEGMENT_BASIS = 196;
 const TOGGLE_DURATION = monthYearToggleMotion.duration;
 const TOGGLE_CURVE = monthYearToggleMotion.curve;
 const CHEVRON_TURN = monthYearToggleMotion.chevronTurn;
-/** Under reduced motion the chevron's turn applies at its dip's middle. */
-const RM_DIP_HALF = `calc(${reducedMotionFadeConsts.duration} / 2)`;
 
 const styles = stylex.create({
   iconButton: {
@@ -461,7 +459,7 @@ const styles = stylex.create({
   // Under a finger, UIDatePicker's chevron: it points along the reading
   // direction for the calendar and turns down on the toggle's clock. With a
   // mouse it points down and stays. Under Reduced Motion it does not turn.
-  // The turn applies mid-dip on a touch screen (useChevronDip).
+  // The turn lands mid-dip on a touch screen (useChevronDip).
   touchTitleChevron: {
     display: 'inline-flex',
     flexShrink: 0,
@@ -484,11 +482,6 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
       '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
         '0s',
-    },
-    transitionDelay: {
-      default: '0s',
-      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
-        RM_DIP_HALF,
     },
     transitionTimingFunction: {
       default: 'ease',
@@ -717,7 +710,7 @@ export function TouchDateTimeField({
   // Once the sheet settles, the hidden wheels are laid out at opacity 0, so
   // the toggle itself only changes opacity.
   const isWheelsWarm = useWheelsWarmUp(isSheetOpen && isTouch);
-  const chevronDipRef = useChevronDip(isWheelOpen);
+  const {ref: chevronRef, dip: dipChevron} = useChevronDip();
   const [draftTime, setDraftTime] = useState<ISOTimeString | undefined>(() =>
     normalizeISOTime(splitDateTime(value).time, hasSeconds),
   );
@@ -1159,10 +1152,11 @@ export function TouchDateTimeField({
           )}>
           <div {...stylex.props(styles.touchHeader)}>
             <button
-              ref={chevronDipRef}
+              ref={chevronRef}
               type="button"
               onClick={() => {
                 followFocus(!isWheelOpen);
+                dipChevron();
                 setIsWheelOpen(!isWheelOpen);
               }}
               aria-expanded={isWheelOpen}
@@ -1331,6 +1325,7 @@ export function TouchDateTimeField({
                   label={t('@astryx.dateInput.doneChoosingMonth')}
                   onClick={() => {
                     followFocus(false);
+                    dipChevron();
                     setIsWheelOpen(false);
                   }}
                 />
