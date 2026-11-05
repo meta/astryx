@@ -273,17 +273,22 @@ export const neutralTheme = defineTheme({
   },
 
   components: {
-    // A selected row's fill (`--color-accent-muted`) is darker in dark mode
-    // than the secondary text's 4.5:1 floor allows, so a selected row lifts
-    // its secondary text to the next stop that clears it.
+    // In dark mode, secondary text falls under 4.5:1 on the selected fill
+    // and under its hover. Selected rows use the next stop that clears both.
     item: {
       selected: {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
       },
     },
     'tree-list-item': {
       selected: {
-        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[75]})`,
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
+      },
+    },
+    // A numbered citation is a pill on the same fill.
+    citation: {
+      'variant:number': {
+        '--color-text-secondary': `light-dark(${neutral.light[30]}, ${neutral.dark[80]})`,
       },
     },
 

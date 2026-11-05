@@ -380,6 +380,11 @@ describe('neutral selected fill', () => {
         '--color-text-secondary'
       ],
     ),
+    'citation variant:number --color-text-secondary': pair(
+      neutralTheme.components?.citation?.['variant:number']?.[
+        '--color-text-secondary'
+      ],
+    ),
     '--color-syntax-comment': pair(
       neutralTheme.tokens['--color-syntax-comment'],
     ),
@@ -390,6 +395,50 @@ describe('neutral selected fill', () => {
       neutralTheme.tokens['--color-syntax-punctuation'],
     ),
   };
+  // Every token colour reads on a highlighted line, not only the muted ones.
+  it.each(
+    [
+      'keyword',
+      'string',
+      'comment',
+      'number',
+      'function',
+      'type',
+      'variable',
+      'operator',
+      'constant',
+      'tag',
+      'attribute',
+      'property',
+      'punctuation',
+    ].map(token => `--color-syntax-${token}`),
+  )('%s reads at 4.5:1 on a highlighted line in both modes', token => {
+    const [light, dark] = pair(neutralTheme.tokens[token]);
+    expect(contrastRatio(light, lightFill)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(dark, darkFill)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // A selected row also shows the hover overlay over its fill
+  // (`--color-overlay-hover`: black at 0x0D in light, white at 0x0D in dark).
+  it.each([
+    'item selected --color-text-secondary',
+    'tree-list-item selected --color-text-secondary',
+  ] as const)('%s reads at 4.5:1 on the hovered fill', name => {
+    const [light, dark] = foregrounds[name];
+    const lightHovered = composite(
+      neutralPalettes.neutral.light[0],
+      0x0d,
+      lightFill,
+    );
+    const darkHovered = composite(
+      neutralPalettes.neutral.dark[100],
+      0x0d,
+      darkFill,
+    );
+    expect(contrastRatio(light, lightHovered)).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(dark, darkHovered)).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('scopes the lifted secondary text to selected rows in the generated CSS', () => {
     const css = generateThemeCSS(neutralTheme).component;
     for (const target of ['item', 'tree-list-item']) {
@@ -399,6 +448,9 @@ describe('neutral selected fill', () => {
         ),
       );
     }
+    expect(css).toMatch(
+      /\.astryx-citation\[data-variant="number"\][^{]*\{[^}]*--color-text-secondary/,
+    );
   });
   it.each(Object.entries(foregrounds))(
     '%s reads at 4.5:1 on the fill in both modes',
