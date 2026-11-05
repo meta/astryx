@@ -1,0 +1,79 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Diagnostic only, never merged: WebKit's first-draw cost with an empty Mesa
+# shader cache, on the runner and in Playwright's container image.
+name: WebKit shader probe (diagnostic)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/workflows/webkit-shader-probe.yml'
+      - '.github/scripts/webkit-shader-probe.mjs'
+
+permissions: {}
+
+concurrency:
+  group: webkit-shader-probe-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  runner:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Install Playwright WebKit as the interaction legs do today
+        run: npx playwright install --with-deps webkit
+      - name: Probe first-draw shader cost
+        run: |
+          LP_NUM_THREADS="$(nproc)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            read -r quota period < /sys/fs/cgroup/cpu.max
+            if [ "$quota" != max ]; then
+              share=$(( (quota + period - 1) / period ))
+              if [ "$share" -lt "$LP_NUM_THREADS" ]; then LP_NUM_THREADS="$share"; fi
+            fi
+          fi
+          export LP_NUM_THREADS
+          node .github/scripts/webkit-shader-probe.mjs runner
+
+  container:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Trust the checkout in the container
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: ./.github/actions/setup
+      - name: Install Playwright WebKit from the image
+        run: npx playwright install webkit
+      - name: Probe first-draw shader cost
+        run: |
+          LP_NUM_THREADS="$(nproc)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            read -r quota period < /sys/fs/cgroup/cpu.max
+            if [ "$quota" != max ]; then
+              share=$(( (quota + period - 1) / period ))
+              if [ "$share" -lt "$LP_NUM_THREADS" ]; then LP_NUM_THREADS="$share"; fi
+            fi
+          fi
+          export LP_NUM_THREADS
+          node .github/scripts/webkit-shader-probe.mjs container
