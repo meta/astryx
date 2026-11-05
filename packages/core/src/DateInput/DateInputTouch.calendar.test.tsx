@@ -19,13 +19,14 @@ import {
   type ISODateTimeString,
 } from '../DateTimeInput/DateTimeInput';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
+import {monthGridKeyTarget} from './MonthPane';
 import {createMonthModel, dateInMonth} from './monthGeometry';
 import {
   type CalendarSystem,
   calendarDateFromFields,
   calendarDayOfMonth,
 } from '../utils/calendarSystem';
-import type {ISODateString} from '../utils/dateTypes';
+import type {ISODateString, PlainDate} from '../utils/dateTypes';
 import {plainDateAddDays, plainDateFromISO} from '../utils/plainDate';
 
 const host = globalThis as {Temporal?: unknown};
@@ -479,6 +480,35 @@ describe('the month model', () => {
       year: 5785,
       month: 6,
     });
+  });
+
+  it('pages the keyboard focus by calendar months, and by calendar years with Shift', () => {
+    const hebrew = createMonthModel('hebrew');
+    const page = (date: PlainDate, key: string, shiftKey = false) =>
+      monthGridKeyTarget({key, shiftKey} as React.KeyboardEvent, date, {
+        calendar: 'hebrew',
+        isRTL: false,
+        weekStartsOn: 0,
+      });
+    const at = (date: PlainDate | null) =>
+      hebrew.yearMonthAt(hebrew.indexOf(date!));
+    // A month back from 1 Nisan 5784 is Adar II: the leap year has Adar I too.
+    const nisan1 = calendarDateFromFields('hebrew', {
+      year: 5784,
+      monthCode: 'M07',
+      day: 1,
+    })!;
+    expect(at(page(nisan1, 'PageUp'))).toEqual({year: 5784, month: 7});
+    // A year back from Shevat 5785 is Shevat 5784, 13 months back across
+    // Adar I, not 12.
+    const shevat10 = calendarDateFromFields('hebrew', {
+      year: 5785,
+      monthCode: 'M05',
+      day: 10,
+    })!;
+    const yearBack = page(shevat10, 'PageUp', true);
+    expect(at(yearBack)).toEqual({year: 5784, month: 5});
+    expect(calendarDayOfMonth('hebrew', yearBack!)).toBe(10);
   });
 
   it('moves a date by calendar months, keeping its day of the month', () => {
