@@ -2,35 +2,41 @@
 
 /**
  * @file panelScroll.ts
- * @input A tab's panel id and the document the bar lives in
+ * @input A tab's panel id, the document the bar lives in, and Core's scroll
+ *   test from its internal touch entry
  * @output scrollPanelToTop, which brings the tab's own scroll area to its top,
  *   and panelScrollArea, which finds that area
  * @position Internal to the lab TabBar (TabBar.tsx): the selected tab chosen
  *   again
  */
 
+import {measureLogicalScrollAxis} from '@astryxdesign/core/internal/touch';
+
+/**
+ * The vertical axis as Core's logical scroll test reads it: in a horizontal
+ * mapping, the block axis is the vertical one.
+ */
+const VERTICAL = {
+  inline: 'x',
+  block: 'y',
+  inlineReversed: false,
+  blockReversed: false,
+} as const;
+
 /**
  * The tab's own scroll area: the panel itself when it scrolls vertically.
- * Otherwise it is the first element inside the panel that does. A row that
- * scrolls only sideways computes `overflow-y: auto` too, so the content must
- * also be taller than the element.
+ * Otherwise it is the first element inside the panel that does. Core's test
+ * decides, so a row that overflows by a pixel or less, or only sideways, is
+ * never taken.
  */
 export function panelScrollArea(panel: HTMLElement): HTMLElement | null {
-  const view = panel.ownerDocument.defaultView;
-  if (view == null) {
-    return null;
-  }
   const walker = panel.ownerDocument.createTreeWalker(
     panel,
     NodeFilter.SHOW_ELEMENT,
   );
   for (let node: Node | null = panel; node != null; node = walker.nextNode()) {
     const element = node as HTMLElement;
-    const {overflowY} = view.getComputedStyle(element);
-    if (
-      (overflowY === 'auto' || overflowY === 'scroll') &&
-      element.scrollHeight > element.clientHeight
-    ) {
+    if (measureLogicalScrollAxis(element, 'block', VERTICAL)?.isScrollable) {
       return element;
     }
   }

@@ -132,6 +132,7 @@ const LAB_ONLY_NAMES = [
   'UIKIT_GESTURES',
   'useTouchPresentation',
   'TOUCH_QUERY',
+  'measureLogicalScrollAxis',
 ];
 
 /** The inputs matching `pattern` that put bytes in `bytes`. */

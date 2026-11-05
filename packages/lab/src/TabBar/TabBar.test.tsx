@@ -104,13 +104,22 @@ function coarsePrimaryPointer(): () => void {
 /**
  * A scroll area scrolled to `top`, with its `scrollTo` recorded: jsdom lays
  * nothing out, so the offset and the sizes are set by hand. Its content is
- * `content` px tall in a 600 px box.
+ * `content` px tall in a box `box` px tall and 400 px wide.
  */
-function scrolledArea(element: HTMLElement, top: number, content = 2000) {
+function scrolledArea(
+  element: HTMLElement,
+  top: number,
+  content = 2000,
+  box = 600,
+) {
   const scrollTo = vi.fn();
   Object.defineProperty(element, 'scrollTop', {value: top, configurable: true});
   Object.defineProperty(element, 'clientHeight', {
-    value: 600,
+    value: box,
+    configurable: true,
+  });
+  Object.defineProperty(element, 'clientWidth', {
+    value: 400,
     configurable: true,
   });
   Object.defineProperty(element, 'scrollHeight', {
@@ -266,6 +275,24 @@ describe('TabBar', () => {
     // A row with overflow-x: auto computes overflow-y: auto too; its content
     // is no taller than the row.
     const chips = scrolledArea(screen.getByTestId('chips'), 0, 600);
+    const list = scrolledArea(screen.getByTestId('list'), 120);
+    fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
+    expect(chips).not.toHaveBeenCalled();
+    expect(list).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+  });
+
+  it('skips a row whose content overflows it by a pixel or less, as Core’s scroll test does', () => {
+    render(
+      <>
+        <div id="panel-home">
+          <div data-testid="chips" style={{overflowY: 'auto'}} />
+          <div data-testid="list" style={{overflowY: 'auto'}} />
+        </div>
+        <Bar hasPanels />
+      </>,
+    );
+    // Chips 1 px taller than their row: 48 px of content in a 47 px box.
+    const chips = scrolledArea(screen.getByTestId('chips'), 0, 48, 47);
     const list = scrolledArea(screen.getByTestId('list'), 120);
     fireEvent.click(screen.getByRole('tab', {name: 'Home'}));
     expect(chips).not.toHaveBeenCalled();
