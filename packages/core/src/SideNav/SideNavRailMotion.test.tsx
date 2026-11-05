@@ -416,7 +416,7 @@ describe('SideNav rail motion (component:SideNav FR6, component:AppShell FR17)',
     );
     expect(railCopies).toHaveLength(1);
     const panel = document.querySelector<HTMLElement>('.astryx-layout-panel');
-    expect(panel?.style.zIndex).toBe('2');
+    expect(panel?.style.zIndex).toBe('2147483647');
     // Its icons start at the opacity the collapsed rail showed, mostly seen.
     const icons = recorded.find(
       entry => entry.element === panel && 'opacity' in entry.keyframes[0],

@@ -2230,6 +2230,8 @@ export interface LayoutSwapMotion {
   readonly copyText?: (p: number) => number;
   /** The copy paints above its neighbours, in the background it shows. */
   readonly isOpaque?: boolean;
+  /** The opaque copy's `z-index` (default `1`). */
+  readonly copyZIndex?: string;
   /**
    * An element the glide moves, such as the column the old content sat in.
    * Every part plays over its glide, frame by frame, and is told how far it
@@ -2286,6 +2288,10 @@ export function holdLayoutSwap(
   return part == null ? null : {area, ...part};
 }
 
+// The largest z-index a browser accepts, and the one just under it.
+const TOP_Z_INDEX = '2147483647';
+const BELOW_TOP_Z_INDEX = '2147483646';
+
 /**
  * After the change commits, before paint: the copy leaves while the incoming
  * elements enter, on FR4's one motion, every part started on the same
@@ -2307,7 +2313,7 @@ export function playLayoutSwap(
   const change = changeStartIn(swap.area, copy.ownerDocument);
   placeOver(copy, how.host, swap.rect);
   if (how.isOpaque === true) {
-    copy.style.zIndex = '1';
+    copy.style.zIndex = how.copyZIndex ?? '1';
     copy.style.backgroundColor = paintedBackground(copy);
   }
   const animations: Animation[] = [];
@@ -2688,17 +2694,23 @@ export function playLayoutEdge(
       raised == null
         ? null
         : {position: raised.style.position, zIndex: raised.style.zIndex};
+    // The leaving state stood beside the page's other content, never under
+    // it. Layout already has the new extent, so a positioned sibling at any
+    // z-index can reach into the copy's area. For the motion's length the
+    // element and its copy stack at the top of the host's stacking context,
+    // the element above the copy.
     if (raised != null) {
       if (getComputedStyle(raised).position === 'static') {
         raised.style.position = 'relative';
       }
-      raised.style.zIndex = '2';
+      raised.style.zIndex = TOP_Z_INDEX;
     }
     const end = playLayoutSwap(
       {...swap, rect: at},
       {
         host,
         isOpaque: true,
+        copyZIndex: BELOW_TOP_Z_INDEX,
         copy: (p, ride) => ({
           clipPath: clip(extentOfBox(before) - extentAt(p, ride)),
           opacity: copyOpacity(p),
