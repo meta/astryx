@@ -44,6 +44,7 @@ import {
   focusVars,
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {focusOverlayStyles} from '../internal/focusOutline.stylex';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useLayer} from '../Layer';
@@ -597,7 +598,7 @@ export function Carousel({
           styles.root,
           // The scroller is the root's first child and its tab stop. Its
           // edge-fade mask would cover a ring the root draws itself.
-          focusOutlineStyles.focusOverlayFirstChild,
+          focusOverlayStyles.firstChild,
           xstyle,
         ),
         className,
