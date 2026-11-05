@@ -3747,6 +3747,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-link-component-article-cards",
+      "path": "examples/use-link-component/article-cards",
+      "aliases": []
+    },
+    {
       "name": "example-use-list-focus-recent-files",
       "path": "examples/use-list-focus/recent-files",
       "aliases": []
@@ -3754,6 +3759,11 @@
     {
       "name": "example-use-locale-invoice-summary",
       "path": "examples/use-locale/invoice-summary",
+      "aliases": []
+    },
+    {
+      "name": "example-use-merged-refs-auto-grow-text-area",
+      "path": "examples/use-merged-refs/auto-grow-text-area",
       "aliases": []
     },
     {
@@ -3767,6 +3777,16 @@
       "aliases": []
     },
     {
+      "name": "example-use-pan-gesture-a-draggable-box",
+      "path": "examples/use-pan-gesture/a-draggable-box",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-playing-card-advanced",
+      "path": "examples/use-pan-gesture/a-playing-card-advanced",
+      "aliases": []
+    },
+    {
       "name": "example-use-popover-quick-actions",
       "path": "examples/use-popover/quick-actions",
       "aliases": []
@@ -3774,6 +3794,11 @@
     {
       "name": "example-use-press-feedback-pressable-card",
       "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scroll-overflow-filter-strip-edge-fades",
+      "path": "examples/use-scroll-overflow/filter-strip-edge-fades",
       "aliases": []
     },
     {
@@ -3879,6 +3904,11 @@
     {
       "name": "hook-create-animator",
       "path": "hooks/create-animator",
+      "aliases": []
+    },
+    {
+      "name": "hook-create-pan-gesture",
+      "path": "hooks/create-pan-gesture",
       "aliases": []
     },
     {
@@ -4017,6 +4047,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-link-component",
+      "path": "hooks/use-link-component",
+      "aliases": []
+    },
+    {
       "name": "hook-use-list-focus",
       "path": "hooks/use-list-focus",
       "aliases": []
@@ -4059,6 +4094,11 @@
     {
       "name": "hook-use-overflow",
       "path": "hooks/use-overflow",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-pan-gesture",
+      "path": "hooks/use-pan-gesture",
       "aliases": []
     },
     {
