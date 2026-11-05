@@ -39,6 +39,7 @@
  *
  * @typedef {object} HookListResponse
  * @property {'hook.list'} type
+ * @property {string} package `@astryxdesign/core`, the only package that ships hooks.
  * @property {HookListData} data
  */
 
@@ -59,6 +60,7 @@
  * astryx --json hook <name>
  * @typedef {object} HookDetailResponse
  * @property {'hook.detail'} type
+ * @property {string} package `@astryxdesign/core`, the only package that ships hooks.
  * @property {HookDoc} data
  */
 
@@ -66,6 +68,7 @@
  * astryx --json hook <name> --params
  * @typedef {object} HookDetailParamsResponse
  * @property {'hook.detail.params'} type
+ * @property {string} package `@astryxdesign/core`, the only package that ships hooks.
  * @property {HookParamDoc[]} data
  */
 

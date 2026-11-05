@@ -33,13 +33,13 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {describe, it, expect} from 'vitest';
+import {docs} from '../packages/cli/api/docs/docs.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 const TEMPLATE = path.join(REPO_ROOT, 'packages/cli/assets/theme.template.ts');
 const THEME_SRC = path.join(REPO_ROOT, 'packages/core/src/theme');
 const CORE_SRC = path.join(REPO_ROOT, 'packages/core/src');
-const DOCS_DIR = path.join(REPO_ROOT, 'packages/cli/assets/docs');
 const NEUTRAL_PALETTE = path.join(
   REPO_ROOT,
   'packages/themes/neutral/src/neutralPalettes.ts',
@@ -97,7 +97,7 @@ const tokensSrc = fs.readFileSync(
 /** Field names declared on `DefineThemeInput`. */
 function defineThemeFields() {
   const body = defineThemeSrc.match(
-    /export interface DefineThemeInput \{([\s\S]*?)\n\}/,
+    /export interface DefineThemeInput(?:<[\s\S]*?>)? \{([\s\S]*?)\n\}/,
   );
   if (!body) throw new Error('DefineThemeInput not found in defineTheme.ts');
   return [...body[1].matchAll(/^ {2}(\w+)\??:/gm)].map(m => m[1]);
@@ -160,13 +160,20 @@ function themingTargets() {
   return {targets, publicVars};
 }
 
-/** Doc topics `astryx docs <topic>` can print. */
-function docTopics() {
-  return fs
-    .readdirSync(DOCS_DIR)
-    .map(f => f.match(/^([\w-]+)\.doc\.mjs$/))
-    .filter(Boolean)
-    .map(m => m[1]);
+/**
+ * Whether `astryx docs <route>` prints something: a flat topic, or a node of
+ * the docs tree (a namespace such as `tokens`, or a guide such as
+ * `tokens/tokens-color`), resolved the way the command resolves it.
+ * @param {string} route
+ * @returns {Promise<boolean>}
+ */
+async function docsRouteExists(route) {
+  try {
+    await docs(route, undefined, {index: true});
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -305,6 +312,18 @@ describe('theme template stays in sync with the theme system', () => {
     ).toEqual([]);
   });
 
+  it('documents the color scale without enabling it for new themes', () => {
+    expect(template).toMatch(/^ {2}\/\/ color: \{/m);
+    expect(template).not.toMatch(/^ {2}color: \{/m);
+    expect(template).toContain(
+      'astryx theme palette generate palette.config.json --out palette.generated.ts',
+    );
+    expect(template).toContain(
+      "// import {palette} from './palette.generated';",
+    );
+    expect(template).toContain('palette.neutral.light[100]');
+  });
+
   it('invents no field that defineTheme does not accept', () => {
     const real = new Set([...defineThemeFields(), 'name']);
     const invented = templateFields().filter(f => !real.has(f));
@@ -364,14 +383,19 @@ describe('theme template stays in sync with the theme system', () => {
     ).toEqual([]);
   });
 
-  it('cites only doc topics that exist', () => {
-    const topics = new Set(docTopics());
+  it('cites only doc topics that exist', async () => {
     const cited = [
       ...new Set(
-        [...template.matchAll(/astryx docs ([a-z-]+)/g)].map(m => m[1]),
+        [...template.matchAll(/astryx docs ([a-z-]+(?:\/[a-z-]+)*)/g)].map(
+          m => m[1],
+        ),
       ),
     ];
-    const dead = cited.filter(t => !topics.has(t));
+    expect(cited.length).toBeGreaterThan(0);
+    const dead = [];
+    for (const route of cited) {
+      if (!(await docsRouteExists(route))) dead.push(route);
+    }
     expect(
       dead,
       `The template tells authors to run \`astryx docs ${dead.join('`, `astryx docs ')}\`, ` +

@@ -27,6 +27,7 @@ const NODE_FIELDS = new Set([
   'lang',
   'provenance',
   'sourceTitles',
+  'sectionProviders',
   'doc',
 ]);
 const RESOLVED_FIELDS = new Set([
@@ -169,6 +170,12 @@ function structureProblems(node) {
     problems.push(
       'provenance: expected {provider, replaces, extensions} naming packages, not paths',
     );
+  }
+  const providers = isRecord(node.sectionProviders)
+    ? node.sectionProviders
+    : null;
+  if (!providers || !Object.values(providers).every(isText)) {
+    problems.push('sectionProviders: expected section key -> provider id');
   }
   const titles = isRecord(node.sourceTitles) ? node.sourceTitles : null;
   if (!titles || !Object.values(titles).every(isText)) {

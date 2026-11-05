@@ -5,6 +5,8 @@ import userEvent from '@testing-library/user-event';
 import {AvatarGroup} from './AvatarGroup';
 import {AvatarGroupOverflow} from './AvatarGroupOverflow';
 import {Avatar, AvatarStatusDot} from '../Avatar';
+import {HoverCard} from '../HoverCard';
+import {Tooltip} from '../Tooltip';
 
 describe('AvatarGroup', () => {
   it('renders all avatar children', () => {
@@ -211,6 +213,71 @@ describe('AvatarGroup — roving focus + keyboard hint', () => {
     // Static avatars are not focusable — no roving tabindex stamped.
     expect(screen.getByTestId('alice')).not.toHaveAttribute('tabindex');
     expect(screen.getByTestId('bob')).not.toHaveAttribute('tabindex');
+  });
+});
+
+describe('AvatarGroup — overlap', () => {
+  // jsdom cannot lay the row out, so these check the declarations that make
+  // it overlap: every item takes the negative overlap margin, and the group's
+  // start padding gives the first item that space back.
+  const overlapMargin = (el: HTMLElement) =>
+    getComputedStyle(el).getPropertyValue('margin-inline-start');
+
+  it('overlaps every avatar, including the first', () => {
+    render(
+      <AvatarGroup>
+        <Avatar name="Alice" data-testid="alice" />
+        <Avatar name="Bob" data-testid="bob" />
+        <AvatarGroupOverflow count={2} data-testid="overflow" />
+      </AvatarGroup>,
+    );
+
+    for (const id of ['alice', 'bob', 'overflow']) {
+      expect(overlapMargin(screen.getByTestId(id))).toBe(
+        'var(--_avatar-group-overlap)',
+      );
+    }
+    const group = screen.getByRole('group');
+    expect(
+      getComputedStyle(group).getPropertyValue('padding-inline-start'),
+    ).toBe('calc(-1 * var(--_avatar-group-overlap))');
+    // md = 36px; the overlap is a quarter of that, negated.
+    expect(group.getAttribute('style')).toContain('-9px');
+  });
+
+  it('keeps the overlap when avatars are wrapped in a HoverCard or Tooltip', () => {
+    // Both wrap their trigger in a `display: contents` element, so each avatar
+    // is the first child of its own wrapper. A `:not(:first-child)` rule
+    // would never match.
+    render(
+      <AvatarGroup>
+        <HoverCard content="Alice's card">
+          <Avatar name="Alice" data-testid="alice" />
+        </HoverCard>
+        <HoverCard content="Bob's card">
+          <Avatar name="Bob" data-testid="bob" />
+        </HoverCard>
+        <Tooltip content="Charlie">
+          <Avatar name="Charlie" data-testid="charlie" />
+        </Tooltip>
+      </AvatarGroup>,
+    );
+
+    for (const id of ['alice', 'bob', 'charlie']) {
+      const avatar = screen.getByTestId(id);
+      expect(avatar.parentElement).not.toBe(screen.getByRole('group'));
+      expect(overlapMargin(avatar)).toBe('var(--_avatar-group-overlap)');
+    }
+  });
+
+  it('adds no start padding to an empty group', () => {
+    render(<AvatarGroup data-testid="empty">{[]}</AvatarGroup>);
+
+    expect(
+      getComputedStyle(screen.getByTestId('empty')).getPropertyValue(
+        'padding-inline-start',
+      ),
+    ).toMatch(/^0(px)?$/);
   });
 });
 

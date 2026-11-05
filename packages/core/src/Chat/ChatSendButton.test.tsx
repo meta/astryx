@@ -4,12 +4,14 @@
  * @file ChatSendButton.test.tsx
  * @input Uses vitest, @testing-library/react, the global icon registry
  * @output Unit tests for ChatSendButton
- * @position Colocated unit test; covers the send/stop labels and icons, the
- *   disabled rules, click routing, and the ChatComposer context defaults
+ * @position Colocated unit test; covers labels and icons, disabled rules,
+ *   composed consumer clicks, state-action routing, and ChatComposer defaults
  */
 
+import {createRef} from 'react';
 import {describe, it, expect, vi, afterEach} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {ChatSendButton} from './ChatSendButton';
 import {ChatComposer} from './ChatComposer';
 import {Button} from '../Button';
@@ -38,6 +40,55 @@ describe('ChatSendButton', () => {
       expect(screen.getByRole('button', {name: 'Send'})).toBeEnabled();
     });
 
+    it('forwards ref, className, data, and ARIA inputs to the Button root', () => {
+      const ref = createRef<HTMLButtonElement>();
+      render(
+        <>
+          <ChatSendButton
+            ref={ref}
+            isDisabled={false}
+            onSend={() => {}}
+            className="consumer-class"
+            data-audit-root="forwarded"
+            aria-describedby="send-help"
+          />
+          <span id="send-help">Sends the current message</span>
+        </>,
+      );
+      const button = screen.getByRole('button', {name: 'Send'});
+      expect(ref.current).toBe(button);
+      expect(button).toHaveClass('consumer-class');
+      expect(button).toHaveAttribute('data-audit-root', 'forwarded');
+      expect(button).toHaveAccessibleDescription('Sends the current message');
+    });
+
+    it('reflects both supported Button sizes', () => {
+      render(
+        <>
+          <ChatSendButton
+            data-testid="send-small"
+            isDisabled={false}
+            onSend={() => {}}
+            size="sm"
+          />
+          <ChatSendButton
+            data-testid="send-medium"
+            isDisabled={false}
+            onSend={() => {}}
+            size="md"
+          />
+        </>,
+      );
+      expect(screen.getByTestId('send-small')).toHaveAttribute(
+        'data-size',
+        'sm',
+      );
+      expect(screen.getByTestId('send-medium')).toHaveAttribute(
+        'data-size',
+        'md',
+      );
+    });
+
     it('calls onSend when clicked', () => {
       const onSend = vi.fn();
       render(<ChatSendButton isDisabled={false} onSend={onSend} />);
@@ -45,13 +96,53 @@ describe('ChatSendButton', () => {
       expect(onSend).toHaveBeenCalledTimes(1);
     });
 
-    it('swallows the click while disabled', () => {
+    it('composes the consumer onClick with onSend', () => {
+      const onClick = vi.fn();
+      const onSend = vi.fn();
+      render(
+        <ChatSendButton isDisabled={false} onClick={onClick} onSend={onSend} />,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Send'}));
+      expect(onClick).toHaveBeenCalledTimes(1);
+      expect(onSend).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs onSend exactly once before a consumer click prevents default', () => {
+      const order: string[] = [];
+      const onSend = vi.fn(() => order.push('send'));
+      const onClick = vi.fn(event => {
+        order.push('click');
+        event.preventDefault();
+      });
+      render(
+        <ChatSendButton isDisabled={false} onClick={onClick} onSend={onSend} />,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Send'}));
+      expect(order).toEqual(['send', 'click']);
+      expect(onSend).toHaveBeenCalledTimes(1);
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('supports native Enter and Space activation', async () => {
+      const user = userEvent.setup();
+      const onSend = vi.fn();
+      render(<ChatSendButton isDisabled={false} onSend={onSend} />);
+      const button = screen.getByRole('button', {name: 'Send'});
+      button.focus();
+      await user.keyboard('{Enter}');
+      await user.keyboard(' ');
+      expect(onSend).toHaveBeenCalledTimes(2);
+    });
+
+    it('swallows both state and consumer clicks while disabled', () => {
       // isDisabled already defaults true here (no composer context), so this
       // pins the click routing through a disabled Button, not the prop.
       const onSend = vi.fn();
-      render(<ChatSendButton onSend={onSend} />);
+      const onClick = vi.fn();
+      render(<ChatSendButton onClick={onClick} onSend={onSend} />);
       fireEvent.click(screen.getByRole('button', {name: 'Send'}));
       expect(onSend).not.toHaveBeenCalled();
+      expect(onClick).not.toHaveBeenCalled();
     });
 
     it('styles the send state as a primary button', () => {
@@ -131,6 +222,38 @@ describe('ChatSendButton', () => {
       fireEvent.click(screen.getByRole('button', {name: 'Stop'}));
       expect(onStop).toHaveBeenCalledTimes(1);
       expect(onSend).not.toHaveBeenCalled();
+    });
+
+    it('composes the consumer onClick with onStop', () => {
+      const onClick = vi.fn();
+      const onStop = vi.fn();
+      render(<ChatSendButton isStopShown onClick={onClick} onStop={onStop} />);
+      fireEvent.click(screen.getByRole('button', {name: 'Stop'}));
+      expect(onClick).toHaveBeenCalledTimes(1);
+      expect(onStop).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs onStop exactly once before a consumer click prevents default', () => {
+      const order: string[] = [];
+      const onStop = vi.fn(() => order.push('stop'));
+      const onClick = vi.fn(event => {
+        order.push('click');
+        event.preventDefault();
+      });
+      render(<ChatSendButton isStopShown onClick={onClick} onStop={onStop} />);
+      fireEvent.click(screen.getByRole('button', {name: 'Stop'}));
+      expect(order).toEqual(['stop', 'click']);
+      expect(onStop).toHaveBeenCalledTimes(1);
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('remains an enabled no-op without onStop while generic onClick still runs', () => {
+      const onClick = vi.fn();
+      render(<ChatSendButton isStopShown onClick={onClick} />);
+      const stop = screen.getByRole('button', {name: 'Stop'});
+      expect(stop).toBeEnabled();
+      fireEvent.click(stop);
+      expect(onClick).toHaveBeenCalledTimes(1);
     });
 
     it('resolves its default icon from the registry stop entry', () => {

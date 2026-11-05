@@ -49,7 +49,7 @@ export const doc = {
   throws: [
     {
       code: 'Error',
-      when: 'the CLI returned an error envelope (the CLI message is rethrown), or the response `type` is not expectedType',
+      when: 'a plain Error with no code: the CLI returned an error envelope (its message is rethrown; code and suggestions are dropped), or the response `type` is not expectedType',
     },
   ],
   examples: [

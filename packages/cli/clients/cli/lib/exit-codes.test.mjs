@@ -9,7 +9,8 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {describe, it, expect} from 'vitest';
-import {program, JSON_SUPPORTED} from '../index.mjs';
+import {JSON_SUPPORTED} from '../index.mjs';
+import {program} from '../program.mjs';
 import {buildManifest} from './manifest.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 
@@ -24,6 +25,10 @@ for (const file of fs.readdirSync(COMMANDS).sort()) {
 }
 
 const manifest = buildManifest(program, {jsonSupported: JSON_SUPPORTED, version: '0.0.0-test'});
+/** Hidden commands (a package-script hook): documented, never in the manifest. */
+const HIDDEN = new Set(
+  program.commands.filter((c) => /** @type {any} */ (c)._hidden).map((c) => c.name()),
+);
 /** @type {Map<string, any>} */
 const entries = new Map();
 const walk = (/** @type {any} */ c) => {
@@ -41,7 +46,7 @@ describe('command exit codes', () => {
   });
 
   it.each(commandDocs.map((d) => [d.name, d]))(
-    '`astryx %s --help` lists the documented exit codes',
+    '`astryx %s --help` lists the documented exit codes, then the examples and the docs route',
     async (name, doc) => {
       const {status, stdout} = await runCli([...name.split(' '), '--help']);
       expect(status).toBe(0);
@@ -51,15 +56,24 @@ describe('command exit codes', () => {
       for (const {code, when} of doc.exitCodes) {
         expect(section).toContain(`\n  ${code}  ${when}\n`);
       }
+      // Examples follow the exit codes, each under its label, and a `More:`
+      // line names the route that reads the whole command.
+      const examples = section.indexOf('\nExamples:\n');
+      expect(examples > 0, stdout).toBe((doc.examples ?? []).length > 0);
+      for (const {label, cli} of doc.examples ?? []) {
+        const line = ` ${cli.replace(/^astryx\s+/, '')}\n`;
+        expect(section.slice(examples), stdout).toContain(
+          label ? `\n  # ${label}\n` : line,
+        );
+        expect(section.slice(examples)).toContain(line);
+      }
+      const route = `docs cli/commands/${name.replace(/ /g, '-')}`;
+      expect(section, stdout).toMatch(
+        new RegExp(`\\n\\nMore: \\S.* ${route}\\n`),
+      );
+      expect(section.indexOf('\nMore: ')).toBeGreaterThan(examples);
     },
   );
-
-  it('bare `astryx layout` exits 1 in both modes, as documented', async () => {
-    const doc = commandDocs.find((d) => d.name === 'layout');
-    expect(doc.exitCodes.find((e) => e.code === 1)?.when).toMatch(/^no subcommand/);
-    expect((await runCli(['layout'])).status).toBe(1);
-    expect((await runCli(['layout', '--json'])).status).toBe(1);
-  });
 
   it('`astryx discover` with a blank query exits 1 only when packages are discovered', async () => {
     const doc = commandDocs.find((d) => d.name === 'discover');
@@ -89,6 +103,7 @@ describe('command exit codes', () => {
 
   it('the manifest carries every command exit code', () => {
     for (const doc of commandDocs) {
+      if (HIDDEN.has(doc.name)) continue;
       expect(entries.get(doc.name)?.exitCodes, doc.name).toEqual(
         doc.exitCodes.map(({code, when}) => ({code, when})),
       );

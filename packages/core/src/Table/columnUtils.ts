@@ -15,8 +15,27 @@ import type {CSSProperties, ReactNode} from 'react';
 import type {TableColumn, ProportionalWidth, PixelWidth} from './types';
 import {firstCharacter} from '../utils/characters';
 
-/** Default minimum width (in px) for proportional columns. */
+/** Default minimum width (in px) for explicit proportional columns. */
 export const DEFAULT_MIN_COLUMN_WIDTH = 120;
+
+/**
+ * Compact readability floor (in px) for flexible columns with no width.
+ *
+ * This is intentionally smaller than the explicit proportional() default:
+ * width-less columns remain compact and equal while avoiding near-zero collapse.
+ */
+export const DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH = 60;
+
+function resolveFlexibleColumnMinWidth(
+  width: ProportionalWidth | undefined,
+): number {
+  return (
+    width?.minWidth ??
+    (width == null
+      ? DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH
+      : DEFAULT_MIN_COLUMN_WIDTH)
+  );
+}
 
 // =============================================================================
 // Resolved Column Widths
@@ -56,17 +75,24 @@ export interface ResolvedColumnWidths {
  * @param columns - Resolved column definitions (after auto-generation)
  * @returns Pre-computed widths for each column and the table minimum width
  */
-export function resolveColumnWidths<T extends Record<string, unknown>>(
-  columns: TableColumn<T>[],
-): ResolvedColumnWidths {
-  // --- Pass 1: Categorize columns and compute totals ---
+/**
+ * Space accounting shared by layout and by plugins that need rendered widths.
+ * Flexible columns (width-less or proportional) split `maxProportionalSpace`
+ * by proportion; it is the smallest space in which every flexible column
+ * still meets its own floor.
+ */
+interface ColumnSpacePlan {
+  totalProportion: number;
+  pixelTotal: number;
+  maxProportionalSpace: number;
+}
+
+function planColumnSpace<T extends Record<string, unknown>>(
+  columns: ReadonlyArray<TableColumn<T>>,
+): ColumnSpacePlan {
   let totalProportion = 0;
   let pixelTotal = 0;
-  const proportionalCols: {
-    key: string;
-    proportion: number;
-    minWidth: number;
-  }[] = [];
+  const flexibleCols: {proportion: number; minWidth: number}[] = [];
 
   for (const col of columns) {
     const w = col.width;
@@ -74,25 +100,108 @@ export function resolveColumnWidths<T extends Record<string, unknown>>(
       pixelTotal += w.value;
     } else {
       const proportion = w?.value ?? 1;
-      // Only count minWidth for columns that explicitly used proportional().
-      // Columns with no width set (w === undefined) have no minimum —
-      // they flex freely and the scroll wrapper handles overflow.
-      const minW = w != null ? (w.minWidth ?? DEFAULT_MIN_COLUMN_WIDTH) : 0;
       totalProportion += proportion;
-      proportionalCols.push({key: col.key, proportion, minWidth: minW});
+      flexibleCols.push({
+        proportion,
+        minWidth: resolveFlexibleColumnMinWidth(w),
+      });
     }
   }
 
-  // --- Pass 2: Compute table min-width ---
   let maxProportionalSpace = 0;
   if (totalProportion > 0) {
-    for (const col of proportionalCols) {
+    for (const col of flexibleCols) {
       const required = (col.minWidth * totalProportion) / col.proportion;
       if (required > maxProportionalSpace) {
         maxProportionalSpace = required;
       }
     }
   }
+  return {totalProportion, pixelTotal, maxProportionalSpace};
+}
+
+/**
+ * Inline width (px) of each column while the table sits at its minimum width,
+ * which is the width a horizontally overflowing table renders at. Pixel
+ * columns keep their value; a flexible column takes its proportional share of
+ * the space that satisfies every flexible floor, so a width-less column beside
+ * a `proportional()` column can render wider than its own 60px floor.
+ */
+export function resolveColumnFloorWidths<T extends Record<string, unknown>>(
+  columns: ReadonlyArray<TableColumn<T>>,
+): Map<string, number> {
+  const {totalProportion, maxProportionalSpace} = planColumnSpace(columns);
+  const widths = new Map<string, number>();
+  for (const col of columns) {
+    const w = col.width;
+    if (w?.type === 'pixel') {
+      widths.set(col.key, w.value);
+    } else {
+      const proportion = w?.value ?? 1;
+      widths.set(
+        col.key,
+        totalProportion > 0
+          ? (maxProportionalSpace * proportion) / totalProportion
+          : 0,
+      );
+    }
+  }
+  return widths;
+}
+
+// A min-width CSS `max()` accepts: a dimension with a known length unit, a
+// percentage, or a math/var() expression. Intrinsic-size and global keywords
+// (auto, max-content, min-content, fit-content, inherit, ...) and unitless
+// non-zero numbers are not lengths and would invalidate the whole declaration.
+const MAX_COMPATIBLE_LENGTH =
+  /^[+-]?(?:\d+\.?\d*|\.\d+)(?:px|r?em|r?lh|r?ex|r?ch|r?cap|r?ic|vw|vh|vi|vb|vmin|vmax|[sld]v(?:w|h|i|b|min|max)|cq(?:w|h|i|b|min|max)|cm|mm|q|in|pt|pc|%)$/i;
+const MAX_COMPATIBLE_FUNCTION = /^(?:calc|min|max|clamp|var)\(/i;
+const ZERO_LENGTH = /^[+-]?(?:0+\.?0*|\.0+)(?:[a-z]+|%)?$/i;
+const PX_LENGTH = /^(\d+(?:\.\d+)?)px$/i;
+
+/**
+ * Inline min-width for a data-driven table: the larger of the column-floor
+ * minimum and a min-width the consumer (or a plugin) set.
+ *
+ * - Numbers, zero, and px lengths compare directly and yield a px value.
+ * - Other lengths, percentages, and calc()/var() expressions defer to CSS
+ *   `max()` so the browser resolves the larger one.
+ * - Keywords (auto, max-content, inherit, ...) cannot appear inside `max()`;
+ *   the column floors win, which keeps every column at its readable minimum.
+ */
+export function resolveTableMinWidth(
+  consumer: CSSProperties['minWidth'],
+  floorPx: number,
+): string {
+  const floor = `${floorPx}px`;
+  if (consumer == null) {
+    return floor;
+  }
+  if (typeof consumer === 'number') {
+    return `${Math.max(consumer, floorPx)}px`;
+  }
+  const value = consumer.trim();
+  if (value === '' || ZERO_LENGTH.test(value)) {
+    return floor;
+  }
+  const px = PX_LENGTH.exec(value);
+  if (px) {
+    return `${Math.max(Number(px[1]), floorPx)}px`;
+  }
+  if (
+    MAX_COMPATIBLE_LENGTH.test(value) ||
+    MAX_COMPATIBLE_FUNCTION.test(value)
+  ) {
+    return `max(${value}, ${floor})`;
+  }
+  return floor;
+}
+
+export function resolveColumnWidths<T extends Record<string, unknown>>(
+  columns: TableColumn<T>[],
+): ResolvedColumnWidths {
+  const {totalProportion, pixelTotal, maxProportionalSpace} =
+    planColumnSpace(columns);
   const tableMinWidth = pixelTotal + maxProportionalSpace;
 
   // --- Pass 3: Build per-column styles ---
@@ -112,13 +221,8 @@ export function resolveColumnWidths<T extends Record<string, unknown>>(
       if (totalProportion > 0) {
         style.width = `${(proportion / totalProportion) * 100}%`;
       }
-      // Only apply minWidth if the column explicitly used proportional().
-      // Columns with no width set (w === undefined) have no minimum —
-      // they flex freely and the scroll wrapper handles overflow.
-      if (w != null) {
-        const minW = w.minWidth ?? DEFAULT_MIN_COLUMN_WIDTH;
-        style.minWidth = `${minW}px`;
-      }
+      // Width-less columns stay flexible, but keep a compact readability floor.
+      style.minWidth = `${resolveFlexibleColumnMinWidth(w)}px`;
     }
 
     result.set(col.key, {style});
@@ -253,9 +357,6 @@ function longestWord(value: unknown): number {
   return max;
 }
 
-/** Minimum floor for any column (px). Prevents collapse on narrow viewports. */
-const MIN_COLUMN_FLOOR = 60;
-
 /** Scale factor: approximate px per character for min-width calculation. */
 const PX_PER_CHAR = 8;
 
@@ -309,7 +410,7 @@ export function generateColumns<T extends Record<string, unknown>>(
     // Min-width: enough to fit header or longest word without wrapping
     const minWidth = Math.max(
       Math.max(m.headerLen, m.maxWordLen) * PX_PER_CHAR,
-      MIN_COLUMN_FLOOR,
+      DEFAULT_FLEXIBLE_COLUMN_MIN_WIDTH,
     );
 
     return {

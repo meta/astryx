@@ -4,10 +4,9 @@
  * @file `astryx theme template` leaf — writes the annotated theme template into the
  * consumer's project.
  *
- * Sibling of `theme add`: both answer "put a theme starting point in my
- * project", and they split on where you start. `add` copies a theme we ship
- * (you like stone, you want to own it); `template` writes the blank annotated
- * reference (you want your own, and need to know what the surface contains).
+ * `theme add` uses an installed built theme without copying source. This command
+ * writes the blank annotated reference for a new theme. `theme eject` is the
+ * separate path for starting from a complete source fork of an existing theme.
  *
  * The template is a doc that happens to compile, so it is one file at the
  * project root by default rather than a package under src/themes/ — you read

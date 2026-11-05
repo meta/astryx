@@ -25,6 +25,12 @@ import {
 /** @typedef {{recipe: typeof PALETTE_RECIPE, status: 'candidate', request: NormalizedRequest, families: GeneratedFamily[], coordination: TonalPaletteCoordinationDiagnostics[], errors: {familyId: string, message: string}[]}} PaletteGenerationResult */
 
 export const PALETTE_RECIPE = 'astryx-oklch-v1';
+/**
+ * Identity of this generator implementation. `PALETTE_RECIPE` names the
+ * normative algorithm; this names the code that ran it, so a receipt can tell
+ * two implementations of one recipe apart.
+ */
+export const PALETTE_GENERATOR_VERSION = 'palette-generator-v1';
 export const PALETTE_BLACK = '#000000';
 export const PALETTE_WHITE = '#ffffff';
 export const DEFAULT_21_STOPS = Object.freeze([

@@ -4,7 +4,7 @@
 
 export const docs = {
   name: 'browser-support',
-  title: 'Browser Support',
+  title: 'Browser support',
   category: 'guide',
   description:
     'What browsers Astryx targets, which modern platform features it depends on, and how to support older browsers for your own audience.',
@@ -32,7 +32,12 @@ export const docs = {
         },
         {
           type: 'table',
-          headers: ['Tier', 'Baseline', 'Representative versions', 'What your users experience'],
+          headers: [
+            'Tier',
+            'Baseline',
+            'Representative versions',
+            'What your users experience',
+          ],
           rows: [
             [
               'Tier 1: Full fidelity',
@@ -73,7 +78,7 @@ export const docs = {
               'Baseline 2026: the tightest requirement.',
             ],
             [
-              '[`Popover`](https://developer.mozilla.org/en-US/docs/Web/API/Popover_API) API',
+              '`Popover` API',
               'Opens, stacks, and light-dismisses layered surfaces via the top layer.',
               'Baseline 2025.',
             ],
@@ -86,7 +91,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'The gap that matters is between Tier 1 and Tier 2: the [`Popover`](https://developer.mozilla.org/en-US/docs/Web/API/Popover_API) API and `light-dark()` reached wide availability well before anchor positioning. So in Tier 2 browsers, layered surfaces open and dismiss correctly; they just are not positioned. This is the one feature most consumers will need to reason about.',
+          text: 'The gap that matters is between Tier 1 and Tier 2: the `Popover` API and `light-dark()` reached wide availability well before anchor positioning. So in Tier 2 browsers, layered surfaces open and dismiss correctly; they just are not positioned. This is the one feature most consumers will need to reason about.',
         },
       ],
     },
@@ -95,24 +100,24 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'The browser requirement is concentrated in the layered-surface components: anything that renders content in an overlay positioned against a trigger:',
+          text: 'Any component that opens a menu, popover, tooltip, or dropdown carries the browser requirement: it renders that surface in an overlay positioned against its trigger. That includes:',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
-            'Tooltip',
-            'HoverCard',
-            'Popover',
-            'ContextMenu',
-            'Selector and MultiSelector (dropdown surfaces)',
+            'Tooltip, HoverCard, and Popover, and any prop that shows one (such as the Button `tooltip`)',
+            'DropdownMenu, MoreMenu, and ContextMenu',
+            'Selector, MultiSelector, ComplexSelector, Typeahead, and PowerSearch (dropdown surfaces)',
+            'DateInput, DateRangeInput, and DateTimeInput (calendar popovers)',
             'Tokenizer (suggestion menu)',
+            'The overflow and flyout menus in Breadcrumbs, TabList, TopNav, and SideNav',
             'Carousel (anchored controls)',
           ],
         },
         {
           type: 'prose',
-          text: 'If your product does not use any of these, it has no anchor-positioning requirement at all; it needs only `light-dark()` (Tier 2 and up) for correct theme colors. Page layout, typography, forms, buttons, cards, tables, and navigation all work down to Tier 2 with no special handling.',
+          text: 'If your product opens no menus, popovers, tooltips, or dropdowns, it has no anchor-positioning requirement; it needs only `light-dark()` (Tier 2 and up) for correct theme colors. Page layout, typography, forms, buttons, cards, and tables work down to Tier 2 with no special handling.',
         },
       ],
     },
@@ -123,7 +128,7 @@ export const docs = {
           type: 'list',
           style: 'do',
           items: [
-            'Components never throw on missing platform APIs. Where a browser lacks the [`Popover`](https://developer.mozilla.org/en-US/docs/Web/API/Popover_API) API, layers fall back to plain visibility instead of crashing.',
+            'Components never throw on missing platform APIs. Where a browser lacks the `Popover` API, layers fall back to plain visibility instead of crashing.',
             'Tier 1 and Tier 2 are officially supported and tested.',
             'Non-layered components render correctly down to Tier 2.',
           ],
@@ -139,6 +144,27 @@ export const docs = {
       ],
     },
     {
+      title: 'The On-Screen Keyboard',
+      content: [
+        {
+          type: 'prose',
+          text: "On a phone, a fully expanded `height='tall'` BottomSheet responds to the on-screen keyboard: it measures the keyboard as the layout viewport's height minus the visual viewport's height times its scale. Where the visual viewport shrinks for the keyboard, as in Safari on iOS in the browser and as a home-screen app, in Firefox for Android and in Chrome on Android, it keeps the focused field above the keyboard and leaves the page where it was. If Firefox for Android pans to the field, the sheet puts the page back within a couple of frames.",
+        },
+        {
+          type: 'prose',
+          text: 'In Chrome on Android, a Tall BottomSheet\u2019s focused field rides the keyboard as Gboard slides it up, and as Gboard slides it down after the field loses focus. The scroll room stays until the keyboard is down. A hide Chrome reports late, such as Back, which keeps the focus, rides down from Chrome\u2019s report. When the keyboard is reported, the sheet places the field just above it in that same frame, so Chrome has no covered field to pan to; if Chrome pans anyway, the sheet puts the page back when that pan ends. Chrome follows your viewport setting, which Astryx documents and never sets: your app owns its viewport `<meta>` element. By default (`interactive-widget=resizes-visual`) Chrome lays the keyboard over the page and pans to a focused field elsewhere on the page. With `interactive-widget=resizes-content` it shrinks the layout viewport instead, so content anchored to the bottom sits above the keyboard, and the sheet measures no keyboard and changes nothing: the browser has already made the room.',
+        },
+        {
+          type: 'code',
+          lang: 'html',
+          label: 'Chrome on Android resizes the page for the keyboard',
+          code: `<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />`,
+        },
+      ],
+    },
+    {
       title: 'Supporting Older Browsers',
       content: [
         {
@@ -149,7 +175,7 @@ export const docs = {
           type: 'list',
           style: 'ordered',
           items: [
-            'Polyfill anchor positioning. Load a CSS anchor positioning polyfill conditionally behind an `@supports` check so it costs nothing on Tier 1. This is the lowest-effort way to get correct positioning; note that polyfills may not cover every position-fallback feature.',
+            'Polyfill anchor positioning. Load a CSS anchor positioning polyfill conditionally behind an `@supports` check so it costs nothing on Tier 1. This is the lowest-effort way to get correct positioning; polyfills may not cover every position-fallback feature.',
             'Provide a JS positioning fallback. Detect missing support with `CSS.supports("anchor-name", "--x")` and position layers with a measurement-based library (e.g. a floating-element positioner) when it returns false. More code, full control.',
             'Accept degraded positioning. Document for your users that on Tier 2 browsers, layered surfaces open correctly but may not sit next to their trigger. Cheapest, and often fine for internal tools on evergreen browsers.',
           ],
@@ -192,7 +218,7 @@ const hasLightDark = CSS.supports('color', 'light-dark(#000, #fff)');`,
         },
         {
           type: 'prose',
-          text: 'This is not an arbitrary window: Baseline − 2 is close to where anchor positioning stops being available while the [`Popover`](https://developer.mozilla.org/en-US/docs/Web/API/Popover_API) API and `light-dark()` still are, so the tier boundary tracks a real capability edge, not a guessed date. The version floors above are reviewed and advanced roughly once a year as new Baseline years land. Always feature-detect rather than hardcoding version numbers, so your app adapts automatically as the platform moves.',
+          text: 'This is not an arbitrary window: Baseline − 2 is close to where anchor positioning stops being available while the `Popover` API and `light-dark()` still are, so the tier boundary tracks a real capability edge, not a guessed date. The version floors above are reviewed and advanced roughly once a year as new Baseline years land. Always feature-detect rather than hardcoding version numbers, so your app adapts automatically as the platform moves.',
         },
       ],
     },

@@ -1,0 +1,37 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+import {describe, it, expect, beforeEach, afterEach} from 'vitest';
+import * as fs from 'node:fs'; import * as os from 'node:os'; import * as path from 'node:path';
+import {runCli} from '../../../test-utils/run-cli.mjs';
+let dir;
+beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(),'astryx-op-')); fs.writeFileSync(path.join(dir,'package.json'),JSON.stringify({name:'s',version:'1.0.0',dependencies:{'@astryxdesign/core':'0.6.3'}})); const c=path.join(dir,'node_modules','@astryxdesign','core'); fs.mkdirSync(c,{recursive:true}); fs.writeFileSync(path.join(c,'package.json'),JSON.stringify({name:'@astryxdesign/core',version:'0.6.3'})); });
+afterEach(() => fs.rmSync(dir, {recursive:true,force:true}));
+const json = async a => { const {status,stdout}=await runCli(['--json',...a],{cwd:dir}); return {status,body:JSON.parse(stdout)}; };
+describe('option-pair refusals (AST-042 FR5)', () => {
+  it('template --list + name', async () => { const {status,body}=await json(['template','ai-chat','--list']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('template --list + path', async () => { const {status,body}=await json(['template','ai-chat','src/p.tsx','--list']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('template --list + --skeleton', async () => { const {status,body}=await json(['template','--list','--skeleton']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('template --cdn + --list', async () => { const {status,body}=await json(['template','--cdn','--list']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('template --cdn + name', async () => { const {status,body}=await json(['template','ai-chat','--cdn']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('template --cdn + --type', async () => { const {status,body}=await json(['template','--cdn','--type','page']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('template --cdn + --package', async () => { const {status,body}=await json(['template','--cdn','--package','@astryxdesign/core']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('template --skeleton + --overwrite', async () => { const {status,body}=await json(['template','ai-chat','--skeleton','--overwrite']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('upgrade --list + --from', async () => { const {status,body}=await json(['upgrade','--list','--from','0.5.0']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('upgrade --list + --force', async () => { const {status,body}=await json(['upgrade','--list','--force']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('upgrade --list + --apply', async () => { const {status,body}=await json(['upgrade','--list','--apply']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('upgrade --list + --path', async () => { const {status,body}=await json(['upgrade','--list','--path','../x']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('upgrade --list + --codemod', async () => { const {status,body}=await json(['upgrade','--list','--codemod','x']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('upgrade --list + --skip-codemod', async () => { const {status,body}=await json(['upgrade','--list','--skip-codemod','x']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('upgrade --list + --integration', async () => { const {status,body}=await json(['upgrade','--list','--integration','@acme/x']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('upgrade --list + --install-deps', async () => { const {status,body}=await json(['upgrade','--list','--install-deps']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('init --remove-agents + --features', async () => { const {status,body}=await json(['init','--remove-agents','--features','agents']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('init --remove-agents + --all', async () => { const {status,body}=await json(['init','--remove-agents','--all']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('init --remove-agents + --agent', async () => { const {status,body}=await json(['init','--remove-agents','--agent','claude']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('init --remove-agents + --agent-docs-path', async () => { const {status,body}=await json(['init','--remove-agents','--agent-docs-path','docs/AI.md']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('init --all + --features', async () => { const {status,body}=await json(['init','--all','--features','agents']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('gap-report --list-categories + component', async () => { const {status,body}=await json(['gap-report','Button','--list-categories']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('gap-report --list-categories + --category', async () => { const {status,body}=await json(['gap-report','--list-categories','--category','docs_gap']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('gap-report --list-categories + --reason', async () => { const {status,body}=await json(['gap-report','--list-categories','--reason','test']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('gap-report --list-categories + --package', async () => { const {status,body}=await json(['gap-report','--list-categories','--package','@acme/x']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('gap-report --list-categories + --additional-context', async () => { const {status,body}=await json(['gap-report','--list-categories','--additional-context','extra']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+  it('gap-report --list-categories + --confirm-public', async () => { const {status,body}=await json(['gap-report','--list-categories','--confirm-public']); expect(status).toBe(1); expect(body.code).toBe('ERR_INVALID_ARGUMENT'); });
+});

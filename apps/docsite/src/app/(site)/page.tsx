@@ -67,12 +67,12 @@ const styles = stylex.create({
       default: 'flex-start',
       '@media (min-width: 1024px)': 'center',
     },
-    // Narrow: in flow under the transparent nav, so pad by nav height to clear
-    // it. Desktop is fixed + centered, so none.
+    // Narrow: in flow below the header. Pad by the nav's height plus the gap;
+    // --spacing-12 rather than --appshell-header-height, which also counts the
+    // canary banner. Desktop is fixed + centered, so none.
     paddingBlockStart: {
-      default: 'calc(var(--appshell-header-height, 0px) + var(--spacing-8))',
-      '@media (min-width: 768px)':
-        'calc(var(--appshell-header-height, 0px) + var(--hero-gap))',
+      default: 'calc(var(--spacing-12) + var(--spacing-8))',
+      '@media (min-width: 768px)': 'calc(var(--spacing-12) + var(--hero-gap))',
       '@media (min-width: 1024px)': 0,
     },
     paddingBlockEnd: spacingVars['--spacing-12'],

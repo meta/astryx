@@ -197,9 +197,10 @@ export function CollapsibleGroup({
     normalizeToArray(defaultValue),
   );
 
-  const openValues = isControlled
-    ? normalizeToArray(controlledValue)
-    : internalValue;
+  const openValues = useMemo(
+    () => (isControlled ? normalizeToArray(controlledValue) : internalValue),
+    [controlledValue, internalValue, isControlled],
+  );
 
   const isOpen = useCallback(
     (itemValue: string) => openValues.includes(itemValue),

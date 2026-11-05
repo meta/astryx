@@ -3,10 +3,11 @@
 /**
  * @file Markdown.remarkPlugins.tsx
  * @input Synchronous transform-only Remark plugins in Unified's attacher shape
- * @output Storybook-only adapted plugins: one compatible, two outside the profile
+ * @output Storybook-only adapted plugins: two compatible, two outside the profile
  * @position Documentation fixtures for the limited Remark compatibility profile
  */
 
+import remarkBreaks from 'remark-breaks';
 import {
   createMarkdownPlugin,
   createMarkdownTextTransform,
@@ -119,6 +120,12 @@ export const specBadgePlugin = createMarkdownPlugin<
       toText: node => node.data.label,
     },
   },
+});
+
+export const remarkBreaksPlugin = createMarkdownPlugin({
+  name: 'demo-remark-breaks',
+  apiVersion: 1,
+  transform: createMarkdownRemarkTransform(remarkBreaks),
 });
 
 export const remarkSpecLinkPlugin = createMarkdownPlugin({

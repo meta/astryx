@@ -28,7 +28,6 @@ const SKIP_DIRS = new Set(['node_modules', '__tests__']);
  * @property {string} component - the component whose doc declares it
  * @property {string[]} props - visual props the target reflects (`variant:value` keys)
  * @property {string[]} states - runtime states the target reflects (bare-name keys)
- * @property {string} [deprecatedFor] - canonical replacement key for a deprecated target
  */
 
 /**
@@ -55,13 +54,9 @@ function targetKey(className) {
  * not take out theme validation or the listing.
  *
  * @param {string} coreSrc - absolute path to `<core>/src`
- * @param {{includeDeprecated?: boolean}} [options] - preserve the CLI's full listing by default; ownership checks can request active targets only
  * @returns {Promise<ThemingTarget[]>}
  */
-export async function collectThemingTargets(
-  coreSrc,
-  {includeDeprecated = true} = {},
-) {
+export async function collectThemingTargets(coreSrc) {
   if (!coreSrc || !fs.existsSync(coreSrc)) return [];
 
   /** @type {Array<ThemingTarget & {parent: string|null}>} */
@@ -92,7 +87,6 @@ export async function collectThemingTargets(
           : path.basename(path.dirname(full));
 
       for (const target of doc?.theming?.targets || []) {
-        if (!includeDeprecated && target?.deprecatedFor != null) continue;
         const className = target?.className;
         if (typeof className !== 'string') continue;
         const key = targetKey(className);
@@ -105,9 +99,6 @@ export async function collectThemingTargets(
             typeof doc?.subComponentOf === 'string' ? doc.subComponentOf : null,
           props: stringList(target.visualProps),
           states: stringList(target.states),
-          ...(typeof target.deprecatedFor === 'string'
-            ? {deprecatedFor: target.deprecatedFor}
-            : {}),
         });
       }
     }
@@ -158,7 +149,6 @@ function canonicalizeParentTargets(targets) {
     const canonical = roots[0];
     canonical.props = [...new Set([...canonical.props, ...target.props])];
     canonical.states = [...new Set([...canonical.states, ...target.states])];
-    canonical.deprecatedFor ??= target.deprecatedFor;
     duplicates.add(target);
   }
 
@@ -250,33 +240,6 @@ export function targetsByKey(targets) {
     ];
   }
   return byKey;
-}
-
-/**
- * Build the component-validation registry from the same target rows used by
- * `theme targets`. Deprecated keys stay accepted during their compatibility
- * window, while the replacement map lets theme build issue exact guidance.
- *
- * @param {ThemingTarget[]} targets
- * @returns {{propsByKey: Record<string, string[]>, deprecatedByKey: Record<string, string>}}
- */
-export function targetValidationRegistry(targets) {
-  const propsByKey = targetsByKey(targets);
-  /** @type {Record<string, string>} */
-  const deprecatedByKey = {};
-
-  for (const target of targets) {
-    if (target.deprecatedFor == null) continue;
-    const existing = deprecatedByKey[target.key];
-    if (existing != null && existing !== target.deprecatedFor) {
-      throw new Error(
-        `Deprecated theme target "${target.key}" has conflicting replacements: "${existing}" and "${target.deprecatedFor}".`,
-      );
-    }
-    deprecatedByKey[target.key] = target.deprecatedFor;
-  }
-
-  return {propsByKey, deprecatedByKey};
 }
 
 /**

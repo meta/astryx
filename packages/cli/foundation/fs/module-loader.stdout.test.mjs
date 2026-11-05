@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const LOADER_URL = pathToFileURL(path.join(HERE, 'module-loader.mjs')).href;
@@ -268,7 +269,7 @@ describe('--json stdout stays one envelope when project modules print', () => {
     write('package.json', JSON.stringify({name: 'consumer', private: true}));
     write(
       'node_modules/@astryxdesign/core/package.json',
-      JSON.stringify({name: '@astryxdesign/core', version: '0.6.3'}),
+      JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
     );
     write(
       'astryx.config.js',
@@ -289,7 +290,7 @@ describe('--json stdout stays one envelope when project modules print', () => {
     );
     write(
       'node_modules/@astryxdesign/core/package.json',
-      JSON.stringify({name: '@astryxdesign/core', version: '0.6.3'}),
+      JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
     );
     write(
       'astryx.config.mjs',

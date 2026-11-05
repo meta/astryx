@@ -15,6 +15,8 @@ import {assertPublicArtifactSafe} from '../src/public-artifact.mjs';
 import {analyzeSetupIntegrity} from './setup-integrity.mjs';
 // @ts-expect-error -- setup-workspace.mjs intentionally has no declaration output.
 import {manifestDifferences, treeManifest} from './setup-workspace.mjs';
+// @ts-expect-error -- linkDirectory.mjs intentionally has no declaration output.
+import {linkDirectory} from './linkDirectory.mjs';
 import {
   passesAcceptance,
   scoreArm,
@@ -137,14 +139,9 @@ function preparePair(fixture: string) {
   const arm = path.join(root, 'arm');
   for (const destination of [baseline, arm]) {
     copyFixture(fixture, destination);
-    run(
-      'cp',
-      [
-        '-al',
-        path.join(deps, 'node_modules'),
-        path.join(destination, 'node_modules'),
-      ],
-      root,
+    linkDirectory(
+      path.join(deps, 'node_modules'),
+      path.join(destination, 'node_modules'),
     );
   }
 
@@ -654,9 +651,12 @@ function applyEnterpriseComposition(arm: string) {
     if (start === -1 || end === -1) {
       throw new Error('canonical enterprise dialog edit did not apply');
     }
+    // AST-038 makes inherited typography an explicit root-level choice. This
+    // host-owned composition deliberately keeps its established host type.
     next = `${next.slice(0, start)}      {dialogOpen ? (
         <Dialog
           aria-labelledby="service-dialog-title"
+          style={{fontFamily: 'inherit', fontSize: 'inherit', lineHeight: 'inherit'}}
           className="fixture-shell block z-[50] rounded-lg border border-border bg-panel p-6 text-foreground shadow-2xl"
           data-guest-design-system
           data-mode={mode}

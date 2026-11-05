@@ -3,7 +3,8 @@
 /**
  * @file page.tsx
  * @input Attested preview channel, editor code, and active theme
- * @output Isolated live preview with native navigation in production
+ * @output Isolated live preview with native navigation in production, or a
+ *   compile error sent to the playground when the compiler bootstrap fails
  * @position Playground runner; platform restrictions never grant parent privileges.
  */
 
@@ -29,7 +30,8 @@ import {
   setCleanSource,
   setPostToParent,
 } from '../propertyEditor/targetingOverlay';
-import {runCode, setTypeScript} from './runner';
+import {runCode, setTypeScript, type LocalModules} from './runner';
+import {loadPostModules} from './postModules';
 import {
   acceptPreviewConnect,
   announcePreview,
@@ -62,7 +64,14 @@ const useIsomorphicLayoutEffect =
   typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 type PreviewMessage =
-  | {type: 'preview-code'; code: string; source: string}
+  | {
+      type: 'preview-code';
+      code: string;
+      source: string;
+      // A blog post's live example (spec:AST-033 FR22): the post whose
+      // post-local example assets the code may import by relative path.
+      post?: string;
+    }
   | {type: 'preview-clear'}
   | {
       type: 'preview-theme';
@@ -117,6 +126,7 @@ export default function PreviewPage() {
   const [customTheme, setCustomTheme] = useState<DefinedTheme | null>(null);
   const [resetKey, setResetKey] = useState(0);
   const [tsReady, setTsReady] = useState(false);
+  const [compilerError, setCompilerError] = useState<string | null>(null);
   // Whether this document's own `load` event has fired (or the wait for it
   // ran out); readiness is announced only after it.
   const [documentLoaded, setDocumentLoaded] = useState(false);
@@ -130,6 +140,9 @@ export default function PreviewPage() {
   const readyRef = useRef<MessagePort | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  // Counts code messages, so a run that waits on a post's example assets
+  // never lands after a newer message.
+  const codeRunRef = useRef(0);
 
   // Load the TypeScript compiler from public/vendor — self-hosted because
   // corpnet blocks external CDNs. The UMD sets window.ts in the browser
@@ -137,14 +150,19 @@ export default function PreviewPage() {
   useEffect(() => {
     const script = document.createElement('script');
     script.src = '/vendor/typescript.js';
+    const fail = () => setCompilerError('TypeScript compiler failed to load');
     script.onload = () => {
       const w = window as unknown as {ts?: typeof TS};
       if (w.ts) {
         setTypeScript(w.ts);
         setTsReady(true);
+      } else {
+        fail();
       }
     };
+    script.onerror = fail;
     document.head.appendChild(script);
+    return () => script.remove();
   }, []);
 
   const theme = customTheme ?? themeByValue[themeName] ?? FALLBACK_THEME;
@@ -165,8 +183,8 @@ export default function PreviewPage() {
   }
 
   const handleCode = useCallback(
-    (code: string) => {
-      const result = runCode(code);
+    (code: string, localModules?: LocalModules) => {
+      const result = runCode(code, localModules);
       if (result.Component) {
         setComponent(() => result.Component);
         setError(null);
@@ -278,7 +296,20 @@ export default function PreviewPage() {
   }, [tsReady, documentLoaded]);
 
   useEffect(() => {
-    if (!tsReady || !documentLoaded || port == null) {
+    if (
+      !documentLoaded ||
+      port == null ||
+      (!tsReady && compilerError == null)
+    ) {
+      return;
+    }
+
+    if (compilerError != null) {
+      postToParent({
+        type: 'preview-error',
+        error: compilerError,
+        phase: 'compile',
+      });
       return;
     }
 
@@ -293,9 +324,39 @@ export default function PreviewPage() {
           // any live badges so an open popover re-parses against it.
           setCleanSource(event.data.source ?? event.data.code);
           refreshTargetLabels();
-          handleCode(event.data.code);
+          {
+            const {code, post} = event.data;
+            const run = ++codeRunRef.current;
+            if (typeof post === 'string') {
+              // Load the post's own example assets first; a newer code
+              // message supersedes this run.
+              void loadPostModules(post).then(
+                modules => {
+                  if (run === codeRunRef.current) {
+                    handleCode(code, modules);
+                  }
+                },
+                (err: unknown) => {
+                  if (run === codeRunRef.current) {
+                    const message =
+                      err instanceof Error ? err.message : String(err);
+                    setComponent(null);
+                    setError(`[compile] ${message}`);
+                    postToParent({
+                      type: 'preview-error',
+                      error: message,
+                      phase: 'compile',
+                    });
+                  }
+                },
+              );
+            } else {
+              handleCode(code);
+            }
+          }
           break;
         case 'preview-clear':
+          codeRunRef.current += 1;
           handleClear();
           break;
         case 'preview-theme':
@@ -327,6 +388,7 @@ export default function PreviewPage() {
     };
   }, [
     tsReady,
+    compilerError,
     documentLoaded,
     port,
     postToParent,

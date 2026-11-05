@@ -136,7 +136,8 @@ export const Disabled: Story = {
   render: () => (
     <ClickableCard
       label="Disabled card"
-      onClick={() => {}}
+      href="/settings"
+      target="_blank"
       isDisabled
       width={300}>
       <VStack gap={1}>
@@ -153,7 +154,7 @@ export const Disabled: Story = {
     docs: {
       description: {
         story:
-          '`isDisabled` suppresses click, hover, focus, and sets `aria-disabled`. `tabIndex` becomes -1.',
+          '`isDisabled` suppresses click and hover, removes any live link destination, sets `aria-disabled`, and keeps the card in the tab order so it is announced as disabled.',
       },
     },
   },

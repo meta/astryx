@@ -9,7 +9,7 @@ export default function SliderWithMarks() {
   const [value, setValue] = useState(50);
   return (
     <Slider
-      style={{width: 300}}
+      containerStyle={{width: 300}}
       label="Volume"
       value={value}
       onChange={setValue}

@@ -13,6 +13,7 @@ import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {DialogHeader} from './DialogHeader';
+import {Link} from '../Link';
 import {LayoutDividerContext} from '../Layout/LayoutDividerContext';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
@@ -67,6 +68,67 @@ describe('DialogHeader', () => {
   it('does not render subtitle when not provided', () => {
     render(<DialogHeader title="Title" />);
     expect(screen.queryByText('This is a subtitle')).not.toBeInTheDocument();
+  });
+
+  it('renders a node title inside the focusable h2', () => {
+    render(
+      <DialogHeader
+        title={
+          <span data-testid="rich-title">
+            Send <em>feedback</em>
+          </span>
+        }
+      />,
+    );
+    const heading = screen.getByRole('heading', {
+      level: 2,
+      name: 'Send feedback',
+    });
+    expect(heading).toContainElement(screen.getByTestId('rich-title'));
+    expect(heading).toHaveAttribute('tabindex', '-1');
+    expect(document.activeElement).toBe(heading);
+  });
+
+  it('renders a node subtitle and keeps its link', () => {
+    render(
+      <DialogHeader
+        title="Share"
+        subtitle={
+          <>
+            Review the <Link href="#policy">sharing policy</Link> first.
+          </>
+        }
+      />,
+    );
+    const link = screen.getByRole('link', {name: 'sharing policy'});
+    expect(link).toHaveAttribute('href', '#policy');
+    expect(link.closest('.astryx-dialog-header-title-block')).not.toBeNull();
+    expect(screen.getByRole('heading', {level: 2})).not.toContainElement(link);
+  });
+
+  it('renders a numeric zero subtitle inside the title block', () => {
+    const {container} = render(<DialogHeader title="Title" subtitle={0} />);
+    const titleBlock = container.querySelector(
+      '.astryx-dialog-header-title-block',
+    );
+    expect(titleBlock?.children).toHaveLength(2);
+    expect(titleBlock?.children[1]).toHaveTextContent(/^0$/);
+  });
+
+  it.each([
+    ['empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+    ['undefined', undefined],
+  ])('renders no subtitle for %s', (_, subtitle) => {
+    const {container} = render(
+      <DialogHeader title="Title" subtitle={subtitle} />,
+    );
+    const titleBlock = container.querySelector(
+      '.astryx-dialog-header-title-block',
+    );
+    expect(titleBlock?.children).toHaveLength(1);
   });
 
   it('renders close button when onOpenChange is provided', () => {
@@ -198,6 +260,19 @@ describe('DialogHeader', () => {
     expect(closeIcon).toHaveClass('astryx-icon');
   });
 
+  it('renders numeric zero in both content slots', () => {
+    const {container} = render(
+      <DialogHeader title="Title" startContent={0} endContent={0} />,
+    );
+
+    expect(
+      container.querySelector('.astryx-dialog-header-start-content'),
+    ).toHaveTextContent(/^0$/);
+    expect(
+      container.querySelector('.astryx-dialog-header-end-content'),
+    ).toHaveTextContent(/^0$/);
+  });
+
   it('exposes the start-content target when startContent renders', () => {
     const {container} = render(
       <DialogHeader
@@ -230,8 +305,20 @@ describe('DialogHeader', () => {
     ).toHaveLength(1);
   });
 
-  it('omits the content-slot targets when their content does not render', () => {
-    const {container} = render(<DialogHeader title="Title" />);
+  it.each([
+    ['empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+    ['undefined', undefined],
+  ])('omits both content-slot targets for %s', (_, content) => {
+    const {container} = render(
+      <DialogHeader
+        title="Title"
+        startContent={content}
+        endContent={content}
+      />,
+    );
 
     expect(
       container.querySelector('.astryx-dialog-header-start-content'),

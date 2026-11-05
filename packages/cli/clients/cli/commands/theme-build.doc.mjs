@@ -21,14 +21,16 @@ export const doc = {
     'theme. --family combines one selected extension tree into the three files named by ' +
     'the required --family-key, ready for one CSS load and identity-only switching. ' +
     'With --check it writes nothing and reports source drift. --icons-specifier keeps ' +
-    'its existing generated-module behavior.',
+    'its existing generated-module behavior. It prints one line per built theme and ' +
+    'one line naming fonts the themes do not load; --detail full adds the install ' +
+    'example and the font recipe, once for a batch.',
   fn: 'themeBuild',
   args: [{name: 'files', param: 'file', required: true, variadic: true}],
   options: [
     {
       flag: '--family',
       description:
-        'Build the selected extension family into one keyed CSS, JS, and declaration set. Requires --family-key; refused with --out or --watch (ERR_THEME_INVALID)',
+        'Build the selected extension family into one keyed CSS, JS, and declaration set, written beside the family root theme file, which must be inside the working directory to build (ERR_PATH_TRAVERSAL); --check only reads, so it compares outputs anywhere. Requires --family-key; refused with --out or --watch (ERR_THEME_INVALID)',
     },
     {
       flag: '--family-key <key>',
@@ -39,7 +41,7 @@ export const doc = {
       flag: '-o, --out <path>',
       param: 'options.out',
       description:
-        'Output CSS file path; the .js and .d.ts are written beside it (default: <theme name>.css next to the source). A relative path must stay inside the working directory. Single theme only: refused with more than one file or with --family (ERR_THEME_INVALID)',
+        'Output CSS file path, relative or absolute; the .js and .d.ts are written beside it (default: <theme name>.css next to the source). A build writes only inside the working directory, the defaults beside the source too (ERR_PATH_TRAVERSAL); --check writes nothing, so it compares outputs anywhere and refuses only a relative path that escapes the working directory. Single theme only: refused with more than one file or with --family (ERR_THEME_INVALID)',
     },
     {
       flag: '--icons-specifier <specifier>',
@@ -81,6 +83,7 @@ export const doc = {
       cli: 'astryx theme build ./src/themes/ocean.ts --icons-specifier ./icons.mjs',
     },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {
       code: 0,

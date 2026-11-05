@@ -4,6 +4,9 @@
  * @file Data extraction tests for the docsite.
  *
  * Validates that the generated registries contain expected data.
+ * @input Authored component docs and the generated docsite registries
+ * @output Regression coverage for catalog projections, including Drawer demos
+ * @position Build-time docsite data verification
  * Run: pnpm -F @astryxdesign/docsite test
  */
 
@@ -12,7 +15,14 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {describe, it, expect} from 'vitest';
 import {docs as chatDocs} from '../../../../packages/core/src/Chat/Chat.doc.mjs';
+import {docs as drawerDocs} from '../../../../packages/core/src/Drawer/Drawer.doc.mjs';
+import {docs as drawerHeaderDocs} from '../../../../packages/core/src/Drawer/DrawerHeader.doc.mjs';
+import {docs as bottomSheetSwitcherDocs} from '../../../../packages/core/src/BottomSheet/BottomSheetSwitcher.doc.mjs';
 import docsiteConfig from '../../astryx.config.mjs';
+import {
+  DEMO_CONTENT_MODULE,
+  replaceDemoContent,
+} from '../../../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {packages} from '../generated/packageRegistry';
 import {
   components,
@@ -32,6 +42,8 @@ import {eagerShowcases} from '../components/eagerShowcases';
 import {TEMPLATE_COMPONENTS} from '../components/templateComponents';
 import {exampleRegistry} from '../generated/exampleRegistry';
 import {normalizeComponentCategory} from '../lib/componentCategories';
+import {decompressCode} from '../lib/compress';
+import {buildPlaygroundHref} from '../components/playgroundLink';
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -46,7 +58,24 @@ const COMPONENT_REGISTRY_SOURCE = fs.readFileSync(
   COMPONENT_REGISTRY_PATH,
   'utf-8',
 );
-const CONFIGURED_CANARY_PACKAGES = new Set(docsiteConfig.integrations);
+const CONFIGURED_INTEGRATION_PACKAGES = new Set(docsiteConfig.integrations);
+
+/** The workspace manifest of a configured integration package. */
+function integrationManifest(name: string): {
+  private?: boolean;
+  astryx?: {canaryOnly?: boolean};
+} {
+  const entry = packages.find(pkg => pkg.name === name);
+  if (!entry) {
+    throw new Error(`${name} is missing from packageRegistry`);
+  }
+  return JSON.parse(
+    fs.readFileSync(
+      path.join(REPO_ROOT, entry.packagePath, 'package.json'),
+      'utf-8',
+    ),
+  );
+}
 
 function findFiles(dir: string, predicate: (filePath: string) => boolean) {
   const files: string[] = [];
@@ -127,8 +156,12 @@ describe('packageRegistry', () => {
     expect(names).not.toContain('@astryxdesign/theme-chocolate');
     expect(names).not.toContain('@astryxdesign/theme-daily');
     expect(names).not.toContain('@astryxdesign/build');
+    // Every canary-only package is a configured integration; a configured
+    // integration that is a stable release (no `astryx.canaryOnly`) is not.
     expect(packages.filter(pkg => pkg.canaryOnly).map(pkg => pkg.name)).toEqual(
-      [...CONFIGURED_CANARY_PACKAGES].sort(),
+      [...CONFIGURED_INTEGRATION_PACKAGES]
+        .filter(name => integrationManifest(name).astryx?.canaryOnly === true)
+        .sort(),
     );
     expect(packages.length).toBeGreaterThanOrEqual(9);
   });
@@ -258,14 +291,18 @@ describe('componentRegistry', () => {
       'VegaChart',
     ]);
 
+    // Components of a canary-only integration are not ready; components of a
+    // configured integration that is a stable release are, like Core's.
     for (const packageName of [
       '@astryxdesign/lab',
       '@astryxdesign/charts',
       '@astryxdesign/richtext',
       '@astryxdesign/vega',
     ]) {
+      const isReady =
+        integrationManifest(packageName).astryx?.canaryOnly !== true;
       expect(
-        components[packageName].every(comp => !comp.isReady),
+        components[packageName].every(comp => comp.isReady === isReady),
         packageName,
       ).toBe(true);
     }
@@ -686,6 +723,24 @@ describe('componentRegistry', () => {
     expect(toolCalls!.parentDoc).toBeNull();
   });
 
+  it('projects a doc deprecation, naming a documented current replacement', () => {
+    const all = Object.values(components).flat();
+    const byName = new Map(all.map(entry => [entry.name, entry]));
+    const switcher = byName.get(bottomSheetSwitcherDocs.name);
+    expect(bottomSheetSwitcherDocs.deprecated).toBeDefined();
+    expect(switcher?.deprecated).toMatchObject(
+      bottomSheetSwitcherDocs.deprecated!,
+    );
+    for (const entry of all.filter(e => e.deprecated)) {
+      const replacement = byName.get(entry.deprecated!.replacement);
+      expect(replacement, entry.name).toBeDefined();
+      expect(replacement!.deprecated, entry.name).toBeNull();
+      expect(entry.deprecated!.replacementDisplayName).toBe(
+        replacement!.displayName,
+      );
+    }
+  });
+
   it('simple components have null parentDoc', () => {
     const core = components['@astryxdesign/core'];
     const button = core.find(c => c.name === 'Button');
@@ -970,6 +1025,42 @@ describe('blockRegistry', () => {
     }
   });
 
+  it('shows each core block as a copy writes it, with no demo content (spec:AST-033 FR23)', () => {
+    const blocksDir = path.join(
+      REPO_ROOT,
+      'packages/cli/assets/templates/blocks',
+    );
+    for (const block of blocks.filter(b => b.sourcePackage == null)) {
+      const file = path.join(blocksDir, block.category, `${block.dirName}.tsx`);
+      expect(block.source).toBe(
+        replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+      );
+      expect(block.source).not.toContain(DEMO_CONTENT_MODULE);
+    }
+    for (const entry of Object.values(exampleRegistry).flat()) {
+      expect(entry.source).not.toContain(DEMO_CONTENT_MODULE);
+    }
+  });
+
+  it('opens the displayed source in the playground, with no demo content (spec:AST-033 FR23)', () => {
+    for (const entry of Object.values(exampleRegistry).flat()) {
+      const hash = buildPlaygroundHref(entry.source).split('#code=')[1];
+      const opened = decompressCode(hash);
+      expect(opened).not.toBeNull();
+      expect(opened).not.toContain(DEMO_CONTENT_MODULE);
+    }
+    const pagesDir = path.join(
+      REPO_ROOT,
+      'packages/cli/assets/templates/pages',
+    );
+    for (const template of templates) {
+      const file = path.join(pagesDir, template.slug, 'page.tsx');
+      expect(template.source).toBe(
+        replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+      );
+    }
+  });
+
   it('decodes unicode escapes in block titles', () => {
     const block = blocks.find(b => b.dirName === 'TabListTabsWithBadge');
     expect(block).toBeDefined();
@@ -1071,7 +1162,7 @@ describe('docsRegistry', () => {
 
     const theme = docTopics.find(d => d.topic === 'theme');
     expect(theme).toBeDefined();
-    expect(theme?.title).toBe('Theme System');
+    expect(theme?.title).toBe('Theming');
   });
 
   it('known topics are present', () => {
@@ -1203,6 +1294,42 @@ describe('exampleRegistry', () => {
     expect(exampleRegistry['Button']).toBeDefined();
     expect(exampleRegistry['Table']).toBeDefined();
     expect(exampleRegistry['Dialog']).toBeDefined();
+  });
+
+  it('projects Drawer docs into a live showcase and runnable example blocks', () => {
+    const drawerBlocks = blocks.filter(block => block.exampleFor === 'Drawer');
+    const labels = drawerDocs.examples!.map(example => example.label);
+    expect(drawerBlocks).toHaveLength(labels.length);
+    expect(drawerBlocks.map(block => block.name).sort()).toEqual(
+      [...labels].sort(),
+    );
+    // Core blocks, not an integration package's.
+    expect(drawerBlocks.every(block => block.sourcePackage == null)).toBe(true);
+
+    const showcase = drawerBlocks.filter(block => block.isShowcase);
+    expect(showcase.map(block => block.name)).toEqual([labels[0]]);
+    expect(showcaseRegistry.Drawer).toBeTypeOf('function');
+    // The page lists the examples in the doc's priority order, not by name.
+    expect(exampleRegistry.Drawer.map(example => example.name)).toEqual(
+      labels.slice(1),
+    );
+  });
+
+  it('gives DrawerHeader a visible showcase and projects its docs into example blocks', () => {
+    const headerBlocks = blocks.filter(
+      block => block.exampleFor === 'DrawerHeader',
+    );
+    const labels = drawerHeaderDocs.examples!.map(example => example.label);
+    expect(headerBlocks).toHaveLength(labels.length + 1);
+    expect(headerBlocks.every(block => block.sourcePackage == null)).toBe(true);
+
+    // Like DialogHeader, the page leads with a rendered header rather than an
+    // empty preview; every authored example also runs live.
+    expect(headerBlocks.filter(block => block.isShowcase)).toHaveLength(1);
+    expect(showcaseRegistry.DrawerHeader).toBeTypeOf('function');
+    expect(
+      exampleRegistry.DrawerHeader.map(example => example.name).sort(),
+    ).toEqual([...labels].sort());
   });
 
   it('Button has multiple examples', () => {
@@ -1362,7 +1489,10 @@ describe('DropdownMenu adaptive-presentation example', () => {
     );
 
     expect(presentation?.type).toBe("'popover' | 'bottom-sheet' | 'adaptive'");
-    expect(presentation?.default).toBe("'popover'");
+    // Unset by default: the menu is anchored, with the touch modes under a
+    // finger. 'popover' pins the pointer behavior.
+    expect(presentation?.default).toBeUndefined();
+    expect(presentation?.description).toContain("Pass 'popover'");
 
     const defaults = dropdownMenu?.playground?.defaults as
       Record<string, unknown> | undefined;

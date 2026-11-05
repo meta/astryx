@@ -1,6 +1,6 @@
 ---
 schema_version: 3
-template_version: 3
+template_version: 4
 kind: module
 id: module:<ParentComponent>/<PublicName>
 authority: draft
@@ -16,6 +16,8 @@ references: [architecture:<surface>, design:<surface>, spec:AST-000/DEC-0]
 ---
 
 # <PublicName> module contract
+
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
 
 ## Contract at a glance
 

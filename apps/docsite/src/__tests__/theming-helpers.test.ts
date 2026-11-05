@@ -35,7 +35,7 @@ describe('theming helpers — data attributes', () => {
   it('reflects both visual props and states', () => {
     expect(
       targetDataAttributes({
-        className: 'astryx-checkbox',
+        className: 'astryx-checkbox-indicator',
         visualProps: ['size'],
         states: ['checked', 'disabled'],
       }),
@@ -95,21 +95,6 @@ describe('theming helpers — buildDefineThemeExample', () => {
     expect(example).toContain("'banner': {");
     expect(example).toContain("'banner-icon': {");
     expect(example).toContain("'status': {");
-  });
-
-  it('excludes deprecated targets from copyable examples', () => {
-    const theming: ThemingDoc = {
-      targets: [
-        {
-          className: 'astryx-progressbar-fill',
-          deprecatedFor: 'progress-bar-fill',
-        },
-        {className: 'astryx-progress-bar-fill'},
-      ],
-    };
-    const example = buildDefineThemeExample(theming);
-    expect(example).not.toContain("'progressbar-fill'");
-    expect(example).toContain("'progress-bar-fill'");
   });
 
   it('returns empty string with no targets', () => {

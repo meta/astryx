@@ -39,6 +39,7 @@ import {stableClassName} from '../naming';
 
 const CORE_SRC_DIR = join(__dirname, '..');
 const LAB_SRC_DIR = join(__dirname, '../../../lab/src');
+const RICHTEXT_SRC_DIR = join(__dirname, '../../../richtext/src');
 const LAB_PROMOTION_MANIFEST = join(
   __dirname,
   '../../../../internal/lab-readiness/manifest.mjs',
@@ -213,32 +214,32 @@ function extractThemeTargets(
 
 describe('extractThemeTargets', () => {
   it('reads a bare call with no props', () => {
-    expect(extractThemeTargets(`themeProps('progressbar-track')`)).toEqual([
-      {className: 'astryx-progressbar-track', propKeys: [], isOpaque: false},
+    expect(extractThemeTargets(`themeProps('progress-bar-track')`)).toEqual([
+      {className: 'astryx-progress-bar-track', propKeys: [], isOpaque: false},
     ]);
   });
 
   it('reads shorthand props', () => {
-    expect(extractThemeTargets(`themeProps('progressbar', {variant})`)).toEqual(
-      [
-        {
-          className: 'astryx-progressbar',
-          propKeys: ['variant'],
-          isOpaque: false,
-        },
-      ],
-    );
+    expect(
+      extractThemeTargets(`themeProps('progress-bar', {variant})`),
+    ).toEqual([
+      {
+        className: 'astryx-progress-bar',
+        propKeys: ['variant'],
+        isOpaque: false,
+      },
+    ]);
   });
 
   it('records the KEY, not the value, when a prop is renamed', () => {
     // The trap a regex falls into: `fillVariant` is a local, not a prop.
     expect(
       extractThemeTargets(
-        `themeProps('progressbar-fill', {variant: fillVariant})`,
+        `themeProps('progress-bar-fill', {variant: fillVariant})`,
       ),
     ).toEqual([
       {
-        className: 'astryx-progressbar-fill',
+        className: 'astryx-progress-bar-fill',
         propKeys: ['variant'],
         isOpaque: false,
       },
@@ -337,7 +338,7 @@ type DocBlock = {theming?: {targets?: DocTarget[]}};
 type ComponentDocModule = {docs?: DocBlock; docsZh?: DocBlock};
 
 interface ComponentInfo {
-  packageName: 'core' | 'lab';
+  packageName: 'core' | 'lab' | 'richtext';
   dir: string;
   sites: ThemeTargetSite[];
   /** The doc blocks that carry theming.targets, by the key they live under. */
@@ -402,6 +403,10 @@ function sourceDirs(srcDir: string): string[] {
     }
   };
   walk('');
+  // The package root itself. A package that keeps its components as flat
+  // files rather than one directory each (richtext) has no subdirectory to
+  // find, so without this it is silently discovered as zero components.
+  out.push('');
   return out;
 }
 
@@ -493,6 +498,7 @@ describe('theming.targets matches the themeProps() call sites', () => {
   const components = [
     ...discoverComponents(CORE_SRC_DIR, 'core'),
     ...discoverComponents(LAB_SRC_DIR, 'lab', LAB_PROMOTION_DIRS),
+    ...discoverComponents(RICHTEXT_SRC_DIR, 'richtext'),
   ];
 
   it('finds participating Core and Lab components', () => {
@@ -504,6 +510,12 @@ describe('theming.targets matches the themeProps() call sites', () => {
     expect(components.some(component => component.packageName === 'lab')).toBe(
       true,
     );
+    // richtext keeps its components as flat files, so a regression in
+    // directory discovery would enroll zero of them and the guard would pass
+    // on an unchecked package rather than fail.
+    expect(
+      components.some(component => component.packageName === 'richtext'),
+    ).toBe(true);
   });
 
   it('enrolls every Lab promotion candidate and explicit theming capability', () => {

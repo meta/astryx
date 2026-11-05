@@ -144,19 +144,26 @@ describe('compileDocs over a broken integration', () => {
     expect(bundle.nodes.some(node => node.id === 'acme-guide')).toBe(true);
   });
 
-  it('reports a component doc that fails to load, and compiles the rest', async () => {
+  it('withdraws a component doc that fails to load, reports it, and compiles the rest', async () => {
     write(
       'components/AcmeCard.doc.mjs',
       "throw new Error('boom');\nexport default {};\n",
     );
     const project = await Project.load(tmpDir);
     const bundle = await compileDocs(project);
-    const found = bundle.diagnostics.filter(d => d.provider === '@acme/kit');
-    // Discovery lists the doc; compiling it fails at load, and only it.
-    expect(found.map(d => [d.code, d.source])).toEqual([
-      ['load_failed', '@acme/kit/components/AcmeCard.doc.mjs'],
-    ]);
-    expect(found[0].message).toMatch(/boom/);
+    // Discovery loads each integration component doc and withdraws one that
+    // fails, so the project reports it and the compiler never reads it.
+    const issues = (await project.issues()).filter(
+      issue => issue.package === '@acme/kit',
+    );
+    expect(issues.map(issue => issue.code)).toEqual(['invalid_component']);
+    expect(issues[0].message).toMatch(/boom/);
+    expect(
+      bundle.diagnostics.filter(d => d.provider === '@acme/kit'),
+    ).toEqual([]);
+    expect(
+      bundle.nodes.some(node => node.id === '@acme/kit:components:AcmeCard'),
+    ).toBe(false);
     expect(bundle.nodes.some(node => node.kind === 'reference')).toBe(true);
   });
 
@@ -165,9 +172,13 @@ describe('compileDocs over a broken integration', () => {
       'components/AcmeCard.doc.mjs',
       "export default {type: 'component', displayName: 'No name'};\n",
     );
-    const bundle = await compileDocs(await Project.load(tmpDir));
-    const found = bundle.diagnostics.filter(d => d.provider === '@acme/kit');
-    expect(found.map(d => d.code)).toEqual(['invalid_doc']);
+    const project = await Project.load(tmpDir);
+    const bundle = await compileDocs(project);
+    const issues = (await project.issues()).filter(
+      issue => issue.package === '@acme/kit',
+    );
+    expect(issues.map(issue => issue.code)).toEqual(['invalid_component']);
+    expect(issues[0].message).toMatch(/invalid metadata/);
     expect(
       bundle.nodes.some(node => node.id === '@acme/kit:components:AcmeCard'),
     ).toBe(false);

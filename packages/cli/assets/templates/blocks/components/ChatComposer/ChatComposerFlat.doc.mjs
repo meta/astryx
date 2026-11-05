@@ -11,4 +11,9 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['ChatComposer', 'Layout', 'Text'],
+  icons: {
+    Cog6ToothIcon: 'settings',
+    MicrophoneIcon: 'microphone',
+    SparklesIcon: 'sparkles',
+  },
 };

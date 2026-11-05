@@ -1,7 +1,12 @@
 # Storybook visual regression
 
 Every visual-regression test uses the shared Storybook framework and
-`.github/workflows/ci.yml` → `pr-visual` (**Stable visual regression**).
+`.github/workflows/ci.yml` → `pr-visual` (**Stable visual regression**). It runs
+in `release-check`, which `main-heavy-lanes.yml` dispatches after merges to
+`main` (a burst is checked once, at its newest commit) and the release gate dispatches before a cut. A pull request runs its full
+check only with the `ci:run-visual` label; without it, `pr-visual` runs its
+default touched check, which compares only the touched Core components that
+have an accepted baseline shot and never widens (AST-030 FR12, DEC-7).
 [AST-030 FR12](../../../docs/specs/AST-030/spec.md) owns this requirement.
 Add coverage to that owner, not to a new component, package, theme, scheduled,
 post-CI, or post-merge workflow.
@@ -10,8 +15,9 @@ post-CI, or post-merge workflow.
 
 Dispatch **CI** from `main` with `operation=release-check`. The event SHA is
 immutable for the run; the request and final `release-check` join reject a
-non-main ref or a SHA that is no longer current main. After main advances, dispatch
-again rather than reusing an earlier green run.
+non-main ref or a SHA that is not an ancestor of current main. Later fast-forward
+commits do not invalidate an earlier green run; a rewrite or divergence that
+removes the checked SHA requires a new dispatch.
 
 The existing Storybook build feeds the same **Stable visual regression**
 (`pr-visual`), `pr-a11y`, and `pr-rtl` owners. Release scope is the closed full
@@ -23,22 +29,25 @@ cancelled, and skipped work is not release evidence.
 This changes when and where release evidence runs, not finding policy: visual
 `changed` still requires review, a11y fails on new baseline violations, and RTL
 findings remain soft while report completeness is mandatory. The dispatch does
-not capture baseline candidates, promote baselines, publish previews, or replace
-PR checks. It runs only on request, not every push. `visual-release-report` holds
+not capture baseline candidates, promote baselines, or publish previews. `visual-release-report` holds
 the visual evidence for that exact run/attempt.
 
-PR accessibility is intentionally smaller: explicit changed-component axe scope
-(including grouped-folder owners), plus the fast modal-close, theme-var, and
-story-play guards. Empty/shared scope never falls back to all stories, and
+PR accessibility is intentionally smaller. With `ci:run-a11y` it runs an
+explicit changed-component axe scope (including grouped-folder owners), plus
+the fast modal-close, theme-var, and story-play guards. Without the label, the
+default touched-components check audits only the touched components' stories,
+without the guards, and runs up to four browser accessibility spec files the
+pull request adds or modifies (scoped and `always` specs; `audit` and
+`release-only` specs wait). Empty/shared scope never falls back to all stories, and
 missing or approximate analysis fails rather than granting an empty scope.
 The full axe roster, whole-repository accessibility spec-test contracts and their
-pixel/evidence uploads, and Probe reach sweep run only during `release-check`.
+pixel/evidence uploads run only during `release-check`.
 
 Release callers must bind the CI run/attempt and all three job outcomes to its
-exact main SHA, and recheck main immediately before release mutation. The public
-[Release Process](https://github.com/facebook/astryx/wiki/Release-Process) needs a
-separate follow-up to replace constituent-PR-only gating with this dispatch; this
-CI capability does not update release automation.
+exact main SHA, and confirm that SHA remains an ancestor of current main before
+release mutation. The public
+[Release Process](https://github.com/meta/astryx/wiki/Release-Process) uses
+the same checked-SHA boundary; later fast-forward commits are next-release input.
 
 ## Coverage and results
 
@@ -70,17 +79,17 @@ keys requires explicit full-plan baseline maintenance.
 - `skipped`: no comparison was performed; the reason is explicit. It does not
   imply a separate workflow covered the change.
 
-The `visual-pr-report` artifact belongs to the exact CI run and attempt.
+The `visual-pr-report` artifact belongs to the exact CI run. A rerun of only
+the failed jobs keeps the artifacts of the jobs that passed, so the report can
+come from an earlier attempt of that run, never a later one.
 `pr-comment.yml` only publishes its report: it checks identity, bounds JSON and
 image sizes, re-encodes PNGs, and renders escaped HTML from default-branch code.
 It does not execute artifact HTML, run a browser, compare pixels again, change
-a baseline, or create another visual status.
+a baseline, or create another visual status. Its only status is `PR Comment` on
+the pull request head, which says whether a report step failed.
 
-Deployment previews, `a11y-weekly.yml`, `rtl-weekly.yml`, and
-`vibe-screenshots.yml` remain separate because they do not run visual regression.
-The baseline-free `gate.mjs reach` diagnostic lives with the existing `pr-a11y`
-browser checks; it tests whether Probe overrides reach their targets, not whether
-screenshots match a golden image.
+Deployment previews and `vibe-screenshots.yml` remain separate because they do
+not run visual regression.
 
 ## Explicit baseline maintenance
 
@@ -92,16 +101,18 @@ Maintenance uses **CI**, not another workflow. Dispatch from `main`:
 2. Review that run's report and capture. A browser-version mismatch can make the
    comparison fail while still producing a complete candidate capture; inspect
    the rendering rather than accepting it merely to clear a check.
-3. Dispatch CI again with `operation=promote`, the reviewed `run_id` and
-   `run_attempt`, selected `keys` (or `all`), and an explicit `reason`. Choose
-   `prune` only when the full-plan removal checks permit it.
+3. Download that exact run/attempt's validated candidate artifact. In a dedicated
+   branch, run `gate.mjs accept` with the checked-in baseline, candidate directory,
+   reviewed keys (or `all`), and an explicit reason; use `--prune` only when the
+   full-plan removal checks permit it. Open a normal pull request containing only
+   the reviewed baseline delta.
 
-Promotion verifies the source maintenance run, attempt, and artifact identity,
-then uses the shared serialized gh-pages publisher. It never recaptures or
-promotes automatically after merge. The existing accept/prune validation and
-decision log remain the write boundary. Partial captures cannot become complete
-baseline candidates. Bootstrap, coverage changes, and browser refreshes use this
-same path; none is a release gate.
+The pull request is the publication and decision record. `gate.mjs accept`
+revalidates the candidate verdict and hashes before writing the compact index and
+selected PNGs. It never recaptures, promotes automatically after merge, or writes
+to GitHub Pages. Partial captures cannot become complete baseline candidates.
+Bootstrap, coverage changes, and browser refreshes use this same path; none is a
+release gate.
 
 The shared promotion boundary accepts `pass` or `changed`. A failed comparison
 is eligible only for the validated browser-only refresh: every baseline and
@@ -114,16 +125,16 @@ skipped, unknown, partial, or otherwise failed evidence is refused before writes
 ```bash
 pnpm build && pnpm -F @astryxdesign/storybook build
 pnpm visual:plan
-pnpm visual:check --baseline .visual-baseline --out .visual-run
+pnpm visual:check --baseline .github/visual-baseline --out .visual-run
 open .visual-run/report/index.html
 ```
 
 CLI exit codes: `0` clean, `1` crashed, `2` changed. `gate.mjs release` selects the
 closed full canonical plan used by broad PRs, release checks, and maintenance.
-`gate.mjs accept` is an explicit local write; CI baseline publication uses it
-inside the serialized publication turn. Local baselines must stay local:
-platform and browser differences make them incomparable with the pinned CI
-baseline.
+`gate.mjs accept` is an explicit local write. A reviewed baseline refresh is
+committed through a normal pull request; local captures must not overwrite the
+checked-in baseline without that review because platform and browser differences
+can make them incomparable.
 
 ## Determinism and storage
 
@@ -132,11 +143,13 @@ state, and blocks off-origin requests. Storybook's channel selects theme and
 color mode. Each story starts in the default light theme before switching
 variants. Canonical PNG encoding avoids treating encoding metadata as pixels.
 
-The baseline remains at `gh-pages:visual-gate/baseline/`. Immutable PR reports
-remain beside the preview at `pr/<number>/visual/<head>/<run>/<attempt>/`.
-The shared publisher, deployment, cleanup, and compaction must preserve the
-baseline and publication queue. Do not delete the `visual-gate/` subtree when
-retiring workflows; it still contains live baseline data and queue state.
+The baseline is versioned at `.github/visual-baseline/`. Its move into the
+repository and removal of the old branch writer belong in one change: splitting
+that ownership transfer would temporarily leave either two authoritative write
+paths or no durable comparison oracle. Pull-request reports, including their
+before/after/diff images, remain GitHub Actions artifacts for 30 days. The
+release check and baseline-candidate artifacts retain their existing independent
+lifetimes. GitHub Pages is not evidence storage.
 
 ## Drift guard
 

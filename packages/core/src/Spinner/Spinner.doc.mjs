@@ -6,7 +6,7 @@ export const docs = {
   name: 'Spinner',
   displayName: 'Spinner',
   category: 'Feedback & Status',
-  keywords: ["spinner","loader","loading","circular","progress","spin","activity","busy","indeterminate"],
+  keywords: ["spinner","loader","loading","circular","progress","spin","activity","busy","indeterminate","circularprogress"],
   props: [
     {
       name: 'size',

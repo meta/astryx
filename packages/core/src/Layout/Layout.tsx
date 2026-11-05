@@ -24,7 +24,8 @@ import {LayoutSlotsContext, type LayoutSlots} from './LayoutSlotsContext';
 import {LayoutDividerContext} from './LayoutDividerContext';
 import {stack} from '../Stack/stack.stylex';
 import {stackItem} from '../Stack/stackItem.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {layoutFooterMarker, layoutHeaderMarker} from './layoutEdges.stylex';
 import type {BaseProps} from '../BaseProps';
 import type {SizeValue, SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
@@ -81,6 +82,13 @@ const styles = stylex.create({
     // released padding. An explicit contentWidth overrides this on the same node.
     '--layout-content-width': '100cqi',
     '--layout-alignment-width': '100cqi',
+    // A Layout's `padding` belongs to its own regions. Clear an ancestor
+    // Layout's value so a nested Layout without `padding` takes the nearest
+    // padding container's inset (Card, Section, Dialog) or the default,
+    // instead of inheriting, e.g., AppShell's internal padding={0}. An
+    // explicit `padding` on this Layout overrides this on the same node.
+    '--layout-padding-own-outer-x': 'initial',
+    '--layout-padding-own-outer-y': 'initial',
   },
   fill: {
     // Add 2x container block padding to compensate for negative block margins
@@ -94,6 +102,23 @@ const styles = stylex.create({
   middle: {
     flex: 1,
     minHeight: 0,
+    // A LayoutHeader without a divider right before this row, or a
+    // LayoutFooter without one right after it, removes the matching inner
+    // padding of LayoutContent (it reads these, falling back to its padding).
+    // Sibling relations on this row only: a `:has()` on the layout followed
+    // by `*` restyles everything inside it on any change. Unset otherwise, so
+    // a nested Layout's content inherits an outer row's value, as the
+    // ancestor rule this replaces matched any enclosing layout.
+    '--_layout-flush-block-start': {
+      default: null,
+      [stylex.when.siblingBefore(':not([data-divider])', layoutHeaderMarker)]:
+        '0px',
+    },
+    '--_layout-flush-block-end': {
+      default: null,
+      [stylex.when.siblingAfter(':not([data-divider])', layoutFooterMarker)]:
+        '0px',
+    },
   },
   middleQuery: {
     containerType: {
@@ -140,10 +165,10 @@ const styles = stylex.create({
         'max(0px, calc((100% - var(--layout-content-width)) / 2))',
     },
   },
-  // When full bleed, set outer padding variables to 0 so child components touch container edges
+  // When full bleed, set this Layout's outer padding to 0 so its regions touch container edges
   fullBleed: {
-    '--layout-padding-outer-x': '0px',
-    '--layout-padding-outer-y': '0px',
+    '--layout-padding-own-outer-x': '0px',
+    '--layout-padding-own-outer-y': '0px',
   },
 });
 
@@ -224,7 +249,9 @@ export interface LayoutProps extends Omit<BaseProps, 'content'> {
 
   /**
    * Padding at the layout's outer edges using the spacing scale.
-   * Controls both `--layout-padding-outer-x` and `--layout-padding-outer-y`.
+   * Applies to this Layout's own header, footer, panels, and content; a nested
+   * Layout does not inherit it. Without `padding`, regions use the enclosing
+   * Card, Section, or Dialog padding, or the default inset.
    * Accepts numeric spacing steps: 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10.
    */
   padding?: SpacingStep;
@@ -327,6 +354,7 @@ export function Layout({
   xstyle,
   className,
   style,
+  ...restProps
 }: LayoutProps) {
   const isFill = height === 'fill';
   // Children are a shorthand for the content slot; an explicit `content` prop
@@ -355,6 +383,7 @@ export function Layout({
   const tree = (
     <LayoutSlotsContext value={slotsValue}>
       <div
+        {...restProps}
         ref={ref}
         {...mergeProps(
           themeProps('layout', {height}),

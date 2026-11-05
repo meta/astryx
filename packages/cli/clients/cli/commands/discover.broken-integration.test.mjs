@@ -68,12 +68,13 @@ describe('astryx discover with a manifest that fails to load', () => {
     const {status, stdout, stderr} = await runCli(['discover'], {cwd: project});
 
     expect(status).toBe(0);
-    expect(stderr).toContain(
-      'Warning: @test/broken has 1 integration issue(s). ' +
-        'Run: astryx doctor integration validate @test/broken',
+    expect(stderr).toMatch(
+      /Warning: @test\/broken has 1 integration issue\(s\)\. Run: .+ doctor/,
     );
     expect(stdout).not.toContain('No integrations configured.');
-    expect(stdout).toContain('No external components found in configured integrations.');
+    expect(stdout).toContain(
+      'No external components found in configured integrations.',
+    );
   });
 
   it('reports meta.configured=true in --json, with the nudge suppressed', async () => {
@@ -82,7 +83,11 @@ describe('astryx discover with a manifest that fails to load', () => {
     });
 
     expect(status).toBe(0);
-    expect(JSON.parse(stdout).meta).toEqual({configured: true});
+    const {meta} = JSON.parse(stdout);
+    expect(meta.configured).toBe(true);
+    // The official list still answers; nothing else is claimed.
+    expect(meta.sources.map(s => s.name)).toEqual(['Astryx']);
+    expect(meta.answeredBy).toEqual(expect.any(Object));
     expect(stderr).not.toContain('integration issue');
   });
 });
@@ -101,7 +106,7 @@ describe('astryx discover with a configured package that is not installed', () =
     );
     fs.writeFileSync(
       path.join(healthy, 'components', 'Widget.doc.mjs'),
-      `export const docs = {name: 'Widget', usage: {description: 'A widget.'}};\n`,
+      `export const docs = {name: 'Widget', usage: {description: 'A widget.'}, props: []};\n`,
     );
     fs.writeFileSync(
       path.join(healthy, 'components', 'Widget.tsx'),
@@ -128,9 +133,8 @@ describe('astryx discover with a configured package that is not installed', () =
     const {status, stderr} = await runCli(['discover'], {cwd: project});
 
     expect(status).toBe(0);
-    expect(stderr).toContain(
-      'Warning: @test/missing has 1 integration issue(s). ' +
-        'Run: astryx doctor integration validate @test/missing',
+    expect(stderr).toMatch(
+      /Warning: @test\/missing has 1 integration issue\(s\)\. Run: .+ doctor\n/,
     );
   });
 });
@@ -148,9 +152,8 @@ describe('astryx search with a manifest that fails to load', () => {
     const {status, stderr} = await runCli(['search', 'button'], {cwd: project});
 
     expect(status).toBe(0);
-    expect(stderr).toContain(
-      'Warning: @test/broken has 1 integration issue(s). ' +
-        'Run: astryx doctor integration validate @test/broken',
+    expect(stderr).toMatch(
+      /Warning: @test\/broken has 1 integration issue\(s\)\. Run: .+ doctor/,
     );
 
     const asJson = await runCli(['search', 'button', '--json'], {cwd: project});

@@ -37,6 +37,7 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {findInstalledPackage} from '../../../foundation/fs/paths.mjs';
+import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../../../..');
@@ -50,13 +51,18 @@ const PACKED_DIRS = ['clients', 'api', 'assets', 'authoring', 'foundation'];
 const RUNTIME_DEPS = [
   '@babel/parser',
   'commander',
+  'ignore',
   'jiti',
   'jscodeshift',
   'zod',
 ];
 
-const OLD_CORE_VERSION = '0.5.4';
-const CURRENT_CORE_VERSION = '0.6.0';
+// Both Cores carry the packed CLI's own version: a run through the bin in a
+// project whose Core is another release is handed to that release (spec
+// AST-081 FR2), so the old surface is told apart by what it exports, not by
+// its version.
+const OLD_CORE_VERSION = CLI_VERSION;
+const CURRENT_CORE_VERSION = CLI_VERSION;
 const TSC_BIN = path.join(REPO_ROOT, 'node_modules/typescript/bin/tsc');
 
 /**
@@ -278,8 +284,20 @@ function buildTheme(themeFile, extraArgs = []) {
     'node_modules/@astryxdesign/cli/clients/cli/bin/astryx.mjs',
   );
   try {
+    // A packed CLI outside any project's package.json reads as installed for
+    // the computer, so it gets a home folder of its own: nothing it keeps for
+    // the computer lands in the real one.
+    const home = path.join(root, 'home');
+    const env = {
+      ...process.env,
+      HOME: home,
+      USERPROFILE: home,
+      XDG_CONFIG_HOME: path.join(home, '.config'),
+      XDG_CACHE_HOME: path.join(home, '.cache'),
+      NO_UPDATE_NOTIFIER: '1',
+    };
     // prettier-ignore
-    const stdout = execFileSync(process.execPath, [bin, 'theme', 'build', ...(Array.isArray(themeFile) ? themeFile : [themeFile]), ...extraArgs, '--json'], {cwd: consumer, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']});
+    const stdout = execFileSync(process.execPath, [bin, 'theme', 'build', ...(Array.isArray(themeFile) ? themeFile : [themeFile]), ...extraArgs, '--json'], {cwd: consumer, encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe']});
     return {status: 0, envelope: JSON.parse(stdout)};
   } catch (error) {
     const e = /** @type {any} */ (error);

@@ -17,6 +17,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  effectiveTemplateDiscovery,
   extractComponents,
   findPageDocFile,
   stripTemplateAssetRefs,
@@ -177,5 +178,46 @@ describe('findPageDocFile', () => {
     expect(findPageDocFile(page)).toBe(
       path.join(page, 'template.template.mjs'),
     );
+  });
+});
+
+describe('effectiveTemplateDiscovery', () => {
+  it('shadows only the matching template kind', () => {
+    const pageReplacement = {
+      type: 'page',
+      dirName: 'acme-dashboard',
+      name: 'Acme dashboard',
+      description: '',
+      filePath: '/acme-dashboard.tsx',
+      docPath: '/acme-dashboard.doc.mjs',
+      package: '@acme/widgets',
+      replaces: 'dashboard',
+    };
+    const corePage = {
+      type: 'page',
+      dirName: 'dashboard',
+      name: 'Dashboard page',
+      description: '',
+      filePath: '/dashboard-page.tsx',
+      docPath: '/dashboard-page.doc.mjs',
+    };
+    const coreBlock = {
+      type: 'block',
+      dirName: 'dashboard',
+      name: 'Dashboard block',
+      description: '',
+      filePath: '/dashboard-block.tsx',
+      docPath: '/dashboard-block.doc.mjs',
+    };
+
+    const effective = effectiveTemplateDiscovery([
+      corePage,
+      coreBlock,
+      pageReplacement,
+    ]);
+
+    expect(effective).toContain(pageReplacement);
+    expect(effective).toContain(coreBlock);
+    expect(effective).not.toContain(corePage);
   });
 });

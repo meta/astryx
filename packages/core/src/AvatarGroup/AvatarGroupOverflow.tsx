@@ -3,7 +3,7 @@
 
 /**
  * @file AvatarGroupOverflow.tsx
- * @input Uses React, StyleX, AvatarGroupContext, i18n (useTranslator)
+ * @input Uses React, StyleX, AvatarGroupContext, i18n (useComponentTranslator)
  * @output Exports AvatarGroupOverflow for overflow indicator
  * @position Slot component used inside AvatarGroup
  *
@@ -31,7 +31,14 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
-import {useTranslator} from '../i18n';
+import {usePressFeedback} from '../hooks/usePressFeedback';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/AvatarGroup/AvatarGroupOverflow.generated';
+
+registerEnglishFallback(english);
 
 const BORDER_WIDTH = 2;
 const OVERFLOW_FONT_RATIO = 0.35;
@@ -101,12 +108,10 @@ const styles = stylex.create({
     // Focus ring via focus-visible
   },
   overlap: {
-    // Matches Avatar's own overlap rule: the first item in the row must not be
-    // pulled outside the group's box.
-    marginInlineStart: {
-      default: null,
-      ':not(:first-child)': 'var(--_avatar-group-overlap)',
-    },
+    // Matches Avatar's own overlap rule. AvatarGroup pads its start edge by
+    // the same amount, so the indicator stays inside the group's box even
+    // when it is the first child.
+    marginInlineStart: 'var(--_avatar-group-overlap)',
   },
 });
 
@@ -160,7 +165,8 @@ export function AvatarGroupOverflow({
   style,
   ...rest
 }: AvatarGroupOverflowProps): ReactNode {
-  const t = useTranslator();
+  const pressable = usePressFeedback();
+  const t = useComponentTranslator();
   const group = useAvatarGroup();
   const size = group?.size ?? 'md';
   const shape = group?.shape ?? 'circle';
@@ -183,6 +189,7 @@ export function AvatarGroupOverflow({
         {...rest}
         aria-label={label}
         data-avatar-item=""
+        {...pressable}
         {...mergeProps(
           themeProps('avatar-group-overflow', {size, shape}),
           focusOutlineProps.focusVisible(
@@ -207,6 +214,8 @@ export function AvatarGroupOverflow({
   return (
     <span
       ref={ref}
+      // Before the caller's props so a caller-supplied role still wins.
+      role="img"
       {...rest}
       aria-label={label}
       {...mergeProps(

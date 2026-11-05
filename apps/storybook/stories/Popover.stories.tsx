@@ -98,10 +98,6 @@ const readinessStyles = stylex.create({
     paddingInlineEnd: spacingVars['--spacing-4'],
     overflow: 'clip',
   },
-  edgeAnchorRow: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-  },
   oversizedTrigger: {
     inlineSize: 640,
   },
@@ -676,56 +672,10 @@ export const RenderProp: Story = {
 // Responsive and Interaction Readiness Evidence
 // =============================================================================
 
-export const ViewportFit: Story = {
-  name: 'Viewport Fit',
-  parameters: {
-    layout: 'fullscreen',
-    viewport: {defaultViewport: 'mobile1'},
-    docs: {
-      story: {inline: false, height: '844px'},
-      description: {
-        story:
-          'Uses the actual Storybook viewport rather than a simulated phone frame. The Popover requests a 640px width and must stay anchored to the trigger while preserving at least 16px safe-area-aware gutters from both viewport edges.',
-      },
-    },
-  },
-  render: () => (
-    <div {...stylex.props(readinessStyles.viewportStoryCanvas)}>
-      <div {...stylex.props(readinessStyles.edgeAnchorRow)}>
-        <Popover
-          placement="below"
-          alignment="end"
-          label="Narrow viewport fit evidence"
-          width={640}
-          content={
-            <VStack gap={3} xstyle={readinessStyles.evidenceCopy}>
-              <Heading level={4} tabIndex={-1}>
-                Narrow viewport fit
-              </Heading>
-              <Text type="body" wordBreak="break-word">
-                This intentionally requests a wider-than-mobile popover. The
-                layer should stay anchored to the trigger, preserve safe gutters
-                on both viewport edges, and allow long content to reflow instead
-                of causing horizontal page overflow.
-              </Text>
-              <Text type="supporting" wordBreak="break-word">
-                Long localized-token-like content:
-                project-settings-notification-delivery-exception-review-queue
-              </Text>
-            </VStack>
-          }>
-          <Button label="Open fit evidence">Open fit evidence</Button>
-        </Popover>
-      </div>
-    </div>
-  ),
-  play: async ({canvasElement}) => {
-    const trigger = canvasElement.querySelector('button');
-    if (trigger instanceof HTMLElement) {
-      trigger.click();
-    }
-  },
-};
+// Viewport geometry — gutters, caps, flips, the slide — is the layer runtime's
+// and is demonstrated under Core/Layer (spec:AST-059). Popover keeps the
+// stories for what is Popover's own: its match-trigger preference, scrolling,
+// focus, dismissal, and surface styling.
 
 export const MatchTriggerViewportFit: Story = {
   name: 'Match-trigger viewport fit',
@@ -736,7 +686,7 @@ export const MatchTriggerViewportFit: Story = {
       story: {inline: false, height: '844px'},
       description: {
         story:
-          'Uses the actual Storybook viewport. The real trigger is intentionally 640px wide, while Popover keeps its default match-trigger sizing; the Popover must cap to the available viewport instead of inheriting the full trigger width.',
+          'Uses the actual Storybook viewport. The real trigger is intentionally 640px wide, while Popover keeps its default match-trigger sizing; the preference is clamped by the layer runtime\u2019s viewport cap (spec:AST-059 FR7) instead of inheriting the full trigger width.',
       },
     },
   },
@@ -911,6 +861,31 @@ export const BottomSheetPresentationOption: Story = {
       trigger.click();
     }
   },
+};
+
+export const AdaptivePresentation: Story = {
+  name: 'Adaptive Presentation',
+  parameters: {
+    layout: 'fullscreen',
+    docs: {
+      story: {inline: false, height: '844px'},
+      description: {
+        story:
+          'presentation="adaptive": on a compact touch screen (a phone) the content is presented in a BottomSheet, the way iOS presents a popover on an iPhone; with a mouse or on a larger screen it stays anchored to its trigger.',
+      },
+    },
+  },
+  render: () => (
+    <div style={{padding: 16}}>
+      <Popover
+        label="Filter by status"
+        presentation="adaptive"
+        width={280}
+        content={<FilterContent />}>
+        <Button label="Filter">Filter</Button>
+      </Popover>
+    </div>
+  ),
 };
 
 export const AdaptivePopoverRecipe: PresentationRecipeStory = {

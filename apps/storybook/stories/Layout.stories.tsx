@@ -1488,3 +1488,111 @@ export const ContentWidthInAppShell: Story = {
     </VStack>
   ),
 };
+
+const nestedStyles = stylex.create({
+  frame390: {
+    width: 390,
+    height: 360,
+  },
+  frame960: {
+    width: 960,
+    height: 360,
+  },
+  frame320: {
+    width: 320,
+  },
+});
+
+/** A page Layout with a details panel, as it sits inside AppShell content. */
+const OrdersPageLayout = ({panelWidth}: {panelWidth: number}) => (
+  <Layout
+    header={
+      <LayoutHeader hasDivider>
+        <h3 {...stylex.props(styles.heading)}>Orders</h3>
+      </LayoutHeader>
+    }
+    end={
+      <LayoutPanel
+        hasDivider
+        width={panelWidth}
+        role="complementary"
+        label="Order details">
+        <VStack gap={2}>
+          <p {...stylex.props(styles.subheading)}>Order #1042</p>
+          <p {...stylex.props(styles.bodyText)}>Shipped · 3 items</p>
+        </VStack>
+      </LayoutPanel>
+    }
+    content={
+      <LayoutContent>
+        <p {...stylex.props(styles.bodyText)}>
+          Select an order to see its shipping and payment details.
+        </p>
+      </LayoutContent>
+    }
+  />
+);
+
+/**
+ * A Layout nested in AppShell content keeps its regions' default inset:
+ * AppShell's own internal Layout is full bleed (`padding={0}`), and a
+ * Layout's `padding` applies only to its own regions. The Card row shows the
+ * unchanged path: a Layout inside a padded Card still takes the Card's inset.
+ * One AppShell per story: each renders a `<main>` landmark.
+ */
+export const NestedInAppShell: Story = {
+  name: 'Nested Layout — Inset in AppShell',
+  render: () => (
+    <VStack gap={4} xstyle={styles.storySection}>
+      <p {...stylex.props(styles.sectionLabel)}>
+        Page Layout with a details panel inside AppShell (no padding props),
+        390px frame
+      </p>
+      <div {...stylex.props(styles.cwContainer, nestedStyles.frame390)}>
+        <AppShell>
+          <OrdersPageLayout panelWidth={150} />
+        </AppShell>
+      </div>
+      <p {...stylex.props(styles.sectionLabel)}>
+        Unchanged: Layout inside Card padding=2 takes the Card inset
+      </p>
+      <div {...stylex.props(nestedStyles.frame320)}>
+        <Card padding={2}>
+          <Layout
+            height="auto"
+            header={
+              <LayoutHeader hasDivider>
+                <h3 {...stylex.props(styles.heading)}>Card title</h3>
+              </LayoutHeader>
+            }
+            content={
+              <LayoutContent>
+                <p {...stylex.props(styles.bodyText)}>
+                  Header and content align to the Card&apos;s 8px inset.
+                </p>
+              </LayoutContent>
+            }
+          />
+        </Card>
+      </div>
+    </VStack>
+  ),
+};
+
+/** The same nested page Layout in a 960px AppShell frame. */
+export const NestedInAppShellWide: Story = {
+  name: 'Nested Layout — Inset in AppShell (960px)',
+  render: () => (
+    <VStack gap={4} xstyle={styles.storySection}>
+      <p {...stylex.props(styles.sectionLabel)}>
+        Page Layout with a details panel inside AppShell (no padding props),
+        960px frame
+      </p>
+      <div {...stylex.props(styles.cwContainer, nestedStyles.frame960)}>
+        <AppShell>
+          <OrdersPageLayout panelWidth={320} />
+        </AppShell>
+      </div>
+    </VStack>
+  ),
+};

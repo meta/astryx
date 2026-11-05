@@ -4,12 +4,13 @@
 
 /**
  * @file InputGroupContext.ts
- * @input React createContext/use
+ * @input Layer-scoped React context/use
  * @output Exports InputGroup context and useInputGroup hook
  * @position Shared context; consumed by input components for group-aware styling and ARIA associations
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 
 export interface InputGroupContextValue {
   isInGroup: true;

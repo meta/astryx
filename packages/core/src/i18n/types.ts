@@ -40,10 +40,21 @@ export interface MessageEntry {
 export type Catalog = Record<string, MessageEntry>;
 
 /**
- * A map of BCP 47 tags to catalogs. Passed as `messages` on
- * `<InternationalizationProvider>`.
+ * A generated runtime catalog. Unlike the authoring `Catalog`, it contains
+ * only the ICU messages used by applications and no translator metadata.
+ */
+export type RuntimeCatalog = Readonly<Record<string, string>>;
+
+/**
+ * The original rich-catalog map retained for context consumers.
  */
 export type MessagesByLocale = Record<Locale, Catalog>;
+
+/**
+ * Catalog input accepted by `<InternationalizationProvider>`. Each locale can
+ * use either the rich authoring shape or a generated runtime string map.
+ */
+export type ProviderMessagesByLocale = Record<Locale, Catalog | RuntimeCatalog>;
 
 /**
  * Sparse per-locale overrides applied on top of the shipped defaults.

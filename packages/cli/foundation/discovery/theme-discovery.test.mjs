@@ -62,12 +62,17 @@ afterEach(() => {
 });
 
 describe('theme descriptor discovery', () => {
-  it('reads bundled descriptors with package ownership', () => {
+  it('keeps the released selector package and records the import package', () => {
     const themes = discoverBundledThemes();
     expect(themes.length).toBeGreaterThan(0);
     expect(themes.every(theme => theme.package === BUNDLED_THEME_PACKAGE)).toBe(
       true,
     );
+    expect(
+      themes.every(
+        theme => theme.importPackage === `@astryxdesign/theme-${theme.slug}`,
+      ),
+    ).toBe(true);
     expect(themes.every(theme => theme.bundled)).toBe(true);
     expect(
       themes.filter(theme => theme.maintained).map(theme => theme.slug),
@@ -717,10 +722,11 @@ describe('folders under a theme root that are not themes', () => {
 });
 
 describe('bundled theme files', () => {
-  it('copies what the bundle has always copied, entry first, without its descriptor', () => {
+  it('keeps entry first and includes the descriptor needed by theme eject', () => {
     const themes = discoverBundledThemes();
     expect(themes.find(theme => theme.slug === 'neutral')?.files).toEqual([
       'neutralTheme.ts',
+      'neutralTheme.doc.mjs',
       'icons.tsx',
       'neutralPalettes.ts',
       'neutralPalettes.generated.ts',
@@ -730,7 +736,7 @@ describe('bundled theme files', () => {
     ]);
     for (const theme of themes) {
       expect(theme.files[0]).toBe(theme.entry);
-      expect(theme.files.some(file => file.endsWith('.doc.mjs'))).toBe(false);
+      expect(theme.files).toContain(path.basename(theme.docPath));
     }
   });
 

@@ -234,7 +234,7 @@ export const Disabled: Story = {
     docs: {
       description: {
         story:
-          '`isDisabled` suppresses toggle, hover, focus. Accent border remains visible on disabled+selected cards.',
+          '`isDisabled` suppresses toggle and hover; the control remains focusable and exposes aria-disabled. Accent border remains visible on disabled+selected cards.',
       },
     },
   },

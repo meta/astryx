@@ -1,6 +1,6 @@
 # @astryxdesign/theme-neutral
 
-Muted, minimal aesthetic with system fonts. Uses [Lucide](https://lucide.dev) icons.
+Muted, minimal aesthetic with Figtree typography. Uses [Lucide](https://lucide.dev) icons.
 
 ## Install
 
@@ -82,12 +82,34 @@ Add the theme CSS to your stylesheet:
 
 This is required for component-level theme overrides (colors, radii, typography) to take effect.
 
-This theme uses system fonts; no external font loading is required.
+## Fonts
+
+This theme uses a custom typeface:
+
+| Role    | Font                        |
+| ------- | --------------------------- |
+| Body    | Figtree                     |
+| Heading | Figtree                     |
+| Code    | System monospace (built in) |
+
+**Figtree must be loaded separately.** The theme references it by name but does not bundle the font files.
+
+Add this to your HTML `<head>`:
+
+```html
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" />
+```
+
+Without this, the theme falls back to system fonts. If you'd rather avoid external font requests entirely (offline apps, no-third-party-request policies), that fallback is a supported choice — the system stack is designed to hold up on its own.
 
 ## Related Packages
 
 | Package                                                                              | Description                               |
 | ------------------------------------------------------------------------------------ | ----------------------------------------- |
-| [`@astryxdesign/core`](https://github.com/facebook/astryx/tree/main/packages/core)   | Core components and theme system          |
-| [`@astryxdesign/build`](https://github.com/facebook/astryx/tree/main/packages/build) | Build plugins for StyleX source builds    |
-| [`@astryxdesign/cli`](https://github.com/facebook/astryx/tree/main/packages/cli)     | CLI tooling including `astryx docs theme` |
+| [`@astryxdesign/core`](https://github.com/meta/astryx/tree/main/packages/core)   | Core components and theme system          |
+| [`@astryxdesign/build`](https://github.com/meta/astryx/tree/main/packages/build) | Build plugins for StyleX source builds    |
+| [`@astryxdesign/cli`](https://github.com/meta/astryx/tree/main/packages/cli)     | CLI tooling including `astryx docs theme` |

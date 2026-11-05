@@ -19,6 +19,8 @@ import {
   discoverRegistryReceipts,
   reconcileRegistryCompositions,
 } from './registry.mjs';
+import {upgrade} from '../upgrade.mjs';
+import {logger} from '../../logger.mjs';
 
 const ITEM = {
   name: 'example-button-basic',
@@ -822,5 +824,88 @@ describe('registry composition upgrades', () => {
 
     expect(result.summary.failed).toBe(1);
     expect(fs.readFileSync(sourcePath, 'utf8')).toBe('old\n');
+  });
+});
+
+describe('copied-composition paths name files from the folder the command ran in', () => {
+  it('below the project root, and from the scanned source folder at the root', async () => {
+    const {sourcePath} = seed({
+      base: 'value = 1\n',
+      current: 'value = local\n',
+    });
+    const fetchImpl = remote('value = upstream\n');
+    const origin = path.join(project, 'apps', 'web');
+
+    const [atRoot] = (await reconcile({}, {fetchImpl})).summary.items[0].files;
+    const [below] = (await reconcile({}, {fetchImpl, origin})).summary.items[0]
+      .files;
+
+    expect(atRoot).toMatchObject({
+      path: SOURCE_TARGET,
+      conflictFile: `${SOURCE_TARGET}.astryx-conflict`,
+    });
+    expect(below).toMatchObject({
+      path: `../../src/${SOURCE_TARGET}`,
+      conflictFile: `../../src/${SOURCE_TARGET}.astryx-conflict`,
+    });
+    expect(path.resolve(origin, below.path)).toBe(sourcePath);
+  });
+
+  it('for an invalid receipt too', async () => {
+    const value = receipt('base\n');
+    value.files[0].sha256 = '0'.repeat(64);
+    seed({base: 'base\n', receiptValue: value});
+    const fetchImpl = remote('new\n');
+    const origin = path.join(project, 'docs');
+
+    const [atRoot] = (await reconcile({}, {fetchImpl})).summary.items;
+    const [below] = (await reconcile({}, {fetchImpl, origin})).summary.items;
+
+    expect(atRoot.message).toContain(`Invalid receipt ${RECEIPT_TARGET}:`);
+    expect(below.message).toContain(
+      `Invalid receipt ../src/${RECEIPT_TARGET}:`,
+    );
+  });
+
+  it('through upgrade(), with --registry and in a run, which name the project root', async () => {
+    fs.writeFileSync(
+      path.join(project, 'package.json'),
+      JSON.stringify({
+        name: 'app',
+        dependencies: {'@astryxdesign/core': '0.6.0'},
+      }),
+    );
+    const core = path.join(project, 'node_modules', '@astryxdesign', 'core');
+    fs.mkdirSync(core, {recursive: true});
+    fs.writeFileSync(
+      path.join(core, 'package.json'),
+      JSON.stringify({name: '@astryxdesign/core', version: '0.6.0'}),
+    );
+    const frontend = path.join(project, 'frontend');
+    fs.mkdirSync(frontend);
+    seed({base: 'old\n'});
+    vi.stubGlobal('fetch', remote('new\n'));
+    const log = vi.spyOn(logger, 'log');
+    try {
+      const registry = await upgrade({registry: true}, {cwd: frontend});
+      const run = await upgrade({from: '0.6.0'}, {cwd: frontend});
+      const atRoot = await upgrade({registry: true}, {cwd: project});
+
+      expect(registry.data.items[0].files[0].path).toBe(
+        `../src/${SOURCE_TARGET}`,
+      );
+      expect(run.data.registryCompositions.items[0].files[0].path).toBe(
+        `../src/${SOURCE_TARGET}`,
+      );
+      expect(atRoot.data.items[0].files[0].path).toBe(SOURCE_TARGET);
+      expect(
+        log.mock.calls.filter(([line]) =>
+          String(line).startsWith('Project root:'),
+        ),
+      ).toEqual([['Project root: ..'], ['Project root: ..']]);
+    } finally {
+      vi.unstubAllGlobals();
+      log.mockRestore();
+    }
   });
 });

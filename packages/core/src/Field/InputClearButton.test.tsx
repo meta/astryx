@@ -25,6 +25,7 @@ import {
   type InputClearButtonProps,
 } from './InputClearButton';
 import {Icon, registerIcons, resetIcons} from '../Icon';
+import {InternationalizationProvider} from '../i18n';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {declaredValue} from '../__tests__/stylexDeclarations';
@@ -95,18 +96,42 @@ describe('InputClearButton public props', () => {
 });
 
 describe('InputClearButton', () => {
-  it('uses the contextual label for the tooltip and accessible name', async () => {
+  it('shows a generic "Clear" tooltip while the accessible name keeps the field label', async () => {
+    // A long field label repeated in the tooltip reads as awkward copy
+    // ("Clear Assigned engineering partner"); the field's own label already
+    // sits beside the glyph. The contextual name stays for assistive tech.
     const showPopover = vi.spyOn(HTMLElement.prototype, 'showPopover');
-    render(<InputClearButton label="Clear Search" onClick={() => {}} />);
+    render(
+      <InputClearButton
+        label="Clear Assigned engineering partner"
+        onClick={() => {}}
+      />,
+    );
 
-    const button = screen.getByRole('button', {name: 'Clear Search'});
+    const button = screen.getByRole('button', {
+      name: 'Clear Assigned engineering partner',
+    });
     const tooltip = screen.getByRole('tooltip', {hidden: true});
-    expect(tooltip).toHaveTextContent(/^Clear Search$/);
+    expect(tooltip).toHaveTextContent(/^Clear$/);
     expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
 
     fireEvent.mouseEnter(button);
     await waitFor(() => expect(showPopover).toHaveBeenCalled());
     showPopover.mockRestore();
+  });
+
+  it('localizes the tooltip through the catalog', () => {
+    render(
+      <InternationalizationProvider
+        locale="en"
+        overrides={{en: {'@astryx.inputClearButton.tooltip': 'Leeren'}}}>
+        <InputClearButton label="Suche leeren" onClick={() => {}} />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('button', {name: 'Suche leeren'})).toBeTruthy();
+    expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+      /^Leeren$/,
+    );
   });
 
   it('renders a real button with the given accessible label', () => {
@@ -169,20 +194,17 @@ describe('InputClearButton', () => {
     expect(screen.getByRole('button')).toHaveAccessibleName('Clear');
   });
 
-  it('merges an extra iconClassName beside the canonical target', () => {
-    // Consumers that shipped a component-specific target before the family
-    // converged pass it through here to keep emitting it for a deprecation
-    // window.
+  it('merges a consumer iconClassName beside the canonical target', () => {
     render(
       <InputClearButton
         label="Clear"
         onClick={() => {}}
-        iconClassName="astryx-date-input-clear-icon"
+        iconClassName="consumer-clear-icon"
       />,
     );
     const glyph = getGlyph();
     expect(glyph).toHaveClass('astryx-input-clear-icon');
-    expect(glyph).toHaveClass('astryx-date-input-clear-icon');
+    expect(glyph).toHaveClass('consumer-clear-icon');
   });
 
   it('exposes input-clear-icon so a theme reaches the glyph color, size, and hover', () => {

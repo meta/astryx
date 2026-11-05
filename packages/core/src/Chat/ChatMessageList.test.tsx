@@ -1,7 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect} from 'vitest';
-import {render, screen} from '@testing-library/react';
+/**
+ * @file ChatMessageList.test.tsx
+ * @input React Testing Library, Vitest, and the public ChatMessageList surface
+ * @output Observable log, empty-state, alignment, and async-loading regressions
+ * @position Colocated component behavior tests
+ */
+
+import {describe, it, expect, vi} from 'vitest';
+import {act, render, screen} from '@testing-library/react';
 import {ChatMessageList} from './ChatMessageList';
 import {ChatMessage} from './ChatMessage';
 import {ChatMessageBubble} from './ChatMessageBubble';
@@ -53,6 +60,11 @@ describe('ChatMessageList', () => {
       </ChatMessageList>,
     );
     expect(screen.getByText('No messages yet')).toBeTruthy();
+  });
+
+  it('renders an accepted numeric empty state', () => {
+    render(<ChatMessageList emptyState={0}>{[]}</ChatMessageList>);
+    expect(screen.getByRole('log')).toHaveTextContent('0');
   });
 
   it('applies density class', () => {
@@ -128,5 +140,59 @@ describe('ChatMessageList', () => {
       </ChatMessageList>,
     );
     expect(screen.getByText('Hello')).toBeTruthy();
+  });
+
+  it('loads older messages through the top sentinel and exposes pending status', async () => {
+    let notify!: IntersectionObserverCallback;
+    let complete!: () => void;
+    const observeSentinel = vi.fn();
+    const disconnect = vi.fn();
+    const action = vi.fn(
+      async () =>
+        new Promise<void>(resolve => {
+          complete = resolve;
+        }),
+    );
+    class Observer {
+      constructor(callback: IntersectionObserverCallback) {
+        notify = callback;
+      }
+      observe = observeSentinel;
+      disconnect = disconnect;
+    }
+    vi.stubGlobal('IntersectionObserver', Observer);
+    try {
+      const {unmount} = render(
+        <ChatMessageList scrollToTopAction={action}>
+          <div>Earlier message</div>
+        </ChatMessageList>,
+      );
+      expect(observeSentinel).toHaveBeenCalledTimes(1);
+      act(() => {
+        notify(
+          [{isIntersecting: false} as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        );
+      });
+      expect(action).not.toHaveBeenCalled();
+      act(() => {
+        notify(
+          [{isIntersecting: true} as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        );
+      });
+      expect(action).toHaveBeenCalledTimes(1);
+      // The loader Spinner inside the log is silent (spec:AST-086 FR4, FR8).
+      expect(document.querySelector('.astryx-spinner')).toHaveAttribute(
+        'aria-hidden',
+        'true',
+      );
+      await act(async () => complete());
+      expect(document.querySelector('.astryx-spinner')).toBeNull();
+      unmount();
+      expect(disconnect).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

@@ -117,6 +117,12 @@ describe('ASCII normalization', () => {
     expect(list(['Avatar \u2014 Group']).toString()).toBe('- Avatar - Group');
   });
 
+  it('converts Unicode arrows to ASCII arrows', () => {
+    expect(text('Rename items \u2192 options').toString()).toBe('Rename items -> options');
+    expect(text('options \u2190 items').toString()).toBe('options <- items');
+    expect(record({title: 'a \u2192 b'}).toString()).toBe('title: a -> b');
+  });
+
   it('leaves code verbatim (no normalization)', () => {
     expect(code('a \u2014 b').toString()).toBe('a \u2014 b');
   });
@@ -178,6 +184,21 @@ describe('records inline layout', () => {
     expect(
       records(items, {fields: ['id', 'title', 'summary'], layout: 'inline'}).toString(),
     ).toBe('a    Alpha - First.\nbbb  Beta');
+  });
+
+  it('sizes the first column from the records sizesColumn keeps; another overhangs it', () => {
+    const rows = [
+      {id: 'a', summary: 'First.'},
+      {id: 'a-much-longer-name', summary: 'Extra.', extra: true},
+      {id: 'bbb', summary: 'Third.'},
+    ];
+    expect(
+      records(rows, {
+        fields: ['id', 'summary'],
+        layout: 'inline',
+        sizesColumn: row => !row.extra,
+      }).toString(),
+    ).toBe('a    First.\na-much-longer-name  Extra.\nbbb  Third.');
   });
 
   it('wraps a long record under the first column', () => {

@@ -268,6 +268,49 @@ describe('parseMarkdownIncremental', () => {
     }
   });
 
+  it.each([
+    ['blockquote', 'Intro.\n\n> quoted\ncontinued lazily'],
+    ['unordered list', 'Intro.\n\n- listed\ncontinued lazily'],
+    ['ordered list', 'Intro.\n\n1. listed\ncontinued lazily'],
+    ['task list', 'Intro.\n\n- [ ] listed\ncontinued lazily'],
+    ['CRLF blockquote', 'Intro.\r\n\r\n> quoted\r\ncontinued lazily'],
+    [
+      'later blockquote paragraph',
+      'Intro.\n\n> para1\n>\n> para2\ncontinued lazily',
+    ],
+    ['nested containers', 'Intro.\n\n> 1. > quoted\ncontinued lazily'],
+  ] as const)(
+    'keeps a lazy continuation in its %s at every stream split',
+    (_label, text) => {
+      const full = parseMarkdown(text, {sourceRanges: true});
+      expect(full).toHaveLength(2);
+      expect(JSON.stringify(full[1])).toContain('continued lazily');
+      const characterState = createIncrementalState();
+      let result: BlockNode[] = [];
+      for (let end = 1; end <= text.length; end++) {
+        result = parseMarkdownIncremental(text.slice(0, end), characterState, {
+          sourceRanges: true,
+          isFinal: false,
+        });
+      }
+      expect(result).toEqual(full);
+
+      for (let split = 0; split <= text.length; split++) {
+        const state = createIncrementalState();
+        parseMarkdownIncremental(text.slice(0, split), state, {
+          sourceRanges: true,
+          isFinal: false,
+        });
+        expect(
+          parseMarkdownIncremental(text, state, {
+            sourceRanges: true,
+            isFinal: true,
+          }),
+        ).toEqual(full);
+      }
+    },
+  );
+
   it('handles 1-char chunks and matches full parse', () => {
     const text = '# Hello\n\nWorld';
     const {final} = simulateStreaming(text, 1);
@@ -739,6 +782,37 @@ describe('streaming structural suppression', () => {
         text.length - prefix.length + 5,
       );
     });
+
+    it.each([false, true])(
+      'decodes escaped pipes in code spans during production streaming (sourceRanges=%s)',
+      sourceRanges => {
+        const text =
+          'Intro\n\n| Concept | TypeScript |\n| --- | --- |\n| Null safety | **`T \\| null`** |';
+        const options = {sourceRanges, math: false as const};
+        const full = parseMarkdown(text, options);
+
+        for (const trimsArtifacts of [false, true]) {
+          const state = createIncrementalState();
+          let streamed = parseMarkdownIncremental('', state, options);
+          for (let end = 1; end <= text.length; end++) {
+            const prefix = text.slice(0, end);
+            streamed = parseMarkdownIncremental(
+              trimsArtifacts ? trimStreamingArtifacts(prefix, options) : prefix,
+              state,
+              options,
+            );
+          }
+
+          expect(state.settledText).toBe('Intro');
+          expect(streamed).toEqual(full);
+          expect(streamed).toHaveLength(2);
+          expect(streamed[1].type).toBe('table');
+          expect(visibleText(streamed[1])).toBe(
+            'Concept TypeScript\nNull safety T | null',
+          );
+        }
+      },
+    );
 
     it('still holds back a lone header whose pipes are unescaped', () => {
       const state = createIncrementalState();

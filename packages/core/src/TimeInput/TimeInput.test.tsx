@@ -10,8 +10,10 @@
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../theme/tokens.stylex';
 import {TimeInput} from './TimeInput';
 import {InputGroup, InputGroupText} from '../InputGroup';
 import {InternationalizationProvider} from '../i18n';
@@ -63,6 +65,26 @@ describe('TimeInput', () => {
     // A real, non-composing ArrowUp still steps the time by one minute.
     fireEvent.keyDown(input, {key: 'ArrowUp'});
     expect(onChange).toHaveBeenCalledWith('14:31');
+  });
+
+  it('does not step into a fractional minute when increment is fractional', () => {
+    const onChange = vi.fn();
+    render(
+      <TimeInput
+        label="Time"
+        value={'14:30' as ISOTimeString}
+        increment={0.5}
+        onChange={onChange}
+      />,
+    );
+    const input = screen.getByLabelText('Time');
+
+    // `increment` is documented as minutes and typed `number`. A fractional one
+    // used to reach formatISOTime unrounded, which pads "30.5" to two
+    // characters and leaves it, so the arrow key handed the consumer a value
+    // that is no longer a time at all.
+    fireEvent.keyDown(input, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenCalledWith('14:30');
   });
 
   it('displays formatted time in 12h format', () => {
@@ -121,9 +143,41 @@ describe('TimeInput', () => {
     );
   });
 
-  it('disables input when isDisabled is true', () => {
+  it('keeps a disabled input focusable without native disabled (AST-085 FR1)', () => {
     render(<TimeInput label="Time" isDisabled onChange={() => {}} />);
-    expect(screen.getByRole('textbox')).toBeDisabled();
+    const input = screen.getByRole('textbox');
+    expect(input).not.toHaveAttribute('disabled');
+    expect(input).toHaveAttribute('aria-disabled', 'true');
+    expect(input).toHaveAttribute('readonly');
+    input.focus();
+    expect(input).toHaveFocus();
+  });
+
+  it('restores the focus ring on a focused disabled field (AST-085 FR6)', () => {
+    // The same declarations as the field's ring style compile to the same
+    // atomic classes; the shared disabled style alone drops them.
+    const ringClasses = stylex
+      .props(
+        stylex.create({
+          ring: {
+            borderColor: {
+              default: colorVars['--color-border-emphasized'],
+              ':focus-within': colorVars['--color-accent'],
+            },
+            boxShadow: {
+              default: 'none',
+              ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+            },
+          },
+        }).ring,
+      )
+      .className!.split(' ')
+      .filter(name => !name.includes('__'));
+    render(<TimeInput label="Time" isDisabled onChange={() => {}} />);
+    const wrapper = screen.getByRole('textbox').closest('.astryx-time-input')!;
+    for (const name of ringClasses) {
+      expect(wrapper).toHaveClass(name);
+    }
   });
 
   it('shows clear button when hasClear is true and value exists', () => {
@@ -625,11 +679,89 @@ describe('TimeInput', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('remains natively disabled when disabled without a reason', () => {
-      render(<TimeInput label="Time" isDisabled />);
+    it('blocks typing, arrows and a caller onClick when disabled without a reason (AST-085 FR2)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const onClick = vi.fn();
+      render(
+        <TimeInput
+          label="Time"
+          value={'09:00' as ISOTimeString}
+          onChange={onChange}
+          onClick={onClick}
+          isDisabled
+        />,
+      );
       const input = screen.getByLabelText('Time');
-      expect(input).toBeDisabled();
-      expect(input).not.toHaveAttribute('aria-disabled');
+      await user.click(input);
+      await user.type(input, '1');
+      await user.keyboard('{ArrowUp}');
+      await user.tab();
+      expect(onChange).not.toHaveBeenCalled();
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['text-input', false, {isDisabled: true}],
+      ['native', true, {isDisabled: true}],
+      ['bottom-sheet', true, {isDisabled: true}],
+      ['bottom-sheet', true, {isLoading: true}],
+    ] as const)(
+      'does not submit a surrounding form on Enter: %s (coarse %s) %o (AST-085 FR2)',
+      async (presentation, isCoarse, state) => {
+        vi.stubGlobal('matchMedia', (query: string) => ({
+          matches: /pointer:\s*coarse/.test(query)
+            ? isCoarse
+            : /pointer:\s*fine/.test(query) && !isCoarse,
+          media: query,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+        }));
+        const user = userEvent.setup();
+        const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+        render(
+          <form onSubmit={onSubmit}>
+            <TimeInput
+              label="Time"
+              presentation={presentation}
+              value={'09:00' as ISOTimeString}
+              onChange={() => {}}
+              {...state}
+            />
+            <button type="submit">Save</button>
+          </form>,
+        );
+        try {
+          const input = document.querySelector<HTMLInputElement>(
+            '.astryx-time-input input:not([type=hidden])',
+          )!;
+          act(() => input.focus());
+          await user.keyboard('{Enter}');
+          expect(onSubmit).not.toHaveBeenCalled();
+        } finally {
+          vi.unstubAllGlobals();
+        }
+      },
+    );
+
+    it('drops a draft instead of committing it when the field becomes disabled (AST-085 FR2)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const value = '09:00' as ISOTimeString;
+      const {rerender} = render(
+        <TimeInput label="Time" value={value} onChange={onChange} />,
+      );
+      const input = screen.getByLabelText('Time');
+      await user.click(input);
+      await user.clear(input);
+      onChange.mockClear();
+      rerender(
+        <TimeInput label="Time" value={value} onChange={onChange} isDisabled />,
+      );
+      await user.tab();
+      expect(onChange).not.toHaveBeenCalled();
     });
 
     it('does not swap in the format-hint placeholder on focus while disabled', () => {
@@ -695,5 +827,81 @@ describe('TimeInput disabled theme state', () => {
     const {container} = render(<TimeInput label="Time" onChange={() => {}} />);
     const root = container.querySelector('.astryx-time-input');
     expect(root).not.toHaveAttribute('data-disabled');
+  });
+});
+
+describe('TimeInput locale time text (issue 8992)', () => {
+  function renderIn(
+    locale: string,
+    props: Partial<React.ComponentProps<typeof TimeInput>> = {},
+  ) {
+    return render(
+      <InternationalizationProvider locale={locale}>
+        <TimeInput
+          label="Time"
+          value={'14:30' as ISOTimeString}
+          onChange={() => {}}
+          presentation="text-input"
+          {...props}
+        />
+      </InternationalizationProvider>,
+    );
+  }
+
+  it.each([
+    ['en-US', '2:30 PM'],
+    ['en-GB', '14:30'],
+    ['de-DE', '14:30'],
+    ['vi-VN', '14:30'],
+    ['ko-KR', '오후 2:30'],
+  ])(
+    'follows the hour cycle of %s when hourFormat is unset',
+    (locale, text) => {
+      renderIn(locale);
+      expect(screen.getByRole('textbox')).toHaveValue(text);
+    },
+  );
+
+  it('follows a per-user preference carried on the locale tag', () => {
+    renderIn('en-US-u-hc-h23');
+    expect(screen.getByRole('textbox')).toHaveValue('14:30');
+  });
+
+  it('lets an explicit hourFormat win over the locale', () => {
+    renderIn('de-DE', {hourFormat: '12h'});
+    expect(screen.getByRole('textbox')).toHaveValue('2:30 PM');
+  });
+
+  it("writes the locale's day period instead of a fixed English AM/PM", () => {
+    renderIn('ja-JP', {hourFormat: '12h'});
+    expect(screen.getByRole('textbox')).toHaveValue('午後2:30');
+  });
+
+  it('commits an edit of the localized text', () => {
+    const onChange = vi.fn();
+    renderIn('ko-KR', {onChange});
+    const input = screen.getByRole('textbox');
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '오전 9:15'}});
+    expect(onChange).toHaveBeenLastCalledWith('09:15');
+  });
+
+  it('announces a stepped time in the locale text', async () => {
+    const onChange = vi.fn();
+    renderIn('de-DE', {onChange});
+    fireEvent.keyDown(screen.getByRole('textbox'), {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith('14:31');
+    await waitFor(() => {
+      expect(politeRegion()).toHaveTextContent('14:31');
+    });
+  });
+
+  it('shows the catalog format hint for the resolved hour format', () => {
+    renderIn('de-DE', {value: undefined});
+    fireEvent.focus(screen.getByRole('textbox'));
+    expect(screen.getByRole('textbox')).toHaveAttribute(
+      'placeholder',
+      'e.g., 14:30',
+    );
   });
 });

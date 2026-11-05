@@ -22,7 +22,7 @@
 import {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useThemeMode} from '../../app/providers';
-import {blogDarkImages} from '../../generated/blogRegistry';
+import {blogDarkImages, blogImageSizes} from '../../generated/blogRegistry';
 
 const styles = stylex.create({
   image: {
@@ -30,10 +30,14 @@ const styles = stylex.create({
     maxWidth: '100%',
     height: 'auto',
     borderRadius: 'var(--radius-md, 8px)',
-    // A subtle frame so a screenshot reads as intentional on either background.
-    borderWidth: 1,
-    borderStyle: 'solid',
-    borderColor: 'var(--color-border, rgba(0,0,0,0.12))',
+    // A subtle frame so a screenshot reads as intentional on either
+    // background. Drawn as an outline, not a border, so an `@2x` image's
+    // `width` is exactly its painted width (the site's `box-sizing:
+    // border-box` would otherwise take the frame out of it and resample).
+    outlineWidth: 1,
+    outlineStyle: 'solid',
+    outlineColor: 'var(--color-border, rgba(0,0,0,0.12))',
+    outlineOffset: 0,
   },
 });
 
@@ -45,17 +49,37 @@ export interface ThemedImageProps {
   alt: string;
 }
 
+/** `name@2x.png`, `name@2x.dark.png`: a screenshot taken at 2× pixel density. */
+const RETINA_SRC = /@2x(\.dark)?\.[a-zA-Z0-9]+$/;
+
+/**
+ * The CSS width a body image renders at, or undefined to let the image size
+ * itself. An `@2x` image whose natural size the build recorded renders at half
+ * its pixel width — the component's real on-screen size — and the dark
+ * sibling takes the light one's width so the two never shift on toggle.
+ */
+export function displayWidthFor(src: string): number | undefined {
+  if (!RETINA_SRC.test(src)) return undefined;
+  const size = blogImageSizes[src];
+  return size ? Math.round(size.width / 2) : undefined;
+}
+
 export function ThemedImage({lightSrc, darkSrc, alt}: ThemedImageProps) {
   const {themeMode} = useThemeMode();
   const [failed, setFailed] = useState<string | null>(null);
 
   const light = lightSrc ?? darkSrc;
   const dark = darkSrc ?? lightSrc;
+  // `max-width: 100%` and `height: auto` stay in the style, so a wide
+  // screenshot still fits the column and keeps its aspect ratio.
+  const width = displayWidthFor(light ?? dark ?? '');
 
   // Only one variant available (or both point at the same asset): plain image.
   if (light == null || dark == null || light === dark) {
     const only = (light ?? dark) as string;
-    return <img src={only} alt={alt} {...stylex.props(styles.image)} />;
+    return (
+      <img src={only} alt={alt} width={width} {...stylex.props(styles.image)} />
+    );
   }
 
   // Manual toggle resolved to a concrete mode — honor it directly.
@@ -67,6 +91,7 @@ export function ThemedImage({lightSrc, darkSrc, alt}: ThemedImageProps) {
       <img
         src={src}
         alt={alt}
+        width={width}
         onError={() => setFailed(wanted)}
         {...stylex.props(styles.image)}
       />
@@ -77,7 +102,12 @@ export function ThemedImage({lightSrc, darkSrc, alt}: ThemedImageProps) {
   return (
     <picture>
       <source srcSet={dark} media="(prefers-color-scheme: dark)" />
-      <img src={light} alt={alt} {...stylex.props(styles.image)} />
+      <img
+        src={light}
+        alt={alt}
+        width={width}
+        {...stylex.props(styles.image)}
+      />
     </picture>
   );
 }

@@ -21,6 +21,29 @@ describe('AvatarGroupOverflow', () => {
     expect(overflow).toHaveTextContent('+5');
   });
 
+  it('exposes the static overflow as a named image', () => {
+    render(
+      <AvatarGroup>
+        <Avatar name="Alice" />
+        <AvatarGroupOverflow count={5} />
+      </AvatarGroup>,
+    );
+
+    const overflow = screen.getByRole('img', {name: '5 more'});
+    expect(overflow).toHaveAttribute('role', 'img');
+  });
+
+  it('keeps a caller-supplied role on the static overflow', () => {
+    render(
+      <AvatarGroup>
+        <Avatar name="Alice" />
+        <AvatarGroupOverflow count={5} role="note" />
+      </AvatarGroup>,
+    );
+
+    expect(screen.getByLabelText('5 more')).toHaveAttribute('role', 'note');
+  });
+
   it('reflects the group size on the overflow chip', () => {
     render(
       <AvatarGroup size="lg">
@@ -66,7 +89,7 @@ describe('AvatarGroupOverflow', () => {
       </AvatarGroup>,
     );
 
-    const overflow = screen.getByLabelText('3 more');
+    const overflow = screen.getByRole('button', {name: '3 more'});
     expect(overflow.tagName).toBe('BUTTON');
   });
 

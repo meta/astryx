@@ -871,7 +871,7 @@ export default function FormWizardVerticalPage() {
                             ref={fieldRefs.cover}
                             label="Cover image"
                             isLabelHidden
-                            style={hasCover ? dropzoneFill : undefined}
+                            controlStyle={hasCover ? dropzoneFill : undefined}
                             mode="dropzone"
                             accept="image/png,image/jpeg"
                             maxSize={5 * 1024 * 1024}

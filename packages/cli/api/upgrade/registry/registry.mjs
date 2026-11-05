@@ -414,8 +414,9 @@ async function fetchLatestReceipt(
 /**
  * @param {string} receiptPath
  * @param {string} root
+ * @param {string} [display] the folder reported paths are relative to
  */
-function loadInstalledReceipt(receiptPath, root) {
+function loadInstalledReceipt(receiptPath, root, display = root) {
   let receipt;
   let receiptText;
   try {
@@ -436,7 +437,7 @@ function loadInstalledReceipt(receiptPath, root) {
     }
   } catch (error) {
     throw new Error(
-      `Invalid receipt ${relativePath(receiptPath, root)}: ${error instanceof Error ? error.message : String(error)}`,
+      `Invalid receipt ${relativePath(receiptPath, display)}: ${error instanceof Error ? error.message : String(error)}`,
       {cause: error},
     );
   }
@@ -445,7 +446,7 @@ function loadInstalledReceipt(receiptPath, root) {
     const candidates = receiptFileCandidates(receipt, file).map(candidate => {
       if (registryContentHash(candidate.content) !== candidate.sha256) {
         throw new Error(
-          `Invalid receipt ${relativePath(receiptPath, root)}: stored hash does not match ${file.registryPath} (${candidate.format})`,
+          `Invalid receipt ${relativePath(receiptPath, display)}: stored hash does not match ${file.registryPath} (${candidate.format})`,
         );
       }
       let sourcePath;
@@ -458,7 +459,7 @@ function loadInstalledReceipt(receiptPath, root) {
       } catch (error) {
         if (error instanceof PathSafetyError) {
           throw new Error(
-            `Invalid receipt ${relativePath(receiptPath, root)}: ${error.message}`,
+            `Invalid receipt ${relativePath(receiptPath, display)}: ${error.message}`,
             {cause: error},
           );
         }
@@ -471,7 +472,7 @@ function loadInstalledReceipt(receiptPath, root) {
     );
     if (existing.length > 1) {
       throw new Error(
-        `Invalid receipt ${relativePath(receiptPath, root)}: multiple install variants exist for ${file.registryPath}`,
+        `Invalid receipt ${relativePath(receiptPath, display)}: multiple install variants exist for ${file.registryPath}`,
       );
     }
     return existing[0] ?? candidates[0];
@@ -483,12 +484,14 @@ function loadInstalledReceipt(receiptPath, root) {
 /**
  * @param {string} receiptPath
  * @param {string} root
- * @param {{fetchImpl: typeof fetch, registryOrigin: string, expectedVersion?: string}} options
+ * @param {{fetchImpl: typeof fetch, registryOrigin: string, expectedVersion?: string, display?: string}} options
+ *   `display` is the folder reported paths are relative to, `root` by default
  */
 async function planReceipt(receiptPath, root, options) {
+  const display = options.display ?? root;
   let installed;
   try {
-    installed = loadInstalledReceipt(receiptPath, root);
+    installed = loadInstalledReceipt(receiptPath, root, display);
   } catch (error) {
     return {
       receiptPath,
@@ -584,7 +587,7 @@ async function planReceipt(receiptPath, root, options) {
           oldReceiptText,
         };
       }
-      const displayPath = relativePath(sourcePath, root);
+      const displayPath = relativePath(sourcePath, display);
       try {
         if (!fs.existsSync(sourcePath)) {
           plannedFiles.push({
@@ -636,7 +639,7 @@ async function planReceipt(receiptPath, root, options) {
     const newFile = newReceiptFile
       ? receiptFileForFormat(newReceipt, newReceiptFile, oldFile.format)
       : null;
-    const displayPath = relativePath(oldFile.sourcePath, root);
+    const displayPath = relativePath(oldFile.sourcePath, display);
     if (!newReceiptFile) {
       plannedFiles.push({
         id: oldFile.id,
@@ -856,8 +859,12 @@ function publicAction(action, apply) {
   return action;
 }
 
-/** @param {any} item @param {string} root @param {boolean} apply */
-function publicItem(item, root, apply) {
+/**
+ * @param {any} item
+ * @param {string} display the folder reported paths are relative to
+ * @param {boolean} apply
+ */
+function publicItem(item, display, apply) {
   return {
     item: item.item,
     path: item.itemPath,
@@ -870,7 +877,7 @@ function publicItem(item, root, apply) {
         action: publicAction(file.action, apply),
         ...(file.message ? {message: file.message} : {}),
         ...(file.action === 'conflict' && file.conflictPath
-          ? {conflictFile: relativePath(file.conflictPath, root)}
+          ? {conflictFile: relativePath(file.conflictPath, display)}
           : {}),
       }),
     ),
@@ -968,13 +975,17 @@ function applyPlan(plan) {
 }
 
 /**
+ * Reported paths are relative to the scanned source folder, or, when `origin`
+ * names the folder the command ran in below the project root `cwd`, to that
+ * folder, so they resolve from where the command ran.
  * @param {{apply?: boolean, path?: string}} options
- * @param {{cwd?: string, fetchImpl?: typeof fetch, registryOrigin?: string, expectedVersion?: string, requireExpectedVersion?: boolean}} [ctx]
+ * @param {{cwd?: string, origin?: string, fetchImpl?: typeof fetch, registryOrigin?: string, expectedVersion?: string, requireExpectedVersion?: boolean}} [ctx]
  */
 export async function reconcileRegistryCompositions(
   options = {},
   {
     cwd = process.cwd(),
+    origin,
     fetchImpl = globalThis.fetch,
     registryOrigin = PUBLIC_SHADCN_REGISTRY_ORIGIN,
     expectedVersion,
@@ -998,6 +1009,7 @@ export async function reconcileRegistryCompositions(
     throw error;
   }
 
+  const display = origin ?? root;
   const apply = options.apply ?? false;
   const receipts = discoverRegistryReceipts(root);
   const summary = emptySummary(apply);
@@ -1019,6 +1031,7 @@ export async function reconcileRegistryCompositions(
         fetchImpl,
         registryOrigin,
         expectedVersion,
+        display,
       }),
   );
 
@@ -1031,7 +1044,7 @@ export async function reconcileRegistryCompositions(
         summary.invalid++;
       }
     }
-    recordItem(summary, publicItem(plan, root, apply), plan.action, apply);
+    recordItem(summary, publicItem(plan, display, apply), plan.action, apply);
     if (!apply) continue;
 
     try {
@@ -1119,13 +1132,17 @@ export function logRegistryCompositionSummary(summary) {
 }
 
 /**
- * Standalone `astryx upgrade --registry` leaf.
+ * Standalone `astryx upgrade --registry` leaf. `ctx.origin` is the folder the
+ * command ran in, when `ctx.cwd` is the project root above it.
  * @param {{apply?: boolean, path?: string}} options
- * @param {{cwd?: string, fetchImpl?: typeof fetch, registryOrigin?: string, expectedVersion?: string, requireExpectedVersion?: boolean}} [ctx]
+ * @param {{cwd?: string, origin?: string, fetchImpl?: typeof fetch, registryOrigin?: string, expectedVersion?: string, requireExpectedVersion?: boolean}} [ctx]
  * @returns {Promise<import('../upgrade.type.mjs').UpgradeRegistryResponse>}
  */
 export async function registryUpgrade(options = {}, ctx = {}) {
   const cwd = ctx.cwd ?? process.cwd();
+  if (ctx.origin != null) {
+    logger.log(`Project root: ${path.relative(ctx.origin, cwd) || '.'}`);
+  }
   const installed = detectInstalledTargetVersion(cwd);
   const expectedVersion =
     ctx.expectedVersion ??

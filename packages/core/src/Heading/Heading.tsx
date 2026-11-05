@@ -9,10 +9,12 @@
  * @position Core implementation; lives in own Heading/ dir, re-exported by Text/
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/core/src/Text/Text.doc.mjs (props table, features, implementation notes)
+ * - /packages/core/src/Text/Heading.doc.mjs (props table, theming target)
+ * - /packages/core/src/Text/Text.doc.mjs (shared truncation and tooltip guidance)
  * - /packages/core/src/Heading/Heading.test.tsx (tests for new/changed behavior)
- * - /packages/core/src/Text/index.ts (exports if types change)
- * - /apps/storybook/stories/Text.stories.tsx (storybook stories)
+ * - /packages/core/src/Heading/index.ts (exports if types change)
+ * - /packages/core/src/Text/index.ts (re-exports if types change)
+ * - /apps/storybook/stories/Heading.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/Heading/ (showcase blocks)
  * - /packages/cli/assets/templates/blocks/components/Text/ (showcase blocks)
  */
@@ -45,7 +47,7 @@ import {
 import {useTruncation} from '../Text/useTruncation';
 import {resolveStyleColor} from '../Text/Text';
 import type {LayerPlacement} from '../Layer';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
@@ -253,8 +255,12 @@ export function Heading({
   // the closed built-in StyleX maps with an unknown name.
   const builtinType = type && isBuiltinHeadingType(type) ? type : undefined;
 
-  // Truncation detection
-  const truncation = useTruncation({maxLines});
+  // Truncation detection. Only the tooltip reads the measured overflow, so
+  // with the tooltip off the text is clipped by CSS alone and nothing is
+  // measured or observed.
+  const truncation = useTruncation({
+    maxLines: hasTruncateTooltip === false ? 0 : maxLines,
+  });
 
   // Tooltip for truncated text
   const tooltipPlacement: LayerPlacement =

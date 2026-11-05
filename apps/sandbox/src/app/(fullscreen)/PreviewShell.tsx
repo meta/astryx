@@ -3,7 +3,7 @@
 'use client';
 
 import {useState, useCallback, useEffect, useMemo, useRef} from 'react';
-import {usePathname, useRouter} from 'next/navigation';
+import {usePathname, useRouter, basePath} from '../../router';
 import {Text} from '@astryxdesign/core/Text';
 import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {Button} from '@astryxdesign/core/Button';
@@ -23,7 +23,6 @@ import {templates} from '../../generated/templateRegistry';
 import {blocks} from '../../generated/blockRegistry';
 
 const blocksByHref = new Map(blocks.map(b => [b.href.replace(/\/$/, ''), b]));
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
 
 function buildNavTree(currentPath: string): TreeListItemData[] {
   const norm = currentPath.replace(/\/$/, '');
@@ -31,7 +30,7 @@ function buildNavTree(currentPath: string): TreeListItemData[] {
   const pageItems: TreeListItemData[] = templates.map(t => ({
     id: t.href,
     label: t.name,
-    href: basePath + t.href,
+    href: t.href,
     isSelected: t.href.replace(/\/$/, '') === norm,
   }));
 
@@ -49,7 +48,7 @@ function buildNavTree(currentPath: string): TreeListItemData[] {
     items.push({
       id: b.href,
       label: shortName,
-      href: basePath + b.href,
+      href: b.href,
       isSelected: b.href.replace(/\/$/, '') === norm,
     });
   }
@@ -267,13 +266,19 @@ const viewportWidths: Record<ViewportSize, string> = {
   mobile: '375px',
 };
 
-export function PreviewShell({children}: {children: React.ReactNode}) {
+export function PreviewShell({
+  children,
+  forceEmbed = false,
+}: {
+  children: React.ReactNode;
+  forceEmbed?: boolean;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = new URLSearchParams(
     typeof window !== 'undefined' ? window.location.search : '',
   );
-  const isEmbed = searchParams.get('embed') === '1';
+  const isEmbed = forceEmbed || searchParams.get('embed') === '1';
   if (isEmbed) {
     // Embedded template previews need a full-height chain so page roots sized
     // with min-height:100% (e.g. centered login pages) fill the frame instead of
@@ -282,7 +287,7 @@ export function PreviewShell({children}: {children: React.ReactNode}) {
     // <head>) so it applies reliably in the embed context.
     return (
       <>
-        <style>{`html,body{height:100%}body>[data-astryx-theme]{height:100%}`}</style>
+        <style>{`html,body,#root,#root>[data-astryx-theme]{height:100%}`}</style>
         {children}
       </>
     );
@@ -299,7 +304,8 @@ export function PreviewShell({children}: {children: React.ReactNode}) {
   // on initial load. Only recomputes when pathname changes — theme/mode changes
   // are synced to the iframe via postMessage to avoid triggering a reload.
   const iframeSrc = useMemo(
-    () => `${basePath}${pathname}?embed=1&theme=${themeName}&mode=${mode}`,
+    () =>
+      `${basePath}${pathname.endsWith('/') ? pathname : `${pathname}/`}embed.html?embed=1&theme=${themeName}&mode=${mode}`,
     [pathname], // intentionally excludes themeName/mode — live updates use postMessage
   );
 

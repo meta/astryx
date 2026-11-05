@@ -175,7 +175,7 @@ export default function ComplexSelectorTreeSearch() {
       value={value}
       onChange={setValue}
       triggerLabel={value.path}
-      style={{width: 360}}>
+      controlStyle={{width: 360}}>
       {(selectedValue, onChange, close) => (
         <DestinationSearch
           value={selectedValue}
