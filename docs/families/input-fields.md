@@ -261,16 +261,16 @@ another implementation helper.
   host such as a sheet, or in an app's fixed bar docked to the viewport's bottom
   edge with no `translate` of its own; a member in such a bar rides the keyboard
   with it, as `spec:AST-099` FR9 defines. A member inside any other fixed
-  container, one floating above the bottom edge or one that sets its own
-  `translate`, is not moved; the app positions it. This covers TextInput,
-  TextArea, NumberInput, the typed fields of DateInput, DateTimeInput, and
-  TimeInput, the inputs of Typeahead and Tokenizer, and the search row of
-  Selector and MultiSelector. It is internal behavior with no prop or other
-  public API, as `spec:AST-099` FR9 requires; that record owns the observable
-  rule and the full list of covered fields, including those of PowerSearch,
-  CommandPalette, and ChatComposer. A member whose field brings up no keyboard,
-  such as DateRangeInput, FileInput, ComplexSelector, or a touch picker field
-  with no input mode, is outside it.
+  container, one floating above the bottom edge, one that sets its own
+  `translate`, or a full-viewport one, is not moved; the app positions it. This
+  covers TextInput, TextArea, NumberInput, the typed fields of DateInput,
+  DateTimeInput, and TimeInput, the inputs of Typeahead and Tokenizer, and the
+  search row of Selector and MultiSelector. It is internal behavior with no prop
+  or other public API, as `spec:AST-099` FR9 requires; that record owns the
+  observable rule and the full list of covered fields, including those of
+  PowerSearch, CommandPalette, and ChatComposer. A member whose field brings up
+  no keyboard, such as DateRangeInput, FileInput, ComplexSelector, or a touch
+  picker field with no input mode, is outside it.
 
 ## Allowed component variation
 

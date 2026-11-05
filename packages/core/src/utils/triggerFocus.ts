@@ -38,16 +38,29 @@ export function isFocusForTrigger(
   event: Event,
   mode: TriggerFocusMode,
 ): boolean {
+  return isFocusOnTrigger(
+    event.target,
+    event.currentTarget as HTMLElement | null,
+    mode,
+  );
+}
+
+/**
+ * `isFocusForTrigger` for focus already on `target`, inside `trigger`: the
+ * same rule, read when a trigger attaches with focus inside it.
+ */
+export function isFocusOnTrigger(
+  target: EventTarget | null,
+  trigger: HTMLElement | null,
+  mode: TriggerFocusMode,
+): boolean {
   if (mode === 'always') {
     return true;
   }
   if (mode === 'never') {
     return false;
   }
-  const trigger = event.currentTarget as HTMLElement | null;
-  return (
-    trigger != null && (event.target === trigger || isFocusableTrigger(trigger))
-  );
+  return trigger != null && (target === trigger || isFocusableTrigger(trigger));
 }
 
 /** Remembers whether a trigger's current focus counted when it arrived. */

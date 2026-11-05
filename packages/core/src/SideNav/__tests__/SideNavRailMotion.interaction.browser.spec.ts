@@ -399,9 +399,23 @@ interface MotionPart {
   readonly holdsPage: boolean;
 }
 
+/**
+ * One press feedback animation `recordMotion` keeps apart: the toggle's own,
+ * or on a copy of it the old state holds (`onCopy`). `name` is a CSS
+ * animation's; `startTime` is read while it runs, since a cancelled animation
+ * drops it.
+ */
+interface PressPart {
+  readonly onCopy: boolean;
+  readonly name: string | null;
+  startTime: number | null;
+}
+
 /** The record `recordMotion` keeps on the page, for `settledMotion`. */
 interface MotionRecord {
   readonly seen: Map<Animation, MotionPart>;
+  /** Press feedback, apart from the motion. */
+  readonly press: Map<Animation, PressPart>;
   readonly collect: () => void;
   sampling: boolean;
 }
@@ -409,21 +423,43 @@ interface MotionRecord {
 /**
  * Starts recording the motion a press of the toggle causes: every animation
  * running on any frame from now on, described when first seen. Animations on
- * the toggle element itself are its press feedback (its highlight's release
- * fade runs on the button), not the rail's, so they are left out; everything
- * inside it, its chevron included, stays in. `settledMotion` ends the record.
+ * the toggle element itself are its press feedback, not the rail's: its
+ * highlight's release fade runs on the button. So are those on any element
+ * the press model marks (`data-astryx-press`), such as the toggle in the copy
+ * the old state holds. That copy shows the press as the toggle did. They are
+ * kept apart, as press feedback. Everything inside the toggle, its chevron
+ * included, stays in. `settledMotion` ends the record.
  */
 async function recordMotion(page: Page): Promise<void> {
   await toggleButton(page).evaluate(toggle => {
     const seen = new Map<Animation, MotionPart>();
+    const press = new Map<Animation, PressPart>();
     const collect = () => {
       for (const animation of document.getAnimations()) {
         const effect = animation.effect;
+        const known = press.get(animation);
+        if (known != null) {
+          if (animation.startTime != null) {
+            known.startTime = Number(animation.startTime);
+          }
+          continue;
+        }
+        if (seen.has(animation) || !(effect instanceof KeyframeEffect)) {
+          continue;
+        }
         if (
-          seen.has(animation) ||
-          !(effect instanceof KeyframeEffect) ||
-          effect.target === toggle
+          effect.target === toggle ||
+          effect.target?.hasAttribute('data-astryx-press') === true
         ) {
+          press.set(animation, {
+            onCopy: effect.target !== toggle,
+            name:
+              animation instanceof CSSAnimation
+                ? animation.animationName
+                : null,
+            startTime:
+              animation.startTime == null ? null : Number(animation.startTime),
+          });
           continue;
         }
         const properties = new Set<string>();
@@ -445,7 +481,7 @@ async function recordMotion(page: Page): Promise<void> {
         });
       }
     };
-    const record: MotionRecord = {seen, collect, sampling: true};
+    const record: MotionRecord = {seen, press, collect, sampling: true};
     (window as unknown as {railMotion: MotionRecord}).railMotion = record;
     const sample = () => {
       if (record.sampling) {
@@ -498,6 +534,26 @@ async function settledMotion(page: Page): Promise<ReadonlyArray<MotionPart>> {
     }
     record.sampling = false;
     return [...record.seen.values()];
+  });
+}
+
+/**
+ * The press feedback the record kept apart from the motion, once it has
+ * settled. For each: where it ran (the toggle, or a copy of it), a CSS
+ * animation's name, and its start time as read while it ran.
+ */
+async function pressFeedback(
+  page: Page,
+): Promise<
+  ReadonlyArray<{onCopy: boolean; name: string | null; startTime: number}>
+> {
+  return page.evaluate(() => {
+    const record = (window as unknown as {railMotion: MotionRecord}).railMotion;
+    return [...record.press.values()].map(({onCopy, name, startTime}) => ({
+      onCopy,
+      name,
+      startTime: startTime ?? Number.NaN,
+    }));
   });
 }
 
@@ -628,6 +684,59 @@ test.describe('component:SideNav FR6 and component:AppShell FR17 under a finger'
       });
     });
   }
+
+  test(`under Reduce Motion a press held past its onset still only cross-fades, and the old state's copy shows the toggle's press fading in step with the toggle (design:reduced-motion DR2)`, async ({
+    page,
+  }) => {
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    await openStory(page, PHONE_STORY);
+    await recordMotion(page);
+    // Held until the press shows, its release fades the press at once, before
+    // the tap's click collapses the rail. So the copy of the old state holds a
+    // toggle whose press is fading.
+    const box = await toggleButton(page).boundingBox();
+    if (box == null) {
+      throw new Error('the toggle has no box');
+    }
+    const point = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [point],
+    });
+    await expect(toggleButton(page)).toHaveAttribute('data-astryx-press', 'on');
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    });
+    await expect(toggleButton(page)).toHaveAccessibleName('Expand sidebar');
+    const motion = await settledMotion(page);
+    expect(motion.length).toBeGreaterThan(0);
+    for (const {properties, endTime, holdsPage} of motion) {
+      expect(properties).toEqual(['opacity']);
+      expect(endTime).toBeLessThanOrEqual(200);
+      expect(holdsPage).toBe(false);
+    }
+    // The copy's press fade runs on the toggle's own start, from where the
+    // toggle's had got to, not again from its start.
+    const press = await pressFeedback(page);
+    const onCopy = press.filter(fade => fade.onCopy && fade.name != null);
+    expect(onCopy.length).toBeGreaterThan(0);
+    for (const fade of onCopy) {
+      const own = press.find(
+        other => !other.onCopy && other.name === fade.name,
+      );
+      expect(own, JSON.stringify(press)).toBeDefined();
+      expect(
+        Math.abs(fade.startTime - (own?.startTime ?? Number.NaN)),
+        JSON.stringify(press),
+      ).toBeLessThan(1);
+    }
+    expect(await railAtRest(page)).toMatchObject({
+      labelsShown: false,
+      copies: 0,
+    });
+  });
 });
 
 test.describe('component:SideNav FR6 and component:AppShell FR17 under a mouse', () => {

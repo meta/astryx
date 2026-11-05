@@ -590,6 +590,71 @@ export const HugHeight: Story = {
   },
 };
 
+/**
+ * A sheet whose height the caller sets. It keeps a 48 px surface below the
+ * screen, so a pull past the top stretches it at most that far.
+ */
+export const CallerHeight: Story = {
+  name: 'Caller height (500 px)',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <Button label="Open 500 px sheet" onClick={() => setIsOpen(true)} />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Caller height"
+          style={{height: 500}}>
+          <Section padding={4}>
+            <VStack gap={4}>
+              <Heading level={3}>Caller height</Heading>
+              <Text type="supporting" color="secondary">
+                The caller sets this sheet's height to 500 px.
+              </Text>
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
+const callerHeightStyles = stylex.create({
+  sheet: {height: 500},
+});
+
+export const CallerHeightXstyle: Story = {
+  name: 'Caller height through xstyle (500 px)',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <Button
+          label="Open 500 px xstyle sheet"
+          onClick={() => setIsOpen(true)}
+        />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Caller height through xstyle"
+          xstyle={callerHeightStyles.sheet}>
+          <Section padding={4}>
+            <VStack gap={4}>
+              <Heading level={3}>Caller height through xstyle</Heading>
+              <Text type="supporting" color="secondary">
+                The caller sets this sheet's height to 500 px through xstyle.
+              </Text>
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
 export const HugHeightWithLongContent: Story = {
   name: 'Hug height — Long content',
   render: () => {

@@ -11,6 +11,7 @@ import {DOC_EXPORTS} from '../doc-compiler/read.mjs';
 import {
   listDir,
   listDirEntries,
+  listingCacheActive,
   oncePerListing,
   pathExists,
   withListingCache,
@@ -512,6 +513,42 @@ export function discoverComponents(coreDir) {
 }
 
 /**
+ * The folders of `srcDir`, in listing order, whose own listing holds one of
+ * `names`: the only folders a probe for `<folder>/<name>` can find. Inside an
+ * operation each listing is read once, for every name. Outside one, every
+ * folder is returned, so each probe reads the disk.
+ * @param {string} srcDir
+ * @param {fs.Dirent[]} entries `srcDir`'s listing
+ * @param {string[]} names
+ * @returns {fs.Dirent[]}
+ */
+function foldersHolding(srcDir, entries, names) {
+  const folders = entries.filter(entry => entry.isDirectory());
+  if (!listingCacheActive()) return folders;
+  const byName = oncePerListing(`folder-names\0${srcDir}`, () => {
+    /** @type {Map<string, Set<string>>} */
+    const index = new Map();
+    for (const folder of folders) {
+      let listed;
+      try {
+        listed = listDir(path.join(srcDir, folder.name));
+      } catch {
+        continue;
+      }
+      for (const name of listed) {
+        let holders = index.get(name);
+        if (!holders) index.set(name, (holders = new Set()));
+        holders.add(folder.name);
+      }
+    }
+    return index;
+  });
+  return folders.filter(folder =>
+    names.some(name => byName.get(name)?.has(folder.name)),
+  );
+}
+
+/**
  * Find the .doc.mjs file for a component.
  * For sub-components (e.g. StackItem), returns the parent's .doc.mjs
  * if the sub-component is documented there.
@@ -532,8 +569,7 @@ export function findComponentReadme(coreDir, name) {
 
   // Nested match: src/*/{name}/{Name}.doc.mjs or src/*/{name}/Astryx{Name}.doc.mjs
   const entries = listDirEntries(srcDir);
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+  for (const entry of foldersHolding(srcDir, entries, [name])) {
     const nested = path.join(srcDir, entry.name, name, exactDoc);
     if (existsCaseExact(nested, srcDir)) return nested;
     const nestedXds = path.join(srcDir, entry.name, name, xdsDoc);
@@ -541,8 +577,7 @@ export function findComponentReadme(coreDir, name) {
   }
 
   // Per-component doc in a parent directory: src/*/{Name}.doc.mjs or src/*/Astryx{Name}.doc.mjs
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
+  for (const entry of foldersHolding(srcDir, entries, [exactDoc, xdsDoc])) {
     const perComp = path.join(srcDir, entry.name, exactDoc);
     if (existsCaseExact(perComp, srcDir)) return perComp;
     const perCompXds = path.join(srcDir, entry.name, xdsDoc);

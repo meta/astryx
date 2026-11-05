@@ -341,6 +341,12 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--_thumbnail-hit-inset',
   '--_input-clear-hit-inset',
   '--_power-search-sheet-hit-inset',
+  // The border width a host draws where its touch hit layer reaches past,
+  // such as a divided ListItem's divider (0 on the last row).
+  // The ::after layer adds it to its offset, so the band starts past the
+  // border. It is the layer's geometry, not a property a theme author sets. A
+  // theme changes the divider through `--border-width`, which this follows.
+  '--_hit-border-bottom',
   // The interaction overlay's colour on the ::after layer of the cards:
   // written by the component's own hover and mouse `:active` arms, never a
   // value a theme author sets; the overlay colours themselves are the shared
@@ -354,6 +360,9 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // A checkbox row's touch press image, which an indicator that paints its
   // own press inherits. The row writes it from the press paint above.
   '--_indicator-press-image',
+  // A CheckboxList row's own press paint, handed to its checkbox's box:
+  // written by the row's own press arms, never a value a theme author sets.
+  '--_checkbox-row-press-paint',
   '--_input-clear-hit-content',
   '--_power-search-sheet-hit-content',
   // Placement and swipe lifecycle values are private Toast behavior. A theme

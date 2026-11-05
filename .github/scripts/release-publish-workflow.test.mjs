@@ -41,7 +41,11 @@ function writeExecutable(root, name, contents) {
  * unknown, so nothing is skipped) and no waits between attempts.
  */
 function withPublisher(root) {
-  for (const file of ['publish-package.mjs', 'registry.mjs']) {
+  for (const file of [
+    'publish-order.mjs',
+    'publish-package.mjs',
+    'registry.mjs',
+  ]) {
     const target = path.join(root, 'scripts/npm', file);
     fs.mkdirSync(path.dirname(target), {recursive: true});
     fs.copyFileSync(path.join(ROOT, 'scripts/npm', file), target);
@@ -180,7 +184,11 @@ async function runCanaryPublish({
 }
 
 /** Runs the stable publish step over two packages with stubbed npm and pnpm. */
-function runStablePublish({failingPackage = '', failOnce = ''} = {}) {
+function runStablePublish({
+  failingPackage = '',
+  failOnce = '',
+  verifyExit = null,
+} = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-stable-publish-'));
   const publishLog = path.join(root, 'publish.log');
   try {
@@ -192,6 +200,12 @@ function runStablePublish({failingPackage = '', failOnce = ''} = {}) {
       name: '@astryxdesign/theme-neutral',
       version: '0.7.7',
     });
+    // Listed before Core and depends on it: the publish order moves it after.
+    writeJson(root, 'packages/cli/package.json', {
+      name: '@astryxdesign/cli',
+      version: '0.7.7',
+      dependencies: {'@astryxdesign/core': '0.7.7'},
+    });
     // Publishes after core in the loop and peers on it.
     writeJson(root, 'packages/themes/stone/package.json', {
       name: '@astryxdesign/theme-stone',
@@ -202,6 +216,9 @@ function runStablePublish({failingPackage = '', failOnce = ''} = {}) {
     writeExecutable(root, 'npm', '#!/bin/sh\nexit 1\n');
     writeExecutable(root, 'pnpm', PNPM_STUB);
     const publisherEnv = withPublisher(root);
+    if (verifyExit !== null) writeVerifierStub(root, verifyExit);
+    const githubOutput = path.join(root, 'github-output');
+    fs.writeFileSync(githubOutput, '');
     const result = spawnSync(
       'bash',
       ['-c', step(stable, 'Publish changed packages').run],
@@ -214,6 +231,7 @@ function runStablePublish({failingPackage = '', failOnce = ''} = {}) {
           DRY_RUN: 'false',
           FAIL_ONCE: failOnce,
           FAIL_PACKAGE: failingPackage,
+          GITHUB_OUTPUT: githubOutput,
           PATH: `${path.join(root, 'bin')}:${process.env.PATH}`,
           PUBLISH_LOG: publishLog,
           RELEASE_VERSION: '0.7.7',
@@ -222,10 +240,44 @@ function runStablePublish({failingPackage = '', failOnce = ''} = {}) {
     );
     return {
       ...result,
+      output: fs.readFileSync(githubOutput, 'utf8'),
       published: fs.existsSync(publishLog)
         ? fs.readFileSync(publishLog, 'utf8')
         : '',
     };
+  } finally {
+    fs.rmSync(root, {recursive: true, force: true});
+  }
+}
+
+/** A registry verifier stand-in that exits with `code`. */
+function writeVerifierStub(root, code) {
+  const file = path.join(root, 'scripts/npm/verify-published.mjs');
+  fs.mkdirSync(path.dirname(file), {recursive: true});
+  fs.writeFileSync(file, `process.exit(${code});\n`);
+}
+
+/** Runs one follow-up verification job's script with a verifier stand-in. */
+function runFollowUp(job, verifyExit) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-verify-'));
+  try {
+    writeVerifierStub(root, verifyExit);
+    const githubOutput = path.join(root, 'github-output');
+    fs.writeFileSync(githubOutput, '');
+    const result = spawnSync(
+      'bash',
+      ['-c', step(job, 'Verify published packages').run],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GITHUB_OUTPUT: githubOutput,
+          RELEASE_VERSION: '0.7.7',
+        },
+      },
+    );
+    return {...result, output: fs.readFileSync(githubOutput, 'utf8')};
   } finally {
     fs.rmSync(root, {recursive: true, force: true});
   }
@@ -473,10 +525,32 @@ describe('stable and canary publication authority', () => {
       'Not publishing @astryxdesign/theme-stone@0.7.7 because @astryxdesign/core failed',
     );
     expect(result.stdout).toMatch(
-      /Stable publish failed for: @astryxdesign\/core @astryxdesign\/theme-stone\./u,
+      /Stable publish failed for: @astryxdesign\/core @astryxdesign\/cli @astryxdesign\/theme-stone\./u,
     );
     expect(result.published).not.toContain('publish ./packages/themes/stone');
     expect(result.published).toContain('publish ./packages/themes/neutral');
+  });
+
+  it('holds back a package listed before its failed dependency', () => {
+    const result = runStablePublish({failingPackage: 'packages/core'});
+
+    expect(result.stdout).toContain(
+      'Not publishing @astryxdesign/cli@0.7.7 because @astryxdesign/core failed',
+    );
+    expect(result.published).not.toContain('publish ./packages/cli');
+  });
+
+  it('publishes every dependency before the packages that use it', () => {
+    const result = runStablePublish();
+    const order = result.published
+      .split('\n')
+      .filter(Boolean)
+      .map(line => line.split(' ')[1]);
+
+    expect(order.indexOf('./packages/core')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('./packages/core')).toBeLessThan(
+      order.indexOf('./packages/cli'),
+    );
   });
 
   it('retries a stable package whose first signature is rejected', () => {
@@ -576,5 +650,98 @@ describe('stable publish requires the cut commit release-check (spec:AST-030 FR1
     expect(script).toContain('requireUnitRun(');
     expect(stable.steps[guard]['continue-on-error']).toBeUndefined();
     expect(stable.permissions.actions).toBe('read');
+  });
+
+  it('passes the release when every package is readable in the first window', () => {
+    const result = runStablePublish({verifyExit: 0});
+
+    expect(result.status).toBe(0);
+    expect(result.output).toContain('verified=true');
+  });
+
+  it('ends the publish job as "not yet readable", not failed, and hands over to a follow-up', () => {
+    const result = runStablePublish({verifyExit: 2});
+
+    expect(result.status).toBe(0);
+    expect(result.output).toContain('verified=pending');
+    expect(result.stdout).toContain('not yet readable on the registry');
+  });
+
+  it('still fails the publish job on a verification error', () => {
+    const result = runStablePublish({verifyExit: 1});
+
+    expect(result.status).toBe(1);
+    expect(result.output).not.toContain('verified=');
+  });
+
+  it('runs at most two bounded follow-up verification jobs, each only while packages are pending', () => {
+    const first = workflow.jobs['verify-registry-1'];
+    const last = workflow.jobs['verify-registry-2'];
+    const followUps = Object.keys(workflow.jobs).filter(name =>
+      name.startsWith('verify-registry'),
+    );
+
+    expect(followUps).toEqual(['verify-registry-1', 'verify-registry-2']);
+    expect(stable.outputs.verified).toBe(
+      '${{ steps.publish.outputs.verified }}',
+    );
+    expect(first.needs).toBe('publish');
+    expect(first.if).toBe("needs.publish.outputs.verified == 'pending'");
+    expect(last.needs).toBe('verify-registry-1');
+    expect(last.if).toBe(
+      "needs.verify-registry-1.outputs.verified == 'pending'",
+    );
+    for (const job of [first, last]) {
+      expect(job['runs-on']).toBe('ubuntu-latest');
+      expect(job['timeout-minutes']).toBeLessThanOrEqual(10);
+      expect(job.permissions).toEqual({contents: 'read'});
+      expect(step(job, 'Verify published packages').run).toContain(
+        'node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest --window-ms 420000',
+      );
+    }
+  });
+
+  it('hands a still-pending check from the first follow-up to the last one', () => {
+    const pending = runFollowUp(workflow.jobs['verify-registry-1'], 2);
+    expect(pending.status).toBe(0);
+    expect(pending.output).toContain('verified=pending');
+
+    const readable = runFollowUp(workflow.jobs['verify-registry-1'], 0);
+    expect(readable.status).toBe(0);
+    expect(readable.output).toContain('verified=true');
+  });
+
+  it('fails the release when the last follow-up still finds a package unreadable', () => {
+    const result = runFollowUp(workflow.jobs['verify-registry-2'], 2);
+
+    expect(result.status).toBe(2);
+    expect(result.stdout).toContain(
+      'still not readable on the registry after three verification windows',
+    );
+  });
+
+  it('lets nothing act on a stable release before the final verification decides the run', () => {
+    // Every job that depends on the publish job is the next verification
+    // window, so no release step can start on the publish job's pass alone.
+    const dependents = name =>
+      Object.entries(workflow.jobs)
+        .filter(([, job]) => [job.needs].flat().includes(name))
+        .map(([jobName]) => jobName);
+    expect(dependents('publish')).toEqual(['verify-registry-1']);
+    expect(dependents('verify-registry-1')).toEqual(['verify-registry-2']);
+    expect(dependents('verify-registry-2')).toEqual([]);
+
+    // Pending in the publish job and in follow-up 1, still unreadable in
+    // follow-up 2: the run ends failed, so anything that waits for the run's
+    // conclusion does not proceed.
+    const publish = runStablePublish({verifyExit: 2});
+    const first = runFollowUp(workflow.jobs['verify-registry-1'], 2);
+    const last = runFollowUp(workflow.jobs['verify-registry-2'], 2);
+    const jobResults = [publish.status, first.status, last.status];
+    expect(jobResults).toEqual([0, 0, 2]);
+    expect(jobResults.some(status => status !== 0)).toBe(true);
+    expect(stable.outputs.verified).toBeDefined();
+    expect(publish.output).toContain('verified=pending');
+    expect(first.output).toContain('verified=pending');
   });
 });
