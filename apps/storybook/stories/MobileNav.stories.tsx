@@ -440,7 +440,7 @@ export const NestedDialog: Story = {
               content={
                 <LayoutContent label="Search results">
                   {SEARCH_RESULTS.map(result => (
-                    <Text key={result} type="body" as="p">
+                    <Text key={result} type="body" as="p" display="block">
                       {result}
                     </Text>
                   ))}
