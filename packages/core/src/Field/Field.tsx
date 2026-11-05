@@ -4,7 +4,7 @@
 
 /**
  * @file Field.tsx
- * @input Uses React, HTMLAttributes, ReactNode, FieldLabel, IconType, useFieldStatusAnnouncement
+ * @input Uses React, StyleX, BaseProps, FieldLabel/FieldStatus, FormLayoutContext, Text, VisuallyHidden, theme/status utilities
  * @output Exports Field component, FieldProps
  * @position Core implementation; consumed by index.ts, tested by Field.test.tsx
  *
@@ -22,15 +22,16 @@ import type {BaseProps} from '../BaseProps';
 import type {SizeValue} from '../utils/types';
 import {FieldLabel} from './FieldLabel';
 import {FieldStatus} from '../FieldStatus/FieldStatus';
-import type {FieldStatusVariant} from '../FieldStatus/FieldStatus';
 import {useFieldStatusAnnouncement} from '../FieldStatus/useFieldStatusAnnouncement';
 import {spacingVars, borderVars, sizeVars} from '../theme/tokens.stylex';
 import type {IconType} from '../Icon';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
-import {Text} from '../Text';
+import {Text} from '../Text/Text';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
+import type {FieldStatusPlacement} from './fieldStatusPlacement';
 
 const styles = stylex.create({
   container: {
@@ -186,7 +187,7 @@ export interface FieldProps extends Omit<
    * - 'tooltip': No message box; the input surfaces status through a tooltip on its on-field icon
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
    * (e.g. `'100%'`). Sizes the whole field — label, control, and status — so
@@ -298,20 +299,28 @@ export function Field({
     return (
       <div
         ref={ref}
+        {...props}
         {...mergeProps(
           themeProps('field', {layout: 'horizontal-labels'}),
           stylex.props(styles.horizontalLabels, xstyle),
           className,
           style,
-        )}
-        {...props}>
+        )}>
         <div {...stylex.props(styles.horizontalLabelAlign)}>{labelNode}</div>
         <div {...stylex.props(styles.inputStatusWrapper)}>
-          {description && (
-            <Text type="supporting" display="block" id={resolvedDescriptionID}>
-              {description}
-            </Text>
-          )}
+          {description &&
+            (isLabelHidden ? (
+              <VisuallyHidden id={resolvedDescriptionID}>
+                {description}
+              </VisuallyHidden>
+            ) : (
+              <Text
+                type="supporting"
+                display="block"
+                id={resolvedDescriptionID}>
+                {description}
+              </Text>
+            ))}
           {children}
           {statusNode}
         </div>

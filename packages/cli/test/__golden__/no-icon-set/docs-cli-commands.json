@@ -1,0 +1,325 @@
+{
+  "apiVersion": 1,
+  "type": "docs.node",
+  "package": "@astryxdesign/cli",
+  "data": {
+    "id": "astryx:artifact:v1/%40astryxdesign%2Fcli/namespace/commands",
+    "route": "cli/commands",
+    "kind": "namespace",
+    "package": "@astryxdesign/cli",
+    "title": "<text>",
+    "summary": "<text>",
+    "breadcrumb": [
+      {
+        "route": "cli",
+        "title": "<text>"
+      }
+    ],
+    "slots": [
+      {
+        "name": "commands",
+        "title": "<text>",
+        "children": [
+          {
+            "route": "cli/commands/blog",
+            "name": "blog",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/build",
+            "name": "build",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/component",
+            "name": "component",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/discover",
+            "name": "discover",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/docs",
+            "name": "docs",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/doctor",
+            "name": "doctor",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/doctor-integration",
+            "name": "doctor-integration",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/doctor-integration-components",
+            "name": "doctor-integration-components",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/doctor-integration-docs",
+            "name": "doctor-integration-docs",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/doctor-integration-templates",
+            "name": "doctor-integration-templates",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/doctor-integration-validate",
+            "name": "doctor-integration-validate",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/gap-report",
+            "name": "gap-report",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/hook",
+            "name": "hook",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/init",
+            "name": "init",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/integration",
+            "name": "integration",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/integration-add",
+            "name": "integration-add",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/integration-check",
+            "name": "integration-check",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/integration-pack",
+            "name": "integration-pack",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/integration-verify",
+            "name": "integration-verify",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/manifest",
+            "name": "manifest",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/postinstall",
+            "name": "postinstall",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/search",
+            "name": "search",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/swizzle",
+            "name": "swizzle",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/template",
+            "name": "template",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/theme",
+            "name": "theme",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/theme-add",
+            "name": "theme-add",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/theme-build",
+            "name": "theme-build",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/theme-eject",
+            "name": "theme-eject",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/theme-list",
+            "name": "theme-list",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/theme-palette",
+            "name": "theme-palette",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/theme-palette-generate",
+            "name": "theme-palette-generate",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/theme-remove",
+            "name": "theme-remove",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/theme-targets",
+            "name": "theme-targets",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/theme-template",
+            "name": "theme-template",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/theme-use",
+            "name": "theme-use",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/commands/upgrade",
+            "name": "upgrade",
+            "package": "@astryxdesign/cli",
+            "kind": "command",
+            "title": "<text>",
+            "summary": "<text>"
+          }
+        ]
+      }
+    ],
+    "content": [
+      {
+        "type": "prose",
+        "text": "<text>"
+      }
+    ],
+    "links": {
+      "up": "<text>",
+      "next": "<text>"
+    }
+  }
+}

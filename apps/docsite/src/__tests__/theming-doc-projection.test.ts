@@ -19,7 +19,7 @@ function emittedInterfaceFields(name: string): string[] {
   const match = new RegExp(
     `export interface ${name} \\{([\\s\\S]*?)\\n\\}`,
   ).exec(source);
-  if (!match) throw new Error(`generate-data.mjs emits no interface ${name}`);
+  if (!match) {throw new Error(`generate-data.mjs emits no interface ${name}`);}
   return [...match[1].matchAll(/^\s{2}([A-Za-z]+)\??:/gm)].map(m => m[1]);
 }
 

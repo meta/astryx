@@ -31,14 +31,14 @@ export const doc = {
       name: 'name',
       type: 'string',
       description:
-        'Stable identifier for block templates; change `displayName`, not `name`, to edit their visible label. For page templates it is a human-readable label, while the existing template-directory/CLI slug owns the default registry path.',
+        "Stable identifier for block templates; change `displayName`, not `name`, to edit their visible label in the gallery. For page templates it is a human-readable label, while the existing template-directory/CLI slug owns the default registry path. `astryx template --list` and `astryx search` print `name` as the label of both, and `astryx template <id>` finds a template by its id, never by `name`: an integration template's id is its path under the templates folder without the `.doc.*` suffix.",
       required: true,
     },
     {
       name: 'displayName',
       type: 'string',
       description:
-        "Human-readable label for the gallery/CLI. Spaces out block names that mirror a PascalCase component ('ChatMessageMetadata' → 'Chat Message Metadata').",
+        "Human-readable label for the gallery. The CLI prints `name` instead; `astryx template --list --json` also returns an integration template's `displayName`. Spaces out block names that mirror a PascalCase component ('ChatMessageMetadata' → 'Chat Message Metadata').",
       required: true,
     },
     {
@@ -63,6 +63,13 @@ export const doc = {
       type: 'string',
       description:
         "Integration templates only: the exact id of the Core template this one replaces for unqualified lookup. Find it with `astryx --json template --list --package @astryxdesign/core`; the Core original stays selectable with `--package @astryxdesign/core`. A page replaces only a Core page and a block only a Core block. Needs @astryxdesign/cli 0.6.4 or later: earlier CLIs reject the field, drop that template, and hide the package's doc topics.",
+    },
+    {
+      name: 'icons',
+      type: 'Record<string, string>',
+      stability: 'experimental',
+      description:
+        "The icon definition each icon the source imports draws, such as `{TrashIcon: 'delete'}`: a named import is keyed by the name it imports (`{Trash as TrashIcon}` is `Trash`), a default import by its local name (`import DeleteIcon from …` is `DeleteIcon`). When the project sets `experimental.iconSet`, `astryx template` (shown or copied) replaces each declared icon with the set's icon for that definition (`astryx docs cli/experimental/icon-definitions`) and reports every key as mapped or kept; an undeclared import is left alone. A name imported from two modules (`TrashIcon` from an outline and a solid module) needs one key, and each import keeps its variant when its module belongs to an installed set.",
     },
     {
       name: 'isReady',
@@ -162,7 +169,7 @@ export default {
   notes: [
     {
       type: 'prose',
-      text: 'When it loads, a template may leave out `displayName` and `aspectRatio` and use its own `category`, as integration templates already published do; a block with no `aspectRatio` previews at 1. Write to the type anyway; it is the contract.',
+      text: 'When it loads, a template may leave out `displayName` and `aspectRatio` and use its own `category`, as integration templates already published do; a block with no `aspectRatio` previews at 1. Write to the type anyway; it is the contract, and `astryx doctor integration validate` warns about an integration template that leaves out `displayName` or `aspectRatio`.',
     },
     {
       type: 'prose',

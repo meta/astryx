@@ -13,19 +13,39 @@
 
 /** Kinds of item a package can add. */
 export type DiscoverKind =
-  'component' | 'template' | 'doc' | 'theme' | 'codemod' | 'agent-doc';
+  | 'component'
+  | 'template'
+  | 'doc'
+  | 'theme'
+  | 'codemod'
+  | 'agent-doc'
+  /**
+   * An icon set, read only in a project that sets `experimental.iconSet`.
+   * @experimental May change or be removed in a patch release.
+   */
+  | 'icon-set';
 
 /** One item a package version adds. */
 export interface DiscoverContribution {
   kind: DiscoverKind;
   /**
    * The name the CLI uses for it: a component name, template id, doc topic,
-   * theme slug, or codemod id.
+   * theme slug, codemod id, or icon set name.
    */
   name: string;
   title?: string;
   summary?: string;
   keywords?: string[];
+  /**
+   * For an icon set: how many icons it has.
+   * @experimental May change or be removed in a patch release.
+   */
+  iconCount?: number;
+  /**
+   * For an icon set: the icon definitions its `map` covers.
+   * @experimental May change or be removed in a patch release.
+   */
+  definitions?: string[];
 }
 
 /** One published version of a package. */

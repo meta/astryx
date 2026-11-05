@@ -67,7 +67,7 @@ describe('formatFull sub-component rendering', () => {
     expect(out).not.toContain('undefined');
     // Points the reader at the sub-component's own docs instead of a blank.
     expect(out).toMatch(
-      /(?:astryx|@astryxdesign\/cli) component XDSRadioListItem/,
+      /(?:astryx|@astryxdesign\/cli(?:@\S+)?) component XDSRadioListItem/,
     );
   });
 

@@ -56,8 +56,12 @@ const GUTTER_BLOCK = `calc(max(${SPACING}, env(safe-area-inset-top, 0px), env(sa
 
 /**
  * The viewport gutter and the caps derived from it. Every value has an
- * `env()`-less fallback for engines without safe-area support; pair them with
- * `stylex.firstThatWorks(cap, capFallback)`.
+ * `env()`-less fallback for engines without safe-area support; pair them as
+ * `stylex.firstThatWorks(`calc(${cap})`, `calc(${capFallback})`)`. Pass
+ * each inside a `calc()` (or another function), never as a bare reference: a
+ * constant reference compiles to a `var()`, and `firstThatWorks` folds two
+ * `var()` arguments into one `var(cap, capFallback)` whose constant is never
+ * inlined, so every engine would take the fallback.
  */
 export const layerViewportInset = stylex.defineConsts({
   /** Gutter from the block-start viewport edge. */

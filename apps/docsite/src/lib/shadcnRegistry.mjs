@@ -216,6 +216,32 @@ export function pageRegistryIdentity(templateSlug, registry = null) {
   };
 }
 
+const NAME_PREFIX_BY_ROOT = {
+  components: 'component',
+  hooks: 'hook',
+  showcases: 'showcase',
+  examples: 'example',
+  blocks: 'block',
+  templates: 'template',
+};
+
+/**
+ * The item name an organized path stands for: the singular kind root followed
+ * by the remaining path segments, joined with hyphens. Every item's name equals
+ * the name of its canonical path, and an alias path names the item it used to
+ * be, so a renamed item keeps answering at its old `<name>.json` too.
+ */
+export function registryNameForPath(registryPath) {
+  const [root, ...rest] = registryPath.split('/');
+  const prefix = NAME_PREFIX_BY_ROOT[root];
+  if (prefix == null || rest.length === 0) {
+    throw new Error(
+      `registry path ${JSON.stringify(registryPath)} does not start with a kind folder`,
+    );
+  }
+  return `${prefix}-${rest.join('-')}`;
+}
+
 export function shadcnComponentItemName(
   packageName,
   componentName,

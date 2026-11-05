@@ -21,7 +21,7 @@ import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
  * (→ `.astryx-table-cell`), and `astryx-button` → key `button`.
  *
  * Keep the `astryx-` literal in sync with packages/core/src/naming.ts
- * (NAMESPACE / classPrefix), the same way build-theme.mjs mirrors it.
+ * (NAMESPACE / classPrefix), the same way commands/theme.mjs mirrors it.
  * <!-- SYNC: packages/core/src/naming.ts (namespace prefix source of truth) -->
  * @param {import('@astryxdesign/cli/authoring').ComponentThemingTarget} target
  * @returns {string}
@@ -68,8 +68,12 @@ function formatPropsTable(props) {
   for (const p of props) {
     const def = p.default ? `\`${mdCell(p.default)}\`` : '-';
     const req = p.required ? ' **(required)**' : '';
+    // The text projection of the prop doc's `stability` field: an
+    // experimental prop is outside the stable compatibility promise.
+    const stability =
+      p.stability === 'experimental' ? ' **(experimental)**' : '';
     lines.push(
-      `| \`${mdCell(p.name)}\` | \`${mdCell(p.type)}\` | ${def} | ${mdCell(p.description)}${req} |`,
+      `| \`${mdCell(p.name)}\` | \`${mdCell(p.type)}\` | ${def} | ${mdCell(p.description)}${req}${stability} |`,
     );
   }
   return lines.join('\n');

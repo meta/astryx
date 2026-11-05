@@ -14,13 +14,18 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
+  createRepository,
+  importCommits,
+  workingTreeFiles,
+} from '../lib/git-fixture.mjs';
+import {
   buildMarker,
   buildPlan,
   canaryEligibility,
   declaredVersionAtRef,
   latestStableVersion,
+  mergeBackEntries,
   nextPlannedVersion,
-  validateMainVersions,
   validateReleaseDiff,
   validateReleaseMergeBack,
   validateReleaseState,
@@ -85,12 +90,16 @@ function cutFixture(version = '0.6.5') {
     path.join(root, '.changeset/in-cut.md'),
     "---\n'@astryxdesign/core': patch\n---\n\n[fix] Included\n@person\n",
   );
-  git(root, 'init', '-q');
-  git(root, 'config', 'user.name', 'Release Test');
-  git(root, 'config', 'user.email', 'release@example.com');
-  git(root, 'add', '.');
-  git(root, 'commit', '-qm', 'cut');
-  return {...state, cutSha: git(root, 'rev-parse', 'HEAD')};
+  const {cut} = createRepository(root, [
+    {
+      ref: 'refs/heads/main',
+      name: 'cut',
+      message: 'cut',
+      snapshot: true,
+      files: workingTreeFiles(root),
+    },
+  ]);
+  return {...state, cutSha: cut};
 }
 
 function validate(state, overrides = {}) {
@@ -198,13 +207,16 @@ describe('one branch per release lifecycle', () => {
     ).toThrow(
       /main declares 0\.6\.5 at the cut|release refresh cannot change version/,
     );
-    git(root, 'commit', '-qm', 'later', '--allow-empty');
+    const {later} = importCommits(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'later',
+        parent: 'refs/heads/main',
+        message: 'later',
+      },
+    ]);
     expect(() =>
-      writeAuthority(
-        root,
-        {...values, 'cut-sha': git(root, 'rev-parse', 'HEAD')},
-        true,
-      ),
+      writeAuthority(root, {...values, 'cut-sha': later}, true),
     ).toThrow('release refresh cannot change cutSha');
   });
 
@@ -689,6 +701,88 @@ describe('published release merge-back (FR50)', () => {
     );
   });
 
+  describe('compared with the merge commit it was built on', () => {
+    // A merge-back pull request's merge commit, built on an older main, while
+    // main has since gained a file.
+    function movedMain() {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-merge-back-'));
+      roots.push(root);
+      const write = (file, text) => {
+        fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+        fs.writeFileSync(path.join(root, file), text);
+      };
+      git(root, 'init', '-q', '-b', 'main');
+      git(root, 'config', 'user.name', 'Release Test');
+      git(root, 'config', 'user.email', 'release@example.com');
+      write('.changeset/frozen.md', 'frozen\n');
+      write('packages/core/CHANGELOG.md', '# Changelog\n');
+      git(root, 'add', '.');
+      git(root, 'commit', '-qm', 'main the merge was built on');
+      const builtOn = git(root, 'rev-parse', 'HEAD');
+      git(root, 'checkout', '-q', '-b', 'chore/merge-v0.7.0-to-main');
+      fs.rmSync(path.join(root, '.changeset/frozen.md'));
+      write('packages/core/CHANGELOG.md', '# Changelog\n\n## 0.7.0\n');
+      git(root, 'add', '-A');
+      git(root, 'commit', '-qm', 'merge back v0.7.0');
+      git(root, 'checkout', '-q', 'main');
+      write('packages/core/src/Later.tsx', 'export {};\n');
+      git(root, 'add', '.');
+      git(root, 'commit', '-qm', 'main moves on');
+      git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+      git(root, 'checkout', '-q', '--detach', builtOn);
+      git(
+        root,
+        'merge',
+        '-q',
+        '--no-ff',
+        '-m',
+        'merge ref',
+        'chore/merge-v0.7.0-to-main',
+      );
+      return root;
+    }
+
+    it('lists only the merge-back changes against the first parent', () => {
+      const root = movedMain();
+      const entries = mergeBackEntries(root, 'HEAD^1');
+      expect(entries).toEqual([
+        'D\t.changeset/frozen.md',
+        'M\tpackages/core/CHANGELOG.md',
+      ]);
+      expect(
+        mergeBack({base: mainAt('0.7.0'), head: mainAt('0.7.0'), entries}),
+      ).toEqual([]);
+    });
+
+    it("reads a later main's new file as a deletion, which fails merge-back", () => {
+      const root = movedMain();
+      const entries = mergeBackEntries(root, 'origin/main');
+      expect(entries).toContain('D\tpackages/core/src/Later.tsx');
+      expect(
+        mergeBack({
+          base: mainAt('0.7.0'),
+          head: mainAt('0.7.0'),
+          entries,
+        }).join('\n'),
+      ).toContain('packages/core/src/Later.tsx');
+    });
+
+    it.each(['.github/workflows/ci.yml', '.github/workflows/lint.yml'])(
+      '%s validates against the merge commit first parent',
+      file => {
+        const text = fs.readFileSync(
+          path.join(import.meta.dirname, '../..', file),
+          'utf8',
+        );
+        const call = text.slice(text.indexOf('validate-merge-back \\'));
+        expect(call).toMatch(
+          /^validate-merge-back \\\n\s+--root "\$GITHUB_WORKSPACE" \\\n\s+--base HEAD\^1 \\/,
+        );
+        expect(text).not.toContain('--base origin/main');
+      },
+    );
+  });
+
   it('rejects missing frozen deletions and exact-output drift', () => {
     expect(
       mergeBack({
@@ -766,95 +860,5 @@ describe('newest stable release selection', () => {
     for (const tag of ['v0.6.5', 'v0.6.7', 'v0.6.6', 'canary-0.8.0'])
       git(root, 'tag', tag);
     expect(latestStableVersion(root)).toBe('0.6.7');
-  });
-});
-
-describe('main pull requests keep the declared version above newest stable (FR46)', () => {
-  const fixed = ['@astryxdesign/core', '@astryxdesign/cli'];
-  const at = (core, cli = core) =>
-    new Map([
-      ['@astryxdesign/core', {name: '@astryxdesign/core', version: core}],
-      ['@astryxdesign/cli', {name: '@astryxdesign/cli', version: cli}],
-    ]);
-  // `base` is passed deliberately as a red arm: a check that compares against
-  // previous main would reject the first case instead of comparing with v0.6.7.
-  const check = (
-    base,
-    head,
-    releasedVersion = '0.6.7',
-    activeCutVersion = null,
-  ) =>
-    validateMainVersions({
-      fixed,
-      releasedVersion,
-      activeCutVersion,
-      baseManifests: base,
-      headManifests: head,
-    });
-
-  it('accepts a planned-version decrease that stays above newest stable', () => {
-    expect(check(at('0.7.0'), at('0.6.8'))).toEqual([]);
-    expect(check(at('0.6.8'), at('0.7.0'))).toEqual([]);
-  });
-
-  it('allows equality with an untagged active cut but refuses lowering below it', () => {
-    expect(check(at('0.6.8'), at('0.6.8'), '0.6.7', '0.6.8')).toEqual([]);
-    expect(check(at('0.6.8'), at('0.6.9'), '0.6.7', '0.6.8')).toEqual([]);
-    expect(check(at('0.6.8'), at('0.6.7'), '0.6.6', '0.6.8')).toContain(
-      'main declares 0.6.7; it must not fall below active cut v0.6.8',
-    );
-    expect(check(at('0.6.8'), at('0.6.8'), '0.6.8', '0.6.8')).toContain(
-      'main declares 0.6.8; it must stay strictly above newest stable v0.6.8',
-    );
-  });
-
-  it('admits only patch or minor successor as the first plan after merge-back', () => {
-    expect(check(at('0.6.7'), at('0.6.8'))).toEqual([]);
-    expect(check(at('0.6.7'), at('0.7.0'))).toEqual([]);
-    expect(check(at('0.6.7'), at('0.6.9'))).toContain(
-      "main's first plan after v0.6.7 must be patch successor 0.6.8 by default or owner-named minor 0.7.0; found 0.6.9",
-    );
-  });
-
-  it('requires every exact internal pin to follow the separate next plan', () => {
-    const head = at('0.6.8');
-    head.set('@astryxdesign/lab', {
-      name: '@astryxdesign/lab',
-      version: '0.1.9',
-      private: true,
-      peerDependencies: {'@astryxdesign/core': '0.6.7'},
-    });
-    expect(check(at('0.6.7'), head)).toContain(
-      '@astryxdesign/lab peerDependencies.@astryxdesign/core pins 0.6.7; main declares 0.6.8',
-    );
-  });
-
-  it('refuses equality, a lower version, a split group, and a prerelease', () => {
-    expect(check(at('0.7.0'), at('0.6.7'))).toContain(
-      'main declares 0.6.7; it must stay strictly above newest stable v0.6.7',
-    );
-    expect(check(at('0.7.0'), at('0.6.6'))).toContain(
-      'main declares 0.6.6; it must stay strictly above newest stable v0.6.7',
-    );
-    expect(check(at('0.6.8'), at('0.7.0', '0.6.8'))).toContain(
-      'the fixed group must declare one version on main; found 0.6.8, 0.7.0',
-    );
-    expect(check(at('0.6.8'), at('0.7.0-canary.abc'))[0]).toMatch(
-      /main declares an X\.Y\.Z version/,
-    );
-    expect(check(at('0.6.8'), at('0.7.0'), null)).toContain(
-      'main version check needs the newest stable vX.Y.Z tag',
-    );
-  });
-
-  it('accepts a package new to main', () => {
-    expect(
-      check(
-        new Map([
-          ['@astryxdesign/core', at('0.7.0').get('@astryxdesign/core')],
-        ]),
-        at('0.7.0'),
-      ),
-    ).toEqual([]);
   });
 });

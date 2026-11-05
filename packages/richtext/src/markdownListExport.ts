@@ -28,7 +28,12 @@ import {$getTaskState} from './markdownTaskList';
 
 /** The bullet Lexical recorded for a list on import (`-`, `*`, or `+`). */
 function bulletOf(list: ListNode): string {
-  const serialized = list.exportJSON() as {$?: {mdListMarker?: unknown}};
+  // The export may hand over a view of the list (an object inheriting from
+  // the node, see markdownSource.ts); Lexical validates the fields of the
+  // node it serializes, so read the recorded state from the node itself.
+  const serialized = list.getLatest().exportJSON() as {
+    $?: {mdListMarker?: unknown};
+  };
   const marker = serialized.$?.mdListMarker;
   return marker === '*' || marker === '+' ? marker : '-';
 }

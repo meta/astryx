@@ -138,7 +138,7 @@ export const docs = {
     {
       name: 'isLoading',
       type: 'boolean',
-      description: 'Shows a loading spinner and disables interaction. Announces "Loading" via a live region.',
+      description: 'Shows a loading spinner and blocks re-activation while staying focusable (aria-busy + aria-disabled, not native disabled, so keyboard focus is never dropped mid-action). Announces "Loading" via a live region.',
       default: 'false',
     },
     {
@@ -419,7 +419,7 @@ export const docsDense = {
     displayName: 'HTML name for form submission',
     value: 'HTML value for form submission',
     form: 'associates button with form element by ID',
-    isLoading: 'shows spinner+disables interaction; announces via live region',
+    isLoading: 'shows spinner, blocks re-activation but stays focusable (aria-disabled, not native disabled); announces via live region',
     icon: 'icon element rendered before label text; unsized Astryx Icon defaults to sm for sm/md buttons and md for lg',
     isIconOnly: 'when true, renders square icon-only button; label becomes aria-label',
     width: "Width of button. Numbers=pixels, strings=as-is (e.g. '100%' for full-width). Default: content width, capped at the container; label truncates w/ ellipsis in a narrow row; icon-only stays square.",

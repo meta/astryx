@@ -347,6 +347,20 @@
       "aliases": []
     },
     {
+      "name": "component-drawer",
+      "path": "components/drawer",
+      "aliases": [
+        "components/lab/drawer"
+      ]
+    },
+    {
+      "name": "component-drawer-header",
+      "path": "components/drawer-header",
+      "aliases": [
+        "components/lab/drawer-header"
+      ]
+    },
+    {
       "name": "component-dropdown-menu",
       "path": "components/dropdown-menu",
       "aliases": []
@@ -452,6 +466,13 @@
       "aliases": []
     },
     {
+      "name": "component-info-tip",
+      "path": "components/info-tip",
+      "aliases": [
+        "components/lab/info-tip"
+      ]
+    },
+    {
       "name": "component-input-group",
       "path": "components/input-group",
       "aliases": []
@@ -547,6 +568,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-circle-check-indicator",
+      "path": "components/lab/circle-check-indicator",
+      "aliases": []
+    },
+    {
       "name": "component-lab-circular-progress",
       "path": "components/lab/circular-progress",
       "aliases": []
@@ -557,18 +583,33 @@
       "aliases": []
     },
     {
-      "name": "component-lab-drawer",
-      "path": "components/lab/drawer",
+      "name": "component-lab-comment-composer",
+      "path": "components/lab/comment-composer",
       "aliases": []
     },
     {
-      "name": "component-lab-drawer-header",
-      "path": "components/lab/drawer-header",
+      "name": "component-lab-comment-pin",
+      "path": "components/lab/comment-pin",
       "aliases": []
     },
     {
-      "name": "component-lab-info-tip",
-      "path": "components/lab/info-tip",
+      "name": "component-lab-comment-thread",
+      "path": "components/lab/comment-thread",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-comments",
+      "path": "components/lab/comments",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-diff-viewer",
+      "path": "components/lab/diff-viewer",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-emoji-picker",
+      "path": "components/lab/emoji-picker",
       "aliases": []
     },
     {
@@ -579,11 +620,6 @@
     {
       "name": "component-lab-log-stream",
       "path": "components/lab/log-stream",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-mobile-tokenizer",
-      "path": "components/lab/mobile-tokenizer",
       "aliases": []
     },
     {
@@ -599,6 +635,11 @@
     {
       "name": "component-lab-schedule",
       "path": "components/lab/schedule",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-selectable-card-group",
+      "path": "components/lab/selectable-card-group",
       "aliases": []
     },
     {
@@ -1876,6 +1917,26 @@
       "aliases": []
     },
     {
+      "name": "example-comment-pin-host-owned-placement",
+      "path": "examples/comment-pin/host-owned-placement",
+      "aliases": []
+    },
+    {
+      "name": "example-comment-thread-in-a-popover",
+      "path": "examples/comment-thread/in-a-popover",
+      "aliases": []
+    },
+    {
+      "name": "example-comments-inline-comments",
+      "path": "examples/comments/inline-comments",
+      "aliases": []
+    },
+    {
+      "name": "example-comments-inside-a-card",
+      "path": "examples/comments/inside-a-card",
+      "aliases": []
+    },
+    {
       "name": "example-complex-selector-deadline-picker",
       "path": "examples/complex-selector/deadline-picker",
       "aliases": []
@@ -1898,6 +1959,16 @@
     {
       "name": "example-context-menu-bottom-sheet",
       "path": "examples/context-menu/bottom-sheet",
+      "aliases": []
+    },
+    {
+      "name": "example-create-animator-playing-cards-in-plain-java-script",
+      "path": "examples/create-animator/playing-cards-in-plain-java-script",
+      "aliases": []
+    },
+    {
+      "name": "example-create-pan-gesture-a-playing-card-without-react",
+      "path": "examples/create-pan-gesture/a-playing-card-without-react",
       "aliases": []
     },
     {
@@ -2001,8 +2072,8 @@
       "aliases": []
     },
     {
-      "name": "example-drawer-mobile-the-56px-page-reveal-default",
-      "path": "examples/drawer/mobile-the-56px-page-reveal-default",
+      "name": "example-drawer-edit-form-with-footer-actions",
+      "path": "examples/drawer/edit-form-with-footer-actions",
       "aliases": []
     },
     {
@@ -2013,11 +2084,6 @@
     {
       "name": "example-drawer-slide-in-from-the-start-edge",
       "path": "examples/drawer/slide-in-from-the-start-edge",
-      "aliases": []
-    },
-    {
-      "name": "example-drawer-wide-desktop-panel-full-width-on-mobile",
-      "path": "examples/drawer/wide-desktop-panel-full-width-on-mobile",
       "aliases": []
     },
     {
@@ -2063,6 +2129,11 @@
     {
       "name": "example-dropdown-menu-submenu",
       "path": "examples/dropdown-menu/submenu",
+      "aliases": []
+    },
+    {
+      "name": "example-emoji-picker-in-a-popover",
+      "path": "examples/emoji-picker/in-a-popover",
       "aliases": []
     },
     {
@@ -2231,6 +2302,16 @@
       "aliases": []
     },
     {
+      "name": "example-info-tip-metric-definitions",
+      "path": "examples/info-tip/metric-definitions",
+      "aliases": []
+    },
+    {
+      "name": "example-info-tip-permission-notes",
+      "path": "examples/info-tip/permission-notes",
+      "aliases": []
+    },
+    {
       "name": "example-input-group-basic",
       "path": "examples/input-group/basic",
       "aliases": []
@@ -2368,6 +2449,21 @@
     {
       "name": "example-link-with-tooltips",
       "path": "examples/link/with-tooltips",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-budget-allocation",
+      "path": "examples/list-input/budget-allocation",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-family-member-declaration",
+      "path": "examples/list-input/family-member-declaration",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-mailing-list",
+      "path": "examples/list-input/mailing-list",
       "aliases": []
     },
     {
@@ -3561,8 +3657,28 @@
       "aliases": []
     },
     {
+      "name": "example-use-animator-playing-cards",
+      "path": "examples/use-animator/playing-cards",
+      "aliases": []
+    },
+    {
+      "name": "example-use-announce-filter-result-count",
+      "path": "examples/use-announce/filter-result-count",
+      "aliases": []
+    },
+    {
       "name": "example-use-app-shell-mobile-custom-mobile-trigger",
       "path": "examples/use-app-shell-mobile/custom-mobile-trigger",
+      "aliases": []
+    },
+    {
+      "name": "example-use-clickable-container-clickable-project-card",
+      "path": "examples/use-clickable-container/clickable-project-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-clipboard-share-link",
+      "path": "examples/use-clipboard/share-link",
       "aliases": []
     },
     {
@@ -3571,13 +3687,53 @@
       "aliases": []
     },
     {
+      "name": "example-use-collator-locale-aware-name-sort",
+      "path": "examples/use-collator/locale-aware-name-sort",
+      "aliases": []
+    },
+    {
+      "name": "example-use-combobox-assign-to-field",
+      "path": "examples/use-combobox/assign-to-field",
+      "aliases": []
+    },
+    {
       "name": "example-use-container-reveal-reveal-on-hover-row-actions",
       "path": "examples/use-container-reveal/reveal-on-hover-row-actions",
       "aliases": []
     },
     {
+      "name": "example-use-focus-trap-quick-edit-panel",
+      "path": "examples/use-focus-trap/quick-edit-panel",
+      "aliases": []
+    },
+    {
+      "name": "example-use-grid-focus-color-swatch-grid",
+      "path": "examples/use-grid-focus/color-swatch-grid",
+      "aliases": []
+    },
+    {
+      "name": "example-use-hotkeys-search-and-help-shortcuts",
+      "path": "examples/use-hotkeys/search-and-help-shortcuts",
+      "aliases": []
+    },
+    {
       "name": "example-use-hover-card-profile-preview",
       "path": "examples/use-hover-card/profile-preview",
+      "aliases": []
+    },
+    {
+      "name": "example-use-icon-status-row",
+      "path": "examples/use-icon/status-row",
+      "aliases": []
+    },
+    {
+      "name": "example-use-image-mode-photo-caption",
+      "path": "examples/use-image-mode/photo-caption",
+      "aliases": []
+    },
+    {
+      "name": "example-use-input-status-icon-coupon-code-status",
+      "path": "examples/use-input-status-icon/coupon-code-status",
       "aliases": []
     },
     {
@@ -3591,8 +3747,48 @@
       "aliases": []
     },
     {
+      "name": "example-use-lightbox-gallery-grid",
+      "path": "examples/use-lightbox/gallery-grid",
+      "aliases": []
+    },
+    {
+      "name": "example-use-list-focus-recent-files",
+      "path": "examples/use-list-focus/recent-files",
+      "aliases": []
+    },
+    {
+      "name": "example-use-locale-invoice-summary",
+      "path": "examples/use-locale/invoice-summary",
+      "aliases": []
+    },
+    {
+      "name": "example-use-outline-from-markdown-docs-article",
+      "path": "examples/use-outline-from-markdown/docs-article",
+      "aliases": []
+    },
+    {
+      "name": "example-use-overflow-editor-toolbar",
+      "path": "examples/use-overflow/editor-toolbar",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-playing-card",
+      "path": "examples/use-pan-gesture/a-playing-card",
+      "aliases": []
+    },
+    {
       "name": "example-use-popover-quick-actions",
       "path": "examples/use-popover/quick-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-press-feedback-pressable-card",
+      "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scrollable-area-activity-log-panel",
+      "path": "examples/use-scrollable-area/activity-log-panel",
       "aliases": []
     },
     {
@@ -3651,6 +3847,26 @@
       "aliases": []
     },
     {
+      "name": "example-use-toast-settings-saved",
+      "path": "examples/use-toast/settings-saved",
+      "aliases": []
+    },
+    {
+      "name": "example-use-translator-load-more-footer",
+      "path": "examples/use-translator/load-more-footer",
+      "aliases": []
+    },
+    {
+      "name": "example-use-tree-focus-keyboard-file-tree",
+      "path": "examples/use-tree-focus/keyboard-file-tree",
+      "aliases": []
+    },
+    {
+      "name": "example-use-typeahead-type-to-focus-a-country",
+      "path": "examples/use-typeahead/type-to-focus-a-country",
+      "aliases": []
+    },
+    {
       "name": "example-v-stack-basic",
       "path": "examples/v-stack/basic",
       "aliases": []
@@ -3668,6 +3884,26 @@
     {
       "name": "example-visually-hidden-supplementary-context",
       "path": "examples/visually-hidden/supplementary-context",
+      "aliases": []
+    },
+    {
+      "name": "hook-create-animator",
+      "path": "hooks/create-animator",
+      "aliases": []
+    },
+    {
+      "name": "hook-create-pan-gesture",
+      "path": "hooks/create-pan-gesture",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-animated-layout",
+      "path": "hooks/use-animated-layout",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-animator",
+      "path": "hooks/use-animator",
       "aliases": []
     },
     {
@@ -3698,6 +3934,11 @@
     {
       "name": "hook-use-collator",
       "path": "hooks/use-collator",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-combobox",
+      "path": "hooks/use-combobox",
       "aliases": []
     },
     {
@@ -3733,6 +3974,11 @@
     {
       "name": "hook-use-hover-card",
       "path": "hooks/use-hover-card",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-icon",
+      "path": "hooks/use-icon",
       "aliases": []
     },
     {
@@ -3781,6 +4027,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-lightbox",
+      "path": "hooks/use-lightbox",
+      "aliases": []
+    },
+    {
       "name": "hook-use-list-focus",
       "path": "hooks/use-list-focus",
       "aliases": []
@@ -3811,8 +4062,23 @@
       "aliases": []
     },
     {
+      "name": "hook-use-multi-combobox",
+      "path": "hooks/use-multi-combobox",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-outline-from-markdown",
+      "path": "hooks/use-outline-from-markdown",
+      "aliases": []
+    },
+    {
       "name": "hook-use-overflow",
       "path": "hooks/use-overflow",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-pan-gesture",
+      "path": "hooks/use-pan-gesture",
       "aliases": []
     },
     {
@@ -4216,6 +4482,26 @@
       "aliases": []
     },
     {
+      "name": "showcase-comment-composer-new-comment",
+      "path": "showcases/comment-composer/new-comment",
+      "aliases": []
+    },
+    {
+      "name": "showcase-comment-pin-avatar-first-annotations",
+      "path": "showcases/comment-pin/avatar-first-annotations",
+      "aliases": []
+    },
+    {
+      "name": "showcase-comment-thread-margin-comment",
+      "path": "showcases/comment-thread/margin-comment",
+      "aliases": []
+    },
+    {
+      "name": "showcase-comments-panel",
+      "path": "showcases/comments/panel",
+      "aliases": []
+    },
+    {
       "name": "showcase-complex-selector-default",
       "path": "showcases/complex-selector/default",
       "aliases": []
@@ -4256,6 +4542,11 @@
       "aliases": []
     },
     {
+      "name": "showcase-diff-viewer-unified-diff-from-a-patch",
+      "path": "showcases/diff-viewer/unified-diff-from-a-patch",
+      "aliases": []
+    },
+    {
       "name": "showcase-divider-variants",
       "path": "showcases/divider/variants",
       "aliases": []
@@ -4283,6 +4574,11 @@
     {
       "name": "showcase-dropdown-menu-default",
       "path": "showcases/dropdown-menu/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-emoji-picker-inline-picker",
+      "path": "showcases/emoji-picker/inline-picker",
       "aliases": []
     },
     {
@@ -4351,6 +4647,11 @@
       "aliases": []
     },
     {
+      "name": "showcase-info-tip-default",
+      "path": "showcases/info-tip/default",
+      "aliases": []
+    },
+    {
       "name": "showcase-input-group-default",
       "path": "showcases/input-group/default",
       "aliases": []
@@ -4398,6 +4699,11 @@
     {
       "name": "showcase-link-default",
       "path": "showcases/link/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-list-input-tag-options",
+      "path": "showcases/list-input/tag-options",
       "aliases": []
     },
     {

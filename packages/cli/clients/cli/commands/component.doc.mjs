@@ -90,6 +90,7 @@ export const doc = {
       cli: 'astryx component SideNav --package @astryxdesign/core',
     },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success'},
     {

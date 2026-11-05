@@ -63,12 +63,12 @@ describe('Schedule date formatting', () => {
     expect(
       formatWithPlainDate(
         {year: 2026, month: 8, day: 22},
-        'UTC',
         {
           year: 'numeric',
           calendar: 'buddhist',
         },
         'en',
+        'gregory',
       ),
     ).toBe('2026');
   });
@@ -78,9 +78,9 @@ describe('Schedule date formatting', () => {
     expect(
       formatWithPlainDate(
         date,
-        'UTC',
         {month: 'long', year: 'numeric'},
         'th-TH',
+        'gregory',
       ),
     ).toBe(
       new Intl.DateTimeFormat('th-TH', {
@@ -631,6 +631,103 @@ describe('Schedule', () => {
     render(<ScheduleWithViewSelector />);
 
     expect(screen.getByRole('button', {name: /Day/})).toBeInTheDocument();
+  });
+});
+
+describe('Schedule across a midnight that daylight saving skips', () => {
+  // Both zones spring forward at local midnight: the day starts at 01:00.
+  const cases = [
+    {
+      timezoneID: 'America/Santiago',
+      date: Date.UTC(2026, 8, 8, 15),
+      week: [
+        'Sunday, September 6, 2026',
+        'Monday, September 7, 2026',
+        'Tuesday, September 8, 2026',
+        'Wednesday, September 9, 2026',
+        'Thursday, September 10, 2026',
+        'Friday, September 11, 2026',
+        'Saturday, September 12, 2026',
+      ],
+    },
+    {
+      timezoneID: 'America/Havana',
+      date: Date.UTC(2026, 2, 10, 15),
+      week: [
+        'Sunday, March 8, 2026',
+        'Monday, March 9, 2026',
+        'Tuesday, March 10, 2026',
+        'Wednesday, March 11, 2026',
+        'Thursday, March 12, 2026',
+        'Friday, March 13, 2026',
+        'Saturday, March 14, 2026',
+      ],
+    },
+  ];
+  const renderPopover = () => null;
+  const dayGroups = () =>
+    screen
+      .getAllByRole('group')
+      .map(group => group.getAttribute('aria-label') ?? '')
+      .filter(name => /, \d{4}$/u.test(name));
+
+  it.each(cases)(
+    'keeps seven days in the week and one in the day view in $timezoneID',
+    ({timezoneID, date, week}) => {
+      const {unmount} = render(
+        <Schedule
+          view={createScheduleWeeklyView({renderPopover})}
+          events={[]}
+          date={date}
+          timezoneID={timezoneID}
+        />,
+      );
+      expect(dayGroups()).toEqual(week);
+      unmount();
+      render(
+        <Schedule
+          view={createScheduleDayView({renderPopover})}
+          events={[]}
+          date={date - 2 * 24 * 60 * 60 * 1000}
+          timezoneID={timezoneID}
+        />,
+      );
+      expect(dayGroups()).toEqual([week[0]]);
+    },
+  );
+
+  it('keeps seven days in the week and one in the day view that end at the skipped midnight', () => {
+    // Santiago's week of Sunday, August 30, 2026 ends on Saturday, September 5;
+    // its end is the start of September 6, a midnight that never happens.
+    const timezoneID = 'America/Santiago';
+    const date = Date.UTC(2026, 8, 5, 15);
+    const {unmount} = render(
+      <Schedule
+        view={createScheduleWeeklyView({renderPopover})}
+        events={[]}
+        date={date}
+        timezoneID={timezoneID}
+      />,
+    );
+    expect(dayGroups()).toEqual([
+      'Sunday, August 30, 2026',
+      'Monday, August 31, 2026',
+      'Tuesday, September 1, 2026',
+      'Wednesday, September 2, 2026',
+      'Thursday, September 3, 2026',
+      'Friday, September 4, 2026',
+      'Saturday, September 5, 2026',
+    ]);
+    unmount();
+    render(
+      <Schedule
+        view={createScheduleDayView({renderPopover})}
+        events={[]}
+        date={date}
+        timezoneID={timezoneID}
+      />,
+    );
+    expect(dayGroups()).toEqual(['Saturday, September 5, 2026']);
   });
 });
 

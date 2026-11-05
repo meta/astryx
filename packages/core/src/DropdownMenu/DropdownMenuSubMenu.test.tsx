@@ -6,7 +6,15 @@
  * @output Unit tests for DropdownMenuSubMenu (#3829)
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  beforeEach,
+  afterEach,
+} from 'vitest';
 import {createRef, useState} from 'react';
 import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -14,8 +22,11 @@ import * as stylex from '@stylexjs/stylex';
 import {DropdownMenu} from './DropdownMenu';
 import {DropdownMenuItem} from './DropdownMenuItem';
 import {DropdownMenuSubMenu} from './DropdownMenuSubMenu';
+import {warmMenuBottomSheet} from './__tests__/warmMenuBottomSheet';
 import {IconButton} from '../IconButton';
+import {RadioList, RadioListItem} from '../RadioList';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {Theme, defineTheme} from '../theme';
 import {rtlStyles} from '../utils';
 
 beforeEach(() => {
@@ -440,6 +451,54 @@ describe('DropdownMenuSubMenu host attributes', () => {
     ).toHaveAttribute('aria-labelledby', 'move-row');
   });
 
+  it('reports each flyout open and close to onOpenChange once', async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu label="Move to" onOpenChange={onOpenChange}>
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    const trigger = await openRoot(user);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    trigger.focus();
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    expect(onOpenChange.mock.calls).toEqual([[true]]);
+    await user.keyboard('{Escape}');
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'false'),
+    );
+    expect(onOpenChange.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('menuDataTestId names the flyout menu, and data-testid the row', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu
+          label="Move to"
+          data-testid="move-row"
+          menuDataTestId="move-menu">
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    const trigger = await openRoot(user);
+    expect(trigger).toHaveAttribute('data-testid', 'move-row');
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    expect(screen.getByTestId('move-menu')).toBe(
+      screen.getByRole('menu', {name: 'Move to', hidden: true}),
+    );
+  });
+
   it('a ref reaches the trigger row', async () => {
     const user = userEvent.setup();
     const ref = createRef<HTMLElement>();
@@ -586,6 +645,40 @@ describe('DropdownMenu data-driven submenus', () => {
       await screen.findByRole('menuitem', {name: 'Folder B', hidden: true}),
     );
     expect(onMove).toHaveBeenCalledWith('b');
+  });
+
+  it('renders a submenu for an item with nested items inside a section', async () => {
+    const user = userEvent.setup();
+    const onWork = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Share'}}
+        items={[
+          {
+            type: 'section',
+            title: 'Send',
+            items: [
+              {label: 'Copy link', onClick: () => {}},
+              {
+                label: 'Email',
+                items: [
+                  {label: 'Work', onClick: onWork},
+                  {label: 'Personal', onClick: () => {}},
+                ],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /Share/}));
+    const trigger = screen.getByRole('menuitem', {name: /Email/, hidden: true});
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    await user.click(trigger);
+    await user.click(
+      await screen.findByRole('menuitem', {name: 'Work', hidden: true}),
+    );
+    expect(onWork).toHaveBeenCalled();
   });
 
   it('keyboard-reaches an item positioned after a submenu row', async () => {
@@ -1397,6 +1490,62 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
     await waitFor(() => shownRow('Back to Actions'));
   });
 
+  it("follows the theme's md point: a 900 px touch screen drills in under md 1000, and keeps the flyout under the default (spec:AST-012 FR9)", async () => {
+    // A query-aware stand-in for a 900 × 1024 coarse-pointer screen: `,` is
+    // or, `and` is and.
+    const screenSize = {width: 900, height: 1024};
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query.split(', ').some(alternative =>
+          alternative.split(' and ').every(part => {
+            if (part === '(pointer: coarse)') {
+              return true;
+            }
+            const range = /^\((width|height) < (\d+)px\)$/.exec(part);
+            return (
+              range != null &&
+              screenSize[range[1] as 'width' | 'height'] < Number(range[2])
+            );
+          }),
+        ),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    const wideMd = defineTheme({
+      name: 'wide-md-drill-in',
+      adaptations: {widthBreakpoints: {md: 1000, lg: 1100}},
+    });
+    const user = userEvent.setup();
+    const menu = (
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>
+    );
+    // The default md point (768): not compact, so the sub-menu flies out.
+    const {unmount} = render(menu);
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    fireEvent.click(await waitFor(() => shownRow('Move to')), {detail: 1});
+    const flyout = await waitFor(() => shownMenu('Move to'));
+    expect(flyout.closest('[popover]')).not.toBe(
+      shownMenu('Actions').closest('[popover]'),
+    );
+    unmount();
+    // A theme whose md is 1000: the same screen is compact, and it drills in.
+    render(<Theme theme={wideMd}>{menu}</Theme>);
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    fireEvent.click(await waitFor(() => shownRow('Move to')), {detail: 1});
+    await waitFor(() => shownRow('Back to Actions'));
+  });
+
   it('closing the menu resets the drilled view', async () => {
     stubCompactTouch(true);
     const user = userEvent.setup();
@@ -1492,5 +1641,802 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
 
     const shownMenuNamed = (name: string) =>
       screen.getAllByRole('menu', {name, ...h}).find(isShown);
+  });
+});
+
+describe('DropdownMenuSubMenu light dismiss of the root menu (#6893)', () => {
+  // The browser closes the root `popover=\"auto\"` element itself on an outside
+  // tap; that path never reaches the submenu, whose flyout is
+  // `popover=\"manual\"`. Simulate it by hiding the root popover element
+  // directly, exactly what light dismiss does to it.
+  function lightDismissRootMenu() {
+    const menu = screen.getByRole('menu', {name: /Actions/, hidden: true});
+    const rootPopover = menu.closest<HTMLElement>('[popover]');
+    expect(rootPopover).not.toBeNull();
+    act(() => {
+      rootPopover!.hidePopover();
+    });
+  }
+
+  function getFlyoutPopover(name: RegExp) {
+    const flyout = screen.getByRole('menu', {name, hidden: true});
+    return flyout.closest<HTMLElement>('[popover]');
+  }
+
+  it('closes an open flyout when the root menu is light-dismissed', async () => {
+    const user = userEvent.setup();
+    render(<MoveMenu />);
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const trigger = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    await user.click(trigger);
+    await waitFor(() => {
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    });
+    const flyoutPopover = getFlyoutPopover(/Move to/);
+    expect(flyoutPopover).toHaveAttribute('popover-open', '');
+
+    lightDismissRootMenu();
+
+    await waitFor(() => {
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+    expect(flyoutPopover).not.toHaveAttribute('popover-open');
+  });
+
+  it('leaves the submenu collapsed when the menu reopens after a light dismiss', async () => {
+    const user = userEvent.setup();
+    render(<MoveMenu />);
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const trigger = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    await user.click(trigger);
+    await waitFor(() => {
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    lightDismissRootMenu();
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+
+    await waitFor(() => {
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+    expect(getFlyoutPopover(/Move to/)).not.toHaveAttribute('popover-open');
+  });
+
+  it('closes an open flyout when the root menu closes via controlled isMenuOpen', async () => {
+    const user = userEvent.setup();
+    function ControlledMenu() {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <DropdownMenu
+            button={{label: 'Actions'}}
+            isMenuOpen={open}
+            onOpenChange={setOpen}>
+            <DropdownMenuSubMenu label="Move to">
+              <DropdownMenuItem label="Folder A" onClick={() => {}} />
+            </DropdownMenuSubMenu>
+          </DropdownMenu>
+          <button type="button" onClick={() => setOpen(false)}>
+            close it
+          </button>
+        </>
+      );
+    }
+    render(<ControlledMenu />);
+    const trigger = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    await user.click(trigger);
+    await waitFor(() => {
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    });
+    const flyoutPopover = getFlyoutPopover(/Move to/);
+
+    await user.click(screen.getByRole('button', {name: /close it/}));
+
+    await waitFor(() => {
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+    expect(flyoutPopover).not.toHaveAttribute('popover-open');
+  });
+
+  it('closes flyouts nested two levels deep on light dismiss', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuSubMenu label="Deeper">
+            <DropdownMenuItem label="Leaf" onClick={() => {}} />
+          </DropdownMenuSubMenu>
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const first = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    await user.click(first);
+    await waitFor(() => {
+      expect(first).toHaveAttribute('aria-expanded', 'true');
+    });
+    const deeper = screen.getByRole('menuitem', {
+      name: /Deeper/,
+      hidden: true,
+    });
+    await user.click(deeper);
+    await waitFor(() => {
+      expect(deeper).toHaveAttribute('aria-expanded', 'true');
+    });
+    const firstPopover = getFlyoutPopover(/Move to/);
+    const deeperPopover = getFlyoutPopover(/Deeper/);
+
+    lightDismissRootMenu();
+
+    await waitFor(() => {
+      expect(first).toHaveAttribute('aria-expanded', 'false');
+    });
+    await waitFor(() => {
+      expect(deeper).toHaveAttribute('aria-expanded', 'false');
+    });
+    expect(firstPopover).not.toHaveAttribute('popover-open');
+    expect(deeperPopover).not.toHaveAttribute('popover-open');
+  });
+
+  // Regression for the stale hover timer: a hover over the submenu trigger
+  // schedules an open after the show delay. A press on the same trigger
+  // cancels its own scheduled hover-open (that is the click guard), so the
+  // way a timer is still pending at close time is a close that comes from
+  // elsewhere — here the root menu's light dismiss, the #6893 case. The
+  // close must cancel the scheduled hover-open: once the delay elapses the
+  // flyout stays closed instead of reopening behind the dismissed menu.
+  // Time is driven manually so the dismiss lands inside the show delay;
+  // auto-advancing timers would let the hover-open fire before it.
+  it('cancels a hover-open scheduled before the menu was closed from elsewhere', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<MoveMenu />);
+      fireEvent.click(screen.getByRole('button', {name: /Actions/}));
+      const trigger = screen.getByRole('menuitem', {
+        name: /Move to/,
+        hidden: true,
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      // Schedules the hover-open (default show delay 150ms).
+      fireEvent.mouseEnter(trigger);
+
+      // Close from elsewhere while the hover-open is still pending.
+      lightDismissRootMenu();
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+
+      // The scheduled delay passes; the flyout must stay closed.
+      await act(async () => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(getFlyoutPopover(/Move to/)).not.toHaveAttribute('popover-open');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('DropdownMenuSubMenu header and footer', () => {
+  const h = {hidden: true} as const;
+  // The touch sheet is loaded lazily; resolve it once so the sheets below
+  // render synchronously.
+  beforeAll(warmMenuBottomSheet, 20000);
+  // The bottom sheet is a native dialog, which jsdom does not open.
+  beforeEach(() => {
+    HTMLDialogElement.prototype.showModal = vi.fn(function (
+      this: HTMLDialogElement,
+    ) {
+      this.setAttribute('open', '');
+    });
+    HTMLDialogElement.prototype.close = vi.fn(function (
+      this: HTMLDialogElement,
+    ) {
+      this.removeAttribute('open');
+    });
+  });
+  // Hidden by an attribute, or stepped aside by a style rule (the root's menu
+  // while a view with regions shows). The walk stops at the popover, whose
+  // own open state jsdom does not compute.
+  const isShown = (el: HTMLElement) => {
+    for (
+      let node: HTMLElement | null = el;
+      node != null && !node.hasAttribute('popover');
+      node = node.parentElement
+    ) {
+      if (node.hidden || window.getComputedStyle(node).display === 'none') {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  function LabelsMenu({
+    onCreate,
+    onPick,
+    rootHeader,
+    menuMaxHeight,
+    header = <input aria-label="Filter labels" />,
+  }: {
+    onCreate?: () => void;
+    onPick?: (label: string) => void;
+    rootHeader?: React.ReactNode;
+    menuMaxHeight?: number;
+    header?: React.ReactNode;
+  } = {}) {
+    return (
+      <DropdownMenu
+        button={{label: 'Session'}}
+        header={rootHeader}
+        menuMaxHeight={menuMaxHeight}>
+        <DropdownMenuItem label="Rename" onClick={() => {}} />
+        <DropdownMenuSubMenu
+          label="Labels"
+          header={header}
+          footer={
+            <button type="button" onClick={onCreate}>
+              Create label
+            </button>
+          }>
+          <DropdownMenuItem label="Bug" onClick={() => onPick?.('Bug')} />
+          <DropdownMenuSubMenu label="More">
+            <DropdownMenuItem label="Later" onClick={() => onPick?.('Later')} />
+          </DropdownMenuSubMenu>
+        </DropdownMenuSubMenu>
+      </DropdownMenu>
+    );
+  }
+
+  async function openLabels(props?: Parameters<typeof LabelsMenu>[0]) {
+    const user = userEvent.setup();
+    render(<LabelsMenu {...props} />);
+    const trigger = screen.getByRole('button', {name: /Session/});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    const rootMenu = screen.getByRole('menu', {name: 'Session', ...h});
+    // A pointer open focuses the root menu itself; let that land first.
+    await waitFor(() => expect(rootMenu).toHaveFocus());
+    const row = screen.getByRole('menuitem', {name: /Labels/, ...h});
+    fireEvent.click(row, {detail: 1});
+    const dialog = await screen.findByRole('dialog', {name: /Labels/, ...h});
+    return {user, trigger, rootMenu, row, dialog};
+  }
+
+  const field = () =>
+    screen.getByRole('textbox', {name: 'Filter labels', ...h});
+  const create = () => screen.getByRole('button', {name: 'Create label', ...h});
+  const labelsMenu = () => screen.getByRole('menu', {name: /Labels/, ...h});
+
+  it('holds the header, the rows and the footer in a dialog named by the row, outside every menu', async () => {
+    const {rootMenu, row, dialog} = await openLabels();
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(row).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(row).toHaveAttribute('aria-controls', dialog.id);
+    const menu = labelsMenu();
+    for (const part of [field(), menu, create()]) {
+      expect(dialog).toContainElement(part);
+    }
+    // The sub-menu's menu holds only its rows, and the dialog sits beside the
+    // root's menu, not inside it.
+    expect(menu).not.toContainElement(field());
+    expect(menu).not.toContainElement(create());
+    expect(rootMenu).not.toContainElement(dialog);
+    expect(rootMenu.closest('[popover]')).toContainElement(dialog);
+    expect(
+      field().compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      menu.compareDocumentPosition(create()) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('makes the rows one Tab stop, and Tab and Shift+Tab walk the regions and wrap', async () => {
+    const {row} = await openLabels();
+    const menu = labelsMenu();
+    expect(menu).toHaveAttribute('tabindex', '0');
+    // A pointer open lands on the first row.
+    const bug = screen.getByRole('menuitem', {name: 'Bug', ...h});
+    await waitFor(() => expect(bug).toHaveFocus());
+
+    fireEvent.keyDown(bug, {key: 'Tab'});
+    expect(create()).toHaveFocus();
+    fireEvent.keyDown(create(), {key: 'Tab'});
+    expect(field()).toHaveFocus();
+    fireEvent.keyDown(field(), {key: 'Tab'});
+    expect(menu).toHaveFocus();
+    fireEvent.keyDown(menu, {key: 'Tab', shiftKey: true});
+    expect(field()).toHaveFocus();
+    fireEvent.keyDown(field(), {key: 'Tab', shiftKey: true});
+    expect(create()).toHaveFocus();
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('keeps arrows and letters in the field; Escape there returns to the row and leaves the menu open', async () => {
+    const {trigger, row} = await openLabels();
+    act(() => field().focus());
+    fireEvent.keyDown(field(), {key: 'ArrowLeft'});
+    fireEvent.keyDown(field(), {key: 'b'});
+    expect(field()).toHaveFocus();
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.keyDown(field(), {key: 'Escape'});
+    await waitFor(() => expect(row).toHaveAttribute('aria-expanded', 'false'));
+    expect(row).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('an Escape a control in the region already handled closes only that control: a menu in the header, a field that clears itself', async () => {
+    // A field that clears itself on Escape claims the key.
+    function ClearingField() {
+      const [query, setQuery] = useState('bu');
+      return (
+        <input
+          aria-label="Filter labels"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Escape' && query !== '') {
+              e.preventDefault();
+              setQuery('');
+            }
+          }}
+        />
+      );
+    }
+    const {user, trigger, row} = await openLabels({
+      header: (
+        <>
+          <ClearingField />
+          <DropdownMenu button={{label: 'Sort'}}>
+            <DropdownMenuItem label="By name" onClick={() => {}} />
+          </DropdownMenu>
+        </>
+      ),
+    });
+
+    // The header's own menu takes the first Escape and closes; the sub-menu
+    // and the root menu stay open.
+    const sort = screen.getByRole('button', {name: /Sort/, ...h});
+    await user.click(sort);
+    await waitFor(() => expect(sort).toHaveAttribute('aria-expanded', 'true'));
+    const sortMenu = screen.getByRole('menu', {name: /Sort/, ...h});
+    await waitFor(() => expect(sortMenu).toHaveFocus());
+    fireEvent.keyDown(sortMenu, {key: 'Escape'});
+    await waitFor(() => expect(sort).toHaveAttribute('aria-expanded', 'false'));
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    // A field that clears itself on Escape keeps that Escape too.
+    act(() => field().focus());
+    fireEvent.keyDown(field(), {key: 'Escape'});
+    expect(field()).toHaveValue('');
+    expect(field()).toHaveFocus();
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+
+    // The next Escape, which nothing in the region claims, returns to the row.
+    fireEvent.keyDown(field(), {key: 'Escape'});
+    await waitFor(() => expect(row).toHaveAttribute('aria-expanded', 'false'));
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('an Escape that ends an IME composition in the field closes nothing', async () => {
+    const {trigger, row} = await openLabels();
+    act(() => field().focus());
+    fireEvent.keyDown(field(), {key: 'Escape', isComposing: true});
+    fireEvent.keyDown(field(), {key: 'Escape', keyCode: 229});
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    expect(field()).toHaveFocus();
+    // The next Escape, outside the composition, returns to the row.
+    fireEvent.keyDown(field(), {key: 'Escape'});
+    await waitFor(() => expect(row).toHaveAttribute('aria-expanded', 'false'));
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('a keyboard open lands on the first row, not the field', async () => {
+    const user = userEvent.setup();
+    render(<LabelsMenu />);
+    const trigger = screen.getByRole('button', {name: /Session/});
+    await user.click(trigger);
+    const row = screen.getByRole('menuitem', {name: /Labels/, ...h});
+    act(() => row.focus());
+    fireEvent.keyDown(row, {key: 'ArrowRight'});
+    await waitFor(() =>
+      expect(screen.getByRole('menuitem', {name: 'Bug', ...h})).toHaveFocus(),
+    );
+  });
+
+  it('a press in a region acts on nothing in the menus and keeps both open', async () => {
+    const onCreate = vi.fn();
+    const onPick = vi.fn();
+    const {trigger, row} = await openLabels({onCreate, onPick});
+    fireEvent.pointerDown(field(), {pointerType: 'mouse', button: 0});
+    fireEvent.pointerUp(field(), {pointerType: 'mouse', button: 0});
+    fireEvent.click(field());
+    fireEvent.click(create());
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(onPick).not.toHaveBeenCalled();
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('Tab from a deeper flyout closes it and walks on from the rows', async () => {
+    await openLabels();
+    const more = screen.getByRole('menuitem', {name: /More/, ...h});
+    act(() => more.focus());
+    fireEvent.keyDown(more, {key: 'ArrowRight'});
+    const later = await waitFor(() => {
+      const el = screen.getByRole('menuitem', {name: 'Later', ...h});
+      expect(el).toHaveFocus();
+      return el;
+    });
+    fireEvent.keyDown(later, {key: 'Tab'});
+    await waitFor(() => expect(more).toHaveAttribute('aria-expanded', 'false'));
+    expect(create()).toHaveFocus();
+  });
+
+  // Opens the Labels flyout by hover (timers faked), puts focus on `focusIn`,
+  // and moves the pointer off until the hide delay has run out: the flyout
+  // stays open while focus is inside.
+  function hoverOpenAndLeave(
+    focusIn: () => HTMLElement,
+    header?: React.ReactNode,
+  ) {
+    render(<LabelsMenu header={header} />);
+    fireEvent.click(screen.getByRole('button', {name: /Session/}));
+    const row = screen.getByRole('menuitem', {name: /Labels/, ...h});
+    fireEvent.mouseEnter(row);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    act(() => focusIn().focus());
+    fireEvent.mouseLeave(screen.getByRole('dialog', {name: /Labels/, ...h}));
+    fireEvent.mouseLeave(row);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    return row;
+  }
+
+  it('a flyout the pointer left stays open while focus moves inside it, and closes once focus leaves it', async () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    try {
+      const row = hoverOpenAndLeave(field);
+      await act(async () => create().focus());
+      act(() => {
+        vi.advanceTimersByTime(0);
+      });
+      expect(row).toHaveAttribute('aria-expanded', 'true');
+      // Focus leaving closes it, with no further pointer movement, once the
+      // move has completed.
+      await act(async () =>
+        screen.getByRole('menuitem', {name: 'Rename', ...h}).focus(),
+      );
+      act(() => {
+        vi.advanceTimersByTime(0);
+      });
+      expect(row).toHaveAttribute('aria-expanded', 'false');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a flyout the pointer left stays open while the browser moves focus between its header controls, as an arrow in a radio group does', async () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    try {
+      const radio = (name: string) => screen.getByRole('radio', {name, ...h});
+      const row = hoverOpenAndLeave(
+        () => radio('Any label'),
+        <RadioList label="Match" value="any" onChange={() => {}}>
+          <RadioListItem label="Any label" value="any" />
+          <RadioListItem label="All labels" value="all" />
+        </RadioList>,
+      );
+      // The browser's own move, in its order: the blur, a microtask
+      // checkpoint, then the focus on the next radio.
+      fireEvent.focusOut(radio('Any label'));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      act(() => radio('All labels').focus());
+      act(() => {
+        vi.advanceTimersByTime(0);
+      });
+      expect(row).toHaveAttribute('aria-expanded', 'true');
+      expect(radio('All labels')).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a flyout with regions stays in the popover when the root header comes or goes, which moves the host', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(<LabelsMenu />);
+    const trigger = screen.getByRole('button', {name: /Session/});
+    await user.click(trigger);
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'true'),
+    );
+    const rootMenu = screen.getByRole('menu', {name: 'Session', ...h});
+    fireEvent.click(screen.getByRole('menuitem', {name: /Labels/, ...h}), {
+      detail: 1,
+    });
+    await screen.findByRole('dialog', {name: /Labels/, ...h});
+    const popover = rootMenu.closest<HTMLElement>('[popover]');
+    // The host moves into the regions frame and back out; the flyout follows
+    // the host that is mounted, never a detached one.
+    for (const rootHeader of [
+      <input key="search" aria-label="Search actions" />,
+      undefined,
+    ]) {
+      rerender(<LabelsMenu rootHeader={rootHeader} />);
+      const dialog = await screen.findByRole('dialog', {name: /Labels/, ...h});
+      expect(popover).toContainElement(dialog);
+    }
+  });
+
+  it('a nested flyout with regions closes with the flyout that holds its row', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Session'}}>
+        <DropdownMenuSubMenu
+          label="Labels"
+          header={<input aria-label="Filter labels" />}>
+          <DropdownMenuItem label="Bug" onClick={() => {}} />
+          <DropdownMenuSubMenu
+            label="More"
+            header={<input aria-label="Filter more" />}>
+            <DropdownMenuItem label="Later" onClick={() => {}} />
+          </DropdownMenuSubMenu>
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Session/}));
+    const labelsRow = screen.getByRole('menuitem', {name: /Labels/, ...h});
+    fireEvent.click(labelsRow, {detail: 1});
+    await screen.findByRole('dialog', {name: /Labels/, ...h});
+    const moreRow = screen.getByRole('menuitem', {name: /More/, ...h});
+    fireEvent.click(moreRow, {detail: 1});
+    const moreDialog = await screen.findByRole('dialog', {name: /More/, ...h});
+    const morePopover = moreDialog.closest<HTMLElement>('[popover]');
+    expect(morePopover).toHaveAttribute('popover-open', '');
+    // Escape in the outer flyout's field closes that flyout, and the nested
+    // one, which renders beside the root's menu, with it.
+    act(() => field().focus());
+    fireEvent.keyDown(field(), {key: 'Escape'});
+    await waitFor(() =>
+      expect(labelsRow).toHaveAttribute('aria-expanded', 'false'),
+    );
+    await waitFor(() =>
+      expect(morePopover).not.toHaveAttribute('popover-open'),
+    );
+  });
+
+  it('a menu placed in a region keeps its own press: a mouse release outside it closes it and acts on nothing', async () => {
+    const user = userEvent.setup();
+    const onBug = vi.fn();
+    const onNewest = vi.fn();
+    render(
+      <DropdownMenu button={{label: 'Session'}}>
+        <DropdownMenuItem label="Rename" onClick={() => {}} />
+        <DropdownMenuSubMenu
+          label="Labels"
+          header={
+            <DropdownMenu button={{label: 'Sort'}}>
+              <DropdownMenuItem label="Newest" onClick={onNewest} />
+            </DropdownMenu>
+          }>
+          <DropdownMenuItem label="Bug" onClick={onBug} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Session/}));
+    fireEvent.click(screen.getByRole('menuitem', {name: /Labels/, ...h}), {
+      detail: 1,
+    });
+    await screen.findByRole('dialog', {name: /Labels/, ...h});
+    const sort = screen.getByRole('button', {name: /Sort/, ...h});
+    await user.click(sort);
+    await waitFor(() => expect(sort).toHaveAttribute('aria-expanded', 'true'));
+    const newest = screen.getByRole('menuitem', {name: 'Newest', ...h});
+    const bug = screen.getByRole('menuitem', {name: 'Bug', ...h});
+    fireEvent.pointerDown(newest, {
+      pointerType: 'mouse',
+      pointerId: 1,
+      button: 0,
+    });
+    fireEvent.pointerMove(bug, {pointerType: 'mouse', pointerId: 1});
+    fireEvent.pointerUp(bug, {pointerType: 'mouse', pointerId: 1, button: 0});
+    expect(onBug).not.toHaveBeenCalled();
+    expect(onNewest).not.toHaveBeenCalled();
+    await waitFor(() => expect(sort).toHaveAttribute('aria-expanded', 'false'));
+  });
+
+  it('a press from a menu row released on a row of the flyout acts on it, as in any flyout', async () => {
+    const onPick = vi.fn();
+    const {trigger} = await openLabels({onPick});
+    const rename = screen.getByRole('menuitem', {name: 'Rename', ...h});
+    const bug = screen.getByRole('menuitem', {name: 'Bug', ...h});
+    fireEvent.pointerDown(rename, {
+      pointerType: 'mouse',
+      pointerId: 1,
+      button: 0,
+    });
+    fireEvent.pointerMove(bug, {pointerType: 'mouse', pointerId: 1});
+    fireEvent.pointerUp(bug, {pointerType: 'mouse', pointerId: 1, button: 0});
+    expect(onPick).toHaveBeenCalledWith('Bug');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it("a mouse press from a menu row released on the flyout's field acts on nothing and closes, as outside the menu", async () => {
+    const onPick = vi.fn();
+    const {trigger} = await openLabels({onPick});
+    const rename = screen.getByRole('menuitem', {name: 'Rename', ...h});
+    fireEvent.pointerDown(rename, {
+      pointerType: 'mouse',
+      pointerId: 1,
+      button: 0,
+    });
+    fireEvent.pointerMove(field(), {pointerType: 'mouse', pointerId: 1});
+    fireEvent.pointerUp(field(), {
+      pointerType: 'mouse',
+      pointerId: 1,
+      button: 0,
+    });
+    expect(onPick).not.toHaveBeenCalled();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('without a header or footer the sub-menu is a plain flyout menu', async () => {
+    const user = userEvent.setup();
+    render(<MoveMenu />);
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const row = screen.getByRole('menuitem', {name: /Move to/, ...h});
+    fireEvent.click(row, {detail: 1});
+    await waitFor(() => expect(row).toHaveAttribute('aria-expanded', 'true'));
+    expect(row).toHaveAttribute('aria-haspopup', 'menu');
+    expect(screen.queryByRole('dialog', h)).toBeNull();
+  });
+
+  describe('on a phone', () => {
+    const originalMatchMedia = window.matchMedia;
+    beforeEach(() => {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn().mockImplementation((query: string) => ({
+          matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      );
+    });
+    afterEach(() => {
+      vi.stubGlobal('matchMedia', originalMatchMedia);
+    });
+
+    it('the drilled-in view holds the regions beside its menu while the root steps aside, and Escape in its field returns', async () => {
+      const {rootMenu, row, dialog} = await openLabels({
+        rootHeader: <input aria-label="Search actions" />,
+      });
+      const rootField = screen.getByRole('textbox', {
+        name: 'Search actions',
+        ...h,
+      });
+      expect(isShown(dialog)).toBe(true);
+      expect(dialog).toHaveAttribute('aria-modal', 'true');
+      expect(row).toHaveAttribute('aria-haspopup', 'dialog');
+      // The view sits beside the root's menu, which steps aside with its own
+      // header; the view leads with a Back row.
+      expect(rootMenu).not.toContainElement(dialog);
+      expect(isShown(rootMenu)).toBe(false);
+      expect(isShown(rootField)).toBe(false);
+      expect(dialog.closest('[popover]')).toBe(rootMenu.closest('[popover]'));
+      const viewRows = Array.from(
+        labelsMenu().querySelectorAll('[role="menuitem"]'),
+      )
+        .filter(el => isShown(el as HTMLElement))
+        .map(el => el.textContent);
+      expect(viewRows[0]).toBe('Back to Session');
+      for (const part of [field(), labelsMenu(), create()]) {
+        expect(dialog).toContainElement(part);
+      }
+
+      // Escape in the field returns to the row; the root comes back.
+      act(() => field().focus());
+      fireEvent.keyDown(field(), {key: 'Escape'});
+      await waitFor(() => expect(row).toHaveFocus());
+      expect(isShown(rootMenu)).toBe(true);
+      expect(isShown(rootField)).toBe(true);
+    });
+
+    it('a shown view follows its header or footer as it comes and goes: beside the root menu with one, inside it without', async () => {
+      function TogglingLabels() {
+        const [hasHeader, setHasHeader] = useState(true);
+        return (
+          <>
+            <button type="button" onClick={() => setHasHeader(v => !v)}>
+              Toggle filter
+            </button>
+            <DropdownMenu button={{label: 'Session'}}>
+              <DropdownMenuItem label="Rename" onClick={() => {}} />
+              <DropdownMenuSubMenu
+                label="Labels"
+                header={
+                  hasHeader ? <input aria-label="Filter labels" /> : undefined
+                }>
+                <DropdownMenuItem label="Bug" onClick={() => {}} />
+              </DropdownMenuSubMenu>
+            </DropdownMenu>
+          </>
+        );
+      }
+      const user = userEvent.setup();
+      render(<TogglingLabels />);
+      await user.click(screen.getByRole('button', {name: /Session/}));
+      const rootMenu = screen.getByRole('menu', {name: 'Session', ...h});
+      fireEvent.click(screen.getByRole('menuitem', {name: /Labels/, ...h}), {
+        detail: 1,
+      });
+      await screen.findByRole('dialog', {name: /Labels/, ...h});
+      expect(isShown(rootMenu)).toBe(false);
+      const toggle = screen.getByRole('button', {name: 'Toggle filter'});
+      const bugIsShown = () =>
+        isShown(screen.getByRole('menuitem', {name: 'Bug', ...h}));
+
+      // The header goes: the view drills in inside the root's menu, which
+      // shows again with the view's rows.
+      fireEvent.click(toggle);
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', {name: /Labels/, ...h})).toBeNull(),
+      );
+      expect(isShown(rootMenu)).toBe(true);
+      expect(bugIsShown()).toBe(true);
+
+      // It comes back: the view moves beside the root's menu, which steps
+      // aside again.
+      fireEvent.click(toggle);
+      const dialog = await screen.findByRole('dialog', {
+        name: /Labels/,
+        ...h,
+      });
+      expect(isShown(dialog)).toBe(true);
+      expect(isShown(rootMenu)).toBe(false);
+      expect(bugIsShown()).toBe(true);
+    });
+
+    it("a drilled-in view with a header or footer caps at the root's menuMaxHeight, as the plain view does", async () => {
+      const {dialog} = await openLabels({menuMaxHeight: 560});
+      expect(dialog.getAttribute('style')).toContain('min(560px');
+    });
+
+    it('Tab in the drilled-in view wraps through its own regions', async () => {
+      await openLabels();
+      act(() => field().focus());
+      fireEvent.keyDown(field(), {key: 'Tab'});
+      expect(labelsMenu()).toHaveFocus();
+      fireEvent.keyDown(labelsMenu(), {key: 'Tab'});
+      expect(create()).toHaveFocus();
+      fireEvent.keyDown(create(), {key: 'Tab'});
+      expect(field()).toHaveFocus();
+    });
   });
 });

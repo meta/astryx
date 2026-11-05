@@ -14,7 +14,12 @@ export type AuthoredDocKind =
   | 'schema'
   | 'command'
   | 'enum'
-  | 'namespace';
+  | 'namespace'
+  /**
+   * An icon definition (spec:AST-084 FR4).
+   * @experimental May change or be removed in a patch release.
+   */
+  | 'icon-definition';
 
 /** Visibility of an authored doc in a compiled audience-specific bundle. */
 export type DocAudience = 'public' | 'internal';
@@ -45,6 +50,10 @@ export interface AuthoredDocGraphFields {
   /** Reserved: docs bundle audience; omit for public docs. Nothing reads it
    *  yet. */
   audience?: DocAudience;
+  /** Set on the doc of an experimental surface (spec:AST-017 FR21, FR27),
+   *  whose text then says it may change or be removed in a patch release. A
+   *  command's help shows it as `[experimental]`. Omit for stable surfaces. */
+  stability?: 'experimental';
 }
 
 /**
@@ -383,6 +392,12 @@ export interface ComponentPropDoc {
    *  ```
    */
   slotElements?: ComponentSlotElement[];
+  /** Lifecycle marker for a prop outside the stable compatibility promise
+   *  (spec:AST-017 FR21). Set `'experimental'` on a stable component's
+   *  optional `experimental` prop object, and say in `description` that its
+   *  contents may change or be removed in a patch release. Omit for stable
+   *  props. */
+  stability?: 'experimental';
 }
 
 /**

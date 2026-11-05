@@ -36,6 +36,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useCalendarConstraints} from '../Calendar';
 import type {DateInputProps} from './DateInput';
 import {hasEditableDateSegments} from './nativeDateSegments';
@@ -49,13 +50,14 @@ import {
 } from '../Field';
 import {useInputStatusIcon, useMergedRefs} from '../hooks';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {useInputGroup} from '../InputGroup';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {joinAriaIDs} from '../utils/inputAria';
-import {groupStyles} from '../InputGroup/groupStyles';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext';
 import {Spinner} from '../Spinner';
 import {
@@ -80,6 +82,13 @@ import {
   type ISODateString,
 } from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateInput/NativeDateField.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   wrapper: {
@@ -295,7 +304,7 @@ export function NativeDateField({
     onBlur: onBlurProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -317,15 +326,19 @@ export function NativeDateField({
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
   const isBusy = isLoading || optimisticValue !== value;
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8).
+  useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), inputRef);
   // Keep the OS picker mounted and focusable while its own Action is pending.
   // Native TimeInput follows the same pattern: commit guards block duplicates,
   // while aria-busy and the Spinner communicate the save without detaching the
   // platform picker from its input.
   const isEffectivelyDisabled = isDisabled || isLoading;
 
-  // Disabled-reason tooltip, same contract as the other two surfaces: a
-  // disabled control swallows pointer events, so the listeners attach to the
-  // wrapper and the input stays focusable via aria-disabled.
+  // Same contract as the other two surfaces: a disabled field never renders
+  // native `disabled` (spec:AST-085 FR1); the input stays focusable via
+  // aria-disabled and readOnly. The disabled-reason tooltip's listeners
+  // attach to the wrapper.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -571,6 +584,7 @@ export function NativeDateField({
       ref={el => {
         disabledMessageTooltip.ref(el);
       }}
+      {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('date-input', {
           size,
@@ -581,7 +595,11 @@ export function NativeDateField({
           inputWrapperStyles.base,
           sizeStyles[size],
           styles.wrapper,
-          isEffectivelyDisabled && inputWrapperStyles.disabled,
+          // Disabled paint belongs to the disabled state only; a busy field
+          // keeps its ordinary paint and shows the Spinner (spec:AST-085
+          // FR6, family:buttons FR4).
+          isDisabled && inputWrapperStyles.disabled,
+          isEffectivelyDisabled && inputDisabledFocusStyles.inputFocusRing,
           status && inputStatusBorderStyles[status.type],
           status &&
             !isEffectivelyDisabled &&
@@ -597,7 +615,7 @@ export function NativeDateField({
       <button
         type="button"
         onClick={openPicker}
-        disabled={isEffectivelyDisabled}
+        aria-disabled={isEffectivelyDisabled || undefined}
         aria-label={t('@astryx.dateInput.openCalendar')}
         tabIndex={-1}
         {...stylex.props(
@@ -615,6 +633,7 @@ export function NativeDateField({
       <span {...stylex.props(styles.slot)}>
         <input
           {...controlProps}
+          onClick={isEffectivelyDisabled ? undefined : controlProps.onClick}
           ref={mergedInputRef}
           id={id}
           type="date"
@@ -626,9 +645,8 @@ export function NativeDateField({
           onBlur={chainEventHandlers(handleBlur, onBlurProp)}
           min={min}
           max={max}
-          disabled={isEffectivelyDisabled && !showsDisabledMessage}
-          aria-disabled={showsDisabledMessage ? 'true' : undefined}
-          readOnly={showsDisabledMessage || undefined}
+          aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
+          readOnly={isEffectivelyDisabled || undefined}
           aria-labelledby={
             ariaLabelledByProp != null
               ? joinAriaIDs(ariaLabelledBy ?? fieldLabelID, ariaLabelledByProp)
@@ -674,7 +692,7 @@ export function NativeDateField({
           onClick={handleClear}
         />
       )}
-      {isBusy && <Spinner size="sm" />}
+      {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {statusIcon}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}

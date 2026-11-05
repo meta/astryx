@@ -4,10 +4,11 @@ Internal build-time scripts. Not shipped, not part of any package.
 
 <!-- SYNC: When files in this directory change, update this document. -->
 
-| File                             | Purpose                                                                                                                                                                                                                               |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `upload-crowdin-screenshots.mjs` | Build storybook, capture in-context screenshots for i18n catalog keys, upload to Crowdin, and POST tag positions so each screenshot pixel-links to the matching source string.                                                        |
-| `lib/crowdin-strategies.mjs`     | Declarative measurement strategies (visibleText, textRun, option, placeholder, ariaLabel, chipOperator, filterInput, footerButton, srOnlyLabel, srOnlyReveal, liveRegionReveal) used by the upload script to resolve tag coordinates. |
+| File                             | Purpose                                                                                                                                                                                                                                                                           |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `upload-crowdin-screenshots.mjs` | Build storybook, capture in-context screenshots for i18n catalog keys, upload to Crowdin, and POST tag positions so each screenshot pixel-links to the matching source string.                                                                                                    |
+| `lib/crowdin-strategies.mjs`     | Declarative measurement strategies (visibleText, textRun, option, placeholder, ariaLabel, chipOperator, filterInput, footerButton, srOnlyLabel, srOnlyReveal, liveRegionReveal) used by the upload script to resolve tag coordinates.                                             |
+| `bottom-sheet-safari-check.mjs`  | Manual real-Safari check (W3C WebDriver over `safaridriver`, no dependencies) for BottomSheet stacking, replace, non-modal popover hosting, toast order and focus return against a deployed Storybook; prints a pass/fail/skipped/not-driven table and writes JSON + screenshots. |
 
 The file-level context Crowdin shows beside every string in the catalog is a
 field on the file record, not something `crowdin.yml` can declare; a step in
@@ -92,3 +93,14 @@ Crowdin's built-in `--auto-tag` uses fuzzy text matching, which produces false p
 - After adding a new story that better exposes existing keys.
 
 `--replace-tags` handles the "just update the pixel positions" case cleanly.
+
+## bottom-sheet-safari-check.mjs
+
+Real-Safari evidence for the BottomSheet stacking and replace behaviour, which Linux CI (Chromium, Playwright WebKit) cannot produce. On a Mac with Safari ▸ Develop ▸ Allow Remote Automation enabled:
+
+```bash
+safaridriver --port 4799 &
+node internal/scripts/bottom-sheet-safari-check.mjs <storybook base URL> <label> [out dir]
+```
+
+Each run writes `<label>-results.json` (every per-frame sample), `<label>-summary.md` and screenshots to the out dir (the label is flattened for file names first: `/`, `\`, spaces and other unsafe characters become `-`, so a branch name works as given) (default `internal/scripts/output/safari/`, which git ignores), exits 1 if a check fails — so every run against current `main` exits 1: its `show()` host fails the non-modal hosting row, and with it the no-scrim rows that depend on top-layer hosting (`focus return: lone no-scrim sheet, Escape`, `replace handoff (no-scrim)`), which is the gap the stacking change closes — and exits 1 without running when the Storybook index cannot be read (a wrong base URL). A story the deployment lacks is recorded as `skipped` — the stacking and replace stories (`core-bottomsheetstacking--*`, `core-bottomsheetreplace--*`) ship with the open-order stacking change and are skipped on a deployment without it, where the switcher and no-scrim checks still run; a check Safari's WebDriver cannot drive reliably (hover) is `not-driven`, never faked, and so is a check whose precondition did not hold (no sheet presented for a sheet action; a fast Back whose Back button was not found — after the 1 → 2 handoff it did measure has been graded, so a failed handoff is still `fail`); when a step throws, each check that step owns is recorded as `fail` with the error, so the table keeps its shape. macOS Safari evidence informs but does not satisfy an iOS Safari claim (spec AST-013).

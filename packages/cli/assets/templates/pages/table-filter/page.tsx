@@ -4099,7 +4099,7 @@ export default function TableFilterTemplate() {
             restates the selected tab word for word, and the strip already
             marks which one that is. On a phone that is a line of vertical
             space spent saying it twice. The panel keeps the name for anyone
-            not seeing the strip, as its accessible label. */}
+            not seeing the strip: its selected tab labels it. */}
         <TabList
           value={viewSection}
           onChange={value => setViewSection(value as ViewSection)}
@@ -4109,6 +4109,7 @@ export default function TableFilterTemplate() {
           {VIEW_SECTIONS.map(section => (
             <Tab
               key={section.key}
+              id={`${viewPanelId}-tab-${section.key}`}
               value={section.key}
               label={section.label}
               icon={section.icon}
@@ -4126,7 +4127,7 @@ export default function TableFilterTemplate() {
           gap={0}
           id={viewPanelId}
           role="tabpanel"
-          aria-label={activeSection?.title}
+          aria-labelledby={`${viewPanelId}-tab-${viewSection}`}
           paddingBlockStart={3}>
           {viewPanelBody()}
         </VStack>

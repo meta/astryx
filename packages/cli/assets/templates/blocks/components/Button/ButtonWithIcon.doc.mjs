@@ -10,4 +10,10 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Button', 'Icon', 'Layout'],
+  icons: {
+    ArrowDownTrayIcon: 'download',
+    PencilSquareIcon: 'compose',
+    PlusIcon: 'add',
+    TrashIcon: 'delete',
+  },
 };

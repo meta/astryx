@@ -49,13 +49,13 @@ export const doc = {
       name: 'namespace',
       type: 'string',
       description:
-        "The group that reads this doc: 'authoring' for a file an author writes (a section of {@link generic:authoring}), or 'cli/api' for a shape the CLI returns (the docs tree adopts it by kind, as the leaf `cli/api/schemas/<name>`). Every schema doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that nothing reads.",
+        "The group that reads this doc: 'authoring' for a file an author writes (a section of {@link generic:field-reference}), or 'cli/api' for a shape the CLI returns (the docs tree adopts it by kind, as the leaf `cli/api/schemas/<name>`). Every schema doc the CLI ships declares one, and `astryx doctor` fails on one that is missing or that nothing reads.",
     },
     {
       name: 'aliases',
       type: 'string[]',
       description:
-        'Alternate slugs that also resolve to this doc (back-compat).',
+        'Reserved: alternate slugs for this doc. Nothing reads it yet: `astryx docs` finds a schema doc by its `name` only.',
     },
     {
       name: 'appliesTo',
@@ -141,7 +141,7 @@ export const doc = {
       name: 'notes',
       type: 'ReferenceContentBlock[]',
       description:
-        'Freeform prose/notes rendered after the field table. Same block union as ReferenceDoc (prose, heading, code, table, list, token-ref).',
+        'Freeform prose/notes rendered after the field table and examples. The stable ReferenceContentBlock union (prose, heading, code, table, list, token-ref), without the reference block a ReferenceDoc section also takes; a token-ref note is accepted but not rendered.',
     },
   ],
   examples: [
@@ -152,17 +152,17 @@ export const doc = {
   type: 'schema',
   name: 'integration',
   displayName: 'Astryx Integration',
-  namespace: 'cli',
-  description: 'The astryx.integration.* manifest that registers the components a package provides.',
+  namespace: 'authoring',
+  description: 'The astryx.integration.* manifest that points the CLI at what a package contributes.',
   appliesTo: 'astryx.integration.{ts,mjs,js}',
   fields: [
-    {name: 'name', type: 'string', description: 'Package name.', required: true},
+    {name: 'docs', type: 'string', description: 'The folder that holds your doc topics, relative to package.json.'},
     {
-      name: 'components',
-      type: '{ dir: string }',
-      description: 'Where component sources live.',
+      name: 'agentDocs',
+      type: '{ append?: readonly string[] }',
+      description: 'Guidance your package adds to the agent instructions the CLI manages.',
       fields: [
-        {name: 'components.dir', type: 'string', description: 'Glob root for Acme*.tsx files.', required: true},
+        {name: 'agentDocs.append', type: 'readonly string[]', description: 'Lines added at the end, at most eight.'},
       ],
     },
   ],

@@ -4,7 +4,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {expect, waitFor} from 'storybook/test';
 import {useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
-import {InputGroup} from '@astryxdesign/core/InputGroup';
+import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import {Selector, SelectorOption} from '@astryxdesign/core/Selector';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {RadioIndicator} from '@astryxdesign/core/Indicator';
@@ -63,7 +63,7 @@ const meta: Meta<typeof Selector> = {
     },
     variant: {
       control: 'radio',
-      options: ['input', 'ghost'],
+      options: ['input', 'secondary', 'ghost'],
       description: 'Visual trigger style',
     },
     placement: {
@@ -140,6 +140,28 @@ export const Default: Story = {
   },
   args: {
     placeholder: 'Select a fruit...',
+  },
+};
+
+const LONG_LIST = Array.from({length: 120}, (_, i) => `Team ${i + 1}`);
+
+/**
+ * A long option list: the list scrolls, End and PageDown scroll it, and a
+ * mouse resting over it keeps the highlight where the keys put it.
+ */
+export const LongList: Story = {
+  tags: ['!autodocs'],
+  render: () => {
+    const [value, setValue] = useState<string | undefined>(undefined);
+    return (
+      <Selector
+        label="Team"
+        options={LONG_LIST}
+        value={value}
+        onChange={v => setValue(v)}
+        presentation="popover"
+      />
+    );
   },
 };
 
@@ -875,6 +897,81 @@ export const GhostVariant: Story = {
           statusVariant="tooltip"
         />
         <Button label="Export" variant="ghost" />
+      </div>
+    );
+  },
+  decorators: [Story => <Story />],
+};
+
+// Secondary variant for nav composition beside secondary buttons
+export const SecondaryVariant: Story = {
+  render: () => {
+    const [platform, setPlatform] = useState<string | undefined>('all');
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          width: 'max-content',
+        }}>
+        <Button label="Share" variant="secondary" />
+        <Selector
+          label="Platform"
+          isLabelHidden
+          variant="secondary"
+          size="md"
+          options={[
+            {value: 'all', label: 'All platforms'},
+            {value: 'ios', label: 'iOS'},
+            {value: 'android', label: 'Android'},
+          ]}
+          value={platform}
+          onChange={setPlatform}
+        />
+        <Button label="Export" variant="secondary" />
+      </div>
+    );
+  },
+  decorators: [Story => <Story />],
+};
+
+// Secondary trigger as the first, middle, and last member of an InputGroup:
+// it keeps its neutral fill and takes the group's row height and seam edges.
+export const SecondaryInInputGroup: Story = {
+  render: () => {
+    const options = [
+      {value: 'all', label: 'All platforms'},
+      {value: 'ios', label: 'iOS'},
+      {value: 'android', label: 'Android'},
+    ];
+    const selector = (label: string) => (
+      <Selector
+        label={label}
+        isLabelHidden
+        variant="secondary"
+        options={options}
+        value="all"
+        onChange={() => {}}
+      />
+    );
+    return (
+      <div
+        data-secondary-input-group-matrix
+        style={{display: 'grid', gap: 16, width: 320}}>
+        <InputGroup label="Secondary first" isLabelHidden>
+          {selector('Platform first')}
+          <InputGroupText>.app</InputGroupText>
+        </InputGroup>
+        <InputGroup label="Secondary middle" isLabelHidden>
+          <InputGroupText>@</InputGroupText>
+          {selector('Platform middle')}
+          <InputGroupText>.app</InputGroupText>
+        </InputGroup>
+        <InputGroup label="Secondary last" isLabelHidden>
+          <InputGroupText>@</InputGroupText>
+          {selector('Platform last')}
+        </InputGroup>
       </div>
     );
   },

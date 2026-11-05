@@ -86,11 +86,45 @@ const STRUCTURAL_VARS = new Set([
   // replays on pinned cells. Structural/runtime, not themeable design tokens.
   '--table-sticky-background',
   '--table-row-overlay',
+  // The width a cell's row divider draws (0 on the last row), which a pinned
+  // cell's or a detail panel's own divider reads (Table/rowDivider.ts).
+  // Private runtime plumbing, never authored by a theme.
+  '--_table-row-divider-width',
+  // A gliding row's divider, carried on the row for the glide
+  // (Table/glidingDivider.ts). Private runtime plumbing.
+  '--_table-row-glide-width',
+  '--_table-row-glide-style',
+  '--_table-row-glide-color',
+  '--_table-row-glide-offset',
   '--separator-display',
   '--astryx-section-padding',
   // Private counterpart of the public token above: one ancestor Section's
   // padding, propagated down the tree. Structural, never authored by a theme.
   '--_section-padding-propagated',
+  // Layout's middle row tells LayoutContent that a divider-less header or
+  // footer sits beside it (Layout/layoutEdges.stylex.ts). Structural, never
+  // authored by a theme.
+  '--_layout-flush-block-start',
+  '--_layout-flush-block-end',
+  // ProgressBar's filled share of the track, written inline from `value` on
+  // every render and read by the fill's transform. Runtime state, never
+  // authored by a theme.
+  '--_progress-bar-fill',
+  // ProgressBar's touch layer (ProgressBarTouch) writes these inline on every
+  // render: the touch move's duration and curve, the three-step return offset
+  // and the touch minimum. The duration and curve are the progress table's
+  // motion roles, which no theme sets. Runtime state, never authored by a
+  // theme.
+  '--_progress-bar-move',
+  '--_progress-bar-curve',
+  '--_progress-bar-flip',
+  '--_progress-bar-min',
+  // The reduced-motion pulse's duration, curve and floor, written inline from
+  // the progress table on the indeterminate fill. Runtime state, never
+  // authored by a theme.
+  '--_progress-bar-pulse',
+  '--_progress-bar-pulse-curve',
+  '--_progress-bar-pulse-floor',
 ]);
 
 /**
@@ -224,13 +258,11 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
   Chat: 'chat',
   ContextMenu: 'context-menu',
   Dialog: 'dialog',
-  // The Drawer doc file lives in packages/lab/src/Drawer, outside this
-  // package's scan; the mapping keeps the registry orphan check honest and
-  // defineTheme.test.ts pins the expansion.
   Drawer: 'drawer',
   DropdownMenu: 'dropdown-menu',
   Field: 'field',
   HoverCard: 'hover-card',
+  Icon: 'icon',
   Item: 'item',
   NumberInput: 'number-input',
   Popover: 'popover',
@@ -248,6 +280,19 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
  * e.g. Carousel and Thumbnail set --_button-radius for their child Buttons,
  * but --_button-radius is documented in Button's doc.
  */
+/**
+ * Private system variables a component sets that are never a theming surface:
+ * no component documents them, and a theme never writes them. Each is named
+ * by the record that requires it.
+ */
+const PRIVATE_SYSTEM_VARS = new Set([
+  // Text and Heading FR3: a container that wraps with `overflow-wrap:
+  // anywhere` passes it to the Text inside it; Text reads it with a
+  // `break-word` fallback. scripts/text-overflow-wrap-anywhere.test.mjs
+  // keeps every such container setting it.
+  '--_astryx-text-overflow-wrap',
+]);
+
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   Carousel: ['--_button-radius'],
   Thumbnail: ['--_button-radius'],
@@ -264,6 +309,9 @@ const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   // The destructive item variant recolors the Item it renders; Item owns,
   // documents and reads both slots.
   DropdownMenu: ['--_item-label-color', '--_item-description-color'],
+  // List's edge="flush" zeroes the inline inset of the Item each ListItem
+  // renders; Item owns, documents and reads it.
+  List: ['--_item-inset-inline'],
   // A layer content root stops an outer Stepper's connector gap; Stepper owns,
   // documents and reads it.
   Layer: ['--step-connector-gap'],
@@ -292,18 +340,31 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // properties a theme author sets on the component.
   '--_thumbnail-hit-inset',
   '--_input-clear-hit-inset',
-  // The interaction overlay's fill and its transition on the ::after layer of
-  // the cards: written by the component's own hover / pressed arms (mouse
-  // `:active`, touch `data-astryx-press`), never a value a theme author sets; the
-  // overlay colours themselves are the shared interaction tokens.
+  '--_power-search-sheet-hit-inset',
+  // The border width a host draws where its touch hit layer reaches past,
+  // such as a divided ListItem's divider (0 on the last row).
+  // The ::after layer adds it to its offset, so the band starts past the
+  // border. It is the layer's geometry, not a property a theme author sets. A
+  // theme changes the divider through `--border-width`, which this follows.
+  '--_hit-border-bottom',
+  // The interaction overlay's colour on the ::after layer of the cards:
+  // written by the component's own hover and mouse `:active` arms, never a
+  // value a theme author sets; the overlay colours themselves are the shared
+  // interaction tokens.
   '--_press-overlay',
-  '--_press-overlay-transition',
   // The touch press's paint at its current strength, declared once by the
   // shared overlay styles on the element the controller writes to and read
   // by whatever paints it. A theme sets `--color-overlay-pressed`, not this.
   '--_press-paint',
   '--_press-paint-image',
+  // A checkbox row's touch press image, which an indicator that paints its
+  // own press inherits. The row writes it from the press paint above.
+  '--_indicator-press-image',
+  // A CheckboxList row's own press paint, handed to its checkbox's box:
+  // written by the row's own press arms, never a value a theme author sets.
+  '--_checkbox-row-press-paint',
   '--_input-clear-hit-content',
+  '--_power-search-sheet-hit-content',
   // Placement and swipe lifecycle values are private Toast behavior. A theme
   // author controls the surface transform/opacity as a whole, not these values.
   '--_toast-slide-y',
@@ -311,6 +372,10 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--_toast-swipe-exit-y',
   '--_toast-swipe-opacity',
   '--_toast-swipe-scale',
+  // Set by each ChatMessage article from its own content and read as its
+  // avatar's top margin, so the avatar lines up with a name row. Content
+  // state, not a value a theme author sets.
+  '--_chat-avatar-offset',
   // Indentation and row-spacing metrics: --tree-list-indent is the authorable
   // step, --_tree-indent the per-row distance TreeListItem computes from it.
   // --tree-list-row-gap is applied as half a padding-block on each row wrapper,
@@ -319,6 +384,10 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--tree-list-indent',
   '--_tree-indent',
   '--tree-list-row-gap',
+  // Published by each treeitem while it has keyboard focus and read as its
+  // row's z-index, so the focused row paints above the guide lines. Focus
+  // state, not a value a theme author sets.
+  '--_tree-focus-z',
   // Clipped on the ONE side each on-track connector segment faces the
   // indicator from — trailing above the node, leading below it, mirrored
   // again per axis. No standard property maps onto this purpose-based seam:
@@ -364,7 +433,10 @@ describe('component CSS vars are documented and themeable', () => {
 
     it(`${dir}: all source vars are in doc file`, () => {
       const undocumented = sourceVars.filter(
-        v => !docVars.includes(v) && !crossVars.has(v),
+        v =>
+          !docVars.includes(v) &&
+          !crossVars.has(v) &&
+          !PRIVATE_SYSTEM_VARS.has(v),
       );
       expect(
         undocumented,
@@ -491,6 +563,20 @@ describe('getDerivedVars', () => {
     expect(result).toHaveLength(1);
     expect(result[0].vars).toEqual(['--_textarea-inline-padding']);
     expect(result[0].replaces).toBe(true);
+  });
+
+  it('marks icon width and height as replacing the source property', () => {
+    // spec:AST-087 FR10: the glyph reads these vars for its dimension, so a
+    // raw width/height beside them would only compete with its size styles.
+    for (const [property, varName] of [
+      ['width', '--_icon-width'],
+      ['height', '--_icon-height'],
+    ]) {
+      const result = getDerivedVars('icon', property);
+      expect(result).toHaveLength(1);
+      expect(result[0].vars).toEqual([varName]);
+      expect(result[0].replaces).toBe(true);
+    }
   });
 
   it('marks progress-bar-mark width and height as replacing the source property', () => {

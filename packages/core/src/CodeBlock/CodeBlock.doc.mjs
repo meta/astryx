@@ -28,9 +28,9 @@ export const docs = {
     },
     {
       name: 'language',
-      type: 'string',
+      type: 'string | CodeLanguage',
       description:
-        'Language for syntax highlighting. Use "plaintext" to disable.',
+        'Language for syntax highlighting. A string selects a built-in: ts, js, tsx, jsx, json, html, xml, svg, css, scss, less, python, bash/sh/zsh/shell, php, hack, yaml, markdown, c, cpp (c++, cc, cxx, hpp, hh), sql, rust, kotlin, swift, go. Any other language is a value you import on its own and pass here: graphql, java, thrift, objectiveC, toml, powershell, ruby, lua, dockerfile from @astryxdesign/core/CodeBlock/languages/<path> (e.g. languages/graphql, languages/objective-c), or your own made with createCodeLanguage({name, identifiers, tokenize}). A value labels with its name and reflects its first identifier as data-language. Use "plaintext" to disable.',
       default: "'plaintext'",
     },
     {
@@ -52,9 +52,24 @@ export const docs = {
       default: 'false',
     },
     {
+      name: 'startLineNumber',
+      type: 'number',
+      description:
+        'First line number shown in the gutter. The gutter shows file coordinates (startLineNumber + index) so a code excerpt reads with its real line numbers. highlightLines uses the same file coordinates. Values below 1 clamp to 1.',
+      default: '1',
+    },
+    {
       name: 'highlightLines',
       type: 'number[]',
-      description: '1-indexed line numbers to highlight.',
+      description:
+        '1-indexed line numbers to highlight, in the same file coordinates as the gutter (see startLineNumber). Out-of-range entries render no highlight.',
+    },
+    {
+      name: 'isDiff',
+      type: 'boolean',
+      default: 'false',
+      description:
+        'Render the code as a unified diff over `language`: lines starting with + are added, - removed, @@ is a hunk header (a `--- `/`+++ ` file-header pair directly before one is a header too), anything else is context. The language label reads `diff` or `<language> diff`. The glyph sits in its own column and the rest of each line keeps syntax highlighting; copy returns the exact source. Markdown ```diff and ```diff-<lang> fences set this.',
     },
     {
       name: 'hasCopyButton',
@@ -66,6 +81,22 @@ export const docs = {
       name: 'onCopy',
       type: '() => void',
       description: 'Callback after the code is copied.',
+    },
+    {
+      name: 'endContent',
+      type: 'ReactNode',
+      description:
+        'Your own controls, shown just before Copy: in the header when the block has one, otherwise beside the code in the top inline-end corner, never over it. It never creates a header and never collapses the block. Ghost sm IconButtons match Copy’s size and variant.',
+      slotElements: [
+        {
+          __element: 'IconButton',
+          props: {
+            variant: 'ghost',
+            size: 'sm',
+            label: 'Run in terminal',
+          },
+        },
+      ],
     },
     {
       name: 'isWrapped',
@@ -101,7 +132,8 @@ export const docs = {
     {
       name: 'tokenizer',
       type: '(code: string, language: string) => Array<{type: string; start: number; end: number}>',
-      description: 'Custom tokenizer override for unsupported languages.',
+      description:
+        'Deprecated: pass language={createCodeLanguage({name, identifiers, tokenize})} with this same function instead. Still works exactly as released and wins over the language; astryx upgrade rewrites static uses.',
     },
     {
       name: 'syntaxTheme',
@@ -223,7 +255,7 @@ export const docs = {
         name: 'Header Bar',
         required: false,
         description:
-          'Shows the title, visible language label, and copy button when a header is present. A title or visible language label creates the header; the copy button alone floats at the top-end of a headerless block.',
+          'Shows the title, visible language label, endContent, and copy button when a header is present. A title or visible language label creates the header at every line count. With no title and hasLanguageLabel={false}, endContent and the copy button sit in their own column beside the code, centred on the first line, and never cover it; a one-line block then reads as a single row.',
       },
       {
         name: 'Header Title',

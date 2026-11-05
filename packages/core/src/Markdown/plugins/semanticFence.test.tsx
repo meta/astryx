@@ -412,9 +412,10 @@ describe('createMarkdownFenceTransform', () => {
     expect(createNode).not.toHaveBeenCalled();
     expect(document.querySelector('pre')).toHaveTextContent('plain source');
     expect(screen.getByRole('button', {name: 'Copy code'})).toBeInTheDocument();
+    // CodeBlock's named viewport; its tab stop follows overflow (none in jsdom).
     expect(screen.getByRole('group', {name: 'text'})).toHaveAttribute(
-      'tabindex',
-      '0',
+      'data-scroll-axis',
+      'both',
     );
 
     rerender(

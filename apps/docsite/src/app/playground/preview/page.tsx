@@ -30,7 +30,8 @@ import {
   setCleanSource,
   setPostToParent,
 } from '../propertyEditor/targetingOverlay';
-import {runCode, setTypeScript} from './runner';
+import {runCode, setTypeScript, type LocalModules} from './runner';
+import {loadPostModules} from './postModules';
 import {
   acceptPreviewConnect,
   announcePreview,
@@ -63,7 +64,14 @@ const useIsomorphicLayoutEffect =
   typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 type PreviewMessage =
-  | {type: 'preview-code'; code: string; source: string}
+  | {
+      type: 'preview-code';
+      code: string;
+      source: string;
+      // A blog post's live example (spec:AST-033 FR22): the post whose
+      // post-local example assets the code may import by relative path.
+      post?: string;
+    }
   | {type: 'preview-clear'}
   | {
       type: 'preview-theme';
@@ -132,6 +140,9 @@ export default function PreviewPage() {
   const readyRef = useRef<MessagePort | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  // Counts code messages, so a run that waits on a post's example assets
+  // never lands after a newer message.
+  const codeRunRef = useRef(0);
 
   // Load the TypeScript compiler from public/vendor — self-hosted because
   // corpnet blocks external CDNs. The UMD sets window.ts in the browser
@@ -172,8 +183,8 @@ export default function PreviewPage() {
   }
 
   const handleCode = useCallback(
-    (code: string) => {
-      const result = runCode(code);
+    (code: string, localModules?: LocalModules) => {
+      const result = runCode(code, localModules);
       if (result.Component) {
         setComponent(() => result.Component);
         setError(null);
@@ -313,9 +324,39 @@ export default function PreviewPage() {
           // any live badges so an open popover re-parses against it.
           setCleanSource(event.data.source ?? event.data.code);
           refreshTargetLabels();
-          handleCode(event.data.code);
+          {
+            const {code, post} = event.data;
+            const run = ++codeRunRef.current;
+            if (typeof post === 'string') {
+              // Load the post's own example assets first; a newer code
+              // message supersedes this run.
+              void loadPostModules(post).then(
+                modules => {
+                  if (run === codeRunRef.current) {
+                    handleCode(code, modules);
+                  }
+                },
+                (err: unknown) => {
+                  if (run === codeRunRef.current) {
+                    const message =
+                      err instanceof Error ? err.message : String(err);
+                    setComponent(null);
+                    setError(`[compile] ${message}`);
+                    postToParent({
+                      type: 'preview-error',
+                      error: message,
+                      phase: 'compile',
+                    });
+                  }
+                },
+              );
+            } else {
+              handleCode(code);
+            }
+          }
           break;
         case 'preview-clear':
+          codeRunRef.current += 1;
           handleClear();
           break;
         case 'preview-theme':

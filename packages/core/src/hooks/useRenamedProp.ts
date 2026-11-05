@@ -6,24 +6,15 @@
  * @file useRenamedProp.ts
  * @input The component name, the old and new prop names, and both values
  * @output The value to use, with development warnings for the overlap
- * @position Core deprecation utility; the replacement-first half of a prop
- *   rename
- *
- * A released prop is a public promise, so a rename ships the replacement
- * first and keeps the old name working through the overlap (`spec:AST-017`
- * FR28–FR29, `architecture:public-component-api` INV9). This centralizes the
- * two things every such overlap owes: the new name wins when both are set,
- * and development says so rather than letting a caller wonder which one the
- * component read.
- *
- * Production behavior is unchanged either way — a warning is a builder
- * guardrail, never shipped noise (`spec:AST-017` FR29).
- *
- * SYNC: deliberately NOT exported from /packages/core/src/hooks/index.ts —
- * that barrel is re-exported wholesale from the package entry point, so
- * adding it there would ship a new public hook without `spec:AST-002`
- * admission. Import it by path from inside the package.
+ * @position Core deprecation utility for the overlap of a prop rename. It is
+ *   not in hooks/index.ts, because that barrel is public and a new public hook
+ *   needs admission (AST-002). Import it by path.
  */
+
+// A released prop is a public promise. So a rename ships the replacement
+// first and keeps the old name working for an overlap (AST-017). The new name
+// wins when both are set, and development says so. Production behavior does
+// not change.
 
 import {useDevWarning} from './useDevWarning';
 

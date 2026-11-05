@@ -12,18 +12,24 @@ import {
   type RichTextEditorRef,
 } from '@astryxdesign/richtext';
 import type {EditorState} from 'lexical';
+import {objectiveC} from '@astryxdesign/core/CodeBlock/languages/objective-c';
+import {thrift} from '@astryxdesign/core/CodeBlock/languages/thrift';
 import {BOLD_STAR, ITALIC_STAR, UNORDERED_LIST} from '@lexical/markdown';
 import {$getRoot} from 'lexical';
 import {
   LONG_DOCUMENT_COPIES,
   MarkdownParitySandbox,
+  WideNumberMarkerParity,
+  MixedNumberMarkerParity,
+  TaskParentNumberMarkerParity,
   type MarkdownParitySandboxProps,
 } from './RichTextEditor.markdownParity';
 import {MarkdownPluginsImportExport as MarkdownPluginsImportExportStory} from './RichTextEditor.markdownPluginsImportExport';
 import {MarkdownPluginsSandbox} from './RichTextEditor.markdownPlugins';
+import {RichTextEditorPlayground} from './RichTextEditor.playground';
 
 const meta: Meta<typeof RichTextEditor> = {
-  title: 'Lab/RichTextEditor',
+  title: 'RichText/RichTextEditor',
   component: RichTextEditor,
   tags: ['autodocs'],
   argTypes: {
@@ -53,6 +59,22 @@ const meta: Meta<typeof RichTextEditor> = {
 
 export default meta;
 type Story = StoryObj<typeof RichTextEditor>;
+
+/**
+ * Every feature on one editor — the Astryx counterpart of
+ * playground.lexical.dev. The other stories each mount their own editor to
+ * show one thing; this one exists so the features can be combined on a single
+ * document and watched for interactions: a toolbar format inside a table
+ * cell, a Markdown shortcut inside a code block, an autolinked URL exported
+ * back to Markdown. The panel beside the editor reads that same editor's
+ * Markdown, HTML, editor state, node tree, and read-only RichTextView render.
+ */
+export const Playground = {
+  // Page-sized, like the parity sandboxes: keep it off the docs page.
+  tags: ['!autodocs'],
+  parameters: {controls: {disable: true}},
+  render: () => <RichTextEditorPlayground />,
+};
 
 export const Default: Story = {
   args: {
@@ -182,7 +204,7 @@ export const CustomTransformers: Story = {
   args: {
     label: 'Comment',
     description:
-      'Restricted markdown: only `*bold*`, `_italic_` and `- ` unordered lists (no headings, quotes or code).',
+      'Restricted markdown: only `**bold**`, `*italic*` and `- ` unordered lists (no headings, quotes or code).',
     placeholder: 'Try typing "# " — it will not become a heading…',
     transformers: [BOLD_STAR, ITALIC_STAR, UNORDERED_LIST],
   },
@@ -544,6 +566,24 @@ export const MarkdownParity: MarkdownParityStory = {
   },
 };
 
+export const MarkdownParityWideNumberMarkers: Story = {
+  name: 'Markdown parity: wide number markers at 16px',
+  tags: ['!autodocs'],
+  render: () => <WideNumberMarkerParity />,
+};
+
+export const MarkdownParityMixedNumberMarkers: Story = {
+  name: 'Markdown parity: mixed nested number markers at 16px',
+  tags: ['!autodocs'],
+  render: () => <MixedNumberMarkerParity />,
+};
+
+export const MarkdownParityTaskParentNumberMarkers: Story = {
+  name: 'Markdown parity: pure task-parent number markers at 16px',
+  tags: ['!autodocs'],
+  render: () => <TaskParentNumberMarkerParity />,
+};
+
 export const MarkdownParityToggle: MarkdownParityStory = {
   ...markdownParity,
   name: 'Markdown parity: read/edit toggle',
@@ -575,4 +615,32 @@ export const MarkdownParityLongDocument: MarkdownParityStory = {
     hasPlugins: true,
     hostWidth: '680px',
   },
+};
+
+const OBJC_FENCE = markdownToEditorStateJSON(
+  '```objc\n@interface Greeter : NSObject\n@end\n```',
+);
+
+const THRIFT_FENCE = markdownToEditorStateJSON(
+  '```thrift\n# A user record\nstruct User {\n  1: required string name;\n}\n```',
+);
+
+/**
+ * Code blocks colour a fence named by a value in `codeLanguages`, as Markdown
+ * does, and label it with the value's name; without it the fence stays plain.
+ */
+export const CodeLanguageModules: Story = {
+  render: () => (
+    <div style={{display: 'grid', gap: 16, maxWidth: 520}}>
+      <div data-testid="listed">
+        <RichTextView value={THRIFT_FENCE} codeLanguages={[thrift]} />
+      </div>
+      <div data-testid="listed-renamed">
+        <RichTextView value={OBJC_FENCE} codeLanguages={[objectiveC]} />
+      </div>
+      <div data-testid="unlisted">
+        <RichTextView value={THRIFT_FENCE} />
+      </div>
+    </div>
+  ),
 };

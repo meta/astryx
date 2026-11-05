@@ -151,14 +151,14 @@ export const docs = {
       name: 'isReadOnly',
       type: 'boolean',
       description:
-        'Makes the textarea read-only: the value is shown at full opacity and still submits with the form, but cannot be edited. Unlike isDisabled, a read-only textarea is not dimmed and stays in the tab order. isDisabled takes precedence when both are set.',
+        'Makes the textarea read-only: the value is shown at full opacity and still submits with the form, but cannot be edited. Unlike isDisabled, a read-only textarea is not dimmed and keeps its form value. isDisabled takes precedence when both are set.',
       default: 'false',
     },
     {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the textarea is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the textarea focusable via aria-disabled (the field becomes read-only). Use this instead of wrapping a disabled TextArea in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the textarea is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the textarea focusable via aria-disabled (the field becomes read-only). Use this instead of wrapping a disabled TextArea in Tooltip, so the reason is attached to the field itself.',
     },
     {
       name: 'isLoading',
@@ -212,7 +212,8 @@ export const docs = {
     {
       name: 'hasSpellCheck',
       type: 'boolean',
-      description: 'Enables or disables browser spell checking.',
+      description:
+        'Enables or disables browser spell checking.',
       default: 'true',
     },
     {
@@ -260,6 +261,30 @@ export const docs = {
       type: 'string',
       description:
         'The native autocomplete attribute, forwarded to the textarea unchanged. Does not affect the controlled value.',
+    },
+    {
+      name: 'enterKeyHint',
+      type: "'enter' | 'done' | 'go' | 'next' | 'previous' | 'search' | 'send'",
+      description:
+        'What the Return key of a touch keyboard says (the native `enterkeyhint`). iOS gives `done`, `go`, `next`, `search` and `send` their own key (a glyph on iOS 26: a checkmark, an arrow, a chevron, a magnifier, an up arrow); `enter` and `previous` keep the plain Return key. Chrome on Android (Gboard) gives every value its own key; with no hint a TextArea keeps Return. It only labels the key: what Enter does stays with your handlers.',
+    },
+    {
+      name: 'inputMode',
+      type: "'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search'",
+      description:
+        'Which touch keyboard the field asks for (the native `inputmode`) without changing what it accepts: `numeric` brings up the number pad, `decimal` the decimal pad, `tel` the phone pad, `search` the web-search keyboard (whose Return key reads Go on iOS even with `enterKeyHint="search"`).',
+    },
+    {
+      name: 'autoCapitalize',
+      type: "'off' | 'none' | 'on' | 'sentences' | 'words' | 'characters'",
+      description:
+        'When a touch keyboard capitalizes as you type (the native `autocapitalize`). Unset, iOS capitalizes sentences. `off` and `none` never capitalize; `on` and `sentences` capitalize each sentence.',
+    },
+    {
+      name: 'hasAutoCorrect',
+      type: 'boolean',
+      description:
+        'Whether a touch keyboard corrects words as you type (the native `autocorrect`). Unset, the browser decides; turn it off for usernames, codes and other values that are not words.',
     },
     {
       name: 'containerXstyle',
@@ -339,6 +364,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'Keep Return a line break in a multi-line field. Relabel it with enterKeyHint (send, done) only when your own Enter handling does what the label says.',
+      },
+      {
+        guidance: true,
+        description:
           'Use the status prop to surface validation feedback inline: show success when input is valid, warning for soft limits, and error for hard failures.',
       },
       {
@@ -364,7 +394,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          "Don't wrap a disabled TextArea in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.",
+          "Don't wrap a disabled TextArea in Tooltip to explain why it's disabled. Use the disabledMessage prop, which attaches the reason to the field itself.",
       },
     ],
   },
@@ -437,7 +467,7 @@ export const docsZh = {
       name: 'isReadOnly',
       type: 'boolean',
       description:
-        '将文本域设为只读：值以完整不透明度显示并仍随表单提交，但无法编辑。与 isDisabled 不同，只读文本域不会变暗，并保留在 Tab 顺序中。同时设置时 isDisabled 优先。',
+        '将文本域设为只读：值以完整不透明度显示并仍随表单提交，但无法编辑。与 isDisabled 不同，只读文本域不会变暗，并保留其表单值。同时设置时 isDisabled 优先。',
       default: 'false',
     },
     {
@@ -536,6 +566,30 @@ export const docsZh = {
       description: '原生 autocomplete 属性，原样转发给文本域。不影响受控的值。',
     },
     {
+      name: 'enterKeyHint',
+      type: "'enter' | 'done' | 'go' | 'next' | 'previous' | 'search' | 'send'",
+      description:
+        '触屏键盘回车键上显示的内容（原生 `enterkeyhint`）。iOS 为 `done`、`go`、`next`、`search` 和 `send` 显示各自的按键（iOS 26 上为图标：对勾、箭头、右尖括号、放大镜、上箭头）；`enter` 和 `previous` 保留普通的回车键。Android 上的 Chrome（Gboard）为每个值显示各自的按键；未设置时 TextArea 保留回车键。它只改变按键的标签：按下回车做什么仍由你的处理函数决定。',
+    },
+    {
+      name: 'inputMode',
+      type: "'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search'",
+      description:
+        '字段请求的触屏键盘（原生 `inputmode`），不改变字段接受的内容：`numeric` 显示数字键盘，`decimal` 显示带小数点的数字键盘，`tel` 显示电话键盘，`search` 显示网页搜索键盘（即使设置了 `enterKeyHint="search"`，iOS 上它的回车键仍显示为“前往”）。',
+    },
+    {
+      name: 'autoCapitalize',
+      type: "'off' | 'none' | 'on' | 'sentences' | 'words' | 'characters'",
+      description:
+        '触屏键盘在输入时何时自动大写（原生 `autocapitalize`）。未设置时，iOS 会将句首大写。`off` 与 `none` 从不大写；`on` 与 `sentences` 将每句句首大写。',
+    },
+    {
+      name: 'hasAutoCorrect',
+      type: 'boolean',
+      description:
+        '触屏键盘是否在输入时自动更正单词（原生 `autocorrect`）。未设置时由浏览器决定；对用户名、验证码等不是单词的值请关闭它。',
+    },
+    {
       name: 'containerXstyle',
       type: 'StyleXStyles',
       description:
@@ -612,6 +666,11 @@ export const docsZh = {
       {
         guidance: true,
         description:
+          'Keep Return a line break in a multi-line field. Relabel it with enterKeyHint (send, done) only when your own Enter handling does what the label says.',
+      },
+      {
+        guidance: true,
+        description:
           'Use the status prop to surface validation feedback inline: show success when input is valid, warning for soft limits, and error for hard failures.',
       },
       {
@@ -637,7 +696,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          "Don't wrap a disabled TextArea in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.",
+          "Don't wrap a disabled TextArea in Tooltip to explain why it's disabled. Use the disabledMessage prop, which attaches the reason to the field itself.",
       },
     ],
   },
@@ -658,6 +717,11 @@ export const docsDense = {
       {
         guidance: true,
         description: 'Set maxLength for character counter when a limit exists.',
+      },
+      {
+        guidance: true,
+        description:
+          'Return stays a line break; relabel it (enterKeyHint) only if your Enter handling matches.',
       },
       {
         guidance: true,
@@ -710,7 +774,7 @@ export const docsDense = {
       'Shows "Required" indicator+sets aria-required. Mutually exclusive w/ isOptional.',
     isDisabled: 'Disables textarea, prevents interaction.',
     isReadOnly:
-      'Read-only: value visible + still submits, but not editable. Unlike isDisabled: not dimmed, stays in tab order.',
+      'Read-only: value visible + still submits, but not editable. Unlike isDisabled: not dimmed.',
     disabledMessage:
       'Explains why textarea is disabled. With isDisabled, shows tooltip on hover/focus + keeps textarea focusable via aria-disabled (field becomes read-only). Use instead of wrapping a disabled TextArea in Tooltip.',
     isLoading: 'Loading state w/ spinner inside input.',

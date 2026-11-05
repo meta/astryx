@@ -6,7 +6,7 @@
 // test fixture. Regenerate with: pnpm visual:probe-theme
 //
 // defineTheme takes six things and this covers all six:
-//   components  269 targets, 865 selectors (generated from the docs)
+//   components  275 targets, 874 selectors (generated from the docs)
 //   tokens      custom properties, read back off the themed element
 //   icons       every registry entry swapped for a marked glyph
 //   indicators  check / radio / checkbox swapped — the swap that reaches furthest
@@ -2058,6 +2058,66 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(301.2 93% 25%)',
       },
     },
+    drawer: {
+      base: {
+        backgroundColor: 'hsl(170.3 72% 45%)',
+        color: 'hsl(152.1 88% 12%)',
+        borderColor: 'hsl(310.7 90% 25%)',
+        outlineColor: 'hsl(100.3 90% 25%)',
+      },
+      'side:start': {
+        backgroundColor: 'hsl(198.3 77% 59%)',
+        color: 'hsl(192.4 71% 12%)',
+        borderColor: 'hsl(22.9 83% 25%)',
+        outlineColor: 'hsl(185.1 80% 25%)',
+      },
+      'side:end': {
+        backgroundColor: 'hsl(125.4 80% 59%)',
+        color: 'hsl(28.1 86% 12%)',
+        borderColor: 'hsl(19.6 70% 25%)',
+        outlineColor: 'hsl(274.7 92% 25%)',
+      },
+    },
+    'drawer-header': {
+      base: {
+        backgroundColor: 'hsl(97.3 85% 49%)',
+        color: 'hsl(262.2 75% 12%)',
+        borderColor: 'hsl(318.1 87% 25%)',
+        outlineColor: 'hsl(151.1 80% 25%)',
+      },
+    },
+    'drawer-header-close-icon': {
+      base: {
+        backgroundColor: 'hsl(68.0 84% 57%)',
+        color: 'hsl(249.2 76% 12%)',
+        borderColor: 'hsl(276.3 79% 25%)',
+        outlineColor: 'hsl(72.2 93% 25%)',
+      },
+    },
+    'drawer-header-end-content': {
+      base: {
+        backgroundColor: 'hsl(262.5 94% 60%)',
+        color: 'hsl(141.8 92% 12%)',
+        borderColor: 'hsl(98.2 87% 25%)',
+        outlineColor: 'hsl(5.2 84% 25%)',
+      },
+    },
+    'drawer-header-start-content': {
+      base: {
+        backgroundColor: 'hsl(84.1 77% 51%)',
+        color: 'hsl(71.5 80% 12%)',
+        borderColor: 'hsl(160.3 70% 25%)',
+        outlineColor: 'hsl(108.2 71% 25%)',
+      },
+    },
+    'drawer-header-title-block': {
+      base: {
+        backgroundColor: 'hsl(252.5 80% 48%)',
+        color: 'hsl(52.3 76% 12%)',
+        borderColor: 'hsl(329.0 85% 25%)',
+        outlineColor: 'hsl(123.1 85% 25%)',
+      },
+    },
     'dropdown-menu': {
       base: {
         backgroundColor: 'hsl(149.6 75% 47%)',
@@ -3991,6 +4051,12 @@ export const probeTheme = defineTheme({
         color: 'hsl(13.0 73% 12%)',
         borderColor: 'hsl(168.8 88% 25%)',
         outlineColor: 'hsl(156.5 79% 25%)',
+      },
+      'variant:secondary': {
+        backgroundColor: 'hsl(231.6 92% 55%)',
+        color: 'hsl(324.4 72% 12%)',
+        borderColor: 'hsl(179.1 74% 25%)',
+        outlineColor: 'hsl(21.2 83% 25%)',
       },
       'variant:ghost': {
         backgroundColor: 'hsl(205.2 71% 62%)',

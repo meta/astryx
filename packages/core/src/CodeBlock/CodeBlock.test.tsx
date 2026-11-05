@@ -15,6 +15,7 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {CodeBlock} from './CodeBlock';
+import {rtlStyles} from '../utils';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {dracula} from '../theme/syntax';
 import {InternationalizationProvider} from '../i18n';
@@ -81,17 +82,19 @@ describe('CodeBlock', () => {
     expect(root).toHaveStyle({opacity: '0.75'});
   });
 
-  it('makes the scroll container keyboard-focusable', () => {
+  it('names the code viewport and gives it a tab stop only while it overflows', () => {
+    // jsdom has no layout, so the viewport fits: a fitting viewport is not a
+    // tab stop (AST-025 FR12); the overflowing states are browser evidence.
     render(<CodeBlock code="const x = 1;" language="javascript" />);
     const region = screen.getByRole('group');
-    expect(region).toHaveAttribute('tabindex', '0');
+    expect(region).not.toHaveAttribute('tabindex');
     expect(region).toHaveAttribute('aria-label', 'javascript');
+    expect(region).toHaveAttribute('data-scroll-axis', 'both');
   });
 
   it('labels the scroll region "Code" when no language label is shown', () => {
     render(<CodeBlock code="hello" hasLanguageLabel={false} />);
     const region = screen.getByRole('group');
-    expect(region).toHaveAttribute('tabindex', '0');
     expect(region).toHaveAttribute('aria-label', 'Code');
   });
 
@@ -119,6 +122,84 @@ describe('CodeBlock', () => {
     expect(screen.getByRole('group')).toHaveStyle({maxHeight: '0px'});
   });
 
+  describe('diff layer', () => {
+    const diff =
+      '@@ -1,2 +1,2 @@\n-  const a = 1;\n+  const a = 2;\n   const b = 3;';
+
+    it('marks added, removed and header rows and leaves context unmarked', () => {
+      const {container} = render(
+        <CodeBlock code={diff} language="typescript" isDiff />,
+      );
+      const rows = container.querySelectorAll('[data-line]');
+      expect(rows).toHaveLength(4);
+      expect(rows[0].getAttribute('data-diff')).toBe('header');
+      expect(rows[1].getAttribute('data-diff')).toBe('removed');
+      expect(rows[2].getAttribute('data-diff')).toBe('added');
+      expect(rows[3].getAttribute('data-diff')).toBeNull();
+    });
+
+    it('puts the glyph in its own marker column and keeps base-language tokens past it', () => {
+      const {container} = render(
+        <CodeBlock code={diff} language="typescript" isDiff />,
+      );
+      const rows = container.querySelectorAll('[data-line]');
+      const marker = (row: Element) =>
+        row.querySelector('[data-diff-marker]')?.textContent;
+      expect(marker(rows[1])).toBe('-');
+      expect(marker(rows[2])).toBe('+');
+      // The glyph is the source's own text, so assistive technology reads it.
+      expect(rows[1].querySelector('[data-diff-marker]')).not.toHaveAttribute(
+        'aria-hidden',
+      );
+      expect(marker(rows[3])).toBe(' ');
+      // The code column starts after the glyph on every line: the removed and
+      // context lines' content keeps its own two-space indentation.
+      const content = (row: Element) =>
+        row.querySelectorAll('span')[1]?.textContent;
+      expect(content(rows[1])).toBe('  const a = 1;');
+      expect(content(rows[3])).toBe('  const b = 3;');
+      // `const` is a keyword on changed and context lines alike.
+      expect(rows[1].querySelector('.astryx-token-keyword')).not.toBeNull();
+      expect(rows[3].querySelector('.astryx-token-keyword')).not.toBeNull();
+    });
+
+    it('keeps the header and names the viewport diff / tsx diff', () => {
+      const {rerender} = render(<CodeBlock code={diff} isDiff />);
+      expect(screen.getByRole('group', {name: 'diff'})).toBeInTheDocument();
+      expect(screen.getByText('diff')).toBeInTheDocument();
+      rerender(<CodeBlock code={diff} language="tsx" isDiff />);
+      expect(screen.getByRole('group', {name: 'tsx diff'})).toBeInTheDocument();
+      expect(screen.getByText('tsx diff')).toBeInTheDocument();
+    });
+
+    it('copies the exact source, glyphs included', () => {
+      render(<CodeBlock code={diff} language="typescript" isDiff />);
+      fireEvent.click(screen.getByRole('button', {name: 'Copy code'}));
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(diff);
+    });
+
+    it('composes with highlightLines and does nothing without isDiff', () => {
+      const {container, rerender} = render(
+        <CodeBlock
+          code={diff}
+          language="typescript"
+          isDiff
+          highlightLines={[2]}
+        />,
+      );
+      expect(
+        container
+          .querySelector('[data-diff="removed"]')
+          ?.getAttribute('data-line'),
+      ).toBe('2');
+      rerender(<CodeBlock code={diff} language="typescript" />);
+      expect(container.querySelector('[data-diff]')).toBeNull();
+      expect(
+        container.querySelector('[data-line] [aria-hidden="true"]'),
+      ).toBeNull();
+    });
+  });
+
   it('copies code when the copy button is clicked', () => {
     render(<CodeBlock code="const x = 1;" language="javascript" />);
     const copyButton = screen.getByRole('button', {name: 'Copy code'});
@@ -132,9 +213,14 @@ describe('CodeBlock', () => {
     // Theme seam: a design system can restyle the copy control via this class
     // without turning the button off and re-implementing it.
     expect(copyButton).toHaveClass('astryx-code-block-copy-button');
-    // The button carries a visible "Copy code" hover/focus hint (tooltip),
-    // wired through aria-describedby — a bare <button> could not.
-    expect(copyButton).toHaveAttribute('aria-describedby');
+    // The button carries a visible "Copy code" hover/focus hint (tooltip). It
+    // repeats the name, so it adds no description (Button FR12).
+    expect(
+      screen
+        .getAllByRole('tooltip', {hidden: true})
+        .some(el => el.textContent === 'Copy code'),
+    ).toBe(true);
+    expect(copyButton).not.toHaveAttribute('aria-describedby');
   });
 
   it('keeps the copy button tooltip as "Copy code" after copying', async () => {
@@ -210,6 +296,35 @@ describe('CodeBlock', () => {
     }
   });
 
+  // design:bidirectionality DR4: the collapsed disclosure chevron points
+  // toward the inline end, so it mirrors in RTL. jsdom does not apply the
+  // compiled StyleX CSS, so this pins the structure the mirror relies on: the
+  // chevron renders inside an element carrying the shared rtlStyles.mirror.
+  it('wraps the disclosure chevron in the shared RTL mirror', () => {
+    const {className: mirrorClassName} = stylex.props(rtlStyles.mirror);
+    const mirrorClasses = mirrorClassName?.split(' ') ?? [];
+    expect(mirrorClasses.length).toBeGreaterThan(0);
+    render(
+      <div dir="rtl">
+        <CodeBlock
+          code={LONG_CODE}
+          language="javascript"
+          title="example"
+          isCollapsible
+        />
+      </div>,
+    );
+    const header = screen
+      .getAllByRole('button')
+      .find(el => el.hasAttribute('aria-expanded'));
+    const chevron = header?.querySelector('.astryx-icon');
+    expect(chevron).not.toBeNull();
+    const wrapper = chevron?.parentElement;
+    for (const className of mirrorClasses) {
+      expect(wrapper).toHaveClass(className);
+    }
+  });
+
   it('does NOT collapse the block when the copy button is clicked', () => {
     render(
       <CodeBlock
@@ -232,6 +347,99 @@ describe('CodeBlock', () => {
     // Clicking Copy must not toggle the collapsible header.
     expect(header).toHaveAttribute('aria-expanded', 'true');
     expect(navigator.clipboard.writeText).toHaveBeenCalled();
+  });
+
+  describe('endContent', () => {
+    const run = () => (
+      <button type="button" onClick={onRun}>
+        Run in terminal
+      </button>
+    );
+    let onRun: ReturnType<typeof vi.fn<() => void>>;
+    beforeEach(() => {
+      onRun = vi.fn<() => void>();
+    });
+
+    it('renders caller controls before Copy in the header', () => {
+      render(<CodeBlock code="npm test" language="bash" endContent={run()} />);
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      const copy = screen.getByRole('button', {name: 'Copy code'});
+      expect(action.parentElement).toBe(copy.parentElement);
+      expect(
+        action.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+
+    it('never creates a header: with no title or label the controls sit in the corner', () => {
+      const {container} = render(
+        <CodeBlock
+          code="npm test"
+          language="bash"
+          hasLanguageLabel={false}
+          endContent={run()}
+        />,
+      );
+      expect(container.querySelector('.astryx-code-block-header')).toBeNull();
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      const copy = screen.getByRole('button', {name: 'Copy code'});
+      const cluster = action.parentElement;
+      expect(cluster).toBe(copy.parentElement);
+      expect(cluster?.parentElement).toBe(container.querySelector('pre'));
+      expect(
+        action.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it('keeps its place when Copy is hidden', () => {
+      const {container} = render(
+        <CodeBlock code="npm test" hasCopyButton={false} endContent={run()} />,
+      );
+      expect(screen.queryByRole('button', {name: 'Copy code'})).toBeNull();
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      expect(action.parentElement?.parentElement).toBe(
+        container.querySelector('pre'),
+      );
+    });
+
+    it('sits outside the disclosure and never toggles it, by pointer or keyboard', () => {
+      render(
+        <CodeBlock
+          code={LONG_CODE}
+          language="javascript"
+          title="example"
+          isCollapsible
+          endContent={run()}
+        />,
+      );
+      const header = screen
+        .getAllByRole('button')
+        .find(el => el.hasAttribute('aria-expanded'));
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      expect(header!.contains(action)).toBe(false);
+      fireEvent.click(action);
+      fireEvent.keyDown(action, {key: 'Enter'});
+      fireEvent.keyDown(action, {key: ' '});
+      expect(onRun).toHaveBeenCalledTimes(1);
+      expect(header).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('treats a falsy endContent as absent: no corner column without Copy', () => {
+      const {container} = render(
+        <CodeBlock code="npm test" hasCopyButton={false} endContent={false} />,
+      );
+      const root = container.querySelector('pre');
+      // Only the code viewport: no empty cluster beside it.
+      expect(root?.children).toHaveLength(1);
+      expect(screen.queryAllByRole('button')).toHaveLength(0);
+    });
+
+    it('leaves caller controls unnamed and unstyled by CodeBlock', () => {
+      render(<CodeBlock code="npm test" language="bash" endContent={run()} />);
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      expect(action.getAttribute('class')).toBeNull();
+      expect(action).not.toHaveAttribute('aria-label');
+    });
   });
 
   it('does not nest the copy button inside the collapsible header role="button"', () => {
@@ -371,9 +579,9 @@ describe('CodeBlock', () => {
 
     fireEvent.click(header);
     expect(header).toHaveAttribute('aria-expanded', 'false');
-    // Collapsed: the wrapper is inert, so the keyboard-focusable scroll
-    // container (tabIndex=0) inside it drops out of the tab order and the
-    // accessibility tree instead of remaining an invisible tab stop.
+    // Collapsed: the wrapper is inert, so the scroll container inside it
+    // drops out of the tab order and the accessibility tree instead of
+    // remaining an invisible tab stop while it overflows.
     expect(region).toHaveAttribute('inert');
     const scrollContainer = screen.getByRole('group');
     expect(scrollContainer.closest('[inert]')).toBe(region);
@@ -399,12 +607,12 @@ describe('CodeBlock', () => {
     expect(region).toHaveAttribute('inert');
     fireEvent.click(header);
     expect(header).toHaveAttribute('aria-expanded', 'true');
-    // Expanded again: inert is removed and the scroll container is a
-    // keyboard-focusable group once more.
+    // Expanded again: inert is removed and the scroll container is a named
+    // group once more (its tab stop follows overflow, see the browser spec).
     expect(region).not.toHaveAttribute('inert');
     const scrollContainer = screen.getByRole('group');
     expect(scrollContainer.closest('[inert]')).toBeNull();
-    expect(scrollContainer).toHaveAttribute('tabindex', '0');
+    expect(scrollContainer).toHaveAttribute('data-scroll-axis', 'both');
   });
 
   it('applies a per-instance syntax theme via the syntaxTheme prop', () => {
@@ -481,7 +689,10 @@ describe('CodeBlock', () => {
       expect(screen.getByRole('group')).toHaveAttribute('aria-label', 'Code');
 
       const copyButton = screen.getByRole('button', {name: 'Copy code'});
-      expect(copyButton.parentElement).toBe(container.querySelector('pre'));
+      // Headerless: Copy sits in the corner cluster, a direct child of the root.
+      expect(copyButton.parentElement?.parentElement).toBe(
+        container.querySelector('pre'),
+      );
       await act(async () => {
         fireEvent.click(copyButton);
       });

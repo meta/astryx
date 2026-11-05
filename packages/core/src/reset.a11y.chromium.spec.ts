@@ -1,10 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file reset.a11y.chromium.spec.ts
  * @input packages/core/src/reset.css, alone on a blank Chromium page
  * @output Browser evidence that the reset reaches ::before, ::after,
- *   ::placeholder and the search field's cancel button
+ *   ::placeholder, the search field's cancel button and the dropdown marker
+ *   of a field with a list
  * @position reset.css integration proof. A pseudo-element inside :where() is
  *   invalid, and the forgiving list drops it without an error, so only a
  *   shipping engine shows which of the reset's rules still match.
@@ -12,7 +14,9 @@
 
 import * as fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+// @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
+import {PNG} from 'pngjs';
 
 const RESET_CSS = fs.readFileSync(
   fileURLToPath(new URL('./reset.css', import.meta.url)),
@@ -72,7 +76,15 @@ test('Chromium keeps every selector the reset writes', async ({page}) => {
   // A forgiving list drops an invalid entry instead of the whole rule, so a
   // dropped pseudo-element shows up as a shorter serialized selector.
   const parsed = await page.evaluate(() => {
-    const layer = document.styleSheets[0].cssRules[0] as CSSLayerBlockRule;
+    // The sheet opens with the `@layer` order statement; the rules live in
+    // the `reset` layer block after it.
+    const layer = [...document.styleSheets[0].cssRules].find(
+      (rule): rule is CSSLayerBlockRule =>
+        rule instanceof CSSLayerBlockRule && rule.name === 'reset',
+    );
+    if (layer == null) {
+      throw new Error('reset.css has no @layer reset block');
+    }
     return [...layer.cssRules].map(rule => (rule as CSSStyleRule).selectorText);
   });
   expect(parsed.map(normalize)).toEqual(
@@ -144,6 +156,54 @@ test('a search field has no cancel button to clear it', async ({page}) => {
   }
   await page.mouse.click(box.x + box.width - 8, box.y + box.height / 2);
   await expect(query).toHaveValue('query');
+});
+
+test('the dropdown marker of a field with a list sits in its middle', async ({
+  page,
+}) => {
+  // Chromium shows the marker while the pointer is over the field and draws
+  // it as a glyph set on the field's line-height, the 1.5 the reset inherits.
+  await page.evaluate(() => {
+    const field = document.createElement('input');
+    field.id = 'fruit';
+    field.setAttribute('list', 'fruits');
+    const options = document.createElement('datalist');
+    options.id = 'fruits';
+    options.append(new Option('Apple'));
+    document.body.append(field, options);
+  });
+  await page.addStyleTag({
+    content: `
+      #fruit {
+        display: block;
+        width: 240px;
+        padding: 7px 11px;
+        border: 1px solid;
+        line-height: 1.5;
+      }
+    `,
+  });
+  const field = page.locator('#fruit');
+  await field.hover();
+  const png = PNG.sync.read(await field.screenshot({caret: 'hide'}));
+  // The marker is the only ink in the field's last 32px, inside the border.
+  const inkRows: number[] = [];
+  for (let y = 2; y < png.height - 2; y++) {
+    for (let x = png.width - 32; x < png.width - 2; x++) {
+      const offset = (y * png.width + x) * 4;
+      const luminance =
+        (png.data[offset] + png.data[offset + 1] + png.data[offset + 2]) / 3;
+      if (luminance < 160) {
+        inkRows.push(y);
+        break;
+      }
+    }
+  }
+  expect(inkRows.length, 'the hovered field shows its marker').toBeGreaterThan(
+    0,
+  );
+  const markerMiddle = (inkRows[0] + inkRows[inkRows.length - 1] + 1) / 2;
+  expect(Math.abs(markerMiddle - png.height / 2)).toBeLessThanOrEqual(1);
 });
 
 test('a later layer and an unlayered rule still override the reset', async ({

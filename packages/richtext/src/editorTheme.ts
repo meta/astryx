@@ -53,6 +53,10 @@ const CODE_SPACE = `calc(${spacingVars['--spacing-3']})`;
 // Core CodeBlock's header (8px, a small control, 8px) overlaps the code's
 // 12px top padding by 8px, so its code starts 8px + control + 12px down.
 const CODE_HEADER_SPACE = `calc(${spacingVars['--spacing-2']} + ${sizeVars['--size-element-sm']} + ${spacingVars['--spacing-3']})`;
+// A block that names no language has no header: core CodeBlock puts its copy
+// button in a column of its own at the inline end (8px, a small control, 8px),
+// beside the code rather than over it, so the code ends that much earlier.
+const CODE_CORNER_SPACE = `calc(${spacingVars['--spacing-4']} + ${sizeVars['--size-element-sm']} + 2 * ${spacingVars['--spacing-2']})`;
 
 const editorTheme = stylex.create({
   // Lexical marks every top-level block `dir="auto"`, which picks each
@@ -67,13 +71,20 @@ const editorTheme = stylex.create({
   paragraph: {
     // The first block's leading margin would stack with the input inset, so
     // the first line aligns with TextArea and the empty-editor placeholder.
+    // A Markdown plugin block takes this style and is a decorator, so at
+    // either edge of the document it sits beside Lexical's zero-size caret
+    // boundary element (see `hr`) and takes no outer margin there either.
     marginBlockStart: {
       default: TEXT_BLOCK_SPACE,
       ':first-child': spacingVars['--spacing-0'],
+      ':is([data-lexical-decorator-boundary]:first-child + *)':
+        spacingVars['--spacing-0'],
     },
     marginBlockEnd: {
       default: TEXT_BLOCK_SPACE,
       ':last-child': spacingVars['--spacing-0'],
+      ':has(+ [data-lexical-decorator-boundary]:last-child)':
+        spacingVars['--spacing-0'],
     },
     maxWidth: PROSE_MEASURE,
     // The base reset gives every <p> body weight and primary color; a
@@ -310,6 +321,13 @@ const editorTheme = stylex.create({
   table: {
     borderCollapse: 'collapse',
     width: '100%',
+    // The grid's outer edge, matching core Markdown's table: the row and
+    // column lines stop at the table's rim, so without this the top, bottom,
+    // and sides stay open. `border-collapse: collapse` merges it with the
+    // cell lines into one 1px rule rather than doubling up at the edge.
+    borderWidth: borderVars['--border-width'],
+    borderStyle: 'solid',
+    borderColor: colorVars['--color-border'],
   },
   tableRow: {
     borderBottomWidth: '1px',
@@ -328,12 +346,57 @@ const editorTheme = stylex.create({
     textAlign: 'start',
     verticalAlign: 'middle',
     overflowWrap: 'break-word',
+    // A line on every cell edge, as core Markdown's table draws with
+    // `dividers="grid"`. The row lines come from `tableRow`; this is the
+    // column half. The last column draws none, so the rim is the `table`
+    // rule's own border rather than two lines stacked at the edge — the
+    // same rule core `TableCell` follows (`:last-child` → 0).
+    borderInlineEndWidth: {
+      default: borderVars['--border-width'],
+      ':last-child': 0,
+    },
+    borderInlineEndStyle: 'solid',
+    borderInlineEndColor: colorVars['--color-border'],
   },
   tableCellHeader: {
     fontWeight: fontWeightVars['--font-weight-semibold'],
     color: colorVars['--color-text-secondary'],
   },
-  // Thematic breaks, drawn like core Markdown's rule.
+  // Cells in a table selection — dragging across cells, Shift+arrow between
+  // them, or selecting a row or column — are ringed, for the reason
+  // `hrSelected` gives: a person has to see what the next keystroke will
+  // replace. Lexical names this class on every highlighted cell and takes it
+  // off when the selection goes; left unnamed, a cell inside the selection is
+  // painted exactly like one outside it.
+  //
+  // A ring, not a background wash. A wash sits behind the cell's text and
+  // eats into its contrast, and no one token stays clear of the field in
+  // every theme: `--color-accent-muted` resolves to the field's own colour
+  // under Neutral dark, so the selection would be invisible there, and a
+  // 10% accent tint drops Neutral dark's header text from 5.65:1 to 4.25:1.
+  // The focus ring is drawn for exactly this job — it clears the field by
+  // 5.24:1 at worst across every shipped theme and mode — and sits beside
+  // the text rather than behind it, so no cell's contrast moves at all.
+  // `outline` takes no space, so the document's geometry is untouched
+  // (spec:AST-061 FR9), and the inset offset keeps each ring inside its own
+  // cell instead of bleeding over the neighbour it is not marking.
+  //
+  // `RichTextView` and a read-only editor ring a dragged cell selection too:
+  // Lexical's table pointer handler does not ask whether the surface is
+  // editable, and a person selects cells in a read surface to copy them, so
+  // seeing the selection is as right there. Both surfaces draw the same ring
+  // and neither moves a block, so they still render the same document the
+  // same way.
+  tableCellSelected: {
+    outlineWidth: focusVars['--focus-outline-width'],
+    outlineStyle: focusVars['--focus-outline-style'],
+    outlineColor: focusVars['--focus-outline-color'],
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
+  },
+  // Thematic breaks, drawn like core Markdown's rule. A rule is a decorator,
+  // and Lexical puts a zero-size caret boundary element beside a decorator at
+  // either edge of the document, so a rule there is not literally the first
+  // or last child; it still takes no outer margin.
   hr: {
     borderWidth: 0,
     borderTopWidth: borderVars['--border-width'],
@@ -342,10 +405,14 @@ const editorTheme = stylex.create({
     marginBlockStart: {
       default: RULE_SPACE,
       ':first-child': spacingVars['--spacing-0'],
+      ':is([data-lexical-decorator-boundary]:first-child + *)':
+        spacingVars['--spacing-0'],
     },
     marginBlockEnd: {
       default: RULE_SPACE,
       ':last-child': spacingVars['--spacing-0'],
+      ':has(+ [data-lexical-decorator-boundary]:last-child)':
+        spacingVars['--spacing-0'],
     },
   },
   // A selected rule (click, or arrow onto it) or Markdown plugin node (click)
@@ -380,7 +447,14 @@ const editorTheme = stylex.create({
         CODE_HEADER_SPACE,
     },
     paddingBlockEnd: spacingVars['--spacing-3'],
-    paddingInline: spacingVars['--spacing-4'],
+    paddingInlineStart: spacingVars['--spacing-4'],
+    paddingInlineEnd: {
+      // Room for the corner copy button CodeBlockHeaderPlugin draws over a
+      // block that names no language, so no line runs under it.
+      default: CODE_CORNER_SPACE,
+      ':is([data-language]:not([data-language="plaintext"]))':
+        spacingVars['--spacing-4'],
+    },
     // Sized like core Markdown's code frame: as wide as its longest line, at
     // least the prose measure (or the whole width when that is narrower), and
     // never wider than the editor, where long lines wrap.
@@ -396,9 +470,11 @@ const editorTheme = stylex.create({
       default: WIDE_BLOCK_SPACE,
       ':last-child': spacingVars['--spacing-0'],
     },
+    // Long lines wrap exactly as core CodeBlock's wrapped lines do, so a code
+    // block is as tall here as in core Markdown (spec:AST-061 FR5, DEC-9).
     whiteSpace: 'pre-wrap',
-    // An unbroken token wider than the block (a long URL or hash) wraps too.
-    overflowWrap: 'anywhere',
+    wordBreak: 'break-all',
+    overflowWrap: 'break-word',
   },
 });
 
@@ -465,6 +541,9 @@ export function sharedEditorTheme(): EditorThemeClasses {
     tableRow: block(editorTheme.tableRow),
     tableCell: block(editorTheme.tableCell),
     tableCellHeader: block(editorTheme.tableCellHeader),
+    // Added on top of the cell's own class by Lexical while the cell is in a
+    // table selection, so it carries no direction of its own.
+    tableCellSelected: className(editorTheme.tableCellSelected),
     tableScrollableWrapper: block(editorTheme.tableScrollableWrapper),
   };
 }

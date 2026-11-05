@@ -15,20 +15,25 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {resolveComponentReplacement, resolveCore} from '../_adapter.mjs';
+import {
+  checkGhCli,
+  resolveComponentReplacement,
+  resolveCore,
+} from '../_adapter.mjs';
 import {assertWithin, sanitizeName, PathSafetyError} from '../../../foundation/fs/path-safety.mjs';
-import {checkGhCli} from '../_github.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {
   CORE_PACKAGE,
-  findIntegrationComponentDoc,
-  findIntegrationComponentSource,
+  docStem,
+  findComponentReadme,
+  findIntegrationComponent,
+  unscopedComponentOwners,
 } from '../../../foundation/discovery/component-discovery.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {AstryxError, writeFailed} from '../../error.mjs';
 
 /** Default issue tracker for maintainer feedback after swizzling. */
-const DEFAULT_ISSUES_URL = 'https://github.com/facebook/astryx/issues/new';
+const DEFAULT_ISSUES_URL = 'https://github.com/meta/astryx/issues/new';
 
 /**
  * Rewrite relative imports that point outside the component directory to use
@@ -113,7 +118,7 @@ function buildFeedback(component, issuesUrl) {
  */
 async function loadConfigSafely(cwd) {
   try {
-    const project = await Project.load(cwd);
+    const project = await Project.load(cwd, {core: 'project'});
     return {
       loadedIntegrations: project.loadedIntegrations,
       issuesUrl: project.config.issuesUrl,
@@ -126,33 +131,38 @@ async function loadConfigSafely(cwd) {
 
 /**
  * Build the set of OWNER packages that provide a component named `name` across
- * core + every loaded integration.
+ * core + every loaded integration. Core holds every name it documents, but has
+ * source to copy (`sourceDir`) only for a name with its own folder.
  * @param {string} coreDir
  * @param {Array<{name: string, components?: string, issuesUrl?: string}>} loadedIntegrations
  * @param {string} name
  * @param {string|undefined} coreIssuesUrl
- * @returns {Array<{package: string, sourceDir: string|null, ownerPackage: string, issuesUrl: string|undefined}>}
+ * @returns {Array<{package: string, sourceDir: string|null, docPath: string|null, ownerPackage: string, issuesUrl: string|undefined, hold: string}>}
  */
 function resolveOwners(coreDir, loadedIntegrations, name, coreIssuesUrl) {
   const owners = [];
   const coreComponentDir = path.join(coreDir, 'src', name);
-  if (fs.existsSync(coreComponentDir)) {
+  const coreFolder = fs.existsSync(coreComponentDir);
+  if (coreFolder || findComponentReadme(coreDir, name)) {
     owners.push({
       package: CORE_PACKAGE,
-      sourceDir: coreComponentDir,
+      sourceDir: coreFolder ? coreComponentDir : null,
+      docPath: null,
       ownerPackage: CORE_PACKAGE,
       issuesUrl: coreIssuesUrl || DEFAULT_ISSUES_URL,
+      hold: 'core',
     });
   }
   for (const integration of loadedIntegrations) {
-    const docPath = findIntegrationComponentDoc(integration, name);
-    if (!docPath) continue;
-    const sourcePath = findIntegrationComponentSource(integration, name);
+    const found = findIntegrationComponent(integration, name);
+    if (!found) continue;
     owners.push({
       package: integration.name,
-      sourceDir: sourcePath ? path.dirname(sourcePath) : null,
+      sourceDir: found.sourcePath ? path.dirname(found.sourcePath) : null,
+      docPath: found.docPath,
       ownerPackage: integration.name,
       issuesUrl: integration.issuesUrl,
+      hold: found.hold,
     });
   }
   return owners;
@@ -222,25 +232,32 @@ export async function swizzleCopy(component, options = {}) {
     : undefined;
   // An active integration replacement answers to the Core name it replaces,
   // bare or qualified by its own package (spec:AST-035 FR11): copy it under its
-  // own name. `--package @astryxdesign/core` still copies the Core original.
+  // doc's file name, the folder it has always gone to. `--package
+  // @astryxdesign/core` still copies the Core original.
   if (pkg !== CORE_PACKAGE) {
     const replacement = await resolveComponentReplacement(
       coreDir,
       loadedIntegrations,
       dirName,
     );
+    const copyName = replacement ? docStem(replacement.docPath) : null;
     if (
       replacement &&
-      (!pkg || (pkg === replacement.package && replacement.name !== dirName))
+      copyName &&
+      (!pkg || (pkg === replacement.package && copyName !== dirName))
     ) {
-      return swizzleCopy(replacement.name, {
+      return swizzleCopy(copyName, {
         ...options,
         package: replacement.package,
       });
     }
   }
 
-  const allOwners = resolveOwners(coreDir, loadedIntegrations, dirName, coreIssuesUrl);
+  const found = resolveOwners(coreDir, loadedIntegrations, dirName, coreIssuesUrl);
+  // The owner rule, then a Core name without its own folder drops out.
+  const allOwners = (pkg ? found : unscopedComponentOwners(found)).filter(
+    owner => owner.package !== CORE_PACKAGE || owner.sourceDir != null,
+  );
 
   if (allOwners.length === 0) {
     throw new AstryxError(
@@ -284,6 +301,10 @@ export async function swizzleCopy(component, options = {}) {
   // existing component directory or file may be a symlink out of cwd.
   const outputBase = confineWrite(output, cwd, {label: 'output directory'});
   const outputDir = path.join(outputBase, dirName);
+
+  // The receipt's feedback first: a swizzle that fails must fail before it
+  // writes anything.
+  const feedback = buildFeedback(dirName, owner.issuesUrl);
 
   // Pre-flight path and overwrite checks before any mkdir/writeFile.
   const sourceFiles = fs.readdirSync(componentDir).filter(file => {
@@ -366,8 +387,6 @@ export async function swizzleCopy(component, options = {}) {
       !isExcludedFromCopy(f) &&
       fs.statSync(path.join(componentDir, f)).isFile(),
   );
-  const feedback = buildFeedback(dirName, owner.issuesUrl);
-
   /** @type {import('../swizzle.type.mjs').SwizzleCopyResponse['data']} */
   const data = {
     component: dirName,

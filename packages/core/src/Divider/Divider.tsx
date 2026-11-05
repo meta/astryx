@@ -25,7 +25,8 @@ import {
   typeScaleVars,
   borderVars,
 } from '../theme/tokens.stylex';
-import {mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import type {DividerVariantMap} from './index';
 
@@ -45,6 +46,7 @@ export interface DividerProps extends BaseProps<HTMLDivElement> {
 
   /**
    * Optional label to display centered on the divider.
+   * Numeric zero is preserved; null, booleans, and empty strings render no label.
    * Rendered with small, secondary text styling.
    */
   label?: ReactNode;
@@ -153,6 +155,7 @@ export function Divider({
   ...props
 }: DividerProps) {
   const isHorizontal = orientation === 'horizontal';
+  const hasLabel = isRenderable(label);
   const labelId = useId();
 
   // A separator does not derive its accessible name from its content, so the
@@ -160,7 +163,7 @@ export function Divider({
   // exposed as the separator's name (WCAG 1.3.1). An explicit aria-label or
   // aria-labelledby from the consumer takes precedence.
   const resolvedLabelledBy =
-    ariaLabelledBy ?? (label && ariaLabel == null ? labelId : undefined);
+    ariaLabelledBy ?? (hasLabel && ariaLabel == null ? labelId : undefined);
 
   return (
     <div
@@ -189,7 +192,7 @@ export function Divider({
           lineStyles[variant],
         )}
       />
-      {label && (
+      {hasLabel && (
         <div
           id={labelId}
           {...stylex.props(
@@ -199,7 +202,7 @@ export function Divider({
           {label}
         </div>
       )}
-      {label && (
+      {hasLabel && (
         <div
           {...stylex.props(
             isHorizontal ? lineStyles.horizontalLine : lineStyles.verticalLine,

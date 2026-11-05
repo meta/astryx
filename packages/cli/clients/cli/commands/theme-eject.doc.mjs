@@ -36,6 +36,7 @@ export const doc = {
       cli: 'astryx theme eject ocean src/themes/my-ocean --package @acme/themes',
     },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'all source and descriptor files are written'},
     {

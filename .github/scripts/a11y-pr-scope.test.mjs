@@ -121,7 +121,7 @@ describe('fast PR accessibility scope', () => {
           title: 'Lab/ChatAdditions',
         },
         {id: 'lab-chatadditions--emoji-picker', title: 'Lab/ChatAdditions'},
-        {id: 'lab-drawer--showcase', title: 'Lab/Drawer'},
+        {id: 'lab-stat--showcase', title: 'Lab/Stat'},
       ],
       publicComponentsByPackage: {
         lab: [
@@ -129,7 +129,7 @@ describe('fast PR accessibility scope', () => {
           'ChatReactionBar',
           'ChatTypingIndicator',
           'ChatUnreadDivider',
-          'Drawer',
+          'Stat',
         ],
       },
     }).map(route => ({
@@ -149,14 +149,14 @@ describe('fast PR accessibility scope', () => {
       'lab-chatadditions--emoji-picker',
     ]);
 
-    const drawerScope = resolvePrA11yComponents(
-      analysis({modifiedComponentOwners: ['lab/Drawer']}),
+    const statScope = resolvePrA11yComponents(
+      analysis({modifiedComponentOwners: ['lab/Stat']}),
       process.cwd(),
       routes,
     );
-    expect(drawerScope).toEqual(['lab/Drawer']);
-    expect(storyIdsForComponentFilters(routes, drawerScope)).toEqual([
-      'lab-drawer--showcase',
+    expect(statScope).toEqual(['lab/Stat']);
+    expect(storyIdsForComponentFilters(routes, statScope)).toEqual([
+      'lab-stat--showcase',
     ]);
   });
 

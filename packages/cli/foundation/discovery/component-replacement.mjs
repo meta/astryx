@@ -30,6 +30,7 @@ import {
   COMPONENT_REPLACES_CLI,
   componentReplacesCliProblem,
 } from '../integrations/cli-requirement.mjs';
+import {formatCliCommand} from '../env/package-manager.mjs';
 
 /**
  * @typedef {import('../integrations/integrations.mjs').LoadedIntegration} LoadedIntegration
@@ -161,6 +162,24 @@ export async function resolveComponentReplacements(
       typeof name === 'string' ? byTarget.get(name) : undefined,
   };
 
+  // A first read under file names alone settles the common case, no
+  // declaration anywhere, without reading the names docs document.
+  let declares = false;
+  for (const integration of loadedIntegrations) {
+    if (declares || !integration?.components || integration.__loadError)
+      continue;
+    try {
+      const {components} = await discoverValidIntegrationComponents(
+        integration,
+        {documentedNames: false},
+      );
+      declares = components.some(record => record.replaces !== undefined);
+    } catch {
+      // Read again below, where a root that cannot be read is skipped.
+    }
+  }
+  if (!declares) return result;
+
   /** @type {Declaration[]} */
   const declarations = [];
   /** @type {Array<{name: string, package: string}>} */
@@ -274,7 +293,7 @@ export async function resolveComponentReplacements(
         'missing_component_replacement_target',
         differentCase
           ? `Component "${name}" replaces "${replaces}", which is not a Core component name. Core names it "${differentCase}".`
-          : `Component "${name}" replaces "${replaces}", which is not a Core component. Run \`astryx component --list\` for Core component names.`,
+          : `Component "${name}" replaces "${replaces}", which is not a Core component. Run \`${formatCliCommand('component --list')}\` for Core component names.`,
       );
       if (declaration.optedIn) {
         const key = differentCase ?? replaces;

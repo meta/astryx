@@ -172,6 +172,17 @@ describe('reset.css pseudo-element rules', () => {
     ).toBe(true);
   });
 
+  it('sets the dropdown marker of a field with a list on a single line', () => {
+    const marker = ruleBlocks.filter(({selector}) =>
+      topLevelSelectors(selector).some(entry =>
+        entry.endsWith('::-webkit-calendar-picker-indicator'),
+      ),
+    );
+    expect(marker.map(({body}) => body).join('\n')).toMatch(
+      /line-height:\s*1;/,
+    );
+  });
+
   it('falls back to the --color-text-secondary default for placeholders', () => {
     // A page that loads only the reset never defines the token. The fallback
     // repeats the token's own default, so that page shows the placeholder an

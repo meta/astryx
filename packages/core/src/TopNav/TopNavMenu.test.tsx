@@ -9,13 +9,16 @@
  * SYNC: When TopNavMenu changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi} from 'vitest';
+import {createRef} from 'react';
+import {beforeEach, describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {TopNavRenderContext} from './TopNavRenderContext';
 import {TopNavMenu} from './TopNavMenu';
+import {__resetMenuPressForTest} from '../hooks/useMenuPress';
+import {expectNativeLinkClicks} from '../hooks/__tests__/menuLinkClicks';
 
 const mockItems = [
   {
@@ -233,13 +236,58 @@ describe('TopNavMenu — drawer focus ring', () => {
     expectSharedFocusRing(screen.getByRole('button', {name: /Products/}));
   });
 
-  it('draws the shared ring on a drawer item', () => {
+  it('draws the shared ring on a drawer item', async () => {
+    const user = userEvent.setup();
     render(
       <TopNavRenderContext value="drawer">
         <TopNavMenu label="Products" items={mockItems} />
       </TopNavRenderContext>,
     );
+    await user.click(screen.getByRole('button', {name: /Products/}));
     expectSharedFocusRing(screen.getByRole('link', {name: /Analytics/}));
+  });
+
+  it('clips the drawer section only while it is collapsed', async () => {
+    // The ring paints outside the item, so a permanent clip would cut it off.
+    const user = userEvent.setup();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMenu label="Products" items={mockItems} />
+      </TopNavRenderContext>,
+    );
+    const trigger = screen.getByRole('button', {name: /Products/});
+    const section = document.getElementById(
+      trigger.getAttribute('aria-controls') ?? '',
+    )!;
+    expect(getComputedStyle(section).overflow).toBe('hidden');
+    expect(getComputedStyle(section.firstElementChild!).overflow).toBe('');
+
+    await user.click(trigger);
+    expect(getComputedStyle(section).overflow).toBe('visible');
+  });
+});
+
+describe('TopNavMenu — drawer collapsed section', () => {
+  it('makes collapsed items inert and hidden from assistive technology', async () => {
+    const user = userEvent.setup();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMenu label="Products" items={mockItems} />
+      </TopNavRenderContext>,
+    );
+    const trigger = screen.getByRole('button', {name: /Products/});
+    const region = document.getElementById(
+      trigger.getAttribute('aria-controls') ?? '',
+    );
+
+    expect(region).toHaveAttribute('inert');
+    expect(region).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.queryByRole('link', {name: /Analytics/})).toBeNull();
+
+    await user.click(trigger);
+    expect(region).not.toHaveAttribute('inert');
+    expect(region).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByRole('link', {name: /Analytics/})).toBeInTheDocument();
   });
 });
 
@@ -273,6 +321,22 @@ describe('TopNavMenu pass-through props', () => {
     const trigger = screen.getByRole('button', {name: /Products/});
     expect(trigger).toHaveAttribute('id', 'products-drawer');
     expect(trigger).toHaveAttribute('data-source', 'nav');
+  });
+
+  it('forwards its ref to the trigger button', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(<TopNavMenu ref={ref} label="Products" items={mockItems} />);
+    expect(ref.current).toBe(screen.getByRole('button', {name: 'Products'}));
+  });
+
+  it('forwards its ref to the drawer trigger', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMenu ref={ref} label="Products" items={mockItems} />
+      </TopNavRenderContext>,
+    );
+    expect(ref.current).toBe(screen.getByRole('button', {name: /Products/}));
   });
 
   it('keeps its own popup wiring when a caller passes the same attributes', () => {
@@ -372,5 +436,67 @@ describe('TopNavMenu — owned handlers on the trigger', () => {
 
     await user.hover(screen.getByRole('button', {name: /Products/}));
     expect(handleMouseEnter).toHaveBeenCalledOnce();
+  });
+});
+
+describe('TopNavMenu as an action group (family:action-groups)', () => {
+  beforeEach(() => {
+    __resetMenuPressForTest();
+  });
+
+  const item = (name: RegExp) =>
+    screen.getByRole('menuitem', {name, hidden: true});
+
+  it('renders a link item undraggable, so a mouse press that slides to another item is not a drag', () => {
+    render(
+      <TopNavMenu
+        label="Products"
+        items={[
+          {title: 'Docs', href: '/docs'},
+          {title: 'Status', onClick: () => {}},
+        ]}
+      />,
+    );
+    expect(item(/Docs/)).toHaveAttribute('draggable', 'false');
+    expect(item(/Status/)).not.toHaveAttribute('draggable');
+  });
+
+  it('leaves a Ctrl-, Cmd-, Shift- or middle click on a link item to the browser', () => {
+    render(
+      <TopNavMenu
+        label="Products"
+        items={[
+          {title: 'Docs', href: '/docs'},
+          {title: 'Status', href: '/status'},
+        ]}
+      />,
+    );
+    expectNativeLinkClicks(item(/Docs/));
+  });
+
+  it('acts on the item a press lifts on, once, after sliding from another (FR1, FR2, FR5)', () => {
+    const onAnalytics = vi.fn();
+    const onMessaging = vi.fn();
+    render(
+      <TopNavMenu
+        label="Products"
+        items={[
+          {title: 'Analytics', onClick: onAnalytics},
+          {title: 'Messaging', onClick: onMessaging},
+        ]}
+      />,
+    );
+    for (const pointer of [
+      {pointerType: 'touch', pointerId: 1},
+      {pointerType: 'mouse', pointerId: 2, button: 0},
+    ]) {
+      onAnalytics.mockClear();
+      onMessaging.mockClear();
+      fireEvent.pointerDown(item(/Analytics/), pointer);
+      fireEvent.pointerMove(item(/Messaging/), pointer);
+      fireEvent.pointerUp(item(/Messaging/), pointer);
+      expect(onMessaging).toHaveBeenCalledTimes(1);
+      expect(onAnalytics).not.toHaveBeenCalled();
+    }
   });
 });

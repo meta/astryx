@@ -4,7 +4,8 @@
  * @file `astryx docs styling-overview`
  *
  * One question: "How do I set up CSS?"
- * Three paths, each with its exact imports.
+ * Three paths, each with its exact imports. Every path loads the prebuilt
+ * stylesheets (spec:AST-080 FR5); none compiles Astryx package source.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
@@ -14,7 +15,7 @@ export const docs = {
   title: 'Styling overview',
   category: 'guide',
   description:
-    'How to set up CSS — exact imports for three paths: plain, Tailwind, and StyleX from source.',
+    'How to set up CSS — exact imports for three paths: plain, Tailwind, and StyleX for your own code — plus the stylesheet each Astryx package ships.',
   keywords: [
     'styling',
     'CSS',
@@ -46,15 +47,15 @@ export const docs = {
               "None beyond Tailwind's own.",
             ],
             [
-              'StyleX from source',
-              'Swizzled (ejected) components. Raw StyleX source needs a compiler plugin.',
-              'Yes \u2014 a StyleX bundler plugin.',
+              'StyleX for your own code',
+              'Your own `stylex.create()` styles and swizzled (ejected) components. Astryx itself stays prebuilt.',
+              'Yes \u2014 a StyleX plugin for your own code.',
             ],
           ],
         },
         {
           type: 'prose',
-          text: 'All three resolve to the same design tokens and support theming and dark mode. You can mix them in one app.',
+          text: 'All three load the same prebuilt Astryx stylesheets, resolve to the same design tokens, and support theming and dark mode. None of them compiles Astryx package source. You can mix them in one app.',
         },
       ],
     },
@@ -66,7 +67,7 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Install',
-          code: 'npm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral',
+          code: '{@pm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral}',
         },
         {
           type: 'code',
@@ -78,7 +79,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "Done. Components work out of the box \u2014 style them with `className`, `xstyle`, or `style`. Swap `theme-neutral` for any theme package (`astryx theme list` shows what's available).",
+          text: "Done. Components work out of the box \u2014 style them with `className`, `xstyle`, or `style`. Swap `theme-neutral` for any theme package (`{@command theme list}` shows what's available).",
         },
       ],
     },
@@ -90,7 +91,7 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Install (add to an existing Tailwind v4 app)',
-          code: 'npm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral',
+          code: '{@pm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral}',
         },
         {
           type: 'code',
@@ -117,31 +118,30 @@ export const docs = {
       ],
     },
     {
-      id: 'stylex-from-source',
-      title: 'StyleX from source',
+      id: 'stylex-own-code',
+      title: 'StyleX for your own code',
       content: [
         {
           type: 'prose',
-          text: 'Only needed when you swizzle a component (`astryx swizzle <Component>`) or write your own StyleX. The plain path already supports `xstyle` overrides \u2014 this path is for editing component internals. Some built-in page templates also use StyleX for layout; if you scaffold one and see "Unexpected stylex.create call at runtime", add the compiler plugin for your bundler below.',
+          text: 'Only needed when you write your own StyleX (`stylex.create()`) or swizzle a component (`{@command swizzle <Component>}`), which copies its StyleX source into your app. The plain path already supports `xstyle` overrides \u2014 this path is for your own StyleX code. Some built-in page templates also use StyleX for layout; if you scaffold one and see "Unexpected stylex.create call at runtime", add the compiler plugin for your bundler below.',
         },
         {
           type: 'code',
           lang: 'bash',
           label: 'Install',
-          code: 'npm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral',
+          code: '{@pm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral}',
         },
         {
           type: 'code',
           lang: 'css',
           label: 'globals.css',
-          code: `@layer reset, astryx-base, astryx-theme;
-
-@import "@astryxdesign/core/reset.css";
+          code: `@import "@astryxdesign/core/reset.css";
+@import "@astryxdesign/core/astryx.css";
 @import "@astryxdesign/theme-neutral/theme.css";`,
         },
         {
           type: 'prose',
-          text: 'No `astryx.css` \u2014 the StyleX compiler produces component styles from source. Add the plugin for your bundler:',
+          text: 'Keep `astryx.css`: Astryx component styles always come from the prebuilt stylesheets. Point the StyleX compiler at your own source only, never at `node_modules/@astryxdesign`. Add the plugin for your bundler:',
         },
         {
           type: 'table',
@@ -149,13 +149,47 @@ export const docs = {
           rows: [
             ['Webpack', '@stylexjs/webpack-plugin'],
             ['Vite / Rollup', '@stylexjs/rollup-plugin'],
-            ['Babel (any)', '@stylexjs/babel-plugin + @stylexjs/postcss-plugin'],
+            [
+              'Babel (any)',
+              '@stylexjs/babel-plugin + @stylexjs/postcss-plugin',
+            ],
             ['Next.js (keep next/font)', '@stylexswc/nextjs-plugin'],
           ],
         },
         {
           type: 'prose',
-          text: 'If a swizzled component renders with no styles and no error, a missing compiler is almost always why. See the StyleX Build Setup section of {@link generic:tokens-and-setup} for bundler config examples.',
+          text: 'If a swizzled component fails at runtime with a `stylex.create` error, the app is missing a StyleX compiler: see the StyleX Build Setup section of {@link generic:tokens-and-setup}.',
+        },
+      ],
+    },
+    {
+      id: 'other-packages',
+      title: 'Other Astryx packages',
+      content: [
+        {
+          type: 'prose',
+          text: 'Every Astryx package whose components carry styles ships its own prebuilt stylesheet. Import it after `astryx.css` for each package you use. All of them place their rules in the same `astryx-base` layer, so your theme overrides win over every package.',
+        },
+        {
+          type: 'code',
+          lang: 'css',
+          label: 'globals.css',
+          code: `@import "@astryxdesign/core/reset.css";
+@import "@astryxdesign/core/astryx.css";
+@import "@astryxdesign/richtext/richtext.css"; /* Rich Text */
+@import "@astryxdesign/lab/lab.css"; /* Lab */
+@import "@astryxdesign/charts/charts.css"; /* Charts */
+@import "@astryxdesign/theme-neutral/theme.css";`,
+        },
+        {
+          type: 'table',
+          headers: ['Package', 'Stylesheet'],
+          rows: [
+            ['@astryxdesign/core', '@astryxdesign/core/astryx.css'],
+            ['@astryxdesign/richtext', '@astryxdesign/richtext/richtext.css'],
+            ['@astryxdesign/lab', '@astryxdesign/lab/lab.css'],
+            ['@astryxdesign/charts', '@astryxdesign/charts/charts.css'],
+          ],
         },
       ],
     },
@@ -175,7 +209,12 @@ export const docs = {
             [
               'astryx.css',
               'astryx-base',
-              'Pre-compiled component styles. Required for plain and Tailwind. Omit when compiling from source.',
+              'Prebuilt component styles. Required on every path.',
+            ],
+            [
+              'richtext.css, lab.css, charts.css',
+              'astryx-base',
+              'Prebuilt styles for each other Astryx package you use. Load after astryx.css.',
             ],
             [
               'theme.css',

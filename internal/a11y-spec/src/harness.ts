@@ -97,6 +97,12 @@ export interface Subject {
   textValue(): Promise<string | null>;
   /** DOM layer: the subject's authored text content, whitespace-normalized. */
   textContent(): Promise<string>;
+  /**
+   * DOM layer: how many descendants match a CSS selector (`:scope` names the
+   * subject). Structure contracts count rows and cells with it; it never
+   * reaches into component-private markup beyond ARIA roles and attributes.
+   */
+  descendantCount(selector: string): Promise<number>;
   /** DOM layer: whether a current semantic subject resolves after an update. */
   currentExists(): Promise<boolean>;
   /** DOM layer: whether the originally designated subject is still connected. */
@@ -142,7 +148,12 @@ export type Key =
   | 'ArrowLeft'
   | 'ArrowRight'
   | 'ArrowUp'
-  | 'ArrowDown';
+  | 'ArrowDown'
+  | 'Home'
+  | 'End'
+  | 'PageUp'
+  | 'PageDown'
+  | 'Escape';
 
 /**
  * A mounted binding, observed at whatever layers this runtime can honestly see.
@@ -190,6 +201,23 @@ export interface Harness {
    * press, slide off, let go.
    */
   abortedPress(subject: Subject): Promise<void>;
+  /**
+   * Real-browser layer: click just outside the subject's box, the way a
+   * person clicks the dimmed page beside a modal surface. What that click
+   * lands on (a backdrop, an inert page) is the subject's own business; the
+   * harness only puts the pointer there.
+   */
+  clickBeside(subject: Subject): Promise<void>;
+  /**
+   * Real-browser layer: move a mouse pointer onto the subject and leave it
+   * resting there, the way a mouse user hovers a control to see its hint.
+   */
+  hover(subject: Subject): Promise<void>;
+  /**
+   * Real-browser layer: move the pointer to a point in the viewport that is
+   * off the subject and every related subject, the way a mouse user moves on.
+   */
+  pointerAway(): Promise<void>;
   /** Real-browser layer: type text into the focused subject. */
   typeText(subject: Subject, text: string): Promise<void>;
   /** Real-browser layer: select and delete all text from the subject. */

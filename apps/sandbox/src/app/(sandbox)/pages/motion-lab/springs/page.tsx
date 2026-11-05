@@ -82,6 +82,9 @@ function SpringPlot({duration, bounce}: {duration: number; bounce: number}) {
       className={styles.curveCanvas}
       width={PLOT_WIDTH}
       height={PLOT_HEIGHT}
+      // Shrinks with a card narrower than the plot (a phone); its own size
+      // otherwise.
+      style={{maxWidth: '100%', height: 'auto'}}
       viewBox={`0 0 ${PLOT_WIDTH} ${PLOT_HEIGHT}`}
       role="img"
       aria-label={`Spring position over time, duration ${duration} seconds, bounce ${bounce}`}>
@@ -353,7 +356,7 @@ export default function MotionSpringsPage() {
         }
       />
 
-      <Grid columns={{minWidth: 420}} gap={4}>
+      <Grid columns={{minWidth: 420, max: 2}} gap={4}>
         {SPRINGS.map(spec => (
           <SpringCard
             key={spec.name}

@@ -81,8 +81,9 @@ const reserveStyles = stylex.create({
  *
  * Takes the lane's inset from the field's inline-end border, as the CSS
  * expression that positions it. Returns a ref callback for the lane, and the
- * ordinary input reserve style. Tokenizer's compact input reads the same custom
- * property directly so its empty-query hit surface can stop before the lane.
+ * ordinary input reserve style. With tokens, Tokenizer's field wrapper reads the
+ * same custom property directly so every token row, and the input after the
+ * last token, stops before the lane.
  * With no lane mounted the variable is absent and either rule resolves to its
  * no-lane fallback, so neither path needs to know whether a search is running.
  */

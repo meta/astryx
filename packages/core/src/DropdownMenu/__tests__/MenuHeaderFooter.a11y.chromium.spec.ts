@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y always
 
 /**
  * @file MenuHeaderFooter.a11y.chromium.spec.ts
@@ -10,7 +11,7 @@
  * @position Run with `pnpm test:a11y-contract`.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -31,8 +32,8 @@ test.afterAll(async () => {
 
 const STORY = 'core-dropdownmenu--header-and-footer';
 // The trigger button only: the sub-menu row inside the menu also carries
-// aria-haspopup="menu".
-const TRIGGER = '#storybook-root button[aria-haspopup="menu"]';
+// aria-haspopup. With a header and footer the trigger opens a dialog.
+const TRIGGER = '#storybook-root button[aria-haspopup="dialog"]';
 
 async function openMenu(page: Page) {
   await page.goto(`${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`);
@@ -76,7 +77,7 @@ test('typing into the header field filters without moving to a row', async ({
   await expect(page.getByRole('menuitem')).toHaveText(['Design', 'Move to']);
 });
 
-test('Tab walks header, menu, footer, then closes to the trigger', async ({
+test('Tab walks header, menu, footer, and wraps at both ends', async ({
   page,
 }) => {
   const menu = await openMenu(page);
@@ -97,9 +98,44 @@ test('Tab walks header, menu, footer, then closes to the trigger', async ({
   await expect(page.getByTestId('created')).toHaveText('1');
   await expect(menu).toBeVisible();
 
+  // Past the footer's last control, Tab wraps to the header; before the
+  // header's first, Shift+Tab wraps to the footer. The dialog stays open.
   await page.keyboard.press('Tab');
-  await expect(menu).toBeHidden();
-  await expect(page.locator(TRIGGER)).toHaveAttribute('aria-expanded', 'false');
+  await expect(field).toBeFocused();
+  await expect(menu).toBeVisible();
+  await page.keyboard.press('Shift+Tab');
+  await expect(create).toBeFocused();
+  await expect(menu).toBeVisible();
+  await expect(page.locator(TRIGGER)).toHaveAttribute('aria-expanded', 'true');
+});
+
+test('the popover is a modal dialog around the menu, and the trigger points at it', async ({
+  page,
+}) => {
+  const menu = await openMenu(page);
+  const dialog = page.getByRole('dialog', {name: 'Labels'});
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute('aria-modal', 'true');
+  await expect(
+    dialog.getByRole('menu', {name: 'Labels', exact: true}),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole('textbox', {name: 'Filter labels'}),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole('button', {name: 'Create label'}),
+  ).toBeVisible();
+  const trigger = page.locator(TRIGGER);
+  await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+  const controlsDialog = await trigger.evaluate(el => {
+    const target = document.getElementById(
+      el.getAttribute('aria-controls') ?? '',
+    );
+    const dialogEl = document.querySelector('[role="dialog"]');
+    return target != null && dialogEl != null && target.contains(dialogEl);
+  });
+  expect(controlsDialog).toBe(true);
+  await expect(menu).toBeFocused();
 });
 
 test('Shift+Tab from a row goes straight to the header', async ({page}) => {
