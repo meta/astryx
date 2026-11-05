@@ -442,12 +442,15 @@ Known verification gaps:
   another keeps its name until a minor renames it under INV9. Outline's
   `offset` is the distance below the top of its scroll root
   (`component:Outline` FR4), not a gap from an anchor.
-- INV3: Carousel `hasSnap` takes `boolean | SnapPaging`. Omitted or `false`
-  does not snap, `true` is native scroll snap, and a value from
-  `useSnapPaging` is snap paging. This third state is a known deviation from
-  the rule that an `is…` or `has…` boolean names only a true on/off. The owner
-  accepted it on 2026-11-02 so that builders keep one snap prop
-  (`component:Carousel/DEC-2`); it is not renamed.
+- INV3: Carousel `hasSnap` takes `boolean | SnapPaging`. Omitted or `false` does
+  not snap, `true` is native scroll snap, and a value from `useSnapPaging` is
+  snap paging. It is a known deviation from three rules: an `is…` or `has…`
+  boolean names only a true on/off with no third state (INV3); a prop that
+  chooses how a component responds to input is a `<thing>Behavior` closed union
+  (INV2); and a behavior that differs by device offers a per-device value
+  (INV3), where the paging value pages under a finger and a trackpad swipe and
+  keeps native snap under a mouse wheel. It keeps one snap prop for builders
+  (`component:Carousel/DEC-2`) and is not renamed.
 - INV22: known gaps include `useLongPress`, `useMenuPress`, `usePressFeedback`,
   `useClickableContainer`, `useInputContainer`, `useOverlay`, `useCombobox`,
   `useMultiCombobox`, `useResizable`, `useTooltip`, `useHoverCard`, and
