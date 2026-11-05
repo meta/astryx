@@ -221,7 +221,7 @@ export const docs = {
   },
   usage: {
     description:
-      'A click-triggered overlay anchored to a button or trigger element. Use it for secondary actions, inline confirmations, or supplementary information that does not warrant a full dialog. For hover previews use HoverCard, for brief helper text use Tooltip.',
+      'A click-triggered overlay anchored to a button or trigger element. Use it for secondary actions, inline confirmations, or supplementary information that does not warrant a full dialog. For hover previews use HoverCard, for brief helper text use Tooltip. Under a finger (a coarse primary pointer), it is presented like a native popover: it grows out of its trigger and shrinks back into it on the theme\u2019s motion tokens; with reduced motion it cross-fades, opacity only, in 200 ms or less.',
     bestPractices: [
       {
         guidance: true,
@@ -439,7 +439,7 @@ export const docsZh = {
   },
   usage: {
     description:
-      'A click-triggered overlay anchored to a button or trigger element. Use it for secondary actions, inline confirmations, or supplementary information that does not warrant a full dialog. For hover previews use HoverCard, for brief helper text use Tooltip.',
+      'A click-triggered overlay anchored to a button or trigger element. Use it for secondary actions, inline confirmations, or supplementary information that does not warrant a full dialog. For hover previews use HoverCard, for brief helper text use Tooltip. Under a finger (a coarse primary pointer), it is presented like a native popover: it grows out of its trigger and shrinks back into it on the theme\u2019s motion tokens; with reduced motion it cross-fades, opacity only, in 200 ms or less.',
     bestPractices: [
       {
         guidance: true,
@@ -512,7 +512,7 @@ export const docsDense = {
     'Click-triggered popover displaying interactive content anchored to trigger element; implements button+dialog ARIA pattern.',
   usage: {
     description:
-      'A click-triggered overlay anchored to a button or trigger element. Use it for secondary actions, inline confirmations, or supplementary information that does not warrant a full dialog. For hover previews use HoverCard, for brief helper text use Tooltip.',
+      'A click-triggered overlay anchored to a button or trigger element. Use it for secondary actions, inline confirmations, or supplementary information that does not warrant a full dialog. For hover previews use HoverCard, for brief helper text use Tooltip. Under a finger (a coarse primary pointer), it is presented like a native popover: it grows out of its trigger and shrinks back into it on the theme\u2019s motion tokens; with reduced motion it cross-fades, opacity only, in 200 ms or less.',
     bestPractices: [
       {
         guidance: true,

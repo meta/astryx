@@ -4,7 +4,7 @@
 
 /**
  * @file useSelectorPresentation.ts
- * @input Uses the shared adaptive presentation policy and usePopover
+ * @input Uses the shared adaptive presentation policy and usePopoverInternal
  * @output Coordinates popover and bottom-sheet disclosure state
  * @position Internal presentation controller shared by Selector and MultiSelector
  */
@@ -17,7 +17,7 @@ import {
   type RefObject,
 } from 'react';
 import {
-  usePopover,
+  usePopoverInternal,
   type UsePopoverOptions,
   type UsePopoverReturn,
 } from '../Popover/usePopover';
@@ -34,6 +34,8 @@ interface UseSelectorPresentationOptions {
   onHide: () => void;
   onShow: () => void;
   popoverOptions: Omit<UsePopoverOptions, 'onHide' | 'onShow'>;
+  /** The popover clamps itself on the placement axis instead of flipping. */
+  popoverClampsOnPlacementAxis?: boolean;
   triggerRef: RefObject<HTMLElement | null>;
   /**
    * The component's one modality tracking, its `ref` attached to the trigger,
@@ -67,6 +69,7 @@ export function useSelectorPresentation({
   onHide,
   onShow,
   popoverOptions,
+  popoverClampsOnPlacementAxis = false,
   triggerRef,
   triggerModality,
   isFocusReturnAlways = false,
@@ -121,8 +124,9 @@ export function useSelectorPresentation({
     resetFocusReturn();
     onShowRef.current();
   }, [resetFocusReturn]);
-  const popover = usePopover({
+  const popover = usePopoverInternal({
     ...popoverOptions,
+    clampsOnPlacementAxis: popoverClampsOnPlacementAxis,
     onHide: handlePopoverHide,
     onShow: handlePopoverShow,
   });

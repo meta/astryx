@@ -37,6 +37,8 @@ verified_by:
     packages/core/src/Layer/useLayerDismissal.test.tsx,
     packages/core/src/Layer/layerClickBoundary.test.tsx,
     packages/core/src/Layer/layerDismissalInvariants.test.tsx,
+    packages/core/src/Layer/layerExitCopy.test.ts,
+    packages/core/src/Layer/__tests__/layerExitCopy.interaction.browser.spec.ts,
     packages/core/src/Popover/Popover.test.tsx,
     packages/core/src/DropdownMenu/DropdownMenu.test.tsx,
     packages/core/src/ContextMenu/ContextMenu.test.tsx,
@@ -67,6 +69,7 @@ deciding_specs: [spec:AST-038, spec:AST-059]
       "INV7",
       "INV11",
       "INV12",
+      "INV13",
       "INV14",
       "INV15",
       "INV17",
@@ -239,6 +242,14 @@ self-alignment `unsafe` toward the anchor, so the layer holds the position its
 flips give it and holds its size rather than sliding to the edge. Components
 pass no fallbacks of their own to an anchor-mode layer.
 
+A core component may ask an anchor-mode layer to clamp itself on the placement
+axis instead of flipping, through the internal layer options. That layer takes
+no fallback list and no `position-area`; the component's render style supplies
+the placement-axis inset, which it resolves in layout from `anchor()` values
+and the runtime's gutters, and the inline-axis inset the same way. The layer
+stays anchored: the keyboard cap, the viewport fit and the gutters still apply.
+Selector's selected-item overlay is the one such layer.
+
 Every one of these inputs is resolved by the browser's style and layout in the
 same frame as the render that produced it; apart from the one case below, the
 runtime measures nothing after paint to apply them. Anchor visibility is read
@@ -313,6 +324,26 @@ inside, judged across open shadow roots; a press that starts and ends anywhere
 else closes the layer, a scroll or pinch that starts outside does not, and
 Escape stays on the shared stack. Focus leaving the field stays each owner's to
 handle (`family:overlay-dismissal` AV4).
+
+### Exit copy
+
+The browser hides a popover the moment it closes, whether by a pick, Escape, or
+its own light dismiss. A touch presentation whose close stays on screen plays it
+on an exit copy: a static copy of the layer that `placeLayerExitCopy` takes as
+the layer closes. The copy is laid out on the layer's own box and carries the
+transform and opacity the layer is drawn with, so a copy taken while the layer
+is still entering holds where it was drawn. It carries no ids, form names, or
+form owner; it is `inert`, hidden from assistive technology, and out of pointer
+reach; it keeps the layer's scroll positions. It is shown only in the top layer,
+as a manual popover, so a clipping, transformed, or sticky ancestor neither cuts
+nor moves it; a fixed box or a larger `z-index` is no substitute
+(`spec:AST-027` FR8). Where the browser refuses that show during the closing
+popover's own toggle, the copy waits, hidden, and enters the top layer once the
+toggle is over: after the script that closed the layer, or in the next frame
+before it paints. Where there is no top layer (no popover API), or the browser
+still refuses, there is no copy and the close is immediate. The presentation
+that placed the copy plays its exit on it (`spec:AST-094` FR7) and removes it
+when its close settles.
 
 ### Current dismissal plumbing
 
@@ -524,6 +555,12 @@ layers use Layer rendering without joining Escape/platform dismissal.
   correct, and the runtime polls nothing: an anchor that a scrolled
   container hides is followed again when an intersection observer reports it
   back in view.
+- **INV13 — One exit copy per closing layer.** A layer's close plays on at most
+  one exit copy, made by `placeLayerExitCopy`: drawn where the layer was drawn,
+  inert, hidden from assistive technology, without ids, form names, or form
+  owner, shown only in the top layer, and removed by its owner when the close
+  settles. Placing a second copy for the same layer removes the first; another
+  layer's copy stays.
 - **INV14 — The runtime owns every layer's shared mechanism.** Internally, the layer runtime owns the shared
   mechanism layers use: top-layer mounting, close-request delivery, the
   presentation hold (keeping a layer's chosen presentation from the open until
@@ -591,11 +628,12 @@ Current gaps are observable facts, not current target behavior:
 migration, verification, and completion criteria for these gaps. This record must
 be updated only as that work ships.
 
-INV14 and INV15 are not met yet, and `spec:AST-003` does not cover them: no
-shared presentation hold, exit copy, runtime backdrop tint, or lift module
-exists, and Dialog, Drawer, BottomSheet, Lightbox, MobileNav, ToastViewport,
-and Selector each build their own top-layer mounting, exit, or backdrop, and
-Popover builds its own presentation hold for its sheet presentation.
+INV14 and INV15 are not met yet, and `spec:AST-003` does not cover them. The
+runtime owns the shared exit copy (INV13, `placeLayerExitCopy`); no shared
+presentation hold, runtime backdrop tint or lift module exists, Dialog, Drawer,
+BottomSheet, Lightbox, MobileNav, ToastViewport, and Selector each build their
+own top-layer mounting, exit, or backdrop, and Popover builds its own
+presentation hold for its sheet presentation.
 BottomSheet's own includes its sheet stack's mounting — the re-show that
 keeps a document's sheets in open order, a step dialog's modal present, and
 the non-modal sheet's popover host — alongside its scrim; the ordering rules
@@ -648,6 +686,12 @@ is staged as `[breaking]` (`spec:AST-017` FR32) and `component:SelectableCard`
   entry/return, and controlled close behavior.
 - A browser fallback change updates public `useLayer` and Popover docs and tests
   for both the native path and actual fallback.
+- An exit-copy change verifies, where each can be observed: the copy's reach,
+  accessibility and form exclusion in jsdom; its top-layer show (from script
+  and by light dismiss), its place mid-entrance, and that a layer keeps one
+  copy, in jsdom and in Chromium and WebKit; and the refused show's wait in
+  jsdom and on Chromium 150 and later, the engines that refuse a show during
+  another popover's toggle (Chromium 149 accepts it).
 
 ## Owning code
 
@@ -677,6 +721,8 @@ is staged as `[breaking]` (`spec:AST-017` FR32) and `component:SelectableCard`
   `stopPropagation()` also stops the native event in React 19, which would
   break ContextMenu's outside `mousedown`, Typeahead's pending click, and the
   layer's keep-open `pointerup`, so the seam never stops the native event.
+- `Layer/layerExitCopy.ts` owns the exit copy a touch presentation's close plays
+  on.
 - `Layer/layerStack.ts`, `Layer/useLayerDismissal.ts`, and
   `Layer/LayerDepthContext.tsx` own current registration, presence, ordering, and
   Escape/platform routing.
@@ -730,6 +776,7 @@ this current architecture record.
 | INV3–INV5    | `useLayer.test.tsx` and `anchorName.test.ts`                                                                                                                                                                                                                                         | A mode leaks geometry, RTL resolves from the wrong context, fallback clips, or a sibling anchor is lost                                                                                                                                                                                                                                                                                                                      |
 | INV11        | `layerViewportInset.test.ts`, `useLayer.test.tsx`, and the `Core/Layer` viewport-inset stories under the story play guard at a desktop and a phone viewport; `BaseTypeahead.incremental.test.tsx` and the Typeahead incremental-results stories for the `spec:AST-092` FR6 exception | A second gutter definition, a `100%`-of-span cap, a layer narrower than its explicit size, a layer box wider than the viewport, a layer inside the gutter, or a layer that slides toward an off-screen anchor; for an open Typeahead popup, a later list for the same query that flips it to the other side or grows it past the room on its side, or a first list for a query that is capped to the span beside the trigger |
 | INV12        | The `Core/Layer` viewport-inset stories' first-frame comparison, and `useLayer.test.tsx`'s synchronous anchor read                                                                                                                                                                   | A layer whose first painted rectangle differs from its settled one                                                                                                                                                                                                                                                                                                                                                           |
+| INV13        | `layerExitCopy.test.ts` and `layerExitCopy.interaction.browser.spec.ts`                                                                                                                                                                                                              | A copy with an id, a form name, a form owner, or pointer reach; a copy off the layer's drawn box; a copy outside the top layer; a second copy for one layer                                                                                                                                                                                                                                                                  |
 | INV6, INV7   | `useLayer.test.tsx`, `Popover.test.tsx`, `DropdownMenu.test.tsx`, and `useMenuHover.test.tsx`                                                                                                                                                                                        | Duplicate close callback or the same press/re-hover reopens a surface                                                                                                                                                                                                                                                                                                                                                        |
 | INV8         | `useLayerDismissal.test.tsx`, `layerDismissalInvariants.test.tsx`, and `useFocusTrap.test.tsx`                                                                                                                                                                                       | Current top registered layer is skipped, two layers close, or a blocker leaks through                                                                                                                                                                                                                                                                                                                                        |
 | INV9         | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests; `useBackdropPress.test.tsx`; `outsidePress.test.ts`                                                                                                                                             | A current local channel silently changes ownership or policy                                                                                                                                                                                                                                                                                                                                                                 |

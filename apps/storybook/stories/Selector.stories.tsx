@@ -6,6 +6,7 @@ import {useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import {Selector, SelectorOption} from '@astryxdesign/core/Selector';
+import {TextInput} from '@astryxdesign/core/TextInput';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {RadioIndicator} from '@astryxdesign/core/Indicator';
 import {
@@ -1229,6 +1230,77 @@ export const PlacementAbove: Story = {
         onChange={v => setValue(v)}
         placement="above"
       />
+    );
+  },
+};
+
+/**
+ * The default overlay with the trigger at the viewport's end. The selected
+ * row sits over the trigger. The rest of the list stays inside the viewport,
+ * so the last option can be pointed at.
+ */
+export const OverlayNearViewportBottom: Story = {
+  parameters: {layout: 'fullscreen'},
+  render: () => {
+    const [value, setValue] = useState<string | undefined>(undefined);
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'flex-end',
+          alignItems: 'flex-start',
+          height: '100vh',
+          boxSizing: 'border-box',
+          padding: '0 0 6px 24px',
+        }}>
+        <Selector
+          label="Theme choice"
+          isLabelHidden
+          size="sm"
+          options={['(unset)', 'light', 'dark', 'system', 'custom', 'sepia']}
+          value={value}
+          onChange={v => setValue(v)}
+        />
+      </div>
+    );
+  },
+};
+
+/**
+ * A Selector near the end of the viewport beside a text input, for a phone
+ * with the software keyboard up. On a phone: tap the input, and the keyboard
+ * rises; tap the Selector, and focus moves to its trigger, so the keyboard
+ * goes down and the list opens clamped inside the viewport; pick an option.
+ * The keyboard stays up only while an editable element has focus, and the
+ * Selector's trigger is not one.
+ */
+export const OverlayNearBottomBesideInput: Story = {
+  parameters: {layout: 'fullscreen'},
+  render: () => {
+    const [value, setValue] = useState<string | undefined>('system');
+    const [note, setNote] = useState('');
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'flex-end',
+          alignItems: 'stretch',
+          gap: 12,
+          height: '100dvh',
+          boxSizing: 'border-box',
+          padding: '0 16px 12px',
+        }}>
+        <TextInput label="Note" value={note} onChange={setNote} />
+        <Selector
+          label="Theme choice"
+          size="sm"
+          options={['(unset)', 'light', 'dark', 'system', 'custom', 'sepia']}
+          value={value}
+          onChange={v => setValue(v)}
+        />
+      </div>
     );
   },
 };

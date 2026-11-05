@@ -916,7 +916,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   touch target reaches 44 px only through an invisible hit area clamped by
   its neighbors, unless a component or module record sets its own (FR42).
 - `component:DropdownMenu`, `component:ContextMenu` and `component:Popover`:
-  under a finger they follow FR26–FR35 as each applies.
+  under a finger they follow FR26–FR35 as each applies. Popover's input hold
+  (FR35) starts on the first frame after the open, so a touch that lands
+  within that frame reaches the page.
 - `component:AlertDialog`, `component:Dialog`, `component:BottomSheet`,
   `component:BottomSheetSwitcher`, `component:Drawer`, `component:MobileNav`
   and `component:Lightbox`: under a finger, a tap or a drag during the

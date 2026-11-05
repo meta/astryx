@@ -5,8 +5,9 @@
 /**
  * @file usePopover.tsx
  * @input Uses useLayer, useFocusTrap, React hooks
- * @output Exports the public usePopover hook with derived focus and guarded opening,
- *   and FALLBACK_CLOSE_SELECTOR for Popover.tsx (internal).
+ * @output Exports the public usePopover hook with derived focus and guarded opening.
+ *   For Popover.tsx (internal), exports usePopoverInternal and
+ *   FALLBACK_CLOSE_SELECTOR.
  * @position Higher-level layer utility; used by DatePicker, Combobox, etc.
  *
  * Combines popover layer behavior with focus trap for dialog-like popovers.
@@ -18,7 +19,7 @@
 
 import React, {useCallback, useEffect, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {useLayer, type ContextRenderProps} from '../Layer/useLayer';
+import {useLayerInternal, type ContextRenderProps} from '../Layer/useLayer';
 import {useFocusTrapInternal} from '../hooks/useFocusTrap';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import type {StyleXStyles} from '@stylexjs/stylex';
@@ -354,6 +355,23 @@ export interface UsePopoverReturn {
 }
 
 /**
+ * Options a core component may pass through `usePopoverInternal`; not part
+ * of the public `usePopover` options.
+ */
+interface InternalPopoverOptions extends UsePopoverOptions {
+  /**
+   * Runs as the popover starts to close, while the browser still shows it.
+   * A close that plays out after the popover is hidden starts here.
+   */
+  onCloseStart?: () => void;
+  /**
+   * The layer clamps itself on the placement axis instead of flipping: no
+   * position fallbacks, and the consumer's render style sets the inset.
+   */
+  clampsOnPlacementAxis?: boolean;
+}
+
+/**
  * Hook for creating popover dialogs with focus trapping.
  *
  * Combines:
@@ -394,11 +412,13 @@ export interface UsePopoverReturn {
  * ```
  */
 function usePopoverImplementation(
-  options: UsePopoverOptions = {},
+  options: InternalPopoverOptions = {},
 ): UsePopoverReturn {
   const {
     onShow,
     onHide,
+    onCloseStart,
+    clampsOnPlacementAxis,
     xstyle,
     className,
     style,
@@ -436,11 +456,13 @@ function usePopoverImplementation(
   }, [onShow]);
 
   // Core layer for popover positioning
-  const layer = useLayer({
+  const layer = useLayerInternal({
     mode: 'context',
     lightDismiss: hasLightDismiss,
     onShow: handleLayerShow,
     onHide,
+    onCloseStart,
+    clampsOnPlacementAxis,
   });
 
   // Focus trap for the popover content. Escape stays registered while light
@@ -668,5 +690,14 @@ function usePopoverImplementation(
 }
 
 export function usePopover(options: UsePopoverOptions = {}): UsePopoverReturn {
+  return usePopoverImplementation(options);
+}
+
+/**
+ * @internal For Popover; not exported from the package barrel.
+ */
+export function usePopoverInternal(
+  options: InternalPopoverOptions = {},
+): UsePopoverReturn {
   return usePopoverImplementation(options);
 }
