@@ -145,8 +145,25 @@ describe('AreaChart series composition', () => {
     ).toBeInTheDocument();
   });
 
-  it('renders stacked and gradient variants without crashing', () => {
-    render(
+  it('stacks areas on a shared baseline and fades the fill when gradient', () => {
+    const {container, rerender} = render(
+      <AreaChart
+        data={data}
+        xKey="month"
+        yKeys={['revenue', 'profit']}
+        title="Stacked revenue"
+      />,
+    );
+    reportWidth(600);
+
+    expect(
+      screen.getByRole('img', {name: 'Stacked revenue'}),
+    ).toBeInTheDocument();
+    const fills = () =>
+      Array.from(container.querySelectorAll('path[fill]:not([fill="none"])'));
+    const overlaid = fills().map(path => path.getAttribute('d'));
+
+    rerender(
       <AreaChart
         data={data}
         xKey="month"
@@ -156,11 +173,18 @@ describe('AreaChart series composition', () => {
         title="Stacked revenue"
       />,
     );
-    reportWidth(600);
 
+    const stacked = fills();
+    expect(stacked.length).toBeGreaterThan(0);
     expect(
-      screen.getByRole('img', {name: 'Stacked revenue'}),
-    ).toBeInTheDocument();
+      stacked.every(path =>
+        (path.getAttribute('fill') ?? '').startsWith('url(#area-grad-'),
+      ),
+    ).toBe(true);
+    expect(container.querySelector('linearGradient')).not.toBeNull();
+    // Stacking lifts the second series onto the first, so the fill geometry
+    // differs from the overlaid render.
+    expect(stacked.map(path => path.getAttribute('d'))).not.toEqual(overlaid);
   });
 
   it('hides the legend when legend is false', () => {
