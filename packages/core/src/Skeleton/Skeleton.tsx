@@ -232,7 +232,7 @@ export function Skeleton({
       aria-hidden="true"
       data-testid={testId}
       {...mergeProps(
-        themeProps('skeleton'),
+        themeProps('skeleton', {radius: radiusProp}),
         stylex.props(
           styles.root,
           styles.animate,
