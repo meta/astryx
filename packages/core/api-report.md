@@ -865,6 +865,7 @@ component ContextMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component DateInput(props: DateInputProps)
+  prop calendar?: CalendarSystem = the InternationalizationProvider's calendar, else `'gregory'`
   prop changeAction?: (value: ISODateString | undefined) => void | Promise<void>
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
@@ -900,6 +901,7 @@ component DateInput(props: DateInputProps)
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component DateRangeInput(props: DateRangeInputProps)
+  prop calendar?: CalendarSystem = the InternationalizationProvider's calendar, else `'gregory'`
   prop changeAction?: (value: DateRange | null) => void | Promise<void>
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
@@ -935,6 +937,7 @@ component DateRangeInput(props: DateRangeInputProps)
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component DateTimeInput(props: DateTimeInputProps)
+  prop calendar?: CalendarSystem = the InternationalizationProvider's calendar, else `'gregory'`
   prop changeAction?: (value: ISODateTimeString | undefined) => void | Promise<void>
   prop containerClassName?: string
   prop containerStyle?: CSSProperties

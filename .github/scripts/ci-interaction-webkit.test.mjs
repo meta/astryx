@@ -117,13 +117,74 @@ describe('WebKit interaction proof routing', () => {
     expect(checkout?.with?.ref).toBe(
       '${{ github.event.pull_request.head.sha }}',
     );
-    expect(step(webkit, 'Install Playwright WebKit').run).toContain(
-      'npx playwright install --with-deps webkit',
+    // The image already holds WebKit and its system libraries: no apt step.
+    expect(step(webkit, 'Install Playwright WebKit').run).toBe(
+      'pnpm install --frozen-lockfile && npx playwright install webkit chromium-headless-shell',
     );
     const run = step(webkit, 'Run WebKit interaction proofs').run;
     expect(run).toContain('--config playwright.interaction.config.ts');
     expect(run).toContain('--project webkit');
     expect(run).not.toContain('--project chromium');
+  });
+
+  it("installs Chromium's headless shell when an interaction spec launches Chromium", () => {
+    // A changed interaction spec runs in the WebKit legs too, so a spec that
+    // launches Chromium (to decode a WebKit recording) needs the shell there.
+    const launchesChromium = source => /\bchromium\.launch\(/.test(source);
+    expect(launchesChromium('const decoder = await chromium.launch();')).toBe(
+      true,
+    );
+    expect(launchesChromium('await webkit.launch();')).toBe(false);
+    const specs = execFileSync(
+      'git',
+      ['ls-files', '*.interaction.browser.spec.ts'],
+      {cwd: root, encoding: 'utf8'},
+    )
+      .split('\n')
+      .filter(Boolean);
+    const launchers = specs.filter(file =>
+      launchesChromium(fs.readFileSync(path.join(root, file), 'utf8')),
+    );
+    if (launchers.length > 0) {
+      expect(
+        step(webkit, 'Install Playwright WebKit').run.split(/\s+/),
+        launchers.join(', '),
+      ).toContain('chromium-headless-shell');
+    }
+  });
+
+  it("runs in Playwright's image for exactly the Playwright version the lockfile resolves", () => {
+    expect(webkit['runs-on']).toBe('ubuntu-latest');
+    expect(webkit.container).toEqual({
+      image: expect.stringMatching(
+        /^mcr\.microsoft\.com\/playwright:v\d+\.\d+\.\d+-noble$/,
+      ),
+      options: '--ipc=host',
+    });
+    // Steps keep the runner's bash, and git trusts the root-owned checkout
+    // before the head check reads it.
+    expect(webkit.defaults).toEqual({run: {shell: 'bash'}});
+    const trust = step(webkit, 'Trust the checkout in the container');
+    expect(trust.run).toBe(
+      'git config --global --add safe.directory "$GITHUB_WORKSPACE"',
+    );
+    expect(webkit.steps.indexOf(trust)).toBe(
+      webkit.steps.indexOf(step(webkit, 'Verify evidence checkout')) - 1,
+    );
+    const tag = /:v(\d+\.\d+\.\d+)-/.exec(webkit.container.image)[1];
+    const lock = fs.readFileSync(path.join(root, 'pnpm-lock.yaml'), 'utf8');
+    // Every resolved copy of the three packages, so a bump of any one of them
+    // fails here until the image tag moves with it.
+    for (const name of ['@playwright/test', 'playwright', 'playwright-core']) {
+      const pattern = new RegExp(
+        `^  '?${name.replace(/[/.]/g, '\\$&')}@(\\d+\\.\\d+\\.\\d+)'?:`,
+        'gm',
+      );
+      const versions = new Set(
+        [...lock.matchAll(pattern)].map(match => match[1]),
+      );
+      expect([...versions], name).toEqual([tag]);
+    }
   });
 
   it("caps llvmpipe's threads at the job's cgroup CPU quota before Playwright runs", async () => {

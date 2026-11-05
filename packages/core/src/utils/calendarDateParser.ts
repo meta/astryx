@@ -5,7 +5,7 @@
  * @input Date text, locale, calendar; Intl, calendarSystem, unicodeDigits
  * @output Cached per-locale lexicons, a typed-date parser with distinct rejection
  *   kinds, committed display text, the format hint, and calendar display names
- * @position Core utility; reads and writes dates typed in a calendar system
+ * @position Core utility; used by DateInput and DateTimeInput through useTypedDate
  *
  * SYNC: When modified, update:
  * - /packages/core/src/utils/calendarDateParser.test.ts
