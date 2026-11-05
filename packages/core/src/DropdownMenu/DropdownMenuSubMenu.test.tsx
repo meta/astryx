@@ -26,6 +26,7 @@ import {warmMenuBottomSheet} from './__tests__/warmMenuBottomSheet';
 import {IconButton} from '../IconButton';
 import {RadioList, RadioListItem} from '../RadioList';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {Theme, defineTheme} from '../theme';
 import {rtlStyles} from '../utils';
 
 beforeEach(() => {
@@ -125,7 +126,7 @@ describe('DropdownMenuSubMenu', () => {
     expect(popover).toHaveStyle({minWidth: 'var(--x-minWidth)'});
     expect(popover?.getAttribute('style')).toContain('min(640px, calc(100vw');
     expect(flyout).toHaveStyle(
-      'max-height: min(300px,calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))))',
+      'max-height: min(300px,min(calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))), var(--_layer-keyboard-max-block-size, 100dvb)))',
     );
     expect(flyout).not.toHaveStyle({overflowY: 'auto'});
     expect(flyout).toHaveAttribute('tabindex', '-1');
@@ -644,6 +645,40 @@ describe('DropdownMenu data-driven submenus', () => {
       await screen.findByRole('menuitem', {name: 'Folder B', hidden: true}),
     );
     expect(onMove).toHaveBeenCalledWith('b');
+  });
+
+  it('renders a submenu for an item with nested items inside a section', async () => {
+    const user = userEvent.setup();
+    const onWork = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Share'}}
+        items={[
+          {
+            type: 'section',
+            title: 'Send',
+            items: [
+              {label: 'Copy link', onClick: () => {}},
+              {
+                label: 'Email',
+                items: [
+                  {label: 'Work', onClick: onWork},
+                  {label: 'Personal', onClick: () => {}},
+                ],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /Share/}));
+    const trigger = screen.getByRole('menuitem', {name: /Email/, hidden: true});
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    await user.click(trigger);
+    await user.click(
+      await screen.findByRole('menuitem', {name: 'Work', hidden: true}),
+    );
+    expect(onWork).toHaveBeenCalled();
   });
 
   it('keyboard-reaches an item positioned after a submenu row', async () => {
@@ -1452,6 +1487,62 @@ describe('DropdownMenuSubMenu drill-in on a phone', () => {
     fireEvent.click(await waitFor(() => shownRow('Move to')), {
       detail: 1,
     });
+    await waitFor(() => shownRow('Back to Actions'));
+  });
+
+  it("follows the theme's md point: a 900 px touch screen drills in under md 1000, and keeps the flyout under the default (spec:AST-012 FR9)", async () => {
+    // A query-aware stand-in for a 900 × 1024 coarse-pointer screen: `,` is
+    // or, `and` is and.
+    const screenSize = {width: 900, height: 1024};
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query.split(', ').some(alternative =>
+          alternative.split(' and ').every(part => {
+            if (part === '(pointer: coarse)') {
+              return true;
+            }
+            const range = /^\((width|height) < (\d+)px\)$/.exec(part);
+            return (
+              range != null &&
+              screenSize[range[1] as 'width' | 'height'] < Number(range[2])
+            );
+          }),
+        ),
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    const wideMd = defineTheme({
+      name: 'wide-md-drill-in',
+      adaptations: {widthBreakpoints: {md: 1000, lg: 1100}},
+    });
+    const user = userEvent.setup();
+    const menu = (
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Folder A" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>
+    );
+    // The default md point (768): not compact, so the sub-menu flies out.
+    const {unmount} = render(menu);
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    fireEvent.click(await waitFor(() => shownRow('Move to')), {detail: 1});
+    const flyout = await waitFor(() => shownMenu('Move to'));
+    expect(flyout.closest('[popover]')).not.toBe(
+      shownMenu('Actions').closest('[popover]'),
+    );
+    unmount();
+    // A theme whose md is 1000: the same screen is compact, and it drills in.
+    render(<Theme theme={wideMd}>{menu}</Theme>);
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    fireEvent.click(await waitFor(() => shownRow('Move to')), {detail: 1});
     await waitFor(() => shownRow('Back to Actions'));
   });
 

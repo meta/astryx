@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope core/Markdown richtext/* ^(apps/storybook/stories/RichTextEditor\.(markdownParity|stories)|packages/richtext/src/__tests__/(MarkdownParitySandbox|RichTextView|RichTextEditorToolbar)) ^packages/richtext/src/
 
 /**
  * @file MarkdownParitySandbox.a11y.chromium.spec.ts
@@ -23,7 +24,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import AxeBuilder from '@axe-core/playwright';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -446,6 +447,71 @@ test('side by side: a list of task and plain items keeps each task checkbox and 
       ).toBeLessThanOrEqual(1);
     }
   });
+  expect(errors).toEqual([]);
+});
+
+// spec:AST-061 FR11: however wide a numbered list's counters grow, from `99.`
+// to `100.` or from `i.` to `viii.` two lists down, each item's text, and each
+// nested list's, starts in the same place on both surfaces.
+test('side by side: wide counters start the text where RichText starts it', async ({
+  page,
+}) => {
+  const errors = await openStory(page, STORY.sideBySide, DESKTOP);
+  await waitForDocument(page, MARKDOWN);
+  await waitForDocument(page, RICH_TEXT);
+  const textStarts = (surface: string) =>
+    page.evaluate(selector => {
+      const block = document.querySelector(
+        `${selector} [data-parity-block="list-ordered-wide"]`,
+      );
+      const origin = block?.getBoundingClientRect().left ?? 0;
+      const starts: Array<[string, number]> = [];
+      for (const item of block?.querySelectorAll('li') ?? []) {
+        // The item's own first text; RichText holds a nested list in an item
+        // of its own, which has none.
+        const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (!node.textContent?.trim()) {
+            continue;
+          }
+          if (node.parentElement?.closest('li') === item) {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            starts.push([
+              node.textContent.trim(),
+              range.getBoundingClientRect().left - origin,
+            ]);
+          }
+          break;
+        }
+      }
+      return starts;
+    }, surface);
+  const markdown = await textStarts(MARKDOWN);
+  const richText = new Map(await textStarts(RICH_TEXT));
+  expect(markdown.map(([text]) => text)).toEqual([
+    'Wide step ninety-eight',
+    'Wide step ninety-nine',
+    'Lettered step a',
+    'Roman step i',
+    'Roman step ii',
+    'Roman step iii',
+    'Roman step iv',
+    'Roman step v',
+    'Roman step vi',
+    'Roman step vii',
+    'Roman step viii',
+    'Wide step one hundred',
+  ]);
+  expect([...richText.keys()].sort()).toEqual(
+    markdown.map(([text]) => text).sort(),
+  );
+  for (const [text, start] of markdown) {
+    expect(
+      Math.abs((richText.get(text) ?? Number.NaN) - start),
+      `text of ${text}`,
+    ).toBeLessThanOrEqual(1);
+  }
   expect(errors).toEqual([]);
 });
 

@@ -234,7 +234,9 @@
 .scrimAfter[data-open='true'] {
   opacity: 1;
   visibility: visible;
-  transition: opacity var(--lab-duration-overlay) linear, visibility 0s;
+  transition:
+    opacity var(--lab-duration-overlay) linear,
+    visibility 0s;
 }
 
 .scrimBefore[data-open='true'] {
@@ -321,7 +323,9 @@
 .drawer[data-open='true'] {
   transform: translateX(0);
   visibility: visible;
-  transition: transform var(--drawer-slide, 410ms) var(--ease-drawer), visibility 0s;
+  transition:
+    transform var(--drawer-slide, 410ms) var(--ease-drawer),
+    visibility 0s;
 }
 
 /* The unmount timer firing while the slide is still running. */
@@ -351,7 +355,11 @@
 }
 
 .trackTimer {
-  background: color-mix(in srgb, var(--color-text-error, #d3543f) 45%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--color-text-error, #d3543f) 45%,
+    transparent
+  );
 }
 
 /* --------------------------------------------------- sliding indicator --- */
@@ -429,33 +437,6 @@
 
 .chevronOpen {
   transform: rotate(90deg);
-}
-
-/* ------------------------------------------------------------- sidenav --- */
-
-.rail {
-  overflow: hidden;
-  height: 100%;
-  width: 156px;
-  border-inline-end: 1px solid var(--color-border);
-  background: var(--color-background-surface);
-}
-
-.railAnimated {
-  transition: width var(--lab-duration-reveal) var(--ease-move);
-}
-
-.rail[data-collapsed='true'] {
-  width: 52px;
-}
-
-.railLabel {
-  white-space: nowrap;
-  transition: opacity var(--lab-duration-state) var(--ease-state);
-}
-
-.rail[data-collapsed='true'] .railLabel {
-  opacity: 0;
 }
 
 /* ------------------------------------------------------ skeleton swap ---- */
@@ -669,7 +650,8 @@
   height: 11px;
   border-radius: 50%;
   background: var(--color-background-success, #3f9a6b);
-  animation: pulseRing var(--loop-duration, 2s) var(--loop-ease, ease-in-out) infinite;
+  animation: pulseRing var(--loop-duration, 2s) var(--loop-ease, ease-in-out)
+    infinite;
 }
 
 @keyframes pulseRing {
@@ -693,7 +675,8 @@
     var(--color-background-base) 80%
   );
   background-size: 220% 100%;
-  animation: shimmer var(--loop-duration, 1.5s) var(--loop-ease, ease-in-out) infinite;
+  animation: shimmer var(--loop-duration, 1.5s) var(--loop-ease, ease-in-out)
+    infinite;
 }
 
 @keyframes shimmer {
@@ -753,19 +736,127 @@
   }
 }
 
+/* ------------------------------------------------------- progress fill ---- */
+
+/* A copy of ProgressBar's track and fill (8px, muted track, accent fill, full
+   radius) whose fill moves with transform instead of width, on the same token
+   and curve core uses, so the pair differs only in technique. */
+.fillTrack {
+  position: relative;
+  height: 8px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.fillScale {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform-origin: left center;
+  transition: transform var(--duration-medium) var(--ease-standard);
+}
+
+/* Core's own paint, in Core's layer, so a theme's rule for the
+   ProgressBar targets (the copy carries their classes) wins as it does on
+   the real bar. */
+@layer astryx-base {
+  .fillTrack {
+    background: var(--color-background-muted);
+  }
+
+  .fillScale {
+    background: var(--color-accent);
+  }
+}
+
+[dir='rtl'] .fillScale {
+  transform-origin: right center;
+}
+
+/* Forced colours paint the track and fill as Canvas: Core's fill keeps its
+   shape with a CanvasText outline, and so does the copy. */
+@media (forced-colors: active) {
+  .fillScale {
+    outline: 1px solid CanvasText;
+    outline-offset: -1px;
+  }
+}
+
 /* ---------------------------------------------------------------- tint ---- */
 
 /* The Table hover tint, at whatever duration and curve is being argued over.
    Rows 1-9 of the violation table are this, and the honest finding is that
-   150ms and 175ms are near-indistinguishable at 1x. */
+   150ms and 175ms are near-indistinguishable at 1x, which is why the preview
+   also shows the tint with no transition at all. */
+.tintTable {
+  width: 100%;
+  /* Three panes share a narrow window: the columns shrink to the pane. */
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.tintTable td {
+  padding: var(--space-2, 6px) var(--space-3, 10px);
+  border-bottom: 1px solid var(--color-border);
+  overflow-wrap: anywhere;
+}
+
+/* Also the "real rule" rows on the Bugs page, which are divs: the padding
+   and radius are theirs (a table row ignores both). */
 .tintRow {
   padding: var(--space-2, 6px) var(--space-3, 10px);
   border-radius: var(--radius-sm, 6px);
-  transition: background-color var(--tint-duration, 150ms) var(--tint-ease, ease);
+  transition: background-color var(--tint-duration, 150ms)
+    var(--tint-ease, ease);
 }
 
+/* The hover overlay token Astryx ships (the rig used to read two names no
+   theme defines, so the tint never showed). */
 .tintRow:hover {
-  background: var(--color-background-hover, var(--color-background-elevated));
+  background-color: var(--color-overlay-hover);
+}
+
+/* The state token, as Table would read it. */
+.tintRowToken {
+  transition: background-color var(--lab-duration-state) var(--ease-state);
+}
+
+/* Reduce Motion: the tint is a change of state, so with a fine pointer it
+   lands at once (design:reduced-motion DR3), and an instant change is also
+   within DR2's "200 ms or less" on touch. */
+@media (prefers-reduced-motion: reduce) {
+  .tintRowToken {
+    transition: none;
+  }
+}
+
+/* Deleting the transition, the option the preview makes visible. */
+.tintRowNone {
+  transition: none;
+}
+
+/* NavItem's hover tint (NavTintRig). Before: as shipped, it snaps on where
+   the device hovers. After: it fades on the duration and curve the rig passes
+   in, and only where the device hovers with a fine pointer. */
+.navTint,
+.navTintFine {
+  padding: var(--space-2, 6px) var(--space-3, 10px);
+  border-radius: var(--radius-sm, 6px);
+  transition: background-color var(--tint-duration, 0ms) var(--tint-ease, ease);
+}
+
+/* Today, as shipped nav items paint it: on any device that hovers. */
+@media (hover: hover) {
+  .navTint:hover {
+    background: var(--color-overlay-hover, var(--color-background-elevated));
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .navTintFine:hover {
+    background: var(--color-overlay-hover, var(--color-background-elevated));
+  }
 }
 
 /* A `transitionProperty` with no duration: the rule reads like motion in
@@ -776,8 +867,11 @@
   transition-property: background-color;
 }
 
+/* The hover overlay token Astryx ships: the rule used to read two names no
+   theme defines, so the row never tinted and the pane showed nothing to
+   compare. */
 .noopRow:hover {
-  background: var(--color-background-hover, var(--color-background-elevated));
+  background-color: var(--color-overlay-hover);
 }
 
 /* ------------------------------------------------------------- origin ----- */
@@ -865,7 +959,9 @@
 }
 
 .lightboxFade[data-open='true'] {
-  transition: opacity var(--lab-duration-enter) var(--ease-entry), visibility 0s;
+  transition:
+    opacity var(--lab-duration-enter) var(--ease-entry),
+    visibility 0s;
 }
 
 .lightboxNone {

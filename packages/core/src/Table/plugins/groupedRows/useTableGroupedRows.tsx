@@ -21,7 +21,13 @@ import {
 } from '../../../theme/tokens.stylex';
 import {Icon} from '../../../Icon';
 import type {TablePlugin} from '../../types';
-import {useTranslator} from '../../../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/groupedRows/useTableGroupedRows.generated';
+
+registerEnglishFallback(english);
 
 // A synthetic group-header row injected into the flattened data. Real rows
 // never carry this marker.
@@ -272,7 +278,7 @@ const styles = stylex.create({
 export function useTableGroupedRows<T extends Record<string, unknown>>(
   config: UseTableGroupedRowsConfig<T>,
 ): UseTableGroupedRowsResult<T> {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {
     data,
     groupBy,

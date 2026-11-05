@@ -26,13 +26,16 @@ const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
  */
 const INPUT_STATUS_VARS = {
   'status:success': {
-    '--color-success': lightDark(green.light[55], green.dark[70]),
+    '--color-border-success': lightDark(green.light[55], green.dark[70]),
+    '--color-icon-success': lightDark(green.light[55], green.dark[70]),
   },
   'status:warning': {
-    '--color-warning': lightDark(yellow.light[55], yellow.dark[70]),
+    '--color-border-warning': lightDark(yellow.light[55], yellow.dark[70]),
+    '--color-icon-warning': lightDark(yellow.light[55], yellow.dark[70]),
   },
   'status:error': {
-    '--color-error': lightDark(red.light[60], red.dark[70]),
+    '--color-border-error': lightDark(red.light[60], red.dark[70]),
+    '--color-icon-error': lightDark(red.light[60], red.dark[70]),
   },
 } as const;
 
@@ -188,9 +191,22 @@ export const stoneTheme = defineTheme({
     '--color-on-dark': neutral.light[100],
     '--color-on-light': [neutral.light[15], neutral.dark[15]],
     '--color-on-accent': [neutral.light[100], neutral.dark[15]],
-    '--color-on-success': [green.light[30], green.dark[90]],
-    '--color-on-error': [red.light[30], red.dark[90]],
-    '--color-on-warning': [yellow.light[30], yellow.dark[90]],
+    '--color-on-success': [neutral.light[100], neutral.dark[10]],
+    '--color-on-error': [neutral.light[100], neutral.dark[10]],
+    '--color-on-warning': [neutral.light[100], neutral.dark[10]],
+
+    '--color-info': [blue.light[40], blue.dark[70]],
+    '--color-info-muted': [blue.light[90], blue.dark[25]],
+    '--color-on-info': [neutral.light[100], neutral.dark[15]],
+
+    '--color-text-info': [blue.light[30], blue.dark[90]],
+    '--color-text-success': [green.light[30], green.dark[90]],
+    '--color-text-warning': [yellow.light[30], yellow.dark[90]],
+    '--color-text-error': [red.light[30], red.dark[90]],
+    '--color-on-info-muted': [blue.light[30], blue.dark[90]],
+    '--color-on-success-muted': [green.light[30], green.dark[25]],
+    '--color-on-warning-muted': [yellow.light[30], yellow.dark[25]],
+    '--color-on-error-muted': [red.light[30], red.dark[25]],
 
     // Icon
     '--color-icon-accent': [neutral.light[15], neutral.dark[95]],
@@ -336,32 +352,23 @@ export const stoneTheme = defineTheme({
       },
     },
 
-    // Banner surface declarations live above the theme layer, so redirect the
-    // semantic variables here instead of attempting a losing direct fill.
+    // Banner status surfaces and content use the matching categorical pair.
     banner: {
       'status:info': {
-        '--color-accent-muted': 'var(--color-background-blue)',
-        '--color-text-primary': 'var(--color-text-blue)',
-        '--color-text-secondary': 'var(--color-text-blue)',
-        '--color-accent': 'var(--color-text-blue)',
+        '--color-info-muted': 'var(--color-background-blue)',
+        '--color-on-info-muted': 'var(--color-text-blue)',
       },
       'status:success': {
         '--color-success-muted': 'var(--color-background-green)',
-        '--color-text-primary': 'var(--color-text-green)',
-        '--color-text-secondary': 'var(--color-text-green)',
-        '--color-success': 'var(--color-text-green)',
+        '--color-on-success-muted': 'var(--color-text-green)',
       },
       'status:warning': {
         '--color-warning-muted': 'var(--color-background-yellow)',
-        '--color-text-primary': 'var(--color-text-yellow)',
-        '--color-text-secondary': 'var(--color-text-yellow)',
-        '--color-warning': 'var(--color-text-yellow)',
+        '--color-on-warning-muted': 'var(--color-text-yellow)',
       },
       'status:error': {
         '--color-error-muted': 'var(--color-background-red)',
-        '--color-text-primary': 'var(--color-text-red)',
-        '--color-text-secondary': 'var(--color-text-red)',
-        '--color-error': 'var(--color-text-red)',
+        '--color-on-error-muted': 'var(--color-text-red)',
       },
     },
 
@@ -379,6 +386,21 @@ export const stoneTheme = defineTheme({
       },
       'variant:error': {
         backgroundColor: lightDark(red.light[90], red.dark[70]),
+      },
+    },
+
+    'progress-bar-mark': {
+      'placement:fill+variant:accent': {
+        backgroundColor: 'var(--color-on-light)',
+      },
+      'placement:fill+variant:success': {
+        backgroundColor: 'var(--color-on-light)',
+      },
+      'placement:fill+variant:warning': {
+        backgroundColor: 'var(--color-on-light)',
+      },
+      'placement:fill+variant:error': {
+        backgroundColor: 'var(--color-on-light)',
       },
     },
 
@@ -400,12 +422,15 @@ export const stoneTheme = defineTheme({
     'field-status': {
       'type:success': {
         backgroundColor: 'var(--color-background-green)',
+        color: 'var(--color-text-green)',
       },
       'type:warning': {
         backgroundColor: 'var(--color-background-yellow)',
+        color: 'var(--color-text-yellow)',
       },
       'type:error': {
         backgroundColor: 'var(--color-background-red)',
+        color: 'var(--color-text-red)',
       },
     },
 

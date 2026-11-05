@@ -6,9 +6,29 @@ name: CLI Smoke Test
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: ['main']
-    paths-ignore:
-      - 'apps/docsite/**'
+    # Runs only when something the CLI reads or the smoke scripts run can
+    # change (spec:AST-030 FR14): every package (the CLI discovers Core, Lab,
+    # Charts, Rich Text and the themes from the workspace), the workspace's
+    # dependency and TypeScript configuration, the setup action and the smoke
+    # scripts themselves. A merge-group entry, which cannot filter by path,
+    # keeps running.
+    paths:
+      - 'packages/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig*.json'
+      - '.nvmrc'
+      - '.github/actions/setup/**'
+      - '.github/scripts/cli-smoke-test.mjs'
+      - '.github/scripts/cli-json-smoke-test.mjs'
+      - '.github/scripts/api-cli-parity-test.mjs'
+      - '.github/scripts/cdn-template-smoke-test.mjs'
+      - '.github/scripts/lib/cdn-*.mjs'
+      - '.github/scripts/vitest.browser-scripts.config.mjs'
+      - '.github/workflows/cli-smoke-test.yml'
   merge_group:
 
 permissions: {}
@@ -19,7 +39,10 @@ concurrency:
 
 jobs:
   smoke-test:
-    runs-on: 2-core-ubuntu-arm
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
+    runs-on: ubuntu-24.04-arm
+    # PR CI's budget is 15 minutes (see ci.yml).
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -84,6 +107,18 @@ jobs:
       - name: Install Playwright
         if: steps.scope.outputs.spec_only != 'true'
         run: npx playwright install chromium
+
+      # cdn-page-render's real-browser half: a page whose module request hangs
+      # never goes idle, and renderPage reports that timeout. With
+      # ASTRYX_CDN_SMOKE_BROWSER set, a missing browser fails the cases.
+      # ci-browser-gated-tests.test.mjs keeps this step after the install.
+      - name: CDN page render in a real browser
+        if: steps.scope.outputs.spec_only != 'true'
+        env:
+          ASTRYX_CDN_SMOKE_BROWSER: '1'
+        # Its own config: the workspace's global setup builds Core, which this
+        # test never imports.
+        run: pnpm exec vitest run --config .github/scripts/vitest.browser-scripts.config.mjs .github/scripts/lib/cdn-page-render.browser.test.mjs --maxWorkers=1
 
       - name: CDN starter page smoke test
         if: steps.scope.outputs.spec_only != 'true'

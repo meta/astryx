@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y always
 
 /**
  * @file MobileNavWidth.a11y.chromium.spec.ts
@@ -11,7 +12,7 @@
  *   in MobileNav.tsx); the jsdom layer is MobileNav.test.tsx
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

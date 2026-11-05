@@ -63,7 +63,10 @@ same generated contract.
   adapting per device where the device differs; a prop is never accepted
   without that meaning (`architecture:public-component-api` INV2). A prop only
   one platform can honor is that platform's prop, such as Switch's `size`,
-  which only macOS can honor with the system switch. A `content` slot, which `<Name>Props` leaves out, is a
+  which only macOS can honor with the system switch. Switch's `labelPosition` and
+  `labelSpacing` are absent from the Apple contracts: an Apple switch row follows the system toggle
+  layout, the label leading, the switch trailing, and the system's spacing
+  between them. A `content` slot, which `<Name>Props` leaves out, is a
   parameter of both initializers instead: the labeled one takes it as a
   `@ViewBuilder` closure and the props one as the slot's generated node type
   (A3, A4). The view
@@ -76,7 +79,11 @@ same generated contract.
   labeled one as a `@ViewBuilder` closure and the props one as the slot's
   generated node type, as `packages/native/specs/swift/library/slots.md` says,
   and both build the view from the same `<Name>Props` values; the view's `body`
-  reads only those values and slots.
+  reads only those values and slots. The two initializers, and the convenience
+  initializers that take a slot component's props (slots S3), are one API in
+  several Swift spellings (`architecture:public-component-api` INV21): each
+  builds the same `<Name>Props`, and a convenience initializer fills its slot
+  with the component its props describe.
 - **A4 — SwiftUI shapes for SwiftUI concepts.**
   - The component's main word comes first and unlabeled, as in `Button` and
     `Text`.
@@ -96,6 +103,8 @@ same generated contract.
     draws a disabled `<button>`; a disabled Item with `href` stays a link that
     VoiceOver reads as dimmed and that does not open, as core keeps a disabled
     link; Avatar has no disabled state.
+    How a loading Button with `href` behaves is Button's own rule
+    (`component:swift/Button` FR4).
 - **A5 — Words and values take the contract's types.** A word prop is the
   contract's `String`, and a value prop and its change callback are the
   contract's two parameters, as AST-093 FR5 requires. A localizable spelling
@@ -130,13 +139,14 @@ same generated contract.
 | A1c         | A source check finds no public `View` extension member without the `astryx` prefix.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | A2          | A source check fails when a components file declares an `enum` with the same cases as a generated enum, or a public parameter that is neither a prop of the generated `<Name>Props`, the `<Name>Props` value itself, nor a content slot of the contract.                                                                                                                                                                                                                                                                                                                                                                                |
 | A2          | A compile test builds every view from its generated `<Name>Props` with every prop set, plus each content slot's generated node type, and through the labeled initializer with a builder for each content slot, on iOS and on macOS. A source check finds no parameter that a view accepts and ignores; Switch's `size` exists on macOS only.                                                                                                                                                                                                                                                                                            |
-| A3          | A test builds a view through each initializer with the same arguments and finds every `<Name>Props` field the same in both, comparing callbacks by invoking them.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| A3          | A test builds a view through each initializer, including a slot component's convenience initializer, with the same arguments and finds every `<Name>Props` field the same across them, comparing callbacks by invoking them; a convenience initializer's slot holds the component its props describe.                                                                                                                                                                                                                                                                                                                                   |
 | A4          | `AnyView` does not appear in the components module. An enabled Button with `href` is a `Link` in the view tree and reads as a link to VoiceOver; a disabled Button with `href` reads as a dimmed button; an Avatar with `href` draws the same as without it. A disabled Item with `href` reads as a dimmed link and does not open.                                                                                                                                                                                                                                                                                                      |
 | A5          | The A2 source check passes: no public parameter outside the generated `<Name>Props` and the contract's content slots.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | A6          | A source check finds no public SwiftUI `Color`, `Font`, `CGFloat` padding, or `*Style` parameter on a component; the contract's own visual props are allowed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | A7          | A UI test finds the view by its `id` and does not find it when `isHidden` is true.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | A8          | DocC builds with no missing-documentation warning for a public component symbol.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | A9          | The `Astryx` product declares no public `HStack` or `VStack` view; the logic host draws `HStack` and `VStack` wire nodes with SwiftUI's stacks.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| A2          | The Swift Switch view takes no `labelPosition` or `labelSpacing` parameter, and a capture shows its row with the label leading and the switch trailing, in light and dark and at the largest text size.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ## Current state
 
@@ -144,8 +154,11 @@ same generated contract.
   (SwiftUI views with core's names, `Button`, `Text`, and so on, re-exporting
   SwiftUI and the contracts) and the `AstryxNative` product (generated contract
   types, unprefixed: `ButtonProps`, `ButtonVariant`).
-- All six views still take hand-written parameters until each moves onto its
-  generated `<Name>Props`; Banner has no generated contract.
+- Avatar, AvatarStatusDot, Button, Card, Heading, Icon, Item, ListItem, Text, TextInput, and Thumbnail take their generated `<Name>Props`; Banner has no generated
+  contract.
+- `AstryxNodeView` draws Avatar (with its status dot), AvatarStatusDot, Button, Card, Heading, Icon, Item, ListItem, Text, TextInput, and Thumbnail wire nodes. Any other
+  node, HStack and VStack included, renders in its place as unsupported, and
+  its siblings still render, until the logic host draws stacks (A9).
 - The generated iOS `SwitchProps` still declares `size`, and `HStackProps` and
   `VStackProps` are still generated for iOS and macOS.
 

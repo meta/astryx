@@ -10,39 +10,26 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts (exports)
- *
- * Centralizes the on-field status icon across the bordered inputs (TextInput,
- * TextArea, NumberInput, DateInput, DateTimeInput, DateRangeInput, TimeInput,
- * FileInput) so the three statusVariants behave consistently:
- *
- * - `attached`  → icon sits inside the control; the message box below carries
- *   the text.
- * - `detached`  → the detached message box renders its OWN leading icon, so the
- *   on-field icon is suppressed here to avoid a duplicate glyph.
- * - `tooltip`   → no message box renders; the status is surfaced through an
- *   info-tip on the on-field icon. The icon is a real focusable `<button>` so
- *   the status is reachable by every user, not just those with hover or a
- *   screen reader:
- *     - Keyboard (no AT): the button is in the tab order (WCAG 2.1.1) with a
- *       visible focus ring (WCAG 2.4.7); focusing it opens the tooltip.
- *     - Pointer: hover opens it (guarded to fine pointers).
- *     - Touch: hover is unavailable, so a tap toggles the tooltip open/closed.
- *     - Assistive tech: the button has an accessible name (its status type,
- *       WCAG 4.1.2) and is described by the message via `aria-describedby`.
- *     - Dismissible with Escape and hoverable (WCAG 1.4.13) via useTooltip.
  */
 
 import {useCallback, useEffect, useState} from 'react';
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Icon, type IconName, type IconSize} from '../Icon';
-import type {FieldStatusVariant} from '../FieldStatus/FieldStatus';
+import {Icon, type IconSize} from '../Icon/Icon';
+import type {IconName} from '../Icon/globalIconRegistry';
 import type {InputStatus, InputStatusType} from '../Field/types';
-import {useTooltip} from '../Tooltip';
-import {useTranslator} from '../i18n';
+import {useTooltip} from '../Tooltip/useTooltip';
 import {radiusVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/hooks/useInputStatusIcon.generated';
+
+registerEnglishFallback(english);
 
 /**
  * Maps each status type to its glyph. Shared so every input shows the same icon
@@ -86,12 +73,9 @@ const styles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    // Own the interactivity so the tooltip opens on hover even when the field
-    // renders this affordance inside a non-interactive trailing slot. TextArea
-    // positions its end slot as an absolute overlay with `pointer-events: none`
-    // (right for the decorative spinner/icon it was built for), which otherwise
-    // swallows this button's hover — keyboard focus still worked, pointer did
-    // not.
+    // The button owns its pointer events, so hover opens the tooltip in a
+    // non-interactive trailing slot. TextArea's end slot has
+    // `pointer-events: none`, which would block this button's hover.
     pointerEvents: 'auto',
     borderRadius: radiusVars['--radius-full'],
     // Not the shared offset: this button sits inside the field, and measured at
@@ -104,7 +88,7 @@ export interface UseInputStatusIconOptions {
   /** The input's status, or undefined when there is none. */
   status?: InputStatus;
   /** How the status is presented relative to the input. */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /** Whether the input is inside an InputGroup (which owns status rendering). */
   isInGroup?: boolean;
   /** Size of the on-field icon. @default 'md' */
@@ -132,7 +116,15 @@ export interface UseInputStatusIconReturn {
 
 /**
  * Builds the on-field status icon and its accessibility wiring for a bordered
- * input. See the file header for the per-variant behavior.
+ * input, so every bordered input shows status the same way:
+ * - `attached`: the icon is in the control, and the message box below has
+ *   the text.
+ * - `detached`: the message box shows its own leading icon, so this hook
+ *   shows none.
+ * - `tooltip`: no message box. The icon is a focusable `<button>` with an
+ *   info-tip, so every user can reach the status. Focus or a fine-pointer
+ *   hover opens it, and a tap toggles it on touch. Its accessible name is the
+ *   status type, and the message describes it. Escape dismisses it.
  */
 export function useInputStatusIcon({
   status,
@@ -140,7 +132,7 @@ export function useInputStatusIcon({
   isInGroup = false,
   size = 'md',
 }: UseInputStatusIconOptions): UseInputStatusIconReturn {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const isTooltipVariant = statusVariant === 'tooltip';
   const hasTooltip = isTooltipVariant && !!status?.message;
 
@@ -156,9 +148,8 @@ export function useInputStatusIcon({
     isOpen: tapOpen,
   });
 
-  // Re-hand control back to hover/focus once a tap-opened tooltip is dismissed
-  // (Escape/outside interaction), so subsequent pointer/keyboard use behaves
-  // normally.
+  // Give control back to hover and focus after a tap-opened tooltip is
+  // dismissed.
   const handleButtonBlur = useCallback(() => {
     setTapOpen(undefined);
   }, []);
@@ -177,9 +168,8 @@ export function useInputStatusIcon({
     setTapOpen(prev => (prev === true ? false : true));
   }, []);
 
-  // Dismiss a tap-opened tooltip on Escape and return to the uncontrolled
-  // state (useTooltip owns Escape for the uncontrolled case, but while we hold
-  // control via isOpen it does not, so mirror it here).
+  // Escape dismisses a tap-opened tooltip and returns to the uncontrolled
+  // state. useTooltip handles Escape only when it is uncontrolled.
   useEffect(() => {
     if (tapOpen !== true) {
       return;
@@ -207,11 +197,9 @@ export function useInputStatusIcon({
       icon={STATUS_ICON[status.type]}
       size={size}
       color={status.type}
-      // Stable theme target on the status glyph itself, so a theme can restyle
-      // just this icon (color, size) — and each status — via `defineTheme`.
-      // Same-element rules in @layer astryx-theme win over the icon's own base
-      // width/height/fontSize, which a field-level target could not reach.
-      // Shared by the attached and tooltip variants across all bordered inputs.
+      // A stable theme target on the glyph, so a theme can restyle this icon
+      // for each status. Same-element rules in @layer astryx-theme override
+      // the icon's base size, which a field-level target cannot reach.
       {...themeProps('input-status-icon', {size, status: status.type})}
     />
   );

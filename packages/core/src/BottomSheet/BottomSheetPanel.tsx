@@ -6,19 +6,15 @@
  * @file BottomSheetPanel.tsx
  * @input Uses React, StyleX, theme tokens, text/provider boundaries, container padding, sheet gestures, shared scroll behavior, and the host label
  * @output Internal BottomSheetPanel with a keyboard-reachable scrolling body and motion-state types
- * @position Shared presentation layer for standalone and switcher BottomSheets
- *
- * This component owns everything intrinsic to a sheet surface: height budgets,
- * drag and snap gestures, the handle and scrolling body, the content box's
- * container padding, motion styles, and transition completion. It owns the
- * body's keyboard access; dialog focus entry/return, inert state, and switcher
- * registration belong to the host.
+ * @position Shared presentation layer for standalone and switcher
+ *   BottomSheets. It owns the sheet surface and the body's keyboard access.
+ *   The host owns dialog focus, inert state and switcher registration.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/BottomSheet/BottomSheet.tsx
  * - /packages/core/src/BottomSheet/BottomSheetPanel.test.tsx
  * - /packages/core/src/BottomSheet/snapOffsets.ts
- * - /packages/core/src/BottomSheet/useMobileKeyboard.ts
+ * - /packages/core/src/keyboard/useMobileKeyboard.ts
  * - /packages/core/src/BottomSheet/useSheetGestures.ts
  * - /packages/core/src/Layout/container.stylex.ts (bottom-sheet padding chain)
  */
@@ -30,11 +26,13 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
-import {useDevWarning} from '../hooks';
+import {useDevWarning} from '../hooks/useDevWarning';
+import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useScrollableArea} from '../hooks/useScrollableArea';
 import {
   borderVars,
@@ -47,7 +45,8 @@ import {
   sizeVars,
   spacingVars,
 } from '../theme/tokens.stylex';
-import {mergeProps, themeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
@@ -62,14 +61,19 @@ import {
   paddingStyles,
   spacingStepToToken,
 } from '../Layout/padding.stylex';
+import {subscribeInput} from '../utils/inputStream';
 import type {SpacingStep} from '../utils/types';
 import {
   isValidSnapPoint,
   resolveSnapPoints,
   type BottomSheetSnapPoint,
 } from './snapOffsets';
-import {useMobileKeyboard} from './useMobileKeyboard';
-import {useSheetGestures} from './useSheetGestures';
+import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
+import {
+  scrollPreservationPadding,
+  sheetLayoutHeight,
+  useSheetGestures,
+} from './useSheetGestures';
 
 const HEIGHT_BUDGETS = {
   hug: '92dvh',
@@ -80,8 +84,20 @@ const HEIGHT_BUDGETS = {
 export type BottomSheetHeight = keyof typeof HEIGHT_BUDGETS;
 export type {BottomSheetSnapPoint};
 
-// SYNC: must match OVERSCROLL_MAX in useSheetGestures.ts.
-const OVERSCROLL_PADDING = 48;
+// The reserve: how far the sheet's surface reaches below the screen, so a
+// pull past the top never shows the page under it.
+// SYNC: OVERSCROLL_MAX in useSheetGestures.ts must not exceed MIN_RESERVE.
+const MIN_RESERVE = 48;
+// A finger can pull past the top by at most the viewport's height. The rubber
+// band over a sheet as tall as the viewport then shows 35.5% of it.
+const RESERVE_VIEWPORT_SHARE = 0.4;
+
+function sheetReserve(viewportHeight: number): number {
+  return Math.max(
+    MIN_RESERVE,
+    Math.ceil(viewportHeight * RESERVE_VIEWPORT_SHARE),
+  );
+}
 const MOBILE_KEYBOARD_BOTTOM_CLEARANCE = 48;
 const TRANSITION_BACKSTOP_BUFFER_MS = 50;
 // The floating handle bar's height. The bar is out of flow, so this is not
@@ -90,14 +106,36 @@ const TRANSITION_BACKSTOP_BUFFER_MS = 50;
 // padding already provides.
 const HANDLE_BAR_HEIGHT = spacingVars['--spacing-6'];
 
-// Measure the same viewport the height budgets are written against. Those are
-// `dvh`, which the virtual keyboard does not shrink, so reading
-// `visualViewport` here would make the two disagree by exactly the keyboard's
-// height: every detent would move while the sheet it measures did not. A
-// keyboard is `useMobileKeyboard`'s business — it holds the sheet still and
-// scrolls the body — and it does not redefine the sheet's detents.
+const BLOCK_SIZE_PROPERTIES = [
+  'height',
+  'minHeight',
+  'maxHeight',
+  'blockSize',
+  'minBlockSize',
+  'maxBlockSize',
+] as const;
+
+/** Whether StyleX styles hold any style: they can nest in arrays. */
+function hasStyles(xstyle: unknown): boolean {
+  return Array.isArray(xstyle)
+    ? xstyle.some(hasStyles)
+    : xstyle != null && typeof xstyle === 'object';
+}
+
+// Measure the viewport that the height budgets use. They are `dvh`, which
+// the virtual keyboard does not shrink, so `visualViewport` would differ by
+// the keyboard's height. `useMobileKeyboard` handles the keyboard and does
+// not change the detents.
 function layoutViewportHeight(): number {
   return typeof window === 'undefined' ? 0 : window.innerHeight;
+}
+
+function subscribeToResize(onChange: () => void): () => void {
+  return subscribeInput(window, 'resize', onChange);
+}
+
+function subscribeToNothing(): () => void {
+  return () => {};
 }
 
 /**
@@ -118,6 +156,16 @@ function snapPointsKeyFor(
   return key;
 }
 
+/**
+ * The reduced-motion queries. With a coarse primary pointer the sheet
+ * cross-fades, else it changes at once. The cross-fade lasts at most 200 ms.
+ */
+const REDUCED_MOTION_COARSE =
+  '@media (prefers-reduced-motion: reduce) and (pointer: coarse)';
+export const REDUCED_MOTION_COARSE_QUERY =
+  '(prefers-reduced-motion: reduce) and (pointer: coarse)';
+const CROSS_FADE_MS = 200;
+
 const styles = stylex.create({
   sheet: {
     pointerEvents: 'auto',
@@ -131,13 +179,10 @@ const styles = stylex.create({
     width: '100%',
     maxWidth: 640,
     backgroundColor: colorVars['--color-background-surface'],
-    // Hairline on the three edges that face the scrim. The surface fill alone
-    // separates sheet from scrim in light mode, but not in dark: there the two
-    // sit within a few RGB steps of each other and the drop shadow is black on
-    // near-black, so the sheet's left and right edges disappear. Same
-    // treatment MobileNav gives its scrim-facing edge. The block-end edge is
-    // deliberately left bare; it sits below the viewport, under the overscroll
-    // padding.
+    // A hairline on the three edges that face the scrim. In dark mode the
+    // surface and the scrim are only a few RGB steps apart, and the shadow is
+    // black on near-black, so the side edges disappear. The block-end edge
+    // stays bare, below the viewport.
     borderBlockStartWidth: borderVars['--border-width'],
     borderBlockStartStyle: 'solid',
     borderBlockStartColor: colorVars['--color-border'],
@@ -152,42 +197,77 @@ const styles = stylex.create({
     boxShadow: shadowVars['--shadow-high'],
     outline: 'none',
     overflow: 'hidden',
-    paddingBlockEnd: `calc(env(safe-area-inset-bottom, 0px) + ${OVERSCROLL_PADDING}px)`,
-    marginBlockEnd: `${-OVERSCROLL_PADDING}px`,
+    paddingBlockEnd: `calc(env(safe-area-inset-bottom, 0px) + var(--_sheet-reserve, ${MIN_RESERVE}px))`,
+    marginBlockEnd: `calc(-1 * var(--_sheet-reserve, ${MIN_RESERVE}px))`,
+    // Under reduced motion no transform runs. On a coarse primary pointer the
+    // entrance is an opacity cross-fade of at most 200 ms. A fine pointer gets
+    // the change at once (the 0.01s collapse).
     transform: {
       default: 'translateY(0)',
-      '@starting-style': 'translateY(100%)',
+      '@starting-style': {
+        default: 'translateY(100%)',
+        '@media (prefers-reduced-motion: reduce)': 'translateY(0)',
+      },
     },
-    opacity: 1,
+    opacity: {
+      default: 1,
+      '@starting-style': {
+        default: 1,
+        [REDUCED_MOTION_COARSE]: 0,
+      },
+    },
     transitionProperty: 'transform, opacity',
-    transitionDuration: durationVars['--duration-medium'],
+    transitionDuration: {
+      default: durationVars['--duration-medium'],
+      '@media (prefers-reduced-motion: reduce)': {
+        default: '0.01s',
+        '@media (pointer: coarse)': `0.01s, ${CROSS_FADE_MS}ms`,
+      },
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
     willChange: 'transform, opacity',
-    '@media (prefers-reduced-motion: reduce)': {
-      transitionDuration: '0.01s',
+  },
+  // A sheet present on page load opens where it rests (spec:AST-013 FR13):
+  // the collapse reduced motion uses, so the transition still ends.
+  sheetSettled: {
+    transitionDuration: '0.01s',
+  },
+  /**
+   * The exit is its own motion, not the entrance played backwards. The
+   * decelerate `--ease-standard` put the sheet half off-screen in 59ms of a
+   * 410ms close, so the travel ended before the eye followed it. An exit
+   * accelerates instead (`--ease-exit`). The curve is gentle, so the sheet
+   * moves within ~50ms and the close reads as one departure. The duration is
+   * the entrance's band, because a shorter band leaves too little travel when
+   * a theme scales motion down.
+   */
+  sheetClosing: {
+    // Under reduced motion the exit does not travel. On a coarse pointer it
+    // fades out where it is, and on a fine one it ends at once.
+    transform: {
+      default: 'translateY(100%)',
+      '@media (prefers-reduced-motion: reduce)': 'translateY(0)',
+    },
+    opacity: {
+      default: null,
+      [REDUCED_MOTION_COARSE]: 0,
+    },
+    // A pointer presentation closes on the theme's exit curve. A touch
+    // presentation keeps its own curve.
+    transitionTimingFunction: {
+      default: easeVars['--ease-exit'],
+      '@media (pointer: coarse)': 'cubic-bezier(0.3, 0, 0.6, 0.6)',
     },
   },
   /**
-   * The exit is its own motion, not the entrance played backwards.
-   *
-   * `--ease-standard` is `cubic-bezier(0.24, 1, 0.4, 1)`, a decelerate curve:
-   * it spends its speed immediately and coasts. That is right for an entrance,
-   * where the sheet arrives fast and settles, and wrong for an exit. Measured
-   * on device, it put the sheet half off-screen in 59ms of a 410ms close and
-   * 90% off in 163ms -- the travel is over before the eye has followed it, and
-   * the rest of the duration moves pixels already below the fold.
-   *
-   * An exit accelerates instead: away from rest, gathering speed, quickest as
-   * it leaves the screen. The curve is deliberately gentle rather than a hard
-   * `ease-in` -- it is moving within ~50ms, so the close reads as one
-   * departure rather than a hesitation and a snap. The duration is the
-   * entrance's own band, so only the curve differs between the two
-   * directions; a shorter band leaves too little visible travel once a theme
-   * scales the motion scale down (neutral's medium is 300ms against 410ms).
+   * An exit that cross-fades on a pointer that the media query does not
+   * cover: a touch swipe dismissal under reduced motion fades out in place on
+   * every pointer. It uses the opacity and ceiling of the coarse-pointer rule.
    */
-  sheetClosing: {
-    transform: 'translateY(100%)',
-    transitionTimingFunction: 'cubic-bezier(0.3, 0, 0.6, 0.6)',
+  sheetClosingCrossFade: {
+    transform: 'translateY(0)',
+    opacity: 0,
+    transitionDuration: `0.01s, ${CROSS_FADE_MS}ms`,
   },
   sheetFading: {
     opacity: 0,
@@ -213,18 +293,24 @@ const styles = stylex.create({
     // surface behind the pill itself, fading out across the lower half so the
     // content emerging below has no visible cut line.
     backgroundImage: `linear-gradient(to bottom, ${colorVars['--color-background-surface']} 60%, transparent)`,
+    // WebKit can draw this bar under the scrolling body's own layer while the
+    // sheet's transform animates, so the pill vanishes until the sheet rests.
+    // A layer of its own keeps it above the body.
+    willChange: 'transform',
     // Drags are the handle's; a pinch still zooms the page (WCAG 1.4.4).
     touchAction: 'pinch-zoom',
     cursor: {
       default: 'grab',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-  },
-  handlePill: {
-    width: sizeVars['--size-element-lg'],
-    height: spacingVars['--spacing-1'],
-    borderRadius: radiusVars['--radius-full'],
-    backgroundColor: colorVars['--color-border'],
+    // The pill is drawn on the grab bar itself, as decoration with no role.
+    '::before': {
+      content: '""',
+      width: sizeVars['--size-element-lg'],
+      height: spacingVars['--spacing-1'],
+      borderRadius: radiusVars['--radius-full'],
+      backgroundColor: colorVars['--color-border'],
+    },
   },
   body: {
     flexGrow: 1,
@@ -252,30 +338,51 @@ const styles = stylex.create({
   },
   content: {
     // Preserve the body's block formatting (including margin/float isolation)
-    // and its definite percentage-height basis. min-content lets this real
+    // and its definite percentage-height basis. fit-content lets this real
     // observed box grow with async content beyond a fixed-height viewport.
     // This box is also the sheet's container: it carries the padding and
     // publishes it, so a lone Section child escapes it exactly as in Dialog.
     display: 'flow-root',
     boxSizing: 'border-box',
     height: '100%',
-    minHeight: 'min-content',
+    // fit-content, not min-content: they are one size in the block axis, but
+    // WebKit ignores min-content on a block's min-height. There the box keeps
+    // its body's height on a budget-height sheet. Content placed directly in
+    // it then overflows the box, and its block-end padding leaves the scroll
+    // range.
+    minHeight: 'fit-content',
   },
   tallKeyboardBody: {
     scrollPaddingBlockEnd: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
+  },
+  // The inset the keyboard takes at the end of a Tall sheet's content
+  // (useMobileKeyboard), so its last control can scroll above the keyboard.
+  // It is the content box's last in-flow box, after the content's own
+  // children, not a box after the content. Firefox resolves the content's
+  // `min-height: min-content` as `auto` in the block axis. The content box
+  // then keeps the body's height while its children overflow it. An inset
+  // after that box sat inside the overflow and added no scroll range. In
+  // Firefox for Android, the body's scrollHeight was 1491 with and without a
+  // 357 px inset.
+  tallKeyboardContent: {
     '::after': {
       content: '""',
       display: 'block',
-      blockSize: 'var(--_sheet-keyboard-inset, 0px)',
+      blockSize: 0,
       pointerEvents: 'none',
     },
   },
+  keyboardInset: (inset: number) => ({
+    '::after': {
+      blockSize: inset,
+    },
+  }),
   budget: {
-    height: `calc(var(--_sheet-budget) + ${OVERSCROLL_PADDING}px)`,
+    height: `calc(var(--_sheet-budget) + var(--_sheet-reserve, ${MIN_RESERVE}px))`,
   },
   hugHeight: {
     height: 'fit-content',
-    maxHeight: `calc(${HEIGHT_BUDGETS.hug} + ${OVERSCROLL_PADDING}px)`,
+    maxHeight: `calc(${HEIGHT_BUDGETS.hug} + var(--_sheet-reserve, ${MIN_RESERVE}px))`,
   },
 });
 
@@ -296,6 +403,23 @@ interface BottomSheetPanelProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the visual sheet panel. */
   ref?: React.Ref<HTMLDivElement>;
   state: BottomSheetPanelState;
+  /**
+   * Whether the sheet was open on page load: it then opens where it rests,
+   * with no entry motion.
+   */
+  isEntrySettled?: boolean;
+  /**
+   * Called when the settled entry's transition ends, so the host can release
+   * it and later motion in the same open (a drag's settle) animates as usual.
+   */
+  onEntrySettled?: () => void;
+  /**
+   * The host's controlled open state — false as soon as the host has taken
+   * a close, true while it is open or has refused one — distinct from
+   * `state`, which stays `open` until the close settles. Decides whether a
+   * swipe release's dismissal was honored (the reduced-motion cross-fade).
+   */
+  isOpenRequested?: boolean;
   height: BottomSheetHeight | number | string;
   /** Existing host name, reused for the keyboard scrolling group. */
   label: string;
@@ -314,6 +438,18 @@ interface BottomSheetPanelProps extends BaseProps<HTMLDivElement> {
   onElementChange?: (element: HTMLDivElement | null) => void;
   onMotionStart?: (motion: BottomSheetPanelMotion) => void;
   onMotionComplete?: (motion: BottomSheetPanelMotion) => void;
+}
+
+/**
+ * A hidden sheet observes nothing. The scroll area's measuring ref attaches
+ * as the sheet presents and detaches when it is hidden, so a closed sheet
+ * that stays mounted holds no resize, mutation or viewport observers.
+ */
+function whilePresented<P extends {ref?: unknown}>(
+  isPresented: boolean,
+  props: P,
+): P {
+  return isPresented ? props : {...props, ref: undefined};
 }
 
 function motionForState(
@@ -340,6 +476,7 @@ function waitForTransition(
 
   let done = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let backstopMs = 0;
   const finish = () => {
     if (done) {
       return;
@@ -353,9 +490,24 @@ function waitForTransition(
     complete();
   };
   const handleTransitionEnd = (event: TransitionEvent) => {
-    if (event.target === element && event.propertyName === propertyName) {
-      finish();
+    if (event.target !== element || event.propertyName !== propertyName) {
+      return;
     }
+    // The engine cancels a transition whose end value changes mid-flight. A
+    // percentage transform does when the closing frame moves the height by a
+    // fraction of a pixel. A replacement runs on from where it was. That one
+    // ends the motion, not the cancel.
+    if (
+      event.type === 'transitioncancel' &&
+      hasRunningTransition(element, propertyName)
+    ) {
+      if (timer != null) {
+        clearTimeout(timer);
+        timer = setTimeout(finish, backstopMs);
+      }
+      return;
+    }
+    finish();
   };
   element.addEventListener('transitionend', handleTransitionEnd);
   element.addEventListener('transitioncancel', handleTransitionEnd);
@@ -406,7 +558,8 @@ function waitForTransition(
     return () => {};
   }
 
-  timer = setTimeout(finish, transitionMs + TRANSITION_BACKSTOP_BUFFER_MS);
+  backstopMs = transitionMs + TRANSITION_BACKSTOP_BUFFER_MS;
+  timer = setTimeout(finish, backstopMs);
   return () => {
     if (timer != null) {
       clearTimeout(timer);
@@ -414,6 +567,19 @@ function waitForTransition(
     element.removeEventListener('transitionend', handleTransitionEnd);
     element.removeEventListener('transitioncancel', handleTransitionEnd);
   };
+}
+
+// Whether a CSS transition of `propertyName` still runs on `element`.
+function hasRunningTransition(
+  element: HTMLElement,
+  propertyName: string,
+): boolean {
+  return (element.getAnimations?.() ?? []).some(
+    animation =>
+      (animation as Animation & {transitionProperty?: string})
+        .transitionProperty === propertyName &&
+      (animation.playState === 'running' || animation.playState === 'paused'),
+  );
 }
 
 function parseTransitionTime(value: string): number | null {
@@ -429,6 +595,7 @@ function parseTransitionTime(value: string): number | null {
 export function BottomSheetPanel({
   ref,
   state,
+  isOpenRequested,
   height,
   label,
   children,
@@ -438,6 +605,9 @@ export function BottomSheetPanel({
   style,
   tabIndex,
   xstyle,
+  isEntrySettled = false,
+  onEntrySettled,
+  onTransitionEnd,
   isSwipeDismissAllowed = true,
   isPageScrollLocked = false,
   onDismiss,
@@ -448,6 +618,9 @@ export function BottomSheetPanel({
   ...props
 }: BottomSheetPanelProps) {
   const elementRef = useRef<HTMLDivElement | null>(null);
+  const dismissKeyboardRef = useRef<
+    ((focusTarget?: HTMLElement) => void) | null
+  >(null);
   const previousStateRef = useRef(state);
   const reactivatedEntranceRef = useRef(false);
   const onMotionStartRef = useRef(onMotionStart);
@@ -476,7 +649,11 @@ export function BottomSheetPanel({
   const isInactive = isRetained || state.kind === 'exiting';
   const isClosing = state.kind === 'exiting';
   const isFading = isRetained && state.motion === 'fading';
-  const alignmentOffset = isRetained ? state.alignmentOffset : 0;
+  // Under reduced motion a retained sheet does not align down to a shorter
+  // entering sheet, because that is travel. It fades where it is.
+  const isReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const alignmentOffset =
+    isRetained && !isReducedMotion ? state.alignmentOffset : 0;
 
   // Everything derived from the snap points keys off their identity, not the
   // array's: the resolver's identity is the hook's signal that the stops
@@ -508,6 +685,26 @@ export function BottomSheetPanel({
     ignoredSnapPointsMessage !== '',
   );
 
+  // A caller's height owns the element's height: the drag never writes it.
+  const consumerHeight = style?.height;
+  // StyleX styles and a class name can size the sheet too. Their rules are
+  // only class names here, so any of them counts as a size.
+  const isSizedByCaller =
+    BLOCK_SIZE_PROPERTIES.some(property => style?.[property] != null) ||
+    hasStyles(xstyle) ||
+    (className != null && className !== '');
+  // Only a finger stretches the sheet past MIN_RESERVE, so a device with no
+  // touch pointer keeps the smallest reserve. So does a sheet the caller
+  // sizes, which nothing extends by the reserve; the stretch stops at it.
+  const hasTouchPointer = useMediaQuery('(any-pointer: coarse)');
+  const tracksViewport = isPresented && hasTouchPointer && !isSizedByCaller;
+  const viewportHeight = useSyncExternalStore(
+    tracksViewport ? subscribeToResize : subscribeToNothing,
+    () => (tracksViewport ? layoutViewportHeight() : 0),
+    () => 0,
+  );
+  const reserve =
+    viewportHeight > 0 ? sheetReserve(viewportHeight) : MIN_RESERVE;
   const {
     contentProps,
     handleProps,
@@ -517,7 +714,7 @@ export function BottomSheetPanel({
     dragOffset,
     settledOffset,
     isDragging,
-    isTraveling,
+    isDismissedByTouchDrag,
     sheetHeight,
     scrollPreservationInset,
     settlingLayoutOffset,
@@ -525,11 +722,17 @@ export function BottomSheetPanel({
     completeScrollAreaSettle,
   } = useSheetGestures({
     isOpen: isInteractive,
+    isOpenRequested: isOpenRequested ?? isInteractive,
     canDismiss: isSwipeDismissAllowed,
-    offscreenBlockEndInset: OVERSCROLL_PADDING,
+    offscreenBlockEndInset: reserve,
     onDismiss,
     snapHeights,
+    onTravelStart: () => {
+      // Focusing the sheet dismisses the keyboard as the sheet starts to move.
+      dismissKeyboardRef.current?.(elementRef.current ?? undefined);
+    },
     onScrimOpacity,
+    hasFixedHeight: consumerHeight != null,
   });
 
   const {getViewportProps, getContentProps} = useScrollableArea({
@@ -543,25 +746,37 @@ export function BottomSheetPanel({
     stickyContainment: 'always',
   });
 
+  // The sheet measures its own height only while it is presented; a hidden
+  // sheet that stays mounted observes nothing.
+  const isPresentedRef = useRef(isPresented);
   const setElement = useCallback(
     (element: HTMLDivElement | null) => {
-      sheetRef(element);
+      sheetRef(isPresentedRef.current ? element : null);
       elementRef.current = element;
       onElementChange?.(element);
     },
     [onElementChange, sheetRef],
   );
-  useMobileKeyboard({
-    bodyRef: bodyElementRef,
-    bottomClearance: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
-    isEnabled: height === 'tall',
-    isFullyExpanded: settledOffset === 0,
-    isPageScrollLocked,
-    isSheetTraveling: isTraveling,
+  useLayoutEffect(() => {
+    if (isPresentedRef.current === isPresented) {
+      return;
+    }
+    isPresentedRef.current = isPresented;
+    sheetRef(isPresented ? elementRef.current : null);
+  }, [isPresented, sheetRef]);
+  const keyboard = useMobileKeyboard(elementRef, {
+    move: 'ride',
+    inset: true,
+    offset: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
+    isEnabled: height === 'tall' && isPresented,
+    isExpanded: settledOffset === 0,
     isOpen: isInteractive,
-    isPresented,
-    sheetRef: elementRef,
+    isPageScrollLocked,
   });
+  const keyboardInset = keyboard.inset;
+  // The drag's own callback dismisses the keyboard as the sheet starts to
+  // move. It runs in the gesture, so it reads the newest dismiss.
+  dismissKeyboardRef.current = keyboard.dismiss;
   // Keep controller registration attached to one stable host ref. React
   // detaches an old callback ref when a consumer supplies a new identity; if
   // that public ref were merged with setElement, an ordinary parent rerender
@@ -569,28 +784,49 @@ export function BottomSheetPanel({
   useImperativeHandle(ref, () => elementRef.current as HTMLDivElement, []);
 
   const motion = motionForState(state);
+  // The cross-fade applies on a coarse pointer, and to a transition that a
+  // touch drag's release started: a finger's swipe dismissal fades in place on
+  // every pointer. A mouse or pen drag is not a touch drag.
+  const isCoarseCrossFade = useMediaQuery(REDUCED_MOTION_COARSE_QUERY);
+  const isCrossFade =
+    isCoarseCrossFade || (isReducedMotion && isDismissedByTouchDrag);
+  // Syncs the motion with the panel's CSS transition. The motion completes when
+  // that transition ends.
   useLayoutEffect(() => {
     if (motion == null) {
       return;
     }
-    startedMotionRef.current = null;
+    // React can run this effect again for the same motion, for example when
+    // a Suspense boundary shows this content again. The passive effect below
+    // does not run again then, so the motion it started stays started, and a
+    // completion completes at once instead of waiting for that effect.
+    if (startedMotionRef.current !== motion) {
+      startedMotionRef.current = null;
+    }
     pendingMotionCompleteRef.current = null;
+    const complete = () => {
+      if (startedMotionRef.current === motion) {
+        onMotionCompleteRef.current?.(motion);
+      } else {
+        pendingMotionCompleteRef.current = motion;
+      }
+    };
     if (motion === 'entering' && reactivatedEntranceRef.current) {
-      pendingMotionCompleteRef.current = motion;
+      complete();
       return;
     }
+    // What ends a motion: the fade is opacity, and the entrance, alignment and
+    // exit are transforms. Under the reduced-motion cross-fade an exit fades
+    // where it is, and its dialog closes only after the fade, so it waits on
+    // opacity. The entrance still waits on its instant transform, so the
+    // retained sheet's fade starts at once and the two fades cross.
+    const crossFadeMotion = isCrossFade && motion === 'exiting';
     return waitForTransition(
       elementRef.current,
-      motion === 'fading' ? 'opacity' : 'transform',
-      () => {
-        if (startedMotionRef.current === motion) {
-          onMotionCompleteRef.current?.(motion);
-        } else {
-          pendingMotionCompleteRef.current = motion;
-        }
-      },
+      motion === 'fading' || crossFadeMotion ? 'opacity' : 'transform',
+      complete,
     );
-  }, [motion]);
+  }, [motion, isCrossFade]);
   // The snap is transform-only; the layout height reconciles when it lands.
   // waitForTransition — the same helper the motion states use — resolves that
   // even when no `transitionend` is coming: inline or computed
@@ -648,6 +884,8 @@ export function BottomSheetPanel({
     // transform — the layout height changes at rest, in one reconciling render
     // whose visible geometry is identical (see useSheetGestures).
     //   - dragging above the base restores the full height below the viewport
+    //     (the move that crosses writes that height to the element itself,
+    //     so this render only catches up to it)
     //   - a peek settles with layout 0, so it slides rather than reflowing
     const layoutOffset = isDragging
       ? dragOffset < settledOffset
@@ -664,7 +902,7 @@ export function BottomSheetPanel({
     const isTraveling = isDragging || settlingLayoutOffset != null;
     resizedHeight =
       layoutOffset > 0 || isTraveling
-        ? `${Math.max(0, sheetHeight - Math.max(0, layoutOffset))}px`
+        ? sheetLayoutHeight(sheetHeight, layoutOffset)
         : undefined;
     gestureTransform =
       translation !== 0 ? `translateY(${translation}px)` : undefined;
@@ -681,34 +919,56 @@ export function BottomSheetPanel({
       ? retainedTransform
       : undefined;
   const consumerTransform = style?.transform;
-  // The transform is written to the element here, not rendered through the
-  // style prop. A drag writes it straight to the element once per input
-  // sample (useSheetGestures) and renders nothing in between, so React never
-  // sees those writes; rendered through the prop, the resting value would be
-  // skipped as "unchanged" when the drag ends and the sheet would stay where
-  // the finger left it. Written after every commit instead, outside a drag,
-  // the resting value lands in the same style update as the restored
-  // transition, so a settle or a dismissal animates from the live position.
+  const hostHeight =
+    isInteractive || isRetained || isClosing ? resizedHeight : undefined;
+  const bodyEndPadding = scrollPreservationPadding(scrollPreservationInset);
+  // The transform is written to the element here, not through the style
+  // prop. A drag writes it straight to the element and renders nothing, so
+  // React never sees those writes. Through the prop, React would skip the
+  // resting value as unchanged, and the sheet would stay where the finger
+  // left it. Written after each commit outside a drag, the resting value
+  // lands with the restored transition, so a settle animates from the live
+  // position.
+  //
+  // A drag that crosses its base detent also writes the height and the end
+  // inset. If the release runs before that move's render commits, React sees
+  // no change and writes nothing, so these are written here too. A caller's
+  // height stays in the style prop, because the drag does not write it.
   useLayoutEffect(() => {
-    if (isDragging || consumerTransform != null) {
+    if (isDragging) {
       return;
     }
     const element = elementRef.current;
     if (element != null) {
-      element.style.transform = sheetTransform ?? '';
+      if (consumerTransform == null) {
+        element.style.transform = sheetTransform ?? '';
+      }
+      if (consumerHeight == null) {
+        element.style.height = hostHeight ?? '';
+      }
+    }
+    const body = bodyElementRef.current;
+    if (body != null) {
+      body.style.paddingBlockEnd = bodyEndPadding ?? '';
     }
   });
   const gestureStyle = {
     transition: contentProps.style.transition,
     touchAction: contentProps.style.touchAction,
     overscrollBehavior: contentProps.style.overscrollBehavior,
-    height: resizedHeight,
+    height: hostHeight,
   };
   return (
     <div
       {...props}
       ref={setElement}
       tabIndex={tabIndex ?? -1}
+      onTransitionEnd={event => {
+        onTransitionEnd?.(event);
+        if (isEntrySettled && event.target === event.currentTarget) {
+          onEntrySettled?.();
+        }
+      }}
       {...mergeProps(
         themeProps('bottom-sheet'),
         stylex.props(
@@ -718,17 +978,20 @@ export function BottomSheetPanel({
           overlayPaddingReset.reset,
           height === 'hug' ? styles.hugHeight : styles.budget,
           isClosing && styles.sheetClosing,
+          isClosing && isCrossFade && styles.sheetClosingCrossFade,
           isFading && styles.sheetFading,
           isInactive && styles.sheetInactive,
+          isEntrySettled && styles.sheetSettled,
           xstyle,
         ),
         className,
         {
           ['--_sheet-budget' as string]: budget,
+          ['--_sheet-reserve' as string]: `${reserve}px`,
           ...(isInteractive
             ? gestureStyle
             : isRetained || isClosing
-              ? {height: resizedHeight}
+              ? {height: hostHeight}
               : {}),
           ...style,
         },
@@ -736,49 +999,58 @@ export function BottomSheetPanel({
       <div
         {...stylex.props(styles.handleBar)}
         {...handleProps}
-        aria-hidden="true">
-        <div {...stylex.props(styles.handlePill)} />
-      </div>
+        aria-hidden="true"
+      />
       <div
-        {...getViewportProps<HTMLDivElement>({
-          ...bodyProps,
-          ...mergeProps(
-            stylex.props(
-              focusOutlineStyles.focusVisible,
-              styles.body,
-              height === 'tall' && styles.tallKeyboardBody,
-            ),
-            scrollPreservationInset > 0
-              ? {style: {paddingBlockEnd: `${scrollPreservationInset}px`}}
-              : {},
-          ),
-        })}>
-        <div
-          {...getContentProps<HTMLDivElement>(
-            stylex.props(
-              styles.content,
-              ...container(
-                usesThemePadding
-                  ? {useThemeDefault: 'bottom-sheet'}
-                  : {
-                      paddingInnerX: paddingToken,
-                      paddingInnerY: paddingToken,
-                      paddingOuterX: paddingToken,
-                      paddingOuterY: paddingToken,
-                    },
+        {...whilePresented(
+          isPresented,
+          getViewportProps<HTMLDivElement>({
+            ...bodyProps,
+            ...mergeProps(
+              stylex.props(
+                focusOutlineStyles.focusVisible,
+                styles.body,
+                height === 'tall' && styles.tallKeyboardBody,
               ),
-              !usesThemePadding &&
-                effectivePadding !== 4 &&
-                paddingStyles[effectivePadding],
-              !usesThemePadding &&
-                effectivePadding !== 4 &&
-                containerPaddingInlineVarStyles[effectivePadding],
-              !usesThemePadding &&
-                effectivePadding !== 4 &&
-                containerPaddingBlockStartVarStyles[effectivePadding],
-              !usesThemePadding &&
-                effectivePadding !== 4 &&
-                containerPaddingBlockEndVarStyles[effectivePadding],
+              bodyEndPadding != null
+                ? {style: {paddingBlockEnd: bodyEndPadding}}
+                : {},
+            ),
+          }),
+        )}>
+        <div
+          {...whilePresented(
+            isPresented,
+            getContentProps<HTMLDivElement>(
+              stylex.props(
+                styles.content,
+                height === 'tall' && styles.tallKeyboardContent,
+                height === 'tall' &&
+                  keyboardInset > 0 &&
+                  styles.keyboardInset(keyboardInset),
+                ...container(
+                  usesThemePadding
+                    ? {useThemeDefault: 'bottom-sheet'}
+                    : {
+                        paddingInnerX: paddingToken,
+                        paddingInnerY: paddingToken,
+                        paddingOuterX: paddingToken,
+                        paddingOuterY: paddingToken,
+                      },
+                ),
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  paddingStyles[effectivePadding],
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  containerPaddingInlineVarStyles[effectivePadding],
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  containerPaddingBlockStartVarStyles[effectivePadding],
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  containerPaddingBlockEndVarStyles[effectivePadding],
+              ),
             ),
           )}>
           <LayerContentBoundary>{children}</LayerContentBoundary>

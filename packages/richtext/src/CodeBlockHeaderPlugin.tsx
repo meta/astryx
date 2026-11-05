@@ -25,6 +25,8 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {useClipboard} from '@astryxdesign/core/hooks';
 import {useTranslator} from '@astryxdesign/core/i18n';
+import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
+import {listedLanguage} from './codeLanguages';
 import {
   fontWeightVars,
   spacingVars,
@@ -119,8 +121,11 @@ function samePlacements(
 
 function CodeBlockHeader({
   placement,
+  label,
 }: {
   readonly placement: HeaderPlacement;
+  /** The matched language value's name, when a listed value claims the fence. */
+  readonly label?: string;
 }): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const t = useTranslator();
@@ -170,7 +175,7 @@ function CodeBlockHeader({
     <div
       data-richtext-code-header=""
       {...stylex.props(styles.header, position)}>
-      <span {...stylex.props(styles.title)}>{placement.language}</span>
+      <span {...stylex.props(styles.title)}>{label ?? placement.language}</span>
       {copyButton}
     </div>
   );
@@ -180,7 +185,12 @@ function CodeBlockHeader({
  * Draws a header over each top-level code block and keeps it there as the
  * document, the editor's size, or the window changes.
  */
-export function CodeBlockHeaderPlugin(): JSX.Element {
+export function CodeBlockHeaderPlugin({
+  codeLanguages,
+}: {
+  /** Language values a fence may name; a matched fence shows the value's name. */
+  codeLanguages?: ReadonlyArray<CodeLanguage>;
+} = {}): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const [placements, setPlacements] = useState<ReadonlyArray<HeaderPlacement>>(
     [],
@@ -255,7 +265,17 @@ export function CodeBlockHeaderPlugin(): JSX.Element {
   return (
     <>
       {placements.map(placement => (
-        <CodeBlockHeader key={placement.key} placement={placement} />
+        <CodeBlockHeader
+          key={placement.key}
+          placement={placement}
+          // A fence matched in `codeLanguages` shows the value's name, as
+          // Markdown does (spec:AST-061).
+          label={
+            placement.language == null
+              ? undefined
+              : listedLanguage(codeLanguages, placement.language)?.name
+          }
+        />
       ))}
     </>
   );

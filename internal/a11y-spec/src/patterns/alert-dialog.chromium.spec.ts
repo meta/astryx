@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/alert-dialog|internal/a11y-spec/src/harness|packages/core/src/AlertDialog/|packages/core/src/Dialog/|apps/storybook/stories/AlertDialogA11y)
 
 /**
  * @file alert-dialog.chromium.spec.ts
@@ -7,7 +8,7 @@
  * @position Contract self-test, Chromium lane
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {expect, test, type CDPSession, type Page} from '../playwright';
 import {describeExpectation, requiredLayers} from '../contract';
 import {checkAccessibilitySpec, type ExpectationResult} from '../check';
 import {

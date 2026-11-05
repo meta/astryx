@@ -27,10 +27,11 @@ import {
   useState,
 } from 'react';
 import type {BaseProps} from '../BaseProps';
+import {isRenderable} from '../utils/isRenderable';
 import type {SpacingStep} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {mergeProps} from '../utils';
-import {useOverflow} from '../hooks/useOverflow';
+import {useOverflowInternal} from '../hooks/useOverflow';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {spacingVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
@@ -283,15 +284,21 @@ export function OverflowList({
   const observeParent = behavior === 'observeParent';
   const isMultiRow = maxRows != null && maxRows > 1;
 
+  // Only the multi-row path renders from `rowHeight` (it caps the
+  // container's height), so only that path tracks it.
   const {containerRef, measureRef, visibleCount, hasOverflow, rowHeight} =
-    useOverflow(itemCount, {
-      gap: gapPx,
-      minVisibleItems,
-      maxVisibleItems,
-      maxRows,
-      collapseFrom,
-      behavior,
-    });
+    useOverflowInternal(
+      itemCount,
+      {
+        gap: gapPx,
+        minVisibleItems,
+        maxVisibleItems,
+        maxRows,
+        collapseFrom,
+        behavior,
+      },
+      {tracksRows: isMultiRow},
+    );
 
   const allItems: OverflowItem[] = childArray.map((child, index) => ({
     child,
@@ -349,6 +356,8 @@ export function OverflowList({
   const overflowItemsRef = useRef(overflowItems);
   overflowItemsRef.current = overflowItems;
 
+  // Reports the measured overflow to `onOverflowChange`. A ResizeObserver
+  // drives the measurement, so no event handler can report it.
   useIsomorphicLayoutEffect(() => {
     if (
       !onOverflowChange ||
@@ -370,7 +379,7 @@ export function OverflowList({
         inert
         {...stylex.props(styles.measureContainer, gapStyles[gap])}>
         {childArray}
-        {measureIndicator != null && (
+        {isRenderable(measureIndicator) && (
           <div {...stylex.props(styles.measureIndicator)}>
             {measureIndicator}
           </div>

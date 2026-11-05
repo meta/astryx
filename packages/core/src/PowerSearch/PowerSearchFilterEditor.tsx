@@ -30,6 +30,7 @@ export function PowerSearchFilterEditor({
   onCancel,
   saveButtonLabel,
   isReadOnly,
+  timezoneID,
 }: PowerSearchEditorProps) {
   const config = useInternalConfig(configProp);
 
@@ -43,6 +44,7 @@ export function PowerSearchFilterEditor({
       onCancel={onCancel}
       saveButtonLabel={saveButtonLabel}
       isReadOnly={isReadOnly}
+      timezoneID={timezoneID}
     />
   );
 }
