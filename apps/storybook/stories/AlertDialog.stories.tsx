@@ -1,12 +1,16 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {
   AlertDialog,
   useImperativeAlertDialog,
 } from '@astryxdesign/core/AlertDialog';
 import {Button} from '@astryxdesign/core/Button';
+import {Stack} from '@astryxdesign/core/Stack';
+import {Text} from '@astryxdesign/core/Text';
+import {useToast} from '@astryxdesign/core/Toast';
+import type {ToastDismissFn} from '@astryxdesign/core/Toast';
 
 const meta: Meta<typeof AlertDialog> = {
   title: 'Core/AlertDialog',
@@ -88,6 +92,9 @@ export const Async: Story = {
 /**
  * Wide reference state. In a wide viewport, Dialog preserves AlertDialog's
  * preferred 400px surface and AlertDialog renders a horizontal action row.
+ * Under a finger on a compact screen, its two short actions share a row in
+ * equal halves, Cancel leading. The theme defines compact: by default
+ * narrower than 768px or shorter than 500px.
  */
 export const DesktopFinePointer: Story = {
   args: {
@@ -103,8 +110,10 @@ export const DesktopFinePointer: Story = {
 };
 
 /**
- * Narrow reference state. Use a <=640px viewport to see Dialog's width clamp
- * with AlertDialog's destructive-above-Cancel stacked action order.
+ * Narrow reference state. With a mouse, use a <=640px viewport to see
+ * Dialog's width clamp with AlertDialog's destructive-above-Cancel stacked
+ * action order. Under a finger on a compact screen these labels stack too:
+ * each one is too long for its half of the row.
  */
 export const NarrowFinePointer: Story = {
   args: {
@@ -121,8 +130,9 @@ export const NarrowFinePointer: Story = {
 };
 
 /**
- * Mobile reference state. Use a <=640px mobile viewport to verify the same
- * stacked action order; this story does not emulate pointer or hover capability.
+ * Mobile reference state. On a compact touch screen these long labels keep
+ * the destructive-above-Cancel stack; this story does not emulate pointer or
+ * hover capability.
  */
 export const MobileTouch: Story = {
   args: NarrowFinePointer.args,
@@ -224,5 +234,54 @@ export const Inline: Story = {
     actionLabel: 'Delete',
     onOpenChange: () => {},
     onAction: () => {},
+  },
+};
+
+/**
+ * An action that raises a toast. Under a finger the alert fades out above the
+ * toast. The toast stays live meanwhile: its Undo button takes a tap during
+ * the fade, and assistive technology reads it.
+ */
+export const AlertOverAToast: Story = {
+  render: function AlertOverAToastStory() {
+    const [isOpen, setIsOpen] = useState(false);
+    const [undoCount, setUndoCount] = useState(0);
+    const toast = useToast();
+    // The story's one toast. A new delete replaces it, and leaving the story
+    // dismisses it.
+    const dismissRef = useRef<ToastDismissFn | null>(null);
+    useEffect(() => () => dismissRef.current?.(), []);
+    return (
+      <Stack gap={2}>
+        <Button
+          label="Delete item"
+          variant="destructive"
+          onClick={() => setIsOpen(true)}
+        />
+        <Text>{`Undo taps: ${undoCount}`}</Text>
+        <AlertDialog
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          title="Delete item?"
+          description="This action cannot be undone. The item and all its data will be permanently removed."
+          actionLabel="Delete"
+          onAction={() => {
+            dismissRef.current = toast({
+              body: 'Item deleted.',
+              uniqueID: 'alert-over-a-toast',
+              isAutoHide: false,
+              endContent: (
+                <Button
+                  label="Undo"
+                  variant="secondary"
+                  onClick={() => setUndoCount(count => count + 1)}
+                />
+              ),
+            });
+            setIsOpen(false);
+          }}
+        />
+      </Stack>
+    );
   },
 };

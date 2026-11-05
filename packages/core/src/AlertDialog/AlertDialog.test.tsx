@@ -19,6 +19,7 @@ import {
   afterEach,
 } from 'vitest';
 import {
+  act,
   cleanup,
   render,
   screen,
@@ -27,6 +28,7 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {StrictMode} from 'react';
 import {getGestureHost} from '../gestures/GestureHost';
 import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
 import {AlertDialog} from './AlertDialog';
@@ -57,6 +59,7 @@ vi.mock('../gestures/pageHold', () => ({
   holdPageScroll: () => () => {},
 }));
 
+/** Stubs the media queries AlertDialog reads. */
 function stubAlertDialogMedia({
   smallScreen,
   coarsePointer,
@@ -73,7 +76,10 @@ function stubAlertDialogMedia({
     'matchMedia',
     vi.fn((query: string) => {
       let matches = false;
-      if (query.includes('max-width: 640px')) {
+      if (
+        query.includes('max-width: 640px') ||
+        query.includes('width < 768px')
+      ) {
         matches = smallScreen;
       } else if (query.includes('pointer: coarse')) {
         matches = coarsePointer;
@@ -248,9 +254,9 @@ describe('AlertDialog', () => {
       });
       render(<AlertDialog {...defaultProps} />);
 
+      // The layout reads the width alone. The pointer query only picks the
+      // motion (UIKit's under a finger), never the order or the stacking.
       expect(window.matchMedia).toHaveBeenCalledWith('(max-width: 640px)');
-      // The layout reads the width alone. The pointer query only turns the
-      // touch layer on, never the order or the stacking.
       expect(window.matchMedia).not.toHaveBeenCalledWith('(hover: none)');
       const dialog = screen.getByRole('alertdialog');
       const buttons = within(dialog).getAllByRole('button');
@@ -310,9 +316,9 @@ describe('AlertDialog', () => {
         />,
       );
 
+      // The layout reads the width alone. The pointer query only picks the
+      // motion (UIKit's under a finger), never the order or the stacking.
       expect(window.matchMedia).toHaveBeenCalledWith('(max-width: 640px)');
-      // The layout reads the width alone. The pointer query only turns the
-      // touch layer on, never the order or the stacking.
       expect(window.matchMedia).not.toHaveBeenCalledWith('(hover: none)');
       const dialog = screen.getByRole('alertdialog');
       const buttons = within(dialog).getAllByRole('button');
@@ -331,12 +337,93 @@ describe('AlertDialog', () => {
       }
     });
 
-    it('uses the same stacked layout on a mobile touch screen', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    /**
+     * jsdom lays nothing out and resolves no `var()`. So these are a
+     * browser's lengths for a 320 px alert's action row. The row is 288 px
+     * wide with an 8 px column gap. Each action has 12 px of padding on each
+     * side and no border. Each label is `labelWidth(text)` px wide on one line.
+     */
+    function stubActionRow(labelWidth: (text: string) => number): void {
+      const isRow = (element: Element) =>
+        element.querySelectorAll(':scope > button').length === 2;
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(
+        function (this: HTMLElement) {
+          return isRow(this) ? 288 : 0;
+        },
+      );
+      vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(
+        function (this: HTMLElement) {
+          return this.children.length === 0
+            ? labelWidth(this.textContent?.trim() ?? '')
+            : 0;
+        },
+      );
+      const computed = window.getComputedStyle.bind(window);
+      vi.spyOn(window, 'getComputedStyle').mockImplementation(
+        (element, pseudoElement) => {
+          const style = computed(element, pseudoElement);
+          const lengths: Record<string, string> | null = isRow(element)
+            ? {columnGap: '8px'}
+            : element.tagName === 'BUTTON'
+              ? {
+                  paddingLeft: '12px',
+                  paddingRight: '12px',
+                  borderLeftWidth: '0px',
+                  borderRightWidth: '0px',
+                }
+              : null;
+          // The rest of the computed style stays jsdom's own.
+          for (const [property, value] of Object.entries(lengths ?? {})) {
+            Object.defineProperty(style, property, {value});
+          }
+          return style;
+        },
+      );
+    }
+
+    /** Each label 50 px wide: each fits its 140 px half of the row. */
+    const fittingLabels = () => 50;
+
+    it('under a finger on a compact screen puts two short actions in a row, Cancel leading, each taking half', () => {
       stubAlertDialogMedia({
         smallScreen: true,
         coarsePointer: true,
         noHover: true,
       });
+      stubActionRow(fittingLabels);
+      render(<AlertDialog {...defaultProps} />);
+
+      const dialog = screen.getByRole('alertdialog');
+      const buttons = within(dialog).getAllByRole('button');
+      // DOM and tab order are the visual order: Cancel leads the row.
+      expect(buttons.map(button => button.textContent)).toEqual([
+        'Cancel',
+        'Delete',
+      ]);
+      const footerStack = buttons[0].parentElement as HTMLElement;
+      expect(getComputedStyle(footerStack).flexDirection).toBe('row');
+      expect(getComputedStyle(footerStack).flexWrap).toBe('nowrap');
+      for (const button of buttons) {
+        expect(getComputedStyle(button).flexGrow).toBe('1');
+        expect(getComputedStyle(button).flexBasis).toBe('0px');
+      }
+      expect(screen.getByRole('button', {name: 'Cancel'})).toHaveAttribute(
+        'data-autofocus',
+      );
+    });
+
+    it('under a finger on a compact screen stacks the actions when one label is wider than its half, the action above Cancel', () => {
+      stubAlertDialogMedia({
+        smallScreen: true,
+        coarsePointer: true,
+        noHover: true,
+      });
+      // Cancel fits its half; the action's label does not.
+      stubActionRow(text => (text === 'Keep this workspace' ? 110 : 160));
       render(
         <AlertDialog
           {...defaultProps}
@@ -345,21 +432,83 @@ describe('AlertDialog', () => {
         />,
       );
 
-      expect(window.matchMedia).toHaveBeenCalledWith('(max-width: 640px)');
-      // The layout reads the width alone. The pointer query only turns the
-      // touch layer on, never the order or the stacking.
-      expect(window.matchMedia).not.toHaveBeenCalledWith('(hover: none)');
       const dialog = screen.getByRole('alertdialog');
       const buttons = within(dialog).getAllByRole('button');
-      expect(dialog.getAttribute('style')).toContain('--x-width: 400px');
+      expect(dialog.getAttribute('style')).toContain('--x-width: 320px');
       expect(buttons.map(button => button.textContent)).toEqual([
         'Permanently delete workspace',
         'Keep this workspace',
       ]);
-      expect(getComputedStyle(buttons[0]).whiteSpace).toBe('nowrap');
-      expect(getComputedStyle(buttons[0]).width).toBe('100%');
-      expect(getComputedStyle(buttons[1]).whiteSpace).toBe('nowrap');
-      expect(getComputedStyle(buttons[1]).width).toBe('100%');
+      const footerStack = buttons[0].parentElement as HTMLElement;
+      expect(getComputedStyle(footerStack).flexDirection).toBe('column');
+      for (const button of buttons) {
+        expect(getComputedStyle(button).whiteSpace).toBe('nowrap');
+        expect(getComputedStyle(button).width).toBe('100%');
+      }
+    });
+
+    it('under a finger on a compact screen lays the actions out again when a label changes while the alert is open', () => {
+      stubAlertDialogMedia({
+        smallScreen: true,
+        coarsePointer: true,
+        noHover: true,
+      });
+      stubActionRow(text => (text === 'Delete every message' ? 180 : 50));
+      const view = render(<AlertDialog {...defaultProps} />);
+      const labels = () =>
+        within(screen.getByRole('alertdialog'))
+          .getAllByRole('button')
+          .map(button => button.textContent);
+      expect(labels()).toEqual(['Cancel', 'Delete']);
+      view.rerender(
+        <AlertDialog {...defaultProps} actionLabel="Delete every message" />,
+      );
+      expect(labels()).toEqual(['Delete every message', 'Cancel']);
+      view.rerender(<AlertDialog {...defaultProps} />);
+      expect(labels()).toEqual(['Cancel', 'Delete']);
+    });
+
+    it('with a mouse on a small screen keeps the stack even when the labels fit', () => {
+      stubAlertDialogMedia({
+        smallScreen: true,
+        coarsePointer: false,
+        noHover: false,
+      });
+      stubActionRow(fittingLabels);
+      render(<AlertDialog {...defaultProps} />);
+      // A fine pointer, before anything is checked.
+      expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+
+      const dialog = screen.getByRole('alertdialog');
+      const buttons = within(dialog).getAllByRole('button');
+      expect(buttons.map(button => button.textContent)).toEqual([
+        'Delete',
+        'Cancel',
+      ]);
+      const footerStack = buttons[0].parentElement as HTMLElement;
+      expect(getComputedStyle(footerStack).flexDirection).toBe('column');
+    });
+
+    it('under a finger on a wider touch screen keeps the wide row, as with a mouse', () => {
+      stubAlertDialogMedia({
+        smallScreen: false,
+        coarsePointer: true,
+        noHover: true,
+      });
+      stubActionRow(fittingLabels);
+      render(<AlertDialog {...defaultProps} />);
+
+      const dialog = screen.getByRole('alertdialog');
+      const buttons = within(dialog).getAllByRole('button');
+      expect(buttons.map(button => button.textContent)).toEqual([
+        'Cancel',
+        'Delete',
+      ]);
+      const footerStack = buttons[0].parentElement as HTMLElement;
+      expect(getComputedStyle(footerStack).flexWrap).toBe('wrap');
+      for (const button of buttons) {
+        expect(getComputedStyle(button).flexGrow).not.toBe('1');
+      }
     });
 
     it('keeps narrow visual, DOM, and tab order aligned while autofocus stays on cancel', async () => {
@@ -570,35 +719,59 @@ describe('AlertDialog action tracking', () => {
     target.dispatchEvent(event);
   }
 
-  function renderOpen(props: {isInline?: boolean; coarse?: boolean} = {}) {
-    const isCoarse = props.coarse ?? true;
+  /**
+   * Renders the alert open under a finger by default, in any engine. UIKit's
+   * motion runs, and touches wait for the presentation. With `touch: false`
+   * it opens under a mouse, with the theme's motion.
+   */
+  function renderOpen(
+    props: {
+      isInline?: boolean;
+      touch?: boolean;
+      smallScreen?: boolean;
+      width?: number;
+    } = {},
+  ) {
+    const isTouch = props.touch ?? true;
     stubAlertDialogMedia({
-      smallScreen: true,
-      coarsePointer: isCoarse,
-      noHover: isCoarse,
+      smallScreen: props.smallScreen ?? true,
+      coarsePointer: isTouch,
+      noHover: isTouch,
     });
     const onOpenChange = vi.fn();
     const onAction = vi.fn();
-    render(
+    const element = (isOpen: boolean) => (
       <AlertDialog
-        isOpen
+        isOpen={isOpen}
         isInline={props.isInline}
+        width={props.width}
         onOpenChange={onOpenChange}
         title="Delete item?"
         description="This cannot be undone."
         actionLabel="Delete"
         onAction={onAction}
-      />,
+      />
     );
+    const view = render(element(true));
     const cancel = screen.getByRole('button', {name: 'Cancel'});
     const action = screen.getByRole('button', {name: 'Delete'});
     // Stacked on a narrow screen: the action above Cancel.
     place(action, 16, 100);
     place(cancel, 16, 140);
-    return {onOpenChange, onAction, cancel, action};
+    const close = () => view.rerender(element(false));
+    return {onOpenChange, onAction, cancel, action, close};
+  }
+
+  /**
+   * Lets the presentation complete: UIKit drops touches until it does. jsdom
+   * runs no entrance, so its end comes in the next microtask.
+   */
+  async function completePresentation(): Promise<void> {
+    await act(async () => {});
   }
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -622,7 +795,7 @@ describe('AlertDialog action tracking', () => {
   });
 
   it("tracks nothing under a fine primary pointer: a desktop press stays the native button's (family:action-groups FR1)", () => {
-    const {cancel, action} = renderOpen({coarse: false});
+    const {cancel, action} = renderOpen({touch: false});
     for (const button of [cancel, action]) {
       expect(isTrackedByGroup(button)).toBe(false);
       expect(button).toHaveAttribute('data-astryx-pressable');
@@ -657,6 +830,8 @@ describe('AlertDialog action tracking', () => {
         onAction={() => selectText(made)}
       />,
     );
+    // A press counts once the alert has entered.
+    await completePresentation();
     const action = screen.getByRole('button', {name: 'Delete'});
     place(action, 16, 100);
     place(screen.getByRole('button', {name: 'Cancel'}), 16, 140);
@@ -684,8 +859,9 @@ describe('AlertDialog action tracking', () => {
     expect(onAction).not.toHaveBeenCalled();
   });
 
-  it('runs the action a finger lifts on: from the action to Cancel cancels, from Cancel to the action runs it', () => {
+  it('runs the action a finger lifts on: from the action to Cancel cancels, from Cancel to the action runs it', async () => {
     const {onOpenChange, onAction, cancel, action} = renderOpen();
+    await completePresentation();
     let id = touchId++;
     touch('touchstart', action, {x: 60, y: 116}, id);
     expect(action).toHaveAttribute('data-astryx-press', 'on');
@@ -703,10 +879,88 @@ describe('AlertDialog action tracking', () => {
     expect(onAction).toHaveBeenCalledTimes(1);
     expect(onOpenChange).toHaveBeenCalledTimes(1);
   });
+  it("takes iOS's alert width on a phone, a caller's width there, and Dialog's 400 on a wider touch screen or with a mouse (FR9)", () => {
+    const widthOf = () => screen.getByRole('alertdialog').getAttribute('style');
+    // A phone: a compact window under a coarse primary pointer.
+    renderOpen();
+    expect(widthOf()).toContain('--x-width: 320px');
+    cleanup();
+    vi.unstubAllGlobals();
+    // A caller's width still wins on a phone.
+    renderOpen({width: 360});
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(true);
+    expect(widthOf()).toContain('--x-width: 360px');
+    cleanup();
+    vi.unstubAllGlobals();
+    // A wider touch screen (a tablet): Dialog's 400.
+    renderOpen({smallScreen: false});
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(true);
+    expect(widthOf()).toContain('--x-width: 400px');
+    cleanup();
+    vi.unstubAllGlobals();
+    renderOpen({touch: false});
+    // A fine pointer, before the mouse's width is checked.
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    expect(widthOf()).toContain('--x-width: 400px');
+  });
+
+  it('under a finger, while the alert fades out, holds its input: its content is inert, focus leaves it, and Escape does nothing', async () => {
+    const {onOpenChange, cancel, action, close} = renderOpen();
+    await completePresentation();
+    const dialog = screen.getByRole('alertdialog');
+    cancel.focus();
+    // jsdom runs no animation: a 300 ms exit fade that never ends.
+    dialog.getAnimations = () => [
+      {
+        finished: new Promise<Animation>(() => {}),
+        effect: {getComputedTiming: () => ({endTime: 300})},
+      } as unknown as Animation,
+    ];
+    close();
+    // Leaving: still open while it fades out.
+    expect(dialog).toHaveAttribute('open');
+    // jsdom still dispatches a click on inert content, so the browser specs
+    // prove that a tap or a click there runs nothing.
+    expect(action.closest('[inert]')).not.toBeNull();
+    expect(cancel.closest('[inert]')).not.toBeNull();
+    expect(cancel).not.toHaveFocus();
+    fireEvent.keyDown(dialog, {key: 'Escape'});
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('under StrictMode, an alert that mounts open presents and takes touches once the presentation completes', async () => {
+    stubAlertDialogMedia({
+      smallScreen: true,
+      coarsePointer: true,
+      noHover: true,
+    });
+    const onOpenChange = vi.fn();
+    render(
+      <StrictMode>
+        <AlertDialog
+          isOpen
+          onOpenChange={onOpenChange}
+          title="Delete item?"
+          description="This cannot be undone."
+          actionLabel="Delete"
+          onAction={() => {}}
+        />
+      </StrictMode>,
+    );
+    const cancel = screen.getByRole('button', {name: 'Cancel'});
+    place(cancel, 16, 140);
+    await completePresentation();
+    const id = touchId++;
+    touch('touchstart', cancel, {x: 60, y: 156}, id);
+    expect(cancel).toHaveAttribute('data-astryx-press', 'on');
+    touch('touchend', cancel, {x: 60, y: 156}, id);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   it('keeps the keyboard on the buttons under every pointer: Enter runs the action and Space cancels (FR8)', async () => {
-    for (const coarse of [true, false]) {
+    for (const touch of [true, false]) {
       const user = userEvent.setup();
-      const {onOpenChange, onAction, cancel, action} = renderOpen({coarse});
+      const {onOpenChange, onAction, cancel, action} = renderOpen({touch});
       action.focus();
       await user.keyboard('{Enter}');
       expect(onAction).toHaveBeenCalledTimes(1);
@@ -720,8 +974,9 @@ describe('AlertDialog action tracking', () => {
     }
   });
 
-  it('tracks only the actions: a press that lands on the title, the message or the backdrop and slides onto an action runs nothing', () => {
+  it('tracks only the actions: a press that lands on the title, the message or the backdrop and slides onto an action runs nothing', async () => {
     const {onOpenChange, onAction, cancel} = renderOpen();
+    await completePresentation();
     const dialog = screen.getByRole('alertdialog');
     // A touch on ::backdrop targets the dialog element itself.
     for (const start of [
