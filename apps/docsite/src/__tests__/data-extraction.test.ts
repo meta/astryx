@@ -277,6 +277,7 @@ describe('componentRegistry', () => {
   it('discovers CLI-configured canary package components', () => {
     expect(components['@astryxdesign/lab'].length).toBeGreaterThan(30);
     expect(components['@astryxdesign/charts'].map(comp => comp.name)).toEqual([
+      'AreaChart',
       'Chart',
       'ChartAxis',
       'ChartGrid',
