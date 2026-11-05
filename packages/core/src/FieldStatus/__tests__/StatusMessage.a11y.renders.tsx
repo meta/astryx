@@ -116,6 +116,20 @@ function ToastAnnouncementHarness({type}: {type: 'info' | 'error'}) {
   );
 }
 
+function ToastTopLayerAnnouncementHarness({type}: {type: 'info' | 'error'}) {
+  // Outside a modal a top-layer viewport speaks through the shared channel.
+  const politeness = type === 'error' ? 'assertive' : 'polite';
+  return (
+    <ToastViewport>
+      <PrimeLiveRegion politeness={politeness} />
+      <button data-a11y-relation="focus-anchor" type="button">
+        Keep focus
+      </button>
+      <ToastAnnouncementButtons type={type} />
+    </ToastViewport>
+  );
+}
+
 function ToastCardHarness({type}: {type: 'info' | 'error'}) {
   const message = type === 'error' ? 'Upload failed' : 'Changes saved';
   const replacement =
@@ -242,6 +256,12 @@ export const CORE_STATUS_MESSAGE_STATE_RENDERS: Record<
 > = {
   'toast-info-announcement': () => <ToastAnnouncementHarness type="info" />,
   'toast-error-announcement': () => <ToastAnnouncementHarness type="error" />,
+  'toast-info-announcement-top-layer': () => (
+    <ToastTopLayerAnnouncementHarness type="info" />
+  ),
+  'toast-error-announcement-top-layer': () => (
+    <ToastTopLayerAnnouncementHarness type="error" />
+  ),
   'toast-info-card-mounted': () => <ToastCardHarness type="info" />,
   'toast-error-card-mounted': () => <ToastCardHarness type="error" />,
   'field-status-error-attached': () => (
