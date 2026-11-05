@@ -3667,6 +3667,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-calendar-days-month-grid",
+      "path": "examples/use-calendar-days/month-grid",
+      "aliases": []
+    },
+    {
       "name": "example-use-clickable-container-clickable-project-card",
       "path": "examples/use-clickable-container/clickable-project-card",
       "aliases": []
@@ -3934,6 +3939,11 @@
     {
       "name": "hook-use-app-shell-mobile",
       "path": "hooks/use-app-shell-mobile",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-calendar-days",
+      "path": "hooks/use-calendar-days",
       "aliases": []
     },
     {
