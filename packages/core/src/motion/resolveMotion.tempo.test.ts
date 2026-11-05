@@ -14,7 +14,7 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {createMotionAnimator} from './animator';
+import {createMotionEngine} from './animator';
 import {resolveMotion} from './resolveMotion';
 import {solveSpring, toSpring} from './spring';
 import {
@@ -167,7 +167,7 @@ describe("resolveMotion at the theme's tempo (spec:AST-108 FR3)", () => {
 describe('the animator', () => {
   it("plays a role's spring at the theme's tempo", () => {
     tempo = '1.5';
-    const animator = createMotionAnimator(element(), {now: () => 0});
+    const animator = createMotionEngine(element(), {now: () => 0});
     animator.set({y: 300});
     animator.animate({y: 0}, {spring: springs.settle}, {at: 0});
     const table = solveSpring(toSpring(springs.settle), {from: 300, to: 0});

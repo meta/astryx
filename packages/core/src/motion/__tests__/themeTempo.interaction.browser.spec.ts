@@ -88,7 +88,7 @@ async function travels(
         id => document.getElementById(id) as HTMLElement,
       );
       const handles = boxes.map(box =>
-        Motion.createMotionAnimator(box).animate(
+        Motion.createMotionEngine(box).animate(
           {x: travel},
           {spring: Motion.springs[role]},
         ),
