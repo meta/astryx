@@ -2465,6 +2465,54 @@ describe('DateInput — month/year wheels', () => {
     expect(fromDay.commits).toBe(fromTitle.commits);
   });
 
+  it('Done hands focus from the wheels to the calendar in the toggle\u2019s commit', () => {
+    // One Done press with focus on `target`: its commits, and where focus ends.
+    const pressDone = (target: () => HTMLElement) => {
+      let commits = 0;
+      withLayout(() => {
+        render(
+          <Profiler
+            id="sheet"
+            onRender={() => {
+              commits += 1;
+            }}>
+            <Controlled initial="2026-03-21" />
+          </Profiler>,
+        );
+        fireEvent.click(field());
+      });
+      openWheels();
+      // A running exit on both panels, so neither settles inside the press.
+      for (const which of ['calendar', 'wheels'] as const) {
+        (panel(which) as HTMLElement).getAnimations = () =>
+          [
+            {transitionProperty: 'opacity', playState: 'running'},
+          ] as unknown as Animation[];
+      }
+      target().focus();
+      commits = 0;
+      fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+      const result = {
+        commits,
+        isInCalendar: panel('calendar').contains(document.activeElement),
+        focusedDate: (document.activeElement as HTMLElement | null)?.dataset
+          .date,
+      };
+      cleanup();
+      return result;
+    };
+    // A keyboard user can leave focus on a wheel while a pointer presses Done.
+    const fromWheel = pressDone(() =>
+      screen.getByRole('listbox', {name: 'Month'}),
+    );
+    const fromTitle = pressDone(title);
+    expect(fromWheel.isInCalendar).toBe(true);
+    expect(fromWheel.focusedDate).toBe('2026-03-21');
+    expect(fromTitle.isInCalendar).toBe(false);
+    // The hand-off rides the toggle's own commit and costs none of its own.
+    expect(fromWheel.commits).toBe(fromTitle.commits);
+  });
+
   it('the year wheel keeps the month', () => {
     renderAndOpen(<Controlled initial="2026-03-21" {...FIVE_YEARS} />);
     openWheels();

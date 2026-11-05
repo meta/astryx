@@ -1005,6 +1005,61 @@ describe('DateTimeInput touch surface', () => {
     expect(fromDone.commits).toBe(fromTitle.commits);
   });
 
+  it('a title press hands focus from the calendar to the wheels in the toggle’s commit', () => {
+    // One title press with focus on a day or on the title: its commits, and
+    // where focus ends.
+    const pressTitle = (isFocusOnDay: boolean) => {
+      let commits = 0;
+      withMonthLayout(() => {
+        render(
+          <Profiler
+            id="sheet"
+            onRender={() => {
+              commits += 1;
+            }}>
+            <DateTimeInput
+              label="Meeting"
+              value={'2026-03-15T10:00' as ISODateTimeString}
+              onChange={() => {}}
+            />
+          </Profiler>,
+        );
+        openDateSheet();
+      });
+      const surface = (which: 'calendar' | 'wheels') =>
+        document.querySelector<HTMLElement>(`[data-date-surface="${which}"]`)!;
+      const title = document.querySelector<HTMLElement>(
+        'button[aria-label$="Choose month and year"]',
+      )!;
+      // An assistive technology can press the title while focus stays on a day.
+      (isFocusOnDay
+        ? surface('calendar').querySelector<HTMLElement>('[data-date]')!
+        : title
+      ).focus();
+      // A running exit on both surfaces, so neither settles inside the press.
+      for (const which of ['calendar', 'wheels'] as const) {
+        surface(which).getAnimations = () =>
+          [
+            {transitionProperty: 'opacity', playState: 'running'},
+          ] as unknown as Animation[];
+      }
+      commits = 0;
+      fireEvent.click(title);
+      const result = {
+        commits,
+        isInWheels: surface('wheels').contains(document.activeElement),
+      };
+      cleanup();
+      return result;
+    };
+    const fromDay = pressTitle(true);
+    const fromTitle = pressTitle(false);
+    expect(fromDay.isInWheels).toBe(true);
+    expect(fromTitle.isInWheels).toBe(false);
+    // The hand-off rides the toggle's own commit and costs none of its own.
+    expect(fromDay.commits).toBe(fromTitle.commits);
+  });
+
   it('keeps Save date disabled until a valid date exists', () => {
     withMonthLayout(() => {
       render(<ControlledDateTimeInput />);
