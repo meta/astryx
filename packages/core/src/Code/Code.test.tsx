@@ -51,6 +51,17 @@ describe('Code', () => {
     expect(screen.getByText('code')).toHaveAttribute('data-color', 'inherit');
   });
 
+  it('omits data-size when size is not provided', () => {
+    render(<Code>code</Code>);
+    expect(screen.getByText('code')).not.toHaveAttribute('data-size');
+  });
+
+  it('reflects size attribute when provided', () => {
+    render(<Code size="inherit">code</Code>);
+    expect(screen.getByText('code')).toHaveClass('astryx-code');
+    expect(screen.getByText('code')).toHaveAttribute('data-size', 'inherit');
+  });
+
   it('forwards supported root props and composes styling inputs', () => {
     render(
       <Code
