@@ -41,7 +41,28 @@ function Harness({
   );
 }
 
+function ContextHarness({rows = data}: {rows?: Row[]}) {
+  const rowIndex = useTableRowIndex<Row>();
+  return (
+    <Table data={rows} columns={columns} idKey="id" plugins={{rowIndex}} />
+  );
+}
+
 describe('useTableRowIndex', () => {
+  it('numbers rows from the row context without data, and renumbers after a re-sort', () => {
+    const {rerender} = render(<ContextHarness />);
+    let rows = screen.getAllByRole('row');
+    expect(within(rows[1]).getByText('1')).toBeInTheDocument();
+    expect(within(rows[3]).getByText('3')).toBeInTheDocument();
+
+    rerender(<ContextHarness rows={[data[2], data[0], data[1]]} />);
+    rows = screen.getAllByRole('row');
+    expect(within(rows[1]).getByText('Carol')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('1')).toBeInTheDocument();
+    expect(within(rows[2]).getByText('Alice')).toBeInTheDocument();
+    expect(within(rows[2]).getByText('2')).toBeInTheDocument();
+  });
+
   it('prepends a header cell with the default label', () => {
     render(<Harness />);
     const headers = screen.getAllByRole('columnheader');
