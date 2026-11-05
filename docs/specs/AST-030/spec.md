@@ -802,7 +802,9 @@ A pull request's Vitest legs and browser audits follow what its change reaches:
 the module graph for tests and built-bundle reach for components. Tests that
 read sources through the file system run whole, because no import reaches what
 they read. Shared infrastructure, uncertainty, `main`, merge-group entries and
-release checks run everything, so no landing or release gate narrows; a pull
+release checks run everything, except where FR13 narrows the Vitest owner for
+the interaction harness and the lint plugin, so no landing or release gate
+narrows; a pull
 request runs the visual, accessibility and RTL owners at their opted-in scope
 only with the suite's `ci:run-*` label, and otherwise only the
 touched-components check for the components it touches (DEC-7).
