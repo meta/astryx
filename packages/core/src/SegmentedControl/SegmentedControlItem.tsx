@@ -232,7 +232,7 @@ export function SegmentedControlItem({
   );
 
   // Under a coarse pointer a segment's target grows toward 44 px through an
-  // invisible band, and nothing changes size (spec:AST-094 FR42). A disabled
+  // invisible band, and nothing changes size. A disabled
   // segment takes no taps, so it keeps its box.
   const hasHitArea = !isItemDisabled;
   const segmentRef = useMergedRefs(ref, useTouchHitArea(hasHitArea));
