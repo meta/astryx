@@ -163,6 +163,31 @@ describe('a bound between whole minutes', () => {
   });
 });
 
+describe('a bound with no whole minute inside the range', () => {
+  it.each([
+    ['an iPhone', IOS],
+    ['a mouse', MOUSE],
+  ])('commits the bound itself, with %s', (_, device) => {
+    stubDevice(device);
+    const onChange = vi.fn();
+    render(
+      <TimeInput
+        label="Alarm"
+        presentation="bottom-sheet"
+        value={'22:00' as ISOTimeString}
+        min={'23:59:30' as ISOTimeString}
+        onChange={onChange}
+      />,
+    );
+    const {hour} = openTimeSheet();
+    // 11 PM is the only hour with a row inside the bounds, and 23:00 is still
+    // below the minimum. A minute inside that hour has no row, so the bound,
+    // seconds and all, is the only time the rest can commit.
+    fireEvent.click(within(hour).getByRole('option', {name: '11'}));
+    expect(onChange).toHaveBeenLastCalledWith('23:59:30');
+  });
+});
+
 describe('opening a bounded sheet never changes an untouched value', () => {
   it.each([
     ['an iPhone', IOS],
