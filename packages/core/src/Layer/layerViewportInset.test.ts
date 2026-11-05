@@ -64,11 +64,22 @@ describe('layerViewportInset (spec:AST-059)', () => {
     }
   });
 
+  it('caps the block axis to the room the software keyboard leaves while it caps the layer (FR9)', () => {
+    expect(layerViewportInset.maxBlockSize).toContain(
+      'var(--_layer-keyboard-max-block-size, 100dvb)',
+    );
+    expect(layerViewportInset.maxBlockSizeFallback).toContain(
+      'var(--_layer-keyboard-max-block-size, 100vh)',
+    );
+  });
+
   it('caps both axes to the viewport minus both gutters, with env()-less fallbacks (FR2, FR3)', () => {
     expect(layerViewportInset.maxInlineSize).toMatch(/^calc\(100vi - /);
-    expect(layerViewportInset.maxBlockSize).toMatch(/^calc\(100dvb - /);
+    expect(layerViewportInset.maxBlockSize).toMatch(/^min\(calc\(100dvb - /);
     expect(layerViewportInset.maxInlineSizeFallback).toMatch(/^calc\(100vw - /);
-    expect(layerViewportInset.maxBlockSizeFallback).toMatch(/^calc\(100vh - /);
+    expect(layerViewportInset.maxBlockSizeFallback).toMatch(
+      /^min\(calc\(100vh - /,
+    );
     for (const value of [
       layerViewportInset.maxInlineSizeFallback,
       layerViewportInset.maxBlockSizeFallback,
