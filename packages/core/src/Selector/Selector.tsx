@@ -2156,9 +2156,8 @@ export function Selector<T extends SelectorOptionType>(
             variant === 'ghost' && styles.triggerGhost,
             variant === 'secondary' && styles.triggerSecondary,
             variant !== 'input' && interactionOverlayStyles.backgroundImage,
-            // Rings for the trigger button only; the clear and status
-            // buttons ring themselves (`architecture:interaction-modality`
-            // INV3).
+            // Rings for the trigger button only. The clear and status
+            // buttons ring themselves.
             variant !== 'input' && focusWithinOwner,
             surface.isTriggerFocusRingSuppressed &&
               selectorPresentationStyles.pointerRestoredFocus,
