@@ -331,8 +331,8 @@ stack reports itself absent to the shared stack while that lasts
 registry, and only the order among sheets is the sheet stack's to state. Other family members still use local Escape handling as listed in
 `family:overlay-dismissal`.
 
-Outside interaction is not coordinated by the shared stack. Current paths are
-independent:
+Outside interaction is not coordinated by the shared stack. Current paths
+close their own layers independently:
 
 - auto popovers use native light dismiss;
 - BaseTypeahead's list, DateInput's calendar, DateTimeInput's time list and
@@ -347,6 +347,15 @@ independent:
 - sheets own scrim and swipe behavior; and
 - dropdown submenus encode their root-close relationship locally through
   `DropdownMenuContext`.
+
+One fact joins these paths, for a modal host's backdrop press
+(`family:overlay-dismissal` FR11). The outside-press watch, the touch-only
+outside listener, the text fields' blur closes, ContextMenu's `mousedown` close,
+and a held Tooltip's focus-out release each record their close in a
+per-document count. A Dialog or Drawer backdrop press that sees the count
+change, or an auto popover close, between its pointer-down and its click leaves
+the host open. The count orders nothing else: each path still closes only its
+own layer.
 
 The shared stack exposes `isTopmostLayer()`, but current outside, backdrop, touch,
 and swipe paths do not use it. There is no shared interaction-owner role,
@@ -474,9 +483,13 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV8 — Current Escape delivery follows registered layers.** The shared stack
   uses present `close` and `block` entries in its current depth, containment, and
   stable-registration order.
-- **INV9 — Outside channels remain component-owned and uncoordinated.** Current
-  backdrop, pointer, touch, hover/focus, and swipe handlers act through their
-  owning component or browser mechanism rather than one shared branch operation.
+- **INV9 — Outside channels remain component-owned.** Current backdrop,
+  pointer, touch, hover/focus, and swipe handlers act through their owning
+  component or browser mechanism rather than one shared branch operation. Their
+  one shared fact is the per-document count of outside closes in
+  `Layer/outsidePress.ts`: a modal backdrop press reads it, so a press that
+  closed a layer above the host does not also close the host
+  (`family:overlay-dismissal` FR11).
 - **INV10 — LayerProvider is configuration, not a universal layer host.** It
   carries Toast configuration and the app-declared viewport inset. Trigger-
   associated layers resolve near their JSX position independently of the
@@ -670,7 +683,8 @@ is staged as `[breaking]` (`spec:AST-017` FR32) and `component:SelectableCard`
   touch-only outside listener for Tooltip/HoverCard.
 - `Layer/outsidePress.ts` owns the outside-press watch for a text field's
   manual layer, used by BaseTypeahead, DateInput, DateTimeInput and
-  ChatComposerInput's trigger menu.
+  ChatComposerInput's trigger menu, and the per-document count of outside
+  closes that a modal backdrop press reads (`family:overlay-dismissal` FR11).
 - `DropdownMenuContext` and `DropdownMenuSubMenu` own the current local
   menu-cascade parent-close chain.
 - Dialog families own native modal/backdrop presentation and their local channel
@@ -711,7 +725,7 @@ this current architecture record.
 | INV12        | The `Core/Layer` viewport-inset stories' first-frame comparison, and `useLayer.test.tsx`'s synchronous anchor read                                                                                                                                                                   | A layer whose first painted rectangle differs from its settled one                                                                                                                                                                                                                                                                                                                                                           |
 | INV6, INV7   | `useLayer.test.tsx`, `Popover.test.tsx`, `DropdownMenu.test.tsx`, and `useMenuHover.test.tsx`                                                                                                                                                                                        | Duplicate close callback or the same press/re-hover reopens a surface                                                                                                                                                                                                                                                                                                                                                        |
 | INV8         | `useLayerDismissal.test.tsx`, `layerDismissalInvariants.test.tsx`, and `useFocusTrap.test.tsx`                                                                                                                                                                                       | Current top registered layer is skipped, two layers close, or a blocker leaks through                                                                                                                                                                                                                                                                                                                                        |
-| INV9         | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests                                                                                                                                                                                                  | A current local channel silently changes ownership or policy                                                                                                                                                                                                                                                                                                                                                                 |
+| INV9         | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests; `useBackdropPress.test.tsx`; `outsidePress.test.ts`                                                                                                                                             | A current local channel silently changes ownership or policy                                                                                                                                                                                                                                                                                                                                                                 |
 | INV10        | `LayerProvider.tsx`, `LayerProvider.test.tsx`, `useToast.tsx`, `ToastViewport.test.tsx`, and `ToastViewport.modalHost.test.tsx`                                                                                                                                                      | Provider begins relocating ordinary layers, Toast fallback loses its current lifecycle, or a default provider renders differently from no provider                                                                                                                                                                                                                                                                           |
 | INV14, INV15 | Source boundary check over Core for top-layer hosts, exit copies, backdrop elements, lift, and rectangle-morph code outside the runtime and the lift module                                                                                                                          | A component building its own copy of a mechanism INV14 lists (top-layer mounting, close-request delivery, hold, exit copy, or backdrop element), or re-implementing the lift or the grow                                                                                                                                                                                                                                     |
 | INV17        | One runtime suite over every kind of layer root: a `useLayer` layer, inline and portaled, and the Dialog, Drawer, Lightbox, MobileNav, BottomSheetPanel, and ToastViewport content roots, each inside a plain `onClick` wrapper and a Core clickable container; nested layers        | A click inside a layer root that reaches an ancestor bubble-phase handler, a caller's wrapper included; an outer layer's handler that receives an inner layer's press; or a document listener or light dismiss that no longer receives it                                                                                                                                                                                    |
