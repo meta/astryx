@@ -1967,11 +1967,6 @@
       "aliases": []
     },
     {
-      "name": "example-create-pan-gesture-a-playing-card-without-react",
-      "path": "examples/create-pan-gesture/a-playing-card-without-react",
-      "aliases": []
-    },
-    {
       "name": "example-date-input-clearable",
       "path": "examples/date-input/clearable",
       "aliases": []
@@ -3767,6 +3762,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-merged-refs-auto-grow-text-area",
+      "path": "examples/use-merged-refs/auto-grow-text-area",
+      "aliases": []
+    },
+    {
       "name": "example-use-outline-from-markdown-docs-article",
       "path": "examples/use-outline-from-markdown/docs-article",
       "aliases": []
@@ -3777,8 +3777,13 @@
       "aliases": []
     },
     {
-      "name": "example-use-pan-gesture-a-playing-card",
-      "path": "examples/use-pan-gesture/a-playing-card",
+      "name": "example-use-pan-gesture-a-draggable-box",
+      "path": "examples/use-pan-gesture/a-draggable-box",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-playing-card-advanced",
+      "path": "examples/use-pan-gesture/a-playing-card-advanced",
       "aliases": []
     },
     {
