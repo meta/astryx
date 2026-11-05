@@ -295,8 +295,8 @@ export interface DefineThemeInput<
   /**
    * Motion configuration: two knobs (spec:AST-108), a motion scale, or both.
    *
-   * - `tempo` (default 1, clamped to 0.75–1.5) scales every motion duration
-   *   token; touch motion's springs don't read it yet.
+   * - `tempo` (default 1, clamped to 0.75–1.5) scales every motion duration:
+   *   the duration tokens and touch motion's springs.
    * - `character` (`'crisp'`, `'standard'` or `'expressive'`) sets the
    *   entrance and move curves; exits and fades never overshoot.
    *

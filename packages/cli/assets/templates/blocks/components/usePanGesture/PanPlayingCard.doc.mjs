@@ -4,11 +4,11 @@
 export const doc = {
   type: 'block',
   exampleFor: 'usePanGesture',
-  name: 'usePanGesture — A playing card',
-  displayName: 'usePanGesture — A playing card',
+  name: 'usePanGesture — A playing card (advanced)',
+  displayName: 'usePanGesture — A playing card (advanced)',
   description:
-    'A playing card built with usePanGesture: it follows a drag from a finger, a mouse or a pen with no render per move, snaps back on a gentle release, flies off on a quick flick, and a button discards it from the keyboard.',
+    'An advanced usePanGesture example: a playing card follows a drag, settles back on a gentle release and flies off on a quick flick, while a Discard button deals the next card from the keyboard and announces it. Drag, settle and throw are StyleX styles driven by React state. A pattern for swipe-to-dismiss, card decks and flick gestures.',
   isReady: true,
   aspectRatio: 4 / 3,
-  componentsUsed: [],
+  componentsUsed: ['Button', 'Card', 'Center', 'Text', 'VStack'],
 };
