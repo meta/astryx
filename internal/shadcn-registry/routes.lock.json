@@ -623,6 +623,16 @@
       "aliases": []
     },
     {
+      "name": "component-lab-navigation-screen",
+      "path": "components/lab/navigation-screen",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-navigation-stack",
+      "path": "components/lab/navigation-stack",
+      "aliases": []
+    },
+    {
       "name": "component-lab-page-control",
       "path": "components/lab/page-control",
       "aliases": []
@@ -3814,6 +3824,11 @@
     {
       "name": "example-use-press-feedback-pressable-card",
       "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scroll-lock-full-screen-mobile-menu",
+      "path": "examples/use-scroll-lock/full-screen-mobile-menu",
       "aliases": []
     },
     {

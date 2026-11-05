@@ -328,6 +328,17 @@ export {
   type DiffViewerSide,
 } from './DiffViewer';
 
+// NavigationStack: push/pop drill-down navigation with UIKit's transitions
+// and back swipes.
+export {
+  NavigationScreen,
+  NavigationStack,
+  useNavigationStack,
+  type NavigationScreenProps,
+  type NavigationStackApi,
+  type NavigationStackProps,
+} from './NavigationStack';
+
 // PageControl: UIPageControl's row of page indicators.
 export {PageControl, type PageControlProps} from './PageControl';
 
