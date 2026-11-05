@@ -64,6 +64,12 @@ export type IconVariant = keyof IconVariantMap & string;
 export interface ComponentIconSlotMap {
   /** CodeBlock's copy button. `copied` is true while the copied feedback shows. */
   'code-block-copy': {readonly copied: boolean};
+  /** A Timestamp hover card row's copy button. `copied` is true while the copied feedback shows. */
+  'timestamp-copy': {readonly copied: boolean};
+  /** A sortable Table column's sort indicator, by the column's sort direction. */
+  'table-sort-indicator': {
+    readonly direction: 'ascending' | 'descending' | 'none';
+  };
   /** A Table row's expansion toggle (`useTableRowExpansion`), by whether the row is expanded. */
   'table-row-expand': {readonly expanded: boolean};
 }
