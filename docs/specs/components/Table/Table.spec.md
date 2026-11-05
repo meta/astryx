@@ -117,6 +117,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Canonical key resolution and opt-in validity, row classification, declared
   whole-row conflict handling, immutable transform context and pre-cell render planning.
 - The coordinated viewport, logical positions and parent row-paint resolution.
+- Which plugins Core ships (DEC-6). A plugin ships in Core when it sets what
+  the table is or how a person moves through it: a row model, a whole-row
+  owner, the table's role and keyboard model (grid, treegrid), selection, sort,
+  or the table's loading, empty, and error states. Other plugins, such as value
+  heatmaps, column transposition, drag previews, prefetching, and bulk-action
+  wrappers, are built in Lab or in an app on the same `TablePlugin` protocol,
+  passed under any name (AV5), and earn Core only through this rule.
 
 **Does not own / non-goals**
 
@@ -519,6 +526,26 @@ The same coordinated row-paint path preserves selection and activation in either
 update order.
 
 Rejected: wrapper-only slicing, caller-spread data/offset bundles or a parallel Table/scroll renderer.
+
+### DEC-6 - Core ships the plugins that set the table's behavior
+
+**Reference:** `component:Table/DEC-6`
+**Decider:** pending
+
+A person using a table depends on what it is (a grid, a tree, a selectable
+list) and how they move through it. Those plugins change roles, row ownership,
+and keyboard paths, and they have to compose with each other, so Core owns them
+and their records. Presentation and data plugins do not change what the table
+is; they ship in Lab or in an app on the public plugin protocol, which already
+accepts any plugin under any name (AV5). An accessibility behavior arrives as a
+plugin that adjusts the table, not as code inside Table: a tree plugin switches
+the table to treegrid navigation.
+
+Rejected: shipping the whole feature-suite roster in Core, which makes every
+presentation feature a permanent shared API. Rejected: shipping only the
+protocol, which leaves each app to rebuild selection and keyboard models that
+must compose correctly. Rejected: a separate `customPlugins` prop, because the
+named plugin record already takes custom plugins.
 
 ## Open questions
 
