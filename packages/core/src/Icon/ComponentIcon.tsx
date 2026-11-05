@@ -12,7 +12,6 @@
  */
 
 import type {ReactNode} from 'react';
-import type {StyleXStyles} from '@stylexjs/stylex';
 import {Icon, type IconColor} from './Icon';
 import type {
   ComponentIconFallback,
@@ -26,8 +25,6 @@ type ComponentIconProps<Slot extends ComponentIconSlotName> = {
   state: ComponentIconSlotState<Slot>;
   fallback: ComponentIconFallback;
   color?: IconColor;
-  /** The component's own styles for the glyph, such as a state transform. */
-  xstyle?: StyleXStyles;
   /**
    * Icon content the component's caller supplied. When set (`null`
    * included), it renders instead of the slot.
@@ -57,7 +54,6 @@ function SlotIcon<Slot extends ComponentIconSlotName>({
   state,
   fallback,
   color,
-  xstyle,
 }: Omit<ComponentIconProps<Slot>, 'content'>): ReactNode {
   const {icon, variant, size} = useComponentIcon(slot, state, fallback);
   if (icon == null) {
@@ -70,7 +66,6 @@ function SlotIcon<Slot extends ComponentIconSlotName>({
       variant={variant as IconVariant | undefined}
       size={size}
       color={color}
-      xstyle={xstyle}
     />
   );
 }
