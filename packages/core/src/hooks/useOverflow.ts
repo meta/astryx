@@ -217,6 +217,7 @@ function observedSizeFollowsItems(
   if (style == null || typeof style.setProperty !== 'function') {
     return false;
   }
+  const hadStyleAttribute = list.hasAttribute('style');
   const value = style.getPropertyValue('contain');
   const priority = style.getPropertyPriority('contain');
   const width = observed.offsetWidth;
@@ -224,11 +225,20 @@ function observedSizeFollowsItems(
   style.setProperty('contain', 'inline-size', 'important');
   const follows =
     observed.offsetWidth !== width || observed.offsetHeight !== height;
-  if (value === '') {
+  if (value !== '') {
+    style.setProperty('contain', value, priority);
+  } else if (hadStyleAttribute) {
     style.removeProperty('contain');
   } else {
-    style.setProperty('contain', value, priority);
+    style.removeProperty('contain');
+    // Chromium writes the inline style back to the attribute lazily. Reading
+    // the attribute first stops the removal from leaving `style=""`.
+    void list.getAttribute('style');
+    list.removeAttribute('style');
   }
+  // Lay out again now. A later observer in this delivery reads the current
+  // layout without updating it, so it would get the contained size.
+  void observed.offsetWidth;
   return follows;
 }
 

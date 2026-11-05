@@ -812,6 +812,14 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     const box = {
       style,
       offsetHeight: 28,
+      hasAttribute: (name: string) => name === 'style' && style.length > 0,
+      getAttribute: (name: string) =>
+        name === 'style' && style.length > 0 ? style.cssText : null,
+      removeAttribute: (name: string) => {
+        if (name === 'style') {
+          style.cssText = '';
+        }
+      },
       get offsetWidth() {
         return followsItems && style.getPropertyValue('contain') !== ''
           ? 0
@@ -850,6 +858,23 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
       expect(result.current.visibleCount).toBe(1);
     },
   );
+
+  it('leaves no style attribute on a list that had none after the probe', async () => {
+    const {result} = renderHook(() => useOverflow(3, {gap: 10}));
+    let width = 200;
+    const list = document.createElement('div');
+    Object.defineProperty(list, 'offsetWidth', {get: () => width});
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50], 30));
+      result.current.containerRef(list);
+    });
+    expect(result.current.visibleCount).toBe(3);
+
+    width = 100;
+    await deliverBeforePaint(list);
+    expect(result.current.visibleCount).toBe(1);
+    expect(list.hasAttribute('style')).toBe(false);
+  });
 
   it('measures every list that one delivery reports, then renders once', async () => {
     let renders = 0;
