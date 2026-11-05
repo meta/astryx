@@ -234,14 +234,11 @@ async function observe(page: Page) {
         const style = getComputedStyle(cell);
         const row = cell.parentElement as HTMLElement;
         const tokens = resolveTokens(row);
-        const members = Array.from(row.children).filter(
-          child =>
-            !child.matches('[popover], template, dialog') &&
-            (child as HTMLElement).checkVisibility(),
-        );
-        const index = members.indexOf(cell);
-        const previous = index > 0 ? members[index - 1] : null;
-        const next = index < members.length - 1 ? members[index + 1] : null;
+        // The cell rounds its corners by its place among the row's children.
+        const siblings = Array.from(row.children);
+        const index = siblings.indexOf(cell);
+        const previous = cell.previousElementSibling;
+        const next = cell.nextElementSibling;
         const range = document.createRange();
         range.selectNodeContents(cell);
         const contentRect = range.getBoundingClientRect();
@@ -265,7 +262,7 @@ async function observe(page: Page) {
           rowBox: box(row.getBoundingClientRect()),
           rowSize: row.getAttribute('data-size'),
           index,
-          memberCount: members.length,
+          memberCount: siblings.length,
           previousBox: previous ? box(previous.getBoundingClientRect()) : null,
           nextBox: next ? box(next.getBoundingClientRect()) : null,
           contentBox: box(contentRect),
@@ -444,6 +441,14 @@ for (const item of cases) {
         `${where} classes ${cell.className}`,
       );
       check(cell.marked, `${where} is not a marked group member`);
+      check(
+        cell.rowSize === ((item.args?.size as string | undefined) ?? 'md'),
+        `${where} row data-size ${cell.rowSize}`,
+      );
+      check(
+        cell.hasIcon === (item.story === 'with-icon-prefix'),
+        `${where} icon ${cell.hasIcon}`,
+      );
       check(cell.direction === item.direction, `${where} ${cell.direction}`);
       // Paint and one-line layout.
       check(
