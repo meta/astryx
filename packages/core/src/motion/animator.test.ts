@@ -19,7 +19,7 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   animatorFor,
-  createMotionAnimator,
+  createMotionEngine,
   END_HOLD_MS,
   PROMOTION_LINGER_MS,
   type AnimatorOptions,
@@ -205,7 +205,7 @@ function setup({
 }: AnimatorOptions & {reduced?: boolean; coarse?: boolean} = {}) {
   stubMedia(reduced, coarse);
   const element = document.createElement('div');
-  const animator = createMotionAnimator(element, {
+  const animator = createMotionEngine(element, {
     now: () => clock,
     requestFrame,
     ...options,
@@ -2071,11 +2071,11 @@ describe('promotion: a compositing layer while it moves', () => {
         .mock.calls.filter(([read]) => read === node).length;
     const removed = document.createElement('div');
     document.body.append(removed);
-    createMotionAnimator(removed, {now: () => clock, requestFrame});
+    createMotionEngine(removed, {now: () => clock, requestFrame});
     removed.remove();
     const kept = document.createElement('div');
     document.body.append(kept);
-    createMotionAnimator(kept, {now: () => clock, requestFrame});
+    createMotionEngine(kept, {now: () => clock, requestFrame});
     await vi.advanceTimersByTimeAsync(0);
     expect(readsOf(removed)).toBe(0);
     // A node still in the document is read, once, in that task.
@@ -2089,7 +2089,7 @@ describe('promotion: a compositing layer while it moves', () => {
     stylesheet['will-change'] = 'transform, opacity';
     stubMedia(false, false);
     const element = document.createElement('div');
-    const animator = createMotionAnimator(element, {
+    const animator = createMotionEngine(element, {
       now: () => clock,
       requestFrame,
     });
@@ -2834,7 +2834,7 @@ describe('Reduced Motion (design:reduced-motion)', () => {
 
   it('a running dip survives any re-attach, so the move never passes in view', async () => {
     const halfway = async (
-      animator: ReturnType<typeof createMotionAnimator>,
+      animator: ReturnType<typeof createMotionEngine>,
       start: number,
     ): Promise<number> => {
       // The plan lands by timer: step the clock to the landing.
@@ -4171,7 +4171,7 @@ describe('pseudoElement: a dialog\u2019s ::backdrop', () => {
 
 describe('attach', () => {
   it('keeps state without an element and resumes the curve on attach', () => {
-    const animator = createMotionAnimator(null, {
+    const animator = createMotionEngine(null, {
       now: () => clock,
     });
     animator.animate({x: 300}, {spring: springs.settle});
@@ -4262,7 +4262,7 @@ describe('attach', () => {
 
   it('writes nothing for channels at identity', () => {
     const element = document.createElement('div');
-    createMotionAnimator(element);
+    createMotionEngine(element);
     expect(element.getAttribute('style')).toBeNull();
   });
 });
@@ -4367,7 +4367,7 @@ describe("a theme's reduced-motion mark", () => {
     const element = document.createElement('div');
     theme.append(element);
     document.body.append(theme);
-    const animator = createMotionAnimator(element, {
+    const animator = createMotionEngine(element, {
       now: () => clock,
       requestFrame,
     });

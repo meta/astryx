@@ -804,6 +804,8 @@ export const CollapsedPanelFixture: Story = {
 /**
  * Browser fixture for a scrolling LayoutPanel that collapses to width 0. Its
  * content overflows while it is open, and a button collapses and opens it.
+ * The lines are buttons, so a keyboard reaches the scrolling content without
+ * a tab stop on the panel.
  */
 function CollapsingScrollPanel() {
   const [isOpen, setIsOpen] = useState(true);
@@ -825,7 +827,7 @@ function CollapsingScrollPanel() {
             hasDivider
             data-testid="collapsing-end">
             {Array.from({length: 40}, (_, index) => (
-              <Text key={index}>Detail line {index + 1}</Text>
+              <Button key={index} label={`Detail line ${index + 1}`} />
             ))}
           </LayoutPanel>
         }
