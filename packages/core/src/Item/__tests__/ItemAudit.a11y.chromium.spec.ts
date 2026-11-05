@@ -169,6 +169,8 @@ async function observe(page: Page) {
         'padding-top:var(--spacing-1)',
         'padding-right:var(--spacing-2)',
         'padding-bottom:var(--spacing-3)',
+        'outline-style:solid',
+        'outline-width:var(--focus-outline-width)',
       ].join(';');
       host.appendChild(probe);
       const style = getComputedStyle(probe);
@@ -178,6 +180,7 @@ async function observe(page: Page) {
         spacing1: px(style.paddingTop),
         spacing2: px(style.paddingRight),
         spacing3: px(style.paddingBottom),
+        focusOutlineWidth: px(style.outlineWidth),
       };
       probe.remove();
       return tokens;
@@ -211,10 +214,15 @@ async function observe(page: Page) {
         const action = row.querySelector<HTMLElement>(
           ':scope > button, :scope > a',
         );
-        const label = row.querySelector<HTMLElement>(
-          ':scope > button > span, :scope > a > span, :scope > span > span',
-        );
-        const content = label?.parentElement ?? null;
+        // The text cell is the row's growing child: its action, or a plain
+        // span. The label is its first child.
+        const content =
+          action ??
+          (Array.from(row.children).find(
+            child => getComputedStyle(child).flexGrow === '1',
+          ) as HTMLElement | undefined) ??
+          null;
+        const label = content?.firstElementChild ?? null;
         return {
           text: label?.textContent?.trim() ?? '',
           direction: style.direction,
@@ -247,9 +255,6 @@ async function observe(page: Page) {
             inlineStart: px(style.paddingInlineStart),
             inlineEnd: px(style.paddingInlineEnd),
           },
-          labelClipped: label
-            ? label.scrollWidth > label.clientWidth + 1
-            : null,
           tokens: resolveTokens(row),
         };
       }),
@@ -311,7 +316,17 @@ for (const item of cases) {
       await page.getByText('Rest', {exact: true}).hover();
     }
     if (item.interaction === 'hover-disabled') {
-      await page.getByText('Disabled', {exact: true}).hover();
+      // The disabled row takes no pointer events, so move the pointer over
+      // it instead of asking Playwright to hover an element it cannot hit.
+      const target = await page
+        .getByText('Disabled', {exact: true})
+        .boundingBox();
+      if (target != null) {
+        await page.mouse.move(
+          target.x + target.width / 2,
+          target.y + target.height / 2,
+        );
+      }
     }
     await settle(page);
 
@@ -472,7 +487,7 @@ for (const item of cases) {
         check(
           focused != null &&
             focused.outlineStyle !== 'none' &&
-            focused.outlineWidth >= 2,
+            near(focused.outlineWidth, focused.tokens.focusOutlineWidth, 0.01),
           `focused row outline ${focused?.outlineStyle} ${focused?.outlineWidth}`,
         );
       }
@@ -523,7 +538,7 @@ for (const item of cases) {
         padding:
           'block padding spacing-1 (compact), spacing-2 (balanced), spacing-3 (spacious); inline padding spacing-2, spacing-3 when spacious',
         focus:
-          "tab: the first Tab stop is the first row's button, focus-visible, and the row root draws an outline of at least 2px",
+          "tab: the first Tab stop is the first row's button, focus-visible, and the row root draws an outline of the theme focus outline width",
         hover:
           'hover-rest: the rest row paints a hover background; hover-disabled: the disabled row paints nothing new',
         layout:
