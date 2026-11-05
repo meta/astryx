@@ -253,9 +253,9 @@ test('with a mouse a zoomed drag follows the pointer and stops at the photo’s 
       .getByRole('button', {name: 'Zoom', exact: true})
       .focus();
     await page.keyboard.press('+');
-    // On a loaded machine the keyboard's 200 ms zoom can start and end with
-    // no page frame between, where the recorder sees nothing. So the test
-    // waits for the zoomed scale itself.
+    // On a loaded machine the keyboard's zoom can start and end with no page
+    // frame between, where the recorder sees nothing. So the test waits for
+    // the zoomed scale itself.
     await expect.poll(async () => (await read()).scale).toBeGreaterThan(1.5);
     await waitForRest(img);
     const zoomed = await read();
@@ -321,9 +321,9 @@ test('with a mouse a zoomed drag follows the pointer’s whole travel from the p
       .getByRole('button', {name: 'Zoom', exact: true})
       .focus();
     await page.keyboard.press('+');
-    // On a loaded machine the keyboard's 200 ms zoom can start and end with
-    // no page frame between, where the recorder sees nothing. So the test
-    // waits for the zoomed scale itself.
+    // On a loaded machine the keyboard's zoom can start and end with no page
+    // frame between, where the recorder sees nothing. So the test waits for
+    // the zoomed scale itself.
     await expect.poll(async () => (await read()).scale).toBeGreaterThan(1.5);
     await waitForRest(img);
     const zoomed = await read();
@@ -519,9 +519,8 @@ async function edges(img: Locator) {
 test('under Reduce Motion a zoomed flick coasts on and settles at the edge, as on iOS', async ({
   page,
 }) => {
-  // Momentum that continues a throw is the person's own movement
-  // (design:reduced-motion DR2, DEC-2). So it coasts and settles at an edge,
-  // with no cross-fade.
+  // Momentum that continues a throw is the person's own movement, so under
+  // Reduce Motion it still coasts and settles at an edge, with no cross-fade.
   await page.emulateMedia({reducedMotion: 'reduce'});
   const {driver, img, read} = await openPhone(page);
   const s = await read();

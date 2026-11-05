@@ -19,6 +19,7 @@ import {
   compareTime,
   isTimeInRange,
   adjustTime,
+  clampTime,
   type ISOTimeString,
 } from './timeParser';
 
@@ -291,5 +292,26 @@ describe('adjustTime', () => {
   it('wraps around midnight', () => {
     expect(adjustTime('23:30' as ISOTimeString, 60)).toBe('00:30');
     expect(adjustTime('00:30' as ISOTimeString, -60)).toBe('23:30');
+  });
+});
+
+describe('clampTime', () => {
+  const t = (value: string) => value as ISOTimeString;
+
+  it('brings a time outside the bounds onto the bound', () => {
+    expect(clampTime(t('08:00'), t('09:00'))).toBe('09:00');
+    expect(clampTime(t('18:00'), undefined, t('17:00'))).toBe('17:00');
+    expect(clampTime(t('12:00'), t('09:00'), t('17:00'))).toBe('12:00');
+  });
+
+  it('keeps a bound with seconds when the time shows seconds', () => {
+    expect(clampTime(t('08:00:00'), t('09:00:30'), undefined, true)).toBe(
+      '09:00:30',
+    );
+  });
+
+  it('without seconds, gives the nearest whole minute inside a bound between minutes', () => {
+    expect(clampTime(t('08:00'), t('09:00:30'))).toBe('09:01');
+    expect(clampTime(t('18:00'), undefined, t('17:00:30'))).toBe('17:00');
   });
 });

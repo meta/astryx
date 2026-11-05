@@ -82,8 +82,9 @@ function msOf(value: string): number {
 
 /**
  * The private custom property a theme with a `tempo` writes beside its
- * duration tokens: the press release fade (`utils/interactionOverlay.stylex.ts`)
- * multiplies its clock by it.
+ * duration tokens, for a style that scales a clock of its own by it
+ * (ProgressBar's move). A press release needs none: it plays
+ * `--duration-exit`, which already follows the tempo.
  */
 export const MOTION_TEMPO_PROPERTY = '--_astryx-motion-tempo';
 

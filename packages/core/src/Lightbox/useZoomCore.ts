@@ -8,9 +8,9 @@
  *   element the gestures attach to: the stage, or a gallery's track. Also
  *   whether zoom is on, the current item's key and the zoom and fit callbacks
  * @output Exports `useZoomCore`: Lightbox's zoom stage for every pointer. It
- *   writes the photo's transform through the compositor animator and plays
- *   the eased settle and the keyboard's zoom and pan. Its API tells an outer
- *   pager when the photo is at an edge (`isAtEdge`)
+ *   writes the photo's transform through the compositor animator and settles
+ *   every zoom, the keyboard's zoom and pan included, on `springs.settle`. Its
+ *   API tells an outer pager when the photo is at an edge (`isAtEdge`)
  * @position Lightbox's shared zoom stage, internal. useZoomStage.ts drives
  *   its pointer paths; the geometry is in zoomStage.ts.
  *
@@ -22,20 +22,13 @@ import {useCallback, useMemo, useRef, useState, type RefObject} from 'react';
 import type {Point} from '../gestures/types';
 import {useAttachment} from '../hooks/useAttachment';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {
-  createMotionAnimator,
-  type Animator,
-  type MotionCurve,
-} from '../motion/animator';
-import {mapProgress, mapRange} from '../motion/progress';
+import {createMotionEngine, type Animator} from '../motion/animator';
 import {resolveMotion} from '../motion/resolveMotion';
-import {readThemeTiming, type ThemeTimingTokens} from '../motion/themeTiming';
+import {springs} from '../motion/uikit/springs';
 import {registerReducedMotionCrossFade} from '../motion/uikit/timing';
-import {zoomMedia} from '../motion/uikit/zoomMedia';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {
   IDENTITY,
-  RELEASED_ZOOM,
   doubleClickTarget,
   doubleTapScaleFor,
   isZoomed,
@@ -44,7 +37,6 @@ import {
   releasedZoomTarget,
   restRange,
   restingTransform,
-  settleCurves,
   transformForResize,
   type StagePoint,
   type ZoomGeometry,
@@ -143,47 +135,19 @@ export interface ZoomCore {
   /** Whether a zoomed photo's edge toward `direction` is at the stage's. */
   isAtEdgeOf(geometry: ZoomGeometry, direction: PanDirection): boolean;
   /**
-   * UIScrollView's eased settle (a release past a limit, a zoom to a rect).
-   * With `released` it plays Lightbox's released 200 ms ease-out instead,
-   * the keyboard's (see RELEASED_ZOOM). With `tapped` it plays the theme's
-   * move easing and medium duration, as a finger's double tap does. Under
-   * Reduce Motion the animator's default applies. That is a fade in place on
-   * a touch screen or for a finger's release (`touchRelease`), and at once
-   * otherwise.
+   * Settles on `springs.settle`: a release past a limit, a double tap, a
+   * double-click and the keyboard's zoom and pan. Lightbox's main interaction
+   * is a gesture, so every zoom settles on that one spring. A pinch's release
+   * starts it at `scaleVelocity`, the photo's scale per second at the lift;
+   * anything else starts at rest. Under Reduce Motion the animator's default
+   * applies. That is a fade in place on a touch screen or for a finger's
+   * release (`touchRelease`), and at once otherwise.
    */
   settleTo(
     geometry: ZoomGeometry,
     target: ZoomTransform,
-    options?: {touchRelease?: boolean; released?: boolean; tapped?: boolean},
+    options?: {touchRelease?: boolean; scaleVelocity?: number},
   ): void;
-}
-
-/** A tap-started zoom plays the theme's move easing over its medium duration. */
-const TAP_ZOOM_TIMING: ThemeTimingTokens = {
-  durations: ['--duration-medium'],
-  easing: '--ease-move',
-};
-
-/**
- * The zoom a tap starts. Each channel follows the same eased progress, so the
- * tapped point stays in place all the way.
- */
-function tapCurves(
-  from: ZoomTransform,
-  to: ZoomTransform,
-  progress: MotionCurve,
-): {
-  readonly x: MotionCurve;
-  readonly y: MotionCurve;
-  readonly scale: MotionCurve;
-} {
-  const along = (a: number, b: number) =>
-    mapProgress(progress, mapRange([0, 1], [a, b], {clamp: false}));
-  return {
-    x: along(from.x, to.x),
-    y: along(from.y, to.y),
-    scale: along(from.scale, to.scale),
-  };
 }
 
 /**
@@ -194,7 +158,7 @@ function tapCurves(
  */
 export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
   // One animator for the component's lifetime; the photo's ref attaches it.
-  const [animator] = useState(() => createMotionAnimator(null));
+  const [animator] = useState(() => createMotionEngine(null));
   const optionsRef = useRef(options);
   useIsomorphicLayoutEffect(() => {
     optionsRef.current = options;
@@ -346,9 +310,8 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
       target: ZoomTransform,
       {
         touchRelease = false,
-        released = false,
-        tapped = false,
-      }: {touchRelease?: boolean; released?: boolean; tapped?: boolean} = {},
+        scaleVelocity = 0,
+      }: {touchRelease?: boolean; scaleVelocity?: number} = {},
     ) => {
       const from = current();
       animator.stop();
@@ -373,26 +336,24 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
       setAtFit(false);
       // Registers the reduced-motion cross-fade once; later calls do nothing.
       registerReducedMotionCrossFade();
-      // A pinch's settle plays the `timing.curves.move` role, and the mouse's
-      // and the keyboard's zoom plays the released ease-out. A tap starts no
-      // gesture, so its zoom plays the theme's move easing and medium
-      // duration, read where the stage that took the tap is.
+      // Every zoom settles on `springs.settle`, read where the stage is. A
+      // pinch's release starts it at the photo's scale velocity. The offset
+      // starts at the matching speed, so the point the fingers held stays
+      // put, as it does from rest.
       const stageElement = optionsRef.current.stageRef.current;
-      const curves = released
-        ? settleCurves(from, target, RELEASED_ZOOM.curve, RELEASED_ZOOM.seconds)
-        : tapped && stageElement != null
-          ? tapCurves(
-              from,
-              target,
-              readThemeTiming(stageElement, TAP_ZOOM_TIMING),
-            )
-          : settleCurves(
-              from,
-              target,
-              resolveMotion(stageElement, zoomMedia.settle.curve),
-            );
-      const handle = animator.play(
-        {x: curves.x, y: curves.y, scale: curves.scale},
+      const span = target.scale - from.scale;
+      const rate =
+        Number.isFinite(scaleVelocity) && span !== 0 ? scaleVelocity / span : 0;
+      const handle = animator.animate(
+        {x: target.x, y: target.y, scale: target.scale},
+        {
+          spring: resolveMotion(stageElement, springs.settle),
+          velocity: {
+            x: (target.x - from.x) * rate,
+            y: (target.y - from.y) * rate,
+            scale: span * rate,
+          },
+        },
         {touchRelease},
       );
       if (isAtFit(target)) {
@@ -461,9 +422,7 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
     if (geometry == null || zoomedRef.current) {
       return;
     }
-    settleTo(geometry, releasedZoomTarget(geometry, targetRef.current), {
-      released: true,
-    });
+    settleTo(geometry, releasedZoomTarget(geometry, targetRef.current));
   }, [measure, settleTo]);
 
   const zoomOut = useCallback(() => {
@@ -474,7 +433,6 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
     settleTo(
       geometry,
       restingTransform(geometry, {...IDENTITY, scale: geometry.minScale}),
-      {released: true},
     );
   }, [measure, settleTo]);
 
@@ -490,9 +448,7 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
         if (geometry == null || !zoomedRef.current) {
           return;
         }
-        settleTo(geometry, pannedBy(geometry, targetRef.current, dx, dy), {
-          released: true,
-        });
+        settleTo(geometry, pannedBy(geometry, targetRef.current, dx, dy));
       },
       doubleClickAt: (clientX: number, clientY: number) => {
         const geometry = measure();
@@ -500,9 +456,7 @@ export function useZoomCore(options: UseZoomCoreOptions): ZoomCore {
           return;
         }
         const point = toStage({x: clientX, y: clientY});
-        settleTo(geometry, doubleClickTarget(geometry, current(), point), {
-          released: true,
-        });
+        settleTo(geometry, doubleClickTarget(geometry, current(), point));
       },
       isAtEdge: (direction: PanDirection) => {
         const geometry = geometryRef.current ?? measure();

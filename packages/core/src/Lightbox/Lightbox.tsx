@@ -62,6 +62,7 @@ import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isRtlElement} from '../hooks/isRtlElement';
@@ -432,7 +433,7 @@ const VIDEO_CONTROLS_BAND = 48;
  * button on the left.
  *
  * Optionally supports zoom like a photo viewer. A pinch or a ctrl-wheel zooms
- * about the fingers or the pointer, gives past the limits and eases back. A
+ * about the fingers or the pointer, gives past the limits and springs back. A
  * double tap or a double-click zooms in at that point and back. Enter or
  * Space on the image, and `+` or `-` from the keyboard, zoom too. When zoomed,
  * a drag or a trackpad's scroll pans. On a phone or a tablet, the pan has
@@ -484,6 +485,9 @@ export function Lightbox({
   const t = useComponentTranslator();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const mergedDialogRef = useMergedRefs(ref, dialogRef);
+  // Native showModal() lets Tab leave for the browser's own UI, so the shared
+  // module wraps it.
+  useFocusRegionContainment(dialogRef, isOpen);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageWrapperRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);

@@ -29,7 +29,6 @@ import {
   castStoryboard,
   compareCurve,
   countBetween,
-  cubicBezier,
   curveOf,
   drag,
   flick,
@@ -44,6 +43,7 @@ import {
   pinch,
   releaseAnimations,
   sampleCurve,
+  springStep,
   startBusyControl,
   startScreencast,
   timeline,
@@ -64,25 +64,11 @@ const storybook = withStorybook(test);
 
 // UIKit's measured zoom (motion/uikit/zoomMedia.ts), restated so a change to
 // the table has to be made here too.
-const EASE_IN_OUT = cubicBezier(0.42, 0, 0.58, 1);
-/** The theme's duration token that a finger's double tap zooms over. */
-const TAP_ZOOM_DURATION = '--duration-medium';
-/** iOS's measured length of a finger's 2× double-tap zoom, ms. */
-const IOS_DOUBLE_TAP_MS = 308;
-/** The theme's duration tokens, shortest to longest. */
-const DURATION_TOKENS = [
-  '--duration-fast-min',
-  '--duration-fast',
-  '--duration-fast-max',
-  '--duration-medium-min',
-  '--duration-medium',
-  '--duration-medium-max',
-  '--duration-slow-min',
-  '--duration-slow',
-  '--duration-slow-max',
-];
-const settleMs = (from: number, to: number) =>
-  Math.min(400, 100 + 300 * Math.abs(Math.log(to / from)));
+/**
+ * `springs.settle`, SwiftUI's smooth spring (duration 0.5 s, no bounce), on
+ * which every zoom settles.
+ */
+const SETTLE = {response: 0.5, dampingFraction: 1};
 
 /**
  * A test photo: a checkerboard of 50 px squares, whose sharp edges judge the
@@ -551,7 +537,7 @@ test('a pinch on the controls still zooms the page', async ({
   await expect.poll(async () => pageScale(page)).toBeGreaterThan(1.5);
 });
 
-test('past the minimum the zoom gives way, then returns on the eased curve', async ({
+test('past the minimum the zoom gives way, then springs back on springs.settle', async ({
   page,
 }, testInfo) => {
   const {driver, photo, state} = await openViewer(page);
@@ -589,10 +575,9 @@ test('past the minimum the zoom gives way, then returns on the eased curve', asy
   );
   await releaseAnimations(page);
   const from = samples[0].value;
-  const expectedMs = settleMs(from, 1);
-  const expected = (t: number) =>
-    from + (1 - from) * EASE_IN_OUT(Math.min(1, t / expectedMs));
-  const result = compareCurve(samples, expected, 0.003);
+  // The fingers rest before they lift, so the return starts at rest.
+  const expected = (t: number) => from + (1 - from) * springStep(SETTLE, t);
+  const result = compareCurve(samples, expected, 0.01);
   await writeEvidence(
     'curves/lightbox-zoom-past-minimum',
     {
@@ -605,9 +590,10 @@ test('past the minimum the zoom gives way, then returns on the eased curve', asy
     testInfo,
   );
   expect(from).toBeCloseTo(shown, 2);
-  expect(duration).toBeGreaterThanOrEqual(expectedMs - 1);
+  // The spring runs past the eased curve's 400 ms cap.
+  expect(duration).toBeGreaterThan(400);
   expect(result.maxError, JSON.stringify(result.worst)).toBeLessThanOrEqual(
-    0.003,
+    0.01,
   );
   await waitForRest(photo);
   const rest = await state();
@@ -670,32 +656,6 @@ test("past the maximum the zoom gives way by UIKit's law and settles about the l
   expect(await pageScale(page)).toBe(1);
 });
 
-test('a double tap zooms over the Storybook theme’s duration token nearest iOS’s 308 ms', async ({
-  page,
-}) => {
-  const {stage} = await openViewer(page);
-  const tokens = await stage.evaluate((element, names) => {
-    const style = getComputedStyle(element);
-    return names.map(name => {
-      const value = style.getPropertyValue(name).trim();
-      const ms = value.endsWith('ms')
-        ? parseFloat(value)
-        : parseFloat(value) * 1000;
-      return {name, ms};
-    });
-  }, DURATION_TOKENS);
-  expect(tokens.every(token => Number.isFinite(token.ms))).toBe(true);
-  const nearest = tokens.reduce((best, token) =>
-    Math.abs(token.ms - IOS_DOUBLE_TAP_MS) <
-    Math.abs(best.ms - IOS_DOUBLE_TAP_MS)
-      ? token
-      : best,
-  );
-  // The Storybook theme's medium duration, 300 ms, is the nearest to iOS's
-  // measured 308 ms.
-  expect(nearest).toEqual({name: TAP_ZOOM_DURATION, ms: 300});
-});
-
 test('a double tap zooms until the photo fills the screen, about the tapped point', async ({
   page,
 }, testInfo) => {
@@ -713,28 +673,10 @@ test('a double tap zooms until the photo fills the screen, about the tapped poin
   );
   await releaseAnimations(page);
   const fill = before.stage.height / before.fit.height;
-  // A tap starts the zoom, so it plays the theme's move easing and medium
-  // duration: its duration token on its `--ease-move`.
-  const theme = await stage.evaluate((element, token) => {
-    const style = getComputedStyle(element);
-    return {
-      duration: style.getPropertyValue(token).trim(),
-      ease: style.getPropertyValue('--ease-move').trim(),
-    };
-  }, TAP_ZOOM_DURATION);
-  expect(theme.duration).toMatch(/^\d+(\.\d+)?ms$/);
-  const points = /^cubic-bezier\(([^)]*)\)$/
-    .exec(theme.ease)?.[1]
-    ?.split(',')
-    .map(Number);
-  if (points?.length !== 4 || points.some(Number.isNaN)) {
-    throw new Error(`no cubic-bezier move easing: ${theme.ease}`);
-  }
-  const expectedMs = parseFloat(theme.duration);
-  const ease = cubicBezier(points[0], points[1], points[2], points[3]);
-  const expected = (t: number) =>
-    1 + (fill - 1) * ease(Math.min(1, t / expectedMs));
-  const result = compareCurve(samples, expected, 0.005);
+  // Lightbox's main interaction is a gesture, so a tap's zoom settles on the
+  // same spring as a pinch's, from rest.
+  const expected = (t: number) => 1 + (fill - 1) * springStep(SETTLE, t);
+  const result = compareCurve(samples, expected, 0.02);
   await writeEvidence(
     'curves/lightbox-double-tap-zoom',
     {
@@ -747,7 +689,7 @@ test('a double tap zooms until the photo fills the screen, about the tapped poin
     testInfo,
   );
   expect(result.maxError, JSON.stringify(result.worst)).toBeLessThanOrEqual(
-    0.005,
+    0.02,
   );
   await waitForRest(photo);
   const zoomed = await state();
@@ -995,8 +937,8 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   await startBusyControl(page);
   const cast = await startScreencast(page);
   // The page itself waits for the zoom and blocks one frame into it. The
-  // theme's move easing covers most of its travel early, and a round trip
-  // from the test would start the block too late.
+  // spring covers most of its travel early, and a round trip from the test
+  // would start the block too late.
   const blocking = blockMainThread(page, 500, {during: photo});
   await driver.play(
     doubleTap({x: 201, y: before.stage.y + before.stage.height / 2}),
@@ -1007,12 +949,13 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
   const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
-  // The theme's move easing slows hard at its end, so its last few px span
-  // several frames. WebKit's 2 px cast step shows that as a plateau, so
-  // judging stops two cast steps from the end.
+  // The spring slows hard at its end. Near the end each 60 Hz frame moves it
+  // about 0.18 of what remains (2π / 0.5 s, critically damped). So within
+  // about 5.6 cast steps of its end a frame moves less than one step, and
+  // the cast shows plateaus there. Judging stops six cast steps from the end.
   const proof = busyWindowProof(tracked, block, {
     axis: 'height',
-    settledWithinSteps: 2,
+    settledWithinSteps: 6,
     control,
   });
   await writeEvidence(

@@ -4,6 +4,7 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {Profiler, StrictMode, useState} from 'react';
 import {Lightbox} from './Lightbox';
+import {getFocusableElements} from '../hooks/useFocusTrap';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
 
@@ -1456,13 +1457,15 @@ describe('Lightbox gestures for a mouse and a pen (spec:AST-094 FR43)', () => {
   it('pans a zoomed photo under a mouse drag from its first move, with the grab cursor', async () => {
     const {stage, img} = renderPhoto();
     fireEvent.keyDown(document.querySelector('dialog')!, {key: '+'});
-    // A drag starts where the photo shows: let the 200 ms zoom land first.
+    // A drag starts where the photo shows: let the zoom's spring come to
+    // rest first.
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 400));
+      await new Promise(resolve => setTimeout(resolve, 1500));
     });
-    const from = photoTransform(img).translate;
     const t0 = performance.now();
     pointer('pointerdown', stage, 'mouse', 200, 300, t0);
+    // The press holds the photo where it shows, so the drag moves from there.
+    const from = photoTransform(img).translate;
     const [fromX, fromY] = from.split(' ').map(parseFloat);
     const moved = () => {
       const [x, y] = photoTransform(img).translate.split(' ').map(parseFloat);
@@ -1888,9 +1891,9 @@ describe('Lightbox touch zoom (synthetic touches)', () => {
     touch('touchend', stage, [], [tapAt], 560);
     const img = screen.getByAltText('Photo');
     expect(parseFloat(photoTransform(img).scale)).toBeGreaterThan(1.5);
-    // The drag reads where the photo shows: let the zoom land.
+    // The drag reads where the photo shows: let the zoom's spring land.
     await act(async () => {
-      await new Promise(resolve => setTimeout(resolve, 400));
+      await new Promise(resolve => setTimeout(resolve, 900));
     });
     const x = () => parseFloat(photoTransform(img).translate || '0');
     const before = x();
@@ -2056,5 +2059,39 @@ describe('Lightbox unmounting while open', () => {
     await Promise.resolve();
 
     expect(document.activeElement).toBe(opener);
+  });
+});
+
+// Tab from the last tabbable control wraps to the first and Shift+Tab from the
+// first wraps to the last, so focus never leaves the modal for the browser's
+// own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+describe('Lightbox focus region (Dialog DEC-2)', () => {
+  it('wraps Tab and Shift+Tab inside the open viewer', () => {
+    render(
+      <Lightbox
+        isOpen
+        onOpenChange={() => {}}
+        media={[
+          {src: '/one.jpg', alt: 'One'},
+          {src: '/two.jpg', alt: 'Two'},
+        ]}
+      />,
+    );
+    expectTabWrapsInside(document.querySelector('dialog') as HTMLElement);
   });
 });

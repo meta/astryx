@@ -4,25 +4,16 @@
  * @file zoomStage.test.ts
  * @input vitest, the zoom stage geometry and the UIKit zoom constants
  * @output Checks the zoom stage against UIKit's measured zooming and
- *   Lightbox's own zoom. It covers the overshoot, the settle, the maximum
- *   zoom, both double taps, resting places, a drag's rubber band, a resize
- *   and the keyboard's zoom
+ *   Lightbox's own zoom. It covers the overshoot, the maximum zoom, both
+ *   double taps, resting places, a drag's rubber band, a resize and the
+ *   keyboard's zoom
  * @position Testing; zoomStage.ts without a browser
  */
 
 import {describe, expect, it} from 'vitest';
-import {cubicBezier} from '../motion/bezier';
-import {solveAnimatedPageScroll} from '../motion/paging';
 import {rubberBand} from '../motion/rubberBand';
-import {motionRole, motionRoleOf} from '../motion/roles';
-import {
-  reducedMotionCrossFade,
-  registerReducedMotionCrossFade,
-} from '../motion/uikit/timing';
-import {registerZoomMediaTable, zoomMedia} from '../motion/uikit/zoomMedia';
 import {
   IDENTITY,
-  RELEASED_ZOOM,
   ZOOM_STEP,
   doubleClickTarget,
   doubleTapScaleFor,
@@ -38,8 +29,6 @@ import {
   releasedZoomTarget,
   restRange,
   restingTransform,
-  settleCurves,
-  settleSeconds,
   transformForResize,
   transformKeepingPoint,
   type ZoomGeometry,
@@ -124,81 +113,6 @@ describe('the overshoot past the zoom limits (UIKit lab, iOS 26.2)', () => {
         pinchScaleFor(geometry, overshootScale(geometry, pinch)),
       ).toBeCloseTo(pinch, 9);
     }
-  });
-});
-
-describe('the settle (UIScrollView zoom animation)', () => {
-  it('lasts 0.1 s + 0.3 s × |ln(zoom ratio)|, at most 0.4 s, as measured', () => {
-    expect(settleSeconds(5.333, 4)).toBeCloseTo(0.186, 3);
-    expect(settleSeconds(4.8, 4)).toBeCloseTo(0.155, 3);
-    expect(settleSeconds(0.596, 1)).toBeCloseTo(0.255, 3);
-    expect(settleSeconds(1, 2.5)).toBeCloseTo(0.375, 3);
-    expect(settleSeconds(2.5, 1)).toBeCloseTo(0.375, 3);
-    expect(settleSeconds(1, 4)).toBe(0.4);
-    // A move at the same zoom (a keyboard step).
-    expect(settleSeconds(3, 3)).toBeCloseTo(0.1, 9);
-  });
-
-  it('plays its three lengths as motion roles, named by the zoom table', () => {
-    registerZoomMediaTable();
-    expect(motionRole('zoomMedia.settle.baseMs')?.value).toBe(100);
-    expect(motionRole('zoomMedia.settle.lnRatioMs')?.value).toBe(300);
-    expect(motionRole('zoomMedia.settle.maxMs')?.value).toBe(400);
-  });
-
-  it('runs along the curve it is given', () => {
-    const from: ZoomTransform = {x: 0, y: 0, scale: 1};
-    const to: ZoomTransform = {x: -400, y: -100, scale: 3};
-    // A linear curve: a quarter of the time is a quarter of the way
-    // (easeInEaseOut would be about 13 %).
-    const curves = settleCurves(from, to, [0, 0, 1, 1]);
-    const t = curves.duration / 4;
-    expect(curves.x.at(t)).toBeCloseTo(-100, 3);
-    expect(curves.scale.at(t)).toBeCloseTo(1.5, 3);
-  });
-
-  it('plays each axis as the eased move an animated page scroll plays', () => {
-    const from: ZoomTransform = {x: 0, y: 0, scale: 1};
-    const to: ZoomTransform = {x: -400, y: -100, scale: 3};
-    const curves = settleCurves(from, to);
-    const page = solveAnimatedPageScroll({
-      from: 0,
-      to: -400,
-      durationMs: curves.duration * 1000,
-      curve: zoomMedia.settle.curve,
-    });
-    for (const p of [0, 0.25, 0.5, 0.75, 1]) {
-      const t = p * curves.duration;
-      expect(curves.x.at(t)).toBe(page.at(t));
-      expect(curves.x.velocity(t)).toBe(page.velocity(t));
-    }
-  });
-
-  it('plays the timing.curves.move role: its curve is that leaf, not a copy', () => {
-    registerReducedMotionCrossFade();
-    expect(zoomMedia.settle.curve).toBe(reducedMotionCrossFade.curve);
-    expect(motionRoleOf(zoomMedia.settle.curve)?.id).toBe('timing.curves.move');
-  });
-
-  it('moves zoom and offset together on easeInEaseOut', () => {
-    const from: ZoomTransform = {x: 0, y: 0, scale: 1};
-    const to: ZoomTransform = {x: -400, y: -100, scale: 3};
-    const curves = settleCurves(from, to);
-    const ease = cubicBezier([0.42, 0, 0.58, 1]);
-    expect(zoomMedia.settle.curve).toEqual([0.42, 0, 0.58, 1]);
-    expect(curves.duration).toBe(0.4);
-    for (const p of [0, 0.1, 0.25, 0.5, 0.75, 1]) {
-      const t = p * curves.duration;
-      expect(curves.scale.at(t)).toBeCloseTo(1 + 2 * ease(p), 9);
-      expect(curves.x.at(t)).toBeCloseTo(-400 * ease(p), 9);
-      expect(curves.y.at(t)).toBeCloseTo(-100 * ease(p), 9);
-    }
-    // Ease in and out: at rest at both ends, fastest in the middle.
-    expect(curves.x.velocity(0)).toBeCloseTo(0, 0);
-    expect(curves.x.velocity(curves.duration)).toBeCloseTo(0, 0);
-    expect(Math.abs(curves.x.velocity(curves.duration / 2))).toBeGreaterThan(
-      1000,
-    );
   });
 });
 
@@ -423,7 +337,7 @@ describe('the double-click: 2× about the clicked point', () => {
   });
 });
 
-describe('the released zoom the keyboard keeps', () => {
+describe("the keyboard's zoom", () => {
   const g = landscape();
   const centre = {x: g.width / 2, y: g.height / 2};
   it('zooms 2x about the centre, whatever aspect fill would give', () => {
@@ -447,22 +361,5 @@ describe('the released zoom the keyboard keeps', () => {
     expect(
       releasedZoomTarget(small, {...IDENTITY, scale: small.minScale}).scale,
     ).toBe(1.5);
-  });
-  it("plays CSS's 200 ms ease-out, not the settle", () => {
-    const from = {...IDENTITY, scale: 1};
-    const to = releasedZoomTarget(g, from);
-    const curves = settleCurves(
-      from,
-      to,
-      RELEASED_ZOOM.curve,
-      RELEASED_ZOOM.seconds,
-    );
-    expect(curves.duration).toBe(0.2);
-    expect(settleSeconds(from.scale, to.scale)).not.toBe(0.2);
-    const ease = cubicBezier([0, 0, 0.58, 1]);
-    for (const t of [0.05, 0.1, 0.15]) {
-      expect(curves.scale.at(t)).toBeCloseTo(1 + ease(t / 0.2), 9);
-    }
-    expect(curves.scale.at(0.2)).toBe(2);
   });
 });

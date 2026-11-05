@@ -6,7 +6,7 @@
  *   transform (offset from the fitted box, and scale), and pointer positions
  * @output The zoom stage's pure geometry: zoom limits, resting places, a
  *   drag's rubber band and a pinch's overshoot. Also the transform that keeps
- *   a point in place, the eased settle curves and the keyboard's zoom
+ *   a point in place, and the keyboard's zoom
  * @position Pure math under useZoomCore and useZoomStage; no DOM, no React.
  *
  * The model is a zooming UIScrollView; its constants come from motion/uikit.
@@ -15,10 +15,7 @@
  */
 
 import {rubberBandClamp, rubberBandUnclamp} from '../motion/rubberBand';
-import {solveAnimatedPageScroll} from '../motion/paging';
-import {resolveMotion} from '../motion/resolveMotion';
-import {registerZoomMediaTable, zoomMedia} from '../motion/uikit/zoomMedia';
-import type {MotionCurve} from '../motion/animator';
+import {zoomMedia} from '../motion/uikit/zoomMedia';
 
 export interface StagePoint {
   readonly x: number;
@@ -314,70 +311,9 @@ export function releaseTarget(
 }
 
 /**
- * The settle's length, s. It is a base plus a term in the log of the zoom
- * ratio, at most a cap: the zoom table's three motion roles.
+ * Where a zoom key goes from `from`. Enter, Space or `+` zooms `ZOOM_STEP`
+ * times about the stage's centre, or back to the fitted size when zoomed.
  */
-export function settleSeconds(fromScale: number, toScale: number): number {
-  registerZoomMediaTable();
-  const {settle} = zoomMedia;
-  const baseMs = resolveMotion(null, settle, 'baseMs');
-  if (!(fromScale > 0) || !(toScale > 0)) {
-    return baseMs / 1000;
-  }
-  const lnRatioMs = resolveMotion(null, settle, 'lnRatioMs');
-  const maxMs = resolveMotion(null, settle, 'maxMs');
-  const ratio = Math.abs(Math.log(toScale / fromScale));
-  return Math.min(maxMs, baseMs + lnRatioMs * ratio) / 1000;
-}
-
-/**
- * UIScrollView's zoom settle as curves for the animator. The offset and the
- * scale move together on one eased curve, from `from` to `to`, over
- * `duration` (`settleSeconds` by default). The curve is
- * `zoomMedia.settle.curve` by default. Each axis is the eased move an
- * animated page scroll plays.
- */
-export function settleCurves(
-  from: ZoomTransform,
-  to: ZoomTransform,
-  curve: readonly [number, number, number, number] = resolveMotion(
-    null,
-    zoomMedia.settle.curve,
-  ),
-  duration: number = settleSeconds(from.scale, to.scale),
-): {
-  readonly duration: number;
-  readonly x: MotionCurve;
-  readonly y: MotionCurve;
-  readonly scale: MotionCurve;
-} {
-  const along = (a: number, b: number): MotionCurve =>
-    solveAnimatedPageScroll({
-      from: a,
-      to: b,
-      durationMs: duration * 1000,
-      curve,
-    });
-  return {
-    duration,
-    x: along(from.x, to.x),
-    y: along(from.y, to.y),
-    scale: along(from.scale, to.scale),
-  };
-}
-
-/**
- * Lightbox's released zoom, which the keyboard keeps. Enter, Space or `+`
- * zooms `ZOOM_STEP` times about the stage's centre, or back to the fitted
- * size when zoomed. Every such change, a keyboard pan included, plays the
- * released 200 ms CSS `ease-out`.
- */
-export const RELEASED_ZOOM = {
-  seconds: 0.2,
-  curve: [0, 0, 0.58, 1] as readonly [number, number, number, number],
-};
-
-/** Where a zoom key goes from `from` (see RELEASED_ZOOM). */
 export function releasedZoomTarget(
   geometry: ZoomGeometry,
   from: ZoomTransform,

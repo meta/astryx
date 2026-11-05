@@ -364,11 +364,24 @@ export function useZoomStage(
       const shown = current();
       const target = releaseTarget(geometry, shown, session.centroid);
       if (target !== shown) {
-        // Past a limit: UIKit's eased return, anchored at the last centroid.
-        // A finger still down rests until it lands again.
+        // Past a limit: the return springs from the photo's scale velocity
+        // at the lift, anchored at the last centroid. A finger still down
+        // rests until it lands again.
         panRef.current = null;
+        // The photo's scale per second at the lift: the pinch's, through the
+        // give past the limit. A cancelled pinch starts the return at rest.
+        const raw = session.startPinchScale * pinch.scale;
+        const step = raw * 1e-4;
+        const give =
+          (overshootScale(geometry, raw + step) -
+            overshootScale(geometry, raw - step)) /
+          (2 * step);
         settleTo(geometry, target, {
           touchRelease: fingerRef.current.pinch,
+          scaleVelocity:
+            pinch.state === 'ended'
+              ? give * session.startPinchScale * pinch.velocity
+              : 0,
         });
         return;
       }
@@ -517,12 +530,10 @@ export function useZoomStage(
         return;
       }
       // A finger's double tap fills the viewer, at least 2×, and keeps the
-      // tapped point in place. A tap starts it, so it plays the theme's move
-      // easing and medium duration.
+      // tapped point in place. It plays the same spring as every zoom, from
+      // rest.
       const point = toStage(doubleTap.location());
-      settleTo(geometry, doubleTapTarget(geometry, current(), point), {
-        tapped: true,
-      });
+      settleTo(geometry, doubleTapTarget(geometry, current(), point));
     },
     recognizerOptions,
   );

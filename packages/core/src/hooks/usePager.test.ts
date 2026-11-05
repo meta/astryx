@@ -17,7 +17,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../gestures/GestureHost';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {ManualClock} from '../gestures/__tests__/harness';
-import {createMotionAnimator, type Animator} from '../motion/animator';
+import {createMotionEngine, type Animator} from '../motion/animator';
 import {solveAnimatedPageScroll, solvePaging} from '../motion/paging';
 import type * as motionResolution from '../motion/resolveMotion';
 import {resolveMotion} from '../motion/resolveMotion';
@@ -305,7 +305,7 @@ function setup(options: Partial<PagerOptions> = {}, rtl = false): Fixture {
     value: WIDTH,
     configurable: true,
   });
-  const animator = createMotionAnimator(track, {
+  const animator = createMotionEngine(track, {
     now: () => now,
     requestFrame: callback => {
       frameQueue.push(callback);
@@ -1259,7 +1259,7 @@ describe('createPager', () => {
   // (DR3). The drag itself follows the pointer.
   function reducedPager(f: Fixture, defaultIndex: number, coarse: boolean) {
     stubMedia(true, coarse);
-    const reduced = createMotionAnimator(f.track, {
+    const reduced = createMotionEngine(f.track, {
       now: () => now,
       requestFrame: callback => {
         frameQueue.push(callback);
@@ -1928,7 +1928,7 @@ function setupChildren(
     value: WIDTH,
     configurable: true,
   });
-  const animator = createMotionAnimator(track, {
+  const animator = createMotionEngine(track, {
     now: () => now,
     requestFrame: callback => {
       frameQueue.push(callback);
@@ -2461,7 +2461,7 @@ describe('pre-review fixes', () => {
       configurable: true,
     });
     const host = {attach: () => () => {}} as unknown as GestureHost;
-    const animator = createMotionAnimator(track, {
+    const animator = createMotionEngine(track, {
       now: () => now,
       requestFrame: callback => {
         frameQueue.push(callback);

@@ -2,11 +2,13 @@
 
 /**
  * @file themeTiming.test.ts
- * @input vitest (jsdom), readThemeTiming and easedProgress, the theme's
- *   duration and easing defaults
- * @output Checks how a motion reads its theme tokens. Covers a set value, an
- *   explicit zero, an empty or unparseable value, the fallback chain, the
- *   progress velocity and easedProgress's curve.
+ * @input vitest (jsdom), themeTiming's readers and easedProgress, the
+ *   theme's duration and easing defaults
+ * @output Checks how a motion reads its timing: from the element's own
+ *   transition, and from tokens set where the element is or at their
+ *   defaults. A default that refers to a token reads it there. Also checks
+ *   the values that give no curve, the progress velocity and easedProgress's
+ *   curve. jsdom resolves no `calc()`; the browser proof covers it.
  * @position Testing; validates themeTiming.ts
  */
 
@@ -16,20 +18,24 @@ import {parseCssEasing} from './roles';
 import {
   easedProgress,
   readThemeTiming,
+  readThemeTokens,
+  resolveTiming,
   type ThemeTimingTokens,
 } from './themeTiming';
 import {easeDefaults} from '../theme/tokens.stylex';
 
-const EXIT: ThemeTimingTokens = {
-  durations: ['--duration-exit', '--duration-fast'],
-  easing: '--ease-exit',
+const FAST: ThemeTimingTokens = {
+  duration: '--duration-fast',
+  easing: '--ease-standard',
 };
 
-const exitEase = cubicBezier(parseCssEasing(easeDefaults['--ease-exit'])!);
+const standardEase = cubicBezier(
+  parseCssEasing(easeDefaults['--ease-standard'])!,
+);
 
-function element(tokens: Record<string, string> = {}): HTMLElement {
+function element(styles: Record<string, string> = {}): HTMLElement {
   const node = document.createElement('div');
-  for (const [name, value] of Object.entries(tokens)) {
+  for (const [name, value] of Object.entries(styles)) {
     node.style.setProperty(name, value);
   }
   document.body.appendChild(node);
@@ -41,37 +47,65 @@ describe('readThemeTiming', () => {
     document.body.replaceChildren();
   });
 
-  it('plays the last token\u2019s default duration and the easing default when no token is set', () => {
-    const timing = readThemeTiming(element(), EXIT);
+  it('reads the element\u2019s own transition with no tokens', () => {
+    const timing = readThemeTiming(
+      element({
+        'transition-duration': '0.3s, 1s',
+        'transition-timing-function': 'linear, ease-in',
+      }),
+    )!;
+    expect(timing.duration).toBeCloseTo(0.3, 6);
+    expect(timing.at(0.15)).toBeCloseTo(0.5, 6);
+    expect(readThemeTiming(element())).toBe(null);
+  });
+
+  it('reads tokens set where the element is, in ms or s', () => {
+    const seconds = readThemeTiming(
+      element({'--duration-fast': '0.3s', '--ease-standard': 'linear'}),
+      FAST,
+    )!;
+    expect(seconds.duration).toBeCloseTo(0.3, 6);
+    expect(seconds.at(0.15)).toBeCloseTo(0.5, 6);
+    const ms = readThemeTiming(element({'--duration-fast': '250ms'}), FAST)!;
+    expect(ms.duration).toBeCloseTo(0.25, 6);
+    expect(document.body.children).toHaveLength(2);
+  });
+
+  it('reads a token with no value on the element at the default core declares', () => {
+    const timing = readThemeTiming(element(), FAST)!;
     expect(timing.duration).toBeCloseTo(0.175, 6);
-    expect(timing.at(0.0875)).toBeCloseTo(exitEase(0.5), 6);
+    expect(timing.at(0.0875)).toBeCloseTo(standardEase(0.5), 6);
     expect(timing.at(0.175)).toBe(1);
   });
 
-  it('plays the first set token of the chain, in ms or s, with its easing', () => {
-    const exit = readThemeTiming(
-      element({
-        '--duration-exit': '0.3s',
-        '--duration-fast': '100ms',
-        '--ease-exit': 'linear',
+  it('reads --duration-exit with no value at its declared default, var(--duration-fast), resolved where the element is', () => {
+    const exit: ThemeTimingTokens = {
+      duration: '--duration-exit',
+      easing: '--ease-exit',
+    };
+    expect(readThemeTiming(element(), exit)?.duration).toBeCloseTo(0.175, 6);
+    expect(
+      readThemeTokens(element({'--duration-fast': '250ms'}), {
+        duration: '--duration-exit',
       }),
-      EXIT,
+    ).toEqual({ms: 250, points: null});
+    expect(readThemeTokens(element({'--duration-exit': '90ms'}), exit).ms).toBe(
+      90,
     );
-    expect(exit.duration).toBeCloseTo(0.3, 6);
-    expect(exit.at(0.15)).toBeCloseTo(0.5, 6);
-    const fast = readThemeTiming(element({'--duration-fast': '250ms'}), EXIT);
-    expect(fast.duration).toBeCloseTo(0.25, 6);
   });
 
   it('gives the progress velocity per second, and none once the motion ends', () => {
     const timing = readThemeTiming(
-      element({'--duration-exit': '0.3s', '--ease-exit': 'linear'}),
-      EXIT,
-    );
+      element({'--duration-fast': '0.3s', '--ease-standard': 'linear'}),
+      FAST,
+    )!;
     expect(timing.velocity(0)).toBeCloseTo(1 / 0.3, 4);
     expect(timing.velocity(0.15)).toBeCloseTo(1 / 0.3, 4);
     expect(timing.velocity(0.3)).toBe(0);
-    const eased = readThemeTiming(element(), EXIT);
+    const eased = readThemeTiming(element(), {
+      duration: '--duration-fast',
+      easing: '--ease-exit',
+    })!;
     const t = 0.05;
     const h = 1e-6;
     expect(eased.velocity(t)).toBeCloseTo(
@@ -80,48 +114,41 @@ describe('readThemeTiming', () => {
     );
   });
 
-  it('an explicit zero duration means no motion', () => {
-    const timing = readThemeTiming(
-      element({'--duration-exit': '0ms', '--duration-fast': '250ms'}),
-      EXIT,
+  it('returns no curve for a duration that is not a positive length, or an easing it does not read', () => {
+    expect(readThemeTiming(element({'--duration-fast': '0ms'}), FAST)).toBe(
+      null,
     );
-    expect(timing.duration).toBe(0);
-    expect(timing.at(0)).toBe(1);
-    expect(timing.velocity(0)).toBe(0);
+    expect(readThemeTiming(element({'--duration-fast': 'fast'}), FAST)).toBe(
+      null,
+    );
+    expect(
+      readThemeTiming(element({'--ease-standard': 'steps(4)'}), FAST),
+    ).toBe(null);
+    expect(readThemeTiming(element({'transition-duration': '0s'}))).toBe(null);
+  });
+});
+
+describe('resolveTiming', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
   });
 
-  it('an empty duration falls back down the chain', () => {
-    const timing = readThemeTiming(
-      element({'--duration-exit': ' ', '--duration-fast': '250ms'}),
-      EXIT,
-    );
-    expect(timing.duration).toBeCloseTo(0.25, 6);
-  });
-
-  it('an unparseable duration falls back down the chain, and never means no motion', () => {
-    const next = readThemeTiming(
-      element({'--duration-exit': 'fast', '--duration-fast': '250ms'}),
-      EXIT,
-    );
-    expect(next.duration).toBeCloseTo(0.25, 6);
-    const last = readThemeTiming(
-      element({'--duration-exit': '-1ms', '--duration-fast': 'calc(1s)'}),
-      EXIT,
-    );
-    expect(last.duration).toBeCloseTo(0.175, 6);
-  });
-
-  it('an unparseable easing gets its default', () => {
-    const timing = readThemeTiming(
-      element({'--duration-exit': '200ms', '--ease-exit': 'steps(4)'}),
-      EXIT,
-    );
-    expect(timing.at(0.1)).toBeCloseTo(exitEase(0.5), 6);
+  it('resolves a time of zero or more and a cubic Bézier, and null for anything else or a text left out', () => {
+    const node = element();
+    expect(
+      resolveTiming(node, {duration: '0.3s', easing: 'ease-in-out'}),
+    ).toEqual({ms: 300, points: [0.42, 0, 0.58, 1]});
+    expect(resolveTiming(node, {duration: '0ms'}).ms).toBe(0);
+    expect(resolveTiming(node, {duration: 'fast'}).ms).toBe(null);
+    expect(resolveTiming(node, {duration: '-1ms'}).ms).toBe(null);
+    expect(resolveTiming(node, {easing: 'steps(4)'}).points).toBe(null);
+    expect(resolveTiming(node, {})).toEqual({ms: null, points: null});
+    expect(document.body.children).toHaveLength(1);
   });
 });
 
 describe('easedProgress', () => {
-  it('eases from 0 to 1 over its length, and a zero length means no motion', () => {
+  it('eases from 0 to 1 over its length, and a curve of no length is at its end', () => {
     const curve = easedProgress(0.2, x => x * x);
     expect(curve.duration).toBe(0.2);
     expect(curve.at(0)).toBe(0);

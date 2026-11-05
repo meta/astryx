@@ -4,16 +4,13 @@
  * @file zoomMedia.ts
  * @input Nothing; data only
  * @output Exports `zoomMedia`: UIScrollView zooming in a photo viewer. That
- *   is the give past the zoom limits, the settle's curve and duration law,
- *   and Photos' double tap, maximum zoom and gap between pages
+ *   is the give past the zoom limits, and Photos' double tap, maximum zoom
+ *   and gap between pages
  * @position A domain of the UIKit constants table (motion/uikit). Lightbox's
- *   zoom stage reads it. Its three settle lengths are internal motion roles
+ *   zoom stage reads it
  *
  * SYNC: When modified, update /packages/core/src/motion/MEASUREMENTS.md
  */
-
-import {registerMotionTable} from '../roles';
-import {timing} from './timing';
 
 /**
  * UIScrollView zooming as a photo viewer uses it, with Photos' double tap
@@ -51,51 +48,13 @@ export const zoomMedia = {
      */
     limitFactor: 2,
   },
-  settle: {
-    /**
-     * The curve of the return from past a limit, and of `zoom(to:animated:)`
-     * and `setZoomScale(_:animated:)`. UIKit runs one CABasicAnimation,
-     * easeInEaseOut, on the image view's transform and position and the scroll
-     * view's bounds. This is the `timing.curves.move` leaf itself, so the
-     * settle plays that role. Zoom and offset move together on it.
-     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-     *   iPhone 17 Pro, CAAnimation read (timing function control points),
-     *   Oct 23 2026
-     */
-    curve: timing.curves.move,
-    /**
-     * Its length, ms, is this plus `lnRatioMs` × |ln(zoom ratio)|. So
-     * 5.333 → 4 lasts 186 ms, 4.8 → 4 lasts 155 ms, and 0.596 → 1 lasts
-     * 255 ms.
-     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-     *   iPhone 17 Pro, CAAnimation durations of releases past the limits and
-     *   of zoom(to:animated:), Oct 23 2026
-     */
-    baseMs: 100,
-    /**
-     * See `baseMs`.
-     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-     *   iPhone 17 Pro, CAAnimation durations of releases past the limits and
-     *   of zoom(to:animated:), Oct 23 2026
-     */
-    lnRatioMs: 300,
-    /**
-     * `zoom(to:animated:)` never takes longer than this, ms. 1 ↔ 2.5 takes
-     * 375 ms, and a rect 4 times smaller takes 400 ms. Photos' double tap
-     * from 1 to 3.261 shows about 420 ms of motion.
-     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
-     *   iPhone 17 Pro, CAAnimation durations of zoom(to:animated:) and
-     *   setZoomScale(_:animated:), Oct 23 2026
-     */
-    maxMs: 400,
-  },
   viewer: {
     /**
      * In Photos, a double tap at the fitted size zooms until the photo fills
      * the stage (aspect fill). A 402 × 268 landscape photo on the 874 pt tall
      * screen zooms 3.261×, and a 402 × 603 portrait 1.449×. Photos brings the
      * tapped point to the centre, kept inside the stage. A double tap while
-     * zoomed returns to the fitted size. Both run `settle`.
+     * zoomed returns to the fitted size. Both run UIKit's zoom settle.
      * @source measured: Photos, iOS 26.2 simulator, iPhone 17 Pro,
      *   zoomScale and contentOffset per frame after double taps at the
      *   centre and near the edge of 3000 × 2000 and 2000 × 3000 photos,
@@ -121,15 +80,3 @@ export const zoomMedia = {
     pageGap: 40,
   },
 } as const;
-
-/**
- * Registers the zoom settle's three lengths as internal motion roles.
- * Nothing registers on import: the zoom stage calls it before its first
- * settle, and a second call does nothing. The settle's curve is the
- * `timing.curves.move` role.
- */
-export function registerZoomMediaTable(): void {
-  registerMotionTable('zoomMedia', zoomMedia, {
-    roles: ['settle.baseMs', 'settle.lnRatioMs', 'settle.maxMs'],
-  });
-}

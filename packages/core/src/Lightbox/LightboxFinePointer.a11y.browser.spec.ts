@@ -6,8 +6,8 @@
  *   primary pointer) and real mouse input; in Chromium, pen input
  * @output Evidence that the gestures take every pointer where the primary
  *   pointer is fine too. It covers the zoom's touches as on a phone, the
- *   double-click's 2× zoom and the keyboard's 200 ms ease-out. It also covers
- *   pen and mouse drags, and a gallery's Next, arrow keys and dark-area click
+ *   double-click's 2× zoom and the keyboard's spring. It also covers pen and
+ *   mouse drags, and a gallery's Next, arrow keys and dark-area click
  * @position Cross-browser proof for Lightbox under a fine primary pointer
  */
 
@@ -412,10 +412,20 @@ test('a mouse double-click zooms 2× about the clicked point, and the next zooms
 });
 
 /**
- * Samples the photo's width every frame from the first `startEvent` on,
- * while `act` zooms it 2×, and checks Lightbox's released 200 ms ease-out.
+ * `springs.settle`'s progress `ms` in from rest: SwiftUI's smooth spring
+ * (duration 0.5 s, no bounce), critically damped.
  */
-async function expectReleasedZoom(
+function settleProgress(ms: number): number {
+  const x = ((2 * Math.PI) / 0.5) * (ms / 1000);
+  return 1 - (1 + x) * Math.exp(-x);
+}
+
+/**
+ * Samples the photo's width every frame from the first `startEvent` on,
+ * while `act` zooms it 2×, and checks that the zoom settles on
+ * `springs.settle` from rest.
+ */
+async function expectSpringZoom(
   page: Page,
   fitted: Box,
   startEvent: 'keydown' | 'dblclick',
@@ -440,7 +450,7 @@ async function expectReleasedZoom(
           if (start != null && img != null) {
             samples.push([now - start, img.getBoundingClientRect().width]);
           }
-          if (start == null || now - start < 800) {
+          if (start == null || now - start < 1000) {
             requestAnimationFrame(tick);
           } else {
             resolve(samples);
@@ -463,39 +473,42 @@ async function expectReleasedZoom(
   const first = samples.findIndex(([, width]) => progress(width) > 0.001);
   expect(first).toBeGreaterThanOrEqual(0);
   const origin = first > 0 ? samples[first - 1][0] : 0;
-  // Progress 100 ms in, interpolated between the frames around it. CSS
-  // `ease-out` over 200 ms is past 0.6 there (0.69 at its middle).
-  // UIScrollView's eased settle over its ~0.31 s is near 0.25 there.
-  const after = samples.findIndex(([t]) => t - origin >= 100);
-  expect(after).toBeGreaterThan(0);
-  const [t0, w0] = samples[after - 1];
-  const [t1, w1] = samples[after];
-  const at100 = progress(w0 + ((w1 - w0) * (origin + 100 - t0)) / (t1 - t0));
-  expect(at100).toBeGreaterThan(0.5);
-  // It ends within the 200 ms and a frame or two.
+  // Progress `ms` in, interpolated between the frames around it.
+  const progressAt = (ms: number) => {
+    const after = samples.findIndex(([t]) => t - origin >= ms);
+    expect(after).toBeGreaterThan(0);
+    const [t0, w0] = samples[after - 1];
+    const [t1, w1] = samples[after];
+    return progress(w0 + ((w1 - w0) * (origin + ms - t0)) / (t1 - t0));
+  };
+  // The spring's own course: about 0.36 at 100 ms, where a 200 ms ease-out
+  // is past 0.6, and 0.72 at 200 ms.
+  for (const ms of [100, 200, 300]) {
+    expect(
+      Math.abs(progressAt(ms) - settleProgress(ms)),
+      `${ms} ms`,
+    ).toBeLessThan(0.08);
+  }
+  // It comes within half a percent of the target near 0.59 s.
   const doneAt = samples.find(([, width]) => progress(width) > 0.995)?.[0];
   expect(doneAt).toBeDefined();
-  expect((doneAt ?? Number.POSITIVE_INFINITY) - origin).toBeLessThan(250);
+  expect((doneAt ?? 0) - origin).toBeGreaterThan(450);
+  expect((doneAt ?? Number.POSITIVE_INFINITY) - origin).toBeLessThan(800);
 }
 
-test('the keyboard’s zoom plays the released 200 ms ease-out', async ({
-  page,
-}) => {
+test('the keyboard’s zoom settles on springs.settle', async ({page}) => {
   const {stage, fitted} = await openViewer(page);
-  // The keyboard keeps Lightbox's released zoom: Enter zooms 2× about the
-  // centre.
-  await expectReleasedZoom(page, fitted, 'keydown', async () => {
+  // Enter zooms 2× about the centre, on the spring every zoom plays.
+  await expectSpringZoom(page, fitted, 'keydown', async () => {
     await stage.focus();
     await page.keyboard.press('Enter');
   });
 });
 
-test('a mouse double-click plays the released 200 ms ease-out too', async ({
-  page,
-}) => {
+test('a mouse double-click settles on springs.settle too', async ({page}) => {
   const {stageBox, fitted} = await openViewer(page);
   const middle = centre(stageBox);
-  await expectReleasedZoom(page, fitted, 'dblclick', async () => {
+  await expectSpringZoom(page, fitted, 'dblclick', async () => {
     await page.mouse.dblclick(middle.x, middle.y);
   });
 });
