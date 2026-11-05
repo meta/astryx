@@ -79,8 +79,7 @@ registerEnglishFallback(english);
 const CONTENT_BLOCK_CAP = '480px';
 
 const styles = stylex.create({
-  // The status icon (or the tooltip-placement info-tip) sits beside the
-  // chevron and keeps its size when the trigger text is long.
+  // The status glyph or info-tip keeps its size when the trigger text is long.
   statusTip: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -926,6 +925,7 @@ export function ComplexSelector<Value>({
           {...stylex.props(styles.trigger)}>
           <span {...stylex.props(styles.triggerText)}>{triggerContent}</span>
         </button>
+        {isBusy && <Spinner size="sm" aria-hidden="true" />}
         {isRenderable(statusTip) &&
           (isTooltipStatus ? (
             // The info-tip is its own control: a press on it, or on its
@@ -940,7 +940,6 @@ export function ComplexSelector<Value>({
             // popup, as a press on the trigger does.
             <span {...stylex.props(styles.statusTip)}>{statusTip}</span>
           ))}
-        {isBusy && <Spinner size="sm" aria-hidden="true" />}
         {/* A status icon or info-tip takes the chevron's place, as in
             Selector. */}
         {!isRenderable(statusTip) && (
