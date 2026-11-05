@@ -7,12 +7,14 @@
  * @output Checks where the popover grows from on each side of its source,
  *   and that every frame stays on UIKit's measured path. Checks that the
  *   growth plays the entrance tokens and the shrink the exit tokens. Covers
- *   present, dismiss, turn-back, reset and Reduce Motion.
+ *   present, dismiss, turn-back, reset, Reduce Motion and the input hold
+ *   while it grows.
  * @position Testing; the curves on a real compositor are proven in
  *   __tests__/PopoverTouchMotion.interaction.browser.spec.ts
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {isInHeldLayer, isInputShield} from '../Layer/inputHold';
 import {cubicBezier} from '../motion/bezier';
 import {parseCssEasing, parseMotionRoleValue} from '../motion/roles';
 import {popover, timing} from '../motion/uikit';
@@ -598,5 +600,60 @@ describe('createPopoverSurfaceMotion', () => {
         }
       }
     }
+  });
+  describe('the hold while it grows', () => {
+    const shieldOf = (element: HTMLElement) =>
+      [...element.children].find(node => isInputShield(node)) ?? null;
+
+    it('holds every touch while the popover grows, and lets go when the growth ends', async () => {
+      const {element, motion} = create();
+      motion.enter(() => GEOMETRY);
+      expect(isInHeldLayer(element)).toBe(true);
+      expect(shieldOf(element)).not.toBeNull();
+      // Still held halfway through the growth.
+      clock += ENTRANCE.ms / 2;
+      vi.advanceTimersByTime(ENTRANCE.ms / 2);
+      await Promise.resolve();
+      expect(isInHeldLayer(element)).toBe(true);
+      // Free once the growth has ended.
+      const [growth] = live('scale', element);
+      const duration = Number(growth.options.duration);
+      clock += duration;
+      vi.advanceTimersByTime(duration);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(isInHeldLayer(element)).toBe(false);
+      expect(shieldOf(element)).toBeNull();
+    });
+
+    it('lets go at once when the popover is dismissed or reset during the growth', () => {
+      const dismissed = create();
+      dismissed.motion.enter(() => GEOMETRY);
+      expect(isInHeldLayer(dismissed.element)).toBe(true);
+      dismissed.motion.exit();
+      expect(isInHeldLayer(dismissed.element)).toBe(false);
+      expect(shieldOf(dismissed.element)).toBeNull();
+
+      const reset = create();
+      reset.motion.enter(() => GEOMETRY);
+      reset.motion.reset();
+      expect(isInHeldLayer(reset.element)).toBe(false);
+      expect(shieldOf(reset.element)).toBeNull();
+    });
+
+    it('holds under Reduce Motion too, for the length of the cross-fade', async () => {
+      const {element, motion} = create(true);
+      motion.enter(() => GEOMETRY);
+      expect(isInHeldLayer(element)).toBe(true);
+      clock += timing.reducedMotionCrossFadeMs / 2;
+      vi.advanceTimersByTime(timing.reducedMotionCrossFadeMs / 2);
+      await Promise.resolve();
+      expect(isInHeldLayer(element)).toBe(true);
+      clock += timing.reducedMotionCrossFadeMs;
+      vi.advanceTimersByTime(timing.reducedMotionCrossFadeMs);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(isInHeldLayer(element)).toBe(false);
+    });
   });
 });
