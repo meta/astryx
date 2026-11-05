@@ -921,7 +921,9 @@ export function busyWindowProof(
     // when it and the block's first frame are both within the bound.
     let before: (typeof valued)[number] | undefined;
     for (const f of valued) {
-      if (f.t >= window.from) break;
+      if (f.t >= window.from) {
+        break;
+      }
       before = f;
     }
     const firstInBlock = valued.find(f => f.t >= window.from);
@@ -1261,32 +1263,33 @@ export function busyWindowProof(
       }
       const unchanged = k - 1 - start;
       // Under one step a frame the change that ends the run is a single step.
-      // Under two, a frame delivered early can also show no step, and the
-      // change then carries the motion of every frame the run held, at the
-      // pace of the frames before it, to the nearest step. An early frame
-      // hides one frame's motion: at one step a frame or more the run is one
-      // frame long, and under one step a frame it adds at most one step to
-      // the catch-up.
+      // Under two, a frame delivered early can also show no step. The change
+      // then carries the motion of every frame the run held, to the nearest
+      // step, at the pace before the run or across it. An early frame hides
+      // one frame's motion. At one step a frame or more, the run is one frame
+      // long. Under one step a frame, it adds at most one step to the
+      // catch-up.
       const catchUp = Math.abs(series[k].value - series[i].value);
-      // The pace at the run: the component's motion over the frames before
-      // it. A proof that bounds its settle in the cast's own steps also reads
-      // the pace across the run itself, its catch-up over the frames from the
-      // run's start to the change, where the curve slows faster than the
-      // frames before it show. A freeze still fails: its run is longer than
-      // one frame at a step a frame or more, and at a steady pace of two steps
-      // a frame its catch-up carries two frames of that pace.
+      // Two readings give the pace at the run, and either can explain the
+      // run. One is the component's motion over the frames before the run.
+      // The other is its catch-up across the run itself, from the run's start
+      // to the change. The run's own reading counts where the curve slows
+      // faster than the frames before it show. It also counts where a loaded
+      // runner stamps those frames unevenly, whatever the settle bound. A
+      // freeze still fails. Its run is longer than one frame at a step a frame
+      // or more. At a steady pace of two steps a frame, its catch-up carries
+      // two frames of that pace.
       const paceBefore = pxPerFrameBefore(start);
       const runFrames = (series[k].t - series[start].t) / cadence;
-      const pace =
-        paceBefore == null || settledWithinSteps == null || runFrames <= 0
-          ? paceBefore
-          : Math.min(paceBefore, catchUp / runFrames);
+      const explains = (pace: number | null): boolean =>
+        pace != null &&
+        pace < 2 * stepPx &&
+        (pace < stepPx ? catchUp < 2.5 * stepPx : unchanged <= 1) &&
+        catchUp <= (unchanged + 1) * pace + stepPx;
       const shown =
         catchUp < 1.5 * stepPx ||
-        (pace != null &&
-          pace < 2 * stepPx &&
-          (pace < stepPx ? catchUp < 2.5 * stepPx : unchanged <= 1) &&
-          catchUp <= (unchanged + 1) * pace + stepPx);
+        explains(paceBefore) ||
+        (paceBefore != null && runFrames > 0 && explains(catchUp / runFrames));
       if (!shown) {
         return false;
       }

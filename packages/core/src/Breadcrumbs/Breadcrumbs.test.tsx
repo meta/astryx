@@ -817,6 +817,14 @@ describe('BreadcrumbItem menu', () => {
     await user.click(trigger);
     const menu = screen.getByRole('menu', {hidden: true});
     const outside = screen.getByRole('button', {name: 'Outside action'});
+    // The menu takes focus in the frame after it opens. Wait for it: jsdom
+    // does not hide a closed popover, so a later frame could still focus an
+    // item in it, where a browser cannot.
+    await waitFor(() => {
+      expect(menu).toContainElement(
+        document.activeElement as HTMLElement | null,
+      );
+    });
 
     outside.focus();
     expect(outside).toHaveFocus();

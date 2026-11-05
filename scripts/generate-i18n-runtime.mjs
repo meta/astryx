@@ -220,11 +220,22 @@ export function createSpawnInvocation(
   };
 }
 
-async function watchRuntimeCatalogs(command) {
+/**
+ * Runs `command` once the runtime catalogs are current and regenerates them
+ * while it runs. A test passes its own `generate`, `run` and `watch`.
+ */
+export async function watchRuntimeCatalogs(
+  command,
+  {
+    generate = generateRuntimeCatalogs,
+    run = runForwardingSignals,
+    watch = fs.watch,
+  } = {},
+) {
   let debounce;
   let regeneration = Promise.resolve();
   const queueGeneration = () => {
-    const next = regeneration.then(() => generateRuntimeCatalogs());
+    const next = regeneration.then(() => generate());
     regeneration = next.catch(() => {});
     return next;
   };
@@ -239,14 +250,14 @@ async function watchRuntimeCatalogs(command) {
       });
     }, 75);
   };
-  const watcher = fs.watch(SOURCE_LOCALES_DIR, (_event, file) => {
+  const watcher = watch(SOURCE_LOCALES_DIR, (_event, file) => {
     const fileName = file == null ? null : String(file);
     if (fileName !== null && !isSourceLocaleFile(fileName)) return;
     scheduleGeneration();
   });
   // Core modules decide which keys each English fallback map holds, so a
   // module edit regenerates the maps too.
-  const sourceWatcher = fs.watch(
+  const sourceWatcher = watch(
     CORE_SRC_DIR,
     {recursive: true},
     (_event, file) => {
@@ -261,28 +272,37 @@ async function watchRuntimeCatalogs(command) {
     // Register the watcher first so an edit during initial generation queues a
     // second pass instead of leaving the child process on stale catalogs.
     await queueGeneration();
-
-    const spawnOptions = {env: process.env, stdio: 'inherit'};
-    const invocation = createSpawnInvocation(command);
-    const child = spawn(invocation.file, invocation.args, spawnOptions);
-    const forwardInterrupt = () => child.kill('SIGINT');
-    const forwardTermination = () => child.kill('SIGTERM');
-    process.on('SIGINT', forwardInterrupt);
-    process.on('SIGTERM', forwardTermination);
-
-    try {
-      return await new Promise((resolve, reject) => {
-        child.once('error', reject);
-        child.once('exit', (code, signal) => resolve(signal ? 1 : (code ?? 1)));
-      });
-    } finally {
-      process.removeListener('SIGINT', forwardInterrupt);
-      process.removeListener('SIGTERM', forwardTermination);
-    }
+    return await run(command);
   } finally {
     clearTimeout(debounce);
     watcher.close();
     sourceWatcher.close();
+  }
+}
+
+/**
+ * Runs `command` as a child and forwards SIGINT and SIGTERM to it until it
+ * exits. Resolves with the child's exit code, or 1 when a signal ended it.
+ */
+export async function runForwardingSignals(command) {
+  const invocation = createSpawnInvocation(command);
+  const child = spawn(invocation.file, invocation.args, {
+    env: process.env,
+    stdio: 'inherit',
+  });
+  const forwardInterrupt = () => child.kill('SIGINT');
+  const forwardTermination = () => child.kill('SIGTERM');
+  process.on('SIGINT', forwardInterrupt);
+  process.on('SIGTERM', forwardTermination);
+
+  try {
+    return await new Promise((resolve, reject) => {
+      child.once('error', reject);
+      child.once('exit', (code, signal) => resolve(signal ? 1 : (code ?? 1)));
+    });
+  } finally {
+    process.removeListener('SIGINT', forwardInterrupt);
+    process.removeListener('SIGTERM', forwardTermination);
   }
 }
 
