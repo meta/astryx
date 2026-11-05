@@ -197,7 +197,15 @@ export interface MetricTileProps extends BaseProps<HTMLElement> {
  *   value="2.4M"
  *   delta={{value: '+12.4%', direction: 'up'}}
  *   description="vs. previous 30 days"
- *   trend={<Sparkline data={[4, 7, 5, 9, 6, 11]} />}
+ *   trend={
+ *     <Chart
+ *       data={trendRows}
+ *       xKey="index"
+ *       series={[line('value')]}
+ *       height={48}
+ *       title="Request trend"
+ *     />
+ *   }
  * />
  * ```
  */
