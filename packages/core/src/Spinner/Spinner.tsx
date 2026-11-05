@@ -4,13 +4,13 @@
 
 /**
  * @file Spinner.tsx
- * @input Uses React, i18n (useTranslator), StyleX, SVG rendering
+ * @input Uses React, i18n (useComponentTranslator), StyleX, SVG rendering
  * @output Exports Spinner component, SpinnerProps, SpinnerSize, SpinnerShade types
  * @position Core implementation of spinner loading indicator
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Spinner/Spinner.doc.mjs
- * - /packages/core/src/Spinner/Spinner.test.tsx
+ * - /packages/core/src/Spinner/Spinner.test.tsx and __tests__/SpinnerMotion.a11y.chromium.spec.ts (rotor timing)
  * - /packages/core/src/Spinner/index.ts
  * - /apps/storybook/stories/Spinner.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/Spinner/ (showcase blocks)
@@ -19,27 +19,34 @@
 import {use, useId, useMemo, useRef, type ReactNode} from 'react';
 import {SpinnerOwnerContext} from './SpinnerOwnerContext';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, durationVars, spacingVars} from '../theme/tokens.stylex';
+import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {Text} from '../Text/Text';
 import {mergeProps} from '../utils/mergeProps';
 import {mergeRefs} from '../utils/mergeRefs';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
-import {useTranslator} from '../i18n/useTranslator';
 import {themeProps} from '../utils/themeProps';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Spinner/Spinner.generated';
+import {spinnerRotorStyles, syncRotationPhase} from './spinnerRotor';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Constants
 // =============================================================================
 
 /**
- * Default fraction of the ring the moving arc covers. The canvas ring this
- * replaces swept 135deg, not the 270deg its constant's comment claimed.
+ * The fraction of the ring the arc covers: SPINNER_ARC_FRACTION. StyleX reads
+ * only a literal in this file, and a test pins the two together.
  *
  * Themeable via `--spinner-arc-fraction`, declared alongside the other public
  * vars in `sizeStyles` below. Only the inline `strokeDasharray` attribute
- * (the pre-stylesheet render — see its own comment) still reads this
- * constant directly; the CSS side composes the dash from the live var.
+ * (the pre-stylesheet render) still reads the constant directly; the CSS side
+ * composes the dash from the live var.
  */
 const ARC_FRACTION = 0.375;
 
@@ -149,84 +156,6 @@ function registerSpinnerVars(): void {
 // elide.
 registerSpinnerVars();
 
-/**
- * Pin every ring's dash motion to the document timeline's origin instead of
- * its own start time, so spinners mounted seconds apart stay in phase.
- *
- * Setting `startTime` is exact where arithmetic on a clock read is not: a
- * negative `animation-delay` computed at mount is only as good as the gap
- * between reading the clock and the frame the animation starts in, which at
- * 10x CPU throttling measured 116deg of drift (from when this animated a
- * literal rotation; the same drift risk applies to the dash offset now).
- *
- * Rings are collected and pinned in one frame because `getAnimations()`
- * resolves style and `startTime` dirties it again, so pinning them one at a
- * time makes each mount re-force what the previous one invalidated — 53 style
- * recalcs for 38 spinners against 19 batched.
- */
-const pendingRings = new Set<SVGSVGElement>();
-let flushScheduled = false;
-
-function pinRingsToTimelineOrigin(): void {
-  flushScheduled = false;
-  const animations: Animation[] = [];
-  for (const svg of pendingRings) {
-    // The animation now runs on the arc <circle>, a descendant of the ring
-    // this ref sits on (#6253), so it needs subtree:true to be found here.
-    animations.push(...svg.getAnimations({subtree: true}));
-  }
-  pendingRings.clear();
-  for (const animation of animations) {
-    animation.startTime = 0;
-  }
-}
-
-/**
- * Ref callback for the ring: the one place a mounted ring touches the DOM.
- *
- * It reads nothing back — the geometry is resolved by the cascade, not in JS.
- */
-function syncRotationPhase(
-  svg: SVGSVGElement | null,
-): (() => void) | undefined {
-  if (svg == null) {
-    return undefined;
-  }
-  // jsdom implements no Web Animations, and this runs in every consumer's
-  // component tests.
-  if (typeof svg.getAnimations !== 'function') {
-    return undefined;
-  }
-  pendingRings.add(svg);
-  if (!flushScheduled) {
-    flushScheduled = true;
-    requestAnimationFrame(pinRingsToTimelineOrigin);
-  }
-  return () => {
-    pendingRings.delete(svg);
-  };
-}
-
-// =============================================================================
-// Animation
-// =============================================================================
-
-/**
- * Moves the dash around a stationary circle instead of rotating the whole
- * ring. WebKit re-antialiases a rotating stroked shape's rounded cap
- * (`strokeLinecap: 'round'`, below) slightly differently at each intermediate
- * angle, which reads as a visible wobble on iOS Safari independent of
- * compositing (#6253) — confirmed by a real-device test against this exact
- * fix, since `willChange`/layer promotion alone (the earlier fix for #3617)
- * only smooths the rotation's motion, not the per-frame stroke rasterization.
- * A static circle with an animated `stroke-dashoffset` never rotates, so
- * WebKit never re-rasterizes the cap at an intermediate angle at all.
- */
-const dashMotion = stylex.keyframes({
-  '0%': {strokeDashoffset: '0px'},
-  '100%': {strokeDashoffset: `calc(var(${RESOLVED_DIAMETER}) * -${PI})`},
-});
-
 // =============================================================================
 // Styles
 // =============================================================================
@@ -280,6 +209,8 @@ const styles = stylex.create({
   ring: {
     backfaceVisibility: 'hidden',
     display: 'block',
+    // The track and the rotor share the one grid cell, stacked and centred.
+    gridArea: '1 / 1',
     // The frame is the box, read from the same composed var the span is sized
     // from — not from the size constant, which a theme cannot reach, and not
     // from a percentage, which needs the grid area to be a definite size in
@@ -296,6 +227,13 @@ const styles = stylex.create({
     // diameter — an overflowing grid item aligns to start rather than centre,
     // which put the ring 1.5-3.3px off across the four sizes.
     overflow: 'visible',
+  },
+  // The rotor is the frame's size, so it turns about the ring's centre.
+  rotor: {
+    display: 'block',
+    gridArea: '1 / 1',
+    width: `var(${BOX_SIZE})`,
+    height: `var(${BOX_SIZE})`,
   },
   circle: {
     fill: 'none',
@@ -333,19 +271,6 @@ const styles = stylex.create({
   // `0` the way the registered length pair guards against, so it needs no
   // registration.
   arc: {
-    // Slow the motion dramatically under reduced-motion rather than freezing
-    // it (a frozen spinner reads as broken), matching ProgressBar's approach.
-    // The named progressbar and the shared-channel message still convey
-    // loading.
-    animationDuration: {
-      // The loop reads the duration before a theme's tempo scales it
-      // (spec:AST-108 FR4).
-      default: `var(--_astryx-pre-tempo-duration-slow-min, ${durationVars['--duration-slow-min']})`,
-      '@media (prefers-reduced-motion: reduce)': '3s',
-    },
-    animationIterationCount: 'infinite',
-    animationName: dashMotion,
-    animationTimingFunction: 'linear',
     stroke: 'var(--spinner-color)',
     transform: 'rotate(-90deg)',
     strokeDasharray: `calc(var(${RESOLVED_DIAMETER}) * ${PI} * var(--spinner-arc-fraction)) calc(var(${RESOLVED_DIAMETER}) * ${PI} * (1 - var(--spinner-arc-fraction)))`,
@@ -515,7 +440,7 @@ export function Spinner({
   const arcLength = circumference * ARC_FRACTION;
   const hasLabel = label != null;
   const labelId = useId();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const spinnerRef = useRef<HTMLSpanElement>(null);
   const rootRef = useMemo(() => mergeRefs(spinnerRef, ref), [ref]);
 
@@ -593,10 +518,12 @@ export function Spinner({
           height: `var(${BOX_SIZE}, ${frameSize}px)`,
         },
       )}>
+      {/* The track is zero-sized by attribute. With no stylesheet, the
+          rotor's arc alone fills the box, instead of two discs side by side.
+          `ring` sizes both to the box. */}
       <svg
-        ref={syncRotationPhase}
-        width={frameSize}
-        height={frameSize}
+        width={0}
+        height={0}
         aria-hidden="true"
         {...stylex.props(styles.ring)}>
         <circle
@@ -610,18 +537,28 @@ export function Spinner({
             trackOpacityStyles[shade],
           )}
         />
-        <circle
-          cx="50%"
-          cy="50%"
-          r={diameter / 2}
-          strokeWidth={border}
-          // The size's own dash, for the render with no stylesheet. The rule
-          // above composes the same lengths from the resolved diameter, so a
-          // themed ring keeps this fraction of arc rather than this length.
-          strokeDasharray={`${arcLength} ${circumference - arcLength}`}
-          {...stylex.props(styles.circle, styles.arc)}
-        />
       </svg>
+      <span
+        ref={syncRotationPhase}
+        aria-hidden="true"
+        {...stylex.props(styles.rotor, spinnerRotorStyles.turn)}>
+        <svg
+          width={frameSize}
+          height={frameSize}
+          {...stylex.props(styles.ring)}>
+          <circle
+            cx="50%"
+            cy="50%"
+            r={diameter / 2}
+            strokeWidth={border}
+            // The size's own dash, for the render with no stylesheet. The rule
+            // above composes the same lengths from the resolved diameter, so a
+            // themed ring keeps this fraction of arc rather than this length.
+            strokeDasharray={`${arcLength} ${circumference - arcLength}`}
+            {...stylex.props(styles.circle, styles.arc)}
+          />
+        </svg>
+      </span>
     </span>
   );
 

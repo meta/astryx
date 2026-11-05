@@ -37,8 +37,14 @@ import {Spinner} from '../Spinner';
 import type {BaseProps} from '../BaseProps';
 import type {SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatMessageList.generated';
+
+registerEnglishFallback(english);
 
 export interface ChatMessageListProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root element */
@@ -240,7 +246,7 @@ export function ChatMessageList({
   const sentinelRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [isLoadingTop, startTransition] = useTransition();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // The top loading Spinner sits inside the log and is silent; the list
   // announces its loading through the channel (spec:AST-086 FR4, FR8).
   useBusyAnnouncement(isLoadingTop, t('@astryx.spinner.loading'), innerRef);
@@ -259,7 +265,8 @@ export function ChatMessageList({
     children !== false &&
     !(Array.isArray(children) && children.length === 0);
 
-  // IntersectionObserver for scroll-to-top infinite scroll
+  // Syncs an IntersectionObserver on the top sentinel with `scrollToTopAction`.
+  // The action runs when the sentinel comes into view.
   useEffect(() => {
     const scrollContainer = layoutContext?.scrollContainerRef?.current;
     if (!scrollToTopAction || !sentinelRef.current) {

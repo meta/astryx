@@ -18,8 +18,16 @@ import {
   afterAll,
   beforeEach,
   afterEach,
+  onTestFinished,
 } from 'vitest';
-import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+  cleanup,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
@@ -30,10 +38,13 @@ import {
   startTransition,
   StrictMode,
   Suspense,
+  useLayoutEffect,
+  useRef,
   useState,
   type ProfilerOnRenderCallback,
 } from 'react';
 import {FormLayout} from '../FormLayout/FormLayout';
+import {Dialog} from '../Dialog/Dialog';
 import {Typeahead} from './Typeahead';
 import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -445,6 +456,138 @@ describe('BaseTypeahead', () => {
   });
 });
 
+// component:BaseTypeahead FR12: a press on the field or in the list is inside.
+describe('BaseTypeahead press inside and outside', () => {
+  function press(target: Element) {
+    fireEvent.pointerDown(target, {composed: true});
+    fireEvent.pointerUp(target, {composed: true});
+  }
+
+  async function openList(container?: HTMLElement) {
+    render(
+      <>
+        <BaseTypeahead
+          searchSource={fruitSource}
+          value={null}
+          onChange={() => {}}
+          debounceMs={0}
+        />
+        <p>Elsewhere</p>
+      </>,
+      container ? {container} : undefined,
+    );
+    const root = container ?? document.body;
+    const input = root.querySelector('[role="combobox"]') as HTMLInputElement;
+    input.focus();
+    fireEvent.change(input, {target: {value: 'App'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    return input;
+  }
+
+  it('keeps the list open on a press in its own input', async () => {
+    const input = await openList();
+    press(input);
+    fireEvent.click(input);
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    // The list is a manual popover, so the browser does not light-dismiss it.
+    const list = document.getElementById(input.getAttribute('aria-controls')!);
+    expect(list?.closest('[popover]')).toHaveAttribute('popover', 'manual');
+  });
+
+  it('keeps the list open on a press in the list', async () => {
+    const input = await openList();
+    press(screen.getAllByRole('option', {hidden: true})[0]);
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('closes the list on a press outside the field and the list', async () => {
+    const input = await openList();
+    press(screen.getByText('Elsewhere'));
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+
+  it('keeps the list open when a scroll starts outside (pointercancel)', async () => {
+    const input = await openList();
+    const elsewhere = screen.getByText('Elsewhere');
+    fireEvent.pointerDown(elsewhere, {composed: true});
+    fireEvent.pointerCancel(elsewhere, {composed: true});
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('inside a Dialog, keeps the list on an input press and closes only the list on a press elsewhere in the dialog', async () => {
+    // jsdom has no showModal/close; stand-ins like Dialog's own tests use.
+    const {showModal, close} = HTMLDialogElement.prototype;
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+    };
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.removeAttribute('open');
+    };
+    onTestFinished(() => {
+      HTMLDialogElement.prototype.showModal = showModal;
+      HTMLDialogElement.prototype.close = close;
+    });
+    const onDialogChange = vi.fn();
+    render(
+      <Dialog isOpen={true} onOpenChange={onDialogChange}>
+        <BaseTypeahead
+          searchSource={fruitSource}
+          value={null}
+          onChange={() => {}}
+          debounceMs={0}
+        />
+        <p>Dialog text</p>
+      </Dialog>,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    fireEvent.change(input, {target: {value: 'App'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    press(input);
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    press(screen.getByText('Dialog text'));
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+    expect(onDialogChange).not.toHaveBeenCalled();
+  });
+
+  it('removes its document listeners when the field unmounts with the list open', async () => {
+    const input = await openList();
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    const remove = vi.spyOn(document, 'removeEventListener');
+    cleanup();
+    for (const type of ['pointerdown', 'pointerup', 'pointercancel']) {
+      expect(remove).toHaveBeenCalledWith(type, expect.any(Function), true);
+    }
+    remove.mockRestore();
+  });
+
+  it('keeps the list open on a press in its input inside a shadow root', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const container = document.createElement('div');
+    host.attachShadow({mode: 'open'}).appendChild(container);
+    try {
+      const input = await openList(container);
+      press(input);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      press(container.querySelector('p')!);
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    } finally {
+      host.remove();
+    }
+  });
+});
+
 describe('BaseTypeahead focus-out', () => {
   it('closes the dropdown when focus leaves the input', async () => {
     render(
@@ -579,6 +722,31 @@ describe('BaseTypeahead focus-out', () => {
 });
 
 describe('Typeahead', () => {
+  it('asks a touch keyboard for its Search key and no autocorrection, and Enter still picks the highlighted result', async () => {
+    const onChange = vi.fn();
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={onChange}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox', {name: 'Fruit'});
+    expect(input).toHaveAttribute('enterkeyhint', 'search');
+    expect(input).toHaveAttribute('autocorrect', 'off');
+
+    fireEvent.change(input, {target: {value: 'App'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({label: 'Apple'}),
+    );
+  });
+
   describe('out-of-order async results', () => {
     it('discards a stale response that resolves after a newer query', async () => {
       const resolvers = new Map<string, (items: SearchableItem[]) => void>();
@@ -603,12 +771,14 @@ describe('Typeahead', () => {
       const input = screen.getByRole('combobox');
       fireEvent.change(input, {target: {value: 'a'}});
       fireEvent.change(input, {target: {value: 'ap'}});
+      expect(input).toHaveAttribute('aria-busy', 'true');
 
       // The newer query resolves first…
       await act(async () => {
         resolvers.get('ap')!([{id: 'apple', label: 'Apple'}]);
       });
       expect(screen.getByText('Apple')).toBeInTheDocument();
+      expect(input).not.toHaveAttribute('aria-busy');
 
       // …then the abandoned query's slow response arrives and must be
       // discarded rather than overwriting the current results.
@@ -620,6 +790,7 @@ describe('Typeahead', () => {
       });
       expect(screen.getByText('Apple')).toBeInTheDocument();
       expect(screen.queryByText('Avocado')).not.toBeInTheDocument();
+      expect(input).not.toHaveAttribute('aria-busy');
     });
 
     it('discards a response from a source that was replaced while it was in flight', async () => {
@@ -1300,6 +1471,154 @@ describe('BaseTypeahead hasEntriesOnFocus', () => {
     expect(queryBusySpinner()).not.toBeInTheDocument();
   });
 
+  it('keeps the in-flight search when a replacement source renders in a transition that never commits', async () => {
+    let settleSearch: (items: SearchableItem[]) => void = () => {};
+    const committedSource: SearchSource = {
+      search: async () =>
+        new Promise<SearchableItem[]>(resolve => {
+          settleSearch = resolve;
+        }),
+      bootstrap: () => [],
+    };
+    const discardedSource: SearchSource = {
+      search: async () => [],
+      bootstrap: () => [],
+    };
+    const neverSettles = new Promise<void>(() => {});
+
+    function SuspendingSibling({shouldSuspend}: {shouldSuspend: boolean}) {
+      if (shouldSuspend) {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw neverSettles;
+      }
+      return null;
+    }
+
+    let updateState!: (source: SearchSource, shouldSuspend: boolean) => void;
+
+    function TransitionContainer() {
+      const [source, setSource] = useState<SearchSource>(committedSource);
+      const [shouldSuspend, setShouldSuspend] = useState(false);
+      updateState = (newSource, suspend) => {
+        setSource(newSource);
+        setShouldSuspend(suspend);
+      };
+
+      return (
+        <Suspense fallback={<div>Suspended...</div>}>
+          <Typeahead
+            label="Test"
+            searchSource={source}
+            value={null}
+            onChange={() => {}}
+            debounceMs={0}
+          />
+          <SuspendingSibling shouldSuspend={shouldSuspend} />
+        </Suspense>
+      );
+    }
+
+    render(<TransitionContainer />);
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'query'}});
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    // React renders the replacement source, the render suspends, and a newer
+    // transition replaces it before it commits: the committed source stays.
+    act(() => {
+      startTransition(() => {
+        updateState(discardedSource, true);
+      });
+    });
+    act(() => {
+      startTransition(() => {
+        updateState(committedSource, false);
+      });
+    });
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    // The search still belongs to the committed source, so its answer lists
+    // and settles the busy state.
+    await act(async () => {
+      settleSearch([{id: 'q', label: 'Query result'}]);
+      await Promise.resolve();
+    });
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(queryBusySpinner()).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('option', {name: 'Query result', hidden: true}),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps a read that the replacement source starts earlier in the commit that replaces it', async () => {
+    let settleBootstrap: (items: SearchableItem[]) => void = () => {};
+    // Both sources share one request controller, so cancelling the replaced
+    // source aborts whatever request is pending.
+    let abortPending: (() => void) | null = null;
+    const cancel = () => {
+      abortPending?.();
+      abortPending = null;
+    };
+    const firstSource: SearchSource = {
+      search: () => [],
+      bootstrap: () => [],
+      cancel,
+    };
+    const replacementSource: SearchSource = {
+      search: () => [],
+      bootstrap: async () =>
+        new Promise<SearchableItem[]>((resolve, reject) => {
+          settleBootstrap = resolve;
+          abortPending = () => reject(new Error('aborted'));
+        }),
+      cancel,
+    };
+
+    // A component committed before the field focuses it when the scope
+    // changes, in the same commit that hands the field its new source.
+    function FocusOnScopeChange({scope}: {scope: string}) {
+      const isFirstRef = useRef(true);
+      useLayoutEffect(() => {
+        if (isFirstRef.current) {
+          isFirstRef.current = false;
+          return;
+        }
+        screen.getByRole('combobox').focus();
+      }, [scope]);
+      return null;
+    }
+    function ScopedField({scope}: {scope: string}) {
+      return (
+        <>
+          <FocusOnScopeChange scope={scope} />
+          <Typeahead
+            label="Test"
+            searchSource={scope === 'first' ? firstSource : replacementSource}
+            value={null}
+            onChange={() => {}}
+            hasEntriesOnFocus
+          />
+        </>
+      );
+    }
+
+    const {rerender} = render(<ScopedField scope="first" />);
+    const input = screen.getByRole('combobox');
+    rerender(<ScopedField scope="replacement" />);
+    expect(input).toHaveFocus();
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    await act(async () => {
+      settleBootstrap([{id: 'entry', label: 'Entry'}]);
+      await Promise.resolve();
+    });
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(queryBusySpinner()).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('option', {name: 'Entry', hidden: true}),
+    ).toBeInTheDocument();
+  });
+
   it('shows bootstrap results on mouse click', async () => {
     render(
       <BaseTypeahead
@@ -1964,6 +2283,46 @@ describe('Typeahead edit mode', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  // FR8: Escape with the list shown hides the list and edit mode stays; with
+  // the list hidden it restores the Token and focuses its button, so focus
+  // never falls to the page body.
+  it('hides the list on the first Escape, then restores the Token and focuses its button', async () => {
+    const user = userEvent.setup();
+    function Controlled() {
+      const [value, setValue] = useState<SearchableItem | null>(fruits[0]);
+      return (
+        <Typeahead
+          label="Fruit"
+          searchSource={fruitSource}
+          value={value}
+          onChange={setValue}
+        />
+      );
+    }
+    render(<Controlled />);
+    const input = screen.getByRole<HTMLInputElement>('combobox');
+
+    await user.click(screen.getByText(fruits[0].label, VISIBLE));
+    await waitFor(() => {
+      expect(input.value).toBe(fruits[0].label);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    await user.keyboard('{Escape}');
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(input).toHaveFocus();
+    expect(input).not.toHaveAttribute('tabindex', '-1');
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', {name: new RegExp(fruits[0].label)}),
+      ).toHaveFocus();
+    });
+    expect(input).toHaveAttribute('tabindex', '-1');
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
   it('does not exit edit mode on a composing Escape (IME)', async () => {
     const onChange = vi.fn();
     render(
@@ -2169,6 +2528,7 @@ describe('BaseTypeahead paste behavior', () => {
 
       scrollIntoView.mockClear();
       const options = screen.getAllByRole('option', {hidden: true});
+      fireEvent.pointerMove(options[1], {screenX: 156, screenY: 156});
       fireEvent.mouseMove(options[1]);
 
       expect(input.getAttribute('aria-activedescendant')).toBe(options[1].id);
@@ -2209,8 +2569,10 @@ describe('BaseTypeahead highlight under a resting pointer', () => {
     expect(input.getAttribute('aria-activedescendant')).toBe(options[0].id);
 
     fireEvent.mouseEnter(options[2]);
+    fireEvent.pointerMove(options[2], {screenX: 163, screenY: 163});
     expect(input.getAttribute('aria-activedescendant')).toBe(options[0].id);
 
+    fireEvent.pointerMove(options[2], {screenX: 170, screenY: 170});
     fireEvent.mouseMove(options[2]);
     expect(input.getAttribute('aria-activedescendant')).toBe(options[2].id);
   });

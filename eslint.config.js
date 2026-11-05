@@ -11,7 +11,9 @@ import reactCompiler from 'eslint-plugin-react-compiler';
 import astryxPlugin from './internal/eslint-plugin-astryx/index.js';
 import {scope as internalBarrelScope} from './internal/eslint-plugin-astryx/no-internal-barrel-import.js';
 import {scope as nullishGuardScope} from './internal/eslint-plugin-astryx/no-nullish-jsx-guard.js';
+import {scope as truthyGuardScope} from './internal/eslint-plugin-astryx/no-truthy-jsx-guard.js';
 import {scope as privateAttributeScope} from './internal/eslint-plugin-astryx/no-raw-private-attribute.js';
+import {scope as commentProvenanceScope} from './internal/eslint-plugin-astryx/no-comment-provenance.js';
 
 /* global process */
 
@@ -55,6 +57,20 @@ const privateAttributeBaseline = JSON.parse(
     path.join(
       import.meta.dirname,
       'internal/eslint-plugin-astryx/no-raw-private-attribute.baseline.json',
+    ),
+    'utf8',
+  ),
+);
+
+// Record ids, claim ids, pull request and issue references, date stamps, and
+// quote blocks in source comments that predate
+// `@astryx/no-comment-provenance`, by repo-relative file, once per site. The
+// list only shrinks.
+const commentProvenanceBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
     ),
     'utf8',
   ),
@@ -421,6 +437,24 @@ export default defineConfig(
     rules: {
       '@astryx/no-hover-on-disabled': 'error',
       '@astryx/disabled-cursor': 'error',
+    },
+  },
+  // StyleX compiles a `border` shorthand unevenly, and @astryxdesign/build's
+  // strict default refuses it, so a lab or charts component written with one
+  // ships without its border in the prebuilt stylesheet. Core already gets the
+  // rule from its config above; lab and charts get it at the same severity
+  // (error in strict mode, warning otherwise).
+  {
+    files: [
+      'packages/lab/src/**/*.{ts,tsx}',
+      'packages/charts/src/**/*.{ts,tsx}',
+    ],
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-border-shorthand':
+        astryxConfig.rules['@astryx/no-border-shorthand'],
     },
   },
   // `light-dark()` is the theme layer's mechanism, and reaches lab for the
@@ -877,6 +911,29 @@ export default defineConfig(
       'no-restricted-syntax': 'off',
     },
   },
+  // Browser specs use the shared base test, whose contexts answer remote
+  // images locally and block other remote requests. A remote host that is
+  // slow then cannot stall a spec.
+  {
+    files: ['**/*.browser.spec.ts', '**/*.chromium.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            '@playwright/test',
+            'playwright/test',
+            'playwright',
+            'playwright-core',
+          ].map(name => ({
+            name,
+            message:
+              "Import from '@astryxdesign/a11y-spec/playwright' instead: its `test` keeps every browser context off remote hosts.",
+          })),
+        },
+      ],
+    },
+  },
   // Inside a package's own shipped source, import the module that defines a
   // name, not a folder's index (a barrel): a lazily imported module that goes
   // through a barrel pulls every sibling export into its graph, which broke
@@ -912,6 +969,21 @@ export default defineConfig(
       '@astryx/no-nullish-jsx-guard': reactSeverity,
     },
   },
+  // A slot value can be `0`. A truthiness guard in front of its JSX then
+  // renders a stray "0" (`&&`) or drops the slot (`? :`), so a slot's
+  // presence is decided by `isRenderable` here too. The rule reads types, so
+  // its scope is core, which the type-aware block above parses with the
+  // project service. Every guard is reported (an error in strict mode).
+  {
+    files: truthyGuardScope.files,
+    ignores: truthyGuardScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-truthy-jsx-guard': reactSeverity,
+    },
+  },
   // A private `data-astryx-*` attribute is written once, in its owner module
   // under packages/<package>/src/privateAttributes, which exports ready-made
   // styles, setter props and readers (`architecture:public-component-api`
@@ -931,6 +1003,26 @@ export default defineConfig(
       '@astryx/no-raw-private-attribute': [
         reactSeverity,
         {baseline: privateAttributeBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // A source comment explains a reason, a constraint, or a quirk. It does not
+  // cite a record, a claim, a pull request, an issue, or a date, and it does
+  // not quote requirement text: the record links the code, and
+  // `pnpm specs:for <path>` finds it. The sites that predate this block are
+  // listed in the baseline, once per site, and that many stay allowed until
+  // they are removed; one more is reported (an error in strict mode, so a pull
+  // request that adds one fails lint, while main stays green).
+  {
+    files: commentProvenanceScope.files,
+    ignores: commentProvenanceScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-comment-provenance': [
+        reactSeverity,
+        {baseline: commentProvenanceBaseline, root: import.meta.dirname},
       ],
     },
   },

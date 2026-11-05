@@ -52,9 +52,17 @@ export const docs = {
       default: 'false',
     },
     {
+      name: 'startLineNumber',
+      type: 'number',
+      description:
+        'First line number shown in the gutter. The gutter shows file coordinates (startLineNumber + index) so a code excerpt reads with its real line numbers. highlightLines uses the same file coordinates. Values below 1 clamp to 1.',
+      default: '1',
+    },
+    {
       name: 'highlightLines',
       type: 'number[]',
-      description: '1-indexed line numbers to highlight.',
+      description:
+        '1-indexed line numbers to highlight, in the same file coordinates as the gutter (see startLineNumber). Out-of-range entries render no highlight.',
     },
     {
       name: 'isDiff',

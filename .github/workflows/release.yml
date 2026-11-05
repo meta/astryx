@@ -24,6 +24,13 @@
 #          release branch and head. Stable publication from main is rejected.
 #     Version-gated and idempotent: any version already on the registry is
 #     skipped, so re-running (or a `dry-run` first) is safe.
+#     Registry verification runs in bounded windows: the publish job's own,
+#     then at most two follow-up verification jobs while packages are not yet
+#     readable. Anything that acts on a stable release (the GitHub
+#     Release, deployment, merge-back, release receipts, release tracking)
+#     waits for this workflow run's conclusion, never the publish job's: while
+#     packages are still propagating, the publish job passes and a follow-up
+#     job decides the run.
 #   - canary: push to main only. Main normally declares the next planned version,
 #     so this publishes <declared>-canary.<short-sha> to the `canary` dist-tag.
 #     The trusted release merge-back briefly leaves main equal to the stable tag;
@@ -94,6 +101,8 @@ jobs:
       actions: read
       contents: read
       id-token: write # npm OIDC trusted publishing + provenance
+    outputs:
+      verified: ${{ steps.publish.outputs.verified }}
     steps:
       - name: Checkout immutable release tag
         uses: actions/checkout@v7
@@ -126,19 +135,21 @@ jobs:
             | tee release-publish-receipt.json
 
       # A release is built from a main commit whose canonical release-check
-      # passed (spec:AST-030 FR12, DEC-11): main is checked about hourly, so
-      # the cut commit's own check is required here, before anything builds.
+      # and full unit run passed (spec:AST-030 FR12, FR21, DEC-11, DEC-15):
+      # main is checked about hourly, so the cut commit's own checks are
+      # required here, before anything builds.
       - name: Require a passing release-check at the exact cut commit
         uses: actions/github-script@v9
         with:
           retries: 3
           script: |
             const {pathToFileURL} = require('node:url');
-            const {requireReleaseCheck} = await import(
+            const {requireReleaseCheck, requireUnitRun} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/release/release-check-receipt.mjs`).href
             );
             const {cutSha} = require(`${process.env.GITHUB_WORKSPACE}/.release/active.json`);
-            await requireReleaseCheck({github, core, ...context.repo, sha: cutSha});
+            const check = await requireReleaseCheck({github, core, ...context.repo, sha: cutSha});
+            if (check) await requireUnitRun({github, core, ...context.repo, sha: cutSha});
 
       - name: Upload exact release authority receipt
         uses: actions/upload-artifact@v7
@@ -172,13 +183,18 @@ jobs:
         run: pnpm build
 
       - name: Publish changed packages
+        id: publish
         env:
           DRY_RUN: ${{ inputs.dry-run }}
           RELEASE_VERSION: ${{ inputs['release-version'] }}
         run: |
           set -eu
           published=0
-          for pkg_dir in packages/* packages/themes/*; do
+          FAILED=""
+          # Dependencies first, so the hold-back below sees every failed
+          # dependency before the packages that use it.
+          ORDER=$(node scripts/npm/publish-order.mjs packages/* packages/themes/*)
+          for pkg_dir in $ORDER; do
             [ -f "$pkg_dir/package.json" ] || continue
             # Stable `latest` never includes canaryOnly packages (e.g. lab):
             # skip them explicitly so even an accidental `private: false` can
@@ -195,18 +211,127 @@ jobs:
               echo "[dry-run] Would publish $NAME@$VERSION"
               continue
             fi
+            # A package that depends on (or peers on) a package that failed
+            # here would reach `latest` uninstallable: hold it back as failed
+            # too, so the re-run publishes both together.
+            BLOCKED_BY=$(node -e "
+              const p = require('./$pkg_dir/package.json');
+              const failed = new Set(process.argv[1].split(' ').filter(Boolean));
+              const deps = Object.keys({...p.dependencies, ...p.peerDependencies});
+              process.stdout.write(deps.filter(d => failed.has(d)).join(' '));
+            " "$FAILED")
+            if [ -n "$BLOCKED_BY" ]; then
+              echo "::error::Not publishing $NAME@$VERSION because $BLOCKED_BY failed"
+              FAILED="$FAILED $NAME"
+              continue
+            fi
             echo "Publishing $NAME@$VERSION"
-            pnpm publish "./$pkg_dir" --tag latest --provenance --access public --no-git-checks
-            published=$((published + 1))
+            # At most once, retried while the registry lacks the version (see
+            # scripts/npm/publish-package.mjs). One package that cannot
+            # publish does not stop the rest; the step fails at the end.
+            if node scripts/npm/publish-package.mjs --dir "./$pkg_dir" --tag latest; then
+              published=$((published + 1))
+            else
+              echo "::error::Stable publish failed for $NAME@$VERSION"
+              FAILED="$FAILED $NAME"
+            fi
           done
+          if [ -n "$FAILED" ]; then
+            echo "::error::Stable publish failed for:$FAILED. Re-running this workflow on the same tag publishes only what is missing."
+            exit 1
+          fi
           if [ "$DRY_RUN" = "true" ]; then
             echo "Dry run complete; no packages were published."
           else
+            # One bounded verification window. Packages that are still not
+            # readable when it ends (exit 2) do not fail the release: the
+            # follow-up verification jobs below continue with windows of
+            # their own.
+            STATUS=0
             node scripts/npm/verify-published.mjs \
               --version "$RELEASE_VERSION" \
-              --tag latest
-            echo "Published $published package(s); registry verification passed."
+              --tag latest || STATUS=$?
+            case "$STATUS" in
+              0)
+                echo "verified=true" >> "$GITHUB_OUTPUT"
+                echo "Published $published package(s); registry verification passed."
+                ;;
+              2)
+                echo "verified=pending" >> "$GITHUB_OUTPUT"
+                echo "::notice::Published $published package(s); some are not yet readable on the registry. A follow-up verification job continues."
+                ;;
+              *)
+                exit "$STATUS"
+                ;;
+            esac
           fi
+
+  # Follow-up registry verification: each job is one more bounded window for
+  # packages that were published but not yet readable, with the same exact-
+  # version proofs. The last one fails the release if a package is still not
+  # readable.
+  # A follow-up starts no check after 7 minutes, which leaves room in its
+  # 10-minute limit for checkout, Node setup and a last slow check.
+  verify-registry-1:
+    name: Verify registry (follow-up 1)
+    needs: publish
+    if: needs.publish.outputs.verified == 'pending'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      verified: ${{ steps.verify.outputs.verified }}
+    steps:
+      - name: Checkout immutable release tag
+        uses: actions/checkout@v7
+      - name: Setup Node
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+      - name: Verify published packages
+        id: verify
+        env:
+          RELEASE_VERSION: ${{ inputs['release-version'] }}
+        run: |
+          set -eu
+          STATUS=0
+          node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest --window-ms 420000 || STATUS=$?
+          case "$STATUS" in
+            0) echo "verified=true" >> "$GITHUB_OUTPUT" ;;
+            2)
+              echo "verified=pending" >> "$GITHUB_OUTPUT"
+              echo "::notice::Some packages are still not readable on the registry. The last follow-up verification job continues."
+              ;;
+            *) exit "$STATUS" ;;
+          esac
+
+  verify-registry-2:
+    name: Verify registry (follow-up 2, last)
+    needs: verify-registry-1
+    if: needs.verify-registry-1.outputs.verified == 'pending'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout immutable release tag
+        uses: actions/checkout@v7
+      - name: Setup Node
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+      - name: Verify published packages
+        env:
+          RELEASE_VERSION: ${{ inputs['release-version'] }}
+        run: |
+          set -eu
+          STATUS=0
+          node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest --window-ms 420000 || STATUS=$?
+          if [ "$STATUS" -eq 2 ]; then
+            echo "::error::Published packages are still not readable on the registry after three verification windows."
+          fi
+          exit "$STATUS"
 
   # Canary publish — runs on every push to main. The @canary dist-tag always
   # points to the latest main commit:
@@ -313,27 +438,31 @@ jobs:
             IS_PUBLISHABLE=$(node -p "const p=require('./$pkg_dir/package.json'); (!p.private || p.astryx?.canaryOnly) && p.name?.startsWith('@astryxdesign/') ? 'yes' : 'no'")
             if [ "$IS_PUBLISHABLE" = "yes" ]; then
               NAME=$(node -p "require('./$pkg_dir/package.json').name")
+              # A private canary-only package is skipped while its npm name
+              # does not exist yet (exit 3); a registry that cannot say
+              # whether it exists fails it, never skips it.
+              SKIP_IF_ABSENT=""
               if grep -Fxq "$NAME" "$PRIVATE_CANARY_PACKAGES"; then
-                PACKAGE_URL=$(node -e "process.stdout.write(new URL(encodeURIComponent(process.argv[1]), 'https://registry.npmjs.org/').href)" "$NAME")
-                HTTP_STATUS=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --max-time 30 "$PACKAGE_URL" || true)
-                case "$HTTP_STATUS" in
-                  200) ;;
-                  404)
-                    echo "::notice::Skipping absent private canary-only package ${NAME}; bootstrap it and register release.yml as its trusted publisher."
-                    continue
-                    ;;
-                  *)
-                    echo "::error::Registry lookup for ${NAME} returned HTTP ${HTTP_STATUS}"
-                    FAILED="${FAILED} ${NAME}"
-                    continue
-                    ;;
-                esac
+                SKIP_IF_ABSENT="--skip-if-package-absent"
               fi
               echo "Publishing ${NAME}@${CANARY_VERSION}"
-              if ! pnpm publish "./$pkg_dir" --tag canary --provenance --access public --no-git-checks; then
-                echo "::error::Canary publish failed for ${NAME}@${CANARY_VERSION}"
-                FAILED="${FAILED} ${NAME}"
-              fi
+              # publish-package.mjs publishes at most once and lets the
+              # registry decide: a version already there is skipped, and a
+              # failed attempt (npm's provenance signing can answer "409 an
+              # equivalent entry already exists") is retried with a new
+              # signature only while the registry does not have the version.
+              STATUS=0
+              node scripts/npm/publish-package.mjs --dir "./$pkg_dir" --tag canary $SKIP_IF_ABSENT || STATUS=$?
+              case "$STATUS" in
+                0) ;;
+                3)
+                  echo "::notice::Skipping absent private canary-only package ${NAME}; bootstrap it and register release.yml as its trusted publisher."
+                  ;;
+                *)
+                  echo "::error::Canary publish failed for ${NAME}@${CANARY_VERSION}"
+                  FAILED="${FAILED} ${NAME}"
+                  ;;
+              esac
             fi
           done
 

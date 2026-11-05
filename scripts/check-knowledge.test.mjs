@@ -7,6 +7,11 @@ import {execFileSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
+  createRepository,
+  importCommits,
+  workingTreeFiles,
+} from './lib/git-fixture.mjs';
+import {
   composeKnowledgeSchemas,
   collectConcernMatches,
   collectGlobalReviewMatches,
@@ -371,18 +376,21 @@ function withSystemClaims(record) {
   );
 }
 
-function commitFixture(root, message) {
-  execFileSync('git', ['init', '-q'], {cwd: root});
-  execFileSync('git', ['config', 'user.name', 'Fixture'], {cwd: root});
-  execFileSync('git', ['config', 'user.email', 'fixture@example.com'], {
-    cwd: root,
-  });
-  execFileSync('git', ['add', '.'], {cwd: root});
-  execFileSync('git', ['commit', '-q', '-m', message], {cwd: root});
-  return execFileSync('git', ['rev-parse', 'HEAD'], {
-    cwd: root,
-    encoding: 'utf8',
-  }).trim();
+/**
+ * Commits the fixture's working tree as it stands on `main`, after the
+ * commit there, or as the first commit of a new repository.
+ */
+function commitFixture(root, message, {create = false} = {}) {
+  const commit = {
+    ref: 'refs/heads/main',
+    name: 'commit',
+    message,
+    snapshot: true,
+    files: workingTreeFiles(root),
+  };
+  return create
+    ? createRepository(root, [commit]).commit
+    : importCommits(root, [{...commit, parent: 'refs/heads/main'}]).commit;
 }
 
 afterEach(() => {
@@ -692,6 +700,7 @@ describe('global review applicability', () => {
     const baseWithoutRouting = commitFixture(
       root,
       'base without global routing',
+      {create: true},
     );
     execFileSync(
       'git',
@@ -703,14 +712,7 @@ describe('global review applicability', () => {
       path.join(root, 'docs/specs/AST-900/spec.md'),
       withReviewApplicability(currentRecord, {'public-api': ['FR1']}),
     );
-    execFileSync('git', ['add', '.'], {cwd: root});
-    execFileSync('git', ['commit', '-q', '-m', 'head adds global routing'], {
-      cwd: root,
-    });
-    const proposedHead = execFileSync('git', ['rev-parse', 'HEAD'], {
-      cwd: root,
-      encoding: 'utf8',
-    }).trim();
+    const proposedHead = commitFixture(root, 'head adds global routing');
 
     expect(
       routeGlobalReviewBaselinesAtRevision(
@@ -740,14 +742,7 @@ describe('global review applicability', () => {
     ).toThrow(/review head must differ/);
 
     fs.writeFileSync(path.join(root, 'README.md'), '# Reviewed change\n');
-    execFileSync('git', ['add', '.'], {cwd: root});
-    execFileSync('git', ['commit', '-q', '-m', 'later review head'], {
-      cwd: root,
-    });
-    const laterHead = execFileSync('git', ['rev-parse', 'HEAD'], {
-      cwd: root,
-      encoding: 'utf8',
-    }).trim();
+    const laterHead = commitFixture(root, 'later review head');
     expect(
       routeGlobalReviewBaselinesAtRevision(root, proposedHead, laterHead, [
         'public-api',
@@ -1864,6 +1859,47 @@ describe('knowledge validation', () => {
     expect(problems).not.toContain('Chart/Chart.swift.spec.md');
     expect(problems).toContain(
       'docs/specs/components/Chart/Ghost.swift.spec.md: platform record for Ghost must match component root "Chart"',
+    );
+  });
+
+  it('checks a package architecture record under packages/<package>/specs/', async () => {
+    const root = fixtureRoot();
+    const template = fs.readFileSync(
+      path.join(root, 'docs/templates/knowledge/architecture.md'),
+      'utf8',
+    );
+    const slots = path.join(root, 'packages/native/specs/swift/slots.spec.md');
+    const writeSlots = (id, kind = 'architecture') => {
+      fs.mkdirSync(path.dirname(slots), {recursive: true});
+      fs.writeFileSync(
+        slots,
+        template
+          .replace('id: architecture:<surface>', `id: ${id}`)
+          .replace('kind: architecture', `kind: ${kind}`),
+      );
+    };
+    const packageProblems = async () =>
+      (await validateKnowledgeRoot(root)).filter(problem =>
+        problem.startsWith('packages/native/specs/'),
+      );
+    // Guidance Markdown that is not a `<slug>.spec.md` is not a candidate.
+    fs.mkdirSync(path.join(root, 'packages/native/specs'), {recursive: true});
+    fs.writeFileSync(
+      path.join(root, 'packages/native/specs/README.md'),
+      '# Native specs\n',
+    );
+
+    writeSlots('architecture:native-swift-slots');
+    expect(await packageProblems()).toEqual([]);
+
+    writeSlots('architecture:swift-slots');
+    expect(await packageProblems()).toEqual([
+      'packages/native/specs/swift/slots.spec.md: id must be architecture:native-swift-slots to match its path.',
+    ]);
+
+    writeSlots('architecture:native-swift-slots', 'bogus');
+    expect(await packageProblems()).toContain(
+      'packages/native/specs/swift/slots.spec.md: a record under packages/native/specs/ must be kind: architecture.',
     );
   });
 

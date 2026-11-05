@@ -155,6 +155,7 @@ export function CommandPaletteItem({
     (ctx ? ctx.highlightedIndex === itemIndex && itemIndex >= 0 : false);
   const isSelected = controlledSelected ?? (ctx ? ctx.value === value : false);
 
+  // Syncs the scroll position of a standalone item with `isHighlighted`.
   useEffect(() => {
     // Inside CommandPalette the shared useHighlightedOptionScroll (via
     // useCombobox) is the single scrollIntoView owner (#6077); a second owner

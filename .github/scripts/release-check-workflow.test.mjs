@@ -24,7 +24,8 @@ const packageJson = JSON.parse(
   fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
 );
 const releaseJobs = [
-  // Admits every CI run under CI's ceiling (ci-admission.test.mjs).
+  // Admit every CI run under CI's ceiling (ci-admission.test.mjs).
+  'room',
   'admission',
   'release-authority',
   'test-registry-e2e',

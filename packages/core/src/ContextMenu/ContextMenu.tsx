@@ -59,6 +59,7 @@ import {useLayerInternal} from '../Layer/useLayer';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {currentGesture} from '../Layer/gestureCounter';
+import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {MenuBottomSheetActionList} from '../DropdownMenu/MenuBottomSheetActionList';
 import {menuBottomSheetStyles} from '../DropdownMenu/menuBottomSheet.stylex';
 import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
@@ -92,7 +93,6 @@ import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import type {StyleXStyles} from '../theme/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import type {
   DropdownMenuOption,
   DropdownMenuItemData,
@@ -105,6 +105,13 @@ import {
   useAdaptivePresentation,
   type AdaptivePresentation,
 } from '../hooks/useAdaptivePresentation';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/ContextMenu/ContextMenu.generated';
+
+registerEnglishFallback(english);
 
 const LazyMenuBottomSheet = lazy(async () =>
   import('../DropdownMenu/MenuBottomSheet').then(module => ({
@@ -344,7 +351,7 @@ export function ContextMenu({
   'data-testid': testId,
   ...rest
 }: ContextMenuProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.contextMenu.label');
   const backLabel = t('@astryx.dropdownMenu.back');
   const resolvedPresentation = useAdaptivePresentation(presentation);
@@ -525,6 +532,7 @@ export function ContextMenu({
         return;
       }
       if (menu && !menu.contains(e.target as Node)) {
+        noteOutsideDismissal(menu.ownerDocument);
         closeMenu();
       }
     };
@@ -706,14 +714,14 @@ export function ContextMenu({
   );
   const handleTriggerTouchEnd = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
-      handleLongPressTouchEnd();
+      handleLongPressTouchEnd(event);
       onTouchEndProp?.(event);
     },
     [handleLongPressTouchEnd, onTouchEndProp],
   );
   const handleTriggerTouchCancel = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
-      handleLongPressTouchCancel();
+      handleLongPressTouchCancel(event);
       onTouchCancelProp?.(event);
     },
     [handleLongPressTouchCancel, onTouchCancelProp],

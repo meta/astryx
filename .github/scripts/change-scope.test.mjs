@@ -65,6 +65,21 @@ describe('spec-only change scope', () => {
     }
   });
 
+  it('owner-gates a package architecture record like docs/architecture/', () => {
+    const result = classifyChanges([
+      {filename: 'packages/native/specs/swift/slots.spec.md'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(false);
+    // Every Markdown file under a package's specs/ is owner-gated, a README
+    // too, though only records count toward a spec-only change.
+    const readme = classifyChanges([
+      {filename: 'packages/native/specs/README.md'},
+    ]);
+    expect(readme.touchesKnowledgeRecords).toBe(true);
+    expect(readme.specOnly).toBe(false);
+  });
+
   it('owner-gates architecture records without granting the spec-only fast path', () => {
     const result = classifyChanges([
       {filename: 'docs/architecture/knowledge-contracts.md'},
@@ -488,5 +503,356 @@ describe('full-suite scope', () => {
   it('runs everything when there are no paths to scope from', () => {
     expect(classifyChanges([]).fullSuite).toBe(true);
     expect(classifyChanges([], {expectedCount: 0}).fullSuite).toBe(true);
+  });
+});
+
+describe('Lab-only change scope (spec:AST-030 FR26)', () => {
+  const lab = [
+    'packages/lab/src/Tour/Tour.tsx',
+    'packages/lab/src/Tour/__tests__/Tour.test.tsx',
+    'packages/lab/src/Tour/Tour.doc.mjs',
+  ];
+
+  it('is Lab-only when every changed path is in the Lab package', () => {
+    const result = classifyChanges(lab.map(filename => ({filename})));
+    expect(result).toMatchObject({
+      labOnly: true,
+      specOnly: false,
+      docsiteOnly: false,
+      toolingOnly: false,
+    });
+    expect(result.reason).toBe('only the Lab package changed');
+    // Its manifest and build configuration are the Lab package's too.
+    expect(
+      classifyChanges([{filename: 'packages/lab/package.json'}]).labOnly,
+    ).toBe(true);
+  });
+
+  it('stays Lab-only beside its release notes, but a Changeset alone is not Lab', () => {
+    expect(
+      classifyChanges(
+        [...lab, '.changeset/tour-steps.md'].map(filename => ({filename})),
+      ).labOnly,
+    ).toBe(true);
+    expect(
+      classifyChanges([{filename: '.changeset/tour-steps.md'}]).labOnly,
+    ).toBe(false);
+  });
+
+  it('runs full CI for any other path beside a Lab change', () => {
+    for (const other of [
+      'packages/core/src/Button/Button.tsx',
+      'packages/core/src/internal/touch.ts',
+      'packages/cli/api/search/search.mjs',
+      'scripts/sync-exports.js',
+      'tsconfig.json',
+      'packages/charts/src/index.ts',
+      'apps/storybook/stories/Tour.stories.tsx',
+      'apps/docsite/src/app/page.tsx',
+      'apps/sandbox/src/main.tsx',
+      '.github/workflows/ci.yml',
+      'pnpm-lock.yaml',
+      'package.json',
+      'vitest.config.mts',
+      'internal/lab-readiness/audit.mjs',
+      'docs/specs/AST-030/spec.md',
+      'packages/labels/src/index.ts',
+    ]) {
+      expect(
+        classifyChanges([...lab, other].map(filename => ({filename}))).labOnly,
+        other,
+      ).toBe(false);
+    }
+  });
+
+  it('checks both sides of a rename into or out of the Lab package', () => {
+    const graduated = classifyChanges([
+      {
+        filename: 'packages/core/src/Tour/Tour.tsx',
+        previous_filename: 'packages/lab/src/Tour/Tour.tsx',
+        status: 'R100',
+      },
+    ]);
+    expect(graduated.labOnly).toBe(false);
+    const parked = classifyChanges([
+      {
+        filename: 'packages/lab/src/Tour/Tour.tsx',
+        previous_filename: 'packages/core/src/Tour/Tour.tsx',
+        status: 'R100',
+      },
+    ]);
+    expect(parked.labOnly).toBe(false);
+  });
+
+  it('is never Lab-only for an incomplete or empty file list', () => {
+    expect(
+      classifyChanges(
+        lab.map(filename => ({filename})),
+        {expectedCount: 4},
+      ).labOnly,
+    ).toBe(false);
+    expect(classifyChanges([]).labOnly).toBe(false);
+  });
+});
+
+describe('Lab entry files (spec:AST-030 FR26)', () => {
+  const {
+    isLabEntryChange,
+    labRouteSlug,
+    ROUTES_LOCK,
+    OFFICIAL_PACKAGES,
+  } = require('./change-scope.cjs');
+  const names = new Set(['CommentPin']);
+  const route = lines => `@@ -556,6 +556,11 @@\n${lines.join('\n')}`;
+  const ownRoute = [
+    '+    {',
+    '+      "name": "component-lab-comment-pin",',
+    '+      "path": "components/lab/comment-pin",',
+    '+      "aliases": []',
+    '+    },',
+  ];
+  const routes = patch => ({
+    change: {filename: ROUTES_LOCK, status: 'M'},
+    patches: {[ROUTES_LOCK]: patch},
+  });
+  const entry = ({change, patches}, base = null) =>
+    isLabEntryChange(change, {names, patches, officialPackagesBase: base});
+
+  it('accepts a carried component route', () => {
+    expect(entry(routes(route(ownRoute)))).toBe(true);
+  });
+
+  it('refuses a renamed route lock, even with the right lines', () => {
+    expect(
+      entry({
+        change: {
+          filename: ROUTES_LOCK,
+          previous_filename: 'packages/lab/routes.lock.json',
+          status: 'R100',
+        },
+        patches: {[ROUTES_LOCK]: route(ownRoute)},
+      }),
+    ).toBe(false);
+  });
+
+  it("refuses a route item named for another component, though its path is the carried one's", () => {
+    const lines = ownRoute.map(line =>
+      line.replace('component-lab-comment-pin', 'component-lab-drawer'),
+    );
+    expect(entry(routes(route(lines)))).toBe(false);
+  });
+
+  it("refuses a route path for another component, though its name is the carried one's", () => {
+    const lines = ownRoute.map(line =>
+      line.replace('components/lab/comment-pin', 'components/lab/drawer'),
+    );
+    expect(entry(routes(route(lines)))).toBe(false);
+  });
+
+  it('refuses an example or showcase name for a component the change does not carry', () => {
+    for (const name of ['example-button-basic', 'showcase-button-tour']) {
+      expect(entry(routes(route([`+      "name": "${name}",`]))), name).toBe(
+        false,
+      );
+    }
+  });
+
+  it('matches a route name and path exactly, not by prefix', () => {
+    const swap = (from, to) => ownRoute.map(line => line.replace(from, to));
+    expect(
+      entry(
+        routes(
+          route(
+            swap('component-lab-comment-pin"', 'component-lab-comment-pin-x"'),
+          ),
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      entry(
+        routes(
+          route(
+            swap('components/lab/comment-pin"', 'components/lab/comment-pinx"'),
+          ),
+        ),
+      ),
+    ).toBe(false);
+  });
+
+  it("matches an example or showcase path only under the component's own folder", () => {
+    for (const prefix of ['examples', 'showcases']) {
+      const item = [
+        '+    {',
+        `+      "name": "${prefix === 'examples' ? 'example' : 'showcase'}-comment-pin-basic",`,
+        `+      "path": "${prefix}/comment-pinx/basic",`,
+        '+      "aliases": []',
+        '+    },',
+      ];
+      expect(entry(routes(route(item))), prefix).toBe(false);
+    }
+  });
+
+  it('refuses an alias outside the Lab components, and a Lab alias for another component', () => {
+    const withAlias = alias => [
+      '+    {',
+      '+      "name": "component-lab-comment-pin",',
+      '+      "path": "components/lab/comment-pin",',
+      '+      "aliases": [',
+      `+        "${alias}"`,
+      '+      ]',
+      '+    },',
+    ];
+    expect(entry(routes(route(withAlias('components/lab/comment-pin'))))).toBe(
+      true,
+    );
+    expect(entry(routes(route(withAlias('components/comment-pin'))))).toBe(
+      false,
+    );
+    expect(entry(routes(route(withAlias('components/lab/drawer'))))).toBe(
+      false,
+    );
+    // A new component has no old route to alias, so only a Lab path counts,
+    // even one under the component's own example prefix.
+    expect(
+      entry(routes(route(withAlias('examples/comment-pin/old-name')))),
+    ).toBe(false);
+  });
+
+  const base = [
+    '{',
+    '  "packages": [',
+    '    {',
+    '      "package": "@astryxdesign/charts",',
+    '      "contributions": [',
+    '        {',
+    '          "kind": "component",',
+    '          "name": "Chart"',
+    '        }',
+    '      ]',
+    '    },',
+    '    {',
+    '      "package": "@astryxdesign/lab",',
+    '      "contributions": [',
+    '        {',
+    '          "kind": "component",',
+    '          "name": "ChartArea"',
+    '        }',
+    '      ]',
+    '    }',
+    '  ]',
+    '}',
+  ].join('\n');
+  const discovery = (added, at = 15) => ({
+    change: {filename: OFFICIAL_PACKAGES, status: 'M'},
+    patches: {
+      [OFFICIAL_PACKAGES]: `@@ -${at},2 +${at},${2 + added.length} @@\n${added.join('\n')}`,
+    },
+  });
+  const ownEntry = [
+    '+        {',
+    '+          "kind": "component",',
+    '+          "name": "CommentPin"',
+    '+        },',
+  ];
+
+  it("accepts a carried component's entry inside Lab's part of the base", () => {
+    expect(entry(discovery(ownEntry), base)).toBe(true);
+  });
+
+  it('refuses an entry for a component the change does not carry', () => {
+    expect(
+      entry(
+        discovery(ownEntry.map(line => line.replace('CommentPin', 'Drawer'))),
+        base,
+      ),
+    ).toBe(false);
+  });
+
+  it("refuses an edit in the package that follows Lab's part of the base", () => {
+    const baseWithNext = base.replace(
+      '    }\n  ]\n}',
+      [
+        '    },',
+        '    {',
+        '      "package": "@astryxdesign/richtext",',
+        '      "contributions": [',
+        '        {',
+        '          "kind": "component",',
+        '          "name": "RichText"',
+        '        }',
+        '      ]',
+        '    }',
+        '  ]',
+        '}',
+      ].join('\n'),
+    );
+    expect(baseWithNext.split('\n')[21]).toContain('@astryxdesign/richtext');
+    // Inside Lab's part: accepted; inside the next package's part: refused.
+    expect(entry(discovery(ownEntry), baseWithNext)).toBe(true);
+    expect(entry(discovery(ownEntry, 25), baseWithNext)).toBe(false);
+    // A hunk that starts in Lab's last lines but runs into the next package.
+    const crossing = {
+      change: {filename: OFFICIAL_PACKAGES, status: 'M'},
+      patches: {
+        [OFFICIAL_PACKAGES]: `@@ -19,4 +19,8 @@\n${ownEntry.join('\n')}`,
+      },
+    };
+    expect(entry(crossing, baseWithNext)).toBe(false);
+  });
+
+  it("refuses the discovery list when the base's copy is missing", () => {
+    expect(entry(discovery(ownEntry), null)).toBe(false);
+  });
+
+  it('refuses a line that is not a component entry', () => {
+    expect(
+      entry(
+        discovery(ownEntry.map(line => line.replace('"component"', '"hook"'))),
+        base,
+      ),
+    ).toBe(false);
+  });
+
+  it("refuses an edit outside Lab's part of the base", () => {
+    expect(entry(discovery(ownEntry, 6), base)).toBe(false);
+  });
+
+  it('derives the same route slug as the registry for every Lab folder', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const {slugifyRegistryName} =
+      await import('../../apps/docsite/src/lib/shadcnRegistry.mjs');
+    const root = path.resolve(import.meta.dirname, '../..');
+    const folders = fs
+      .readdirSync(path.join(root, 'packages/lab/src'), {withFileTypes: true})
+      .filter(entry => entry.isDirectory() && /^[A-Z]/.test(entry.name))
+      .map(entry => entry.name);
+    expect(folders.length).toBeGreaterThan(0);
+    for (const name of [...folders, 'SVGIcon', 'ThreeDBar', 'CommentPin']) {
+      expect(labRouteSlug(name), name).toBe(slugifyRegistryName(name));
+    }
+    expect(labRouteSlug('SVGIcon')).toBe('svg-icon');
+  });
+});
+
+describe('Lab component folders (spec:AST-030 FR26)', () => {
+  it('reads a carried component only from a component folder, not a shared one', () => {
+    const {ROUTES_LOCK} = require('./change-scope.cjs');
+    const routePatch = [
+      '@@ -556,6 +556,11 @@',
+      '+    {',
+      '+      "name": "component-lab-tests",',
+      '+      "path": "components/lab/tests",',
+      '+      "aliases": []',
+      '+    },',
+    ].join('\n');
+    const result = classifyChanges(
+      [
+        {filename: 'packages/lab/src/__tests__/helpers.ts', status: 'M'},
+        {filename: ROUTES_LOCK, status: 'M'},
+      ],
+      {patches: {[ROUTES_LOCK]: routePatch}},
+    );
+    expect(result.labOnly).toBe(false);
   });
 });

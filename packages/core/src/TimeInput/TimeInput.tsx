@@ -31,6 +31,7 @@ import {
   type FocusEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   colorVars,
   sizeVars,
@@ -77,7 +78,7 @@ import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useTooltip} from '../Tooltip';
 import {themeProps} from '../utils/themeProps';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {
   formatLocaleTime,
   parseLocaleTime,
@@ -94,22 +95,17 @@ import {
 } from '../utils/inputPresentation';
 import {useDevWarning} from '../hooks/useDevWarning';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TimeInput/TimeInput.generated';
+
+registerEnglishFallback(english);
 
 const TOUCH_POINTER_QUERY = '(pointer: coarse)';
 
 const styles = stylex.create({
-  // The shared disabled style drops the focus ring; restore it while a
-  // control inside the field holds focus (spec:AST-085 FR6). Defaults repeat it.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':focus-within': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   icon: {
     display: 'flex',
     alignItems: 'center',
@@ -454,7 +450,7 @@ function TimeField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -495,6 +491,8 @@ function TimeField({
   // region mounted together with its content is not reliably announced.
   // Ungrouped mode delegates to Field -> FieldStatus, which announces itself.
   const announce = useAnnounce();
+  // Syncs the live region with `status.message` when the field is in an
+  // InputGroup.
   useEffect(() => {
     if (inputGroup && status?.message) {
       announce(
@@ -785,7 +783,7 @@ function TimeField({
           inputWrapperStyles.base,
           sizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
-          isDisabled && styles.disabledFocusRing,
+          isDisabled && inputDisabledFocusStyles.withinRing,
           status && inputStatusBorderStyles[status.type],
           status && !isDisabled && inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],

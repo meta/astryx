@@ -159,6 +159,42 @@ function isPlatformComponentSpecPath(filePath) {
 }
 
 /**
+ * A package's own architecture record:
+ * `packages/<package>/specs/…/<slug>.spec.md`. Its id is `architecture:`
+ * followed by the package name, each directory between `specs/` and the file,
+ * and the slug, joined by hyphens
+ * (`packages/native/specs/swift/accessibility.spec.md` is
+ * `architecture:native-swift-accessibility`). Null for any other path.
+ */
+function classifyPackageArchitectureRecordPath(filePath) {
+  const match = /^packages\/([^/]+)\/specs\/(.+)$/.exec(
+    normalizePath(filePath),
+  );
+  if (!match) return null;
+  const segments = match[2].split('/');
+  const fileName = segments.pop();
+  if (
+    !/^[a-z0-9][a-z0-9-]*\.spec\.md$/.test(fileName) ||
+    fileName.endsWith('.generated.spec.md') ||
+    segments.some(
+      segment =>
+        segment.startsWith('.') || isIgnoredComponentKnowledgeSegment(segment),
+    )
+  ) {
+    return null;
+  }
+  const slug = fileName.slice(0, -'.spec.md'.length);
+  return {
+    packageName: match[1],
+    id: `architecture:${[match[1], ...segments, slug].join('-')}`,
+  };
+}
+
+function isPackageArchitectureRecordPath(filePath) {
+  return classifyPackageArchitectureRecordPath(filePath) !== null;
+}
+
+/**
  * A platform language's component code file:
  * `<source root>/<Module>/<ComponentRoot>/…/<file>`. Returns the language,
  * component root, and file stem; null for any other path, a spec file, or a
@@ -342,6 +378,86 @@ function componentSpecPathForSource(packageName, relativePath) {
   return `${COMPONENT_SPEC_ROOT}/${segments.join('/')}`;
 }
 
+/**
+ * A knowledge record `check:knowledge` discovers and validates: a system spec
+ * or plan, a family, architecture or design record, a theme record, a
+ * package's own architecture record, or a component or module record.
+ * `scripts/check-knowledge.mjs` reads records through this predicate, and its
+ * test pins it to the tool's discovery.
+ */
+function isKnowledgeRecordPath(filePath) {
+  const normalized = normalizePath(filePath);
+  if (/^docs\/(?:architecture|design|families)\/[^/]+\.md$/.test(normalized)) {
+    return !normalized.endsWith('/README.md');
+  }
+  if (/^docs\/specs\/[^/]+\/(?:spec|plan)\.md$/.test(normalized)) {
+    return true;
+  }
+  const themeMatch = /^packages\/themes\/([^/]+)\/([^/]+)\.spec\.md$/.exec(
+    normalized,
+  );
+  if (themeMatch) return themeMatch[1] === themeMatch[2];
+  if (classifyPackageArchitectureRecordPath(normalized)) return true;
+  return isComponentSpecRecordPath(normalized);
+}
+
+/**
+ * A file `check:knowledge` validates as a record of its own: a knowledge
+ * record or a platform component record. Its front matter states its
+ * authority.
+ */
+function isValidatedRecordPath(filePath) {
+  return (
+    isKnowledgeRecordPath(filePath) || isPlatformComponentSpecPath(filePath)
+  );
+}
+
+/**
+ * A path whose change needs a spec owner's approval: every validated record;
+ * every Markdown file in a record location, whether a record or not (a
+ * generated table beside a spec, a draft or README under a package's
+ * `specs/`); theme record candidates `check:knowledge` rejects as misplaced;
+ * a component spec at a legacy location; and the normative design assets.
+ * Ignored locations (isIgnoredKnowledgeLocation) stay ignored.
+ */
+const OWNER_GATED_PATTERNS = Object.freeze([
+  /^docs\/specs\/.+\.md$/,
+  /^docs\/(?:architecture|design|families)\/(?!README\.md$)[^/]+\.md$/,
+  /^docs\/design\/assets\//,
+  /^docs\/themes\/(?!README\.md$)[^/]+\.md$/,
+  /^packages\/themes\/[^/]+\/(?:.*\/)?[^/]+\.spec\.md$/,
+  /^packages\/[^/]+\/specs\/.+\.md$/,
+  /^packages\/[^/]+\/docs\/architecture\/.+\.md$/,
+]);
+
+/**
+ * A hidden, fixture, test, generated, build-output, coverage or dependency
+ * path, or a `*.generated.spec.md`: discovery and pull-request routing ignore
+ * it everywhere (`architecture:knowledge-contracts`).
+ */
+function isIgnoredKnowledgeLocation(filePath) {
+  const segments = normalizePath(filePath).split('/');
+  const fileName = segments.pop();
+  return (
+    fileName.startsWith('.') ||
+    fileName.endsWith('.generated.spec.md') ||
+    segments.some(
+      segment =>
+        segment.startsWith('.') || isIgnoredComponentKnowledgeSegment(segment),
+    )
+  );
+}
+
+function isOwnerGatedPath(filePath) {
+  const normalized = normalizePath(filePath);
+  return (
+    isValidatedRecordPath(normalized) ||
+    isLegacyComponentSpecPath(normalized) ||
+    (!isIgnoredKnowledgeLocation(normalized) &&
+      OWNER_GATED_PATTERNS.some(pattern => pattern.test(normalized)))
+  );
+}
+
 module.exports = {
   COMPONENT_PACKAGE_NAMES,
   COMPONENT_SPEC_ROOT,
@@ -349,12 +465,17 @@ module.exports = {
   PLATFORM_SOURCE_ROOTS,
   PLATFORM_SPEC_LANGUAGES,
   classifyComponentKnowledgePath,
+  classifyPackageArchitectureRecordPath,
   classifyPlatformComponentSpecPath,
   componentSpecPathForSource,
   isComponentSpecRecordPath,
   isIgnoredComponentKnowledgeSegment,
+  isKnowledgeRecordPath,
   isLegacyComponentSpecPath,
+  isOwnerGatedPath,
+  isPackageArchitectureRecordPath,
   isPlatformComponentSpecPath,
+  isValidatedRecordPath,
   locateComponentKnowledgePath,
   locatePlatformComponentSource,
   resolveComponentPackage,

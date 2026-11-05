@@ -5,41 +5,25 @@
 /**
  * @file interactionModality.ts
  * @input Global pointerdown/keydown events
- * @output `useInteractionModalityTracking()` activates tracking for the page and
- *   returns a callback ref that tracks the element's second document, if any,
- *   with a reader for that element's own document;
- *   `useInteractionModalityTrackingFor(objectRef)` does the same for hooks
- *   that receive a consumer's object ref;
- *   `getInteractionModality(target?)` reads how the user last interacted in a
- *   node's or document's own document (the page by default)
- * @position Internal document-wide singleton; used where `:focus-visible` alone
- *   is too broad
- *
- * `:focus-visible` is the right selector for a focus ring and should stay the
- * condition that draws one. It is not, on its own, "focused by keyboard":
- * per CSS Selectors 4 a pointer-focused element that supports text entry
- * matches it too, deliberately, so that a clicked text field still shows where
- * typing will go. Measured in Chromium — a bare `<input>` clicked with a mouse
- * matches `:focus-visible`.
- *
- * A component that wants a ring for keyboard focus ONLY therefore needs one bit
- * `:focus-visible` cannot give it: which device moved focus. This records that,
- * to be used as a gate ALONGSIDE `:focus-visible`, never as a replacement for
- * it — the browser's heuristic still decides everything else, including
- * `focus({focusVisible: true})`.
- *
- * The store lives on `document`, so duplicate Astryx bundles share one state
- * value and one listener pair. The first mounted consumer activates tracking;
- * the listeners then remain for the document lifetime so input during a gap
- * between consumers is not lost. A second document (a same-origin iframe, a
- * Document Picture-in-Picture window) gets its own store when a component
- * tracks it, since input there never reaches the page's listeners; its
- * listeners stay only while a consumer there is mounted. A component attaches
- * the one hook's callback ref to its element and gets both; it never tracks a
- * document itself. Importing this module
- * has no DOM side effects, and server rendering keeps the keyboard-safe
- * default.
+ * @output useInteractionModalityTracking, useInteractionModalityTrackingFor,
+ *   and getInteractionModality, which reads how the user last interacted in a
+ *   document
+ * @position Internal document-wide singleton; used where `:focus-visible`
+ *   alone is too broad
  */
+
+// `:focus-visible` stays the condition that draws a focus ring. But it also
+// matches a text field that a pointer focused, so a clicked field shows where
+// typing goes. A ring for keyboard focus only needs to know which device
+// moved focus. Use this as a gate beside `:focus-visible`, never in its
+// place.
+//
+// The store lives on `document`, so duplicate Astryx bundles share one state
+// and one listener pair. The page's listeners stay for the document lifetime,
+// so input between consumers is not lost. A second document (a same-origin
+// iframe, a Document Picture-in-Picture window) gets its own store while a
+// consumer there is mounted. Importing this module has no DOM side effects,
+// and server rendering keeps the keyboard-safe default.
 
 import {
   useCallback,
@@ -176,7 +160,7 @@ export type InteractionModalityTracking = {
    * a callback ref of the component's own without returning its cleanup).
    * While the element lives in a second document (a same-origin iframe, a
    * Document Picture-in-Picture window), that document is tracked; detaching
-   * or replacing the node releases it first (INV6).
+   * or replacing the node releases it first.
    */
   ref: RefCallback<Element>;
   /** How the user last interacted in the element's own document. */
@@ -219,6 +203,7 @@ function holdNodeDocument(
  * tracker of its own for modality.
  */
 export function useInteractionModalityTracking(): InteractionModalityTracking {
+  // Syncs the document's interaction-modality tracking with this mount.
   useEffect(() => trackInteractionModality(), []);
   const nodeRef = useRef<Element | null>(null);
   const holdRef = useRef<{release: (() => void) | null}>({release: null});
@@ -246,13 +231,16 @@ export function useInteractionModalityTracking(): InteractionModalityTracking {
  * The same, for a hook that receives an object ref its consumer owns
  * (useMenuPress's `menuRef`, useTouchTrigger's trigger), so it cannot attach a
  * callback ref. After every commit it holds the ref's CURRENT owner document,
- * and the same Effect's cleanup releases it (INV3), so a detached, replaced or
- * moved node releases the old document before the new one is held (INV6).
+ * and the same Effect's cleanup releases it, so a detached, replaced or moved
+ * node releases the old document before the new one is held.
  */
 export function useInteractionModalityTrackingFor(
   elementRef: RefObject<Element | null>,
 ): () => InteractionModality {
+  // Syncs the document's interaction-modality tracking with this mount.
   useEffect(() => trackInteractionModality(), []);
+  // Syncs modality tracking in the element's second document, such as an iframe
+  // or a Picture-in-Picture window.
   useEffect(() => {
     const ownerDocument = elementRef.current?.ownerDocument;
     if (

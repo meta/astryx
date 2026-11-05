@@ -70,26 +70,39 @@ describe('main validation dispatch', () => {
     };
   }
 
-  it('keeps one validation of main at a time, and lets only a workflow-token re-check cancel it', () => {
-    for (const event of ['push', 'workflow_dispatch'])
-      expect(concurrencyFor({event})).toEqual({
-        group: 'main-validation',
+  it('keeps one full unit run of main at a time, apart from the fast checks of pushes, and lets only a workflow-token re-check cancel it', () => {
+    // A push's fast checks queue among themselves (spec:AST-030 FR21).
+    expect(concurrencyFor({event: 'push'})).toEqual({
+      group: 'main-validation',
+      cancel: false,
+    });
+    // The scheduler's unit run, which names main's tip, and a person's run of
+    // the tip queue in the unit-run group, which no push cancels.
+    for (const options of [{sha: OLDER}, {}, {actor: 'someone'}])
+      expect(concurrencyFor(options)).toEqual({
+        group: 'main-unit-tests',
         cancel: false,
       });
-    expect(concurrencyFor({recheck: true})).toEqual({
-      group: 'main-validation',
-      cancel: true,
-    });
+    // A release re-check names main's tip and takes the unit-run group.
+    for (const options of [{recheck: true}, {recheck: true, sha: OLDER}])
+      expect(concurrencyFor(options)).toEqual({
+        group: 'main-unit-tests',
+        cancel: true,
+      });
     // A person's re-check waits like any other validation.
     expect(concurrencyFor({recheck: true, actor: 'someone'})).toEqual({
-      group: 'main-validation',
+      group: 'main-unit-tests',
       cancel: false,
     });
   });
 
-  it('runs a dispatch that names a commit in a group of its own, which cancels and replaces nothing', () => {
+  it("runs a person's dispatch that names a commit in a group of its own, which cancels and replaces nothing", () => {
     for (const recheck of [false, true]) {
-      const {group, cancel} = concurrencyFor({sha: OLDER, recheck});
+      const {group, cancel} = concurrencyFor({
+        sha: OLDER,
+        recheck,
+        actor: 'someone',
+      });
       expect(group).toBe('main-validation-sha-77');
       expect(cancel).toBe(false);
     }

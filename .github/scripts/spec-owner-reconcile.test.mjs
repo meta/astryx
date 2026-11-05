@@ -378,6 +378,53 @@ function createDesignHarness(options = {}) {
 }
 
 describe('spec owner workflow reconciliation', () => {
+  it.each([
+    [
+      'a generated table beside a spec',
+      'docs/specs/AST-094-touch-presentations/motion-roles.md',
+      '<!-- Generated. Do not edit. -->\n\n# Motion roles\n\n| role |\n',
+    ],
+    [
+      'a README that shows front-matter examples',
+      'packages/native/specs/README.md',
+      [
+        '# Native specs',
+        '',
+        '```md',
+        '---',
+        'authority: draft',
+        '---',
+        '```',
+        '',
+        '```md',
+        '---',
+        'authority: current',
+        '---',
+        '```',
+        '',
+      ].join('\n'),
+    ],
+  ])(
+    'waits for an engineering owner on %s, and its details say so',
+    async (_, filename, headContent) => {
+      const harness = createHarness({
+        changedFile: {filename, status: 'modified'},
+        baseContent: '# Before\n',
+        headContent,
+      });
+
+      await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+      expect(latestGateStatus(harness.state)).toMatchObject({
+        state: 'pending',
+        description: 'Mirrors review-required · spec waiting (eng)',
+      });
+      expect(harness.state.summary).toContain('| eng owner |');
+      expect(harness.state.summary).toContain('no authority');
+      expect(harness.state.summary).not.toContain('none (draft)');
+    },
+  );
+
   it('skips the owner reads and the label call for a pull request that changes no records', async () => {
     const harness = createHarness({
       changedFile: {filename: 'README.md', status: 'modified'},
@@ -608,6 +655,49 @@ describe('spec owner workflow reconciliation', () => {
       ).toBe(false);
     },
   );
+
+  it('keeps a package architecture record made current pending without exact-head approval', async () => {
+    const record = authority =>
+      `---\nkind: architecture\nid: architecture:native-swift-slots\nauthority: ${authority}\n---\n\nA slot is a typed view.\n`;
+    const harness = createHarness({
+      changedFile: {
+        filename: 'packages/native/specs/swift/slots.spec.md',
+        status: 'modified',
+      },
+      baseContent: record('draft'),
+      headContent: record('current'),
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(latestGateStatus(harness.state)).toMatchObject({
+      state: 'pending',
+      description: 'Mirrors review-required · spec waiting (eng)',
+    });
+    expect(harness.state.calls).not.toContain('enable-auto-merge');
+  });
+
+  it('needs no owner approval for an edit to a draft package architecture record', async () => {
+    const record = body =>
+      `---\nkind: architecture\nid: architecture:native-swift-slots\nauthority: draft\n---\n\n${body}\n`;
+    const harness = createHarness({
+      changedFile: {
+        filename: 'packages/native/specs/swift/slots.spec.md',
+        status: 'modified',
+      },
+      baseContent: record('A slot is a view.'),
+      headContent: record('A slot is a typed view.'),
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(latestReviewGate(harness.state).state).toBe('success');
+    expect(
+      harness.state.calls.some(call =>
+        call.includes('No knowledge records changed'),
+      ),
+    ).toBe(false);
+  });
 
   it('keeps a Swift platform record made current pending without exact-head approval', async () => {
     const harness = createHarness({

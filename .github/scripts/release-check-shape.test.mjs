@@ -244,8 +244,9 @@ describe('release re-check trigger', () => {
         repo: 'r',
         workflow_id: 'deploy.yml',
         ref: 'main',
-        // Without `sha`: only a tip re-check takes the validation group.
-        inputs: {recheck: 'true'},
+        // Naming the tip, so the run is that commit's unit-run receipt
+        // (spec:AST-030 FR21).
+        inputs: {sha: TIP, recheck: 'true'},
       },
     ]);
   });

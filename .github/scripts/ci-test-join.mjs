@@ -20,6 +20,10 @@ const requiredSuccess = [
   ['test-native-swift', process.env.TEST_NATIVE_SWIFT_RESULT],
   ['pr-interaction', process.env.PR_INTERACTION_RESULT],
   ['pr-interaction-webkit', process.env.PR_INTERACTION_WEBKIT_RESULT],
+  [
+    'pr-component-a11y-contracts',
+    process.env.PR_COMPONENT_A11Y_CONTRACTS_RESULT,
+  ],
 ];
 
 function fail(message) {
@@ -46,6 +50,7 @@ const scopes = [
   ['docsite_only', process.env.DOCSITE_ONLY],
   ['spec_only', process.env.SPEC_ONLY],
   ['tooling_only', process.env.TOOLING_ONLY],
+  ['lab_only', process.env.LAB_ONLY],
 ];
 for (const [name, value] of scopes) {
   if (value !== 'true' && value !== 'false') {
