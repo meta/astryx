@@ -219,10 +219,9 @@ const expansionStyles = stylex.create({
       color: colorVars['--color-icon-primary'],
     },
   },
-  // A box the size of the default glyph that holds whatever the slot
-  // resolves, centred and out of flow. The button then takes its baseline
-  // from this box, so a theme's glyph size or a hidden glyph leaves the row
-  // height as the default glyph sets it.
+  // The button takes its baseline from this fixed box. A theme's glyph size
+  // or a hidden glyph then keeps the row height. The box is the toggle's
+  // first child, which the glide gives its spring, so it carries the turn.
   glyphBox: {
     display: 'inline-block',
     position: 'relative',
@@ -406,18 +405,20 @@ function ExpansionChevron({
       }}
       aria-label={ariaLabel}
       aria-expanded={isExpanded}>
-      <span {...stylex.props(expansionStyles.glyphBox, iconBoxSizeStyles.xsm)}>
+      <span
+        {...stylex.props(
+          expansionStyles.glyphBox,
+          iconBoxSizeStyles.xsm,
+          expansionStyles.chevron,
+          isExpanded
+            ? expansionStyles.chevronExpanded
+            : expansionStyles.chevronCollapsed,
+        )}>
         <span {...stylex.props(expansionStyles.glyphCenter)}>
           <ComponentIcon
             slot="table-row-expand"
             state={{expanded: isExpanded}}
             fallback={{icon: 'chevronRight', size: 'xsm'}}
-            xstyle={[
-              expansionStyles.chevron,
-              isExpanded
-                ? expansionStyles.chevronExpanded
-                : expansionStyles.chevronCollapsed,
-            ]}
           />
         </span>
       </span>

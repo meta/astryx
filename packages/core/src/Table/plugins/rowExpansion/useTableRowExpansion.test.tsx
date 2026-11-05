@@ -341,7 +341,9 @@ describe('useTableRowExpansion (detail panel)', () => {
     // has to sit on the glyph instead.
     render(<Harness initialExpanded={new Set(['a'])} />);
     const button = screen.getAllByRole('button', {name: /collapse row/i})[0];
-    const glyph = button.querySelector('svg')?.parentElement;
+    // The glyph's box, the button's first child, turns with the glyph in it.
+    const glyph = button.querySelector<HTMLElement>(':scope > *');
+    expect(glyph?.querySelector('svg')).not.toBeNull();
     expect(glyph).toHaveStyle({transform: 'rotate(90deg)'});
     expect(button).not.toHaveStyle({transform: 'rotate(90deg)'});
   });
@@ -830,10 +832,13 @@ describe('row expansion icon slot', () => {
 
     expect(glyph(expanded)).toBe('chevronRight');
     expect(glyph(collapsed)).toBe('chevronRight');
-    // The component keeps the turn: the two states style the glyph apart.
-    expect(expanded.querySelector('.astryx-icon')?.className).not.toBe(
-      collapsed.querySelector('.astryx-icon')?.className,
-    );
+    // The component keeps the turn on the toggle's first child, the element
+    // the glide gives its spring: the two states style it apart.
+    const turned = (toggle: HTMLElement) => toggle.querySelector(':scope > *');
+    expect(turned(expanded)?.className).not.toBe(turned(collapsed)?.className);
+    expect(
+      turned(expanded)?.contains(expanded.querySelector('.astryx-icon')),
+    ).toBe(true);
   });
 
   it('passes `expanded` to a slot function and draws the name it returns', () => {
