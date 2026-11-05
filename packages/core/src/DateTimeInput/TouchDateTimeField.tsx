@@ -703,7 +703,7 @@ export function TouchDateTimeField({
   const calendarSurfaceRef = useRef<HTMLDivElement | null>(null);
   const wheelsSurfaceRef = useRef<HTMLDivElement | null>(null);
   const {isTouch} = useTouchPresentation();
-  const {isCalendarInert, isWheelsInert, isFading} = useFadeInert(
+  const {isCalendarInert, isWheelsInert, isFading, followFocus} = useFadeInert(
     isWheelOpen,
     calendarSurfaceRef,
     wheelsSurfaceRef,
@@ -1161,7 +1161,10 @@ export function TouchDateTimeField({
             <button
               ref={chevronDipRef}
               type="button"
-              onClick={() => setIsWheelOpen(open => !open)}
+              onClick={() => {
+                followFocus(!isWheelOpen);
+                setIsWheelOpen(!isWheelOpen);
+              }}
               aria-expanded={isWheelOpen}
               aria-label={t('@astryx.dateInput.chooseMonthYear', {
                 monthYear: monthYearLabel,
@@ -1326,7 +1329,10 @@ export function TouchDateTimeField({
                   size="md"
                   width="100%"
                   label={t('@astryx.dateInput.doneChoosingMonth')}
-                  onClick={() => setIsWheelOpen(false)}
+                  onClick={() => {
+                    followFocus(false);
+                    setIsWheelOpen(false);
+                  }}
                 />
               </div>
             </div>

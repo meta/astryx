@@ -5,16 +5,16 @@
  * @file useFadeInert.ts
  * @input Whether the month/year wheels are open, and the two panels the
  *   month/year toggle cross-fades (the calendar and the wheels)
- * @output Exports `useFadeInert`: which panel is `inert`, and whether the
- *   toggle's cross-fade is running
+ * @output Exports `useFadeInert`: which panel is `inert`, whether the
+ *   toggle's cross-fade runs, and the toggle's focus hand-off
  * @position Internal hook of TouchDateField.tsx and TouchDateTimeField.tsx
  *
  * Under a finger, the panels swap `inert` when the outgoing panel's exit
- * ends. With a mouse they swap it with the toggle. Focus in the outgoing
- * panel moves to the incoming one with the toggle.
+ * ends. With a mouse they swap it with the toggle. The toggle's handler calls
+ * `followFocus`, so focus leaves the outgoing panel in the toggle's commit.
  */
 
-import {useRef, useState, type RefObject} from 'react';
+import {useCallback, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 
 const FOCUSABLE =
@@ -56,7 +56,12 @@ export function useFadeInert(
    * with the toggle, so a click right after it lands.
    */
   isDeferred: boolean,
-): {isCalendarInert: boolean; isWheelsInert: boolean; isFading: boolean} {
+): {
+  isCalendarInert: boolean;
+  isWheelsInert: boolean;
+  isFading: boolean;
+  followFocus: (next: boolean) => void;
+} {
   // `settled`: the toggle state whose exit has ended. `focusedFor`: the
   // toggle state whose incoming panel took focus, and so is live early.
   const [{settled, focusedFor}, setFade] = useState<{
@@ -130,32 +135,34 @@ export function useFadeInert(
     };
   }, [isFading, isWheelOpen, calendarRef, wheelsRef]);
 
-  // Synchronizes with the document's focus. Focus inside the outgoing panel
-  // moves to the incoming one with the toggle, never staying in a fading
-  // panel. The incoming panel goes live first (focus cannot
-  // land in an inert one), then takes focus.
-  const shownRef = useRef(isWheelOpen);
   const pendingFocusRef = useRef<HTMLElement | null>(null);
-  useIsomorphicLayoutEffect(() => {
-    if (shownRef.current === isWheelOpen) {
-      return;
-    }
-    shownRef.current = isWheelOpen;
-    const outgoing = (isWheelOpen ? calendarRef : wheelsRef).current;
-    const incoming = (isWheelOpen ? wheelsRef : calendarRef).current;
-    const active = outgoing?.ownerDocument.activeElement ?? null;
-    if (
-      outgoing == null ||
-      incoming == null ||
-      active == null ||
-      !outgoing.contains(active)
-    ) {
-      return;
-    }
-    pendingFocusRef.current = incoming;
-    // eslint-disable-next-line @eslint-react/set-state-in-effect -- focus inside the outgoing panel is known only once the toggle has committed
-    setFade(fade => ({...fade, focusedFor: isWheelOpen}));
-  }, [isWheelOpen, calendarRef, wheelsRef]);
+  /**
+   * The toggle's event handler calls this before it changes the state, with
+   * the state it sets. Focus inside the outgoing panel then moves to the
+   * incoming one in the toggle's commit, never staying in a fading panel.
+   */
+  const followFocus = useCallback(
+    (next: boolean) => {
+      const outgoing = (next ? calendarRef : wheelsRef).current;
+      const incoming = (next ? wheelsRef : calendarRef).current;
+      const active = outgoing?.ownerDocument.activeElement ?? null;
+      if (
+        outgoing == null ||
+        incoming == null ||
+        active == null ||
+        !outgoing.contains(active)
+      ) {
+        return;
+      }
+      pendingFocusRef.current = incoming;
+      // The incoming panel goes live with the toggle: focus cannot land in an
+      // inert one.
+      setFade(fade => ({...fade, focusedFor: next}));
+    },
+    [calendarRef, wheelsRef],
+  );
+  // Synchronizes with the document's focus: the incoming panel takes it once
+  // it is live.
   useIsomorphicLayoutEffect(() => {
     const incoming = pendingFocusRef.current;
     if (incoming == null || incoming.inert) {
@@ -171,6 +178,7 @@ export function useFadeInert(
       isCalendarInert: isWheelOpen,
       isWheelsInert: !isWheelOpen,
       isFading: false,
+      followFocus,
     };
   }
   const isIncomingLive = isFading && focusedFor === isWheelOpen;
@@ -182,5 +190,6 @@ export function useFadeInert(
       ? !settled && !(isIncomingLive && isWheelOpen)
       : !isWheelOpen,
     isFading,
+    followFocus,
   };
 }

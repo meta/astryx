@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {act, render} from '@testing-library/react';
-import {useLayoutEffect, useRef} from 'react';
+import {act, fireEvent, render} from '@testing-library/react';
+import {useLayoutEffect, useRef, useState} from 'react';
 import {describe, expect, it} from 'vitest';
 import {useFadeInert} from './useFadeInert';
 
@@ -9,10 +9,13 @@ function Panels({
   isWheelOpen,
   isDeferred = true,
   onCommit,
+  onToggle,
 }: {
   isWheelOpen: boolean;
   isDeferred?: boolean;
   onCommit?: () => void;
+  /** Renders a toggle that hands focus over, as the sheets' handlers do. */
+  onToggle?: (next: boolean) => void;
 }) {
   // Every commit, to count the renders a toggle costs.
   useLayoutEffect(() => {
@@ -20,7 +23,7 @@ function Panels({
   });
   const calendarRef = useRef<HTMLDivElement | null>(null);
   const wheelsRef = useRef<HTMLDivElement | null>(null);
-  const {isCalendarInert, isWheelsInert} = useFadeInert(
+  const {isCalendarInert, isWheelsInert, followFocus} = useFadeInert(
     isWheelOpen,
     calendarRef,
     wheelsRef,
@@ -28,6 +31,16 @@ function Panels({
   );
   return (
     <>
+      {onToggle != null && (
+        <button
+          type="button"
+          onClick={() => {
+            followFocus(!isWheelOpen);
+            onToggle(!isWheelOpen);
+          }}>
+          Toggle
+        </button>
+      )}
       <div
         ref={calendarRef}
         data-testid="calendar"
@@ -43,6 +56,18 @@ function Panels({
         <div role="listbox" aria-label="Month" tabIndex={0} />
       </div>
     </>
+  );
+}
+
+/** Panels behind a toggle that owns the state. */
+function TogglePanels({onCommit}: {onCommit?: () => void}) {
+  const [isWheelOpen, setIsWheelOpen] = useState(false);
+  return (
+    <Panels
+      isWheelOpen={isWheelOpen}
+      onCommit={onCommit}
+      onToggle={setIsWheelOpen}
+    />
   );
 }
 
@@ -174,32 +199,31 @@ describe('useFadeInert', () => {
     expect(view.getByTestId('wheels').hasAttribute('inert')).toBe(false);
   });
 
-  it('moves focus inside the outgoing panel to the incoming one with the toggle', () => {
-    const view = render(<Panels isWheelOpen={false} />);
+  it('moves focus inside the outgoing panel to the incoming one in the toggle\u2019s commit', () => {
+    let commits = 0;
+    const view = render(
+      <TogglePanels
+        onCommit={() => {
+          commits += 1;
+        }}
+      />,
+    );
     const calendar = view.getByTestId('calendar');
     fading(calendar, view.getByTestId('wheels'));
     calendar.querySelector('button')!.focus();
-    view.rerender(<Panels isWheelOpen />);
+    commits = 0;
+    fireEvent.click(view.getByRole('button', {name: 'Toggle'}));
     // The incoming panel goes live with the toggle to take focus.
     expect(view.getByTestId('wheels').hasAttribute('inert')).toBe(false);
     expect(document.activeElement).toBe(view.getByRole('listbox'));
+    expect(commits).toBe(1);
   });
 
   it('leaves focus outside the panels where it is', () => {
-    const view = render(
-      <>
-        <button type="button">Title</button>
-        <Panels isWheelOpen={false} />
-      </>,
-    );
-    const title = view.getByRole('button', {name: 'Title'});
-    title.focus();
-    view.rerender(
-      <>
-        <button type="button">Title</button>
-        <Panels isWheelOpen />
-      </>,
-    );
-    expect(document.activeElement).toBe(title);
+    const view = render(<TogglePanels />);
+    const toggle = view.getByRole('button', {name: 'Toggle'});
+    toggle.focus();
+    fireEvent.click(toggle);
+    expect(document.activeElement).toBe(toggle);
   });
 });
