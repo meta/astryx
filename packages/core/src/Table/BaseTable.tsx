@@ -600,9 +600,61 @@ function BaseTableInner<T extends Record<string, unknown>>({
         }
       : mergedStyle;
 
-  // Keys the body rows resolved so far, so a repeated id resolves only its
-  // first row and the rest stay inert with one development diagnostic.
-  const seenRowKeys = new Set<string | number>();
+  // Canonical identity for the new-capability path. A plugin consumes
+  // identity by declaring the internal fourth `transformBodyRow` argument;
+  // until the parent row-context protocol lands, that arity is the opt-in
+  // signal. Tables without such a plugin keep released key behavior exactly,
+  // with no diagnostics.
+  const canonicalIdentityOptIn = plugins.some(
+    p => p.transformBodyRow != null && p.transformBodyRow.length >= 4,
+  );
+  const isFunctionIdKey = typeof idKey === 'function';
+  // Property-name keys convert valid strings and finite numbers with
+  // `String`; function keys keep their string/finite-number type. Missing,
+  // null, nonprimitive, nonfinite, and duplicate values are invalid.
+  const projectCanonicalKey = (raw: unknown): string | number | undefined => {
+    if (typeof raw === 'string') {
+      return raw;
+    }
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      return isFunctionIdKey ? raw : String(raw);
+    }
+    return undefined;
+  };
+  // First pass over the logical dataset, so a repeated value invalidates
+  // every row that shares it rather than the losers alone.
+  const canonicalKeys: (string | number | undefined)[] =
+    canonicalIdentityOptIn && idKey != null && hasData
+      ? data.map(item =>
+          projectCanonicalKey(
+            typeof idKey === 'function' ? idKey(item) : item[idKey],
+          ),
+        )
+      : [];
+  const canonicalCounts = new Map<string | number, number>();
+  for (const key of canonicalKeys) {
+    if (key !== undefined) {
+      canonicalCounts.set(key, (canonicalCounts.get(key) ?? 0) + 1);
+    }
+  }
+  const resolvedKeys: (string | number | undefined)[] = canonicalKeys.map(
+    key =>
+      key !== undefined && (canonicalCounts.get(key) ?? 0) > 1
+        ? undefined
+        : key,
+  );
+  if (
+    resolvedKeys.some(
+      (key, index) => key === undefined && canonicalKeys[index] !== undefined,
+    )
+  ) {
+    warnOnce(
+      'table-duplicate-row-key',
+      'Table',
+      'Table rows share an idKey value, so those rows carry no stable identity. ' +
+        'Give every row a unique id.',
+    );
+  }
 
   let tableElement: ReactNode = (
     <table
@@ -635,44 +687,38 @@ function BaseTableInner<T extends Record<string, unknown>>({
           <TableBody>
             {hasData
               ? data.map((item, rowIndex) => {
-                  // The canonical key plugins consume. A missing property
-                  // key resolves to no identity (`String(undefined)` would
-                  // hand out a stable-looking `"undefined"` instead), and a
-                  // repeated key resolves only its first row: duplicates stay
-                  // inert with one development diagnostic rather than sharing
-                  // one current state.
-                  const rawKey =
-                    idKey == null
-                      ? undefined
-                      : typeof idKey === 'function'
-                        ? (idKey(item) ?? undefined)
-                        : (item[idKey] ?? undefined);
-                  let resolvedRowKey =
-                    rawKey === undefined
-                      ? undefined
-                      : typeof rawKey === 'number' || typeof rawKey === 'string'
-                        ? rawKey
-                        : String(rawKey);
-                  if (resolvedRowKey !== undefined) {
-                    if (seenRowKeys.has(resolvedRowKey)) {
-                      warnOnce(
-                        'table-duplicate-row-key',
-                        'Table',
-                        'Table rows share an idKey value, so only the first such row carries stable identity. ' +
-                          'Give every row a unique id.',
-                      );
-                      resolvedRowKey = undefined;
-                    } else {
-                      seenRowKeys.add(resolvedRowKey);
-                    }
-                  }
+                  // The canonical key identity consumers use. Without the
+                  // opt-in this is the released logic exactly: the row index,
+                  // the function result, or the string projection (even of a
+                  // missing value). On the opt-in path a valid unique key
+                  // resolves, anything else stays inert with a deterministic
+                  // per-record fallback; function keys keep their type in
+                  // callbacks while type-tagged React keys tell numeric `0`
+                  // from string `"0"`.
+                  const resolvedRowKey =
+                    canonicalIdentityOptIn && idKey != null
+                      ? resolvedKeys[rowIndex]
+                      : undefined;
                   const rowKey =
-                    idKey == null
-                      ? rowIndex
-                      : (resolvedRowKey ?? `row:${rowIndex}`);
+                    canonicalIdentityOptIn && idKey != null
+                      ? (resolvedRowKey ?? `row:${rowIndex}`)
+                      : idKey == null
+                        ? rowIndex
+                        : typeof idKey === 'function'
+                          ? idKey(item)
+                          : String(item[idKey]);
+                  // Type-tagged reconciliation keys live only on the
+                  // new-capability function-key path; property keys keep the
+                  // released string projection.
+                  const reactKey =
+                    canonicalIdentityOptIn &&
+                    isFunctionIdKey &&
+                    typeof resolvedRowKey !== 'undefined'
+                      ? `${typeof resolvedRowKey}:${String(resolvedRowKey)}`
+                      : rowKey;
                   return (
                     <MemoizedTableRow<T>
-                      key={rowKey}
+                      key={reactKey}
                       item={item}
                       rowIndex={rowIndex}
                       rowKey={rowKey}

@@ -152,7 +152,7 @@ describe('controlled active state', () => {
     }
   });
 
-  it('resolves only the first row of a repeated id and warns once', () => {
+  it('leaves every row of a repeated id inert and warns once', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     __resetDevWarnings();
     const onActivate = vi.fn();
@@ -177,9 +177,12 @@ describe('controlled active state', () => {
     try {
       render(<Harness />);
       const rows = bodyRows();
-      expect(rows[0].getAttribute('data-active')).toBe('true');
-      expect(rows[1].hasAttribute('data-active')).toBe(false);
-      fireEvent.click(rows[1]);
+      // A shared id is invalid identity: neither row exposes current state.
+      for (const row of rows) {
+        expect(row.hasAttribute('data-active')).toBe(false);
+        expect(row.getAttribute('aria-current')).toBeNull();
+        fireEvent.click(row);
+      }
       expect(onActivate).not.toHaveBeenCalled();
       expect(
         warn.mock.calls.some(call =>
@@ -393,6 +396,161 @@ describe('key equality', () => {
     fireEvent.click(bodyRows()[1]);
     expect(onActivate).toHaveBeenCalledTimes(1);
     expect(onActivate).toHaveBeenCalledWith(rows[1], 2);
+  });
+
+  it('projects numeric property keys through String', () => {
+    interface NumericPropRow extends Record<string, unknown> {
+      id: number;
+      name: string;
+    }
+    const rows: NumericPropRow[] = [
+      {id: 1, name: 'Ada'},
+      {id: 2, name: 'Grace'},
+    ];
+    function Harness({activeKey}: {activeKey: string | number | null}) {
+      const plugin = useTableActivation<NumericPropRow>({
+        activeKey,
+        onActivate: () => {},
+      });
+      return (
+        <Table
+          data={rows}
+          columns={[{key: 'name', header: 'Name'}]}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    const {rerender} = render(<Harness activeKey={1} />);
+    // Property-name keys convert with String, so the number 1 matches nothing.
+    expect(bodyRows()[0].hasAttribute('data-active')).toBe(false);
+    rerender(<Harness activeKey="1" />);
+    expect(bodyRows()[0].getAttribute('data-active')).toBe('true');
+  });
+
+  it('treats non-string non-finite property values as invalid identity', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    __resetDevWarnings();
+    const onActivate = vi.fn();
+    const rows = [
+      {id: true, name: 'Flag'},
+      {id: NaN, name: 'Not a number'},
+      {id: 'ok', name: 'Fine'},
+    ];
+    function Harness() {
+      const plugin = useTableActivation<{
+        id: unknown;
+        name: string;
+      }>({
+        activeKey: 'ok',
+        onActivate,
+      });
+      return (
+        <Table
+          data={rows}
+          columns={[{key: 'name', header: 'Name'}]}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    try {
+      render(<Harness />);
+      const body = bodyRows();
+      expect(body[0].hasAttribute('tabindex')).toBe(false);
+      expect(body[1].hasAttribute('tabindex')).toBe(false);
+      fireEvent.click(body[0]);
+      fireEvent.click(body[1]);
+      expect(onActivate).not.toHaveBeenCalled();
+      // The valid row still activates.
+      expect(body[2].getAttribute('data-active')).toBe('true');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('tells function keys 0 and "0" apart while emitting the canonical key', () => {
+    const onActivate = vi.fn();
+    const rows = [{id: 0 as string | number}, {id: '0' as string | number}];
+    function Harness({activeKey}: {activeKey: string | number | null}) {
+      const plugin = useTableActivation<{id: string | number}>({
+        activeKey,
+        onActivate,
+      });
+      return (
+        <Table
+          data={rows}
+          columns={[{key: 'id', header: 'Id'}]}
+          idKey={item => item.id}
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    const {rerender} = render(<Harness activeKey={0} />);
+    const body = bodyRows();
+    // Two distinct rows reconcile (no React key collision).
+    expect(body).toHaveLength(2);
+    expect(body[0].getAttribute('data-active')).toBe('true');
+    expect(body[1].hasAttribute('data-active')).toBe(false);
+    rerender(<Harness activeKey="0" />);
+    expect(body[0].hasAttribute('data-active')).toBe(false);
+    expect(body[1].getAttribute('data-active')).toBe('true');
+    fireEvent.click(body[0]);
+    expect(onActivate).toHaveBeenCalledWith(rows[0], 0);
+  });
+
+  it('keeps released keys and stays silent without an identity consumer', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    __resetDevWarnings();
+    const dupes: Member[] = [
+      {id: '1', name: 'Ada', team: 'Core'},
+      {id: '1', name: 'Ada 2', team: 'Infra'},
+    ];
+    try {
+      render(<Table data={dupes} columns={memberColumns} idKey="id" />);
+      // Both rows render under the released keys; no identity diagnostic.
+      expect(bodyRows()).toHaveLength(2);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('returns earlier props unchanged for a declaratively marked current row', () => {
+    const onActivate = vi.fn();
+    function currentOwnerPlugin(): TablePlugin<Member> {
+      return {
+        transformBodyRow: props => ({
+          ...props,
+          htmlProps: {
+            ...props.htmlProps,
+            'aria-current': 'page' as const,
+          },
+        }),
+      };
+    }
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: '1',
+        onActivate,
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{currentOwner: currentOwnerPlugin(), activation: plugin}}
+        />
+      );
+    }
+    render(<Harness />);
+    const rows = bodyRows();
+    expect(rows[0].getAttribute('aria-current')).toBe('page');
+    // No tab stop and no key affordances were added on top.
+    expect(rows[0].hasAttribute('tabindex')).toBe(false);
+    expect(rows[0].hasAttribute('aria-keyshortcuts')).toBe(false);
+    fireEvent.click(rows[0]);
+    expect(onActivate).not.toHaveBeenCalled();
   });
 
   it('stays inert without an explicit idKey and warns once', () => {

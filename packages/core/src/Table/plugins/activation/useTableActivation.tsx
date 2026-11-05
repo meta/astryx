@@ -409,9 +409,10 @@ function getActiveWashClassNames(): ReadonlyArray<string> {
  * pinned cells.
  *
  * Requires an explicit `idKey` on the Table: without stable row identity the
- * plugin stays inert. Activation never implies selection or navigation, so no
- * `aria-selected` or `aria-current` is emitted; callers that need those own
- * them through the selection or navigation surface.
+ * plugin stays inert. The eligible active row exposes `aria-current="true"`
+ * (removed when it stops being the current row); `aria-selected` is never
+ * written — activation is not selection, and callers that need selection
+ * semantics own them through the selection surface.
  *
  * @example
  * ```
@@ -466,6 +467,13 @@ export function useTableActivation<T extends Record<string, unknown>>(
             'Table rendered without an explicit idKey, so row activation is inert. ' +
               'Pass a stable unique idKey for rows to be activatable.',
           );
+          return props;
+        }
+        // A row an earlier plugin already marked current keeps its
+        // semantics: activation stays fully off it rather than adding a tab
+        // stop and key affordances that would do nothing. Presses and paint
+        // shed competing owners independently of plugin order.
+        if (props.htmlProps['aria-current'] != null) {
           return props;
         }
         const key: string | number = rowKey;
