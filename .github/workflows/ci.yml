@@ -2643,6 +2643,18 @@ jobs:
         leg: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Playwright's own image for the version the lockfile resolves, with
+    # WebKit and its system libraries already installed. Installing those on
+    # the runner took up to fifteen minutes when the package mirror was slow,
+    # which cancelled the leg before a proof ran. A guard test keeps the tag
+    # equal to the lockfile's Playwright version.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    # A container's steps default to `sh`; keep the runner's bash.
+    defaults:
+      run:
+        shell: bash
     permissions:
       # The heavy-suite caps read the author's pull requests and runs.
       actions: read
@@ -2669,7 +2681,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/Layer/inputHold\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/Layer/(inputHold|modalOutlet)\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
           # Lists the changed files, so the planner adds a changed spec.
@@ -2724,6 +2736,12 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
+      # The container runs as root over a workspace the runner owns, and git
+      # refuses a repository another user owns unless it is marked safe.
+      - name: Trust the checkout in the container
+        if: steps.scope.outputs.applies == 'true'
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Verify evidence checkout
         if: steps.scope.outputs.applies == 'true'
         env:
@@ -2743,11 +2761,12 @@ jobs:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
           path: apps/storybook/dist
 
-      # WebKit needs system libraries the runner image lacks; --with-deps
-      # installs them.
+      # The image carries WebKit, Chromium's headless shell and their system
+      # libraries; `install` finds them in place and downloads nothing. A spec
+      # that decodes a WebKit recording does so in the headless shell.
       - name: Install Playwright WebKit
         if: steps.scope.outputs.applies == 'true'
-        run: pnpm install --frozen-lockfile && npx playwright install --with-deps webkit
+        run: pnpm install --frozen-lockfile && npx playwright install webkit chromium-headless-shell
 
       # This leg's share of the WebKit spec files, from the paths the lane
       # covers, by their recorded times. The planner and the times come from
@@ -2802,6 +2821,8 @@ jobs:
           fi
           export LP_NUM_THREADS
           echo "llvmpipe threads: $LP_NUM_THREADS"
+          # Which Mesa software rasterizer the frames go through.
+          echo "Mesa DRI drivers: $(ls /usr/lib/x86_64-linux-gnu/dri 2>/dev/null | tr '\n' ' ')"
           pnpm exec playwright test \
             --test-list "$RUNNER_TEMP/interaction-leg.txt" \
             --config playwright.interaction.config.ts \

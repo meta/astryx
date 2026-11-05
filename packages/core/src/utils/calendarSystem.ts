@@ -7,13 +7,14 @@
  *   month numbers, month and year steps, dates from calendar fields,
  *   availability of each calendar, and calendar labels and digits
  * @position Shared date utility; read by the i18n calendar resolution, by
- *   Calendar, and by its public hooks. Values stay Gregorian PlainDates. Temporal owns the arithmetic of
+ *   the date components, and by Calendar's public hooks. Values stay Gregorian PlainDates. Temporal owns the arithmetic of
  *   every calendar whose months are not Gregorian.
  */
 
 import type {Locale} from '../i18n/types';
 import type {PlainDate} from './dateTypes';
 import {
+  DATE_FORMAT_MONTH_ONLY,
   dateTimeFormatAtCall,
   dateTimeFormatFor,
   plainDateAddDays,
@@ -82,6 +83,14 @@ const GREGORIAN_ALIGNED: ReadonlySet<CalendarSystem> = new Set([
   'japanese',
 ]);
 
+/**
+ * Whether `<input type="date">` can show the calendar. The native control is
+ * Gregorian by specification, so only `gregory` and `iso8601` qualify.
+ */
+export function isGregorianCalendar(calendar: CalendarSystem): boolean {
+  return calendar === 'gregory' || calendar === 'iso8601';
+}
+
 /** Whether the calendar's months and days are the Gregorian ones. */
 export function isGregorianAligned(calendar: CalendarSystem): boolean {
   return GREGORIAN_ALIGNED.has(calendar);
@@ -101,6 +110,10 @@ interface TemporalPlainDate {
   readonly monthsInYear: number;
   with(fields: {year?: number; month?: number; day: number}): TemporalPlainDate;
   add(duration: {months?: number; years?: number}): TemporalPlainDate;
+  until(
+    other: TemporalPlainDate,
+    options: {largestUnit: 'months'},
+  ): {readonly months: number};
   withCalendar(calendar: 'iso8601'): TemporalPlainDate;
 }
 
@@ -340,17 +353,41 @@ export function calendarMonthLabelDay(month: CalendarMonth): PlainDate {
 
 /**
  * The stand-alone month and year label of a calendar month, such as
- * "Aban 1405 AP", named by `calendarMonthLabelDay`.
+ * "Aban 1405 AP", named by `calendarMonthLabelDay`. When `day` is given and the
+ * month spans an era change, it formats that day instead, clamped to the
+ * month, so January 1989 reads 昭和64年1月 on the 3rd and 平成元年1月 on the
+ * 22nd.
  */
 export function formatCalendarMonthLabel(
   calendar: CalendarSystem,
   month: CalendarMonth,
   locale: Locale,
+  day?: number,
 ): string {
+  const labelDay =
+    day != null && calendarMonthSpansEras(calendar, month, locale)
+      ? plainDateAddDays(
+          month.start,
+          Math.min(Math.max(day, 1), month.length) - 1,
+        )
+      : calendarMonthLabelDay(month);
   return plainDateFormatStandaloneMonthYear(
-    calendarMonthLabelDay(month),
+    labelDay,
     locale,
     labelCalendar(calendar),
+  );
+}
+
+/** Whether the first and last days of a calendar month fall in different eras. */
+function calendarMonthSpansEras(
+  calendar: CalendarSystem,
+  month: CalendarMonth,
+  locale: Locale,
+): boolean {
+  return (
+    !isGregorianCalendar(calendar) &&
+    eraYearAt(calendar, month.start, locale).era !==
+      eraYearAt(calendar, month.end, locale).era
   );
 }
 
@@ -620,4 +657,176 @@ export function calendarMonthsInYear(
   return isGregorianAligned(calendar)
     ? 12
     : inCalendar(calendar, pd).monthsInYear;
+}
+
+/**
+ * The number of calendar months from the month `from` to the month `to`:
+ * positive when `to` is later.
+ */
+export function calendarMonthsBetween(
+  calendar: CalendarSystem,
+  from: CalendarMonth,
+  to: CalendarMonth,
+): number {
+  if (isGregorianAligned(calendar)) {
+    return (
+      (to.start.year - from.start.year) * 12 +
+      (to.start.month - from.start.month)
+    );
+  }
+  return inCalendar(calendar, from.start).until(
+    inCalendar(calendar, to.start),
+    {largestUnit: 'months'},
+  ).months;
+}
+
+/**
+ * The calendar month at a position in a year of the calendar. A
+ * Gregorian-aligned calendar counts Gregorian years here; the others count
+ * years as {@link calendarYearMonthOf} does.
+ */
+export function calendarMonthOfYear(
+  calendar: CalendarSystem,
+  year: number,
+  month: number,
+): CalendarMonth {
+  return isGregorianAligned(calendar)
+    ? gregorianMonth(year, month)
+    : calendarMonthFromYearMonth(calendar, {year, month});
+}
+
+/** The number of months in a year of the calendar. */
+export function calendarMonthsInCalendarYear(
+  calendar: CalendarSystem,
+  year: number,
+): number {
+  return isGregorianAligned(calendar)
+    ? 12
+    : calendarMonthsInYear(
+        calendar,
+        calendarMonthOfYear(calendar, year, 1).start,
+      );
+}
+
+/**
+ * The name of a calendar month, such as "Adar I". It formats the middle day of
+ * the month, for the reason {@link formatCalendarMonthLabel} gives.
+ */
+export function formatCalendarMonthName(
+  calendar: CalendarSystem,
+  month: CalendarMonth,
+  locale: Locale,
+): string {
+  return formatCalendarDate(
+    calendar,
+    plainDateAddDays(month.start, Math.floor(month.length / 2)),
+    DATE_FORMAT_MONTH_ONLY,
+    locale,
+  );
+}
+
+const YEAR_PART_TYPES: ReadonlySet<string> = new Set([
+  'era',
+  'year',
+  'relatedYear',
+]);
+
+/** The era and year parts of a date, as the locale writes them in a long date. */
+function eraYearAt(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+  locale: Locale,
+): {readonly era: string | undefined; readonly label: string | null} {
+  const parts = formatToParts(
+    calendar,
+    pd,
+    {era: 'short', year: 'numeric', month: 'long', day: 'numeric'},
+    locale,
+  );
+  const era = parts.find(part => part.type === 'era')?.value;
+  const first = parts.findIndex(part => YEAR_PART_TYPES.has(part.type));
+  if (first === -1) {
+    return {era, label: null};
+  }
+  let last = first;
+  parts.forEach((part, index) => {
+    if (YEAR_PART_TYPES.has(part.type)) {
+      last = index;
+    }
+  });
+  const label = parts
+    .slice(first, last + 1)
+    .filter(part => YEAR_PART_TYPES.has(part.type) || part.type === 'literal')
+    .map(part => part.value)
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return {era, label};
+}
+
+/**
+ * Whether the first and last days of a year of the calendar fall in different
+ * eras, as the Japanese year 2019 does (Heisei, then Reiwa). Only an era change
+ * counts: other parts, such as a Chinese related year, can disagree at the
+ * edges of a year when Intl and Temporal place a month start one day apart.
+ */
+export function calendarYearSpansEras(
+  calendar: CalendarSystem,
+  year: number,
+  locale: Locale,
+): boolean {
+  if (isGregorianCalendar(calendar)) {
+    return false;
+  }
+  const months = calendarMonthsInCalendarYear(calendar, year);
+  const start = eraYearAt(
+    calendar,
+    calendarMonthOfYear(calendar, year, 1).start,
+    locale,
+  );
+  const end = eraYearAt(
+    calendar,
+    calendarMonthOfYear(calendar, year, months).end,
+    locale,
+  );
+  return start.era !== end.era && start.label != null && end.label != null;
+}
+
+/**
+ * The label of a year of the calendar, with its era where the locale writes
+ * one in a date, such as "令和8" in `ja-JP` or "1405 AP" in English. It uses the
+ * era and year parts of a long date, in the locale's order and digits, with the
+ * text between them. A year that spans an era change takes its era from `at`,
+ * a month position and a day clamped to that month, so 2019 reads "平成31" in
+ * January and "令和元" in May. Without `at`, and for every other year, the label
+ * comes from the middle of the year. Gregorian years are plain numbers.
+ */
+export function formatCalendarYearLabel(
+  calendar: CalendarSystem,
+  year: number,
+  locale: Locale,
+  at?: {readonly month: number; readonly day: number},
+): string {
+  if (isGregorianCalendar(calendar)) {
+    return String(year);
+  }
+  const months = calendarMonthsInCalendarYear(calendar, year);
+  if (at != null && calendarYearSpansEras(calendar, year, locale)) {
+    const month = calendarMonthOfYear(
+      calendar,
+      year,
+      Math.min(Math.max(at.month, 1), months),
+    );
+    const day = Math.min(Math.max(at.day, 1), month.length);
+    return (
+      eraYearAt(calendar, plainDateAddDays(month.start, day - 1), locale)
+        .label ?? String(year)
+    );
+  }
+  const middle = eraYearAt(
+    calendar,
+    calendarMonthOfYear(calendar, year, Math.floor(months / 2) + 1).start,
+    locale,
+  );
+  return middle.label ?? String(year);
 }
