@@ -848,6 +848,11 @@
       "source": "./src/internal/calendar-system.ts",
       "types": "./dist/internal/calendar-system.d.ts",
       "default": "./dist/internal/calendar-system.js"
+    },
+    "./internal/line-clamp": {
+      "source": "./src/internal/line-clamp.ts",
+      "types": "./dist/internal/line-clamp.d.ts",
+      "default": "./dist/internal/line-clamp.js"
     }
   },
   "files": [
