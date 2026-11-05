@@ -130,10 +130,10 @@ describe('useMultiCombobox example', () => {
     expect(document.activeElement).toBe(input);
   });
 
-  it('leaves Home and End to the field so they move the caret', () => {
+  it('leaves Home, End, PageUp and PageDown to the field', () => {
     const input = renderExample();
     press(input, 'ArrowDown');
-    for (const key of ['Home', 'End']) {
+    for (const key of ['Home', 'End', 'PageUp', 'PageDown']) {
       const event = new KeyboardEvent('keydown', {
         key,
         bubbles: true,
@@ -142,7 +142,8 @@ describe('useMultiCombobox example', () => {
       act(() => {
         input.dispatchEvent(event);
       });
-      expect(event.defaultPrevented).toBe(false);
+      expect(event.defaultPrevented, key).toBe(false);
+      expect(activeLabel(input), key).toBe('Bug');
     }
   });
 

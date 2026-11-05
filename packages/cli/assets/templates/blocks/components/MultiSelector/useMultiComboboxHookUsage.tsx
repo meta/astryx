@@ -104,12 +104,11 @@ export default function UseMultiComboboxHookUsage() {
           onClick={combobox.onTriggerClick}
           onKeyDown={event => {
             // Keys that compose a Korean, Japanese or Chinese syllable belong
-            // to the input method. Home and End move the caret in a text
-            // field.
+            // to the input method. Home, End, PageUp and PageDown keep their
+            // text-field meaning.
             if (
               isImeKeyEvent(event.nativeEvent) ||
-              event.key === 'Home' ||
-              event.key === 'End'
+              ['Home', 'End', 'PageUp', 'PageDown'].includes(event.key)
             ) {
               return;
             }
