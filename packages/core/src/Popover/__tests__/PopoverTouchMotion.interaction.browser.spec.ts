@@ -13,7 +13,8 @@
  *   through a blocked main thread. On a page with no other frame work,
  *   neither motion does Layout or Paint per frame. Reduce Motion
  *   cross-fades, opacity only, in 200 ms or less. A mouse keeps the layer's
- *   own entrance. Storyboards of both.
+ *   own entrance. A tap, a pan or a pinch while it grows does nothing but a
+ *   pinch's zoom. Storyboards.
  * @position Evidence for Popover's touch presentation; the model itself is
  *   unit-tested in popoverSurfaceMotion.test.ts
  */
@@ -26,17 +27,20 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   animationStoryboard,
+  armHold,
   blockMainThread,
   busyWindowProof,
   castStoryboard,
   compareCurve,
   countBetween,
+  drag,
   freezeTimers,
   holdAnimations,
   installLongTaskLog,
   installTimerGate,
   markElement,
   openStory,
+  pinch,
   releaseAnimations,
   startScreencast,
   thawTimers,
@@ -62,6 +66,10 @@ import {
 } from '../popoverSurfaceFrame';
 
 const storybook = withStorybook(test);
+
+// The layer runtime's input hold puts its shield inside the layer. It is a
+// manual popover hidden from assistive technology, and not the exit copy.
+const SHIELD = '[popover][aria-hidden="true"]:not([data-astryx-popover-exit])';
 
 /**
  * The duration (ms) and the eased progress that the story's theme gives
@@ -771,5 +779,232 @@ test(
     );
     const dismissWidths = dismissBoard.frames.map(f => f.data.w as number);
     expect(dismissWidths.at(-1)!).toBeLessThan(dismissWidths[0] / 2);
+  },
+);
+
+/**
+ * Logs each close of a popover and each click on an added button outside it.
+ * The hold takes a held press before any page listener, so the log counts
+ * what a press did, not the press itself.
+ */
+async function installPressLog(page: Page) {
+  await page.evaluate(() => {
+    const log = {closed: 0, outsideClicks: 0};
+    (window as unknown as {__pressLog: typeof log}).__pressLog = log;
+    document.addEventListener(
+      'toggle',
+      event => {
+        if (event.newState === 'closed') {
+          log.closed += 1;
+        }
+      },
+      true,
+    );
+    const outside = document.createElement('button');
+    outside.textContent = 'Outside';
+    Object.assign(outside.style, {
+      position: 'fixed',
+      right: '20px',
+      bottom: '20px',
+      width: '120px',
+      height: '44px',
+    });
+    outside.addEventListener('click', () => {
+      log.outsideClicks += 1;
+    });
+    document.body.append(outside);
+  });
+}
+
+const readPressLog = async (page: Page) =>
+  page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __pressLog: {closed: number; outsideClicks: number};
+        }
+      ).__pressLog,
+  );
+
+/** Whether the hold's shield is up and is what a press at `point` hits. */
+async function shieldTakes(page: Page, point: {x: number; y: number}) {
+  return page.evaluate(
+    ({selector, x, y}) => {
+      const shield = document.querySelector(selector);
+      return (
+        shield?.matches(':popover-open') === true &&
+        document.elementFromPoint(x, y) === shield
+      );
+    },
+    {selector: SHIELD, ...point},
+  );
+}
+
+/** The center of the added button outside the popover. */
+function outsidePoint(page: Page) {
+  const viewport = page.viewportSize();
+  if (viewport == null) {
+    throw new Error('no viewport');
+  }
+  return {x: viewport.width - 80, y: viewport.height - 42};
+}
+
+/**
+ * Opens the popover with a tap and holds its growth where it starts, so the
+ * next press lands while it grows. Returns the held growth; release it with
+ * `releaseAnimations`.
+ */
+async function openHeldWhileGrowing(page: Page, story: OpenStory) {
+  const armed = await armHold(page, story.layer);
+  await openWithTap(story);
+  return armed.held();
+}
+
+const focusedElement = async (page: Page) =>
+  page.evaluate(() => document.activeElement?.outerHTML.slice(0, 120));
+
+test('a tap outside while it grows is ignored: the popover stays open and keeps focus, and the tap reaches nothing', async ({
+  page,
+}) => {
+  const story = await openDefault(page);
+  await installPressLog(page);
+  const outside = outsidePoint(page);
+  await openHeldWhileGrowing(page, story);
+  const focusedAtOpen = await focusedElement(page);
+  // The tap outside lands on the hold's shield.
+  expect(await shieldTakes(page, outside)).toBe(true);
+  await story.driver.tap(outside);
+  await releaseAnimations(page, {finish: true});
+  await waitForRest(story.layer);
+  await expect(story.trigger).toHaveAttribute('aria-expanded', 'true');
+  const log = await readPressLog(page);
+  expect(log.closed).toBe(0);
+  expect(log.outsideClicks).toBe(0);
+  // The control the popover focused keeps focus.
+  expect(focusedAtOpen).toContain('role="switch"');
+  expect(await focusedElement(page)).toBe(focusedAtOpen);
+  // Once it has grown, the hold is gone, and a tap outside dismisses it.
+  await expect(page.locator(SHIELD)).toHaveCount(0);
+  await story.driver.tap(outside);
+  await expect(story.trigger).toHaveAttribute('aria-expanded', 'false');
+});
+
+test('a tap on the trigger while it grows does not close the popover', async ({
+  page,
+}) => {
+  const story = await openDefault(page);
+  await installPressLog(page);
+  await openHeldWhileGrowing(page, story);
+  expect(await shieldTakes(page, story.center)).toBe(true);
+  await story.driver.tap(story.center);
+  await releaseAnimations(page, {finish: true});
+  await waitForRest(story.layer);
+  await expect(story.trigger).toHaveAttribute('aria-expanded', 'true');
+  const log = await readPressLog(page);
+  expect(log.closed).toBe(0);
+});
+
+test('a pan outside while it grows starts nothing: no scroll, and the popover stays', async ({
+  page,
+}) => {
+  const story = await openDefault(page);
+  test.skip(
+    !story.driver.drivesNativeGestures,
+    'scripted touches do not start native pans in this engine',
+  );
+  await installPressLog(page);
+  // Room to scroll, so a pan the browser took would scroll the page.
+  await page.addStyleTag({content: 'body { min-height: 300vh; }'});
+  const viewport = page.viewportSize()!;
+  await openHeldWhileGrowing(page, story);
+  const focusedAtOpen = await focusedElement(page);
+  const from = {x: viewport.width - 40, y: viewport.height - 120};
+  expect(await shieldTakes(page, from)).toBe(true);
+  await story.driver.play(
+    drag(from, {x: from.x, y: from.y - 100}, {durationMs: 150, hz: 60}),
+  );
+  await releaseAnimations(page, {finish: true});
+  await waitForRest(story.layer);
+  await expect(story.trigger).toHaveAttribute('aria-expanded', 'true');
+  const log = await readPressLog(page);
+  expect(log.closed).toBe(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  expect(await focusedElement(page)).toBe(focusedAtOpen);
+});
+
+test('a pinch while it grows zooms the page, and the popover grows and stays', async ({
+  page,
+}) => {
+  const story = await openDefault(page);
+  test.skip(
+    !story.driver.drivesNativeGestures,
+    'scripted touches do not start a native pinch-zoom in this engine',
+  );
+  await installPressLog(page);
+  const scale = async () =>
+    page.evaluate(() => window.visualViewport?.scale ?? 1);
+  expect(await scale()).toBe(1);
+  const viewport = page.viewportSize()!;
+  await openHeldWhileGrowing(page, story);
+  const center = {x: viewport.width / 2, y: viewport.height - 160};
+  expect(await shieldTakes(page, center)).toBe(true);
+  await story.driver.play(
+    pinch({
+      center,
+      fromDistance: 60,
+      toDistance: 240,
+      durationMs: 200,
+      hz: 60,
+    }),
+  );
+  await releaseAnimations(page, {finish: true});
+  await waitForRest(story.layer);
+  // The fingers landed on the shield, which leaves a pinch to the browser.
+  await expect.poll(scale).toBeGreaterThan(1.1);
+  await expect(story.trigger).toHaveAttribute('aria-expanded', 'true');
+  const log = await readPressLog(page);
+  expect(log.closed).toBe(0);
+});
+
+test(
+  'storyboard: a tap outside while it grows, and the growth goes on',
+  {tag: '@storyboard'},
+  async ({page}, testInfo) => {
+    const story = await openDefault(page);
+    await installTimerGate(page);
+    const viewport = page.viewportSize() ?? {width: 402, height: 714};
+    const clip = {x: 0, y: 0, width: viewport.width, height: viewport.height};
+    const entrance = await themeTiming(story.layer, POPOVER_ENTRANCE_TOKENS);
+    const held = await openHeldWhileGrowing(page, story);
+    const outside = outsidePoint(page);
+    expect(await shieldTakes(page, outside)).toBe(true);
+    await story.driver.tap(outside);
+    await freezeTimers(page);
+    const {storyboard} = await animationStoryboard(page, {
+      name: 'popover-touch-tap-while-growing',
+      clip,
+      held,
+      measure: async () =>
+        story.layer.evaluate(node => {
+          const el = node as HTMLElement;
+          const style = getComputedStyle(el);
+          const [sx] =
+            style.scale === 'none' ? [1] : style.scale.split(' ').map(Number);
+          return {w: el.offsetWidth * sx, open: el.matches(':popover-open')};
+        }),
+      times: timeline(entrance.ms + 100),
+      columns: 8,
+      cellScale: 0.35,
+    });
+    await releaseAnimations(page, {finish: true});
+    await thawTimers(page);
+    await storyboard.write(testInfo);
+    // The trace is the assertion: the popover stays open on every frame and
+    // grows to its full width, with no exit copy.
+    const widths = storyboard.frames.map(f => f.data.w as number);
+    expect(storyboard.frames.every(f => f.data.open === true)).toBe(true);
+    expect(widths.at(-1)!).toBeGreaterThan(widths[0]);
+    await expect(exitCopyOf(page)).toHaveCount(0);
+    await expect(story.trigger).toHaveAttribute('aria-expanded', 'true');
   },
 );
