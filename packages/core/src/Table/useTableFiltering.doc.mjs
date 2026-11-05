@@ -7,7 +7,8 @@ export const docs = {
   subComponentOf: 'Table',
   displayName: 'useTableFiltering',
   isHiddenFromOverview: true,
-  description: 'Table plugin that adds inline column filters with popover or inline controls. Pairs with useTableFilterState for managed state. Supports text, select, multi-select, date, and number filter types via PowerSearch field definitions.',
+  description:
+    'Table plugin that adds inline column filters with popover or inline controls. Pairs with useTableFilterState for managed state. Supports text, select, multi-select, date, and number filter types via PowerSearch field definitions.',
   props: [
     {
       name: 'filters',
@@ -18,7 +19,8 @@ export const docs = {
     {
       name: 'onFilterChange',
       type: '(columnKey: string, value: TableFilterValue | null) => void',
-      description: 'Called when the user changes a filter value. null clears the filter.',
+      description:
+        'Called when the user changes a filter value. null clears the filter.',
       required: true,
     },
     {
@@ -34,7 +36,8 @@ export const docsZh = {
   name: 'useTableFiltering',
   isHiddenFromOverview: true,
   displayName: 'useTableFiltering',
-  description: '表格筛选插件，添加内联列过滤器（弹出式或内联控件）。与 useTableFilterState 配合使用管理状态。',
+  description:
+    '表格筛选插件，添加内联列过滤器（弹出式或内联控件）。与 useTableFilterState 配合使用管理状态。',
   props: [
     {
       name: 'filters',
@@ -61,7 +64,8 @@ export const docsDense = {
   name: 'useTableFiltering',
   isHiddenFromOverview: true,
   displayName: 'useTableFiltering',
-  description: 'Table filtering plugin: inline column filters (popover/inline). Pairs w/ useTableFilterState.',
+  description:
+    'Table filtering plugin: inline column filters (popover/inline). Pairs w/ useTableFilterState.',
   propDescriptions: {
     filters: 'Current filter state map (columnKey → value).',
     onFilterChange: 'Called on filter change. null clears.',

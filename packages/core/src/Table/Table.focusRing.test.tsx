@@ -15,7 +15,7 @@ import {describe, it, expect} from 'vitest';
 import {render, screen, within} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {focusVars} from '../theme/tokens.stylex';
+import {borderVars, focusVars} from '../theme/tokens.stylex';
 import {Table} from './Table';
 import type {TableColumn} from './types';
 import {useTableTreeData} from './plugins/tree/useTableTreeData';
@@ -31,7 +31,7 @@ const inset = stylex.create({
   ring: {
     outlineOffset: {
       default: null,
-      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+      ':focus-visible': `calc(-1 * (${focusVars['--focus-outline-width']} + ${borderVars['--border-width']}))`,
     },
   },
 });

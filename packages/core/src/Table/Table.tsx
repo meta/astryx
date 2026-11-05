@@ -19,7 +19,7 @@
 
 import {useMemo, type ReactElement, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, focusVars} from '../theme/tokens.stylex';
+import {borderVars, colorVars, focusVars} from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {BaseTable} from './BaseTable';
 import {TableContext} from './TableContext';
@@ -134,12 +134,13 @@ const scrollWrapperStyles = stylex.create({
       ':last-child': 'calc(-1 * var(--container-padding-block-end, 0px))',
     },
   },
-  // The wrapper bleeds to its container's edges, and a Card clips there, so
-  // its keyboard ring sits inside its own box instead of around it.
+  // The wrapper bleeds to its container's edges, under a Card's border, and
+  // the Card clips there, so its keyboard ring sits inside its own box, clear
+  // of that border too.
   focusRingInset: {
     outlineOffset: {
       default: null,
-      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+      ':focus-visible': `calc(-1 * (${focusVars['--focus-outline-width']} + ${borderVars['--border-width']}))`,
     },
   },
 });

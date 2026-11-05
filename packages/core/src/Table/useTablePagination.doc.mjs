@@ -6,9 +6,11 @@ export const docs = {
   name: 'useTablePagination',
   subComponentOf: 'Table',
   displayName: 'useTablePagination',
-  description: 'Headless pagination plugin for Table. Call with a config object: `useTablePagination({ page, onPageChange, totalItems })`. Returns a TablePlugin to pass to `<Table plugins={{ pagination: paginationPlugin }} />`.',
+  description:
+    'Headless pagination plugin for Table. Call with a config object: `useTablePagination({ page, onPageChange, totalItems })`. Returns a TablePlugin to pass to `<Table plugins={{ pagination: paginationPlugin }} />`.',
   usage: {
-    description: 'Call useTablePagination with a config object containing page state and callback. Pass the returned plugin to Table via the plugins prop.',
+    description:
+      'Call useTablePagination with a config object containing page state and callback. Pass the returned plugin to Table via the plugins prop.',
   },
   props: [
     {
@@ -26,17 +28,20 @@ export const docs = {
     {
       name: 'totalItems',
       type: 'number',
-      description: 'Total number of items across all pages. Used to calculate total page count.',
+      description:
+        'Total number of items across all pages. Used to calculate total page count.',
     },
     {
       name: 'totalPages',
       type: 'number',
-      description: 'Total number of pages. Use when you know the page count but not item count.',
+      description:
+        'Total number of pages. Use when you know the page count but not item count.',
     },
     {
       name: 'hasMore',
       type: 'boolean',
-      description: 'Whether more pages exist. Use for cursor-based pagination where the total is unknown.',
+      description:
+        'Whether more pages exist. Use for cursor-based pagination where the total is unknown.',
     },
     {
       name: 'pageSize',
@@ -47,12 +52,14 @@ export const docs = {
     {
       name: 'onPageSizeChange',
       type: '(pageSize: number) => void',
-      description: 'Called when the user changes the page size. Shows a page size dropdown when provided with pageSizeOptions.',
+      description:
+        'Called when the user changes the page size. Shows a page size dropdown when provided with pageSizeOptions.',
     },
     {
       name: 'pageSizeOptions',
       type: 'number[]',
-      description: 'Available page size options. Shows a page size selector when provided.',
+      description:
+        'Available page size options. Shows a page size selector when provided.',
     },
     {
       name: 'variant',
@@ -75,7 +82,8 @@ export const docs = {
     {
       name: 'label',
       type: 'string',
-      description: "Accessible name for the pagination nav landmark. With position='both' the two navs get distinct names (the label suffixed as '(top)' and '(bottom)') so same-type landmarks stay unique (axe landmark-unique).",
+      description:
+        "Accessible name for the pagination nav landmark. With position='both' the two navs get distinct names (the label suffixed as '(top)' and '(bottom)') so same-type landmarks stay unique (axe landmark-unique).",
       default: "'Table pagination'",
     },
   ],
@@ -84,7 +92,8 @@ export const docs = {
 export const docsZh = {
   name: 'useTablePagination',
   displayName: 'useTablePagination',
-  description: '无头分页插件。支持客户端切片、服务器端分页和游标分页。自动渲染 Pagination 控件。',
+  description:
+    '无头分页插件。支持客户端切片、服务器端分页和游标分页。自动渲染 Pagination 控件。',
   props: [
     {
       name: 'page',
@@ -127,7 +136,8 @@ export const docsZh = {
 export const docsDense = {
   name: 'useTablePagination',
   displayName: 'useTablePagination',
-  description: 'Headless pagination plugin. Client-side slicing, server-side, or cursor-based. Auto-renders Pagination above/below/both.',
+  description:
+    'Headless pagination plugin. Client-side slicing, server-side, or cursor-based. Auto-renders Pagination above/below/both.',
   propDescriptions: {
     page: 'Current page (1-based).',
     onPageChange: 'Called on page change.',
@@ -135,6 +145,7 @@ export const docsDense = {
     pageSize: 'Items per page. Default 10.',
     variant: "Pagination variant: 'pages'|'count'|'compact'|'dots'|'none'.",
     position: "Render position: 'below'|'above'|'both'|'none'.",
-    label: "Accessible name for the nav landmark; position='both' emits '<label> (top)' / '<label> (bottom)'.",
+    label:
+      "Accessible name for the nav landmark; position='both' emits '<label> (top)' / '<label> (bottom)'.",
   },
 };

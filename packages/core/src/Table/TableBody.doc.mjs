@@ -32,7 +32,8 @@ export const docsDense = {
   name: 'TableBody',
   isHiddenFromOverview: true,
   displayName: 'Table Body',
-  description: '<tbody> wrapper for children mode; holds the data rows; children mode does not add one for you',
+  description:
+    '<tbody> wrapper for children mode; holds the data rows; children mode does not add one for you',
   propDescriptions: {
     children: 'The <tbody> rows.',
     xstyle: 'StyleX styles for layout customization',

@@ -26,7 +26,7 @@ export const docs = {
     {
       name: 'childrenKey',
       type: 'string',
-      description: 'Property holding each row\'s children array.',
+      description: "Property holding each row's children array.",
       default: "'children'",
     },
     {
@@ -93,6 +93,7 @@ export const docsDense = {
     sortSiblings:
       'sorts each sibling group during flattening; pass applySort from useTableSortableState',
     indent: "indent step per level: 'sm' | 'md' | 'lg'. Defaults to 'md'.",
-    treeColumnKey: 'column carrying indent + expander. Defaults to first column.',
+    treeColumnKey:
+      'column carrying indent + expander. Defaults to first column.',
   },
 };
