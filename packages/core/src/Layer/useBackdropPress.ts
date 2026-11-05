@@ -44,10 +44,10 @@ function showingAutoPopovers(host: HTMLElement): ReadonlyArray<Element> {
  *
  * A press that light-dismisses a layer open above the host, such as a menu
  * open in the dialog, is that layer's: the host stays open, and the next
- * backdrop press dismisses it, as a second Escape does. The press counts as
- * the layer's when it light-dismissed a layer: a `popover="auto"` layer that
- * showed at pointer-down no longer shows at the click, or an outside-press
- * watch closed a layer. A layer that hides for another reason, such as a
+ * backdrop press dismisses it, as a second Escape does. The press is the
+ * layer's when it closes one. A `popover="auto"` layer that showed at
+ * pointer-down no longer shows at the click, or a layer counted its close
+ * with noteOutsideDismissal. A layer that hides for another reason, such as a
  * Tooltip whose trigger lost focus, does not count.
  *
  * The pointer handlers run in the capture phase. A nested layer, such as a

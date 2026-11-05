@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope core/Layer core/Dialog core/Drawer core/CommandPalette core/DropdownMenu ^apps/storybook/stories/BackdropPressA11y
+// @pr-a11y scope core/Layer core/Dialog core/Drawer core/CommandPalette core/DropdownMenu core/Typeahead core/DateInput core/InfoTip core/Tooltip core/ContextMenu ^apps/storybook/stories/BackdropPressA11y
 
 /**
  * @file BackdropPress.a11y.chromium.spec.ts
@@ -8,7 +8,8 @@
  * @output Browser evidence that a press which crosses the edge of a Dialog,
  *   Drawer or CommandPalette, either way, leaves it open, that a press on the
  *   backdrop alone still dismisses it, and that a backdrop press which closes
- *   a menu open inside a Dialog or Drawer leaves the host open
+ *   a layer open inside a Dialog or Drawer (a menu, a Typeahead list, a
+ *   DateInput calendar, a pinned InfoTip, a ContextMenu) leaves the host open
  * @position Chromium proof for the shared backdrop-press rule
  *   (Layer/useBackdropPress.ts). jsdom has no backdrop hit testing and no
  *   click retargeting to the common ancestor.
@@ -149,3 +150,62 @@ for (const {name, open, dialog} of MEMBERS.filter(
     });
   });
 }
+
+test.describe('Dialog with another layer open inside, with a mouse', () => {
+  async function openLayersDialog(page: Page) {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=a11y-backdroppress--layers-in-dialog&viewMode=story`,
+    );
+    await holdMotionStill(page);
+    await page.getByRole('button', {name: 'Open layers dialog'}).click();
+    const surface = page.getByRole('dialog', {name: 'Layers dialog'});
+    await expect(surface).toBeVisible();
+    return surface;
+  }
+
+  const LAYERS = [
+    {
+      name: 'a Typeahead list',
+      open: async (page: Page) => {
+        await page.getByRole('combobox', {name: 'Fruit'}).fill('ap');
+        return page.getByRole('listbox');
+      },
+    },
+    {
+      name: 'a DateInput calendar',
+      open: async (page: Page) => {
+        await page.getByRole('button', {name: 'Open calendar'}).click();
+        return page.getByRole('grid').first();
+      },
+    },
+    {
+      name: 'a pinned InfoTip',
+      open: async (page: Page) => {
+        await page.getByRole('button', {name: 'About layers'}).click();
+        return page.getByRole('tooltip');
+      },
+    },
+    {
+      name: 'a ContextMenu',
+      open: async (page: Page) => {
+        await page.getByText('Right-click here').click({button: 'right'});
+        return page.getByRole('menu');
+      },
+    },
+  ];
+
+  for (const {name, open} of LAYERS) {
+    test(`a backdrop click closes only ${name}, and the next closes the dialog`, async ({
+      page,
+    }) => {
+      const surface = await openLayersDialog(page);
+      const layer = await open(page);
+      await expect(layer).toBeVisible();
+      await page.mouse.click(BACKDROP.x, BACKDROP.y);
+      await expect(layer).toBeHidden();
+      await expect(surface).toBeVisible();
+      await page.mouse.click(BACKDROP.x, BACKDROP.y);
+      await expect(surface).toBeHidden();
+    });
+  }
+});

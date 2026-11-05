@@ -8,7 +8,9 @@
  * @output Exports watchOutsidePress and useOutsidePress, which owns one watch
  *   for a component: start on show, stop on hide, stop on unmount;
  *   noteOutsideDismissal and outsideDismissalCount, which count the layers an
- *   outside press closed in each document; and the
+ *   outside press or focus move closed in each document (the watch here, the
+ *   touch trigger, a field's blur, ContextMenu and a held Tooltip record
+ *   theirs); and the
  *   inside tests a text field's owner runs: isPressInsideOwnedLayer for a
  *   press, isFocusInsideOwnedLayer for a blur
  * @position Internal to Layer; the outside-press dismissal for a manual
@@ -25,9 +27,8 @@
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
 
-// How many layers an outside press has closed in each document. A modal
-// host's backdrop press reads it: a press that closed a layer above the host
-// is that layer's, so the host stays open.
+// A modal host's backdrop press reads this. A press that closed a layer above
+// the host is that layer's, so the host stays open.
 const outsideDismissals = new WeakMap<Document, number>();
 
 /** Records that an outside press in `doc` is closing a layer. */
