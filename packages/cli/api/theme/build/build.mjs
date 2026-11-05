@@ -2199,6 +2199,17 @@ function iconNodesExpression(entries, entriesName, nodesName) {
 }
 
 /**
+ * A theme's component icon slot values: a theme from defineTheme keeps them
+ * in `__componentIcons` when any is a function (its `componentIcons` is the
+ * static view); otherwise `componentIcons` holds them.
+ * @param {any} theme
+ * @returns {Record<string, unknown> | undefined}
+ */
+function themeComponentIcons(theme) {
+  return theme?.__componentIcons ?? theme?.componentIcons;
+}
+
+/**
  * Generate a minimal JS module for a built theme.
  * Includes the theme name, marker, and re-exports the icon registry.
  * All styling is in the CSS file.
@@ -2223,6 +2234,9 @@ function iconNodesExpression(entries, entriesName, nodesName) {
  * registry as `__icons`, which `Icon` resolves at the size and variant it
  * renders, and the theme's `icons` and the re-exported registry are the node
  * view, each function read at `{size: 'md'}` as `DefinedTheme['icons']` is.
+ *
+ * Component icon slot values are names, `null`, and requests, written as
+ * JSON. A slot function cannot be serialized, so it fails the build.
  *
  * @param {any} themeDef
  * @param {import('./icon-imports.mjs').IconImports | null} iconInfo
@@ -2295,6 +2309,19 @@ function generateBuiltModule(
         : `\nexport { ${iconInfo.exportName} };\n`
       : '';
 
+  const componentIcons = themeComponentIcons(themeDef);
+  const slotFunction = Object.entries(componentIcons ?? {}).find(
+    ([, value]) => typeof value === 'function',
+  );
+  if (slotFunction) {
+    throw new AstryxError(
+      `Theme "${themeDef.name}" sets componentIcons["${slotFunction[0]}"] to a slot function, which a built theme cannot carry. ` +
+        'A built theme keeps names, null, and requests. Use one of those, or apply the source theme at runtime.',
+      undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
+
   // Resolve token values — tuples become light-dark() strings
   /** @type {Record<string, unknown>} */
   const resolvedTokens = {};
@@ -2365,7 +2392,8 @@ function generateBuiltModule(
             list ?? [],
           ]),
         ),
-    );
+    ) +
+    serializeField('componentIcons', componentIcons, true);
 
   return `${iconImport}${iconDeclaration}${iconNodesDeclaration}/**
  * ${themeDef.name} theme — built by \`${getCliInvocation()} theme build\`
