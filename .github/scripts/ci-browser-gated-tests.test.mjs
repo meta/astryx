@@ -72,15 +72,37 @@ function stepsRunning(file, workflows) {
   return found;
 }
 
-/** The install's condition, or a narrower one that ANDs onto it. */
+/** Whether one pair of parentheses wraps the whole expression. */
+function wrapped(expression) {
+  if (!expression.startsWith('(') || !expression.endsWith(')')) return false;
+  let depth = 0;
+  for (let i = 0; i < expression.length; i++) {
+    if (expression[i] === '(') depth++;
+    else if (expression[i] === ')') depth--;
+    if (depth === 0 && i < expression.length - 1) return false;
+  }
+  return depth === 0;
+}
+
+/**
+ * The install's condition, or a narrower one that ANDs a parenthesised part
+ * onto it. Unparenthesised, `X || Y && <install>` reads as `X || (Y && ...)`,
+ * which runs without the install whenever X holds.
+ */
 function sameOrNarrower(stepIf, installIf) {
   if (installIf == null) return true;
-  return (
-    stepIf === installIf ||
-    (typeof stepIf === 'string' &&
-      (stepIf.endsWith(` && ${installIf}`) ||
-        stepIf.startsWith(`${installIf} && `)))
-  );
+  if (stepIf === installIf) return true;
+  if (typeof stepIf !== 'string') return false;
+  const safeInstall = wrapped(installIf) || !installIf.includes('||');
+  const tail = ` && ${installIf}`;
+  const head = `${installIf} && `;
+  if (stepIf.endsWith(tail)) {
+    return safeInstall && wrapped(stepIf.slice(0, -tail.length));
+  }
+  if (stepIf.startsWith(head)) {
+    return safeInstall && wrapped(stepIf.slice(head.length));
+  }
+  return false;
 }
 
 /** Problems with how the workflows run one browser-gated test file. */
@@ -155,12 +177,24 @@ describe('browser-gated script tests in the workflows', () => {
     ]);
     expect(run.step.env).toEqual({ASTRYX_CDN_SMOKE_BROWSER: '1'});
     expect(run.step.run).toBe(
-      `pnpm exec vitest run ${CDN_BROWSER_TEST} --maxWorkers=1`,
+      `pnpm exec vitest run --config .github/scripts/vitest.browser-scripts.config.mjs ${CDN_BROWSER_TEST} --maxWorkers=1`,
     );
     // The workflow starts for a change to the page renderer or its tests.
     expect(WORKFLOWS['cli-smoke-test.yml'].on.pull_request.paths).toContain(
       '.github/scripts/lib/cdn-*.mjs',
     );
+  });
+
+  it('runs the CDN file under a config with no global setup, which still finds it', async () => {
+    const {default: config} =
+      await import('./vitest.browser-scripts.config.mjs');
+    expect(config.test.globalSetup).toBeUndefined();
+    expect(config.test.projects).toBeUndefined();
+    expect(
+      config.test.include.some(glob =>
+        path.matchesGlob(CDN_BROWSER_TEST, glob),
+      ),
+    ).toBe(true);
   });
 
   it('keeps the full suite, and so the install, for a change to offline-media', () => {
@@ -218,6 +252,11 @@ describe('browser-gated script tests in the workflows', () => {
       [
         'a wider condition',
         [install, runStep({if: 'a || b'})],
+        'not "Install"',
+      ],
+      [
+        'an unparenthesised narrower part',
+        [install, runStep({if: 'x || y && a'})],
         'not "Install"',
       ],
       [

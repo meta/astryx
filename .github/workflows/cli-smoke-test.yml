@@ -115,7 +115,9 @@ jobs:
         if: steps.scope.outputs.spec_only != 'true'
         env:
           ASTRYX_CDN_SMOKE_BROWSER: '1'
-        run: pnpm exec vitest run .github/scripts/lib/cdn-page-render.browser.test.mjs --maxWorkers=1
+        # Its own config: the workspace's global setup builds Core, which this
+        # test never imports.
+        run: pnpm exec vitest run --config .github/scripts/vitest.browser-scripts.config.mjs .github/scripts/lib/cdn-page-render.browser.test.mjs --maxWorkers=1
 
       - name: CDN starter page smoke test
         if: steps.scope.outputs.spec_only != 'true'
