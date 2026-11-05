@@ -81,7 +81,17 @@ function fading(...elements: HTMLElement[]) {
   }
 }
 
+/** A transition of `propertyName` starting on `element`, as the toggle's fade does. */
+function transitionRun(element: HTMLElement, propertyName = 'opacity') {
+  const event = new Event('transitionrun', {bubbles: true});
+  Object.assign(event, {propertyName});
+  act(() => {
+    element.dispatchEvent(event);
+  });
+}
+
 async function fadeEnd(element: HTMLElement, type = 'transitionend') {
+  transitionRun(element);
   const event = new Event(type, {bubbles: true});
   Object.assign(event, {propertyName: 'opacity'});
   act(() => {
@@ -118,6 +128,29 @@ describe('useFadeInert', () => {
     expect(wheels.hasAttribute('inert')).toBe(false);
   });
 
+  it('does not settle at the end of a transition that ran before the toggle', async () => {
+    const view = render(<Panels isWheelOpen={false} />);
+    const calendar = view.getByTestId('calendar');
+    const wheels = view.getByTestId('wheels');
+    fading(calendar, wheels);
+    view.rerender(<Panels isWheelOpen />);
+    // The wheels' warm-up turned their visibility on just before the toggle:
+    // that transition ends during the fade, and the panels keep their inert.
+    const warmUpEnd = new Event('transitionend', {bubbles: true});
+    Object.assign(warmUpEnd, {propertyName: 'visibility'});
+    act(() => {
+      wheels.dispatchEvent(warmUpEnd);
+    });
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+    expect(calendar.hasAttribute('inert')).toBe(false);
+    expect(wheels.hasAttribute('inert')).toBe(true);
+    await fadeEnd(calendar);
+    expect(calendar.hasAttribute('inert')).toBe(true);
+    expect(wheels.hasAttribute('inert')).toBe(false);
+  });
+
   it('waits for the visibility the layer beneath holds for the fade', async () => {
     const view = render(<Panels isWheelOpen={false} />);
     const calendar = view.getByTestId('calendar');
@@ -127,6 +160,7 @@ describe('useFadeInert', () => {
       ] as unknown as Animation[];
     view.rerender(<Panels isWheelOpen />);
     expect(calendar.hasAttribute('inert')).toBe(false);
+    transitionRun(calendar, 'visibility');
     const end = new Event('transitionend', {bubbles: true});
     Object.assign(end, {propertyName: 'visibility'});
     act(() => {
@@ -160,7 +194,25 @@ describe('useFadeInert', () => {
     view.rerender(<Panels isWheelOpen={false} />);
     expect(wheels.hasAttribute('inert')).toBe(false);
     expect(calendar.hasAttribute('inert')).toBe(true);
+    // The cancelled transition is gone, and nothing replaces it.
+    wheels.getAnimations = () => [];
     await fadeEnd(wheels, 'transitioncancel');
+    expect(wheels.hasAttribute('inert')).toBe(true);
+    expect(calendar.hasAttribute('inert')).toBe(false);
+  });
+
+  it('waits for the replacement when a cancelled transition runs again at once', async () => {
+    const view = render(<Panels isWheelOpen />);
+    const calendar = view.getByTestId('calendar');
+    const wheels = view.getByTestId('wheels');
+    fading(calendar, wheels);
+    view.rerender(<Panels isWheelOpen={false} />);
+    // The wheels' opacity transition is cancelled and replaced in one frame:
+    // a transition of that property still runs, so the fade goes on.
+    await fadeEnd(wheels, 'transitioncancel');
+    expect(wheels.hasAttribute('inert')).toBe(false);
+    expect(calendar.hasAttribute('inert')).toBe(true);
+    await fadeEnd(wheels);
     expect(wheels.hasAttribute('inert')).toBe(true);
     expect(calendar.hasAttribute('inert')).toBe(false);
   });
