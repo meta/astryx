@@ -45,7 +45,7 @@ system_specs: [spec:AST-020/FR15, spec:AST-094, spec:AST-102]
 | Behavior                | A Menu Button trigger opens an anchored pointer menu or a bottom-sheet action list. Rows act on the release under the shared press model; sub-menus fly out beside their row or drill in on a compact touch display; a header or footer makes the pointer popover a modal dialog around the menu.                                                                                      |
 | End-user impact         | People pick actions by mouse, finger, or keyboard; keyboard users get a focus return with a ring and pointer users without one; on a phone sub-menus replace the rows instead of flying off-screen. Under a finger the menu opens after a 500 ms hold or at a tap's click, does not grow from its trigger, and a pan outside does not close it.                                        |
 | Builder impact          | Builders choose the trigger, the rows, and the regions; rows stay menu items and every non-item control goes in `header` or `footer`.                                                                                                                                                                                                                                                  |
-| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"`; the released behavior under a finger moves as `spec:AST-094` FR25 lists, with `presentation="popover"` keeping it. Finger press-open (FR8), touch grow and pan dismissal (FR21), disabled-row keyboard reach (FR12, FR17), and the delegated Trigger Button gaps are listed under Current-state impact. |
+| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"`; the released behavior under a finger moves as `spec:AST-094` FR25 lists, with `presentation="popover"` keeping it. Finger press-open (FR8), touch grow and pan dismissal (FR21), the still mouse (FR22), disabled-row keyboard reach (FR12, FR17), and Trigger Button gaps are in Current-state impact. |
 | Review checks           | Reject a control placed among the rows, a lost trigger ARIA wiring, a drilled-in view that leaves the menu box, a header or footer without the dialog, a lost focus-return modality, or a target moved off its painted element.                                                                                                                                                        |
 | Governing rules         | `spec:AST-020` FR15; `spec:AST-094` FR26–FR35; `module:DropdownMenu/useMenuPress`; `architecture:interaction-modality` INV1; `architecture:component-theming-surface`; `architecture:layer-runtime`; `family:overlay-dismissal`; `family:navigation-destinations`.                                                                                                                     |
 
@@ -374,6 +374,9 @@ than adding a DropdownMenu-owned heading target.
   leaves with the layer's own entrance and exit instead of growing out of and
   back into the Trigger button, and a pan that starts outside does not close
   it, against `spec:AST-094` FR31 and FR32.
+- **Still mouse after a finger (FR22).** After a finger, a still mouse's first
+  press lands on the entering menu's shield and does nothing, against
+  `spec:AST-094` FR35.
 - **Delegated Trigger Button gaps (FR3).** The Trigger button scales on a press
   under reduced motion and holds a fixed height, as `component:Button` records,
   against `design:reduced-motion` DR1 and `spec:AST-102` FR4.
