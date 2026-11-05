@@ -230,10 +230,7 @@ describe('area', () => {
 
   it('keeps a zero stroke width on the edge instead of restoring the default', () => {
     const {plot: linePlot} = renderMarks([line('v', {strokeWidth: 0})]);
-    expect(linePlot.querySelector('path')).toHaveAttribute(
-      'stroke-width',
-      '0',
-    );
+    expect(linePlot.querySelector('path')).toHaveAttribute('stroke-width', '0');
     const {plot: areaPlot} = renderMarks([area('v', {strokeWidth: 0})]);
     const paths = areaPlot.querySelectorAll('path');
     expect(paths).toHaveLength(2);
