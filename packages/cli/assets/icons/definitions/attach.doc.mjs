@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'attach',
   description: 'Attach a file.',
-  words: ['attachment', 'paperclip'],
+  words: ['attachment', 'paperclip', 'paper clip'],
 };

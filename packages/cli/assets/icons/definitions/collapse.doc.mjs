@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'collapse',
   description: 'Make something smaller or exit full screen.',
-  words: ['minimize', 'shrink'],
+  words: ['minimize', 'shrink', 'arrows pointing in'],
 };

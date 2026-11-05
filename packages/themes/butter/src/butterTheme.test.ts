@@ -58,6 +58,39 @@ describe('butter touch + narrow type pin', () => {
   });
 });
 
+describe('butter input status roles', () => {
+  it('keeps bright per-input status rims and glyphs on the border and icon roles', () => {
+    const inputs = [
+      'text-input',
+      'text-area',
+      'number-input',
+      'date-input',
+      'time-input',
+      'selector',
+      'multi-selector',
+      'typeahead',
+      'tokenizer',
+    ];
+
+    const {green, red, yellow} = butterModePalettes;
+    for (const input of inputs) {
+      const component = butterTheme.components![input];
+      expect(component['status:success']).toMatchObject({
+        '--color-border-success': `light-dark(${green.light[55]}, ${green.light[70]})`,
+        '--color-icon-success': `light-dark(${green.light[55]}, ${green.light[70]})`,
+      });
+      expect(component['status:warning']).toMatchObject({
+        '--color-border-warning': `light-dark(${yellow.light[55]}, ${yellow.light[80]})`,
+        '--color-icon-warning': `light-dark(${yellow.light[55]}, ${yellow.light[80]})`,
+      });
+      expect(component['status:error']).toMatchObject({
+        '--color-border-error': red.light[60],
+        '--color-icon-error': red.light[60],
+      });
+    }
+  });
+});
+
 describe('butter secondary ComplexSelector', () => {
   it('keeps the hover fill off a disabled trigger in either form', () => {
     expect(generateThemeCSS(butterTheme).component).toMatch(
@@ -125,16 +158,12 @@ describe('butter color token mapping completeness', () => {
     });
     expect(butterTheme.components?.banner).toMatchObject({
       'status:info': {
-        '--color-accent-muted': accent.light[55],
-        '--color-text-primary': neutral.light[15],
-        '--color-text-secondary': neutral.light[15],
-        '--color-accent': neutral.light[15],
+        '--color-info-muted': accent.light[55],
+        '--color-on-info-muted': neutral.light[15],
       },
       'status:error': {
         '--color-error-muted': red.light[60],
-        '--color-text-primary': neutral.light[15],
-        '--color-text-secondary': neutral.light[15],
-        '--color-error': neutral.light[15],
+        '--color-on-error-muted': neutral.light[15],
       },
     });
     expect(

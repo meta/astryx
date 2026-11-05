@@ -18,7 +18,7 @@ import {
   importLine,
   rankIcons,
   setsNamed,
-  withdrawnReason,
+  unusableSet,
 } from '../_records.mjs';
 
 /**
@@ -33,18 +33,7 @@ export async function iconDetail(reference, {cwd}) {
   const id = reference.slice(slash + 1);
   const {sets, withdrawn} = await loadIconSets(cwd);
   const named = setsNamed(sets, selector);
-  if (named.length === 0) {
-    throw new AstryxError(
-      withdrawnReason(withdrawn, selector) ??
-        `No installed icon set named "${selector}"`,
-      closest(
-        selector,
-        sets.flatMap(each => [each.name, `${each.package}/${each.name}`]),
-        'installed icon set',
-      ),
-      ERROR_CODES.ERR_NOT_FOUND,
-    );
-  }
+  if (named.length === 0) throw unusableSet(sets, withdrawn, selector);
   if (named.length > 1) {
     throw new AstryxError(
       `Icon set name "${selector}" is installed by ${named.map(each => each.package).join(' and ')}`,

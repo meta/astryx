@@ -37,7 +37,12 @@
  * @position packages/cli/foundation/discovery — read by template show/copy
  */
 
-import {parse} from '@babel/parser';
+import {
+  isReference,
+  parseTemplateSource as parseSource,
+  walk,
+  writtenNames,
+} from './template-source-tree.mjs';
 import {definitionsByIcon} from './icon-set-discovery.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
 
@@ -63,6 +68,9 @@ import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
  * @typedef {object} MappedIcon
  * @property {{module: string, export: string}} source
  * @property {{set: string, package: string, id: string, module: string, export: string}} target
+ * @property {string[]} [dropped] the library's sizing props (`size`,
+ *   `strokeWidth`, `absoluteStrokeWidth`) removed from its elements: an icon
+ *   set's icons take their size from CSS
  * @property {'match' | 'definition'} by `match`: a reviewed
  *   `exact` or `strong` match in the project set's data names the source
  *   icon; `definition`: the target's `map` names it for the Astryx icon
@@ -216,86 +224,6 @@ function targetExport(icon, set, variant) {
   return {module, export: icon.export};
 }
 
-/** @param {string} source */
-function parseSource(source) {
-  return parse(source, {
-    sourceType: 'module',
-    plugins: ['jsx', 'typescript'],
-    errorRecovery: false,
-  });
-}
-
-/**
- * Every node in the tree, with its parent and the key it sits under.
- * @param {any} node
- * @param {(node: any, parent: any, key: string) => void} visit
- * @param {any} [parent]
- * @param {string} [key]
- */
-function walk(node, visit, parent = null, key = '') {
-  if (Array.isArray(node)) {
-    for (const child of node) walk(child, visit, parent, key);
-    return;
-  }
-  if (
-    node == null ||
-    typeof node !== 'object' ||
-    typeof node.type !== 'string'
-  ) {
-    return;
-  }
-  visit(node, parent, key);
-  for (const childKey of Object.keys(node)) {
-    if (
-      childKey === 'loc' ||
-      childKey === 'extra' ||
-      childKey.endsWith('Comments') ||
-      childKey === 'comments' ||
-      childKey === 'tokens'
-    ) {
-      continue;
-    }
-    const child = node[childKey];
-    if (child != null && typeof child === 'object') {
-      walk(child, visit, node, childKey);
-    }
-  }
-}
-
-/**
- * Whether an identifier node is a reference to a binding, not a property
- * name or a JSX attribute name.
- * @param {any} node
- * @param {any} parent
- * @param {string} key
- */
-function isReference(node, parent, key) {
-  if (!parent) return true;
-  switch (parent.type) {
-    case 'ImportSpecifier':
-    case 'ImportDefaultSpecifier':
-    case 'ImportNamespaceSpecifier':
-      return false;
-    case 'MemberExpression':
-    case 'OptionalMemberExpression':
-      return key !== 'property' || parent.computed;
-    case 'ObjectProperty':
-      return key === 'value' || parent.computed;
-    case 'ObjectMethod':
-    case 'ClassMethod':
-    case 'ClassProperty':
-      return key !== 'key' || parent.computed;
-    case 'JSXAttribute':
-      return false;
-    case 'JSXMemberExpression':
-      return key === 'object';
-    case 'TSPropertySignature':
-      return key !== 'key';
-    default:
-      return true;
-  }
-}
-
 /**
  * Whether a module is one of Astryx's own packages (`@astryxdesign/core`,
  * its subpaths, and every other `@astryxdesign/` package).
@@ -390,6 +318,12 @@ export function iconsNotImported(source, declared) {
   return Object.keys(declared).filter(key => !keys.has(key));
 }
 
+/**
+ * A library's own sizing props, dropped from a mapped icon: an icon set's
+ * icons take their size from CSS.
+ */
+const SIZING_PROPS = new Set(['size', 'strokeWidth', 'absoluteStrokeWidth']);
+
 /** What a template reads with no icon-set state given: nothing is mapped. */
 export const NO_ICON_SETS = Object.freeze({
   sets: [],
@@ -444,14 +378,7 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
   );
 
   /** Every name the file writes, to keep aliases collision-free. */
-  const written = new Set();
-  walk(ast.program, (node, parent, key) => {
-    // The name an import specifier reads from its module binds nothing here.
-    if (parent?.type === 'ImportSpecifier' && key === 'imported') return;
-    if (node.type === 'Identifier' || node.type === 'JSXIdentifier') {
-      written.add(node.name);
-    }
-  });
+  const written = writtenNames(ast);
 
   /** @type {Array<{start: number, end: number, text: string}>} */
   const edits = [];
@@ -520,6 +447,10 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
   let insertAt = -1;
   /** The declared keys reported as mapped or kept so far. */
   const accounted = new Set();
+  /** The local names of mapped imports, as the template wrote them. */
+  const mappedLocals = new Set();
+  /** @type {Array<[MappedIcon, string]>} each mapped icon and its local name */
+  const mappedEntries = [];
 
   for (const node of ast.program.body) {
     if (node.type !== 'ImportDeclaration') continue;
@@ -582,7 +513,9 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
         added.set(key, entry);
       }
       if (local !== entry.local) renames.set(local, entry.local);
-      icons.mapped.push({
+      mappedLocals.add(local);
+      /** @type {MappedIcon} */
+      const mappedIcon = {
         source: {module, export: imported},
         target: {
           set: target.name,
@@ -592,30 +525,74 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
           export: chosen.export,
         },
         by: match.by,
-      });
+      };
+      icons.mapped.push(mappedIcon);
+      mappedEntries.push([mappedIcon, local]);
     }
 
     if (keep.length === node.specifiers.length) continue;
     if (insertAt === -1) insertAt = node.start;
+    // Comments inside the statement, and one that trails it on its line,
+    // survive the rewrite: those a kept specifier does not carry move to
+    // their own lines above it.
+    // A kept specifier carries a comment beside it with only whitespace
+    // between (`Pencil /* pen */`).
+    const keptRanges = keep.map(each => {
+      let [a, b] = [each.start, each.end];
+      for (const comment of ast.comments ?? []) {
+        if (comment.start < node.start || comment.end > node.end) continue;
+        if (comment.start >= b && /^\s*$/u.test(source.slice(b, comment.start)))
+          b = comment.end;
+      }
+      for (const comment of [...(ast.comments ?? [])].reverse()) {
+        if (comment.start < node.start || comment.end > node.end) continue;
+        if (comment.end <= a && /^\s*$/u.test(source.slice(comment.end, a)))
+          a = comment.start;
+      }
+      return [a, b];
+    });
+    const inside = (ast.comments ?? []).filter(
+      (/** @type {any} */ comment) =>
+        comment.start >= node.start &&
+        comment.end <= node.end &&
+        !keptRanges.some(([a, b]) => comment.start >= a && comment.end <= b),
+    );
+    const trailing = /^[ \t]*(\/\/[^\n]*|\/\*[^\n]*?\*\/)[ \t]*(?=\n|$)/u.exec(
+      source.slice(node.end),
+    );
+    /** @type {string[]} */
+    const moved = inside.map((/** @type {any} */ comment) =>
+      source.slice(comment.start, comment.end),
+    );
+    const above = moved.map(comment => `${comment}\n`).join('');
     if (keep.length === 0) {
       let end = node.end;
+      if (trailing) {
+        moved.push(trailing[1]);
+        end += trailing[0].length;
+      }
       if (source[end] === '\n') end += 1;
-      edits.push({start: node.start, end, text: ''});
+      edits.push({
+        start: node.start,
+        end,
+        text: moved.map(comment => `${comment}\n`).join(''),
+      });
     } else {
+      /** @param {any} each */
+      const textOf = each => {
+        const [a, b] = keptRanges[keep.indexOf(each)];
+        return source.slice(a, b);
+      };
       const defaults = keep.filter(each => each.type !== 'ImportSpecifier');
       const named = keep.filter(each => each.type === 'ImportSpecifier');
       const parts = [
-        ...defaults.map(each => source.slice(each.start, each.end)),
-        ...(named.length > 0
-          ? [
-              `{${named.map(each => source.slice(each.start, each.end)).join(', ')}}`,
-            ]
-          : []),
+        ...defaults.map(textOf),
+        ...(named.length > 0 ? [`{${named.map(textOf).join(', ')}}`] : []),
       ];
       edits.push({
         start: node.start,
         end: node.end,
-        text: `import ${parts.join(', ')} from ${source.slice(node.source.start, node.source.end)};`,
+        text: `${above}import ${parts.join(', ')} from ${source.slice(node.source.start, node.source.end)};`,
       });
     }
   }
@@ -678,6 +655,35 @@ export function mapTemplateIcons(source, {sets, choice}, declared = {}) {
       edits.push({start: node.start, end: node.end, text: next});
     }
   });
+  // Size comes from CSS in every icon set (its export contract), so a
+  // library's own sizing props on a mapped icon are dropped and reported.
+  /** @type {Map<string, Set<string>>} local name → props dropped */
+  const dropped = new Map();
+  walk(ast.program, node => {
+    if (node.type !== 'JSXOpeningElement' || node.name.type !== 'JSXIdentifier')
+      return;
+    const local = node.name.name;
+    if (!mappedLocals.has(local)) return;
+    for (const attribute of node.attributes) {
+      if (
+        attribute.type !== 'JSXAttribute' ||
+        attribute.name.type !== 'JSXIdentifier' ||
+        !SIZING_PROPS.has(attribute.name.name)
+      ) {
+        continue;
+      }
+      let start = attribute.start;
+      while (start > 0 && /\s/u.test(source[start - 1])) start -= 1;
+      edits.push({start, end: attribute.end, text: ''});
+      const set = dropped.get(local) ?? new Set();
+      set.add(attribute.name.name);
+      dropped.set(local, set);
+    }
+  });
+  for (const [entry, local] of mappedEntries) {
+    const props = dropped.get(local);
+    if (props) entry.dropped = [...props].sort();
+  }
   // A shorthand property is visited as both key and value; keep one edit.
   const unique = new Map();
   for (const edit of edits) {

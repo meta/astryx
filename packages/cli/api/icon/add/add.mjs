@@ -38,7 +38,12 @@ import {
   exportValueKind,
   generatedModulePath,
   generatedNamesOf,
+  generatedOrigins,
+  iconModulePackage,
   iconNaming,
+  localSourceNote,
+  definitionNameOf,
+  libraryIcons,
   modulePrefix,
   variantExportName,
   rankIcons,
@@ -50,6 +55,7 @@ import {
   writeIconSetData,
   refuseOutsideProject,
 } from '../_adapter.mjs';
+import {passed, refuseIgnoredPairs} from '../_options.mjs';
 
 /** The lowest score a definition match needs: an exact word or name. */
 const FIT_FLOOR = 80;
@@ -63,24 +69,72 @@ const MATCH_LIMIT = 10;
  * Experimental (spec:AST-017 FR27): may change or be removed in a patch
  * release.
  * @experimental
- * @param {string} exportName the export the set exposes the icon as
+ * @param {string | undefined} exportName the export the set exposes the icon as; absent with `all`
  * @param {import('../icon.type.mjs').IconAddOptions} options
- * @returns {Promise<import('../icon.type.mjs').IconAddResponse | import('../icon.type.mjs').IconDefinitionMatchesResponse>}
+ * @returns {Promise<import('../icon.type.mjs').IconAddResponse | import('../icon.type.mjs').IconDefinitionMatchesResponse | import('../icon.type.mjs').IconAddVariantsResponse>}
  */
 export async function iconAdd(exportName, options) {
   const {
     cwd = process.cwd(),
     from,
     set: selector,
-    definition,
+    definition: givenDefinition,
     newDefinition,
     description,
     words,
     useDefault = false,
     variant,
     id: givenId,
+    all = false,
   } = options ?? {};
   refuseOutsideProject(cwd, 'experimental icon add', 'the icon-set package');
+  // `--all` adds a declared variant to existing icons, so it names no icon
+  // and maps nothing; a description and words describe only a new
+  // definition (spec:AST-042 FR5).
+  refuseIgnoredPairs(
+    {
+      'an export name': passed(exportName),
+      '--definition': passed(givenDefinition),
+      '--new-definition': passed(newDefinition),
+      '--description': passed(description),
+      '--words': passed(words),
+      '--default': passed(useDefault),
+      '--id': passed(givenId),
+      '--all': passed(all),
+    },
+    [
+      ['--all', 'an export name'],
+      ['--all', '--definition'],
+      ['--all', '--new-definition'],
+      ['--all', '--description'],
+      ['--all', '--words'],
+      ['--all', '--default'],
+      ['--all', '--id'],
+      ['--definition', '--new-definition'],
+      ['--definition', '--description'],
+      ['--definition', '--words'],
+    ],
+  );
+  for (const [flag, value] of /** @type {const} */ ([
+    ['--description', description],
+    ['--words', words],
+  ])) {
+    if (passed(value) && !passed(newDefinition)) {
+      throw new AstryxError(
+        `${flag} describes a new definition, so it needs --new-definition`,
+        [
+          {
+            name: `--new-definition <name> --description '<what it is for>' --words a,b`,
+            reason: 'add your own definition',
+          },
+        ],
+        ERROR_CODES.ERR_INVALID_OPTION,
+      );
+    }
+  }
+  if (all) {
+    return authoring(() => addVariantForAll({cwd, from, selector, variant}));
+  }
   return authoring(async () => {
     if (
       typeof exportName !== 'string' ||
@@ -99,15 +153,13 @@ export async function iconAdd(exportName, options) {
         ERROR_CODES.ERR_MISSING_ARGUMENT,
       );
     }
-    if (definition != null && newDefinition != null) {
-      throw new AstryxError(
-        'Pass --definition or --new-definition, not both.',
-        undefined,
-        ERROR_CODES.ERR_INVALID_ARGUMENT,
-      );
-    }
     const where = await findLocalIconSet(cwd, selector);
     const {packageDir, set} = where;
+    // The docs' kebab id (`eye-slash`) names the same definition.
+    const definition =
+      givenDefinition == null
+        ? undefined
+        : definitionNameOf(givenDefinition, mappableDefinitions(set));
     const source = resolveIconSource(from, where);
     const sourceExport = useDefault ? 'default' : exportName;
     assertIconExport(source.file, source.module, sourceExport);
@@ -126,9 +178,12 @@ export async function iconAdd(exportName, options) {
     const module = set.data.module;
     // A library prefix every icon export shares (`feather` in `featherEye`)
     // is left out of the id and the set's export name, as the bulk wrap does.
-    const shared = useDefault
-      ? []
-      : modulePrefix(source.file, {adapter: Boolean(set.data.adapter)});
+    // A ./ path is the author's own files, named as written: never a library
+    // prefix (`CheckDouble` and `CheckDoubleSolid` share `check`).
+    const shared =
+      useDefault || source.module.startsWith('./')
+        ? []
+        : modulePrefix(source.file, {adapter: Boolean(set.data.adapter)});
     const nameWords = iconIdOf(exportName).split('-');
     const prefix =
       shared.length > 0 &&
@@ -305,7 +360,15 @@ export async function iconAdd(exportName, options) {
       JSON.stringify(next) !== JSON.stringify(set.data) ||
       created != null ||
       generatedChanged;
-    const note = setModuleNote(set, where, generated, setName);
+    // A ./ file publishes only when package.json `files` lists it; the
+    // author adds it (architecture:cli-surface INV16).
+    const note =
+      [
+        localSourceNote(packageDir, source.module),
+        setModuleNote(set, where, generated, setName),
+      ]
+        .filter(Boolean)
+        .join(' ') || null;
     return {
       type: /** @type {const} */ ('icon.add'),
       data: {
@@ -411,6 +474,156 @@ function definitionMatches(set, exportName, from, id) {
       newDefinition: fits
         ? null
         : `${base} --new-definition ${/^[a-z]/u.test(name) ? name : `icon${name}`} --description '<what the icon is for>' --words <word>,<word>`,
+    },
+  };
+}
+
+/**
+ * `--all`: add one variant for every icon of the set whose library export
+ * has a counterpart in `from` with the same id (`TrashIcon` in the solid
+ * module is the solid variant of `trash`), in one write.
+ * @param {{cwd: string, from: string | undefined, selector: string | undefined, variant: string | undefined}} args
+ * @returns {Promise<import('../icon.type.mjs').IconAddVariantsResponse>}
+ */
+async function addVariantForAll({cwd, from, selector, variant}) {
+  if (variant == null || variant === '') {
+    throw new AstryxError(
+      '--all adds one variant for every icon: pass --variant with the variant, such as solid.',
+      undefined,
+      ERROR_CODES.ERR_MISSING_ARGUMENT,
+    );
+  }
+  if (typeof from !== 'string' || from.trim() === '') {
+    throw new AstryxError(
+      'Pass --from with the module that exports the variant, such as @heroicons/react/24/solid.',
+      undefined,
+      ERROR_CODES.ERR_MISSING_ARGUMENT,
+    );
+  }
+  const where = await findLocalIconSet(cwd, selector);
+  const {packageDir, set} = where;
+  const declared = set.data.variants ?? [];
+  if (!declared.includes(variant)) {
+    throw new AstryxError(
+      `Icon set "${set.name}" declares no variant "${variant}"${declared.length > 0 ? ` (it declares ${declared.join(', ')})` : ''}. Declare it first.`,
+      [
+        {
+          name: `astryx experimental icon new-set ${set.name} --from <its library> --variants ${[...new Set([...(declared.length > 0 ? declared : ['<default>']), variant])].join(',')}`,
+          reason: 'declare the variants',
+        },
+      ],
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+  if (set.data.default?.variant === variant) {
+    throw new AstryxError(
+      `"${variant}" is the set's default variant: each icon's own export already draws it.`,
+      undefined,
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
+  }
+  const source = resolveIconSource(from, where);
+  const found = libraryIcons(source.file, {adapter: Boolean(set.data.adapter)});
+  const byId = new Map(found.map(each => [each.id, each]));
+  // An existing icon is known by the library export it re-exports, then by
+  // its own export, then by its id: an icon whose id or name an older rule
+  // wrote (`squares-2-x2`, `Squares2X2Icon`) still meets its variant
+  // (`HiSquares2X2Icon` in the solid module).
+  const byLibraryExport = new Map(found.map(each => [each.export, each]));
+  const byName = new Map(found.map(each => [each.name, each]));
+  const origins = generatedOrigins(
+    packageDir,
+    generatedModulePath(set, packageDir),
+  );
+  // Only icons from the same package as the variant module can have a
+  // variant there: an icon from your own `./` file, or from another library,
+  // is left as it is and never listed as missing.
+  const variantPackage = iconModulePackage(source.module);
+  const generated = generatedModulePath(set, packageDir);
+  /** @type {import('../../../foundation/discovery/icon-set-writer.mjs').GeneratedIcon[]} */
+  const toWrite = [];
+  /** @type {string[]} */
+  const added = [];
+  /** @type {string[]} */
+  const already = [];
+  /** @type {string[]} */
+  const missing = [];
+  const icons = set.data.icons.map(icon => {
+    const origin = origins.get(icon.export);
+    if (origin && iconModulePackage(origin.module) !== variantPackage) {
+      return icon;
+    }
+    const librarySource =
+      origin && origin.source !== 'default' ? origin.source : undefined;
+    const match =
+      (librarySource ? byLibraryExport.get(librarySource) : undefined) ??
+      byName.get(icon.export) ??
+      byId.get(icon.id);
+    if (!match) {
+      missing.push(icon.id);
+      return icon;
+    }
+    if (match.adapt && !set.data.adapter) {
+      missing.push(icon.id);
+      return icon;
+    }
+    const name = variantExportName(icon.export, variant);
+    const variants = [...(icon.variants ?? [])];
+    if (variants.some(each => each.variant === variant)) {
+      already.push(icon.id);
+      return icon;
+    }
+    toWrite.push({
+      name,
+      from: source.module,
+      source: match.export,
+      adapt: match.adapt,
+    });
+    variants.push({variant, export: name});
+    added.push(icon.id);
+    return {...icon, variants};
+  });
+  if (added.length === 0 && already.length === 0) {
+    throw new AstryxError(
+      `"${source.module}" exports no icon with the id of an icon in "${set.name}". Pass the module that exports the ${variant} variant under the same names.`,
+      undefined,
+      ERROR_CODES.ERR_NOT_FOUND,
+    );
+  }
+  const next = {
+    ...set.data,
+    ...(set.data.generated ? {} : {generated}),
+    ...(set.data.themeMap ? {} : {themeMap: THEME_MAP_NAME}),
+    icons,
+  };
+  /** @type {string[]} */
+  const files = [];
+  const written = writeGeneratedIcons(packageDir, generated, next, toWrite);
+  files.push(...written.files);
+  const dataChanged = JSON.stringify(next) !== JSON.stringify(set.data);
+  if (dataChanged) {
+    try {
+      writeIconSetData(set, next);
+    } catch (error) {
+      written.undo();
+      throw error;
+    }
+    files.push(
+      path.relative(packageDir, set.dataPath).split(path.sep).join('/'),
+    );
+  }
+  return {
+    type: /** @type {const} */ ('icon.addVariants'),
+    data: {
+      set: set.name,
+      package: set.package,
+      variant,
+      from: source.module,
+      added: added.length,
+      already: already.length,
+      missing,
+      files,
+      changed: dataChanged || written.changed,
     },
   };
 }

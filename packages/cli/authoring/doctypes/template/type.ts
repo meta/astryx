@@ -57,7 +57,8 @@ export interface BaseTemplateDoc extends AuthoredDocGraphFields {
    *  (`import DeleteIcon from …` is `DeleteIcon`). When the project has an
    *  icon set, each declared icon is replaced by the set's icon for that
    *  definition (`astryx docs cli/experimental/icon-definitions`), and every
-   *  key is reported as mapped or kept.
+   *  key is reported as mapped or kept. A name imported from two modules
+   *  (`TrashIcon` from an outline and a solid module) needs one key.
    *  @experimental May change or be removed in a patch release. */
   icons?: Record<string, string>;
 

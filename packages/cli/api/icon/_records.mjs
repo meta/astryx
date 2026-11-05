@@ -11,6 +11,8 @@
  * @position api/icon — shared by the search, detail, and list leaves
  */
 
+import {AstryxError} from '../error.mjs';
+import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 export {
   iconRecord,
@@ -51,6 +53,29 @@ export function withdrawnReason(withdrawn, selector) {
   return named.length > 0
     ? `Icon set "${selector}" is installed but withdrawn: ${named.map(each => each.reason).join(' ')}`
     : null;
+}
+
+/**
+ * The one error every icon entry point gives for a set selector that names
+ * no valid installed set (AST-084 FR17): withdrawn, with its reason, when it
+ * names an installed set that was withdrawn; else not installed. Both are
+ * `ERR_NOT_FOUND`, with the closest valid sets as suggestions.
+ * @param {Array<{name: string, package: string}>} sets the valid sets
+ * @param {Array<{name: string, package: string, reason: string}>} withdrawn
+ * @param {string} selector
+ * @returns {AstryxError}
+ */
+export function unusableSet(sets, withdrawn, selector) {
+  return new AstryxError(
+    withdrawnReason(withdrawn, selector) ??
+      `No installed icon set named "${selector}"`,
+    closest(
+      selector,
+      sets.flatMap(each => [each.name, `${each.package}/${each.name}`]),
+      'installed icon set',
+    ),
+    ERROR_CODES.ERR_NOT_FOUND,
+  );
 }
 
 /**

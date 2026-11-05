@@ -21,6 +21,9 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {iconSearch} from './search/search.mjs';
 import {iconDetail} from './detail/detail.mjs';
 import {iconList} from './list/list.mjs';
+import {iconSetIcons} from './search/search.mjs';
+import {astryxIconDefinitions} from './_adapter.mjs';
+import {passed, refuseIgnoredPairs} from './_options.mjs';
 
 /** The default `limit` for `icon.search`. */
 export const DEFAULT_ICON_LIMIT = 10;
@@ -36,15 +39,47 @@ const REFERENCE_RE = /^[^\s/][^\s]*\/[a-z0-9]+(?:-[a-z0-9]+)*$/u;
  * @experimental
  * @param {string} [query] words to search for, or `<set>/<id>`
  * @param {import('./icon.type.mjs').IconOptions} [options]
- * @returns {Promise<import('./icon.type.mjs').IconSearchResponse | import('./icon.type.mjs').IconDetailResponse | import('./icon.type.mjs').IconListResponse>}
+ * @returns {Promise<import('./icon.type.mjs').IconSearchResponse | import('./icon.type.mjs').IconDetailResponse | import('./icon.type.mjs').IconListResponse | import('./icon.type.mjs').IconSetIconsResponse | import('./icon.type.mjs').IconDefinitionsResponse>}
  */
 export async function icon(query, options = {}) {
   const {
     cwd = process.cwd(),
     list = false,
     set,
-    limit = DEFAULT_ICON_LIMIT,
+    limit: givenLimit,
+    allIcons = false,
+    definitions = false,
   } = options;
+  const given = typeof query === 'string' ? query.trim() : '';
+  // Every listing takes nothing the others take, and a query or one icon
+  // takes no listing (spec:AST-042 FR5).
+  refuseIgnoredPairs(
+    {
+      'a query': given !== '',
+      '--list': passed(list),
+      '--definitions': passed(definitions),
+      '--all-icons': passed(allIcons),
+      '--set': passed(set),
+      '--limit': passed(givenLimit),
+      'a <set>/<id> query': REFERENCE_RE.test(given),
+    },
+    [
+      ['--list', 'a query'],
+      ['--list', '--definitions'],
+      ['--list', '--all-icons'],
+      ['--list', '--set'],
+      ['--list', '--limit'],
+      ['--definitions', 'a query'],
+      ['--definitions', '--all-icons'],
+      ['--definitions', '--set'],
+      ['--definitions', '--limit'],
+      ['--all-icons', 'a query'],
+      ['--all-icons', '--limit'],
+      ['a <set>/<id> query', '--set'],
+      ['a <set>/<id> query', '--limit'],
+    ],
+  );
+  const limit = givenLimit ?? DEFAULT_ICON_LIMIT;
   if (query != null && typeof query !== 'string') {
     throw new AstryxError(
       `Invalid icon query: ${String(query)}`,
@@ -53,20 +88,34 @@ export async function icon(query, options = {}) {
     );
   }
   const term = (query ?? '').trim();
-  if (list) {
-    if (term) {
+  if (list) return iconList({cwd});
+  if (definitions) {
+    return {
+      type: /** @type {const} */ ('icon.definitions'),
+      data: {
+        definitions: astryxIconDefinitions().definitions.map(({doc}) => ({
+          name: doc.name,
+          builtIn: doc.builtIn === true,
+          description: doc.description,
+          words: doc.words,
+        })),
+      },
+    };
+  }
+  if (allIcons) {
+    if (set == null) {
       throw new AstryxError(
-        '--list takes no query',
+        '--all-icons lists every icon of one set: pass --set',
         [
           {
-            name: 'astryx experimental icon --list',
-            reason: 'list the installed sets',
+            name: 'astryx experimental icon --set <name> --all-icons',
+            reason: "list one set's icons",
           },
         ],
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
     }
-    return iconList({cwd});
+    return iconSetIcons({cwd, set});
   }
   if (!term) {
     throw new AstryxError(

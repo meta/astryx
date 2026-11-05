@@ -75,7 +75,7 @@ export const doc = {
     {code: 'ERR_FILE_EXISTS', when: 'the definition file already exists'},
     {
       code: 'ERR_NOT_FOUND',
-      when: 'the package ships no icon set, or the set has no such icon',
+      when: 'the package ships no icon set, `set` names no set in it or one that is withdrawn (with why), or the set has no such icon',
     },
     {
       code: 'ERR_PROJECT_REQUIRED',
@@ -93,7 +93,7 @@ export const doc = {
   examples: [
     {
       label: 'Add and map a definition',
-      code: "await iconNewDefinition('rotate', {description: 'Rotate an image or shape.', words: ['turn', 'spin'], icon: 'rotate-cw'});",
+      code: "await iconNewDefinition('random', {description: 'Pick something at random.', words: ['dice', 'shuffle', 'chance'], icon: 'dice-5'});",
     },
   ],
   command: 'experimental icon new-definition',

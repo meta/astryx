@@ -9,7 +9,11 @@
  *   new-definition` command
  */
 
-import {addIconDefinition, refuseOutsideProject} from '../_adapter.mjs';
+import {
+  addIconDefinition,
+  authoring,
+  refuseOutsideProject,
+} from '../_adapter.mjs';
 import {refuseOtherOptions} from '../_options.mjs';
 
 /**
@@ -27,6 +31,6 @@ export async function iconNewDefinition(name, options = {}) {
     'experimental icon new-definition',
     'the icon-set package',
   );
-  const {data} = await addIconDefinition(name, options);
+  const {data} = await authoring(() => addIconDefinition(name, options));
   return {type: 'icon.newDefinition', data};
 }

@@ -484,8 +484,6 @@ const INV21_KNOWN_GAPS = new Map([
   ['integration/validate-integration.mjs', new Set(['fs', 'discovery'])],
   // remove with the layout command
   ['layout/expand/expand.mjs', new Set(['fs'])],
-  // imported by a leaf (copy), not only by the adapter
-  ['swizzle/_github.mjs', new Set(['child_process'])],
   ['swizzle/copy/copy.mjs', new Set(['fs', 'project', 'discovery'])],
   ['template/cdn/cdn.mjs', new Set(['fs'])],
   ['template/copy/copy.mjs', new Set(['fs', 'discovery'])],
@@ -628,6 +626,29 @@ for (const m of apiIndexSrc.matchAll(/export\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)
   }
 }
 
+/** Functions exported from api/experimental.mjs, the experimental entry
+ *  (spec:AST-017 FR21): a CommandDoc marked `stability: 'experimental'` may
+ *  name one of these instead of a stable api/index.mjs export. */
+const experimentalApiExports = new Set();
+const experimentalEntry = path.join(API, 'experimental.mjs');
+if (fs.existsSync(experimentalEntry)) {
+  const src = fs.readFileSync(experimentalEntry, 'utf8');
+  for (const m of src.matchAll(/export\s*\{([^}]+)\}\s*from\s*['"]([^'"]+)['"]/g)) {
+    if (m[2].endsWith('.type.mjs')) continue;
+    for (const part of m[1].split(',')) {
+      const name = part.trim().split(/\s+/).pop();
+      if (name && /^\w+$/.test(name)) experimentalApiExports.add(name);
+    }
+  }
+  for (const name of experimentalApiExports) {
+    if (apiExports.has(name)) {
+      errors.push(
+        `api boundary: '${name}' is exported from both api/index.mjs and api/experimental.mjs — an experimental function stays off the stable entry`,
+      );
+    }
+  }
+}
+
 /** @type {Set<string>} known FR1 gaps: fn values not yet exported.
  *  Remove an entry when the function is exported; do not add entries. */
 const FR1_KNOWN_GAPS = new Set();
@@ -649,7 +670,9 @@ function checkCommandDocFn(dir) {
     if (!fnMatch) continue; // group-only CommandDoc (no fn field)
     fr1Count++;
     const fn = fnMatch[1];
-    if (!apiExports.has(fn) && !FR1_KNOWN_GAPS.has(fn)) {
+    const experimentalFn =
+      experimentalApiExports.has(fn) && /stability:\s*['"]experimental['"]/.test(src);
+    if (!apiExports.has(fn) && !experimentalFn && !FR1_KNOWN_GAPS.has(fn)) {
       errors.push(
         `FR1: CommandDoc ${path.relative(CLI, full)} names fn '${fn}' which is not exported from api/index.mjs`,
       );

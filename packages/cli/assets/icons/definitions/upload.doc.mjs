@@ -5,6 +5,6 @@ export default {
   type: 'icon-definition',
   name: 'upload',
   description: 'Upload a file or content.',
-  words: ['import', 'attach file'],
+  words: ['import', 'attach file', 'arrow up tray'],
   builtIn: true,
 };

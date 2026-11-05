@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'mention',
   description: 'Mention someone or show an email address.',
-  words: ['at', 'email', 'handle'],
+  words: ['at', 'email', 'handle', 'at symbol', 'at sign'],
 };

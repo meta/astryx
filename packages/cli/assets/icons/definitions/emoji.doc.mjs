@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'emoji',
   description: 'Add an emoji or a reaction.',
-  words: ['smile', 'reaction', 'face'],
+  words: ['smile', 'reaction', 'face', 'face smile'],
 };

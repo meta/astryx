@@ -5,6 +5,6 @@ export default {
   type: 'icon-definition',
   name: 'stop',
   description: 'Stop or cancel a running action.',
-  words: ['halt', 'end', 'cancel'],
+  words: ['halt', 'end', 'cancel', 'square', 'circle stop'],
   builtIn: true,
 };

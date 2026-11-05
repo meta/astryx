@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'download',
   description: 'Download a file.',
-  words: ['export', 'save file'],
+  words: ['export', 'save file', 'arrow down tray'],
 };

@@ -344,7 +344,9 @@ describe.each(OWNERS)(
       const dialog = document.querySelector('dialog') as HTMLDialogElement;
       rerender(<dialog open>{renderOwner(true)}</dialog>);
       await nextFrame();
-      const region = dialog.querySelector('[data-astryx-modal-busy-region]');
+      const region = dialog.querySelector(
+        '[data-astryx-modal-live-region="polite"]',
+      );
       expect(region).not.toBeNull();
       expect(region).toHaveAttribute('role', 'status');
       expect(region).toHaveAttribute('aria-live', 'polite');
@@ -370,7 +372,7 @@ describe.each(OWNERS)(
       await nextFrame();
       const dialog = document.querySelector('dialog') as HTMLDialogElement;
       expect(
-        dialog.querySelector('[data-astryx-modal-busy-region]'),
+        dialog.querySelector('[data-astryx-modal-live-region="polite"]'),
       ).toHaveTextContent('Loading');
       expect(busyAnnouncements()).toEqual([]);
     });
@@ -436,7 +438,7 @@ describe.each(SEARCH_OWNERS)(
       await nextFrame();
       const dialog = document.querySelector('dialog') as HTMLDialogElement;
       expect(
-        dialog.querySelector('[data-astryx-modal-busy-region]'),
+        dialog.querySelector('[data-astryx-modal-live-region="polite"]'),
       ).toHaveTextContent('Loading');
       expect(busyAnnouncements()).toEqual([]);
       vi.restoreAllMocks();
@@ -471,6 +473,65 @@ const SHEET_OWNERS: ReadonlyArray<
     },
   ],
 ];
+
+/** A source whose searches settle in a frame callback that runs before the
+ * busy start's frame, as a fast or cached search can. */
+function frameSettledSource(): SearchSource<SearchableItem> {
+  return {
+    search: async () =>
+      new Promise<SearchableItem[]>(resolve =>
+        requestAnimationFrame(() => resolve([{id: 'alex', label: 'Alex'}])),
+      ),
+    bootstrap: () => [],
+  };
+}
+
+describe.each([
+  ...SEARCH_OWNERS.filter(([name]) => name !== 'Tokenizer'),
+  [
+    'CommandPalette',
+    (source: SearchSource<SearchableItem>) => (
+      <CommandPalette
+        isOpen
+        isInline
+        onOpenChange={() => {}}
+        searchSource={source}
+      />
+    ),
+  ] as const,
+])(
+  '%s search that settles before its busy start is announced (spec:AST-086 FR8)',
+  (_name, renderOwner) => {
+    // Browsers run microtasks after each frame callback, while jsdom runs a
+    // frame's callbacks back to back. One task per callback lets a search that
+    // settles in one callback announce its outcome before the next one runs.
+    const jsdomRequestFrame = window.requestAnimationFrame;
+    const jsdomCancelFrame = window.cancelAnimationFrame;
+    beforeEach(() => {
+      window.requestAnimationFrame = callback =>
+        window.setTimeout(() => callback(performance.now()), 16);
+      window.cancelAnimationFrame = frame => window.clearTimeout(frame);
+    });
+    afterEach(() => {
+      window.requestAnimationFrame = jsdomRequestFrame;
+      window.cancelAnimationFrame = jsdomCancelFrame;
+    });
+
+    it('announces the outcome and never the overtaken busy start', async () => {
+      render(renderOwner(frameSettledSource()));
+      await nextFrame();
+      announce.mockClear();
+      act(() => {
+        fireEvent.change(screen.getByRole('combobox'), {target: {value: 'Al'}});
+      });
+      await nextFrame();
+      await nextFrame();
+      await nextFrame();
+      expect(announce).toHaveBeenCalledWith('1 result');
+      expect(busyAnnouncements()).toEqual([]);
+    });
+  },
+);
 
 describe.each(SHEET_OWNERS)(
   '%s busy start from inside its open sheet (spec:AST-086 Platform support)',
@@ -511,7 +572,7 @@ describe.each(SHEET_OWNERS)(
       await nextFrame();
       await nextFrame();
       expect(
-        sheet!.querySelector('[data-astryx-modal-busy-region]'),
+        sheet!.querySelector('[data-astryx-modal-live-region="polite"]'),
       ).toHaveTextContent('Loading');
       expect(busyAnnouncements()).toEqual([]);
     });
@@ -742,7 +803,7 @@ describe('CommandPalette busy start inside its modal (spec:AST-086 FR8, FR3)', (
     return (
       document
         .querySelector('dialog[open]')
-        ?.querySelector('[data-astryx-modal-busy-region]') ?? null
+        ?.querySelector('[data-astryx-modal-live-region="polite"]') ?? null
     );
   }
 

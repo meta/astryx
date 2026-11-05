@@ -62,13 +62,13 @@ export const doc = {
   examples: [
     {
       label:
-        "A set's own definition at icon-sets/outline/definitions/rotate.doc.mjs",
+        "A set's own definition at icon-sets/outline/definitions/random.doc.mjs",
       code: `/** @type {import('@astryxdesign/cli/authoring').IconDefinitionDoc} */
 export default {
   type: 'icon-definition',
-  name: 'rotate',
-  description: 'Rotate an image or shape.',
-  words: ['turn', 'spin'],
+  name: 'random',
+  description: 'Pick something at random.',
+  words: ['dice', 'shuffle', 'chance'],
 };`,
     },
   ],

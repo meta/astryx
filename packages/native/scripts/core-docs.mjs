@@ -23,9 +23,13 @@ export const CORE_ROOT = path.join(
   'core',
 );
 
-/** @param {string} name */
+/**
+ * @param {string} name A component name for `<Name>/<Name>.doc.mjs`, or a
+ *   path such as `Text/Heading` relative to core's `src`.
+ */
 export async function loadCoreDoc(name) {
-  const file = path.join(CORE_ROOT, 'src', name, `${name}.doc.mjs`);
+  const relative = name.includes('/') ? name : `${name}/${name}`;
+  const file = path.join(CORE_ROOT, 'src', `${relative}.doc.mjs`);
   if (!fs.existsSync(file)) {
     throw new Error(
       `No core documentation for "${name}" at ${file}; run pnpm install`,

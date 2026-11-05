@@ -11,15 +11,15 @@ export const doc = {
   stability: 'experimental',
   summary: 'Register one icon you chose from a library in your icon set',
   description:
-    "Run inside an icon-set package. You pick the export; the CLI proves it is a component of --from, read without running it, and never searches the library. Without a definition it lists the icon definitions that fit and the command for each. With --definition it adds the icon and maps the definition to it; --new-definition first adds your set's own definition. Experimental: it may change or be removed in a patch release.",
+    "Run inside an icon-set package. You pick the export; the CLI proves it is a component of --from, read without running it, and never searches the library. Without a definition it lists the icon definitions that fit and the command for each. With --definition it adds the icon and maps the definition to it; --new-definition first adds your set's own definition. With --variant <name> --from <module> --all and no export, it adds that variant for every icon whose id the module exports. Experimental: it may change or be removed in a patch release.",
   fn: 'iconAdd',
-  args: [{name: 'export', param: 'exportName', required: true}],
+  args: [{name: 'export', param: 'exportName', required: false}],
   options: [
     {
       flag: '--from <module>',
       param: 'options.from',
       description:
-        'The module the icon is exported from: a package, a subpath, or a relative path this package exports',
+        'The module the icon is exported from: a package, a subpath, or a ./ path to a file inside this package',
     },
     {
       flag: '--definition <name>',
@@ -56,6 +56,12 @@ export const doc = {
         "Add the export as this variant of an existing icon: one of the set's declared variants, such as solid",
     },
     {
+      flag: '--all',
+      param: 'options.all',
+      description:
+        'With --variant and --from, and no export: add that variant for every icon whose id the module exports, in one run',
+    },
+    {
       flag: '--id <id>',
       param: 'options.id',
       description: "The icon's id, instead of the one its name gives",
@@ -76,8 +82,12 @@ export const doc = {
       cli: 'astryx experimental icon add Bin --from @acme/glyph-library --definition delete',
     },
     {
+      label: 'Add the solid variant of every icon',
+      cli: 'astryx experimental icon add --variant solid --from @heroicons/react/24/solid --all',
+    },
+    {
       label: 'Add your own definition',
-      cli: "astryx experimental icon add RotateCw --from @acme/glyph-library --new-definition rotate --description 'Rotate an image or shape.' --words turn,spin",
+      cli: "astryx experimental icon add Dice5 --from @acme/glyph-library --new-definition random --description 'Pick something at random.' --words dice,shuffle,chance",
     },
     {
       label: 'Add a solid variant',

@@ -145,6 +145,7 @@ const dataSchema = z
       })
       .strict()
       .optional(),
+    exclude: z.array(exportSchema).optional(),
     variants: z.array(variantNameSchema).min(1).optional(),
     default: z
       .object({variant: variantNameSchema.optional()})

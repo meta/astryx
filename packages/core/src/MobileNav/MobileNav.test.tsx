@@ -12,6 +12,7 @@
 import {describe, it, expect, vi, beforeAll} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import {MobileNav} from './MobileNav';
+import {declaredValue} from '../__tests__/stylexDeclarations';
 
 // jsdom doesn't implement showModal/close on <dialog>, so we mock them
 beforeAll(() => {
@@ -51,6 +52,21 @@ describe('MobileNav', () => {
     const dialog = screen.getByTestId('mobile-nav');
     expect(dialog).toBeInTheDocument();
     expect(dialog).not.toHaveAttribute('open');
+  });
+
+  it('stays open when a file picker inside it is dismissed', () => {
+    const handleClose = vi.fn();
+    render(
+      <MobileNav isOpen={true} onOpenChange={handleClose}>
+        <input type="file" aria-label="Picture" />
+      </MobileNav>,
+    );
+    // A dismissed picker fires a bubbling `cancel` at the input; it is not a
+    // close request for the navigation.
+    const fromPicker = new Event('cancel', {bubbles: true, cancelable: true});
+    screen.getByLabelText('Picture').dispatchEvent(fromPicker);
+    expect(handleClose).not.toHaveBeenCalled();
+    expect(fromPicker.defaultPrevented).toBe(false);
   });
 
   it('calls onOpenChange(false) on native cancel event (Escape)', () => {
@@ -133,10 +149,7 @@ describe('MobileNav', () => {
 
   it('forwards data-testid', () => {
     render(
-      <MobileNav
-        isOpen={true}
-        onOpenChange={() => {}}
-        data-testid="custom-nav">
+      <MobileNav isOpen={true} onOpenChange={() => {}} data-testid="custom-nav">
         <span>Content</span>
       </MobileNav>,
     );
@@ -202,10 +215,7 @@ describe('MobileNav', () => {
 
   it('uses native dialog element', () => {
     render(
-      <MobileNav
-        isOpen={true}
-        onOpenChange={() => {}}
-        data-testid="mobile-nav">
+      <MobileNav isOpen={true} onOpenChange={() => {}} data-testid="mobile-nav">
         <span>Content</span>
       </MobileNav>,
     );
@@ -251,14 +261,36 @@ describe('MobileNav', () => {
     expect(dialog).not.toHaveAttribute('open');
 
     rerender(
-      <MobileNav
-        isOpen={true}
-        onOpenChange={() => {}}
-        data-testid="mobile-nav">
+      <MobileNav isOpen={true} onOpenChange={() => {}} data-testid="mobile-nav">
         <span>Content</span>
       </MobileNav>,
     );
 
     expect(dialog).toHaveAttribute('open');
+  });
+
+  it('caps the drawer at 85 % of the viewport, as its docs promise', () => {
+    // On a 320 px phone a 320 px drawer used to cover the whole screen and
+    // leave no backdrop to tap; the cap keeps a 48 px strip of the page.
+    render(
+      <MobileNav
+        isOpen
+        onOpenChange={() => {}}
+        width={300}
+        data-testid="mobile-nav">
+        <span>Content</span>
+      </MobileNav>,
+    );
+
+    const drawer = screen
+      .getByTestId('mobile-nav')
+      .querySelector<HTMLElement>('[tabindex="-1"]');
+    if (drawer == null) {
+      throw new Error('no drawer panel');
+    }
+    expect(declaredValue(drawer, 'max-width')).toBe('85vw');
+    // The requested width is the width, not a cap on a full-viewport one.
+    expect(drawer.style.getPropertyValue('--x-width')).toBe('300px');
+    expect(declaredValue(drawer, 'width')).toBe('var(--x-width)');
   });
 });

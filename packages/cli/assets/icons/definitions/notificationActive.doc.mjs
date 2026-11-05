@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'notificationActive',
   description: 'New or unread notifications.',
-  words: ['ringing', 'unread', 'new alert'],
+  words: ['ringing', 'unread', 'new alert', 'bell alert', 'bell ring'],
 };

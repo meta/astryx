@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'conversation',
   description: 'A conversation between people.',
-  words: ['chat', 'discussion', 'thread'],
+  words: ['chat', 'discussion', 'thread', 'chat bubbles', 'messages square'],
 };

@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'location',
   description: 'A place or address.',
-  words: ['place', 'address', 'map'],
+  words: ['place', 'address', 'map', 'map pin'],
 };

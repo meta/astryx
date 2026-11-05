@@ -986,7 +986,9 @@ export function iconDefinitionTreeInput(doc, file, provider, providerId) {
     kind: 'icon-definition',
     name: doc.name,
     title: doc.name,
-    summary: doc.description,
+    // Built-in definitions are the ones every set must map; the words are
+    // what an author searches the library for.
+    summary: `${doc.builtIn ? '[built-in] ' : ''}${doc.description}${doc.words.length > 0 ? ` Words: ${doc.words.join(', ')}.` : ''}`,
     group: ICON_DEFINITIONS_GROUP,
     placement: undefined,
     ref: {selfDoc: doc},

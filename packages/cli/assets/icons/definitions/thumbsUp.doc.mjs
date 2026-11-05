@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'thumbsUp',
   description: 'Approve or give positive feedback.',
-  words: ['approve', 'good', 'like'],
+  words: ['approve', 'good', 'like', 'hand thumb up'],
 };

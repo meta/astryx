@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'settings',
   description: 'Open settings or preferences.',
-  words: ['gear', 'preferences', 'options'],
+  words: ['gear', 'preferences', 'options', 'cog'],
 };

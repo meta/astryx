@@ -9,7 +9,7 @@
  *   command
  */
 
-import {addIconSet, refuseOutsideProject} from '../_adapter.mjs';
+import {addIconSet, authoring, refuseOutsideProject} from '../_adapter.mjs';
 import {refuseOtherOptions} from '../_options.mjs';
 
 /**
@@ -27,6 +27,6 @@ export async function iconNewSet(name, options = {}) {
     'experimental icon new-set',
     'the integration package',
   );
-  const {data} = await addIconSet(name, options);
+  const {data} = await authoring(() => addIconSet(name, options));
   return {type: 'icon.newSet', data};
 }

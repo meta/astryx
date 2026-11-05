@@ -5,6 +5,6 @@ export default {
   type: 'icon-definition',
   name: 'microphone',
   description: 'Start voice input or audio recording.',
-  words: ['voice', 'audio', 'record'],
+  words: ['voice', 'audio', 'record', 'mic'],
   builtIn: true,
 };

@@ -3,13 +3,13 @@
 /**
  * @file Astryx CLI — Commander program setup
  *
- * Registers all commands via lazy loading. If one command fails to load
- * (bad import, syntax error), the other commands still work.
+ * Commands load lazily: a bin run loads only the one its arguments name.
+ * One that fails to load (bad import, syntax error) leaves the rest working.
  *
  * The program is built by {@link createProgram} — a factory so tests can drive
  * a FRESH program in-process (via parseAsync) instead of spawning `node
- * bin/astryx.mjs` per assertion. `bin/astryx.mjs` and legacy importers use the
- * eager {@link program} singleton, which is just `await createProgram()`.
+ * bin/astryx.mjs` per assertion. Code that reads every command at once uses
+ * the full program in program.mjs.
  */
 
 import {Command, Option} from 'commander';
@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import {formatCliCommand, getCliInvocation, quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {hasRecordedProject} from '../../foundation/env/cli-command.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
+import {findConfigPath} from '../../foundation/config/config-path.mjs';
 import {API_VERSION, setJsonMode} from '../../foundation/response/json.mjs';
 import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
 import {cliInstallAdvice, installFolder} from '../../foundation/release/notices.mjs';
@@ -29,14 +30,18 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {installJsonShim} from './lib/json-shim.mjs';
 import {markReportsResult} from './lib/define-command.mjs';
+// The light modules, not agent-docs.mjs: that one loads discovery and the
+// project config, which every run would pay for at startup.
 import {
   agentDocsTargetDir,
   assertAgentDocsTarget,
+} from '../../foundation/agent-docs/agent-docs-target.mjs';
+import {CLI_ROOT} from '../../foundation/fs/paths.mjs';
+import {
   isAstryxInitialized,
   isAstryxPromptInReach,
-} from '../../foundation/agent-docs/agent-docs.mjs';
-import {CLI_ROOT} from '../../foundation/fs/paths.mjs';
-import {setupNudge} from '../../foundation/agent-docs/agent-doc-state.mjs';
+  setupNudge,
+} from '../../foundation/agent-docs/agent-doc-state.mjs';
 import * as debug from '../../foundation/debug/index.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -99,6 +104,7 @@ export const JSON_SUPPORTED = new Set([
   'experimental icon use',
   'experimental icon new-set',
   'experimental icon new-definition',
+  'experimental render',
   'build',
   'swizzle',
   'gap-report',
@@ -185,9 +191,6 @@ function fullCommandName(actionCommand, root) {
  */
 export async function loadProjectDebugHandler() {
   try {
-    const {findConfigPath, Project} = await import(
-      '../../foundation/config/project.mjs'
-    );
     const configPath = findConfigPath(process.cwd());
     if (!configPath) return;
     const text = fs.readFileSync(configPath, 'utf-8');
@@ -195,6 +198,9 @@ export async function loadProjectDebugHandler() {
       debug.noteConfigGateSkipped();
       return;
     }
+    // Only now: a run in a folder with no such config never loads the project
+    // module and its discovery.
+    const {Project} = await import('../../foundation/config/project.mjs');
     await Project.load(process.cwd());
   } catch {
     // A broken config is the command's problem to report, not ours.
@@ -328,6 +334,52 @@ const commands = [
   {name: 'postinstall', path: './commands/postinstall.mjs', register: 'registerPostinstall'},
 ];
 
+/** The name each registry entry registers, in registration order. */
+export const COMMAND_NAMES = Object.freeze(commands.map(cmd => cmd.name));
+
+/** Commands whose run reads every other command: the manifest lists them. */
+const READS_EVERY_COMMAND = new Set(['manifest']);
+
+/**
+ * The commands a run of the bin loads. Commander dispatches a run to its
+ * first operand after the root's own options, so this reads the arguments the
+ * same way. It returns that one command, no command for a run that only
+ * prints the version, or null for every command. These runs load every
+ * command: help, the manifest, `help <command>`, an unknown word, and a flag
+ * the root does not declare. They print or read the whole list.
+ *
+ * @param {import('commander').Command} program the root, with its options
+ * @param {string[]} argv the arguments after `astryx`
+ * @returns {Set<string> | null}
+ */
+export function commandsForArgs(program, argv) {
+  let printsVersion = false;
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    // Commander reads a lone `-` as an operand, as it reads any word.
+    if (arg.length < 2 || arg[0] !== '-') {
+      return commands.some(cmd => cmd.name === arg) && !READS_EVERY_COMMAND.has(arg)
+        ? new Set([arg])
+        : null;
+    }
+    const equals = arg.startsWith('--') ? arg.indexOf('=') : -1;
+    const flag = equals === -1 ? arg : arg.slice(0, equals);
+    const option = program.options.find(o => o.long === flag || o.short === flag);
+    // Help flags, `--`, combined short flags and unknown flags read the whole
+    // list, or make Commander stop dispatching by name.
+    if (option == null) return null;
+    const takesValue = option.required || option.optional;
+    if (equals !== -1 && !takesValue) return null;
+    if (equals === -1 && option.required) i += 1;
+    const next = argv[i + 1];
+    if (equals === -1 && option.optional && next != null && !(next.length > 1 && next[0] === '-')) {
+      i += 1;
+    }
+    if (option.long === '--version') printsVersion = true;
+  }
+  return printsVersion ? new Set() : null;
+}
+
 const SETUP_NUDGE_EXEMPT = new Set(['init', 'agent-docs']);
 
 /**
@@ -362,9 +414,12 @@ const INTEGRATION_MANIFEST_FILES = [
  * lazy-imported. Each call returns an independent Command so tests can
  * parseAsync repeatedly without commander state leaking between runs.
  *
+ * @param {{argv?: string[]}} [options] `argv`, the arguments after `astryx`:
+ *   load only the commands a run of them needs (commandsForArgs). Without
+ *   it, every command loads.
  * @returns {Promise<import('commander').Command>}
  */
-export async function createProgram() {
+export async function createProgram({argv} = {}) {
   const program = new Command();
 
   // Deterministic, single-line help. Commander wraps each option/command
@@ -707,7 +762,9 @@ export async function createProgram() {
     }
   });
 
+  const loads = argv == null ? null : commandsForArgs(program, argv);
   for (const cmd of commands) {
+    if (loads != null && !loads.has(cmd.name)) continue;
     try {
       const mod = await import(cmd.path);
       mod[cmd.register](program, {jsonSupported: JSON_SUPPORTED, version: pkg.version});
@@ -739,9 +796,3 @@ export async function createProgram() {
 
   return program;
 }
-
-/**
- * Eager singleton program for `bin/astryx.mjs` and legacy importers. Tests
- * should call {@link createProgram} to get an isolated instance.
- */
-export const program = await createProgram();

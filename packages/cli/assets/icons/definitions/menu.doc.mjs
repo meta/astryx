@@ -5,6 +5,6 @@ export default {
   type: 'icon-definition',
   name: 'menu',
   description: 'Open the main navigation menu.',
-  words: ['hamburger', 'navigation'],
+  words: ['hamburger', 'navigation', 'bars'],
   builtIn: true,
 };

@@ -138,8 +138,9 @@ icon, and the CLI verifies it, writes the files, and checks the set.
     `default.variant`, the one each icon's own `export` draws. A variant is a
     named look the set supplies (for example outline or solid); size comes
     from CSS;
-  - optional `source` (the upstream library and version), `generated`
-    (FR13), `adapter` (FR13), and `themeMap` (FR12).
+  - optional `source` (the upstream library and version), `exclude` (library
+    exports that are not icons, FR13), `generated` (FR13), `adapter` (FR13),
+    and `themeMap` (FR12).
 
   A data file that fails this shape, repeats an `id`, maps a name that is
   neither an Astryx definition nor one of the set's own, maps to a missing
@@ -168,12 +169,15 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   `export`, `import` line, `words`, `definitions`, `variants`, `reason`, and
   `score`: 100 for a definition the set maps to the icon, 90 or 80 for an
   exact name or meaning match (the reading most of the searched icons use
-  leads), 60 when the query starts one of its words, 40 for a partial match.
-  An icon also answers to the name and words of every definition it draws.
-  Equal scores are ordered by set order (FR8), so the project's set leads;
-  then, within a set, an exact name match on the whole id before one on an id
-  part and an exact meaning match by its tag position; then by `id`. `--set`
-  keeps one set and `--limit` caps the list.
+  leads), 60 when the query starts one of its words, 40 for a partial match,
+  which answers only when nothing scores 60 or more. An icon also answers to
+  the name and words of every definition it draws. Equal scores are ordered by
+  set order (FR8), so the project's set leads; then, within a set, an exact
+  name match on the whole id before one on an id part and an exact meaning
+  match by its tag position; then by `id`. `--set` keeps one set and `--limit`
+  caps the list; `--set` with `--all-icons` and no words lists every icon of
+  that set (`icon.setIcons`), and `--definitions` lists every Astryx
+  definition (`icon.definitions`).
 - **FR7 — One icon and the installed sets.** `<set>/<id>` answers
   `icon.detail` with every variant's import line; `--list` answers `icon.list`
   with each set's coverage of built-in, Astryx, and its own definitions, the
@@ -197,19 +201,24 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   `map` names for the definition. Every reference uses the mapped export,
   under an alias when the name is taken; a mapped default import becomes the
   set's named import aliased to its local name. Nothing is guessed from names,
-  and a `likely` match is only suggested.
+  and a `likely` match is only suggested. One key covers a name imported from
+  two modules (outline and solid `TrashIcon`); each keeps its variant when its
+  module belongs to an installed set. A mapped icon's elements lose the
+  library's sizing props (`size`, `strokeWidth`, `absoluteStrokeWidth`): size
+  comes from CSS (FR14). Comments on a rewritten import line are kept.
 - **FR10 — The template reports every icon.** The result, and the copy
   receipt, gain `icons`: the set state, each icon `mapped` (source, target,
-  and the rule) or `kept` (with why, and a `likely` suggestion when one
-  exists). With a set, every declared key is mapped or kept: a key bound only
-  by a namespace import, a type-only import, a re-export, or an import from an
-  Astryx package or the project's set, or by no import at all (`module` null),
-  is kept with the reason; a side-effect import binds nothing. An unmapped
-  icon keeps its import, and its library stays a needed dependency. Printed
-  source keeps the report on stderr. Without the opt-in there is no `icons`
-  field and no rewrite. `integration check` notes each key a template's source
-  never imports (`template_icon_not_imported`), never counted or failing,
-  under `--strict` or `--next`.
+  the rule, and the sizing props `dropped`) or `kept` (with why, and a
+  `likely` suggestion when one exists). With a set, every declared key is
+  mapped or kept: a key bound only by a namespace import, a type-only import,
+  a re-export, or an import from an Astryx package or the project's set, or
+  by no import at all (`module` null), is kept with the reason; a side-effect
+  import binds nothing. An unmapped icon keeps its import, and its library
+  stays a needed dependency. Printed source keeps the report on stderr.
+  Without the opt-in there is no `icons` field and no rewrite.
+  `integration check` notes each key a template's source never imports
+  (`template_icon_not_imported`), never counted or failing, under `--strict`
+  or `--next`.
 - **FR11 — Search stays stable.** `astryx search` has no icon domain and no
   `--type icon`, and returns no experimental doc, with or without the opt-in.
   Icons join it only at promotion.
@@ -220,21 +229,96 @@ icon, and the CLI verifies it, writes the files, and checks the set.
 ### Authoring
 
 - **FR13 — The CLI writes the set, one verified icon at a time.** Every
-  command reads modules statically and leaves files unchanged when it fails:
+  icon command refuses, with `ERR_INVALID_OPTION` and before it writes a
+  file, two options it would not both honor: a listing (`--list`,
+  `--definitions`, `--all-icons`) with a query, another listing, or an
+  option it ignores; a `<set>/<id>` query with `--set` or `--limit`;
+  `add --all` with an export name, `--definition`, `--new-definition`,
+  `--description`, `--words`, `--default`, or `--id`; `add --definition`
+  with `--new-definition`; `add --description` or `--words` without
+  `--new-definition`; `map --pairs` with a definition, an icon, or
+  `--remove`, and `map --remove` with an icon; and `new-set --exclude`
+  without `--from` or `--default-variant` without `--variants`. Every
+  command reads modules statically, and its writes are all or nothing: when
+  it fails, every file is as it was and the error has a stable code
+  (`ERR_WRITE_FAILED` for a write that fails). It writes only the set's own
+  files, the manifest root, and the set's root and manifest in an existing
+  package.json `files` (architecture:cli-surface INV16); every other change
+  the package needs, it names as the exact text to add:
   - `experimental icon new-set <name>` writes the descriptor, an empty data
     file, the generated module (`generated`) with its declaration file and an
     empty theme map, and the manifest root. `--from <module>` wraps every
     component the module exports, and every data export through the set's
     `adapter`, as `<Name>Icon` exports, filling `map` only where a definition's
-    name or word is an icon's whole `id`; a shared library prefix is left out
-    of ids and names, and `--exclude` drops exports that are not icons. Run
-    again, it refreshes the icons and keeps `map` entries whose icon exists.
+    name is an icon's whole `id`, and lists those entries for review. For an
+    unmapped definition it returns, never writes, up to three suggestions,
+    in this order: an icon whose `id` is the definition's name spelled with or
+    without hyphens or with a plural `s` (`light-bulb` for `lightbulb`,
+    `languages` for `language`); an icon whose library gives it the
+    definition's name as another name; icons whose `id` starts with the
+    definition's name as written, most of its words first; an icon whose `id`
+    is one of its words; an icon whose library gives it one of its words as
+    another name; then two-word ids whose first word is a one-word word
+    exactly and whose second word only sizes, shapes, or numbers it
+    (`grid-2x2`, `plus-circle`; never `card-sim` or `fast-forward`). A plural
+    joins only its own singular, never a longer id (`users` is not
+    `user-plus`), and no other ending is taken off (`drafting` is not
+    `draft`). Never an icon `map` already uses, one whose `id` is another
+    definition's name, a negated form (`lock-open`, `bell-off`), or the
+    opposite direction (`ellipsis-vertical` for `moreHorizontal`).
+    Ids keep a dimension as one word (`Squares2X2Icon` is `squares-2x2`)
+    and split a one-letter word from a digit (`CalendarX2` is
+    `calendar-x-2`); a shared library prefix is left out of ids and names;
+    an icon exported under several names is recorded once, its other names
+    as words; `…Provider` and `…Context` components
+    are never icons; and `--exclude` adds exports that are not icons to the
+    data file's `exclude`, which every refresh honors. From an installed
+    package it records `source` (the library and version), copies the
+    library's license notices into the set, and takes the library's license
+    for the descriptor. Its receipt names, as the exact text to add, the
+    entry change that makes the generated module public (an `export *` line
+    for an entry file in the package, relative to it; for a package with no
+    entry, `index.js`, `index.d.ts`, and their package.json `main`, `types`,
+    and `exports`; for a built or CommonJS entry, the line for the source it
+    is built from, never the built file), the `react` and optional
+    `@types/react` and `@astryxdesign/cli` peers it does not declare, and a
+    `typecheck` script running `integration check --strict` when it has
+    none. `--variants` and `--default-variant` declare `variants` and
+    `default`; `--display-name` and `--description` fill the descriptor. Run
+    again, it refreshes the icons that module supplies (those the generated
+    module re-exports or adapts from it) and keeps `map` entries whose icon
+    exists; every other icon (the author's `./` artwork, another library's)
+    is kept with its `map` entries and variants, a library icon whose `id`
+    or export one of those has is left out and named, and each icon the
+    module no longer exports, or that `exclude` now names, is removed and
+    named for that reason, with the `map` entries that named it. An existing
+    icon is known by the library export its generated module re-exports, then
+    by its own export, then by its `id`; one matched this way keeps its export
+    unchanged, its `map` entries, and every other field, and an `id` the
+    current rule spells differently is reported under `renamed`
+    (`add --variant <name> --all` meets an icon the same way). A refresh
+    copies the library's license notices the set lacks, and the run that
+    first records `source` takes the library's license for the descriptor
+    when its `license` is still the one `new-set` wrote (the package's own,
+    or `UNLICENSED`); a `license` the author changed is kept, and the
+    receipt names both. Later runs keep the descriptor's `license`. The
+    package's own `license` is never written.
   - `experimental icon add <Export> --from <module>` verifies the export,
     lists the definitions that fit it, and with `--definition` or
     `--new-definition` adds it and maps it; `--variant <name>` adds it as
-    that declared variant of an existing icon.
-  - `experimental icon map <definition> <icon>` writes one `map` entry, and
-    `--remove` removes one;
+    that declared variant of an existing icon. With `--variant <name> --all`
+    and no export, it adds that variant for every icon from that module's
+    package whose `id` an export of the module has, in one write; an icon
+    from another module is left alone and not listed as missing. For a `./`
+    file outside package.json `files`, it names the `files` array that
+    publishes it.
+  - `experimental icon map <definition> <icon>` writes one `map` entry,
+    `--remove` removes one, and `--pairs` writes many in one checked write;
+    here and in `add --definition` a definition may be named by its kebab
+    id. `map` names an icon only by its `id`, its export name in any case,
+    or another name its library exports it as (a word it carries that is
+    not a part of its `id`); a part of an `id` alone (`glass` for
+    `magnifying-glass`) is refused with the icons that carry it;
     `new-definition` writes one of the set's own definitions; `use <set>`
     writes `experimental.iconSet`.
   - The generated module re-exports each library component, or wraps a data
@@ -267,12 +351,17 @@ icon, and the CLI verifies it, writes the files, and checks the set.
   | `icon_source_version_drift`       | warning  | the data names another upstream version than the package depends on            |
   | `icon_license_notice_missing`     | warning  | a set with an upstream ships no license notice                                 |
 
-  A definition finding names the definition's description and words, and
-  suggests an `icon map` command only when an icon's whole `id` is the
-  definition's name or one of its words. Errors fail the check; warnings fail
-  under `--strict`. Re-exports are followed through relative files and
-  installed packages for these checks only, and an export fails only when the
-  reader proves it absent. Neither of these is an issue, never counted and
+  A definition finding names the definition's description and words and the
+  `icon map` command that fixes it, and suggests icons by the rule `new-set`
+  uses (FR13), never from part of a word. When the package's entry exports
+  neither the set's theme map nor any of its icons, one `icon_export_missing`
+  names the same entry change the `new-set` receipt names (FR13), in place of
+  a finding per icon: for a built entry, the source it is built from, never
+  the built file. A CommonJS entry the reader cannot read is listed as not
+  checked instead. Errors fail the check; warnings fail under `--strict`.
+  Re-exports are followed through relative files and installed packages for
+  these checks only, and an export fails only when the reader proves it
+  absent. Neither of these is an issue, never counted and
   never failing, even under `--strict` or `--next`, in the validate result's
   additive
   field `iconSets` (each `{set, unmappedDefinitions, suggestions,
@@ -301,7 +390,11 @@ message}`) names each template or namespace doc that sets `stability`, and
   project. `experimental icon use` adds `warning` to its receipt, printed as a
   `[warn]` line, when the project declares an `@astryxdesign/cli` range (in
   any dependency field) that admits such a release; a project that declares no
-  range, or a `workspace:`, `file:`, or `link:` one, gets none.
+  range, or a `workspace:`, `file:`, or `link:` one, gets none. A CLI reads a
+  set's data file strictly: a key it does not know withdraws the set, naming
+  the key (FR17). `exclude` is read only by a CLI whose data-file reference
+  lists it, and `new-set` writes it only when `--exclude` is given; a set
+  without it is read by every CLI that has `astryx experimental icon`.
 - **FR17 — Doctor and discover read sets only with the opt-in.** In a project
   that sets `experimental.iconSet`, the project's set is one of: valid
   (`selected`), not installed (`missing`), or installed but withdrawn
@@ -310,9 +403,11 @@ message}`) names each template or namespace doc that sets `stability`, and
   or one that was withdrawn, saying which and why, and warns when two packages
   ship that name or another set is withdrawn. The template `icons` report and
   `experimental icon --list` carry the same status and reason, and
-  `experimental icon` with `--set` or `<set>/<id>`, `experimental icon use`,
-  and `discover <package>/<set>` name a withdrawn set as withdrawn, with its
-  reason, rather than as not installed. `astryx discover` reads `icon-set` as
+  `experimental icon` with `--set` (with words or `--all-icons`) or
+  `<set>/<id>`, `experimental icon use`, and `discover <package>/<set>` name a
+  withdrawn set as withdrawn, with its reason, rather than as not installed,
+  each with `ERR_NOT_FOUND`; `add`, `map`, and `new-definition` name a
+  withdrawn set in the package being authored the same way. `astryx discover` reads `icon-set` as
   a kind: `--type icon-set`, catalog entries with `iconCount` and
   `definitions`, and `discover <package>/<set>`; a withdrawn set is not
   listed. Without the opt-in, Doctor has no such check and reports no icon-set

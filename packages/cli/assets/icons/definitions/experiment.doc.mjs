@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'experiment',
   description: 'An experiment, test, or lab feature.',
-  words: ['lab', 'test', 'beta'],
+  words: ['lab', 'test', 'beta', 'test tube'],
 };

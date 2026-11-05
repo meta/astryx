@@ -112,6 +112,19 @@ export const doc = {
       description:
         "One post's metadata plus the feed URL and the post's full plaintext body.",
     },
+    // render (experimental: may change or be removed in a patch release)
+    {
+      value: 'render.page',
+      stability: 'experimental',
+      description:
+        'A page rendered to one self-contained file: `input`, `output`, `bytes`, the local files embedded (`files`: modules, stylesheets, images and JSON), the package `stylesheets` cut and inlined, `classes`, `cssBytes`, `images` inlined, and `warnings` (`{code, message}`; empty when nothing looked wrong). Experimental: may change or be removed in a patch release.',
+    },
+    {
+      value: 'render.reverse',
+      stability: 'experimental',
+      description:
+        'A rendered file turned back into a page: `input`, `mode` (`embedded`: the embedded source written back byte for byte; `rebuilt`: rebuilt from Astryx markup, text and layout only), `output`, every file written (`files`), `exact`, the relative imports it did not carry (`missing`, when any), and for a rebuilt page `components`, `elements`, `unknown` and `omitted`. Experimental: may change or be removed in a patch release.',
+    },
 
     // experimental icon (installed icon sets, AST-084): experimental values,
     // documented under `astryx docs cli/experimental`, not in this table.
@@ -140,6 +153,12 @@ export const doc = {
         'The `experimental.iconSet` written to astryx.config, the set it names as `<package>/<set>`, the config file, whether it was created, the value it replaced, and whether anything changed.',
     },
     {
+      value: 'icon.mapMany',
+      stability: 'experimental',
+      description:
+        'Many `map` entries written at once (--pairs): the set, its package, the data file, each entry {definition, icon, previous, changed}, whether anything changed, and the generated files rewritten.',
+    },
+    {
       value: 'icon.map',
       stability: 'experimental',
       description:
@@ -150,6 +169,24 @@ export const doc = {
       stability: 'experimental',
       description:
         "One icon registered in the icon set being authored: the set, its package, the icon {id, export, module}, the variant when it was added as one, the definition mapped to it, the definition file written when it added the set's own, the files written, and whether anything changed.",
+    },
+    {
+      value: 'icon.definitions',
+      stability: 'experimental',
+      description:
+        'Every Astryx icon definition (--definitions): each {name, builtIn, description, words}.',
+    },
+    {
+      value: 'icon.setIcons',
+      stability: 'experimental',
+      description:
+        'Every icon of one set (--set with --all-icons): the set, its package, how many icons, and each icon {id, export, words, definitions}, by id.',
+    },
+    {
+      value: 'icon.addVariants',
+      stability: 'experimental',
+      description:
+        'One variant added for every icon of the set at once (--all): the set, its package, the variant, the module read, how many icons gained it, how many already had it, the ids the module has no export for, the files written, and whether anything changed.',
     },
     {
       value: 'icon.definitionMatches',
@@ -189,7 +226,7 @@ export const doc = {
     {
       value: 'discover.item',
       description:
-        'One item that is not an installed component, for an @scope/name/<item> query: its kind, name, package, version, and whether the project has the package. The envelope\'s package names the same package.',
+        "One item that is not an installed component, for an @scope/name/<item> query: its kind, name, package, version, and whether the project has the package. The envelope's package names the same package.",
     },
     {
       value: 'discover.search',
@@ -201,7 +238,7 @@ export const doc = {
     {
       value: 'search',
       description:
-        'The echoed query, `matchCount` (total matches, before `limit`), and results, a ranked SearchResultEntry[] bounded by `limit`: each {domain, name, package, score, reason, description, command} (package is the npm package that owns the result), plus import (components, hooks), title, parent (the command that opens the level above), and, for a hit on one section, section (docs), or displayName and kind (templates). When a search with no `type` could not obtain @astryxdesign/core, `meta.partial` is {skipped, reason}: the domains it skipped (component, hook, template) and why.',
+        'The echoed query, `matchCount` (total matches, before `limit`), and results, a ranked SearchResultEntry[] bounded by `limit`: each {domain, name, package, score, reason, description, command} (package is the npm package that owns the result), plus import (components, hooks), title, parent (the command that opens the level above), and, for a hit on one section, section (docs), or displayName and kind (templates). The result for a deprecated component also carries deprecated {replacement, description}: the name of the component to use instead and the modernization route, from its doc. When a search with no `type` could not obtain @astryxdesign/core, `meta.partial` is {skipped, reason}: the domains it skipped (component, hook, template) and why.',
     },
 
     // build
@@ -225,7 +262,7 @@ export const doc = {
     {
       value: 'swizzle.copy',
       description:
-        "An eject receipt: component name, owning package, output directory, files-copied count, the written file names, whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling. The envelope's package names the same owning package.",
+        "An eject receipt: component name, owning package, output directory, files-copied count, the copied file names (relative to the component folder; owner modules copied beside it start with ../), whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling. The envelope's package names the same owning package.",
     },
 
     // gap reports
@@ -249,7 +286,7 @@ export const doc = {
     {
       value: 'template.show',
       description:
-        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and demoMediaReplaced (how many Astryx demo media references were replaced with placeholders for you to swap for your own media).",
+        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and demoMediaReplaced (how many Astryx demo media references were replaced with placeholders for you to swap for your own media), and demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder for your own content).",
     },
     {
       value: 'template.skeleton',
@@ -259,7 +296,7 @@ export const doc = {
     {
       value: 'template.copy',
       description:
-        "A scaffold receipt: template id, output directory, written file name, file count, demoMediaReplaced (how many Astryx demo media references were replaced with placeholders), notes (setup notes naming what the template needs that the project lacks — missing packages, missing StyleX compiler; empty when satisfied), missingPackages (external package names the template imports that are not in the project), and installCommand (a ready-to-run install command with the detected package manager and workspace version ranges; null when nothing is missing, or when several lockfiles leave the package manager undetermined). The envelope's package names the npm package that owns the template.",
+        "A scaffold receipt: template id, output directory, written file name, file count, demoMediaReplaced (how many Astryx demo media references were replaced with placeholders), demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder), notes (setup notes naming what the template needs that the project lacks — missing packages, missing StyleX compiler; empty when satisfied), missingPackages (external package names the template imports that are not in the project), and installCommand (a ready-to-run install command with the detected package manager and workspace version ranges; null when nothing is missing, or when several lockfiles leave the package manager undetermined). The envelope's package names the npm package that owns the template.",
     },
 
     {
@@ -351,7 +388,7 @@ export const doc = {
     {
       value: 'upgrade.run',
       description:
-        'The run receipt: from/to versions, codemod count, integrations processed, the agent-docs summary, sourcePathFound (false when the resolved source directory does not exist, so no source file was read), and (apply mode) filesChanged, transformsApplied, and per-codemod errors. When the installed Core is newer than the CLI, it also carries cliBehindCore ({cliVersion, command}): codemods for the releases after cliVersion did not run.',
+        'The run receipt: from/to versions, codemod count, integrations processed, the agent-docs summary, sourcePathFound (false when the resolved source directory does not exist, so no source file was read), and (apply mode) filesChanged, transformsApplied, and per-codemod errors. regenerate lists generated files to rebuild, each with its codemods, commands and messages. When the installed Core is newer than the CLI, it also carries cliBehindCore ({cliVersion, command}): codemods for the releases after cliVersion did not run.',
     },
 
     // manifest

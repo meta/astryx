@@ -38,7 +38,10 @@ export const doc = {
     },
   ],
   throws: [
-    {code: 'ERR_NOT_FOUND', when: 'no installed set has the name'},
+    {
+      code: 'ERR_NOT_FOUND',
+      when: 'no installed set has the name, or the set it names is withdrawn (the message says which, and why)',
+    },
     {
       code: 'ERR_INVALID_ARGUMENT',
       when: 'two installed packages ship a set with the name',

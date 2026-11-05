@@ -133,8 +133,11 @@ const CASES = {
     ERR_MISSING_ARGUMENT: () => icon('', {cwd: app()}),
     ERR_INVALID_ARGUMENT: () => icon('close', {cwd: app(), limit: 0}),
     ERR_NOT_FOUND: () => icon('glyphs/nope', {cwd: app()}),
+    ERR_INVALID_OPTION: () => icon('close', {cwd: app(), list: true}),
   },
   iconAdd: {
+    ERR_INVALID_OPTION: () =>
+      iconAdd('XIcon', {cwd: pkg(), from: './icons/x.js', all: true}),
     ERR_PROJECT_REQUIRED: () =>
       iconAdd('XIcon', {cwd: outside(), from: './x.js'}),
     ERR_INVALID_ARGUMENT: () =>
@@ -171,6 +174,8 @@ const CASES = {
   },
   iconMap: {
     ERR_PROJECT_REQUIRED: () => iconMap('close', 'x', {cwd: outside()}),
+    ERR_INVALID_OPTION: () =>
+      iconMap('close', undefined, {cwd: pkg(), pairs: 'close=x'}),
     ERR_MISSING_ARGUMENT: () => iconMap('', 'x', {cwd: pkg()}),
     ERR_INVALID_ARGUMENT: () =>
       iconMap('close', 'x', {cwd: withSecondSet(pkg())}),
@@ -221,6 +226,8 @@ const CASES = {
   iconNewSet: {
     ERR_PROJECT_REQUIRED: () => iconNewSet('outline', {cwd: outside()}),
     ERR_INVALID_ARGUMENT: () => iconNewSet('Outline', {cwd: bare()}),
+    ERR_INVALID_OPTION: () =>
+      iconNewSet('outline', {cwd: bare(), exclude: 'Meta'}),
     ERR_FILE_EXISTS: async () => {
       const dir = bare();
       await iconNewSet('outline', {cwd: dir});
@@ -249,27 +256,27 @@ const CASES = {
   },
   iconNewDefinition: {
     ERR_PROJECT_REQUIRED: () =>
-      iconNewDefinition('rotate', {cwd: outside(), ...DEFINITION}),
+      iconNewDefinition('random', {cwd: outside(), ...DEFINITION}),
     ERR_INVALID_ARGUMENT: () =>
       iconNewDefinition('Not-Camel', {cwd: pkg(), ...DEFINITION}),
     ERR_MISSING_ARGUMENT: () =>
-      iconNewDefinition('rotate', {cwd: pkg(), words: ['turn']}),
+      iconNewDefinition('random', {cwd: pkg(), words: ['turn']}),
     ERR_FILE_EXISTS: async () => {
       const dir = pkg();
-      await iconNewDefinition('rotate', {cwd: dir, ...DEFINITION});
-      return iconNewDefinition('rotate', {cwd: dir, ...DEFINITION});
+      await iconNewDefinition('random', {cwd: dir, ...DEFINITION});
+      return iconNewDefinition('random', {cwd: dir, ...DEFINITION});
     },
     ERR_NOT_FOUND: () =>
-      iconNewDefinition('rotate', {cwd: pkg(), ...DEFINITION, icon: 'nope'}),
+      iconNewDefinition('random', {cwd: pkg(), ...DEFINITION, icon: 'nope'}),
     ERR_PATH_TRAVERSAL: () => {
       const dir = pkg();
       manifest(dir, "export default {experimental: {iconSets: '../out'}};\n");
-      return iconNewDefinition('rotate', {cwd: dir, ...DEFINITION});
+      return iconNewDefinition('random', {cwd: dir, ...DEFINITION});
     },
     ERR_WRITE_FAILED: () => {
       const dir = pkg();
       lock(path.join(dir, 'icon-sets', 'glyphs', 'definitions'));
-      return iconNewDefinition('rotate', {cwd: dir, ...DEFINITION});
+      return iconNewDefinition('random', {cwd: dir, ...DEFINITION});
     },
   },
 };

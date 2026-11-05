@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'archive',
   description: 'Archive an item.',
-  words: ['store', 'box'],
+  words: ['box', 'stash'],
 };

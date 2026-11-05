@@ -29,15 +29,21 @@ export interface ContractIssue {
   readonly message: string;
 }
 
-/** Why a core prop name is not allowed, or null when it is. */
-export function coreNameProblem(name: string): string | null {
+/**
+ * Why a core prop name is not allowed, or null when it is. A toolkit name is
+ * allowed when the component declares it has the same meaning there.
+ */
+export function coreNameProblem(
+  name: string,
+  sameMeaning = false,
+): string | null {
   if (SWIFT_KEYWORDS.has(name)) {
     return `"${name}" is a Swift keyword`;
   }
   if (KOTLIN_KEYWORDS.has(name)) {
     return `"${name}" is a Kotlin keyword`;
   }
-  if (RECLAIMED.has(name)) {
+  if (RECLAIMED.has(name) || sameMeaning) {
     return null;
   }
   for (const [toolkit, names] of Object.entries(TOOLKIT_NAMES)) {
@@ -73,8 +79,9 @@ export function checkContract(contract: ComponentContract): ContractIssue[] {
   const collect = (props: PropMap) =>
     Object.values(props).forEach(spec => namedTypesIn(spec.type, referenced));
 
+  const sameMeaning = new Set(contract.sameMeaning ?? []);
   for (const name of Object.keys(contract.core)) {
-    const problem = coreNameProblem(name);
+    const problem = coreNameProblem(name, sameMeaning.has(name));
     if (problem) {
       add(
         'error',

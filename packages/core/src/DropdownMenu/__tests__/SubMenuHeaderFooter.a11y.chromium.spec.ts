@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y always
 
 /**
  * @file SubMenuHeaderFooter.a11y.chromium.spec.ts
@@ -18,7 +19,13 @@
  *   Tab order and the pointer decision are what jsdom cannot exercise.
  */
 
-import {devices, expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  devices,
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

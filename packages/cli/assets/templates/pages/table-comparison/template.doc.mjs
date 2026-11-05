@@ -14,6 +14,7 @@ export const doc = {
     Box: 'package',
     CircleCheck: 'success',
     CircleX: 'error',
+    Cpu: 'cpu',
     FileText: 'document',
     Image: 'image',
     Plus: 'add',

@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'folderAdd',
   description: 'Create a new folder.',
-  words: ['new folder'],
+  words: ['new folder', 'folder plus'],
 };

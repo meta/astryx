@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'activity',
   description: 'Activity or live status over time.',
-  words: ['pulse', 'monitor', 'live'],
+  words: ['pulse', 'live'],
 };

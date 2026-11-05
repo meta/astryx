@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'refresh',
   description: 'Reload or refresh data.',
-  words: ['reload', 'sync', 'retry'],
+  words: ['reload', 'sync', 'retry', 'arrow path'],
 };

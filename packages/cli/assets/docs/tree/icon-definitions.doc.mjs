@@ -18,7 +18,7 @@ export const docs = {
   stability: 'experimental',
   title: 'Icon definitions',
   summary:
-    'Experimental. Every icon definition: what an icon stands for, and the shared name icon sets map their icons to.',
+    'Every icon definition: what an icon stands for, and the shared name icon sets map their icons to.',
   keywords: [
     'icon definition',
     'icon definitions',
@@ -42,7 +42,7 @@ export const docs = {
   blocks: [
     {
       type: 'prose',
-      text: "An icon definition is one thing an icon stands for, such as `close` or `delete`. Every icon set registers its icons against definitions in its data file's `map`, and templates are written against definitions, so a project that switches icon sets gets the same definition from the new set. Built-in definitions are the shared names Core renders; every set maps them. A set may add its own definitions; in a project that sets `experimental.iconSet`, they are listed here with the package that ships them. `astryx experimental icon <definition>` finds the icon each installed set draws for it. Icon definitions are experimental: they may change or be removed in a patch release.",
+      text: "An icon definition is one thing an icon stands for, such as `close` or `delete`. Every icon set registers its icons against definitions in its data file's `map`, and templates are written against definitions, so a project that switches icon sets gets the same definition from the new set. Built-in definitions, marked [built-in], are the shared names Core renders (the semantic icon names in `astryx docs icons`); every set maps them, and `integration check` fails until it does. The others are optional: map each one your library draws. `map` keys a definition by its camelCase name, shown after the id (`eyeSlash`); `experimental icon map` and `--pairs` take either spelling. A set may add its own definitions; in a project that sets `experimental.iconSet`, they are listed here with the package that ships them. `astryx experimental icon <definition>` finds the icon each installed set draws for it. Icon definitions are experimental: they may change or be removed in a patch release.",
     },
   ],
 };

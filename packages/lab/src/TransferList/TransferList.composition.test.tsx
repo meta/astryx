@@ -125,7 +125,7 @@ function StagedColumnSelector({
 }
 
 function openSelector(): void {
-  fireEvent.keyDown(screen.getByRole('button', {name: 'View options'}), {
+  fireEvent.keyDown(screen.getByRole('combobox', {name: 'View options'}), {
     key: 'ArrowDown',
   });
 }
@@ -144,7 +144,7 @@ describe('ComplexSelector + TransferList composition', () => {
     openSelector();
     await waitFor(() => {
       expect(
-        screen.getByRole('button', {name: 'View options'}),
+        screen.getByRole('combobox', {name: 'View options'}),
       ).toHaveAttribute('aria-expanded', 'true');
     });
 
@@ -173,7 +173,7 @@ describe('ComplexSelector + TransferList composition', () => {
     const user = userEvent.setup();
     const onCommit = vi.fn();
     render(<StagedColumnSelector onCommit={onCommit} />);
-    const trigger = screen.getByRole('button', {name: 'View options'});
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
 
     openSelector();
     await user.click(
@@ -255,7 +255,7 @@ describe('ComplexSelector + TransferList composition', () => {
     const user = userEvent.setup();
     const onCommit = vi.fn();
     render(<StagedColumnSelector onCommit={onCommit} />);
-    const trigger = screen.getByRole('button', {name: 'View options'});
+    const trigger = screen.getByRole('combobox', {name: 'View options'});
 
     openSelector();
     await waitFor(() => {

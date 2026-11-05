@@ -102,7 +102,11 @@ async function build() {
     .map((/** @type {any} */ c) => [`\`${c.name}\``, c.description, outsideProject(c)]);
 
   const errorCodes = await loadDoc('foundation/response/error-codes.doc.mjs');
-  const errorRows = errorCodes.members.map((/** @type {any} */ m) => [`\`${m.value}\``, m.description]);
+  // Experimental codes are documented under `astryx docs cli/experimental`,
+  // not in the stable table (spec:AST-017 FR27).
+  const errorRows = errorCodes.members
+    .filter((/** @type {any} */ m) => m.stability !== 'experimental')
+    .map((/** @type {any} */ m) => [`\`${m.value}\``, m.description]);
 
   const responseTypes = await loadDoc(
     'foundation/response/response-types.doc.mjs',

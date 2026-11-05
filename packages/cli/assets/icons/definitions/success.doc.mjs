@@ -5,6 +5,6 @@ export default {
   type: 'icon-definition',
   name: 'success',
   description: 'Show that something worked.',
-  words: ['ok', 'complete', 'passed'],
+  words: ['ok', 'complete', 'passed', 'check circle', 'circle check'],
   builtIn: true,
 };

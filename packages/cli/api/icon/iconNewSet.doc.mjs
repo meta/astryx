@@ -10,7 +10,7 @@ export const doc = {
   displayName: 'iconNewSet()',
   summary: 'Add an icon set to an integration package.',
   description:
-    "Creates an integration manifest when the package has none, writes the set directory with its strongly typed same-stem IconSetDoc and a starter data file (schemaVersion 1, module set to the package name, no icons and an empty map yet), and the set's generated module with its declaration file and an empty themeIcons theme map; with from, it wraps a library's icons into them. It declares the manifest's `experimental.iconSets` root on first use, and includes the manifest and root in package.json files when the package already uses an allowlist. Every path is confined to the package and existing files are never overwritten. Experimental: it may change or be removed in a patch release.",
+    "Creates an integration manifest when the package has none, writes the set directory with its strongly typed same-stem IconSetDoc and a starter data file (schemaVersion 1, module set to the package name, no icons and an empty map yet), and the set's generated module with its declaration file and an empty themeIcons theme map; with from, it wraps a library's icons into them, records the installed library and version as the data file's source, copies the library's license notices into the set, uses the library's license, maps each Astryx definition whose name is an icon id, and returns up to three likely icons for each other definition as suggestions (by its name, its words, and the other names the library gives an icon; never a part of a word, a negated form, or the opposite direction), never written. It declares the manifest's `experimental.iconSets` root on first use, and includes the manifest and root in package.json files when the package already uses an allowlist. It never writes the package's entry, exports, main, types, files list, peers, or scripts: its notes name each change the package needs as text to copy. Every path is confined to the package and existing files are never overwritten. Experimental: it may change or be removed in a patch release.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'iconNewSet(name: string, options?: IconNewSetOptions): Promise<IconNewSetResponse>',
@@ -46,6 +46,30 @@ export const doc = {
       description:
         'With from: export names that are not icons; a string is split on commas. SCREAMING_CASE names and number or boolean exports are always left out.',
     },
+    {
+      name: 'options.variants',
+      type: 'string[] | string',
+      description:
+        "The variants the set supplies, lower-kebab names such as outline and solid; a string is split on commas. Written to the data file's variants.",
+    },
+    {
+      name: 'options.defaultVariant',
+      type: 'string',
+      description:
+        "With variants: the variant each icon's own export draws, written to the data file's default; the first variant when absent.",
+    },
+    {
+      name: 'options.displayName',
+      type: 'string',
+      description:
+        "The descriptor's display name; the set name in title case when absent.",
+    },
+    {
+      name: 'options.description',
+      type: 'string',
+      description:
+        "The descriptor's one-line description; '<Display name> icons.' when absent.",
+    },
   ],
   returns: [
     {
@@ -57,7 +81,11 @@ export const doc = {
   throws: [
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'the name is not lowercase kebab-case, or package.json has no name',
+      when: 'the name is not lowercase kebab-case, package.json has no name, or a variant name or the default variant is invalid',
+    },
+    {
+      code: 'ERR_INVALID_OPTION',
+      when: '`exclude` is given without `from`, or `defaultVariant` without `variants`',
     },
     {
       code: 'ERR_FILE_EXISTS',

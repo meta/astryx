@@ -150,7 +150,8 @@ export const doc = {
     },
     {
       value: 'ERR_CODEMOD_FAILED',
-      description: 'One or more codemods failed during an upgrade run.',
+      description:
+        'A codemod or post-codemod hook failed during an upgrade run; the error carries a `receipt` that lists the files the run already changed.',
     },
     {
       value: 'ERR_CODEMOD_PROTECTED',
@@ -282,12 +283,68 @@ export const doc = {
     {
       value: 'ERR_VERSIONS_UNAVAILABLE',
       description:
-        'Nothing could answer this run, and nothing was written: the project\'s own CLI could not start and nothing else could answer, or the Core a command needs outside a project could not be installed.',
+        "Nothing could answer this run, and nothing was written: the project's own CLI could not start and nothing else could answer, or the Core a command needs outside a project could not be installed.",
     },
     {
       value: 'ERR_PROJECT_REQUIRED',
       description:
         'The command needs a project (an app with Astryx installed, or an integration package) and was run outside one. Nothing was written.',
+    },
+
+    // Render (experimental: may change or be removed in a patch release)
+    {
+      value: 'ERR_RENDER_COMPILE',
+      stability: 'experimental',
+      description:
+        'The page given to render does not compile. A stylesheet the page imports that is not valid CSS is reported this way too, naming the file. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_NO_DEFAULT_EXPORT',
+      stability: 'experimental',
+      description:
+        'The page given to render has no default export to render. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_MISSING_DEPENDENCY',
+      stability: 'experimental',
+      description:
+        'The page imports a package that is not installed where the page is. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_BROWSER_API',
+      stability: 'experimental',
+      description:
+        'The page reads a browser-only API, such as window or document, while rendering. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_ASSET_TOO_LARGE',
+      stability: 'experimental',
+      description:
+        'A local file the page uses is too large to inline into one file. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_TIMEOUT',
+      stability: 'experimental',
+      description:
+        'The page did not finish rendering in time and was stopped. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_FAILED',
+      stability: 'experimental',
+      description:
+        'The page threw while rendering. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_NOT_ASTRYX',
+      stability: 'experimental',
+      description:
+        '`render --reverse` was given a file with no embedded source and no Astryx markup. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_SOURCE_DAMAGED',
+      stability: 'experimental',
+      description:
+        '`render --reverse` refused the received file, and nothing was written: its embedded source is damaged (not valid, or a file does not match its checksum), lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a page module, stylesheet, JSON file or image. Raised only by the experimental render command.',
     },
   ],
 };

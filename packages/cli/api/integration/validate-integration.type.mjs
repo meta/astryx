@@ -126,8 +126,9 @@
  *   Astryx's optional (not built-in) definitions the set's `map` does not
  *   name. An unmapped built-in definition is an error issue instead.
  * @property {Array<{definition: string, icon: string}>} suggestions For each
- *   unmapped definition (built-in, optional, or the set's own), the icon
- *   whose whole id is the definition's name or one of its words, when one is.
+ *   unmapped definition (built-in, optional, or the set's own), the best icon
+ *   `integration check` gives it, by the rule `experimental icon new-set`
+ *   uses for its suggestions, when one is.
  * @property {Array<{icon?: string, adapter?: string, entry?: string, reason: string}>} unchecked
  *   What the checks could not judge, each with the reason: an icon export
  *   whose module is an `exports` target not built yet, or that the reader

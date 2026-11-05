@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'database',
   description: 'A database or stored data.',
-  words: ['data', 'storage', 'table'],
+  words: ['data', 'storage'],
 };

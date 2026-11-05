@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'userAdd',
   description: 'Invite or add a person.',
-  words: ['invite', 'add person'],
+  words: ['invite', 'add person', 'user plus'],
 };

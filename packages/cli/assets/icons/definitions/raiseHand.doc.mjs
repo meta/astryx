@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'raiseHand',
   description: 'Raise a hand to ask or speak.',
-  words: ['hand', 'ask', 'stop'],
+  words: ['hand', 'ask', 'hand raised'],
 };

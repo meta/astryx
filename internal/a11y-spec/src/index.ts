@@ -176,5 +176,13 @@ export {
   type LinkCurrentToken,
   type LinkStateFacts,
 } from './patterns/link';
+export {
+  TABLE_AST_020_FR15,
+  TABLE_PATTERN,
+  composeTablePattern,
+  tableApgRequirement,
+  type TableModuleContract,
+  type TableStateFacts,
+} from './patterns/table';
 export {TOOLBAR_PATTERN, type ToolbarStateFacts} from './patterns/toolbar';
 export {TOOLTIP_PATTERN, type TooltipStateFacts} from './patterns/tooltip';

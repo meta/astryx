@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'audio',
   description: 'Sound or volume.',
-  words: ['sound', 'volume', 'speaker'],
+  words: ['sound', 'volume', 'speaker', 'speaker wave'],
 };

@@ -69,11 +69,15 @@ describe('CommandPalette delegated mouseover performance', () => {
         searchSource: createStaticSource(items),
       }),
     );
+    // The options with {hidden: true}: the default query checks each one's
+    // visibility through jsdom's getComputedStyle, its ancestors' included,
+    // which takes seconds at 500 options (and many times that on a busy
+    // machine), where this test measures lookup reads. The combobox query
+    // below still checks that the open palette is visible.
+    const allOptions = () => view.getAllByRole('option', {hidden: true});
     try {
-      await waitFor(() =>
-        expect(view.getAllByRole('option')).toHaveLength(count),
-      );
-      const options = view.getAllByRole('option');
+      await waitFor(() => expect(allOptions()).toHaveLength(count));
+      const options = allOptions();
       const targets = [0, count - 1, Math.floor(count / 2), 0];
       for (const index of targets) {
         const option = options[index];

@@ -15,7 +15,10 @@ import * as path from 'node:path';
 import {Project} from '../../foundation/config/project.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
-import {IconSetAuthoringError} from '../../foundation/discovery/icon-set-writer.mjs';
+import {
+  IconSetAuthoringError,
+  allOrNothing,
+} from '../../foundation/discovery/icon-set-writer.mjs';
 import {PathSafetyError} from '../../foundation/fs/path-safety.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {projectIconSetCliWarning} from '../../foundation/integrations/cli-requirement.mjs';
@@ -44,6 +47,9 @@ export {
   resolveIconSource,
   generatedModulePath,
   generatedNamesOf,
+  generatedOrigins,
+  iconModulePackage,
+  sameIconModule,
   iconExportName,
   iconNaming,
   modulePrefix,
@@ -51,6 +57,10 @@ export {
   variantExportName,
   writeGeneratedIcons,
   writeIconSetData,
+  definitionNameOf,
+  iconIdIn,
+  iconsWithWord,
+  localSourceNote,
   THEME_MAP_NAME,
 } from '../../foundation/discovery/icon-set-writer.mjs';
 export {exportValueKind} from '../../foundation/discovery/module-exports.mjs';
@@ -87,14 +97,17 @@ function hasPackageJsonAbove(dir) {
 }
 
 /**
- * Run one authoring step, turning its errors into AstryxErrors.
+ * Run one authoring command so its writes are all or nothing, turning its
+ * errors into AstryxErrors.
  * @template T
  * @param {() => T | Promise<T>} step
  * @returns {Promise<T>}
  */
 export async function authoring(step) {
   try {
-    return await step();
+    // All or nothing: a failure after some writes puts every file back
+    // (AST-084 FR13).
+    return await allOrNothing(step);
   } catch (error) {
     if (error instanceof IconSetAuthoringError) {
       throw new AstryxError(

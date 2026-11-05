@@ -5,6 +5,6 @@ export default {
   type: 'icon-definition',
   name: 'warning',
   description: 'Warn about something that needs attention.',
-  words: ['caution', 'alert'],
+  words: ['caution', 'alert', 'exclamation triangle', 'triangle alert'],
   builtIn: true,
 };

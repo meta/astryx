@@ -44,6 +44,7 @@ export {
   discoverIntegrationTemplatesForOne,
   stripTemplateAssetRefs,
   replaceDemoMedia,
+  replaceDemoContent,
   listTemplates,
   findRelatedBlocks,
   findShowcase,
@@ -190,7 +191,9 @@ export async function template(name, options = {}) {
   if (name && candidates.length === 0) {
     throw new AstryxError(
       `Unknown template "${name}"`,
-      orderByAffinity(name, templates, t => [t.dirName, t.name]).map(t => ({
+      orderByAffinity(name, templates, t => [t.dirName, t.name], {
+        closest: true,
+      }).map(t => ({
         name: t.dirName,
         reason: `${t.type} template`,
       })),

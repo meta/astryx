@@ -51,7 +51,10 @@ import {
 } from './icon-set-discovery.mjs';
 import {inspectPackageExport} from './package-exports.mjs';
 import {
+  THEME_MAP_NAME,
+  entryWiringNote,
   generatedTypesPath,
+  otherNamesOf,
   generatedTypesText,
   readGeneratedStatements,
 } from './icon-set-writer.mjs';
@@ -63,6 +66,7 @@ import {
   staticExportBindings,
 } from './module-exports.mjs';
 import {astryxIconDefinitions} from './icon-definition-discovery.mjs';
+import {rankIcons} from './icon-ranking.mjs';
 import {
   issueError,
   issueWarning,
@@ -272,7 +276,17 @@ function checkContract(set, packageName, pkg, unchecked) {
       const actual = fs.existsSync(typesFile)
         ? fs.readFileSync(typesFile, 'utf-8')
         : null;
-      if (expected != null && actual !== expected) {
+      // The header comment is the writer's, and changes between releases;
+      // the declarations are what must match.
+      const code = (/** @type {string} */ text) =>
+        text
+          .split('\n')
+          .filter(line => !line.startsWith('//'))
+          .join('\n');
+      if (
+        expected != null &&
+        (actual == null || code(actual) !== code(expected))
+      ) {
         issues.push(
           issueError(
             ICON_GENERATED_TYPES_MISMATCH,
@@ -350,7 +364,7 @@ function checkDefinitions(set) {
     issues.push(
       issueError(
         ICON_BUILTIN_DEFINITION_MISSING,
-        `${label} maps no icon to the built-in icon definition "${doc.name}" (${doc.description} Words: ${doc.words.join(', ')}.). Every set maps every built-in definition: add it to "map" in ${set.name}.icons.json with the id of the icon that draws it.${hint}`,
+        `${label} maps no icon to the built-in icon definition "${doc.name}" (${doc.description} Words: ${doc.words.join(', ')}.). Every set maps every built-in definition: run \`astryx experimental icon map ${doc.name} <icon id>\` with the icon that draws it${findHint(set, doc)}.${hint}`,
       ),
     );
   }
@@ -368,7 +382,7 @@ function checkDefinitions(set) {
       issues.push(
         issueWarning(
           ICON_DEFINITION_UNUSED,
-          `${label} declares the icon definition "${doc.name}", but "map" names no icon for it. Add it to "map" with the id of the icon that draws it, or remove definitions/${doc.name}.doc.mjs.${suggestion ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon}.` : ''}`,
+          `${label} declares the icon definition "${doc.name}", but "map" names no icon for it. Map it with \`astryx experimental icon map ${doc.name} <icon id>\`, or remove definitions/${doc.name}.doc.mjs.${suggestion ? ` Suggested: astryx experimental icon map ${doc.name} ${suggestion.icon}.` : ''}`,
         ),
       );
     }
@@ -383,9 +397,8 @@ function checkDefinitions(set) {
  *   Astryx's optional (not built-in) definitions the set's `map` does not
  *   name. Mapping them is optional, so they never fail a check.
  * @property {Array<{definition: string, icon: string}>} suggestions for every
- *   unmapped definition, built-in, optional, or the set's own, the icon whose
- *   whole id is the definition's name or one of its words; nothing is guessed
- *   beyond that
+ *   unmapped definition, built-in, optional, or the set's own, the best icon
+ *   {@link suggestedIcons} gives, if any
  * @property {IconSetUnchecked[]} unchecked what the checks could not judge:
  *   never counted, never failing, even under `--strict`
  */
@@ -433,25 +446,247 @@ export function iconSetCoverage(loaded, unchecked = new Map()) {
 }
 
 /**
- * The set's icon whose whole id is the definition's name (`chevronDown` is
- * `chevron-down`) or, in order, one of its words (spaces read as `-`). Null
- * when none is: a suggestion is never a guess from parts of words.
+ * The best icon {@link suggestedIcons} gives for a definition, or null when
+ * it gives none.
  * @param {DiscoveredIconSet} set
  * @param {import('../../authoring/doctypes/icon-definition/type').IconDefinitionDoc} doc
  * @returns {{map: string, icon: string} | null}
  */
 export function suggestIcon(set, doc) {
-  const kebab = doc.name.replace(/([a-z0-9])([A-Z])/gu, '$1-$2').toLowerCase();
-  // No guessing: only an icon whose whole id is the definition's name or one
-  // of its words.
-  for (const candidate of [
-    kebab,
-    ...doc.words.map(word => word.trim().toLowerCase().replace(/\s+/gu, '-')),
-  ]) {
-    const icon = set.data.icons.find(each => each.id === candidate);
-    if (icon) return {map: doc.name, icon: icon.id};
+  const [first] = suggestedIcons(set, doc);
+  return first ? {map: doc.name, icon: first.icon} : null;
+}
+
+/**
+ * Words that turn an icon into the opposite or a variation of its first
+ * words: `lock-open`, `bell-off`, `video-camera-slash`, `audio-lines-x`.
+ */
+const NEGATING_WORDS = new Set([
+  'off',
+  'slash',
+  'x',
+  'open',
+  'minus',
+  'ban',
+  'dashed',
+  'dot',
+  'code',
+  'formatting',
+  'exclamation',
+  'question',
+  'warning',
+]);
+
+/** Direction words that mean the other way. */
+/** @type {Record<string, string>} */
+const OPPOSITES = {
+  horizontal: 'vertical',
+  vertical: 'horizontal',
+  left: 'right',
+  right: 'left',
+  up: 'down',
+  down: 'up',
+  in: 'out',
+  out: 'in',
+};
+
+/**
+ * A second id word that only sizes, shapes, or numbers the first: a number
+ * or dimension (`2`, `3x3`), or one of a few style words. The icon then
+ * still draws what its first word names.
+ */
+const QUALIFIER_RE =
+  /^(?:\d+(?:x\d+)?|circle|square|small|big|large|alt|horizontal|vertical)$/u;
+
+/** How many icons one definition is suggested at most. */
+export const SUGGESTIONS_PER_DEFINITION = 3;
+
+/**
+ * The icons a definition might map to, best first, at most three, in the
+ * order AST-084 FR13 gives: the name in another spelling, an icon the library
+ * gives the name as another name, ids that start with the name (`video` →
+ * `video-camera`, never `close` → `panel-left-close`), an id that is one of
+ * its words (`delete` → `trash`), another name that is one of its words, and
+ * two-word ids that are a one-word word sized, shaped, or numbered
+ * (`grid-2x2`). An icon `map` already names
+ * for another definition, or whose id is another definition's name, is left
+ * out: it has a meaning of its own. Never a negated form or the opposite
+ * direction, and never a guess from parts of words.
+ * @param {{data: {icons: Array<{id: string, words?: string[]}>, map?: Record<string, string>}, definitions?: Array<{doc: {name: string}}>}} set
+ * @param {{name: string, words: string[]}} doc
+ * @returns {Array<{icon: string, word: string}>}
+ */
+export function suggestedIcons(set, doc) {
+  const toId = (/** @type {string} */ name) =>
+    name.replace(/([a-z0-9])([A-Z])/gu, '$1-$2').toLowerCase();
+  const nameId = toId(doc.name);
+  const nameWords = nameId.split('-').map(stem);
+  const map = set.data.map ?? {};
+  const taken = new Set([
+    ...Object.entries(map)
+      .filter(([name]) => name !== doc.name)
+      .map(([, id]) => id),
+    ...[...astryxIconDefinitions().definitions, ...(set.definitions ?? [])]
+      .map(each => toId(each.doc.name))
+      .filter(id => id !== nameId),
+  ]);
+  const wordIds = doc.words.map(word =>
+    word.trim().toLowerCase().replace(/\s+/gu, '-'),
+  );
+  // Every word the definition is known by, stemmed: its name's and its words'.
+  const meaning = new Set([
+    ...nameWords,
+    ...wordIds.flatMap(id => id.split('-')).map(stem),
+  ]);
+  const icons = set.data.icons.map(icon => ({
+    id: icon.id,
+    words: icon.id.split('-').map(stem),
+    raw: icon.id.split('-'),
+    // The library's other names for it, the same ones `map` accepts.
+    other: otherNamesOf(icon),
+  }));
+  /** How many of the definition's words an id has: more is a better fit. */
+  const fit = (/** @type {string[]} */ words) =>
+    words.filter(word => meaning.has(word)).length;
+  /**
+   * Candidates best first: most of the definition's words, then fewest
+   * extra words, then by id.
+   * @param {typeof icons} list
+   */
+  const ranked = list =>
+    [...list].sort(
+      (a, b) =>
+        fit(b.words) - fit(a.words) ||
+        a.words.length - b.words.length ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+    );
+  // An id that turns the definition around (`ellipsis-vertical` for
+  // moreHorizontal) is never its icon.
+  const opposite = new Set(
+    nameWords.flatMap(word => (OPPOSITES[word] ? [OPPOSITES[word]] : [])),
+  );
+  const negated = (/** @type {string[]} */ words) =>
+    words.some(word => NEGATING_WORDS.has(word) || opposite.has(word));
+  /** @type {Array<{icon: string, word: string}>} */
+  const found = [];
+  const add = (/** @type {string} */ icon, /** @type {string} */ word) => {
+    if (taken.has(icon) || found.some(each => each.icon === icon)) return;
+    found.push({icon, word});
+  };
+  const squashed = nameId.replace(/-/gu, '');
+  // 1. The name itself, spelled with or without hyphens or a plural
+  //    (`lightbulb` → `light-bulb`, `language` → `languages`).
+  for (const icon of icons) {
+    if (
+      icon.id === nameId ||
+      icon.id.replace(/-/gu, '') === squashed ||
+      (icon.words.length === nameWords.length &&
+        icon.words.every((word, index) => word === nameWords[index]))
+    ) {
+      add(icon.id, nameId);
+    }
   }
-  return null;
+  // 2. An icon the library once named after the definition, or that it
+  //    gives the definition's name as another name (Lucide's
+  //    `more-horizontal` on `ellipsis`, `unlock` on `lock-open`).
+  for (const icon of icons) {
+    if (icon.other.includes(nameId)) add(icon.id, nameId);
+  }
+  // 3. Ids that start with the name as written (`video` → `video-camera`),
+  //    never a negated form. A plural is not the same start: `users` is not
+  //    `user-plus`, and `apps` is not `app-window`.
+  const nameRaw = nameId.split('-');
+  ranked(
+    icons.filter(
+      icon =>
+        icon.raw.length > nameRaw.length &&
+        nameRaw.every((word, index) => icon.raw[index] === word) &&
+        !negated(icon.raw.slice(nameRaw.length)),
+    ),
+  ).forEach(icon => add(icon.id, nameId));
+  // 4. An icon whose whole id is one of the definition's words.
+  for (const id of wordIds) {
+    if (icons.some(icon => icon.id === id)) add(id, id.replace(/-/gu, ' '));
+  }
+  // 5. Another name the library gives an icon that is one of the
+  //    definition's words (Lucide's `smile` on `face-slightly-smiling`).
+  for (const [index, id] of wordIds.entries()) {
+    for (const icon of icons) {
+      if (icon.other.includes(id)) add(icon.id, doc.words[index]);
+    }
+  }
+  // 6. Last, two-word ids that are a one-word word with only a size, shape,
+  //    or number after it (`columns` → `columns-3`, `plus` → `plus-circle`,
+  //    `grid` → `grid-2x2`), best fit first. Any other second word names
+  //    another thing (`card-sim`, `fast-forward`, `hand-coins`), so it is
+  //    never suggested from a word alone.
+  for (const word of doc.words) {
+    if (!/^[a-z]{3,}$/u.test(word)) continue;
+    ranked(
+      icons.filter(
+        icon =>
+          icon.raw.length === 2 &&
+          icon.raw[0] === word &&
+          icon.raw[1] !== word &&
+          QUALIFIER_RE.test(icon.raw[1]) &&
+          !negated(icon.raw.slice(1)),
+      ),
+    ).forEach(icon => add(icon.id, word));
+  }
+  return found.slice(0, SUGGESTIONS_PER_DEFINITION);
+}
+
+/**
+ * A word in its singular form, so a plural meets its singular and nothing
+ * else: `languages` meets `language`, `arrows` meets `arrow`. Only a
+ * trailing plural `s` comes off (not `ss`, and not from a short word); a
+ * verb ending never does, so `drafting` never meets `draft`.
+ * @param {string} word
+ */
+function stem(word) {
+  if (word.length > 3 && word.endsWith('s') && !word.endsWith('ss')) {
+    return word.slice(0, -1);
+  }
+  return word;
+}
+
+/**
+ * The change that makes a set's generated module part of its package's
+ * entry ({@link entryWiringNote}), or null when the entry exports its theme
+ * map or any of its icons, the set has no generated module on disk, or the
+ * entry is an `exports` target not built yet (listed as not checked).
+ * @param {DiscoveredIconSet} set
+ * @param {string} packageDir
+ * @param {string} packageName
+ * @param {(specifier: string) => string | null} unbuiltTarget
+ * @returns {string | null}
+ */
+function entryNotWired(set, packageDir, packageName, unbuiltTarget) {
+  const generated = set.data.generated;
+  if (!generated || !fs.existsSync(path.join(packageDir, generated))) {
+    return null;
+  }
+  if (splitSpecifier(set.data.module).name !== packageName) return null;
+  if (unbuiltTarget(set.data.module)) return null;
+  const pkg = readJson(path.join(packageDir, 'package.json'));
+  if (!pkg) return null;
+  const note = entryWiringNote(packageDir, pkg, generated, {
+    module: set.data.module,
+    name: set.data.themeMap ?? THEME_MAP_NAME,
+  });
+  if (!note) return null;
+  const entry = resolveIconModule(set.data.module, packageDir, {
+    name: packageName,
+    dir: packageDir,
+  });
+  const someIcon =
+    entry &&
+    set.data.icons.some(
+      icon =>
+        (icon.module ?? set.data.module) === set.data.module &&
+        exportOriginVerdict(entry, icon.export)?.verdict !== 'lacks',
+    );
+  return someIcon ? null : note;
 }
 
 /**
@@ -559,10 +794,22 @@ function checkExports(set, packageDir, packageName, unchecked) {
       .definitions.filter(definition => definition.doc.builtIn)
       .map(definition => definition.doc.name),
   );
+  // A generated module the package's entry does not export yet: one finding
+  // with the exact change \`new-set\` names in its receipt, not one per icon.
+  const wiring = entryNotWired(set, packageDir, packageName, unbuiltTarget);
+  if (wiring) {
+    issues.push(
+      issueError(
+        ICON_EXPORT_MISSING,
+        `${label}: its icons are not exported from "${set.data.module}" yet. ${wiring}`,
+      ),
+    );
+  }
   /** @type {Map<string, {file: string, name: string} | null>} */
   const iconOrigins = new Map();
   for (const icon of set.data.icons) {
     const module = icon.module ?? set.data.module;
+    if (wiring && module === set.data.module) continue;
     iconOrigins.set(
       icon.id,
       originOf(module, icon.export, `icon "${icon.id}"`, {icon: icon.id}),
@@ -595,6 +842,7 @@ function checkExports(set, packageDir, packageName, unchecked) {
     );
     return issues;
   }
+  if (wiring) return issues;
   const mapOrigin = originOf(
     set.data.module,
     themeMap,
@@ -665,6 +913,33 @@ function checkExports(set, packageDir, packageName, unchecked) {
   return issues;
 }
 
+/** The lowest search score a find hint needs: a whole word or a word start. */
+const FIND_FLOOR = 60;
+
+/**
+ * A search that finds icons for a definition in the set, named only when it
+ * answers: the definition's name, then each of its words, as a query against
+ * the set's icon ids and words. Empty when none answers, so the message never
+ * names a search that finds nothing.
+ * @param {DiscoveredIconSet} set
+ * @param {{name: string, words: string[]}} doc
+ */
+function findHint(set, doc) {
+  const queries = [
+    doc.name.replace(/([a-z0-9])([A-Z])/gu, '$1 $2').toLowerCase(),
+    ...doc.words,
+  ];
+  for (const query of queries) {
+    const found = rankIcons([set], query).filter(
+      each => each.score >= FIND_FLOOR,
+    );
+    if (found.length > 0) {
+      return ` (icons matching "${query}": \`astryx experimental icon ${query} --set ${set.name}\`)`;
+    }
+  }
+  return ' (no icon in the set has its name or words: pick the library icon that draws it; if the library has none, map the closest, or add your own artwork with `astryx experimental icon add <Name> --from ./src/icons/<name>.js --definition <definition>`)';
+}
+
 /**
  * The upstream checks of one set: version drift and license notices.
  * @param {DiscoveredIconSet} set
@@ -693,7 +968,7 @@ function checkUpstream(set, packageDir, pkg) {
     issues.push(
       issueWarning(
         ICON_SOURCE_VERSION_DRIFT,
-        `${label} was generated from ${source.package}@${source.version}, but the package resolves ${source.package}@${installed}. Regenerate ${set.name}.icons.json.`,
+        `${label} was generated from ${source.package}@${source.version}, but the package resolves ${source.package}@${installed}. Refresh it: \`astryx experimental icon new-set ${set.name} --from <the ${source.package} module it wraps>\`, then rerun any \`add --variant … --all\`.`,
       ),
     );
   } else if (
@@ -704,7 +979,7 @@ function checkUpstream(set, packageDir, pkg) {
     issues.push(
       issueWarning(
         ICON_SOURCE_VERSION_DRIFT,
-        `${label} was generated from ${source.package}@${source.version}, but the package depends on ${source.package}@${range}. Regenerate ${set.name}.icons.json.`,
+        `${label} was generated from ${source.package}@${source.version}, but the package depends on ${source.package}@${range}. Refresh it: \`astryx experimental icon new-set ${set.name} --from <the ${source.package} module it wraps>\`, then rerun any \`add --variant … --all\`.`,
       ),
     );
   }

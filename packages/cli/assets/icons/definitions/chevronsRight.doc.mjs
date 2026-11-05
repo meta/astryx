@@ -5,6 +5,6 @@ export default {
   type: 'icon-definition',
   name: 'chevronsRight',
   description: 'Jump to the last item or page.',
-  words: ['last', 'end'],
+  words: ['last', 'end', 'chevron double right'],
   builtIn: true,
 };

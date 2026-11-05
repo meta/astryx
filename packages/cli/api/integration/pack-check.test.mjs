@@ -202,6 +202,49 @@ describe('verify-only generated CSS header normalization', () => {
 });
 
 /**
+ * The files `theme build` writes for the ocean fixture, by name. The build
+ * writes the same bytes in any folder, so the file builds once and each
+ * fixture gets a copy.
+ * @type {Map<string, Buffer> | null}
+ */
+let builtOcean = null;
+
+/**
+ * Put the ocean theme's built files beside its source in `oceanDir`.
+ * @param {string} oceanDir
+ */
+function writeBuiltOcean(oceanDir) {
+  if (builtOcean != null) {
+    for (const [file, bytes] of builtOcean) {
+      fs.writeFileSync(path.join(oceanDir, file), bytes);
+    }
+    return;
+  }
+  const sources = new Set(fs.readdirSync(oceanDir));
+  const built = spawnSync(
+    process.execPath,
+    [
+      path.join(process.cwd(), 'packages/cli/clients/cli/bin/astryx.mjs'),
+      'theme',
+      'build',
+      'themes/ocean/oceanTheme.ts',
+    ],
+    {cwd: tmpDir, encoding: 'utf-8', timeout: 30_000},
+  );
+  if (built.status !== 0) {
+    throw new Error(
+      `Could not build the theme fixture: ${built.stderr || built.stdout}`,
+    );
+  }
+  builtOcean = new Map(
+    fs
+      .readdirSync(oceanDir)
+      .filter(file => !sources.has(file))
+      .map(file => [file, fs.readFileSync(path.join(oceanDir, file))]),
+  );
+}
+
+/**
  * Write a minimal integration package into tmpDir.
  * Returns the package directory.
  */
@@ -249,21 +292,7 @@ export default {type: 'theme', name: 'ocean', displayName: 'Ocean', description:
 `,
     );
     if (themeExports) {
-      const built = spawnSync(
-        process.execPath,
-        [
-          path.join(process.cwd(), 'packages/cli/clients/cli/bin/astryx.mjs'),
-          'theme',
-          'build',
-          'themes/ocean/oceanTheme.ts',
-        ],
-        {cwd: tmpDir, encoding: 'utf-8', timeout: 30_000},
-      );
-      if (built.status !== 0) {
-        throw new Error(
-          `Could not build the theme fixture: ${built.stderr || built.stdout}`,
-        );
-      }
+      writeBuiltOcean(path.join(root, 'ocean'));
     }
   }
   if (components) {
@@ -2125,10 +2154,13 @@ describe('integrationPackCheck', () => {
     ).toThrow(/without a files array/);
   });
 
-  it('reports npm missing from PATH as pack_failed', async () => {
+  it('reports pack_failed when no npm can be found', async () => {
     writePackage({files: ['astryx.integration.mjs', 'themes']});
     const originalPath = process.env.PATH;
+    const originalExecPath = process.execPath;
     process.env.PATH = '';
+    // A Node with no npm beside it, and no npm on the PATH.
+    process.execPath = path.join(tmpDir, 'no-npm', 'bin', 'node');
     try {
       const result = await integrationPackCheck({cwd: tmpDir});
       expect(result.data.packable).toBe(false);
@@ -2140,6 +2172,7 @@ describe('integrationPackCheck', () => {
       );
     } finally {
       process.env.PATH = originalPath;
+      process.execPath = originalExecPath;
     }
   });
 

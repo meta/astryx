@@ -45,6 +45,20 @@ export const doc = {
         'Max matches, a positive integer (default 10). `matchCount` counts every match.',
     },
     {
+      name: 'options.allIcons',
+      type: 'boolean',
+      description:
+        'With options.set and no query: every icon of that set, by id.',
+      default: 'false',
+    },
+    {
+      name: 'options.definitions',
+      type: 'boolean',
+      description:
+        'Every Astryx icon definition: name, whether it is built in, description, and words. Takes no query or other option.',
+      default: 'false',
+    },
+    {
       name: 'options.cwd',
       type: 'string',
       description: 'Project directory (default: the current directory).',
@@ -62,6 +76,16 @@ export const doc = {
         "One icon's fields, as a match names them, with every variant's import line. The envelope names the set's package.",
     },
     {
+      type: 'icon.definitions',
+      description:
+        'With definitions: every Astryx icon definition, with whether it is built in, its description, and its words.',
+    },
+    {
+      type: 'icon.setIcons',
+      description:
+        'With set and all: every icon of that set by id, with its export, words, and the definitions it draws.',
+    },
+    {
       type: 'icon.list',
       description:
         "The project's icon-set state, each installed set with its package, license, icon count, default variant, declared variants, and the icon definitions its `map` covers, and each withdrawn set with its reason.",
@@ -74,11 +98,15 @@ export const doc = {
     },
     {
       code: 'ERR_INVALID_ARGUMENT',
-      when: 'a query is given with `list`, `limit` is not a positive integer, or a set name two packages share is not qualified with its package',
+      when: '`limit` is not a positive integer, `allIcons` is given without `set`, or a set name two packages share is not qualified with its package',
+    },
+    {
+      code: 'ERR_INVALID_OPTION',
+      when: 'two options are given that the call cannot both honor: `list`, `definitions`, or `allIcons` with any other listing, a query, `set` (not `allIcons`), or `limit`; or a `<set>/<id>` query with `set` or `limit`',
     },
     {
       code: 'ERR_NOT_FOUND',
-      when: 'the set named by `<set>/<id>` or `options.set` is not installed, or the set has no such icon; suggestions name the closest',
+      when: 'the set named by `<set>/<id>` or `options.set` (with words or `allIcons`) is not installed or is withdrawn (the message says which, and why), or the set has no such icon; suggestions name the closest',
     },
   ],
   examples: [

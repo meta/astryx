@@ -355,26 +355,25 @@ function unmappedBlocks(listed) {
       listed.map(each => ({
         set: each.set,
         unmapped: each.unmappedDefinitions.length,
-        definitions: each.unmappedDefinitions
-          .map(definition => definition.name)
-          .join(', '),
       })),
-      {fields: ['set', 'unmapped', 'definitions']},
+      {fields: ['set', 'unmapped']},
     ),
-    ...listed.flatMap(each =>
-      each.suggestions.length > 0
-        ? [
-            list(
-              each.suggestions.map(
-                ({definition, icon}) =>
-                  `astryx experimental icon map ${definition} ${icon}${listed.length === 1 ? '' : ` --set ${each.set}`}`,
-              ),
-            ),
-          ]
-        : [],
-    ),
+    // One line per definition: what it means and its words, so an author
+    // can pick from the text alone; a suggested icon when one fits.
+    ...listed.map(each => {
+      const suggested = new Map(
+        each.suggestions.map(({definition, icon}) => [definition, icon]),
+      );
+      const setFlag = listed.length === 1 ? '' : ` --set ${each.set}`;
+      return list(
+        each.unmappedDefinitions.map(
+          definition =>
+            `${definition.name}: ${definition.description} Words: ${definition.words.join(', ')}.${suggested.has(definition.name) ? ` Suggested: astryx experimental icon map ${definition.name} ${suggested.get(definition.name)}${setFlag}` : ''}`,
+        ),
+      );
+    }),
     text(
-      'Mapping these is optional and never fails a check. --json lists each with its description and words.',
+      'Mapping these is optional and never fails a check. Map one with `astryx experimental icon map <definition> <icon id>`; list your icons with `astryx experimental icon --set <set> --all-icons`; see how many definitions each set maps with `astryx experimental icon --list`.',
     ),
   ];
 }

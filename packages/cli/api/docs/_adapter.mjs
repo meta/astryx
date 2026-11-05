@@ -77,6 +77,7 @@ import {
   discoverIntegrationTemplatesForOne,
 } from '../../foundation/discovery/template-adapter.mjs';
 import {findCoreDir} from '../../foundation/fs/paths.mjs';
+import {reusedWhileUnchanged} from '../../foundation/fs/read-record.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {orderRouteSuggestions} from '../../foundation/text/suggest-order.mjs';
@@ -393,8 +394,8 @@ export function projectTree(catalog, {fresh = false} = {}) {
   return tree;
 }
 
-/** @type {ReturnType<typeof loadTreeInputs> | undefined} */
-let cliTreeInputs;
+/** The CLI's own tree files, loaded again after one of them changes. */
+const cliTreeInputs = reusedWhileUnchanged(() => loadTreeInputs());
 
 /**
  * Every flat topic in the catalog, as the tree's topic levels read it.
@@ -441,8 +442,7 @@ async function flatTopicInputs(catalog) {
  */
 async function buildProjectTree(catalog, fresh) {
   const added = catalog.treeInputs;
-  if (fresh || !cliTreeInputs) cliTreeInputs = loadTreeInputs();
-  const cli = await cliTreeInputs;
+  const cli = await cliTreeInputs({fresh});
   const result = buildDocsTree({
     namespaces: [...cli.namespaces, ...added.flatMap(each => each.namespaces)],
     docs: [...cli.docs, ...added.flatMap(each => each.guides)],
@@ -573,11 +573,15 @@ function identitiesOf(tree) {
 /**
  * The CLI's authoring docs, by kind and name. The field reference under
  * `astryx docs authoring` reads each as one section keyed by its name, so a
- * link to one opens that section. Loaded once per process, like the CLI's
- * tree files.
- * @type {Promise<Map<string, any>> | undefined}
+ * link to one opens that section. Loaded again after one of them changes,
+ * like the CLI's tree files.
  */
-let authoringDocs;
+const authoringDocs = reusedWhileUnchanged(() =>
+  loadAuthoringSelfDocs().then(
+    ({loaded}) =>
+      new Map(loaded.map(({doc}) => [`${doc.type}\u0000${doc.name}`, doc])),
+  ),
+);
 
 /**
  * The CLI authoring doc a link names. The `authoring` namespace is the CLI's
@@ -587,11 +591,7 @@ let authoringDocs;
  * @returns {Promise<any | null>}
  */
 async function authoringDoc(kind, name) {
-  authoringDocs ??= loadAuthoringSelfDocs().then(
-    ({loaded}) =>
-      new Map(loaded.map(({doc}) => [`${doc.type}\u0000${doc.name}`, doc])),
-  );
-  return (await authoringDocs).get(`${kind}\u0000${name}`) ?? null;
+  return (await authoringDocs()).get(`${kind}\u0000${name}`) ?? null;
 }
 
 /**
@@ -1721,14 +1721,19 @@ export async function topicLinks(catalog, entry) {
  * decides.
  * @param {unknown} topic
  * @param {{cwd?: string}} [options]
+ * @param {DocsCatalog} [loaded] internal: a catalog the read already loaded,
+ *   so the read and every part of it share one snapshot of the project's docs
+ *   (and its memoized lowering) instead of loading the project again for each
+ *   part. It is a separate argument, never an option, so no caller of the
+ *   public `docs()` can set it
  * @returns {Promise<
  *   | {kind: 'topic', catalog: DocsCatalog, entry: import('../../foundation/discovery/docs-discovery.mjs').DocsTopicEntry}
  *   | {kind: 'node', catalog: DocsCatalog, tree: import('../../foundation/doc-compiler/tree.mjs').DocsTree, node: import('../../foundation/doc-compiler/tree.mjs').TreeNode}
  *   | {kind: 'unknown', catalog: DocsCatalog}
  * >}
  */
-export async function resolveDocsArgument(topic, {cwd} = {}) {
-  const catalog = await loadDocsCatalog(cwd);
+export async function resolveDocsArgument(topic, {cwd} = {}, loaded) {
+  const catalog = loaded ?? (await loadDocsCatalog(cwd));
   if (typeof topic !== 'string' || topic === '')
     return {kind: 'unknown', catalog};
   const tree = await projectTree(catalog);
@@ -1844,8 +1849,11 @@ function movedRoute(topic, tree) {
 
 /**
  * The error for a docs argument that names nothing. For a route, it suggests
- * the children of the deepest namespace the route reaches; otherwise, every
- * topic and every top-level namespace.
+ * every child of the deepest namespace the route reaches, closest first.
+ * Otherwise it suggests the docs the argument names in another spelling, or
+ * failing that the topics and top-level namespaces, closest first and cut
+ * where the matches get weaker (every one of them when none shares a word
+ * with the argument).
  * @param {unknown} topic
  * @param {DocsCatalog} catalog
  * @returns {Promise<AstryxError>}
@@ -1854,6 +1862,8 @@ export async function unknownTopicError(topic, catalog) {
   const tree = await projectTree(catalog);
   /** @type {Array<{name: string, reason: string}>} */
   let suggestions = [];
+  // Route children stay whole (spec:AST-046); only the other lists are cut.
+  let routeChildren = false;
   if (typeof topic === 'string' && topic.includes('/')) {
     const parts = topic.split('/');
     for (
@@ -1863,6 +1873,7 @@ export async function unknownTopicError(topic, catalog) {
     ) {
       const near = tree.get(parts.slice(0, depth).join('/'));
       if (near) {
+        routeChildren = true;
         suggestions = near.slots.flatMap(slot =>
           slot.children.map(route => ({
             name: route,
@@ -1894,7 +1905,9 @@ export async function unknownTopicError(topic, catalog) {
     ];
   }
   if (typeof topic === 'string') {
-    suggestions = orderRouteSuggestions(topic, suggestions);
+    suggestions = orderRouteSuggestions(topic, suggestions, {
+      closest: !routeChildren,
+    });
   }
   // A route that moved names where it went, ahead of the usual suggestions
   // (spec:AST-046 FR9, FR6).
@@ -1934,13 +1947,14 @@ export function notLoaded(catalog) {
  * and lower it for the topic readers.
  * @param {unknown} topic
  * @param {{lang?: string | null, zh?: boolean, dense?: boolean, cwd?: string}} [options]
+ * @param {DocsCatalog} [loaded] internal, as {@link resolveDocsArgument}
  */
-export async function resolveTopicDocs(topic, options = {}) {
+export async function resolveTopicDocs(topic, options = {}, loaded) {
   const {lang = null, zh = false, dense = false, cwd} = options;
   const effectiveLang = lang || (dense ? 'dense' : zh ? 'zh' : null);
   // A public API caller could pass a non-string topic; it lands on the same
   // stable code as an unknown name rather than a raw TypeError.
-  const found = await resolveDocsArgument(topic, {cwd});
+  const found = await resolveDocsArgument(topic, {cwd}, loaded);
   if (found.kind !== 'topic') {
     throw found.kind === 'node'
       ? new AstryxError(

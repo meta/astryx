@@ -11,7 +11,7 @@ export const doc = {
   stability: 'experimental',
   summary: 'Start an icon set in your integration package',
   description:
-    "Run inside an integration package. Writes the set's folder with its descriptor, its data file, and its generated module, and declares the manifest's `experimental.iconSets` root on first use. With --from it wraps every icon component of a library; run it again to refresh. Experimental: it may change or be removed in a patch release.",
+    "Run inside an integration package. Writes the set's folder with its descriptor, its data file, and its generated module, and declares the manifest's `experimental.iconSets` root on first use. With --from it wraps every icon component of a library, records the library and its version as the set's source, copies its license notice, and maps each Astryx icon definition whose name is an icon's id; definitions an icon only shares a word with are listed as suggestions, never written. Run it again to refresh. --variants and --default-variant declare the set's variants. Experimental: it may change or be removed in a patch release.",
   fn: 'iconNewSet',
   args: [
     {
@@ -39,6 +39,29 @@ export const doc = {
       description:
         'With --from: comma-separated export names of the library that are not icons',
     },
+    {
+      flag: '--variants <list>',
+      param: 'options.variants',
+      description:
+        'Comma-separated variants the set supplies, such as outline,solid',
+    },
+    {
+      flag: '--default-variant <variant>',
+      param: 'options.defaultVariant',
+      description:
+        "With --variants: the variant each icon's own export draws (the first variant when omitted)",
+    },
+    {
+      flag: '--display-name <text>',
+      param: 'options.displayName',
+      description:
+        "The set's display name (the name in title case when omitted)",
+    },
+    {
+      flag: '--description <text>',
+      param: 'options.description',
+      description: "The set's one-line description",
+    },
   ],
   examples: [
     {
@@ -48,6 +71,10 @@ export const doc = {
     {
       label: 'Wrap a whole icon library',
       cli: 'astryx experimental icon new-set outline --from @acme/glyph-library',
+    },
+    {
+      label: 'Wrap a library with two variants',
+      cli: 'astryx experimental icon new-set heroicons --from @heroicons/react/24/outline --variants outline,solid --default-variant outline',
     },
     {
       label: 'Preview the files',

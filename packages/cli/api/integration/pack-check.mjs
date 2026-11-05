@@ -25,6 +25,7 @@ import * as os from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {assertWithin} from '../../foundation/fs/path-safety.mjs';
+import {npmCommand} from '../../foundation/release/cache.mjs';
 import {commandTokensIn} from '../../foundation/doc-compiler/doc-syntax.mjs';
 import {resolvePackageDir} from '../../foundation/integrations/integrations.mjs';
 import {
@@ -265,17 +266,22 @@ function npmPackErrorDetail(output) {
 /**
  * Run `npm pack --json` with output directed to `destDir` so no preexisting
  * tgz is overwritten. This intentionally runs the package lifecycle, matching
- * the artifact `npm publish` would produce. Uses spawnSync with an args array —
- * no shell — so paths with metacharacters cannot inject.
+ * the artifact `npm publish` would produce. npm starts the way the CLI starts
+ * it everywhere else (`npmCommand`): npm's own entry file run with this Node
+ * when one is found, so an `npm` earlier on the PATH that is not npm itself
+ * cannot answer for it. Uses spawnSync with an args array — no shell — so
+ * paths with metacharacters cannot inject.
  *
  * @param {string} packageDir
  * @param {string} destDir
  * @returns {{filename: string, fileCount: number, size: number, unpackedSize: number, packedPaths: Set<string>}}
  */
 function runNpmPack(packageDir, destDir) {
+  const npm = npmCommand();
   const result = spawnSync(
-    'npm',
+    npm.command,
     [
+      ...npm.prefix,
       'pack',
       '--json',
       '--silent',
@@ -284,7 +290,7 @@ function runNpmPack(packageDir, destDir) {
       '--foreground-scripts=false',
       `--pack-destination=${destDir}`,
     ],
-    {cwd: packageDir, encoding: 'utf-8', timeout: 60_000},
+    {cwd: packageDir, encoding: 'utf-8', shell: false, timeout: 60_000},
   );
   if (result.error) {
     throw new Error(`Could not start npm pack: ${result.error.message}`);

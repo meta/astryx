@@ -29,6 +29,7 @@ import {describe, it, expect, beforeAll, afterAll} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import * as crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 import {writeIconPackage} from '../../../test-utils/icon-set-fixture.mjs';
@@ -419,6 +420,51 @@ const CASES = [
       'export — part of the import line',
       'score — the reason states the tier',
     ],
+  },
+  {
+    name: 'experimental render',
+    args: ['experimental', 'render', 'page.jsx'],
+    cwd: '__TMP__',
+    // A page with no imports, in a folder that can resolve React.
+    setup: dir => {
+      fs.mkdirSync(path.join(dir, 'node_modules'), {recursive: true});
+      for (const pkg of ['react', 'react-dom']) {
+        fs.symlinkSync(
+          path.join(REPO_ROOT, 'node_modules', pkg),
+          path.join(dir, 'node_modules', pkg),
+        );
+      }
+      fs.writeFileSync(
+        path.join(dir, 'page.jsx'),
+        'export default function Page() { return <h1>Hello</h1>; }\n',
+      );
+    },
+    jsonFieldAllowlist: ['warnings — listed under Warnings when present'],
+  },
+  {
+    // The --reverse projection (same command, same folder as the case above).
+    name: 'experimental render',
+    args: ['experimental', 'render', '--reverse', 'carried.html', '--out', 'back.tsx', '--overwrite'],
+    cwd: '__TMP__',
+    // A rendered file that carries its page.
+    setup: dir => {
+      const source = Buffer.from('export default function Page() { return <h1>Hello</h1>; }\n');
+      const json = JSON.stringify({
+        version: 1,
+        entry: 'page.jsx',
+        files: [
+          {
+            path: 'page.jsx',
+            sha256: crypto.createHash('sha256').update(source).digest('hex'),
+            base64: source.toString('base64'),
+          },
+        ],
+      });
+      fs.writeFileSync(
+        path.join(dir, 'carried.html'),
+        `<!doctype html><html><body><h1 class="astryx-heading">Hello</h1><script type="application/x-astryx-source">${json}</script></body></html>`,
+      );
+    },
   },
   {
     name: 'manifest',

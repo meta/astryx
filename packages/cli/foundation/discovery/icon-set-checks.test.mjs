@@ -10,7 +10,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
-import {iconSetCoverage, iconSetIssues} from './icon-set-checks.mjs';
+import {
+  iconSetCoverage,
+  iconSetIssues,
+  suggestedIcons,
+} from './icon-set-checks.mjs';
 import {moduleExportOrigin} from './module-exports.mjs';
 import {generatedTypesText} from './icon-set-writer.mjs';
 import {integrationCheck} from '../../api/integration/check/check.mjs';
@@ -22,6 +26,13 @@ import {
   writeIconPackage,
 } from '../../test-utils/icon-set-fixture.mjs';
 import {ICON_NAMES} from '../../authoring/doctypes/icon-set/icon-names.mjs';
+import {rankIcons} from './icon-ranking.mjs';
+import {astryxIconDefinitions} from './icon-definition-discovery.mjs';
+import {discoverIconSetDirectory} from './icon-set-discovery.mjs';
+
+/** The fixture package's one set, as discovery reads it. */
+const readSet = () =>
+  discoverIconSetDirectory(path.join(dir, 'icon-sets'), '@acme/glyphs').sets[0];
 
 /** @type {string} */
 let tmp;
@@ -641,6 +652,26 @@ describe('icon definitions (map)', () => {
     // close and search are mapped; every other built-in is not.
     expect(builtIn).toHaveLength(ICON_NAMES.length - 2);
     expect(builtIn.every(issue => issue.severity === 'error')).toBe(true);
+    // Each names the command that maps it, never a hand edit of the data.
+    const error = builtIn.find(issue => issue.message.includes('"error"'));
+    expect(error?.message).toContain(
+      '`astryx experimental icon map error <icon id>`',
+    );
+    expect(error?.message).not.toContain('add it to "map"');
+    // A find hint names a search only when that search finds icons.
+    for (const issue of builtIn) {
+      const query =
+        /icons matching "([^"]+)": `astryx experimental icon \1 --set glyphs`/u.exec(
+          issue.message,
+        );
+      if (query) {
+        expect(rankIcons([readSet()], query[1]).length).toBeGreaterThan(0);
+      } else {
+        expect(issue.message).toContain(
+          'no icon in the set has its name or words',
+        );
+      }
+    }
     // An issue is only ever an error or a warning.
     expect(
       issues.every(issue => ['error', 'warning'].includes(issue.severity)),
@@ -692,23 +723,23 @@ describe('icon definitions (map)', () => {
   });
 
   it("a map key that is neither Astryx's definition nor the set's own is an error", () => {
-    const issues = issuesOf({data: data(d => (d.map.rotate = 'home'))});
+    const issues = issuesOf({data: data(d => (d.map.orbit = 'home'))});
     expect(issues).toEqual([
       expect.objectContaining({code: 'invalid_icon_set', severity: 'error'}),
     ]);
     expect(issues[0].message).toMatch(
-      /map "rotate" \(icon "home"\) is not an icon definition\. Declare it in definitions\/rotate\.doc\.mjs/,
+      /map "orbit" \(icon "home"\) is not an icon definition\. Declare it in definitions\/orbit\.doc\.mjs/,
     );
   });
 
   it("the set's own definitions: mapped is fine, unmapped warns with a suggestion, and one Astryx has warns", () => {
     const issues = issuesOf({
-      data: data(d => (d.map.rotate = 'home')),
+      data: data(d => (d.map.orbit = 'home')),
       definitions: {
-        rotate: definitionSource('rotate'),
+        orbit: definitionSource('orbit'),
         garbage: definitionSource('garbage', {words: ['bin', 'trash']}),
-        // The trash icon is tagged garbage, and `tra` starts its id: neither
-        // is a suggestion. No guessing.
+        // The trash icon has the word garbage, so it is a suggestion; `tra`
+        // only starts its id, so that is not. Never part of a word.
         rubbish: definitionSource('rubbish', {words: ['garbage', 'tra']}),
         delete: definitionSource('delete'),
       },
@@ -726,7 +757,9 @@ describe('icon definitions (map)', () => {
       'astryx experimental icon map garbage trash',
     );
     const rubbish = unused.find(issue => issue.message.includes('"rubbish"'));
-    expect(rubbish?.message).not.toContain('Suggested');
+    expect(rubbish?.message).toContain(
+      'Suggested: astryx experimental icon map rubbish trash.',
+    );
     const [coverage] = iconSetCoverage({
       name: '@acme/glyphs',
       iconSets: path.join(dir, 'icon-sets'),
@@ -735,9 +768,10 @@ describe('icon definitions (map)', () => {
       definition: 'garbage',
       icon: 'trash',
     });
-    expect(
-      coverage.suggestions.some(each => each.definition === 'rubbish'),
-    ).toBe(false);
+    expect(coverage.suggestions).toContainEqual({
+      definition: 'rubbish',
+      icon: 'trash',
+    });
     expect(
       issues.find(issue => issue.code === 'icon_definition_shadowed')?.message,
     ).toContain('Astryx now has');
@@ -745,7 +779,7 @@ describe('icon definitions (map)', () => {
 
   it('a definition file that does not read makes the set invalid', () => {
     const issues = issuesOf({
-      definitions: {rotate: definitionSource('Rotate')},
+      definitions: {orbit: definitionSource('Orbit')},
     });
     expect(issues).toEqual([
       expect.objectContaining({code: 'invalid_icon_set'}),
@@ -901,5 +935,84 @@ describe('the codes and severities FR15 lists', () => {
       listed[code] = severity;
     }
     expect(listed).toEqual(raised);
+  });
+});
+
+describe('suggestions join a plural only to its singular', () => {
+  /**
+   * @param {string[]} ids
+   * @param {{name: string, words?: string[]}} doc
+   */
+  const suggest = (ids, {name, words = []}) =>
+    suggestedIcons(
+      {data: {icons: ids.map(id => ({id, words: id.split('-')})), map: {}}},
+      {name, words},
+    ).map(each => each.icon);
+
+  it('never offers a grid of squares for stop, whose word is square', () => {
+    expect(suggest(['squares-2x2'], {name: 'stop', words: ['square']})).toEqual(
+      [],
+    );
+    expect(
+      suggest(['squares-2x2', 'square'], {name: 'stop', words: ['square']}),
+    ).toEqual(['square']);
+  });
+
+  it('meets a plural and its singular of the same word, either way', () => {
+    expect(suggest(['squares'], {name: 'square'})).toEqual(['squares']);
+    expect(suggest(['square'], {name: 'squares'})).toEqual(['square']);
+    expect(suggest(['arrows'], {name: 'arrow'})).toEqual(['arrows']);
+    expect(suggest(['arrow'], {name: 'arrows'})).toEqual(['arrow']);
+  });
+
+  it('never bridges a verb ending or a plural to a longer id', () => {
+    // `drafting` is not `draft`; `users` does not start `user-plus`.
+    expect(
+      suggest(['drafting-compass'], {name: 'compose', words: ['draft']}),
+    ).toEqual([]);
+    expect(suggest(['user-plus', 'user-cog'], {name: 'users'})).toEqual([]);
+    expect(suggest(['tool-case'], {name: 'wrench', words: ['tools']})).toEqual(
+      [],
+    );
+  });
+});
+
+describe('suggestions from a definition word never bridge to another meaning', () => {
+  const definitions = new Map(
+    astryxIconDefinitions().definitions.map(({doc}) => [doc.name, doc]),
+  );
+  /** @param {string} name @param {string[]} ids */
+  const suggest = (name, ids) =>
+    suggestedIcons(
+      {data: {icons: ids.map(id => ({id, words: id.split('-')})), map: {}}},
+      /** @type {any} */ (definitions.get(name)),
+    ).map(each => each.icon);
+
+  it.each([
+    ['creditCard', 'card-sim'],
+    ['bolt', 'fast-forward'],
+    ['archive', 'store'],
+    ['mobile', 'device-tablet'],
+    ['raiseHand', 'stop-circle'],
+    ['star', 'bookmark-square'],
+    ['database', 'table-cells'],
+    ['redo', 'forward'],
+    ['activity', 'monitor'],
+    ['stop', 'square-square'],
+    ['moreHorizontal', 'ellipsis-vertical'],
+  ])('%s never suggests %s', (name, id) => {
+    expect(suggest(name, [id])).toEqual([]);
+  });
+
+  it('still suggests a word with only a size, shape, or number after it', () => {
+    expect(suggest('gridView', ['grid-2x2'])).toEqual(['grid-2x2']);
+    expect(suggest('viewColumns', ['columns-3'])).toEqual(['columns-3']);
+    expect(suggest('add', ['plus-circle'])).toEqual(['plus-circle']);
+  });
+
+  it('finds the glyph a library names in two words through the definition’s words', () => {
+    expect(suggest('raiseHand', ['hand-raised'])).toEqual(['hand-raised']);
+    expect(suggest('location', ['map-pin'])).toEqual(['map-pin']);
+    expect(suggest('textCase', ['case-sensitive'])).toEqual(['case-sensitive']);
   });
 });

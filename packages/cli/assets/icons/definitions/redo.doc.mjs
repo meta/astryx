@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'redo',
   description: 'Redo the last change that was undone.',
-  words: ['again', 'repeat', 'forward'],
+  words: ['again', 'repeat', 'arrow uturn right'],
 };

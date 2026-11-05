@@ -552,6 +552,11 @@ describe('detectStylingSystem', () => {
     expect(detectStylingSystem(tmpDir)).toBe('stylex');
   });
 
+  it('detects the official unplugin (the standard Vite path)', () => {
+    writePkg({'@stylexjs/unplugin': '0.10.0'});
+    expect(detectStylingSystem(tmpDir)).toBe('stylex');
+  });
+
   it('detects tailwind when tailwindcss is present', () => {
     writePkg({tailwindcss: '4.0.0'});
     expect(detectStylingSystem(tmpDir)).toBe('tailwind');

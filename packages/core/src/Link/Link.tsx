@@ -43,12 +43,18 @@ import type {LinkComponentType} from './types';
 import {mergeProps} from '../utils';
 import {computeTargetAndRel} from './computeTargetAndRel';
 import {useInteractiveRole} from '../hooks/useInteractiveRole';
-import {themeProps} from '../utils/themeProps';
+import {themeDataAttributes, themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useTranslator} from '../i18n';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Link/Link.generated';
+
+registerEnglishFallback(english);
 
 /**
  * Base link styles
@@ -76,6 +82,14 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
   },
+  // A truncating label needs a box that stops at its container: an
+  // inline-flex root otherwise grows to its whole text, so its Text never
+  // overflows and draws no ellipsis (`component:Link` FR6, `component:Text`
+  // FR4).
+  truncating: {
+    maxWidth: '100%',
+    minWidth: 0,
+  },
   /**
    * Reset styles for rendering as a <button> when href is undefined.
    * Strips all native button chrome so it looks identical to a link.
@@ -84,6 +98,9 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     borderStyle: 'none',
     padding: 0,
+    // Browsers centre a button's text; a wrapped label lines up as an
+    // anchor's does.
+    textAlign: 'inherit',
     pointerEvents: 'auto',
     position: 'relative',
   },
@@ -312,7 +329,7 @@ export function Link({
   // document controller once, so the link's output stays a pure function of
   // its props.
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const newTabLabel = newTabLabelFromProps ?? t('@astryx.link.newTab');
   const LinkComponent = useLinkComponent(as);
   const role = useInteractiveRole({href, onClick, isDisabled});
@@ -326,6 +343,10 @@ export function Link({
   // render as a <button> with link styling for semantic correctness.
   const renderAsButton =
     role === 'button' || (role === 'inert' && href == null);
+
+  // The reflected theme attributes win over a caller's same-named `data-*`, so
+  // theme targeting always sees the real value (public-component-api INV5).
+  const reflectedAttributes = themeDataAttributes({color});
 
   const sharedContent = (
     <>
@@ -370,12 +391,14 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             isDisabled && styles.disabled,
+            maxLines > 0 && styles.truncating,
             xstyle,
           ),
           className,
           style,
         )}
         {...props}
+        {...reflectedAttributes}
         // Focusable while disabled (spec:AST-085 FR1), but inert (FR2).
         {...(isDisabled ? disabledInteractionProps(props.onKeyDown) : null)}>
         {sharedContent}
@@ -403,12 +426,14 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             styles.disabled,
+            maxLines > 0 && styles.truncating,
             xstyle,
           ),
           className,
           style,
         )}
         {...props}
+        {...reflectedAttributes}
         {...disabledInteractionProps(props.onKeyDown)}>
         {sharedContent}
       </a>
@@ -434,12 +459,14 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             isDisabled && styles.disabled,
+            maxLines > 0 && styles.truncating,
             xstyle,
           ),
           className,
           style,
         )}
-        {...props}>
+        {...props}
+        {...reflectedAttributes}>
         {sharedContent}
       </LinkComponent>
     );

@@ -147,6 +147,11 @@ export interface IconSetData {
   /** The upstream library, absent for a set with no upstream. */
   source?: IconSetSource;
   /**
+   * Library exports that are not icons, left out every time
+   * `astryx experimental icon new-set --from` wraps or refreshes the set.
+   */
+  exclude?: string[];
+  /**
    * The variants the set supplies, lower-kebab names such as `outline` and
    * `solid`; absent when it has one look. A variant is a named look the set
    * supplies; size comes from CSS.

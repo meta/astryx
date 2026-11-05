@@ -13,10 +13,10 @@ export const doc = {
   summary:
     'Register one icon you chose from a library in the set being authored.',
   description:
-    "Run inside an icon-set package. The caller picks the export; the CLI never searches the library. It proves the export is a runtime component of `from` (a package, a package subpath, or a relative path this package exports), read without running it. With no definition it answers the icon definitions that fit the export, Astryx's and the set's own, and writes nothing. With `definition` it adds the icon (id from its name, `module` the source unless the set's own module already exports it, words from its name and the definition) and maps the definition to it. With `newDefinition` it first writes the set's own definition file. A `variant` adds the export as that declared variant of an existing icon. Running it again changes nothing. Experimental: it may change or be removed in a patch release.",
+    "Run inside an icon-set package. The caller picks the export; the CLI never searches the library. It proves the export is a runtime component of `from` (a package, a package subpath, or a ./ path to a file inside this package), read without running it. With no definition it answers the icon definitions that fit the export, Astryx's and the set's own, and writes nothing. With `definition` it adds the icon (id from its name, `module` the source unless the set's own module already exports it, words from its name and the definition) and maps the definition to it. With `newDefinition` it first writes the set's own definition file. A `variant` adds the export as that declared variant of an existing icon. With `variant`, `from`, and `all` and no export name, it adds that variant for every icon of the set whose id an export of `from` has, in one write. Running it again changes nothing. Experimental: it may change or be removed in a patch release.",
   importPath: '@astryxdesign/cli/api',
   signature:
-    'iconAdd(exportName: string, options: IconAddOptions): Promise<IconAddResponse | IconDefinitionMatchesResponse>',
+    'iconAdd(exportName: string | undefined, options: IconAddOptions): Promise<IconAddResponse | IconDefinitionMatchesResponse | IconAddVariantsResponse>',
   keywords: [
     'icon',
     'icon set',
@@ -28,10 +28,10 @@ export const doc = {
   params: [
     {
       name: 'exportName',
-      type: 'string',
+      type: 'string | undefined',
       description:
-        'The export the set exposes the icon as, such as `Bin`; the set exports it as `<Name>Icon`.',
-      required: true,
+        'The export the set exposes the icon as, such as `Bin`; the set exports it as `<Name>Icon`. Omitted with `options.all`.',
+      required: false,
     },
     {
       name: 'options.from',
@@ -83,6 +83,13 @@ export const doc = {
       description: "The icon's id, instead of the one its name gives.",
     },
     {
+      name: 'options.all',
+      type: 'boolean',
+      description:
+        'With `variant` and `from`, and no export name: add that variant for every icon of the set whose id an export of `from` has (`TrashIcon` in a solid module becomes the solid variant of `trash`).',
+      default: 'false',
+    },
+    {
       name: 'options.cwd',
       type: 'string',
       description: 'A directory inside the icon-set package.',
@@ -95,6 +102,11 @@ export const doc = {
         'The icon registered, the definition mapped, and the files written.',
     },
     {
+      type: 'icon.addVariants',
+      description:
+        'With all: how many icons gained the variant, how many had it, the ids the module has no export for, and the files written.',
+    },
+    {
       type: 'icon.definitionMatches',
       description:
         'Without a definition: the definitions that fit the export, and the commands that add it.',
@@ -103,13 +115,17 @@ export const doc = {
   throws: [
     {
       code: 'ERR_NOT_FOUND',
-      when: 'the module does not export the name, or the definition is unknown',
+      when: 'the module does not export the name, the definition is unknown, or `set` names no set in the package or one that is withdrawn (with why)',
     },
     {
       code: 'ERR_INVALID_ARGUMENT',
       when: 'the export is data rather than a component, a new definition is named like an Astryx one, or the variant is not one the set declares',
     },
     {code: 'ERR_FILE_EXISTS', when: 'another icon already has the id'},
+    {
+      code: 'ERR_INVALID_OPTION',
+      when: 'an option is given that the call would ignore: `all` with an export name, `definition`, `newDefinition`, `description`, `words`, `useDefault`, or `id`; `definition` with `newDefinition`; or `description` or `words` without `newDefinition`',
+    },
     {
       code: 'ERR_PROJECT_REQUIRED',
       when: 'the folder is outside any project and has no package.json at or above it',

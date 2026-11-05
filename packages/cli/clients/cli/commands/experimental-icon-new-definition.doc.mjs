@@ -51,7 +51,7 @@ export const doc = {
   examples: [
     {
       label: "Add a set's own icon definition",
-      cli: "astryx experimental icon new-definition rotate --description 'Rotate an image or shape.' --words turn,spin --icon rotate-cw",
+      cli: "astryx experimental icon new-definition random --description 'Pick something at random.' --words dice,shuffle,chance --icon dice-5",
     },
   ],
   outsideProject: 'refuse',

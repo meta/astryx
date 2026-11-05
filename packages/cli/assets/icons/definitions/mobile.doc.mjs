@@ -5,5 +5,5 @@ export default {
   type: 'icon-definition',
   name: 'mobile',
   description: 'A phone, or the mobile layout of a page.',
-  words: ['phone', 'smartphone', 'device'],
+  words: ['phone', 'smartphone'],
 };

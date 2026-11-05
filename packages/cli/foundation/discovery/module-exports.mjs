@@ -146,15 +146,44 @@ const NOT_CHILDREN = new Set([
 ]);
 
 /**
- * Every node of `type` in the tree, at any depth, in source order.
+ * Every node of `type` under each tree walked, by tree and type: a parsed
+ * module is cached and never changes, so a library of a thousand icons is
+ * walked once per type, not once per export looked up.
+ * @type {WeakMap<object, Map<string, readonly any[]>>}
+ */
+const nodesByTree = new WeakMap();
+
+/**
+ * Every node of `type` in the tree, at any depth, in source order. The
+ * answer is shared: callers only read it.
  * @param {any} node
  * @param {string} type
- * @param {any[]} [found]
+ * @returns {readonly any[]}
+ */
+function nodesOfType(node, type) {
+  if (node == null || typeof node !== 'object') return [];
+  let byType = nodesByTree.get(node);
+  if (!byType) {
+    byType = new Map();
+    nodesByTree.set(node, byType);
+  }
+  let found = byType.get(type);
+  if (!found) {
+    found = collectNodesOfType(node, type, []);
+    byType.set(type, found);
+  }
+  return found;
+}
+
+/**
+ * @param {any} node
+ * @param {string} type
+ * @param {any[]} found
  * @returns {any[]}
  */
-function nodesOfType(node, type, found = []) {
+function collectNodesOfType(node, type, found) {
   if (Array.isArray(node)) {
-    for (const child of node) nodesOfType(child, type, found);
+    for (const child of node) collectNodesOfType(child, type, found);
     return found;
   }
   if (node == null || typeof node !== 'object') return found;
@@ -163,7 +192,7 @@ function nodesOfType(node, type, found = []) {
     if (NOT_CHILDREN.has(key)) continue;
     const child = node[key];
     if (child != null && typeof child === 'object') {
-      nodesOfType(child, type, found);
+      collectNodesOfType(child, type, found);
     }
   }
   return found;
@@ -891,6 +920,43 @@ export function staticExportObject(file, exportNames) {
 }
 
 /**
+ * A module's runtime named exports, indexed once per parsed tree: the
+ * export declarations that declare something, and each export specifier by
+ * the name it exports, in source order.
+ * @type {WeakMap<object, {declarations: any[], specifiers: Map<string, Array<{node: any, specifier: any}>>}>}
+ */
+const namedExportIndexes = new WeakMap();
+
+/** @param {any} program */
+function namedExportIndex(program) {
+  const cached = namedExportIndexes.get(program);
+  if (cached) return cached;
+  /** @type {any[]} */
+  const declarations = [];
+  /** @type {Map<string, Array<{node: any, specifier: any}>>} */
+  const specifiers = new Map();
+  for (const node of nodesOfType(program, 'ExportNamedDeclaration')) {
+    if (node.exportKind === 'type') continue;
+    if (node.declaration) declarations.push(node);
+    for (const specifier of node.specifiers ?? []) {
+      if (
+        specifier.type !== 'ExportSpecifier' ||
+        specifier.exportKind === 'type'
+      ) {
+        continue;
+      }
+      const exported = specifier.exported?.name ?? specifier.exported?.value;
+      const list = specifiers.get(exported) ?? [];
+      list.push({node, specifier});
+      specifiers.set(exported, list);
+    }
+  }
+  const index = {declarations, specifiers};
+  namedExportIndexes.set(program, index);
+  return index;
+}
+
+/**
  * Where a module's runtime export is declared, as the file and the name it
  * has there, without executing anything: local re-exports, renames, and
  * imported bindings a module exports again are followed. Two exports are the
@@ -911,30 +977,21 @@ export function moduleExportOrigin(file, exportName, seen = new Set()) {
   } catch {
     return null;
   }
-  for (const node of nodesOfType(ast.program, 'ExportNamedDeclaration')) {
-    if (node.exportKind === 'type') continue;
+  const {declarations, specifiers} = namedExportIndex(ast.program);
+  for (const node of declarations) {
     if (declarationExports(node.declaration, exportName)) {
       return {file, name: exportName};
     }
-    for (const specifier of node.specifiers ?? []) {
-      if (
-        specifier.type !== 'ExportSpecifier' ||
-        specifier.exportKind === 'type'
-      ) {
-        continue;
-      }
-      const exported = specifier.exported?.name ?? specifier.exported?.value;
-      if (exported !== exportName) continue;
-      const local =
-        specifier.local?.name ?? specifier.local?.value ?? exportName;
-      if (node.source) {
-        const target = resolveModuleOrPackage(node.source.value, file);
-        const origin = target ? moduleExportOrigin(target, local, seen) : null;
-        if (origin) return origin;
-        continue;
-      }
-      return bindingOrigin(ast, file, local, seen);
+  }
+  for (const {node, specifier} of specifiers.get(exportName) ?? []) {
+    const local = specifier.local?.name ?? specifier.local?.value ?? exportName;
+    if (node.source) {
+      const target = resolveModuleOrPackage(node.source.value, file);
+      const origin = target ? moduleExportOrigin(target, local, seen) : null;
+      if (origin) return origin;
+      continue;
     }
+    return bindingOrigin(ast, file, local, seen);
   }
   if (exportName === 'default') {
     for (const node of nodesOfType(ast.program, 'ExportDefaultDeclaration')) {
