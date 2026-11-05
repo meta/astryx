@@ -30,6 +30,7 @@ import {
 import {Icon} from '../Icon';
 import {Tooltip} from '../Tooltip';
 import {Text} from '../Text';
+import {linkScope} from './link.markers.stylex';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {
   TextType,
@@ -122,6 +123,19 @@ const styles = stylex.create({
  * Link color styles — applied to the <a> element so the underline
  * and icon colors match the text color set by Text.
  */
+// For the colors whose root mixes in the hover tint, the label follows the
+// root on hover, so the label, the underline, and the icon keep one color.
+const labelHoverStyles = stylex.create({
+  followsRoot: {
+    color: {
+      default: null,
+      [stylex.when.ancestor(':hover', linkScope)]: {
+        '@media (hover: hover)': 'inherit',
+      },
+    },
+  },
+});
+
 const linkColorStyles = stylex.create({
   primary: {
     color: {
@@ -347,6 +361,9 @@ export function Link({
   // The reflected theme attributes win over a caller's same-named `data-*`, so
   // theme targeting always sees the real value (public-component-api INV5).
   const reflectedAttributes = themeDataAttributes({color});
+  const hasHoverTint =
+    !isDisabled &&
+    (color === 'primary' || color === 'secondary' || color === 'accent');
 
   const sharedContent = (
     <>
@@ -356,7 +373,8 @@ export function Link({
         weight={weight}
         color={color}
         display={display}
-        maxLines={maxLines}>
+        maxLines={maxLines}
+        xstyle={hasHoverTint && labelHoverStyles.followsRoot}>
         {children}
       </Text>
       {isExternalLink && !renderAsButton && (
@@ -385,6 +403,7 @@ export function Link({
             styles.base,
             styles.buttonReset,
             linkColorStyles[color],
+            linkScope,
             // The system's pressed overlay behind the text; the hover stays the
             // colour change above, so a press is the one background it paints.
             !isDisabled && interactionOverlayStyles.pressedBackgroundColor,
@@ -423,6 +442,7 @@ export function Link({
           focusOutlineProps.focusVisible(
             styles.base,
             linkColorStyles[color],
+            linkScope,
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             styles.disabled,
@@ -455,6 +475,7 @@ export function Link({
           focusOutlineProps.focusVisible(
             styles.base,
             linkColorStyles[color],
+            linkScope,
             !isDisabled && interactionOverlayStyles.pressedBackgroundColor,
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
