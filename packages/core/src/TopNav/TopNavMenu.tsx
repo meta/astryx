@@ -521,34 +521,39 @@ export function TopNavMenu({
             drawerExpanded && drawerStyles.itemsExpanded,
           )}>
           <div {...stylex.props(drawerStyles.itemsInner)}>
-            {items.map(item => (
-              <LinkComponent
-                key={getMenuItemKey(item)}
-                href={item.href}
-                {...pressable}
-                onClick={closeDrawerAfter((_e: React.MouseEvent) => {
-                  item.onClick?.();
-                })}
-                {...focusOutlineProps.focusVisible(
-                  navItemStyles.item,
-                  interactionOverlayStyles.backgroundColor,
-                  drawerStyles.item,
-                )}>
-                {isRenderable(item.icon) && (
-                  <span {...stylex.props(drawerStyles.itemIcon)}>
-                    {item.icon}
-                  </span>
-                )}
-                <span {...stylex.props(drawerStyles.itemText)}>
-                  {item.title}
-                  {item.description && (
-                    <span {...stylex.props(drawerStyles.itemDescription)}>
-                      {item.description}
+            {items.map(item => {
+              const Element =
+                item.href == null && item.onClick ? 'button' : LinkComponent;
+              return (
+                <Element
+                  key={getMenuItemKey(item)}
+                  type={Element === 'button' ? 'button' : undefined}
+                  href={item.href}
+                  {...pressable}
+                  onClick={closeDrawerAfter((_e: React.MouseEvent) => {
+                    item.onClick?.();
+                  })}
+                  {...focusOutlineProps.focusVisible(
+                    navItemStyles.item,
+                    interactionOverlayStyles.backgroundColor,
+                    drawerStyles.item,
+                  )}>
+                  {isRenderable(item.icon) && (
+                    <span {...stylex.props(drawerStyles.itemIcon)}>
+                      {item.icon}
                     </span>
                   )}
-                </span>
-              </LinkComponent>
-            ))}
+                  <span {...stylex.props(drawerStyles.itemText)}>
+                    {item.title}
+                    {item.description && (
+                      <span {...stylex.props(drawerStyles.itemDescription)}>
+                        {item.description}
+                      </span>
+                    )}
+                  </span>
+                </Element>
+              );
+            })}
           </div>
         </div>
       </div>

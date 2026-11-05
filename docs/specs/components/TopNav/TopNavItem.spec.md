@@ -70,7 +70,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **Color transition under reduced motion.** The bar link's background and text
   color still animate when reduced motion is requested; `design:reduced-motion`
   DR3 allows no animated property for a fine pointer.
-- **A disabled item leaves the tab order.** A disabled item is an `<a>` without
+- **A disabled link leaves the tab order.** A disabled link is an `<a>` without
   `href` carrying `tabIndex=-1`, so keyboard users cannot reach it or learn that
   it is disabled. `spec:AST-085` FR1 has a disabled control keep the tab stop it has
   when enabled.
@@ -102,15 +102,15 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                                                                                                                                            | Basis                    |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| FR1 | An enabled item renders the `as` component, else the `LinkProvider` link component, else `<a>`, with `href` and `target`, the forwarded `ref`, and other DOM props. It shows `icon`, then `children` if given, else `label`.                                                                                                                         | Current source and tests |
-| FR2 | `isSelected` sets `aria-current="page"` and the selected treatment; the selected fill stays under hover and touch press with no overlay.                                                                                                                                                                                                             | Current source and tests |
-| FR3 | `isDisabled` renders a plain `<a>` with no `href` and no `target` and `aria-disabled="true"`, and suppresses clicks, so no input can navigate or fire `onClick`. A disabled item MUST keep the tab stop it has when enabled (`spec:AST-085` FR1). Implementation gap: it is an `<a>` without `href` carrying `tabIndex=-1`, so it is not a tab stop. | Current source and tests |
-| FR4 | `isIconOnly` hides the text and sets `aria-label` to `label`.                                                                                                                                                                                                                                                                                        | Current source and tests |
-| FR5 | In `default` and `mobile-bar` modes the item is a horizontal bar link with `top-nav-item`. In `drawer` mode it is a full-width row sized by `size`, carries `data-mode="drawer"`, and on activation calls `onClick` and then closes the AppShell drawer.                                                                                             | Current source and tests |
-| FR6 | Both renderings paint the shared focus outline on keyboard focus and use the shared press feedback.                                                                                                                                                                                                                                                  | Current source           |
-| FR7 | `className`, `style`, and `xstyle` merge after component styles.                                                                                                                                                                                                                                                                                     | Current source           |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Basis                    |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| FR1 | An enabled item renders the `as` component, else the `LinkProvider` link component, else `<a>`, with `href` and `target`, the forwarded `ref`, and other DOM props. It shows `icon`, then `children` if given, else `label`. With `onClick` and no `href`, an enabled item is a button to assistive technology and the keyboard: it carries `role="button"`, has no `href`, is in the Tab order, and activates on Enter and on Space released (Space does not scroll the page), keeping its `HTMLAnchorElement` type. | Current source and tests |
+| FR2 | `isSelected` sets `aria-current="page"` and the selected treatment; the selected fill stays under hover and touch press with no overlay.                                                                                                                                                                                                                                                                                                                                                                              | Current source and tests |
+| FR3 | `isDisabled` sets `aria-disabled="true"` and suppresses clicks, so no input can navigate or fire `onClick`. A disabled link renders a plain `<a>` with no `href` and no `target`. A disabled `onClick`-only item keeps its host, `role="button"`, and tab stop. A disabled item MUST keep the tab stop it has when enabled (`spec:AST-085` FR1). Implementation gap: a disabled link is an `<a>` without `href` carrying `tabIndex=-1`, so it is not a tab stop.                                                      | Current source and tests |
+| FR4 | `isIconOnly` hides the text and sets `aria-label` to `label`.                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Current source and tests |
+| FR5 | In `default` and `mobile-bar` modes the item is a horizontal bar link with `top-nav-item`. In `drawer` mode it is a full-width row sized by `size`, carries `data-mode="drawer"`, and on activation calls `onClick` and then closes the AppShell drawer.                                                                                                                                                                                                                                                              | Current source and tests |
+| FR6 | Both renderings paint the shared focus outline on keyboard focus and use the shared press feedback.                                                                                                                                                                                                                                                                                                                                                                                                                   | Current source           |
+| FR7 | `className`, `style`, and `xstyle` merge after component styles.                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Current source           |
 
 ### Allowed variation
 
@@ -119,18 +119,18 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State     | Required invariant                                                                | Allowed variation |
-| --------- | --------------------------------------------------------------------------------- | ----------------- |
-| Rest      | Link with label.                                                                  | Theme styling.    |
-| Selected  | `aria-current="page"`; selected fill.                                             | Fill color.       |
-| Disabled  | No `href`, no click; keeps its tab stop. Implementation gap: `tabIndex=-1` (FR3). | Muted styling.    |
-| Icon only | `aria-label` from `label`; no visible text.                                       | Icon.             |
-| Drawer    | Full-width row; activation closes the drawer.                                     | Row size.         |
+| State     | Required invariant                                                                                    | Allowed variation |
+| --------- | ----------------------------------------------------------------------------------------------------- | ----------------- |
+| Rest      | Link with label.                                                                                      | Theme styling.    |
+| Selected  | `aria-current="page"`; selected fill.                                                                 | Fill color.       |
+| Disabled  | No `href`, no click; keeps its tab stop. Implementation gap: a disabled link has `tabIndex=-1` (FR3). | Muted styling.    |
+| Icon only | `aria-label` from `label`; no visible text.                                                           | Icon.             |
+| Drawer    | Full-width row; activation closes the drawer.                                                         | Row size.         |
 
 ### Transformation and precedence order
 
-- **ORD1 — Root element.** Disabled `<a>`, then `as`, then `LinkProvider`, then
-  `<a>`.
+- **ORD1 — Root element.** For a disabled link, a plain `<a>`; otherwise `as`,
+  then `LinkProvider`, then `<a>`.
 - **ORD2 — Content.** `children`, then `label`.
 
 ### Performance and resources
@@ -164,18 +164,18 @@ is recorded.
 
 ## Verification map
 
-| Contract           | Verification                                                                                     | Representative states                            | Mutation or failure expectation                                      | Audit section                    |
-| ------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------ | -------------------------------------------------------------------- | -------------------------------- |
-| FR1, ORD1          | `TopNav.test.tsx` TopNavItem anchor, `as`, LinkProvider tests                                    | Default, `as`, provider                          | Wrong element or lost precedence fails.                              | `audit:TopNavItem/behavior`      |
-| FR2–FR4, AR1–AR3   | `TopNav.test.tsx` TopNavItem state tests                                                         | Selected, disabled, icon only                    | Missing attribute or a navigating disabled item fails.               | `audit:TopNavItem/accessibility` |
-| FR5                | `TopNav.test.tsx` disabled-navigation tests in both modes                                        | Default and drawer                               | Lost click forwarding or href handling fails.                        | `audit:TopNavItem/behavior`      |
-| RTL relation (FR1) | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TopNav / Full example` | The `Dashboard` item's leading icon; LTR and RTL | A leading icon that is not at the inline start of its item fails D2. | `audit:TopNavItem/i18n-rtl`      |
+| Contract           | Verification                                                                                      | Representative states                            | Mutation or failure expectation                                      | Audit section                    |
+| ------------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------- | -------------------------------- |
+| FR1, ORD1          | `TopNav.test.tsx` TopNavItem anchor, `as`, LinkProvider, and `onClick`-only keyboard button tests | Default, `as`, provider                          | Wrong element or lost precedence fails.                              | `audit:TopNavItem/behavior`      |
+| FR2–FR4, AR1–AR3   | `TopNav.test.tsx` TopNavItem state tests                                                          | Selected, disabled, icon only                    | Missing attribute or a navigating disabled item fails.               | `audit:TopNavItem/accessibility` |
+| FR5                | `TopNav.test.tsx` disabled-navigation tests in both modes                                         | Default and drawer                               | Lost click forwarding or href handling fails.                        | `audit:TopNavItem/behavior`      |
+| RTL relation (FR1) | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TopNav / Full example`  | The `Dashboard` item's leading icon; LTR and RTL | A leading icon that is not at the inline start of its item fails D2. | `audit:TopNavItem/i18n-rtl`      |
 
 Pending conformance: the TopNavItem state test and the two disabled-navigation
 tests assert `tabIndex=-1` on a disabled item, pinning FR3's implementation
 gap; they change when disabled items follow `spec:AST-085`.
 
-Read from source, with no focused test yet: the disabled plain `<a>` taking precedence over `as` and `LinkProvider` (ORD1, FR3); other DOM props reaching the link (FR1); the `top-nav-item` target and its `mode` and `selected` states (FR5); the selected fill under hover and press (FR2); the drawer row size, `data-mode="drawer"`, and closing the drawer on activation (FR5); FR6; and FR7.
+Read from source, with no focused test yet: the disabled link's plain `<a>` taking precedence over `as` and `LinkProvider` (ORD1, FR3); other DOM props reaching the link (FR1); the `top-nav-item` target and its `mode` and `selected` states (FR5); the selected fill under hover and press (FR2); the drawer row size, `data-mode="drawer"`, and closing the drawer on activation (FR5); FR6; and FR7.
 
 ## Decision log
 
