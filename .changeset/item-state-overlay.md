@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] A selected or highlighted `Item` row (and `ListItem`) shows its hover and a mouse press again. The row's state fill replaced the hover and pressed overlay; the overlay now paints as a layer over the unchanged fill.
+[fix] A selected or highlighted interactive `Item` row, and a selected `ListItem`, now shows hover and mouse-press paint over its fill. Before, the fill hid both.
 
 @cixzhang
