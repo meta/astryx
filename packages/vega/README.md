@@ -29,7 +29,7 @@ Vega is published **only** under the `@canary` dist-tag, so you must request tha
 npm install @astryxdesign/vega@canary vega vega-lite
 ```
 
-> Canary builds track the latest commit on `main` (`0.x.y-canary.<sha>`). They can break between any two versions — pin an exact version if you need stability.
+> Canary builds follow `main`'s tip, published at most once an hour and on demand (`0.x.y-canary.<sha>`). They can break between any two versions — pin an exact version if you need stability.
 
 ## Usage
 

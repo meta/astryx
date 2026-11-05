@@ -22,7 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-import {registryHas} from './publish-package.mjs';
+import {packageExists, registryHas} from './publish-package.mjs';
 
 /**
  * The packages the canary loop publishes: public `@astryxdesign` packages,
@@ -92,8 +92,7 @@ async function main() {
     version,
     isPublished: (name, packageVersion) =>
       registryHas({name, version: packageVersion, registry}),
-    // A missing package answers 404 on its `latest` version document.
-    exists: name => registryHas({name, version: 'latest', registry}),
+    exists: name => packageExists({name, registry}),
   });
   for (const name of pending)
     console.log(`Not yet published: ${name}@${version}`);
