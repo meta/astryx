@@ -39,6 +39,7 @@ import {composeEventHandlers} from '../utils';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
+import type {focusOwnerProps} from '../privateAttributes/focusOwner.stylex';
 export interface TokenLinkProps extends HTMLAttributes<HTMLElement> {
   /** Ref forwarded to the container element. */
   ref?: Ref<HTMLElement>;
@@ -56,7 +57,9 @@ export interface TokenLinkProps extends HTMLAttributes<HTMLElement> {
   /** Resolved link component (native `<a>` or a router link). */
   LinkComponent: LinkComponentType;
   /** `stylex.props()` output applied to the invisible inner link. */
-  linkStyleProps: {className?: string; style?: CSSProperties};
+  linkStyleProps: {className?: string; style?: CSSProperties} & Partial<
+    typeof focusOwnerProps
+  >;
   /** Visible (or visually hidden) label node rendered inside the link. */
   labelContent: ReactNode;
   /** Optional leading icon. */
