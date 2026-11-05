@@ -1521,6 +1521,26 @@ export function Selector<T extends SelectorOptionType>(
 
   // Only after keyboard input does the active option draw the focus ring; a
   // pointer highlight keeps the fill alone, as a focused menu row does.
+  // The shared modality changes only on a key or a press, so a hover alone
+  // still reads as keyboard. The option the mouse last entered therefore
+  // never draws the ring until a key moves the highlight again. A hover that
+  // a keyboard move holds (a key scrolled the list under a still mouse) does
+  // not take the highlight, so the keyboard's option keeps its ring.
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const keyDownAfterHover = useCallback(
+    (e: React.KeyboardEvent) => {
+      setHoveredIndex(null);
+      comboboxKeyDown(e);
+    },
+    [comboboxKeyDown],
+  );
+  const mouseEnterOption = useCallback(
+    (item: SelectorOptionData, index: number) => {
+      setHoveredIndex(index);
+      comboboxItemMouseEnter(item, index);
+    },
+    [comboboxItemMouseEnter],
+  );
   const {
     isKeyboardHighlight: isHighlightFromKeyboard,
     noteHighlightMove,
@@ -1528,8 +1548,8 @@ export function Selector<T extends SelectorOptionType>(
     onItemMouseEnter,
   } = useKeyboardHighlight(
     triggerModality.readModality,
-    comboboxKeyDown,
-    comboboxItemMouseEnter,
+    keyDownAfterHover,
+    mouseEnterOption,
   );
   const onTriggerClick = useCallback(() => {
     comboboxTriggerClick();
@@ -1613,6 +1633,7 @@ export function Selector<T extends SelectorOptionType>(
         return;
       }
       noteHighlightMove();
+      setHoveredIndex(null);
       // With hasSearch the query input owns typing, so type-to-select is off.
       if (!hasSearch && typeahead.onKeyDown(e)) {
         e.preventDefault();
@@ -1770,7 +1791,9 @@ export function Selector<T extends SelectorOptionType>(
         id={getItemId(flatIndex)}
         isHighlighted={flatIndex === highlightedIndex}
         isKeyboardHighlighted={
-          flatIndex === highlightedIndex && isHighlightFromKeyboard
+          flatIndex === highlightedIndex &&
+          isHighlightFromKeyboard &&
+          flatIndex !== hoveredIndex
         }
         isSelected={item.value === normalizedValue}
         size={size}
@@ -1786,6 +1809,7 @@ export function Selector<T extends SelectorOptionType>(
       indicatorPosition,
       highlightedIndex,
       isHighlightFromKeyboard,
+      hoveredIndex,
       size,
       normalizedValue,
       getItemId,

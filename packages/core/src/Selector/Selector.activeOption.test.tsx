@@ -94,6 +94,27 @@ describe('Selector active option indicator', () => {
     );
   });
 
+  it('moves to the fill alone when the mouse takes the highlight after keyboard input', async () => {
+    const user = userEvent.setup();
+    const field = renderSelector();
+    field.focus();
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('{ArrowDown}');
+    expect(hasRing(activeOption(field))).toBe(true);
+
+    // A hover without a press: the shared modality still reads keyboard.
+    await user.hover(option('Cherry'));
+    const row = activeOption(field);
+    expect(row).toHaveTextContent('Cherry');
+    expect(hasRing(row)).toBe(false);
+    expect(hasRing(option('Banana'))).toBe(false);
+
+    await user.keyboard('{ArrowUp}');
+    const back = activeOption(field);
+    expect(back).toHaveTextContent('Banana');
+    expect(hasRing(back)).toBe(true);
+  });
+
   // WCAG 2.2 1.4.11: a state indicator needs 3:1 against the listbox it sits
   // on. The overlay fill alone measures about 1.09:1 (light) and 1.15:1
   // (dark).
