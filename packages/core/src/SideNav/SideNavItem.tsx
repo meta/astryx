@@ -74,7 +74,10 @@ import {
 import {useSideNavRenderMode} from './SideNavRenderContext';
 import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {themeProps} from '../utils/themeProps';
-import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {
+  disabledInteractionProps,
+  withholdCallerHandlers,
+} from '../utils/disabledInteraction';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {SideNavFocusTargetsContext} from './SideNavFocusTargetsContext';
@@ -362,14 +365,13 @@ function NavItemElement({
       ref={ref as React.Ref<HTMLButtonElement>}
       type="button"
       onClick={onClick}
-      {...rest}
+      // A disabled item keeps its tab stop, so the browser still sends it events.
+      // It runs no caller handler except `onFocus` and `onBlur`.
+      {...withholdCallerHandlers(rest, !!isDisabled)}
       {...(isDisabled
         ? {
             'aria-disabled': true,
-            ...disabledInteractionProps(
-              rest.onKeyDown as
-                React.KeyboardEventHandler<HTMLButtonElement> | undefined,
-            ),
+            ...disabledInteractionProps<HTMLButtonElement>(),
           }
         : null)}>
       {children}

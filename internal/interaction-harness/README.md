@@ -271,6 +271,13 @@ the screencast's stamps. A loaded machine stamps frames late, and
 `inPresentationOrder` can then put a frame after frames that came after it.
 The clock takes the cycle origin that most frames agree with, so such a frame
 moves only its own reading. A frame within 36 px of a turn gets no reading.
+A proof that needs every frame read starts a second control after the first,
+`startBusyControl(page, {ahead: true})`: an `AHEAD_CONTROL_RGB` box in the
+strip below, half a leg (200 ms) ahead. Wherever the first control is near a
+turn, the one ahead is mid-leg. Track it with `trackControl(page, frames,
+{ahead: true})` and read it with its own `controlClock`. `startBusyControl`
+resolves with each control's `start` on the page clock, where its own time
+is zero. Keep the component's marker out of the top 28 px then.
 
 An animation that lasts a fraction of a second, such as a 0.2 s fade, leaves a
 block only a few frames to judge: in WebKit, or on a loaded machine, the control
