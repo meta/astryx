@@ -19,6 +19,7 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   animationStoryboard,
+  armHold,
   blockMainThread,
   busyWindowProof,
   freezeTimers,
@@ -30,7 +31,6 @@ import {
   thawTimers,
   timeline,
   touchDriver,
-  waitForAnimation,
   waitForRest,
   watchAnimations,
   withStorybook,
@@ -133,7 +133,7 @@ async function openCalendar(
   // Under a finger the hidden wheels warm up once the sheet has settled
   // (useWheelsWarmUp): their `visibility` turns visible at opacity 0, with its
   // own transition. Wait for its end, so a test's first tap meets a panel at
-  // rest. `blockMainThread` and `waitForAnimation` take any running animation
+  // rest. `blockMainThread` and `armHold` take any running animation
   // on the panel, and on a slow runner the warm-up can still be running.
   const wheels = page.locator('[data-panel="wheels"]').first();
   await expect
@@ -962,12 +962,16 @@ test(
   async ({page}, testInfo) => {
     const {driver, sheet, wheels, titleAt} = await openCalendar(page);
     await installTimerGate(page);
+    // The page holds the fade itself as soon as it runs. A hold sent after
+    // the tap can miss a 0.25 s fade on a loaded runner.
+    const hold = await armHold(page, sheet);
     await driver.tap(titleAt);
-    await waitForAnimation(wheels);
+    const held = await hold.held();
     await freezeTimers(page);
     const {storyboard} = await animationStoryboard(page, {
       name: 'month-year-toggle',
       clip: sheet,
+      held,
       times: timeline(TOGGLE_MS, 1000 / 30),
       columns: 5,
       cellScale: 0.35,
