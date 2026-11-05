@@ -409,16 +409,23 @@ describe('Node-tooling CI routing', () => {
 
   it('keeps required build and docsite contexts green without their heavy work', () => {
     expect(
-      step(ci.jobs['docsite-test'], 'Skip docsite work for Node tooling').if,
+      step(ci.jobs['docsite-build'], 'Skip docsite work for Node tooling').if,
     ).toContain(TOOLING_TRUE);
     for (const name of [
       'Build docsite workspace dependencies',
       'Build the docsite',
-      'test-docsite (start the data tests)',
-      'test-docsite-e2e (browser contracts)',
+      'test-docsite (data tests)',
     ]) {
-      expect(step(ci.jobs['docsite-test'], name).if).toContain(TOOLING_FALSE);
+      expect(step(ci.jobs['docsite-build'], name).if).toContain(TOOLING_FALSE);
     }
+    // The browser contracts run only when the build found them in scope,
+    // which a tooling-only change never is.
+    expect(
+      step(
+        ci.jobs['docsite-build'],
+        'Decide whether the browser contracts apply',
+      ).run,
+    ).toContain(TOOLING_FALSE);
 
     for (const candidate of [
       ...ci.jobs['build-storybook'].steps,

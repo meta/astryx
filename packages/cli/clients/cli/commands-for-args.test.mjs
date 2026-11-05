@@ -98,8 +98,8 @@ describe('commandsForArgs', () => {
 describe('a run that loads only its command prints what the full program prints', () => {
   /** @param {string[]} argv */
   const expectSameAnswer = async argv => {
-    const asBin = await runCli(argv, {cwd: dir, asBin: true});
-    const everything = await runCli(argv, {cwd: dir});
+    const asBin = await runCli(argv, {cwd: dir});
+    const everything = await runCli(argv, {cwd: dir, allCommands: true});
     expect(asBin, argv.join(' ')).toEqual(everything);
   };
 

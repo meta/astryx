@@ -358,7 +358,10 @@ a measured, sourced difference exists.
   the area sits at its edge and the drag moves toward that edge, the
   surrounding surface (a sheet) takes the drag; otherwise the area keeps it for
   the whole gesture and rubber-bands at its edge. The drag MUST NOT change
-  hands midway, in either direction. This amends `spec:AST-025` FR14 (scroll
+  hands midway, in either direction, with one exception (DEC-28). At a
+  sheet's tallest detent, a pull that carries its content past its end
+  continues as the sheet's stretch, and a reversal hands it back to the
+  content (`component:BottomSheet` FR18). This amends `spec:AST-025` FR14 (scroll
   chaining by default) for touch presentations on every touch platform.
 - **FR15 — Recognizers arbitrate like UIKit's.** Recognizers that see the
   same touch sequence MUST be exclusive by default: the first to recognize
@@ -808,8 +811,15 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   drag and a mouse wheel never do.
 - `component:BottomSheet`: a `form` or `required` sheet rubber-bands past its
   resting place under a finger as under a trackpad (FR3, FR43), with the same
-  stretch for the same travel; a mouse wheel scrolls its content and never
-  moves it. Implementation gap: a finger drags it one for one below rest.
+  stretch for the same travel; a mouse wheel scrolls its content and never moves
+  it. Past its tallest detent, every finger's pull stretches it on FR3's rubber
+  band with no hold, over a reserve deep enough for the whole stretch and the
+  release, unless the caller sizes or styles it (`component:BottomSheet` FR18).
+  A pull on its content does so once the content cannot scroll that way
+  (`component:BottomSheet` FR18). Past its tallest detent, a mouse and a pen
+  keep FR18's resisted stretch of at most 48 px, an exception to FR43's same
+  rubber band (`spec:AST-017` FR59). Implementation gap: a finger drags it one
+  for one below rest.
 - The shared pager (Carousel's paging presentation, Lightbox's viewer): a
   trackpad swipe follows FR43's pager rule in Lightbox's viewer and in
   Carousel's paging presentation, under every pointer (`component:Lightbox`
@@ -1306,6 +1316,18 @@ Safari claims keep real-device evidence. The owner decided this on
 checks there.
 
 Rejected: a physical Android phone as a gate or as a follow-up check.
+
+### DEC-28 — Sheet stretch at the tallest detent
+
+**Reference:** `spec:AST-094/DEC-28`
+**Decider:** the owner, `2026-11-03`
+
+Decided by the owner in a feel check on a phone: at a sheet's tallest detent,
+a pull that carries its content past its end continues as the sheet's
+stretch, and a reversal hands it back (FR14's one exception).
+
+Rejected: keeping the whole gesture with the content (the strict nested-scroll
+rule).
 
 ## Open questions
 

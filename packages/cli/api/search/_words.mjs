@@ -5,6 +5,8 @@
  * identifier spelling, joined names, and typo tolerance.
  */
 
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
+
 /**
  * Light stemmer: strips common English suffixes so "charts"/"charting" and
  * "chart" share a root. Deliberately crude (no Porter) — good enough to bridge
@@ -24,27 +26,47 @@ export function stem(w) {
 }
 
 /**
- * The forms of a word that count as the same word: itself, its stem, and its
- * singular when it ends in a plural suffix — so "tables" is "table",
- * "statuses" is "status", and "filtering" is "filter".
+ * Visits the forms of a word that count as the same word, in order, until a
+ * visit returns true. The forms are the word, its stem, and its singular when
+ * it ends in a plural suffix. So "tables" is "table", "statuses" is "status",
+ * and "filtering" is "filter".
  * @param {string} w - Lowercase word.
- * @returns {Set<string>}
+ * @param {(form: string) => boolean} visit
+ * @returns {boolean} whether a visit returned true
  */
-export function wordForms(w) {
-  const forms = new Set([w, stem(w)]);
-  if (w.length > 3 && w.endsWith('s')) forms.add(w.slice(0, -1));
-  if (w.length > 4 && w.endsWith('es')) forms.add(w.slice(0, -2));
-  if (w.length > 4 && w.endsWith('ies')) forms.add(w.slice(0, -3) + 'y');
+function someForm(w, visit) {
+  if (visit(w) || visit(stem(w))) return true;
+  if (w.length > 3 && w.endsWith('s') && visit(w.slice(0, -1))) return true;
+  if (w.length > 4 && w.endsWith('es') && visit(w.slice(0, -2))) return true;
+  if (w.length > 4 && w.endsWith('ies') && visit(w.slice(0, -3) + 'y')) {
+    return true;
+  }
   // A gerund keeps its verb: "spacing" lost a final e ("space"), and
   // "dragging" doubled a consonant ("drag"). A past participle does not: it
   // usually describes a state ("archived notes"), not the action a catalog
   // word names.
   if (w.length >= 6 && w.endsWith('ing')) {
     const base = w.slice(0, -3);
-    forms.add(base);
-    forms.add(`${base}e`);
-    if (/([b-df-hj-np-tv-z])\1$/.test(base)) forms.add(base.slice(0, -1));
+    if (visit(base) || visit(`${base}e`)) return true;
+    if (/([b-df-hj-np-tv-z])\1$/.test(base) && visit(base.slice(0, -1))) {
+      return true;
+    }
   }
+  return false;
+}
+
+/**
+ * The forms of a word that count as the same word (see someForm).
+ * @param {string} w - Lowercase word.
+ * @returns {Set<string>}
+ */
+export function wordForms(w) {
+  /** @type {Set<string>} */
+  const forms = new Set();
+  someForm(w, form => {
+    forms.add(form);
+    return false;
+  });
   return forms;
 }
 
@@ -72,8 +94,38 @@ function singulars(w) {
 export function sameWord(a, b) {
   if (a === b) return true;
   const forms = wordForms(a);
-  for (const f of wordForms(b)) if (forms.has(f)) return true;
-  return false;
+  return someForm(b, form => forms.has(form));
+}
+
+/**
+ * A search term's forms and the word starts it matches, worked out once for
+ * every word the term is compared with.
+ * @typedef {{term: string, forms: Set<string>, starts: string[]}} TermWords
+ */
+
+/**
+ * @param {string} term - Lowercase term.
+ * @returns {TermWords}
+ */
+export function termWords(term) {
+  return {
+    term,
+    forms: wordForms(term),
+    // The term or its singular may start the word: "tokens" starts
+    // "tokenizer" through "token". A singular needs five letters, so "stats"
+    // does not start "status".
+    starts: [term, ...singulars(term).filter(f => f.length >= 5)],
+  };
+}
+
+/**
+ * Whether a lowercase word is the term's word, as sameWord answers.
+ * @param {TermWords} t
+ * @param {string} w
+ * @returns {boolean}
+ */
+export function sameTermWord(t, w) {
+  return w === t.term || someForm(w, form => t.forms.has(form));
 }
 
 /**
@@ -101,15 +153,31 @@ export function wordsOf(text) {
  * @returns {boolean}
  */
 export function startsAWordOf(term, text) {
-  if (term.length < 4) return false;
-  if (term.length / String(text).length < 0.5) return false;
-  // The term or its singular may start the word: "tokens" starts
-  // "tokenizer" through "token". A singular needs five letters, so "stats"
-  // does not start "status".
-  const starts = [term, ...singulars(term).filter(f => f.length >= 5)];
+  if (!coversHalf(term, text)) return false;
+  return startsATermWordOf(termWords(term), text);
+}
+
+/**
+ * startsAWordOf for a term whose words are already worked out.
+ * @param {TermWords} t
+ * @param {string} text - The name or keyword as authored.
+ * @returns {boolean}
+ */
+export function startsATermWordOf(t, text) {
+  if (!coversHalf(t.term, text)) return false;
   return wordsOf(text).some(
-    w => starts.some(f => w.startsWith(f)) || sameWord(term, w),
+    w => t.starts.some(f => w.startsWith(f)) || sameTermWord(t, w),
   );
+}
+
+/**
+ * Whether a term is long enough to match inside `text`: four letters, and at
+ * least half of the text.
+ * @param {string} term
+ * @param {string} text
+ */
+function coversHalf(term, text) {
+  return term.length >= 4 && term.length / String(text).length >= 0.5;
 }
 
 /**
@@ -155,3 +223,27 @@ export const isTypo = (a, b, dist) =>
   dist <= 3 &&
   Math.min(a.length, b.length) >=
     TYPO_MIN_LENGTH[/** @type {1 | 2 | 3} */ (dist)];
+
+/**
+ * The edit distance between two words when it counts as a typo (isTypo), or
+ * null. The shorter word's length caps the distance that can count. A pair
+ * the cap rules out needs no distance table, and the others compute only the
+ * cells within the cap.
+ * @param {string} a
+ * @param {string} b
+ * @returns {1 | 2 | 3 | null}
+ */
+export function typoDistance(a, b) {
+  const shorter = Math.min(a.length, b.length);
+  const cap =
+    shorter >= TYPO_MIN_LENGTH[3]
+      ? 3
+      : shorter >= TYPO_MIN_LENGTH[2]
+        ? 2
+        : shorter >= TYPO_MIN_LENGTH[1]
+          ? 1
+          : 0;
+  if (cap === 0) return null;
+  const dist = levenshteinDistance(a, b, cap);
+  return dist >= 1 && dist <= cap ? /** @type {1 | 2 | 3} */ (dist) : null;
+}

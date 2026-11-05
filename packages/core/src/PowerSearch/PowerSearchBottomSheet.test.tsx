@@ -5022,6 +5022,27 @@ describe('PowerSearch sheet value text', () => {
     );
   });
 
+  it('writes the trigger token and the Filters row in the provider calendar', () => {
+    // The buddhist calendar needs no Temporal.
+    render(
+      <InternationalizationProvider locale="en" calendar="buddhist">
+        <PowerSearch
+          config={valueTypesConfig}
+          filters={[dateFilter]}
+          onChange={() => {}}
+          presentation="bottom-sheet"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(within(field()).getByText(/^Mar (9|10), 2567 BE$/)).toBeTruthy();
+    openSheet();
+    expect(
+      within(sheet()).getByRole('button', {
+        name: /^Created is after Mar (9|10), 2567 BE$/,
+      }),
+    ).toBeTruthy();
+  });
+
   it("resolves the sheet's date-range and nested summaries through the catalog with the popover token's words", () => {
     // The row's value resolves "date range" and "{n} filters" through
     // `@astryx.powersearch.valueEditor.*` (ICU plural) so a locale can
