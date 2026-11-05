@@ -798,6 +798,59 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     expect(result.current.rowHeight).toBe(32);
   });
 
+  // A box with a real style declaration. `followsItems` makes its width drop
+  // under size containment, as a list sized from its content does.
+  function styledBox(
+    width: number,
+    followsItems: boolean,
+  ): {
+    offsetWidth: number;
+    offsetHeight: number;
+    style: CSSStyleDeclaration;
+  } & Element {
+    const style = document.createElement('div').style;
+    const box = {
+      style,
+      offsetHeight: 28,
+      get offsetWidth() {
+        return followsItems && style.getPropertyValue('contain') !== ''
+          ? 0
+          : width;
+      },
+      set offsetWidth(next: number) {
+        width = next;
+      },
+    };
+    return box as unknown as typeof box & Element;
+  }
+
+  it.each([
+    ['follows its items: after paint', true, 3],
+    ['does not follow its items: before paint', false, 1],
+  ])(
+    'renders a fold whose list width %s',
+    async (_label, followsItems, beforePaint) => {
+      const {result} = renderHook(() => useOverflow(3, {gap: 10}));
+      const box = styledBox(200, followsItems);
+      act(() => {
+        result.current.measureRef(mockMeasure([50, 50, 50], 30));
+        result.current.containerRef(box as unknown as HTMLElement);
+      });
+      expect(result.current.visibleCount).toBe(3);
+
+      box.offsetWidth = 100;
+      await deliverBeforePaint(box);
+      expect(result.current.visibleCount).toBe(beforePaint);
+      // The probe leaves no inline style behind.
+      expect(box.style.getPropertyValue('contain')).toBe('');
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      expect(result.current.visibleCount).toBe(1);
+    },
+  );
+
   it('measures every list that one delivery reports, then renders once', async () => {
     let renders = 0;
     const {result} = renderHook(() => {

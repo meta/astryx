@@ -202,6 +202,37 @@ function canChangeListHeight(
 }
 
 /**
+ * Whether the observed element's size follows the list's items: a list in a
+ * flex item sized from its content, a shrink-to-fit box, or such an ancestor.
+ * A fold then changes an observed size, so it cannot render inside the
+ * observer step. Size containment drops the items' contribution to the
+ * list's inline size, so a size that moves under it follows the items. The
+ * probe reverts at once, before any observer or the frame can see it.
+ */
+function observedSizeFollowsItems(
+  list: HTMLElement,
+  observed: HTMLElement,
+): boolean {
+  const style = list.style as CSSStyleDeclaration | undefined;
+  if (style == null || typeof style.setProperty !== 'function') {
+    return false;
+  }
+  const value = style.getPropertyValue('contain');
+  const priority = style.getPropertyPriority('contain');
+  const width = observed.offsetWidth;
+  const height = observed.offsetHeight;
+  style.setProperty('contain', 'inline-size', 'important');
+  const follows =
+    observed.offsetWidth !== width || observed.offsetHeight !== height;
+  if (value === '') {
+    style.removeProperty('contain');
+  } else {
+    style.setProperty('contain', value, priority);
+  }
+  return follows;
+}
+
+/**
  * Hook for managing horizontal overflow of a list of items.
  *
  * Renders all items into a hidden measurement container, then calculates
@@ -363,9 +394,15 @@ export function useOverflow(
         const changesRowHeight =
           (maxRows ?? 1) > 1 &&
           measuredRowHeight !== appliedRef.current.rowHeight;
+        const observed =
+          observeParent && container.parentElement
+            ? container.parentElement
+            : container;
         if (
           changesParentFill ||
           changesRowHeight ||
+          (nextVisible !== appliedRef.current.visibleCount &&
+            observedSizeFollowsItems(container, observed)) ||
           canChangeListHeight(
             renderedSet(appliedRef.current.visibleCount),
             renderedSet(nextVisible),
