@@ -5,12 +5,14 @@
 import {useId, useRef, useState} from 'react';
 import {CheckIcon} from '@heroicons/react/24/outline';
 import {Card} from '@astryxdesign/core/Card';
+import {useAnnounce} from '@astryxdesign/core/hooks';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Item} from '@astryxdesign/core/Item';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {useMultiCombobox} from '@astryxdesign/core/MultiSelector';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Token} from '@astryxdesign/core/Token';
+import {isImeKeyEvent} from '@astryxdesign/core/utils';
 
 const LABELS = [
   {value: 'bug', label: 'Bug'},
@@ -32,6 +34,7 @@ export default function UseMultiComboboxHookUsage() {
   const [isOpen, setIsOpen] = useState(false);
   const [selected, setSelected] = useState<string[]>(['bug']);
   const matches = filterLabels(query);
+  const announce = useAnnounce({hasReplace: true});
 
   const toggle = (value: string) =>
     setSelected(current =>
@@ -44,7 +47,13 @@ export default function UseMultiComboboxHookUsage() {
     selectableItems: matches,
     isOpen,
     hasSearch: true,
-    onOpen: () => setIsOpen(true),
+    // With no match there is no option to point at, so the list stays shut.
+    onOpen: () => {
+      if (matches.length === 0) {
+        return false;
+      }
+      setIsOpen(true);
+    },
     onClose: () => setIsOpen(false),
     onToggle: toggle,
     listboxId,
@@ -78,16 +87,34 @@ export default function UseMultiComboboxHookUsage() {
           aria-activedescendant={combobox.activeDescendantId}
           value={query}
           onChange={nextQuery => {
+            const nextMatches = filterLabels(nextQuery);
             setQuery(nextQuery);
             setIsOpen(true);
-            combobox.setHighlightedIndex(
-              filterLabels(nextQuery).length > 0 ? 0 : -1,
-            );
+            combobox.setHighlightedIndex(nextMatches.length > 0 ? 0 : -1);
+            if (nextQuery.trim() !== query.trim()) {
+              announce(
+                nextMatches.length === 0
+                  ? 'No labels match'
+                  : nextMatches.length === 1
+                    ? '1 label'
+                    : `${nextMatches.length} labels`,
+              );
+            }
           }}
           onClick={combobox.onTriggerClick}
           onKeyDown={event => {
-            // Home and End move the caret in a text field.
-            if (event.key === 'Home' || event.key === 'End') {
+            // Keys that compose a Korean, Japanese or Chinese syllable belong
+            // to the input method. Home and End move the caret in a text
+            // field.
+            if (
+              isImeKeyEvent(event.nativeEvent) ||
+              event.key === 'Home' ||
+              event.key === 'End'
+            ) {
+              return;
+            }
+            // With no active option, Enter submits a surrounding form.
+            if (event.key === 'Enter' && combobox.activeDescendantId == null) {
               return;
             }
             combobox.onKeyDown(event);

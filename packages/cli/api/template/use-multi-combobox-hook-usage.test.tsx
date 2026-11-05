@@ -5,11 +5,14 @@
  * The useMultiCombobox example takes its keys and active option from the
  * hook: the arrow keys move the active option while focus stays in the field,
  * Enter toggles a label and the list stays open, and Escape closes the list.
+ * Keys that compose a syllable stay with the input method, Enter with no
+ * active option is left to the form, a new query announces its match count,
+ * and a query with no match keeps the list shut.
  */
 
 import {act} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import UseMultiComboboxHookUsage from '../../assets/templates/blocks/components/MultiSelector/useMultiComboboxHookUsage';
 
 (globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean}).IS_REACT_ACT_ENVIRONMENT =
@@ -148,6 +151,62 @@ describe('useMultiCombobox example', () => {
     press(input, 'ArrowDown');
     expect(listbox()).not.toBeNull();
     press(input, 'Escape');
+    expect(listbox()).toBeNull();
+    expect(input.getAttribute('aria-activedescendant')).toBeNull();
+  });
+
+  it('leaves keys that compose a syllable to the input method', () => {
+    const input = renderExample();
+    type(input, 'perf');
+    expect(activeLabel(input)).toBe('Performance');
+    act(() => {
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          isComposing: true,
+          bubbles: true,
+        }),
+      );
+    });
+    expect(selectedOptions()).toEqual([]);
+  });
+
+  it('leaves Enter to the form while no option is active', () => {
+    const input = renderExample();
+    expect(input.getAttribute('aria-activedescendant')).toBeNull();
+    const event = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    });
+    act(() => {
+      input.dispatchEvent(event);
+    });
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('announces how many labels match a new query', async () => {
+    const input = renderExample();
+    // The live region is shared by the whole page, so a message an earlier
+    // test left unexposed can still lead it: read the newest message.
+    const lastSpoken = () =>
+      document.querySelector('[data-astryx-live-region="polite"]')
+        ?.textContent ?? '';
+    type(input, 'o');
+    await vi.waitFor(() => expect(lastSpoken()).toMatch(/(^| )3 labels$/));
+    type(input, 'perf');
+    await vi.waitFor(() => expect(lastSpoken()).toMatch(/(^| )1 label$/));
+    type(input, 'zzz');
+    await vi.waitFor(() =>
+      expect(lastSpoken()).toMatch(/(^| )No labels match$/),
+    );
+  });
+
+  it('keeps the list shut on ArrowDown when no label matches', () => {
+    const input = renderExample();
+    type(input, 'zzz');
+    press(input, 'Escape');
+    press(input, 'ArrowDown');
     expect(listbox()).toBeNull();
     expect(input.getAttribute('aria-activedescendant')).toBeNull();
   });
