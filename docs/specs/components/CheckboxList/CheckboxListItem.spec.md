@@ -283,8 +283,6 @@ No component-local decision. CheckboxListItem applies `spec:AST-021` and
 - **OQ1 — What does a standalone item with `isChecked` and no `onCheck`
   mean?** (`human-api`) Choose read-only, unavailable, or invalid usage,
   consistent with the matching CheckboxInput question.
-- **OQ2 — How should a theme reach the checked-row fill?** (`human-api`)
-  Exposing it needs a target or reflected-state decision.
 - **OQ3 — Which element owns consumer DOM inputs?** (`human-api`) Data and ARIA
   reach the row while `onClick` runs on the checkbox under a row-typed handler.
 - **OQ4 — Should read-only item clicks propagate?** (`human-api`) No current
