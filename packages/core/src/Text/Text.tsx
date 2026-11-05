@@ -52,6 +52,7 @@ import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {TextClampContext} from './textClampContext';
 
 const LazyXDSTooltip = lazy(async () =>
   import('../Tooltip/Tooltip').then(mod => ({default: mod.Tooltip})),
@@ -318,7 +319,11 @@ export function Text({
           {...style, ...inlineStyle},
         )}
         {...props}>
-        {children}
+        {maxLines > 0 ? (
+          <TextClampContext value={true}>{children}</TextClampContext>
+        ) : (
+          children
+        )}
       </Component>
       {tooltipEnabled && (
         <Suspense fallback={null}>

@@ -7,7 +7,7 @@
  * Link keeps its inline-flex root and paints a keyboard focus outline.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

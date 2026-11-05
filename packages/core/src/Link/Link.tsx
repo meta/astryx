@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/Link/ (showcase blocks)
  */
 
-import {Fragment, isValidElement, type ReactNode} from 'react';
+import {use, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 
@@ -30,6 +30,7 @@ import {
 import {Icon} from '../Icon';
 import {Tooltip} from '../Tooltip';
 import {Text} from '../Text';
+import {TextClampContext} from '../Text/textClampContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {
   TextType,
@@ -61,12 +62,9 @@ registerEnglishFallback(english);
  */
 const styles = stylex.create({
   base: {
-    // `inline` (not `inline-flex`) so the anchor participates in the
-    // surrounding line boxes and an ancestor clamp (e.g. <Text maxLines>)
-    // can truncate it. An inline-flex box establishes its own formatting
-    // context, which an ancestor -webkit-line-clamp cannot reach —
-    // <Text maxLines={2}><Link>…</Link></Text> silently did nothing.
-    display: 'inline',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: spacingVars['--spacing-0-5'],
     fontFamily: 'inherit',
     fontSize: 'inherit',
     lineHeight: 'inherit',
@@ -107,16 +105,15 @@ const styles = stylex.create({
     pointerEvents: 'auto',
     position: 'relative',
   },
-  /**
-   * Flex layout for the cases that need it: external links append an icon
-   * after the text (icon centering + gap), and the button-rendered form
-   * keeps its previous inline-flex layout. On plain anchors this is
-   * deliberately NOT applied — see the `base` display note.
-   */
-  flexLayout: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: spacingVars['--spacing-0-5'],
+  // Inside a clamped Text the root joins the text's line boxes, so the
+  // clamp can cut through the link. An inline-flex box is atomic: a clamp
+  // cannot truncate it.
+  inClampedText: {
+    display: 'inline',
+  },
+  externalIconInClampedText: {
+    marginInlineStart: spacingVars['--spacing-0-5'],
+    verticalAlign: 'middle',
   },
   hasUnderline: {
     textDecoration: 'underline',
@@ -296,35 +293,6 @@ export interface LinkProps extends BaseProps<
 }
 
 /**
- * Determines whether children consist solely of text nodes (strings or numbers,
- * or arrays of them). When composed with elements (such as HStack, Icon, or
- * block containers), the anchor must keep an inline-flex root box so Chromium
- * computes and paints a visible keyboard focus outline.
- */
-function isTextOnly(content: ReactNode): boolean {
-  if (
-    typeof content === 'string' ||
-    typeof content === 'number' ||
-    typeof content === 'boolean' ||
-    content === null ||
-    content === undefined
-  ) {
-    // Text, numbers, and non-rendering children (false, null, undefined) all
-    // participate in the surrounding line boxes.
-    return true;
-  }
-  if (Array.isArray(content)) {
-    return content.every(isTextOnly);
-  }
-  if (isValidElement(content) && content.type === Fragment) {
-    // A Fragment renders its children directly, so it is text-only exactly
-    // when those children are.
-    return isTextOnly((content.props as {children?: ReactNode}).children);
-  }
-  return false;
-}
-
-/**
  * A styled anchor link component.
  *
  * Uses Text internally for typography styling.
@@ -387,18 +355,10 @@ export function Link({
   const renderAsButton =
     role === 'button' || (role === 'inert' && href == null);
   const isExternalWithIcon = isExternalLink && !renderAsButton;
-  // The plain anchor stays `inline` so an ancestor clamp (<Text maxLines>)
-  // can truncate it — that is the composition this PR fixes. But a Link that
-  // establishes its own box (`display="block"`, or clamping itself via
-  // `maxLines`, or carrying the external-link icon, or composed with block-level
-  // children like HStack) must keep the inline-flex root: an inline anchor
-  // around a block-level child computes a focus outline that paints nothing in
-  // Chromium, losing keyboard focus visibility on those forms.
-  const needsRootBox =
-    isExternalWithIcon ||
-    display !== 'inline' ||
-    maxLines > 0 ||
-    !isTextOnly(children);
+  // Link reads the enclosing Text's clamp, never its own children (AV1). A
+  // Link with its own display or clamp keeps its own box.
+  const isInClampedText =
+    use(TextClampContext) && display === 'inline' && maxLines === 0;
 
   // The reflected theme attributes win over a caller's same-named `data-*`, so
   // theme targeting always sees the real value (public-component-api INV5).
@@ -417,7 +377,12 @@ export function Link({
       </Text>
       {isExternalWithIcon && (
         <>
-          <Icon icon="externalLink" size="xsm" color="inherit" />
+          <Icon
+            icon="externalLink"
+            size="xsm"
+            color="inherit"
+            xstyle={isInClampedText && styles.externalIconInClampedText}
+          />
           <VisuallyHidden>{newTabLabel}</VisuallyHidden>
         </>
       )}
@@ -439,7 +404,6 @@ export function Link({
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
             styles.base,
-            styles.flexLayout,
             styles.buttonReset,
             linkColorStyles[color],
             // The system's pressed overlay behind the text; the hover stays the
@@ -479,7 +443,7 @@ export function Link({
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
             styles.base,
-            needsRootBox && styles.flexLayout,
+            isInClampedText && styles.inClampedText,
             linkColorStyles[color],
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
@@ -512,7 +476,7 @@ export function Link({
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
             styles.base,
-            needsRootBox && styles.flexLayout,
+            isInClampedText && styles.inClampedText,
             linkColorStyles[color],
             !isDisabled && interactionOverlayStyles.pressedBackgroundColor,
             hasUnderline && styles.hasUnderline,

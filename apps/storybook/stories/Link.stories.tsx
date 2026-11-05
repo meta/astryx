@@ -200,8 +200,8 @@ export const WrappedLines: Story = {
 };
 
 /**
- * A long text-only Link inside `<Text maxLines={2}>` clamps with the ancestor
- * text, while a composed Link (element child) keeps its own box and focus ring.
+ * A long Link inside `<Text maxLines={2}>` clamps with the ancestor text,
+ * while a composed Link outside a clamp keeps its own box and focus ring.
  */
 export const ClampedByAncestorText: Story = {
   tags: ['!autodocs'],

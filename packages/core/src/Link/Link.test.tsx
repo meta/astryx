@@ -13,6 +13,9 @@ import {describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
+import type {ReactNode} from 'react';
+import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {Text} from '../Text/Text';
 import {Link} from './Link';
 import {LinkProvider} from './LinkProvider';
 
@@ -486,9 +489,9 @@ describe('pressed state', () => {
 });
 
 // =============================================================================
-// Display: an ancestor clamp (<Text maxLines>) can only truncate an anchor
-// that participates in the surrounding line boxes, so the plain anchor must
-// be `inline`; flex layout is reserved for the icon/button forms (#6021).
+// Display: inside a clamped Text the anchor joins the text's line boxes, so
+// the clamp can truncate it. Everywhere else it keeps its inline-flex box.
+// Link never reads its children to decide (Link AV1).
 // =============================================================================
 
 /**
@@ -559,109 +562,105 @@ function displayDeclarationsFor(el: Element): string[] {
 }
 
 describe('Link display', () => {
-  it('renders a plain anchor inline so an ancestor clamp can reach it', () => {
+  const inClamp = (link: ReactNode) => (
+    <Text maxLines={2} hasTruncateTooltip={false}>
+      Lead text {link} tail text
+    </Text>
+  );
+
+  it('keeps its inline-flex box outside a clamped Text', () => {
     const {container} = render(<Link href="/docs">Documentation</Link>);
-    const anchor = container.querySelector('a')!;
-    expect(displayDeclarationsFor(anchor)).toContain('inline');
-    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
-  });
-
-  it('keeps flex layout for the external-link icon form', () => {
-    const {container} = render(
-      <Link href="https://example.com" isExternalLink>
-        External docs
-      </Link>,
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline-flex',
     );
-    const anchor = container.querySelector('a')!;
-    expect(displayDeclarationsFor(anchor)).toContain('inline-flex');
   });
 
-  it('keeps the flex root (visible focus box) for display="block" links', () => {
+  it('keeps its inline-flex box inside a Text that does not clamp', () => {
     const {container} = render(
-      <Link href="/docs" display="block">
-        Documentation
-      </Link>,
+      <Text>
+        <Link href="/docs">Documentation</Link>
+      </Text>,
     );
     expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
       'inline-flex',
     );
   });
 
-  it('keeps the flex root for links clamping themselves via maxLines', () => {
+  it('is inline inside a clamped Text, so the clamp can truncate it', () => {
     const {container} = render(
-      <Link href="/docs" maxLines={2}>
-        Documentation
-      </Link>,
+      inClamp(<Link href="/docs">Documentation</Link>),
     );
-    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
-      'inline-flex',
-    );
-  });
-
-  it('keeps flex layout for the button-rendered form', () => {
-    const {container} = render(
-      <Link onClick={() => {}} role="button">
-        Action
-      </Link>,
-    );
-    const button = container.querySelector('button')!;
-    expect(displayDeclarationsFor(button)).toContain('inline-flex');
-  });
-
-  it('keeps the flex root for composed links with element children (e.g. HStack)', () => {
-    const {container} = render(
-      <Link href="/docs">
-        <div>Composed content</div>
-      </Link>,
-    );
-    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
-      'inline-flex',
-    );
-  });
-
-  it('keeps plain inline display for text-only children so ancestor clamp reaches them', () => {
-    const {container} = render(<Link href="/docs">Text only {'content'}</Link>);
     const anchor = container.querySelector('a')!;
     expect(displayDeclarationsFor(anchor)).toContain('inline');
-    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
   });
 
-  it('stays inline for labels assembled with a false or nullish conditional', () => {
-    const condition = false;
-    const {container, rerender} = render(
-      <Link href="/docs">Docs{condition && ' (new)'}</Link>,
+  it('decides from the clamp, not the children: composed content is inline too', () => {
+    const {container} = render(
+      inClamp(
+        <Link href="/docs">
+          <strong>Docs</strong> home
+        </Link>,
+      ),
     );
-    let anchor = container.querySelector('a')!;
-    expect(displayDeclarationsFor(anchor)).toContain('inline');
-    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
-
-    rerender(<Link href="/docs">Docs{null}</Link>);
-    anchor = container.querySelector('a')!;
-    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
-
-    rerender(<Link href="/docs">Docs{undefined}</Link>);
-    anchor = container.querySelector('a')!;
-    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline',
+    );
   });
 
-  it('stays inline for a Fragment wrapping only text, boxed for a Fragment with an element', () => {
-    const {container, rerender} = render(
-      <Link href="/docs">
-        <>Fragment text</>
-      </Link>,
+  it('is inline inside a clamped Text for the external-link form', () => {
+    const {container} = render(
+      inClamp(
+        <Link href="https://example.com" isExternalLink>
+          External docs
+        </Link>,
+      ),
     );
-    let anchor = container.querySelector('a')!;
-    expect(displayDeclarationsFor(anchor)).toContain('inline');
-    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline',
+    );
+  });
 
-    rerender(
-      <Link href="/docs">
+  it('keeps its own box inside a clamped Text when it sets display or maxLines', () => {
+    const {container} = render(
+      inClamp(
         <>
-          Fragment <span>element</span>
-        </>
-      </Link>,
+          <Link href="/block" display="block">
+            Block
+          </Link>
+          <Link href="/self" maxLines={1}>
+            Self clamped
+          </Link>
+        </>,
+      ),
     );
-    anchor = container.querySelector('a')!;
-    expect(displayDeclarationsFor(anchor)).toContain('inline-flex');
+    for (const anchor of Array.from(container.querySelectorAll('a'))) {
+      expect(displayDeclarationsFor(anchor)).not.toContain('inline');
+    }
+  });
+
+  it('keeps the button form as an inline-flex box inside a clamped Text', () => {
+    const {container} = render(
+      inClamp(
+        <Link onClick={() => {}} role="button">
+          Action
+        </Link>,
+      ),
+    );
+    expect(
+      displayDeclarationsFor(container.querySelector('button')!),
+    ).not.toContain('inline');
+  });
+
+  it('keeps its own box in a layer opened inside a clamped Text', () => {
+    const {container} = render(
+      inClamp(
+        <LayerContentBoundary>
+          <Link href="/docs">In a layer</Link>
+        </LayerContentBoundary>,
+      ),
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).not.toContain(
+      'inline',
+    );
   });
 });
