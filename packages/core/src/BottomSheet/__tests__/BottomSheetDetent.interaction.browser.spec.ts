@@ -22,7 +22,12 @@
  * and the curve and the velocity hand-off reported below become assertions.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   animationStoryboard,
   blockMainThread,
