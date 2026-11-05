@@ -945,6 +945,18 @@ describe('Item', () => {
     expect(item()).toHaveAttribute('data-selected', 'selected');
     expect(item()).not.toHaveAttribute('data-highlighted');
     expect(item()).not.toHaveAttribute('data-disabled');
+    rerender(
+      <Item label="Item" role="option" isHighlighted data-testid="item" />,
+    );
+    expect(item()).toHaveAttribute('data-highlighted', 'highlighted');
+    expect(item()).not.toHaveAttribute('data-selected');
+    expect(item()).not.toHaveAttribute('data-disabled');
+    rerender(
+      <Item label="Item" isDisabled onClick={() => {}} data-testid="item" />,
+    );
+    expect(item()).toHaveAttribute('data-disabled', 'disabled');
+    expect(item()).not.toHaveAttribute('data-highlighted');
+    expect(item()).not.toHaveAttribute('data-selected');
   });
 
   it('aligns the row on first baselines only under first-line', () => {
