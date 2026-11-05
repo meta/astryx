@@ -202,9 +202,9 @@ export function usePowerSearchSource(
                 ) {
                   continue;
                 }
-                // A search-source operator lists only source values: `string`
-                // edits through a Typeahead with no free-text path at all,
-                // and `string_list` only when it allows arbitrary strings.
+                // A search-source editor offers only source values. Its `string` form
+                // never accepts free text. Its `string_list` form accepts free text
+                // only when it allows arbitrary strings.
                 if (
                   op.value.searchSource != null &&
                   (op.value.type === 'string' ||
