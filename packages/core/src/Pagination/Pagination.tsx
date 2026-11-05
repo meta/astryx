@@ -692,7 +692,7 @@ export function Pagination({
             {...stylex.props(styles.dotsContainer)}
             // The dots already behave as an APG radio group (one Tab stop,
             // arrows, Home/End, selection follows focus), so they expose its
-            // roles (spec:AST-020 FR15): a reader announces "Page 3, 3 of 7".
+            // roles: a reader announces "Page 3, 3 of 7".
             role="radiogroup"
             aria-label={pageIndicatorsLabel}
             onKeyDown={handleDotsKeyDown}
