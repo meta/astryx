@@ -352,6 +352,44 @@ describe('BottomSheet removed while open', () => {
     },
   );
 
+  it('leaves focus on the body when it rested there before a non-modal sheet was removed', async () => {
+    function NonModal() {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setIsOpen(true)}>
+            Filters
+          </button>
+          <button type="button" onClick={() => setIsOpen(false)}>
+            Remove
+          </button>
+          {isOpen && (
+            <BottomSheet
+              isOpen
+              onOpenChange={setIsOpen}
+              label="Filters"
+              hasScrim={false}>
+              <button type="button">Done</button>
+            </BottomSheet>
+          )}
+        </>
+      );
+    }
+    render(<NonModal />);
+    const opener = screen.getByRole('button', {name: 'Filters'});
+    act(() => opener.focus());
+    fireEvent.click(opener);
+    // The person clicked the page behind the sheet: focus rests on the body.
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
+    expect(document.activeElement).toBe(document.body);
+
+    fireEvent.click(screen.getByRole('button', {name: 'Remove'}));
+    await settle();
+
+    expect(sheetNamed('Filters')).toBeNull();
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it('returns focus to finalFocusRef when one is given', async () => {
     openAndPressDone(<RenderedWhileOpen hasScrim withFinalFocus />);
     await settle();

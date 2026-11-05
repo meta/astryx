@@ -300,6 +300,28 @@ function stackStateAttribute(
   return view.isTop ? 'top' : 'covered';
 }
 
+/**
+ * The element focused when the current commit began removing sheets, per
+ * document. One sheet's removal can drop focus before a later sheet's cleanup
+ * runs, so each cleanup reads the focus from before the first removal.
+ */
+const focusAtRemovalStart = new WeakMap<Document, Element | null>();
+function focusBeforeRemoval(doc: Document): Element | null {
+  if (!focusAtRemovalStart.has(doc)) {
+    focusAtRemovalStart.set(doc, doc.activeElement);
+    queueMicrotask(() => focusAtRemovalStart.delete(doc));
+  }
+  return focusAtRemovalStart.get(doc) ?? null;
+}
+
+function isDetachedFocus(element: Element | null): boolean {
+  return (
+    element == null ||
+    element === element.ownerDocument.body ||
+    element === element.ownerDocument.documentElement
+  );
+}
+
 /** Scrim opacity for an open modal sheet: one visible backdrop per stack. */
 function scrimOpacityForView(view: BottomSheetStackView): '0' | '1' {
   return view.isStacked && !view.ownsScrim ? '0' : '1';
@@ -621,8 +643,15 @@ function StandaloneBottomSheet({
       hasScrim,
     );
     return () => {
-      // Read before the registry lets go of the sheet beneath.
-      if (repairOnRemoval != null && isSheetHostPresented(dialog)) {
+      // Read before the registry lets go of the sheet beneath. Focus that
+      // already rested on the page body did not fall with the removal, so it
+      // stays, as a close leaves it.
+      if (
+        repairOnRemoval != null &&
+        dialog != null &&
+        isSheetHostPresented(dialog) &&
+        !isDetachedFocus(focusBeforeRemoval(dialog.ownerDocument))
+      ) {
         const returnTarget =
           finalFocusRefRef.current?.current ?? triggerRef.current;
         const revealed = hasScrim ? getBottomSheetBeneath(key) : null;
