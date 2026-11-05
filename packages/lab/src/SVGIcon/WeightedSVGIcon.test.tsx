@@ -1,6 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect} from 'vitest';
+import {StrictMode} from 'react';
+import {createPortal} from 'react-dom';
+import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {
   WeightedSVGIcon,
@@ -105,5 +107,53 @@ describe('WeightedSVGIcon', () => {
     );
     render(<WeightedSVGIcon icon={bellWeightedIcon} aria-label="Alerts" />);
     expect(screen.getByRole('img', {name: 'Alerts'})).toBeInTheDocument();
+  });
+});
+
+describe('the weight probe font', () => {
+  /** Gives a document's window a FontFace and its document a font set. */
+  function stubFonts(doc: Document) {
+    const add = vi.fn();
+    const view = doc.defaultView as Window & {FontFace?: unknown};
+    view.FontFace = class {
+      load() {
+        return Promise.resolve(this);
+      }
+    };
+    Object.defineProperty(doc, 'fonts', {configurable: true, value: {add}});
+    return add;
+  }
+
+  it('is added once per document, in StrictMode too, including an iframe the icon renders into', () => {
+    const iframe = document.createElement('iframe');
+    document.body.append(iframe);
+    const frameDoc = iframe.contentDocument;
+    if (frameDoc == null) {
+      throw new Error('no iframe document');
+    }
+    const addToFrame = stubFonts(frameDoc);
+    const {unmount} = render(
+      <StrictMode>
+        {createPortal(
+          <>
+            <WeightedSVGIcon icon={bellWeightedIcon} />
+            <WeightedSVGIcon icon={bellWeightedIcon} />
+          </>,
+          frameDoc.body,
+        )}
+      </StrictMode>,
+    );
+    expect(addToFrame).toHaveBeenCalledTimes(1);
+    unmount();
+    iframe.remove();
+  });
+
+  it('keeps a caller className beside its own classes', () => {
+    const {container} = render(
+      <WeightedSVGIcon icon={bellWeightedIcon} className="caller" />,
+    );
+    const icon = container.querySelector('svg');
+    expect(icon).toHaveClass('caller');
+    expect(icon?.classList.length).toBeGreaterThan(1);
   });
 });

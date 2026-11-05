@@ -39,7 +39,9 @@ export const weightProbeStyles = stylex.create({
   svg: {
     '--astryx-icon-weight-read': {
       default: null,
-      [`${PROBE} (width >= 1.25em) and (width < 1.35em)`]: '300',
+      // Weights below 300 (1.0-1.25em) also draw the 300 layer. Fallback
+      // fonts (about 0.55em) stay below the band and keep 400.
+      [`${PROBE} (width > 1em) and (width < 1.35em)`]: '300',
       [`${PROBE} (width >= 1.35em) and (width < 1.45em)`]: '400',
       [`${PROBE} (width >= 1.45em) and (width < 1.55em)`]: '500',
       [`${PROBE} (width >= 1.55em) and (width < 1.65em)`]: '600',

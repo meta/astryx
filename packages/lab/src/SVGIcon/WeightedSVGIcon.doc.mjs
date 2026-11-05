@@ -15,7 +15,7 @@ export const docs = {
     bestPractices: [
       {guidance: true, description: 'Let the icon follow the text around it; use `weight` only when the icon must differ from that text.'},
       {guidance: true, description: 'Use sprite mode when the same icon repeats many times on a page, such as in list rows.'},
-      {guidance: true, description: 'Build icon modules with scripts/build-weighted-icons.mjs and keep only the weights the type scale can reach.'},
+      {guidance: true, description: 'Build each icon with the exported buildWeightedIcon from one drawing per weight, and keep only the weights the type scale can reach (its `weights` option).'},
       {guidance: false, description: 'Expect smooth in-between weights: a weight like 450 shows the nearest drawing (500).'},
     ],
   },

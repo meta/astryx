@@ -26,24 +26,26 @@ const WEIGHT_PROBE_FAMILY = 'AstryxWeightProbe';
 const WEIGHT_PROBE_WOFF2 =
   'd09GMgABAAAAAAF8AA0AAAAAA3gAAAEqAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP0hWQVJCBmAANC8kChQ0MDgBNgIkAwgLBgAEIAWBHwcmG6wCSJ4Dbju8irW92Oh6kugpxBHF73Wz914orQn1haE0i7NEfoVGyjhDMSqx3PQe4nGGeCocqpVjz8Tigex/gProjx0HFGASWG5hEFKioUWYlo2QwKAbOy9qONhMS92/KOAAAAQbggtRMzPAEwWlFALzlgGfTGkTXVMAjyUGQ/uHEPTdgELDgSY40N2g64JhQcIE3t9R4gArn3EygMg37R8CFOgIGjqgg9CSdQkQBJyp2oftsbBjaTSDpdETjGrevv+jyvtDEL54adqir/D2Dz97+oCOIoKmQGj/MJkCC0WwFwiC0hCqWQCWfCAQuwgo3a5AWHKoSV8Vd84vlxX3Zdjw/twP3bo8UEXd1V44y2GYwzD0Bp3VwhJKxRIDrVPzhGbSYAAJZjW2DwA=';
 
-let registered = false;
+// The documents that already have the probe. The face stays for the
+// document's lifetime, so it is added once per document, on first use.
+const registeredDocuments = new WeakSet<Document>();
 
 /**
- * Adds the probe font to `document.fonts` once. Safe to call on the server
- * and repeatedly; until the font decodes, icons use their fallback weight.
+ * Adds the probe font to `doc.fonts` once per document: the page, an iframe
+ * or a pop-out window. Safe to call repeatedly; until the font decodes, icons
+ * use their fallback weight.
  */
-export function registerWeightProbe(): void {
-  if (
-    registered ||
-    typeof document === 'undefined' ||
-    typeof FontFace === 'undefined'
-  ) {
+export function registerWeightProbe(doc: Document): void {
+  const FontFaceInView = doc.defaultView?.FontFace;
+  if (registeredDocuments.has(doc) || FontFaceInView == null) {
     return;
   }
-  registered = true;
+  registeredDocuments.add(doc);
   const bytes = Uint8Array.from(atob(WEIGHT_PROBE_WOFF2), c => c.charCodeAt(0));
-  const face = new FontFace(WEIGHT_PROBE_FAMILY, bytes, {weight: '1 1000'});
-  document.fonts.add(face);
+  const face = new FontFaceInView(WEIGHT_PROBE_FAMILY, bytes, {
+    weight: '1 1000',
+  });
+  doc.fonts.add(face);
   face.load().catch(() => {
     // Without the probe, icons keep their fallback weight.
   });

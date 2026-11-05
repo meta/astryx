@@ -20,7 +20,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {buildWeightedIcon, ICON_WEIGHTS} from '../src/SVGIcon/buildWeightedIcon.ts';
+import {buildWeightedIcon, ICON_WEIGHTS, parseSVGPaths} from '../src/SVGIcon/buildWeightedIcon.ts';
 
 const [sourceDir, outFile, ...flags] = process.argv.slice(2);
 if (sourceDir == null || outFile == null) {
@@ -42,17 +42,29 @@ const names = fs
   .map(entry => entry.name)
   .sort();
 
+const failures = [];
 const blocks = names.map(name => {
   const drawings = {};
+  let viewBox;
   for (const weight of ICON_WEIGHTS) {
     const file = path.join(sourceDir, name, `${weight}.svg`);
     if (fs.existsSync(file)) {
-      drawings[weight] = fs.readFileSync(file, 'utf8');
+      const svg = fs.readFileSync(file, 'utf8');
+      drawings[weight] = svg;
+      viewBox ??= /\sviewBox=(["'])([^"']+)\1/.exec(svg)?.[2];
+      if (parseSVGPaths(svg).length === 0) {
+        failures.push(`${file}: no <path d="..."> to draw`);
+      }
     }
   }
-  const icon = buildWeightedIcon(name, drawings, weights ? {weights} : {});
+  const icon = buildWeightedIcon(name, drawings, {...(weights ? {weights} : {}), ...(viewBox ? {viewBox} : {})});
   return `export const ${identifier(name)}WeightedIcon: WeightedIconDef = ${JSON.stringify(icon, null, 2)};`;
 });
+
+if (failures.length > 0) {
+  console.error(`No drawing read from:\n${failures.join('\n')}`);
+  process.exit(1);
+}
 
 fs.writeFileSync(
   outFile,

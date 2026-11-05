@@ -57,7 +57,7 @@ export function parseSVGPaths(svg: string): WeightedIconPath[] {
   const paths: WeightedIconPath[] = [];
   for (const match of svg.matchAll(/<path\b([^>]*)>/g)) {
     const attrs = match[1];
-    const d = /\sd="([^"]+)"/.exec(attrs)?.[1];
+    const d = /\sd=(["'])([^"']+)\1/.exec(attrs)?.[2];
     if (d == null) {
       continue;
     }
