@@ -47,6 +47,9 @@ const FOUNDATION_PATTERNS = [
 ];
 
 /** The changed paths that are style-affecting foundations. */
+/** A Storybook story file. */
+export const STORY_FILE = /\.stories\.(?:[cm]?[jt]sx?|mdx)$/;
+
 export function foundationChanges(files) {
   return files.filter(file =>
     FOUNDATION_PATTERNS.some(pattern => pattern.test(file)),
@@ -596,6 +599,9 @@ export function main(argv = process.argv.slice(2)) {
       wide_change: String(decision.wideChange),
       component_count: String(decision.componentCount),
       has_components: String(scope.touched.length > 0 && !decision.wideChange),
+      // A changed story no component owns is audited on its own (FR12),
+      // wide change or not.
+      changed_stories: String(files.some(file => STORY_FILE.test(file))),
       visual_components: scope.visualComponents.join(','),
       a11y_owners: scope.a11yOwners.join(','),
       rtl_packages: Object.keys(scope.rtlOwnersByPackage).join(','),

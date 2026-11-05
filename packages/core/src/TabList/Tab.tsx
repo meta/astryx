@@ -39,6 +39,7 @@ import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
 import {mergeProps} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -362,7 +363,10 @@ export function Tab({
   ) : null;
 
   const sharedProps = {
-    ...restProps,
+    // A disabled tab keeps its tab stop, so the browser still sends it events.
+    // It runs no caller handler other than `onFocus` and `onBlur`, as a natively
+    // disabled control runs none. `onClick` is guarded in `handleSelect`.
+    ...withholdCallerHandlers(restProps, isDisabled),
     ...pressable,
     ...(isLabelHidden ? {'aria-label': label} : {}),
     [EDGE_COMP_ATTR]: '',

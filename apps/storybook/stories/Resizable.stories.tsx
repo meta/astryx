@@ -14,6 +14,7 @@ import {
 } from '@astryxdesign/core/Layout';
 import {SideNav, SideNavItem} from '@astryxdesign/core/SideNav';
 import {Divider} from '@astryxdesign/core/Divider';
+import {Button} from '@astryxdesign/core/Button';
 
 const ps = stylex.create({
   shell: {
@@ -751,4 +752,89 @@ export const HoverPillOnOverlayHandle: StoryObj<typeof HoverPillOnOverlay> = {
   tags: ['!autodocs', 'no-visual'],
   args: {pillPlacement: 'start', dir: 'ltr'},
   render: args => <HoverPillOnOverlay {...args} />,
+};
+
+/**
+ * Browser fixture for LayoutPanel at width 0. The start panel takes a
+ * collapsed region's props and has no divider. The end panel has
+ * `width={0}` and a divider. Neither takes space or shows its children.
+ */
+function CollapsedPanels() {
+  const sidebar = useResizable({
+    defaultSize: 200,
+    collapsible: true,
+    defaultIsCollapsed: true,
+  });
+  return (
+    <div {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        start={
+          <>
+            <LayoutPanel
+              resizable={sidebar.props}
+              hasDivider={false}
+              data-testid="collapsed-start">
+              <Heading level={4}>Panel</Heading>
+              <Text>Collapsed with its region.</Text>
+            </LayoutPanel>
+            <ResizeHandle resizable={sidebar.props} label="Resize panel" />
+          </>
+        }
+        content={
+          <LayoutContent data-testid="collapsed-content">
+            <Text>The content starts at the handle.</Text>
+          </LayoutContent>
+        }
+        end={
+          <LayoutPanel width={0} hasDivider data-testid="collapsed-end">
+            <Heading level={4}>Details</Heading>
+          </LayoutPanel>
+        }
+      />
+    </div>
+  );
+}
+
+export const CollapsedPanelFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <CollapsedPanels />,
+};
+
+/**
+ * Browser fixture for a scrolling LayoutPanel that collapses to width 0. Its
+ * content overflows while it is open, and a button collapses and opens it.
+ */
+function CollapsingScrollPanel() {
+  const [isOpen, setIsOpen] = useState(true);
+  return (
+    <div {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        content={
+          <LayoutContent>
+            <Button
+              label={isOpen ? 'Collapse details' : 'Open details'}
+              onClick={() => setIsOpen(open => !open)}
+            />
+          </LayoutContent>
+        }
+        end={
+          <LayoutPanel
+            width={isOpen ? 240 : 0}
+            hasDivider
+            data-testid="collapsing-end">
+            {Array.from({length: 40}, (_, index) => (
+              <Text key={index}>Detail line {index + 1}</Text>
+            ))}
+          </LayoutPanel>
+        }
+      />
+    </div>
+  );
+}
+
+export const CollapsingScrollPanelFixture: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <CollapsingScrollPanel />,
 };
