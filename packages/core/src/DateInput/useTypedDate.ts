@@ -355,7 +355,7 @@ export function useTypedDateField({
   }
 
   // Typing already reported this date through `onChange`. Once the field is
-  // editable, it shows its value, and a retyped date reports again. A focused
+  // editable, it shows its value. A retyped date then reports again. A focused
   // field keeps the text until Enter or blur, which end the typing session.
   const wasDisabledRef = useRef(isDisabled);
   if (isDisabled !== wasDisabledRef.current) {

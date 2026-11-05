@@ -1075,6 +1075,34 @@ describe('DateTimeInput', () => {
         expect(input).toHaveValue(shown);
       },
     );
+
+    it('keeps a reported date in the focused field when a changeAction save fails', async () => {
+      const user = userEvent.setup();
+      let fail = () => {};
+      function Field() {
+        const [value] = useState('2026-01-12T09:00');
+        const save = async () =>
+          new Promise<void>(resolve => {
+            fail = resolve;
+          });
+        return (
+          <DateTimeInput
+            label="Starts"
+            value={value as ISODateTimeString}
+            onChange={() => {}}
+            changeAction={save}
+          />
+        );
+      }
+      render(<Field />);
+      const input = screen.getByRole('combobox');
+      await user.clear(input);
+      await user.type(input, '3/15/2026');
+
+      await act(async () => fail());
+      expect(input).toHaveFocus();
+      expect(input).toHaveValue('3/15/2026');
+    });
   });
 
   describe('invalid typed input feedback (WCAG 3.3.1)', () => {

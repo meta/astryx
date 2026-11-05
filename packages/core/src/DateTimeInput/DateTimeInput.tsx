@@ -1021,7 +1021,7 @@ function PointerDateTimeField({
     min: calendarMin,
     max: calendarMax,
     isDateDisabled,
-    value: valueParts.date,
+    value: splitDateTime(value).date,
     shownValue: valueParts.date,
     onChange: handleTypedDateChange,
     onClear: clearTypedDate,

@@ -1055,6 +1055,34 @@ describe('DateInput', () => {
         expect(input).toHaveValue(shown);
       },
     );
+
+    it('keeps a reported date in the focused field when a changeAction save fails', async () => {
+      const user = userEvent.setup();
+      let fail = () => {};
+      function Field() {
+        const [value] = useState<ISODateString>('2026-01-12');
+        const save = async () =>
+          new Promise<void>(resolve => {
+            fail = resolve;
+          });
+        return (
+          <DateInput
+            label="Date"
+            value={value}
+            onChange={() => {}}
+            changeAction={save}
+          />
+        );
+      }
+      render(<Field />);
+      const input = screen.getByRole('combobox');
+      await user.clear(input);
+      await user.type(input, '3/15/2026');
+
+      await act(async () => fail());
+      expect(input).toHaveFocus();
+      expect(input).toHaveValue('3/15/2026');
+    });
   });
 
   // --- Enter key commits typed date ---
