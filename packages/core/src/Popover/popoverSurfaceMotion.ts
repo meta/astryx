@@ -135,7 +135,8 @@ const MOTION_STYLE_PROPERTIES = [
  * A fresh presentation writes and reads nothing until the next animation
  * frame, which runs before that frame paints. In the task that opens the
  * popover, its style writes and box reads would lay the page out. The
- * layer's own CSS entrance, started meanwhile, is turned off in that frame.
+ * layer's own CSS entrance goes off once the script that opened the popover
+ * returns.
  *
  * The browser hides a popover as it closes, so the dismissal plays on the
  * layer runtime's exit copy, which is removed when its motion ends.
@@ -259,9 +260,10 @@ export function createPopoverSurfaceMotion(
     // is left to wait for, so a close plays the shrink.
     if (!presented) {
       pendingPresentFrame = frame;
-      // The layer's CSS entrance goes off as the opening task ends, after
-      // that task's own reads, so the write costs it no layout. A style read
-      // after the task then starts no entrance for the frame to cancel.
+      // The layer's CSS entrance goes off in a microtask, once the script
+      // that opened the popover returns. That script's own reads come first,
+      // so the write costs them no layout. A style read after it then starts
+      // no entrance for the frame to cancel.
       queueMicrotask(() => {
         if (pendingPresentFrame === frame) {
           element.style.setProperty('animation-name', 'none');
