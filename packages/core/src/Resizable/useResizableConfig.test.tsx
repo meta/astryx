@@ -26,13 +26,19 @@ interface FakeController extends ResizableController {
   setState(next: {size?: number; isCollapsed?: boolean}): void;
 }
 
-const created: {options: CreateResizableOptions}[] = [];
+const created: {
+  element: HTMLElement | null;
+  options: CreateResizableOptions;
+}[] = [];
 let fake: FakeController;
 
 vi.mock('./createResizable', async importOriginal => {
   const original = await importOriginal<typeof CreateResizableModule>();
-  const createStandIn = (options: CreateResizableOptions = {}) => {
-    created.push({options});
+  const createStandIn = (
+    element: HTMLElement | null,
+    options: CreateResizableOptions = {},
+  ) => {
+    created.push({element, options});
     const listeners = new Set<() => void>();
     let state = {size: 123, isCollapsed: false};
     fake = {
@@ -67,8 +73,11 @@ vi.mock('./createResizable', async importOriginal => {
     createResizable: vi.fn(createStandIn),
     // useResizable's own entry, which names its warnings.
     createResizableAs: vi.fn(
-      (_source: string, options?: CreateResizableOptions) =>
-        createStandIn(options),
+      (
+        _source: string,
+        element: HTMLElement | null,
+        options?: CreateResizableOptions,
+      ) => createStandIn(element, options),
     ),
   };
 });
@@ -92,7 +101,7 @@ function ConfigSplit({
 }
 
 describe('useResizable(config) builds on createResizable too, so the region state has one copy (spec:AST-107 FR6; architecture:public-component-api INV22)', () => {
-  it('creates one factory from the configuration, updates it, and destroys it on unmount', () => {
+  it('creates one factory, with no handle, from the configuration, updates it, and destroys it on unmount', () => {
     const first: UseResizableSingleConfig = {
       defaultSize: 200,
       minSize: 100,
@@ -100,6 +109,7 @@ describe('useResizable(config) builds on createResizable too, so the region stat
     };
     const view = render(<ConfigSplit config={first} onRegion={() => {}} />);
     expect(created).toHaveLength(1);
+    expect(created[0].element).toBeNull();
     expect(created[0].options).toMatchObject(first);
 
     const second: UseResizableSingleConfig = {

@@ -86,6 +86,7 @@ import {
 import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n/useLocale';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {Locale} from '../i18n/types';
 import type {SearchableItem} from '../Typeahead/types';
 import type {
@@ -241,6 +242,15 @@ const sheetTriggerStyles = stylex.create({
       ':is([aria-disabled="true"])': 'default',
     },
     outline: 'none',
+  },
+  // A placeholder longer than the trigger ends in an ellipsis inside it, as
+  // Selector's value does. It never runs under the result count or past the
+  // field's border.
+  placeholder: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   // Once a token is present the empty trigger covers the token lane instead
   // of reserving 40px or wrapping onto an otherwise blank row.
@@ -430,8 +440,10 @@ export interface PowerSearchProps extends Omit<
    *   above it with the fields (or the content search with inline
    *   suggestions), and a value step opens above that, stages operator →
    *   value, and confirms from its footer. Dismissing a step reveals the
-   *   one beneath. Suited to compact touch screens, where the editor
-   *   popover competes with the software keyboard.
+   *   one beneath. The flow edits a draft: `onChange` is called when Done
+   *   applies it, once per edit in order, and a dismissal with a changed
+   *   draft asks before discarding it. Suited to compact touch screens,
+   *   where the editor popover competes with the software keyboard.
    * - `'adaptive'`: the bottom sheet on compact coarse-pointer screens,
    *   otherwise the popover — the same resolution Selector uses. The server
    *   render and the hydrating render are the popover.
@@ -588,6 +600,7 @@ export function PowerSearch({
   const searchSource = usePowerSearchSource(config, maxSearchResults);
   const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'PowerSearch');
   const label = labelFromProps ?? t('@astryx.powersearch.label');
   const placeholder =
     placeholderFromProps ?? t('@astryx.powersearch.placeholder');
@@ -712,6 +725,7 @@ export function PowerSearch({
               10,
             ),
             locale,
+            calendar,
             undefined,
             undefined,
             timezoneID,
@@ -719,7 +733,7 @@ export function PowerSearch({
         : null;
       return {label, value, full: value != null ? `${label} ${value}` : label};
     },
-    [config, maxTokenLength, t, locale, timezoneID],
+    [config, maxTokenLength, t, locale, timezoneID, calendar],
   );
   // The built-in token being edited. A token from a `components` override
   // names itself, so its editor keeps the plain popover.
@@ -870,6 +884,7 @@ export function PowerSearch({
             t,
             locale,
             timezoneID,
+            calendar,
           )
         : '';
 
@@ -888,7 +903,7 @@ export function PowerSearch({
         },
       };
     });
-  }, [filters, config, maxTokenLength, timezoneID, t, locale]);
+  }, [filters, config, maxTokenLength, timezoneID, t, locale, calendar]);
 
   // Handle tokenizer onChange (field selected from typeahead)
   const handleTokenizerChange = useCallback(
@@ -1542,7 +1557,11 @@ export function PowerSearch({
                   sheetTriggerStyles.trigger,
                   filters.length > 0 && sheetTriggerStyles.triggerWithTokens,
                 )}>
-                {filters.length === 0 ? placeholder : null}
+                {filters.length === 0 ? (
+                  <span {...stylex.props(sheetTriggerStyles.placeholder)}>
+                    {placeholder}
+                  </span>
+                ) : null}
               </button>
             </div>
             {(endContent || isRenderable(resultCountText)) && (

@@ -23,6 +23,13 @@ const MINUTES = Array.from({length: 60}, (_, minute) => ({
   label: String(minute).padStart(2, '0'),
 }));
 
+/**
+ * The readout takes the theme's text colour on the theme's surface. A bare
+ * field keeps the browser's white fill under the theme's text colour, which a
+ * dark theme makes unreadable.
+ */
+const READOUT_STYLE = {color: 'inherit', backgroundColor: 'transparent'};
+
 const meta = {
   title: 'Core/Wheel',
   tags: ['no-visual', '!autodocs'],
@@ -44,6 +51,7 @@ export const Minutes: Story = {
         <input
           aria-label="Committed minute"
           readOnly
+          style={READOUT_STYLE}
           value={String(minute).padStart(2, '0')}
         />
         <Wheel
@@ -70,6 +78,7 @@ export const TouchMinutes: Story = {
         <input
           aria-label="Committed minute"
           readOnly
+          style={READOUT_STYLE}
           value={String(minute).padStart(2, '0')}
         />
         <PickerWheel

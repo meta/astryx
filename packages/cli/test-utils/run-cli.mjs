@@ -39,13 +39,18 @@ class ExitSignal extends Error {
  * Run the Astryx CLI in-process and capture its observable surface.
  *
  * @param {string[]} args argv after `astryx` (e.g. `['component', '--list']`)
- * @param {string | {cwd?: string}} [cwdOrOpts] cwd (positional) or `{cwd}`
+ * @param {string | {cwd?: string, allCommands?: boolean}} [cwdOrOpts] cwd
+ *   (positional), or `{cwd}`. The program has only the commands these
+ *   arguments need, as a run of the bin builds it. `allCommands` builds it
+ *   with every command, which no run of the bin does.
  * @returns {Promise<{status: number, code: number, stdout: string, stderr: string}>}
  */
 export async function runCli(args, cwdOrOpts) {
   const cwd =
     typeof cwdOrOpts === 'string' ? cwdOrOpts : cwdOrOpts && cwdOrOpts.cwd;
-  const program = await createProgram();
+  const allCommands =
+    typeof cwdOrOpts === 'object' && cwdOrOpts?.allCommands === true;
+  const program = await createProgram(allCommands ? undefined : {argv: args});
   // Commander's own exits (parse errors, --help, --version, unknown option)
   // throw a CommanderError instead of calling process.exit.
   program.exitOverride();
