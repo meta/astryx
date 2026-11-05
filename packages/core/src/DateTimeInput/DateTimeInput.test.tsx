@@ -2261,6 +2261,70 @@ describe('DateTimeInput', () => {
       expect(timeInput).toHaveAttribute('aria-expanded', 'true');
     });
 
+    it('drops the watcher of a press that never became a click when the field unmounts', () => {
+      // The press defers its show to a one-shot `document` click watcher, and a
+      // press that ends without a click leaves that watcher standing. It belongs
+      // to this field, so unmounting takes it along: otherwise the next click
+      // anywhere in the document runs work for a field that is gone. The Layer
+      // gesture counter also watches `click` on the document, in the capture
+      // phase and for the life of the page, so only the bubble phase is this
+      // field's business. The count comes from running the listener the document
+      // really holds, so this fails when the watcher survives, not when the spy
+      // misfires.
+      const add = document.addEventListener.bind(document);
+      const remove = document.removeEventListener.bind(document);
+      const isCapture = (options?: boolean | AddEventListenerOptions) =>
+        typeof options === 'object'
+          ? Boolean(options.capture)
+          : Boolean(options);
+      let watchers = 0;
+      let fired = 0;
+      const wrapped = new Map<unknown, EventListener>();
+      const added = vi
+        .spyOn(document, 'addEventListener')
+        .mockImplementation((type, listener, options) => {
+          if (type !== 'click' || isCapture(options)) {
+            return add(type, listener, options);
+          }
+          watchers += 1;
+          const counting: EventListener = (event, ...rest) => {
+            fired += 1;
+            if (typeof listener === 'function') {
+              listener(event, ...rest);
+            }
+          };
+          wrapped.set(listener, counting);
+          return add(type, counting, options);
+        });
+      const removed = vi
+        .spyOn(document, 'removeEventListener')
+        .mockImplementation((type, listener, options) =>
+          remove(type, wrapped.get(listener) ?? listener, options),
+        );
+
+      try {
+        const {unmount} = render(
+          <DateTimeInput
+            label="Meeting"
+            value={'2026-03-15T09:00' as ISODateTimeString}
+            timeOptionInterval={60}
+            onChange={() => {}}
+          />,
+        );
+        fireEvent.pointerDown(screen.getByLabelText('Meeting time'));
+        expect(watchers).toBeGreaterThan(0);
+        expect(fired).toBe(0);
+
+        unmount();
+        fireEvent.click(document.body);
+        expect(fired).toBe(0);
+      } finally {
+        wrapped.clear();
+        added.mockRestore();
+        removed.mockRestore();
+      }
+    });
+
     it('activates the first option when the field has a date but no time', () => {
       // The state you land in after picking a date and no time yet. With no
       // active option, ArrowUp and Enter both did nothing at all.

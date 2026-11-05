@@ -1142,6 +1142,36 @@ function PointerDateTimeField({
   // it, as BaseTypeahead does.
   const timePointerActiveRef = useRef(false);
 
+  // The watchers carrying that deferral are one-shot listeners on `document`,
+  // and they belong to this field. Unmounting takes them with it: a watcher
+  // left standing answers the next click anywhere in the document with work for
+  // a field that is gone.
+  const timeClickWatchersRef = useRef<Set<EventListener> | null>(null);
+
+  const addTimeClickWatcher = useCallback((handler: () => void) => {
+    const watchers = timeClickWatchersRef.current ?? new Set<EventListener>();
+    timeClickWatchersRef.current = watchers;
+    const watcher: EventListener = () => {
+      // The `once` option removes this listener as the browser delivers it;
+      // deleting here is what keeps the set from holding every past press.
+      watchers.delete(watcher);
+      handler();
+    };
+    watchers.add(watcher);
+    document.addEventListener('click', watcher, {once: true});
+  }, []);
+
+  const clearTimeClickWatchers = useCallback(() => {
+    for (const watcher of timeClickWatchersRef.current ?? []) {
+      document.removeEventListener('click', watcher);
+    }
+    timeClickWatchersRef.current?.clear();
+  }, []);
+
+  // The Effect owns this field's `document` click watchers: its setup acquires
+  // nothing, its cleanup releases whatever a press left pending.
+  useEffect(() => clearTimeClickWatchers, [clearTimeClickWatchers]);
+
   // Whether the highlight is still the one typing derived, or the user has
   // since moved it themselves. Enter honours typed text only in the former
   // case — otherwise the field would commit something other than the option
@@ -1150,14 +1180,10 @@ function PointerDateTimeField({
 
   const markTimePointerActive = useCallback(() => {
     timePointerActiveRef.current = true;
-    document.addEventListener(
-      'click',
-      () => {
-        timePointerActiveRef.current = false;
-      },
-      {once: true},
-    );
-  }, []);
+    addTimeClickWatcher(() => {
+      timePointerActiveRef.current = false;
+    });
+  }, [addTimeClickWatcher]);
 
   // The time list is a manual popover: the browser's light dismiss counts a
   // press in the time input as outside (a text input cannot be an invoker), so
@@ -1309,16 +1335,14 @@ function PointerDateTimeField({
     // input must hold DOM focus or aria-activedescendant announces nothing.
     timeInputRef.current?.focus();
     if (timePointerActiveRef.current) {
-      document.addEventListener(
-        'click',
-        () =>
-          requestAnimationFrame(() => timePopover.show({skipAutoFocus: true})),
-        {once: true},
+      addTimeClickWatcher(() =>
+        requestAnimationFrame(() => timePopover.show({skipAutoFocus: true})),
       );
     } else {
       timePopover.show({skipAutoFocus: true});
     }
   }, [
+    addTimeClickWatcher,
     hasTimeOptions,
     isEffectivelyDisabled,
     timePopover,
