@@ -8,8 +8,8 @@
  *   module: its one height, and its layout guide for timing.
  * @output Exports `useLayerKeyboardClearance` and its result type,
  *   `keyboardClearanceCap`, `LAYER_ANCHORED_ATTRIBUTE`,
- *   `LAYER_KEYBOARD_CAP_PROPERTY`, `LAYER_KEYBOARD_OVERFLOW_PROPERTY` and
- *   `LAYER_KEYBOARD_CLEARANCE_PX`
+ *   `LAYER_KEYBOARD_CAP_PROPERTY`, `LAYER_KEYBOARD_OVERFLOW_PROPERTY`,
+ *   `LAYER_KEYBOARD_INSET_PROPERTY` and `LAYER_KEYBOARD_CLEARANCE_PX`
  * @position Layer runtime, through the layer's touch module: the software
  *   keyboard's part of the viewport caps
  *
@@ -18,6 +18,7 @@
  * - /packages/core/src/Layer/settledBox.ts
  * - /packages/core/src/Layer/useLayerKeyboardClearance.test.tsx
  * - /packages/core/src/Layer/layerViewportInset.stylex.ts
+ * - /packages/core/src/Selector/hooks.ts
  * - /docs/specs/AST-059-layer-viewport-inset/spec.md
  */
 
@@ -62,6 +63,16 @@ export const LAYER_KEYBOARD_CAP_PROPERTY = '--_layer-keyboard-max-block-size';
 export const LAYER_KEYBOARD_OVERFLOW_PROPERTY = '--_layer-keyboard-overflow';
 
 /**
+ * The custom property each layer's style sets beside the cap. While a
+ * software keyboard is up, it holds how far above the layout viewport's bottom
+ * an anchored layer must end: the keyboard and `LAYER_KEYBOARD_CLEARANCE_PX`.
+ * Otherwise it holds no value. A layer that places itself, such as Selector's
+ * overlay, slides above the keyboard with it before the cap measures.
+ */
+export const LAYER_KEYBOARD_INSET_PROPERTY =
+  '--_layer-keyboard-inset-block-end';
+
+/**
  * Scrolls the nearest scroll container between `target` and `layer` the
  * least amount that shows `target` inside it.
  */
@@ -94,6 +105,12 @@ export interface LayerKeyboardClearance {
   /** The block size that keeps the layer clear of the keyboard, or null. */
   readonly cap: number | null;
   /**
+   * While a software keyboard is up, the layout px between the layout
+   * viewport's bottom and the line an anchored layer ends above. Otherwise
+   * null.
+   */
+  readonly inset: number | null;
+  /**
    * Follows a layer element the runtime swaps in while the layer is open.
    * The runtime calls it from its layer ref callback.
    */
@@ -114,8 +131,10 @@ export function useLayerKeyboardClearance(
   layerRef: RefObject<HTMLElement | null>,
 ): LayerKeyboardClearance {
   const [cap, setCap] = useState<number | null>(null);
+  const [keyboardInset, setKeyboardInset] = useState<number | null>(null);
   // The cap the layer renders with, read by the measurement between commits.
   const capRef = useRef<number | null>(null);
+  const keyboardInsetRef = useRef<number | null>(null);
   // Set while the layer is open: follows the runtime when it replaces the
   // layer element without closing it.
   const resyncRef = useRef<(() => void) | null>(null);
@@ -149,19 +168,31 @@ export function useLayerKeyboardClearance(
     // Renders the layer with `next` and returns once that commit has laid it
     // out, so the measurement after it reads the new box. Runs outside
     // React's own work: keyboard reports, timers, frames and native events.
-    const commitCap = (next: number | null) => {
-      if (isDisposed || capRef.current === next) {
+    const commitCap = (
+      next: number | null,
+      nextInset = keyboardInsetRef.current,
+    ) => {
+      if (
+        isDisposed ||
+        (capRef.current === next && keyboardInsetRef.current === nextInset)
+      ) {
         return;
       }
       capRef.current = next;
+      keyboardInsetRef.current = nextInset;
       // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the box is measured at its new size in the same task, before the frame paints
-      flushSync(() => setCap(next));
+      flushSync(() => {
+        setCap(next);
+        setKeyboardInset(nextInset);
+      });
       sync();
     };
     // Measured at the layer's own size, as the fallback order places it:
     // returns whether the layer is capped.
     const capFor = (inset: number): boolean => {
-      commitCap(null);
+      // The inset goes out in the commit that lifts the cap. So a layer that
+      // places itself by the inset has moved before its box is read.
+      commitCap(null, inset > 0 ? inset + LAYER_KEYBOARD_CLEARANCE_PX : null);
       if (inset <= 0) {
         return false;
       }
@@ -198,7 +229,7 @@ export function useLayerKeyboardClearance(
     const avoid = (inset: number) => {
       sync();
       if (!layer.hasAttribute(LAYER_ANCHORED_ATTRIBUTE)) {
-        commitCap(null);
+        commitCap(null, null);
         return;
       }
       if (!capFor(inset)) {
@@ -361,11 +392,19 @@ export function useLayerKeyboardClearance(
         capRef.current = null;
         setCap(null);
       }
+      if (keyboardInsetRef.current != null) {
+        keyboardInsetRef.current = null;
+        setKeyboardInset(null);
+      }
     };
   }, [isOpen, layerRef]);
 
   const followLayerElement = useCallback(() => {
     resyncRef.current?.();
   }, []);
-  return {cap: isOpen ? cap : null, followLayerElement};
+  return {
+    cap: isOpen ? cap : null,
+    inset: isOpen ? keyboardInset : null,
+    followLayerElement,
+  };
 }
