@@ -3,7 +3,7 @@
 /**
  * @file LineChart.tsx
  * @input Data rows, an x field, one or more y fields, and presentation options
- * @output Ready-to-use line chart — Chart root with line marks, axes, legend, and tooltip
+ * @output LineChart element
  * @position Composed component; delegates scales, layout, and interaction to Chart
  */
 
@@ -19,6 +19,7 @@ import type {ChartTooltipProps} from './ChartTooltip';
 import {ChartAxis} from './ChartAxis';
 import {ChartGrid} from './ChartGrid';
 import {line} from './marks/line';
+import type {CurveType} from './marks/line';
 
 export interface LineChartProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root chart container. */
@@ -34,7 +35,7 @@ export interface LineChartProps extends BaseProps<HTMLDivElement> {
   /** Static series colors, one per y key. Omitted entries use the theme palette. */
   colors?: (string | undefined)[];
   /** Line interpolation between points. @default 'monotone' */
-  curve?: 'linear' | 'monotone' | 'natural' | 'step';
+  curve?: CurveType;
   /** Stroke width in CSS pixels. @default 2 */
   strokeWidth?: number;
   /** Draw a dot at each data point. @default false */
