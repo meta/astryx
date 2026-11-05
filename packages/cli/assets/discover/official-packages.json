@@ -46,6 +46,10 @@
       "contributions": [
         {
           "kind": "component",
+          "name": "AudioPlayer"
+        },
+        {
+          "kind": "component",
           "name": "ChartArea"
         },
         {
@@ -142,6 +146,62 @@
         },
         {
           "kind": "component",
+          "name": "MediaCaptionsButton"
+        },
+        {
+          "kind": "component",
+          "name": "MediaFullscreenButton"
+        },
+        {
+          "kind": "component",
+          "name": "MediaMuteButton"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlaybackRateButton"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlaybackRateMenu"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlaybackRateSlider"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlayButton"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlayer"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlayerAudio"
+        },
+        {
+          "kind": "component",
+          "name": "MediaPlayerVideo"
+        },
+        {
+          "kind": "component",
+          "name": "MediaSeekButton"
+        },
+        {
+          "kind": "component",
+          "name": "MediaTime"
+        },
+        {
+          "kind": "component",
+          "name": "MediaTimeSlider"
+        },
+        {
+          "kind": "component",
+          "name": "MediaVolumeSlider"
+        },
+        {
+          "kind": "component",
           "name": "RadialChart"
         },
         {
@@ -195,6 +255,18 @@
         {
           "kind": "component",
           "name": "TransferList"
+        },
+        {
+          "kind": "component",
+          "name": "VideoPlayer"
+        },
+        {
+          "kind": "template",
+          "name": "AudioPlayerShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "AudioPlayerVoiceMemo"
         },
         {
           "kind": "template",
@@ -255,6 +327,22 @@
         {
           "kind": "template",
           "name": "ListInputShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "MediaPlayerInlineNote"
+        },
+        {
+          "kind": "template",
+          "name": "MediaPlayerShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "VideoPlayerAutoplayLoop"
+        },
+        {
+          "kind": "template",
+          "name": "VideoPlayerShowcase"
         }
       ]
     },

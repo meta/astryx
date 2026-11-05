@@ -1244,10 +1244,13 @@ function generateComponentPreviewRegistry(allComponents) {
   );
   const entries = packageNames
     .flatMap(packageName =>
-      allComponents[packageName].map(
-        component =>
-          `  ${JSON.stringify(component.name)}: namedLazy(${JSON.stringify(component.name)}, () => import(${JSON.stringify(packageName)}).then(module => module.${component.moduleName} as PreviewComponent)),`,
-      ),
+      allComponents[packageName]
+        // A hook entry carries `params`; a hook renders nothing to preview.
+        .filter(component => component.params == null)
+        .map(
+          component =>
+            `  ${JSON.stringify(component.name)}: namedLazy(${JSON.stringify(component.name)}, () => import(${JSON.stringify(packageName)}).then(module => module.${component.moduleName} as PreviewComponent)),`,
+        ),
     )
     .join('\n');
 
@@ -1591,9 +1594,15 @@ async function generateBlockRegistry() {
         package: entry.package,
         cwd: DOCSITE_ROOT,
       });
-      const dirName = `${entry.package}-${entry.id}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+      const dirName = `${entry.package}-${entry.id}`.replace(
+        /[^a-zA-Z0-9_-]/g,
+        '-',
+      );
       const authored = discovered.find(
-        t => t.type === 'block' && t.dirName === entry.id && pkgOf(t) === entry.package,
+        t =>
+          t.type === 'block' &&
+          t.dirName === entry.id &&
+          pkgOf(t) === entry.package,
       );
       if (!authored) throw new Error(`No authored file for ${dirName}`);
       integrationBlockFiles.set(dirName, authored.filePath);
