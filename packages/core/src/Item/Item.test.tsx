@@ -874,6 +874,32 @@ describe('Item', () => {
     }
   });
 
+  it('reflects highlighted, selected, and disabled on the item theme target', () => {
+    const {rerender} = render(<Item label="Item" data-testid="item" />);
+    const item = () => screen.getByTestId('item');
+    for (const state of ['highlighted', 'selected', 'disabled']) {
+      expect(item()).not.toHaveAttribute(`data-${state}`);
+    }
+    rerender(
+      <Item
+        label="Item"
+        isHighlighted
+        isSelected
+        isDisabled
+        onClick={() => {}}
+        data-testid="item"
+      />,
+    );
+    expect(item()).toHaveClass('astryx-item');
+    expect(item()).toHaveAttribute('data-highlighted', 'highlighted');
+    expect(item()).toHaveAttribute('data-selected', 'selected');
+    expect(item()).toHaveAttribute('data-disabled', 'disabled');
+    rerender(<Item label="Item" role="option" isSelected data-testid="item" />);
+    expect(item()).toHaveAttribute('data-selected', 'selected');
+    expect(item()).not.toHaveAttribute('data-highlighted');
+    expect(item()).not.toHaveAttribute('data-disabled');
+  });
+
   it('aligns the row on first baselines only under first-line', () => {
     const {rerender} = render(<Item label="Item" data-testid="item" />);
     const declares = (value: string) =>
