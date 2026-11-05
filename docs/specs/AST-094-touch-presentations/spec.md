@@ -1167,7 +1167,7 @@ Rejected: a system Copy item; suppressing selection on every press-tracked contr
 ### DEC-10 — A press's feedback follows its own pointer, not the primary pointer
 
 **Reference:** `spec:AST-094/DEC-10`
-**Decider:** `cixzhang`, `2026-10-25`
+**Decider:** pending owner confirmation
 
 On a hybrid device whose primary pointer is fine, a finger press otherwise
 gets the fine-pointer press, not the touch press feedback a phone shows, so
