@@ -74,7 +74,7 @@ import {useDropdownMenuPress} from '../hooks/useMenuPress';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
-import {returnFocusForLastInput} from '../utils/focusReturn';
+import {focusForLastInput, returnFocusForLastInput} from '../utils/focusReturn';
 import {useMenuOverflow} from './useMenuOverflow';
 import {MenuRegionsContext} from './menuRegionsContext';
 import {moveRegionsTab} from './menuRegionStops';
@@ -1353,8 +1353,11 @@ function DropdownMenuPopover({
       // remember whatever was focused BEFORE the press as the element to hand
       // focus back to when it closes. Focusing the trigger first gives the
       // popover the state a click-open already has: the trigger is where
-      // Escape or a pick returns focus (the APG menu-button pattern).
-      buttonRef.current?.focus({preventScroll: true});
+      // Escape or a pick returns focus (the APG menu-button pattern). A
+      // finger's press shows no ring here.
+      if (buttonRef.current != null) {
+        focusForLastInput(buttonRef.current, {preventScroll: true});
+      }
       const didOpen = openAndFocus('pointer', true);
       if (didOpen) {
         // The menu is `popover="auto"`: the browser's light dismiss would
