@@ -59,6 +59,8 @@ import {useTooltip} from '../Tooltip';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {
   colorVars,
+  durationVars,
+  easeVars,
   fontWeightVars,
   radiusVars,
   sizeVars,
@@ -191,12 +193,15 @@ const sizeStyles = stylex.create({
 const HORIZONTAL_SEGMENT_BASIS = 196;
 
 /**
- * UIDatePicker's month/year toggle under a finger: its fades and the chevron's
- * quarter turn, 0.25 s on ease-in-ease-out (DateInput's
- * monthYearToggle.stylex.ts).
+ * The month/year toggle under a finger, as in DateInput: the theme duration
+ * token nearest UIDatePicker's measured 0.25 s in the Storybook theme. A part
+ * that arrives eases on the entrance curve, and the hidden styles carry the
+ * exit curve. The chevron's turn takes the move curve.
  */
-const TOGGLE_DURATION = monthYearToggleMotion.duration;
-const TOGGLE_CURVE = monthYearToggleMotion.curve;
+const TOGGLE_DURATION = durationVars['--duration-medium-min'];
+const TOGGLE_ENTRANCE = easeVars['--ease-entrance'];
+const TOGGLE_EXIT = easeVars['--ease-exit'];
+const TOGGLE_TURN = easeVars['--ease-move'];
 const CHEVRON_TURN = monthYearToggleMotion.chevronTurn;
 
 const styles = stylex.create({
@@ -340,10 +345,10 @@ const styles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-0-5'],
     marginInlineStart: 'auto',
-    // Under a finger the month/year toggle is UIDatePicker's cross-fade:
-    // 0.25 s on Core Animation's ease-in-ease-out. With a mouse the swap stays
-    // instant. Under Reduced Motion a touch screen gets the policy's
-    // cross-fade and a mouse the instant swap.
+    // Under a finger the month/year toggle cross-fades on its tokens
+    // (TOGGLE_DURATION). With a mouse the swap stays instant. Under Reduced
+    // Motion a touch screen gets the policy's cross-fade and a mouse the
+    // instant swap.
     transitionProperty: {
       default: 'none',
       '@media (pointer: coarse)': 'opacity, visibility',
@@ -360,7 +365,7 @@ const styles = stylex.create({
     },
     transitionTimingFunction: {
       default: 'linear',
-      '@media (pointer: coarse)': TOGGLE_CURVE,
+      '@media (pointer: coarse)': TOGGLE_ENTRANCE,
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
         reducedMotionFadeConsts.easing,
     },
@@ -371,6 +376,12 @@ const styles = stylex.create({
   touchHeaderActionsHidden: {
     visibility: 'hidden',
     opacity: 0,
+    transitionTimingFunction: {
+      default: 'linear',
+      '@media (pointer: coarse)': TOGGLE_EXIT,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.easing,
+    },
   },
   touchArrow: {
     minBlockSize: {
@@ -421,10 +432,10 @@ const styles = stylex.create({
     minInlineSize: 0,
     flexDirection: 'column',
     gap: spacingVars['--spacing-2'],
-    // Under a finger the month/year toggle is UIDatePicker's cross-fade:
-    // 0.25 s on Core Animation's ease-in-ease-out. With a mouse the swap stays
-    // instant. Under Reduced Motion a touch screen gets the policy's
-    // cross-fade and a mouse the instant swap.
+    // Under a finger the month/year toggle cross-fades on its tokens
+    // (TOGGLE_DURATION). With a mouse the swap stays instant. Under Reduced
+    // Motion a touch screen gets the policy's cross-fade and a mouse the
+    // instant swap.
     transitionProperty: {
       default: 'none',
       '@media (pointer: coarse)': 'opacity, visibility',
@@ -441,7 +452,7 @@ const styles = stylex.create({
     },
     transitionTimingFunction: {
       default: 'linear',
-      '@media (pointer: coarse)': TOGGLE_CURVE,
+      '@media (pointer: coarse)': TOGGLE_ENTRANCE,
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
         reducedMotionFadeConsts.easing,
     },
@@ -449,6 +460,12 @@ const styles = stylex.create({
   touchDateSurfaceHidden: {
     visibility: 'hidden',
     opacity: 0,
+    transitionTimingFunction: {
+      default: 'linear',
+      '@media (pointer: coarse)': TOGGLE_EXIT,
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.easing,
+    },
   },
   // The hidden wheels under a finger once the sheet has settled: laid out, at
   // opacity 0, so the toggle's commit only changes their opacity
@@ -485,7 +502,7 @@ const styles = stylex.create({
     },
     transitionTimingFunction: {
       default: 'ease',
-      '@media (pointer: coarse)': TOGGLE_CURVE,
+      '@media (pointer: coarse)': TOGGLE_TURN,
     },
   },
   touchTitleChevronOpen: {

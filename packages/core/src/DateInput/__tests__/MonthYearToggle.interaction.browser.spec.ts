@@ -5,7 +5,7 @@
  * @input The built "Bottom Sheet Calendar" DateInput story, real touch input
  *   and the interaction harness
  * @output Interaction proofs that the calendar's month/year toggle runs on
- *   UIDatePicker's clock under a finger, in Chromium and WebKit: the fades,
+ *   the theme's tokens under a finger, in Chromium and WebKit: the fades,
  *   the chevron, a turnaround, a blocked main thread, Reduced Motion and RTL
  * @position Interaction tests of TouchDateField.tsx, TouchDateTimeField.tsx and
  *   MonthPager.tsx (`*.interaction.browser.spec.ts`)
@@ -40,12 +40,8 @@ import {
   type TrackedFrame,
 } from '@astryxdesign/interaction-harness';
 import {SHEET_SETTLE_MS} from '../useWheelsWarmUp';
-import {datePicker} from '../../motion/uikit/datePicker';
-import {timing} from '../../motion/uikit/timing';
 
 const storybook = withStorybook(test);
-
-const TOGGLE_MS = datePicker.calendar.monthYearToggle.fadeMs;
 
 /** CSS's named cubic-bézier easings, which a browser may report by name. */
 const NAMED_EASINGS: Record<string, ReadonlyArray<number>> = {
@@ -72,25 +68,79 @@ function bezierOf(easing: string): ReadonlyArray<number> {
   return match[1].split(',').map(Number);
 }
 
+/** The toggle's tokens, as the page's theme resolves them. */
+interface ToggleTokens {
+  /** `--duration-medium-min`, in ms. */
+  ms: number;
+  /** The control points of `--ease-entrance`, `--ease-exit` and `--ease-move`. */
+  entrance: ReadonlyArray<number>;
+  exit: ReadonlyArray<number>;
+  move: ReadonlyArray<number>;
+}
+
 /**
- * The toggle's run of `property` as the page plays it: UIKit's 0.25 s
- * ease-in-ease-out from one end value to the other. It is read from the
- * watched transition itself, whose duration, easing and end values fix every
- * frame. A hold taken after the tap returns can miss the fade on a loaded
- * runner.
+ * Reads the toggle's tokens from the sheet. A browser spec cannot import
+ * tokens.stylex.ts, which needs the StyleX compiler, and a theme's tempo and
+ * character set the values.
+ */
+async function toggleTokens(page: Page): Promise<ToggleTokens> {
+  const [duration, entrance, exit, move] = await page
+    .locator('.astryx-bottom-sheet')
+    .first()
+    .evaluate(element => {
+      const style = getComputedStyle(element);
+      return [
+        '--duration-medium-min',
+        '--ease-entrance',
+        '--ease-exit',
+        '--ease-move',
+      ].map(name => style.getPropertyValue(name).trim());
+    });
+  const ms = Number.parseFloat(duration);
+  expect(ms, duration).toBeGreaterThan(0);
+  return {
+    ms: duration.endsWith('ms') ? ms : ms * 1000,
+    entrance: bezierOf(entrance),
+    exit: bezierOf(exit),
+    move: bezierOf(move),
+  };
+}
+
+/** The steepest slope of a cubic-bézier easing, in output per unit of time. */
+function steepestSlope([x1, y1, x2, y2]: ReadonlyArray<number>): number {
+  const at = (t: number, a: number, b: number) =>
+    3 * a * (1 - t) ** 2 * t + 3 * b * (1 - t) * t ** 2 + t ** 3;
+  let steepest = 0;
+  for (let i = 0; i < 1000; i += 1) {
+    const [t0, t1] = [i / 1000, (i + 1) / 1000];
+    const dx = at(t1, x1, x2) - at(t0, x1, x2);
+    if (dx > 0) {
+      steepest = Math.max(steepest, (at(t1, y1, y2) - at(t0, y1, y2)) / dx);
+    }
+  }
+  return steepest;
+}
+
+/**
+ * The toggle's run of `property` as the page plays it: `ease` over the
+ * toggle's duration token, from one end value to the other. It is read from
+ * the watched transition itself, whose duration, easing and end values fix
+ * every frame. A hold taken after the tap returns can miss the fade on a
+ * loaded runner.
  */
 function expectToggleRun(
   runs: ReadonlyArray<ActiveAnimation>,
   property: string,
   [from, to]: readonly [string, string],
+  {ms, ease}: {ms: number; ease: ReadonlyArray<number>},
 ) {
   const run = runs.find(candidate => candidate.name === property);
   if (run == null) {
     throw new Error(`no ${property} run among ${JSON.stringify(runs)}`);
   }
-  expect(run.durationMs).toBe(TOGGLE_MS);
+  expect(run.durationMs).toBe(ms);
   const points = bezierOf(run.easing);
-  timing.curves.move.forEach((point, index) =>
+  ease.forEach((point, index) =>
     expect(points[index], run.easing).toBeCloseTo(point, 3),
   );
   const frames = run.keyframes;
@@ -190,24 +240,53 @@ async function runningAnimations(page: Page, selector: string) {
     );
 }
 
-test('the wheels fade in and the chevron turns on UIKit’s 0.25 s ease-in-ease-out', async ({
+test('the wheels fade in and the chevron turns on the theme’s tokens nearest UIKit’s toggle', async ({
   page,
 }) => {
   const {driver, wheels, titleAt} = await openCalendar(page);
+  const tokens = await toggleTokens(page);
   const chevron = page
     .locator('[data-title="month-year"] .astryx-icon')
     .first();
   const fade = await watchAnimations(wheels);
   const turn = await watchAnimations(chevron);
   await driver.tap(titleAt);
-  expectToggleRun(await fade.started(), 'opacity', ['0', '1']);
-  expectToggleRun(await turn.started(), 'transform', [
-    'rotate(-90deg)',
-    'rotate(0deg)',
-  ]);
+  expectToggleRun(await fade.started(), 'opacity', ['0', '1'], {
+    ms: tokens.ms,
+    ease: tokens.entrance,
+  });
+  expectToggleRun(
+    await turn.started(),
+    'transform',
+    ['rotate(-90deg)', 'rotate(0deg)'],
+    {ms: tokens.ms, ease: tokens.move},
+  );
 });
 
-test('DateTimeInput: the calendar and the wheels cross-fade on UIKit’s 0.25 s ease-in-ease-out, the chevron turning with them', async ({
+test('the wheels fade out on the exit curve when they close', async ({
+  page,
+}) => {
+  const {driver, wheels, titleAt} = await openCalendar(page);
+  const tokens = await toggleTokens(page);
+  await driver.tap(titleAt);
+  // The opening fade's own end, so the closing run starts from full opacity.
+  await waitForOpacityAbove(wheels, 0.99);
+  await wheels.evaluate(async element => {
+    await Promise.all(
+      element
+        .getAnimations()
+        .map(async animation => animation.finished.catch(() => undefined)),
+    );
+  });
+  const fade = await watchAnimations(wheels);
+  await driver.tap(titleAt);
+  expectToggleRun(await fade.started(), 'opacity', ['1', '0'], {
+    ms: tokens.ms,
+    ease: tokens.exit,
+  });
+});
+
+test('DateTimeInput: the calendar and the wheels cross-fade on the theme’s motion tokens, the title chevron turning with them', async ({
   page,
 }) => {
   await openStory(page, storybook(), DTI_STORY);
@@ -225,26 +304,33 @@ test('DateTimeInput: the calendar and the wheels cross-fade on UIKit’s 0.25 s 
   await waitForRest(
     page.getByRole('dialog').locator('.astryx-bottom-sheet').first(),
   );
+  const tokens = await toggleTokens(page);
   const chevron = page
     .locator('button[aria-label$="Choose month and year"] .astryx-icon')
     .first();
   const fade = await watchAnimations(wheels);
   const turn = await watchAnimations(chevron);
   await tapCenter('button[aria-label$="Choose month and year"]');
-  expectToggleRun(await fade.started(), 'opacity', ['0', '1']);
-  expectToggleRun(await turn.started(), 'transform', [
-    'rotate(-90deg)',
-    'rotate(0deg)',
-  ]);
+  expectToggleRun(await fade.started(), 'opacity', ['0', '1'], {
+    ms: tokens.ms,
+    ease: tokens.entrance,
+  });
+  expectToggleRun(
+    await turn.started(),
+    'transform',
+    ['rotate(-90deg)', 'rotate(0deg)'],
+    {ms: tokens.ms, ease: tokens.move},
+  );
 });
 
 test('a second tap mid-fade turns the fade around from where it is', async ({
   page,
 }) => {
   const {driver, wheels, titleAt} = await openCalendar(page);
+  const tokens = await toggleTokens(page);
   // A test stylesheet stretches the toggle's fades and the chevron's turn to
   // 2 s. So the second tap lands mid-fade every time, instead of racing a
-  // 250 ms fade. The turnaround does not depend on the length.
+  // toggle's fade. The turnaround does not depend on the length.
   await page.addStyleTag({
     content:
       '[data-panel], button[aria-label$="Choose month and year"] .astryx-icon { transition-duration: 2000ms !important; }',
@@ -297,13 +383,19 @@ test('a second tap mid-fade turns the fade around from where it is', async ({
   // The first fade never finished: the second tap caught it part way in.
   expect(peak).toBeGreaterThan(0.3);
   expect(peak).toBeLessThan(0.95);
-  // From there it only falls back to 0: never up to 1, never a jump. The
-  // fall is bounded per millisecond, so a dropped frame is not a jump.
+  // From there it only falls back to 0: never up to 1, never a jump. The fall
+  // is a leave, on the exit curve the hidden style carries. Each step falls at
+  // most what that curve's steepest slope covers in the step's own time on
+  // the 2 s run. That time counts as at least 50 ms. So a late frame is not a
+  // jump, and a jump still fails.
+  const steepest = steepestSlope(tokens.exit);
   for (let i = peakAt + 1; i < fade.length; i += 1) {
     const [time, opacity] = fade[i];
     const [lastTime, last] = fade[i - 1];
     expect(opacity).toBeLessThanOrEqual(last + 1e-6);
-    expect((last - opacity) / Math.max(1, time - lastTime)).toBeLessThan(0.004);
+    expect(last - opacity).toBeLessThan(
+      (1.5 * steepest * Math.max(50, time - lastTime)) / 2000,
+    );
   }
   expect(fade.at(-1)?.[1]).toBe(0);
 });
@@ -477,9 +569,10 @@ test('the wheels keep fading in every frame through a blocked main thread', asyn
 }, testInfo) => {
   test.skip(
     browserName === 'webkit',
-    "WebKit's screencast clock is not the page's (frames arrive ~100 ms off), so a 0.25 s fade cannot be placed inside the block; Mobile Safari on the iOS simulator is this proof's WebKit evidence",
+    "WebKit's screencast clock is not the page's (frames arrive ~100 ms off), so the toggle's fade cannot be placed inside the block; Mobile Safari on the iOS simulator is this proof's WebKit evidence",
   );
   const {driver, wheels, titleAt} = await openCalendar(page);
+  const tokens = await toggleTokens(page);
   // A magenta chip on the wheels' panel: its colour on screen is the fade.
   await markElement(wheels, {inset: 8, size: 24});
   const chip = page.locator('[data-harness-marker-chip]').first();
@@ -516,8 +609,8 @@ test('the wheels keep fading in every frame through a blocked main thread', asyn
     pixels: 1,
   }));
   const started = busy.from - 32;
-  const spanned = {...busy, to: Math.min(busy.to, started + TOGGLE_MS)};
-  expect(spanned.to - spanned.from).toBeGreaterThan(150);
+  const spanned = {...busy, to: Math.min(busy.to, started + tokens.ms)};
+  expect(spanned.to - spanned.from).toBeGreaterThan(0.6 * tokens.ms);
   const proof = busyWindowProof(tracked, spanned, {
     axis: 'x',
     settledWithin: 10,
@@ -625,6 +718,7 @@ test('in RTL the chevron points left, and turns to point down', async ({
   page,
 }) => {
   const {driver, wheels, titleAt} = await openCalendar(page, {rtl: true});
+  const tokens = await toggleTokens(page);
   // Where the chevron's glyph (drawn pointing down) points on screen: its
   // transform (the turn, mirrored under RTL) applied to +y.
   const pointing = async () =>
@@ -645,7 +739,7 @@ test('in RTL the chevron points left, and turns to point down', async ({
   expect(await pointing()).toEqual({x: -1, y: 0});
   await driver.tap(titleAt);
   await waitForRest(wheels);
-  await page.waitForTimeout(TOGGLE_MS + 100);
+  await page.waitForTimeout(tokens.ms + 100);
   expect(await pointing()).toEqual({x: 0, y: 1});
 });
 
@@ -770,6 +864,7 @@ for (const [name, story, titleSelector, panelSelector, panelKey] of [
         timeout: SHEET_SETTLE_MS + 2000,
       })
       .toBe('visible');
+    const tokens = await toggleTokens(page);
     await page.evaluate(
       ({selector, key}) => {
         const state = {
@@ -876,7 +971,7 @@ for (const [name, story, titleSelector, panelSelector, panelKey] of [
     expect(
       (live?.time ?? Number.NaN) - commitTime,
       JSON.stringify(log),
-    ).toBeGreaterThanOrEqual(TOGGLE_MS);
+    ).toBeGreaterThanOrEqual(tokens.ms);
     expect(live?.wheelsOpacity, JSON.stringify(log)).toBe(1);
     // The outgoing calendar turns inert once the cross-fade has ended: faded
     // to 0, hidden, or covered by the wheels at opacity 1. Never part way.
@@ -896,7 +991,7 @@ for (const [name, story, titleSelector, panelSelector, panelKey] of [
     expect(
       (inert?.time ?? Number.NaN) - commitTime,
       JSON.stringify(log),
-    ).toBeGreaterThanOrEqual(TOGGLE_MS);
+    ).toBeGreaterThanOrEqual(tokens.ms);
   });
 }
 
@@ -991,9 +1086,10 @@ test(
   {tag: '@storyboard'},
   async ({page}, testInfo) => {
     const {driver, sheet, wheels, titleAt} = await openCalendar(page);
+    const tokens = await toggleTokens(page);
     await installTimerGate(page);
     // The page holds the fade itself as soon as it runs. A hold sent after
-    // the tap can miss a 0.25 s fade on a loaded runner.
+    // the tap can miss the toggle's fade on a loaded runner.
     const hold = await armHold(page, sheet);
     await driver.tap(titleAt);
     const held = await hold.held();
@@ -1002,7 +1098,7 @@ test(
       name: 'month-year-toggle',
       clip: sheet,
       held,
-      times: timeline(TOGGLE_MS, 1000 / 30),
+      times: timeline(tokens.ms, 1000 / 30),
       columns: 5,
       cellScale: 0.35,
       measure: async () => ({

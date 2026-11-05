@@ -42,7 +42,7 @@ function shownTabStop(panel: HTMLElement): HTMLElement | null {
 
 /**
  * Frames the hand-off tries for before it gives up: about half a second,
- * longer than the toggle's 0.25 s fade.
+ * longer than the toggle's fade.
  */
 const FOCUS_FRAMES = 30;
 
