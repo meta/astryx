@@ -1020,8 +1020,8 @@ export function Item({
           align === 'start' && styles.alignStart,
           align === 'first-line' && styles.alignFirstLine,
           isInteractive && styles.interactive,
-          // A highlighted or selected row keeps its fill as the background
-          // colour, so its hover and press paint as an image layer over it.
+          // A row with a state fill keeps the fill as its background colour.
+          // Its overlay paints as an image layer over the fill.
           isInteractive &&
             (hasStateFill
               ? interactionOverlayStyles.backgroundImage
