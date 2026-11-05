@@ -230,7 +230,13 @@ test('one finger still drags the handle and scrolls the body, without zooming', 
   await openSheet(page);
   const body = sheet.locator('[role="group"]').first();
   const before = await body.evaluate(el => el.scrollTop);
-  const startY = box.y + box.height - 100;
+  // The sheet's box reaches below the screen, so start from the content's
+  // visible end.
+  const bodyBox = await body.boundingBox();
+  if (bodyBox == null) {
+    throw new Error('no body box');
+  }
+  const startY = bodyBox.y + bodyBox.height - 100;
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
     touchPoints: [{x, y: startY}],

@@ -568,6 +568,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-circle-check-indicator",
+      "path": "components/lab/circle-check-indicator",
+      "aliases": []
+    },
+    {
       "name": "component-lab-circular-progress",
       "path": "components/lab/circular-progress",
       "aliases": []
@@ -2292,6 +2297,16 @@
       "aliases": []
     },
     {
+      "name": "example-info-tip-metric-definitions",
+      "path": "examples/info-tip/metric-definitions",
+      "aliases": []
+    },
+    {
+      "name": "example-info-tip-permission-notes",
+      "path": "examples/info-tip/permission-notes",
+      "aliases": []
+    },
+    {
       "name": "example-input-group-basic",
       "path": "examples/input-group/basic",
       "aliases": []
@@ -3652,6 +3667,16 @@
       "aliases": []
     },
     {
+      "name": "example-use-clickable-container-clickable-project-card",
+      "path": "examples/use-clickable-container/clickable-project-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-clipboard-share-link",
+      "path": "examples/use-clipboard/share-link",
+      "aliases": []
+    },
+    {
       "name": "example-use-collapsible-custom-disclosure",
       "path": "examples/use-collapsible/custom-disclosure",
       "aliases": []
@@ -3689,6 +3714,11 @@
     {
       "name": "example-use-hover-card-profile-preview",
       "path": "examples/use-hover-card/profile-preview",
+      "aliases": []
+    },
+    {
+      "name": "example-use-image-mode-photo-caption",
+      "path": "examples/use-image-mode/photo-caption",
       "aliases": []
     },
     {
@@ -4589,6 +4619,11 @@
     {
       "name": "showcase-icon-default",
       "path": "showcases/icon/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-info-tip-default",
+      "path": "showcases/info-tip/default",
       "aliases": []
     },
     {

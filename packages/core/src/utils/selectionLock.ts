@@ -28,7 +28,11 @@
 //
 // A mouse never takes the lock, so its released behavior stays (AST-017).
 
-import {containsAlongFlatTree, parentAcrossShadow} from './flatTree';
+import {
+  containsAlongFlatTree,
+  deepActiveElement,
+  parentAcrossShadow,
+} from './flatTree';
 import {subscribeInput} from './inputStream';
 import {isIosWebKit} from './touchQueries';
 
@@ -116,6 +120,16 @@ export interface DragSelectionReleaseOptions {
   isCancel?: boolean;
 }
 
+/** A drag's selection hold: call it to release the hold. */
+export interface DragSelectionHold {
+  (options?: DragSelectionReleaseOptions): void;
+  /**
+   * Called after the lift's own handlers ran. A selection they made since
+   * the release stays: the hold then puts it back, not the press's.
+   */
+  keepLiftSelection(): void;
+}
+
 /**
  * Refuse a new selection while a mouse or pen drag that a recognizer claimed
  * runs, until the returned function runs. `kept` is the page's selection
@@ -140,9 +154,13 @@ export function lockDragSelection(
   view: Window | null | undefined,
   kept: ReadonlyArray<AbstractRange>,
   onReleased?: () => void,
-): (options?: DragSelectionReleaseOptions) => void {
+): DragSelectionHold {
   const doc = view?.document ?? null;
-  const roots = shadowRootsOfRanges(kept);
+  let keptRanges = kept;
+  let roots = shadowRootsOfRanges(keptRanges);
+  // The selection when the lift released the hold, until the lift's
+  // handlers ran.
+  let atLift: ReadonlyArray<AbstractRange> | null = null;
   const restore = () => {
     const selection = view?.getSelection();
     // The focused field keeps its own selection (a drag never starts in one).
@@ -150,7 +168,7 @@ export function lockDragSelection(
       return;
     }
     const held = heldRanges(selection, roots);
-    if (kept.length === 0) {
+    if (keptRanges.length === 0) {
       if (held.some(range => !range.collapsed)) {
         selection.removeAllRanges();
       }
@@ -158,10 +176,10 @@ export function lockDragSelection(
     }
     // A render can remove what the kept selection held: then there is
     // nothing to put back.
-    if (sameRanges(held, kept) || !kept.every(isValidRange)) {
+    if (sameRanges(held, keptRanges) || !keptRanges.every(isValidRange)) {
       return;
     }
-    selectRanges(selection, kept);
+    selectRanges(selection, keptRanges);
   };
   restore();
   const set = new Set(elements);
@@ -201,9 +219,10 @@ export function lockDragSelection(
       onReleased?.();
     }
   };
-  return ({isCancel = false}: DragSelectionReleaseOptions = {}) => {
+  const release = (({isCancel = false}: DragSelectionReleaseOptions = {}) => {
     if (stage === 'held') {
       stage = 'lifted';
+      atLift = selectionRangesOf(view);
       for (const element of set) {
         element.removeEventListener('selectstart', refuse);
       }
@@ -218,7 +237,26 @@ export function lockDragSelection(
     } else if (stage === 'lifted' && isCancel) {
       releaseDocument();
     }
+  }) as DragSelectionHold;
+  release.keepLiftSelection = () => {
+    if (stage !== 'lifted' || atLift == null) {
+      return;
+    }
+    const before = atLift;
+    atLift = null;
+    const keepIfChanged = () => {
+      const now = selectionRangesOf(view);
+      if (stage !== 'done' && !sameRanges(now, before)) {
+        keptRanges = now;
+        roots = shadowRootsOfRanges(now);
+      }
+    };
+    keepIfChanged();
+    // A click's state update renders in a microtask, and its layout effect
+    // may select then. That still runs before the press's own mouseup.
+    queueMicrotask(keepIfChanged);
   };
+  return release;
 }
 
 /**
@@ -580,15 +618,6 @@ function openShadowRootsOf(target: EventTarget | null): ShadowRoot[] {
     root = host.getRootNode();
   }
   return roots;
-}
-
-/** The focused element, inside open shadow roots too. */
-function deepActiveElement(doc: Document | null): Element | null {
-  let active = doc?.activeElement ?? null;
-  while (active?.shadowRoot?.activeElement != null) {
-    active = active.shadowRoot.activeElement;
-  }
-  return active;
 }
 
 /**

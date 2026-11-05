@@ -21,6 +21,7 @@ const broad = {
   TEST_NATIVE_SWIFT_RESULT: 'success',
   PR_INTERACTION_RESULT: 'success',
   PR_INTERACTION_WEBKIT_RESULT: 'success',
+  PR_COMPONENT_A11Y_CONTRACTS_RESULT: 'success',
 };
 
 // An override of `null` removes the variable, as a missing `needs` result would.
@@ -61,6 +62,11 @@ describe('pull-request test join', () => {
       ['PR_INTERACTION_WEBKIT_RESULT', 'skipped'],
       ['PR_INTERACTION_WEBKIT_RESULT', 'cancelled'],
       ['PR_INTERACTION_WEBKIT_RESULT', null],
+      // A failing component accessibility contract blocks the merge.
+      ['PR_COMPONENT_A11Y_CONTRACTS_RESULT', 'failure'],
+      ['PR_COMPONENT_A11Y_CONTRACTS_RESULT', 'skipped'],
+      ['PR_COMPONENT_A11Y_CONTRACTS_RESULT', 'cancelled'],
+      ['PR_COMPONENT_A11Y_CONTRACTS_RESULT', null],
     ]) {
       expect(run({[name]: value}), name).toMatchObject({status: 1});
     }

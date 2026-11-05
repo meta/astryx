@@ -14,7 +14,7 @@
  */
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
-import {Profiler, useState} from 'react';
+import {Profiler, createRef, useState} from 'react';
 import {
   afterAll,
   afterEach,
@@ -31,6 +31,7 @@ import {fontWeightVars} from '../theme/tokens.stylex';
 import {PickerWheel} from './PickerWheel';
 import {
   WHEEL_ROW_HEIGHT,
+  type WheelHandle,
   type WheelOption,
   type WheelProps,
 } from './wheelOptions';
@@ -1133,6 +1134,21 @@ describe('PickerWheel — under reduced motion', () => {
     expect(onChange).toHaveBeenLastCalledWith(9);
   });
 
+  it('fades for a spin', async () => {
+    const ref = createRef<WheelHandle>();
+    const {onChange} = renderWheel({ref});
+    let arrived: boolean | undefined;
+    act(() => {
+      void ref.current!.spinTo(15).then(value => {
+        arrived = value;
+      });
+    });
+    await advanceAsync(FADE_MS);
+    expect(arrived).toBe(true);
+    expect(onChange).toHaveBeenLastCalledWith(15);
+    expectFadesOnly();
+  });
+
   it('fades for a tap and a key', async () => {
     const {column, onChange} = renderWheel();
     const below = CENTRE + ROW;
@@ -1150,6 +1166,97 @@ describe('PickerWheel — under reduced motion', () => {
 });
 
 describe('PickerWheel — mechanics for its owners', () => {
+  it('spins to a row on request and commits it there', async () => {
+    const ref = createRef<WheelHandle>();
+    const {onChange} = renderWheel({ref});
+    let arrived: boolean | undefined;
+    act(() => {
+      void ref.current!.spinTo(15).then(value => {
+        arrived = value;
+      });
+    });
+    advance(310);
+    await act(async () => {});
+    expect(arrived).toBe(true);
+    expect(onChange).toHaveBeenCalledWith(15);
+  });
+
+  it('turns nothing and reports false for a spin onto a disabled row or outside the rows', async () => {
+    // As the scrolling column answers.
+    const ref = createRef<WheelHandle>();
+    const {option, onChange} = renderWheel({ref});
+    for (const index of [3, 24, -1]) {
+      let arrived: boolean | undefined;
+      act(() => {
+        void ref.current!.spinTo(index).then(value => {
+          arrived = value;
+        });
+      });
+      await act(async () => {});
+      expect(arrived, `spinTo(${index})`).toBe(false);
+    }
+    advance(1000);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(distanceOf(option('10'))).toBeCloseTo(0, 4);
+  });
+
+  it('reports false for a spin still turning when the wheel goes away', async () => {
+    const ref = createRef<WheelHandle>();
+    const {unmount} = renderWheel({ref});
+    const spin = ref.current!.spinTo(15);
+    advance(100);
+    unmount();
+    await expect(spin).resolves.toBe(false);
+  });
+
+  it('reports a spin a finger interrupted', async () => {
+    const ref = createRef<WheelHandle>();
+    const {column} = renderWheel({ref});
+    let arrived: boolean | undefined;
+    act(() => {
+      void ref.current!.spinTo(15).then(value => {
+        arrived = value;
+      });
+    });
+    advance(100);
+    touch('touchstart', column, 100);
+    await act(async () => {});
+    expect(arrived).toBe(false);
+  });
+
+  it('keeps a spin going when its owner re-renders the rows mid-turn', async () => {
+    const ref = createRef<WheelHandle>();
+    const {rerender, onChange} = renderWheel({
+      ref,
+      options: MINUTES,
+      value: 15,
+      label: 'Minute',
+    });
+    let arrived: boolean | undefined;
+    act(() => {
+      void ref.current!.spinTo(30).then(value => {
+        arrived = value;
+      });
+    });
+    advance(100);
+    // The owner commits a time on its bound: the minutes before 30 are
+    // disabled now. The same row nodes come back, so the turn goes on.
+    rerender(
+      <PickerWheel
+        ref={ref}
+        label="Minute"
+        options={MINUTES.map(option => ({
+          ...option,
+          isDisabled: option.value < 30,
+        }))}
+        value={30}
+        onChange={onChange}
+      />,
+    );
+    advance(250);
+    await act(async () => {});
+    expect(arrived).toBe(true);
+  });
   it('keeps a finger that lands on it from an enclosing sheet', () => {
     // A sheet arms its pull-down on its body's pointerdown.
     const onPointerDown = vi.fn();
