@@ -120,7 +120,8 @@ export const docs = {
     {
       name: 'labelTooltip',
       type: 'string',
-      description: 'Tooltip text to display in an info icon at the end of the label.',
+      description:
+        'Tooltip text to display in an info icon at the end of the label. Hover shows it; on a touch screen a tap on the icon opens it without focusing the field, while a mouse click on the icon focuses the field like the rest of the label.',
     },
     {
       name: 'status',

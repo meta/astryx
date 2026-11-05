@@ -24,7 +24,7 @@ See the **[Component Lifecycle](https://github.com/meta/astryx/wiki/Component-Li
 
 The [Accessibility Checklist](https://github.com/meta/astryx/wiki/Accessibility-Checklist) is a hard requirement for graduating to core — every item, verified in the promotion PR, alongside the hardening bar linked above.
 
-Lab components get the same scan coverage as core (the `pr-a11y` axe audit and the weekly full scan run against lab too), but a11y findings on a lab component do not block lab merges — they block **promotion**. Iterate freely in lab; clear the checklist to graduate.
+Lab components get the same scan coverage as core (the `pr-a11y` axe audit and the full release-check scan run against lab too), but a11y findings on a lab component do not block lab merges — they block **promotion**. Iterate freely in lab; clear the checklist to graduate.
 
 ## Usage
 

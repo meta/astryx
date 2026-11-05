@@ -35,6 +35,7 @@ import {
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {isRenderable} from '../utils/isRenderable';
 
 const styles = stylex.create({
   heading: {
@@ -98,7 +99,7 @@ export function DropdownMenuGroup({
   ...rest
 }: DropdownMenuGroupProps) {
   const headingId = useId();
-  const hasTitle = title != null && title !== '' && title !== false;
+  const hasTitle = isRenderable(title);
 
   return (
     <div

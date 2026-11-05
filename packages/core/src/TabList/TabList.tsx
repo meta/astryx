@@ -56,9 +56,15 @@ import {themeProps} from '../utils/themeProps';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {devWarn} from '../utils/devWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TabList/TabList.generated';
+
+registerEnglishFallback(english);
 /**
  * Selector matching the focusable stops in the tab strip: every Tab
  * (`[data-tab-value]`) and every TabMenu trigger (`[data-tab-menu]`),
@@ -413,7 +419,7 @@ export function TabList({
   [EDGE_COMP_ATTR]: _edgeCompAttr,
   ...restProps
 }: TabListProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.tabList.label');
   const size = useSize(sizeProp, 'md');
   const hasScroll = overflow !== 'visible';
@@ -442,6 +448,7 @@ export function TabList({
   // the first enabled stop when none is tabbable.
   const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLElement>({
     itemSelector: TAB_STOP_SELECTOR,
+    boundarySelector: '.astryx-tab-list, [popover]',
     orientation: isTabList ? 'horizontal' : 'both',
     hasRovingTabIndex: true,
   });

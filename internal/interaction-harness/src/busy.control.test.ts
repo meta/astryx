@@ -157,7 +157,7 @@ describe('busyWindowProof against a control', () => {
     const proof = busyWindowProof(tail, BLOCK, {control: asControl(moving())});
     expect(proof.verdict.failures, proof.summary).toEqual([]);
     expect(proof.control?.belowStep).toBeGreaterThan(0);
-    expect(proof.summary).toMatch(/under one cast step a frame/);
+    expect(proof.summary).toMatch(/where the cast could not show the step/);
   });
 
   it('still fails a slow component frozen on frames the control moved on: the change that ends the run catches up more than one step', () => {
@@ -456,17 +456,105 @@ describe('a hold that starts before the block', () => {
     });
   };
   const control = asControl(moving());
+  // The position the page set last, at the release: where the sheet holds.
+  const released = sheet()
+    .filter(f => f.t < holdFrom)
+    .at(-1)!.box!.y;
 
-  it('is judged from its first presented change inside the block', () => {
-    const proof = busyWindowProof(sheet(), BLOCK, {axis: 'y', control});
+  it('is judged from its first presented change inside the block when it holds the position the page set', () => {
+    const proof = busyWindowProof(sheet(), BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: released,
+    });
     expect(proof.verdict.failures, proof.summary).toEqual([]);
     expect(proof.onScreenFromMs).toBeGreaterThanOrEqual(100);
+  });
+
+  it('is not excused without the position the page set', () => {
+    const proof = busyWindowProof(sheet(), BLOCK, {axis: 'y', control});
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it('is not excused when it holds a position the page did not set', () => {
+    const proof = busyWindowProof(sheet(), BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: released + 6,
+    });
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it('is excused on a 2 px cast that reads the held position up to a step off', () => {
+    // WebKit's cast reads positions on a 2 px grid: a hold at a half pixel
+    // reads up to 1.5 px off.
+    const grid = sheet().map(f => ({...f, step: {x: 2, y: 2}}));
+    const proof = busyWindowProof(grid, BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: released + 1.5,
+    });
+    expect(proof.verdict.failures, proof.summary).toEqual([]);
+    expect(proof.onScreenFromMs).toBeGreaterThanOrEqual(100);
+  });
+
+  it('matches the held position within a pixel on a cast that carries no step', () => {
+    const proof = busyWindowProof(sheet(), BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: released + 1.5,
+    });
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it('is not excused when the position it holds shows on one frame only', () => {
+    // Moving up to the last frame before the block, then not found on any
+    // frame until 150 ms in, then moving on. The position the page set
+    // shows on one frame only, which is no hold. So the window is judged
+    // from the judged part's start.
+    let y = 0;
+    const frames = moving().map(f => {
+      y += 3;
+      return (
+        f.t >= BLOCK.from && f.t < BLOCK.from + 150
+          ? {...f, box: null}
+          : {...f, box: {...f.box!, y}}
+      ) as TrackedFrame;
+    });
+    const last = frames.filter(f => f.t < BLOCK.from).at(-1)!.box!.y;
+    const proof = busyWindowProof(frames, BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: last,
+    });
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it('fails an animation that was moving, freezes from just before the block for 50 ms, then moves on', () => {
+    // Moving every frame up to the block, frozen from the frame before it
+    // until 50 ms in, then moving on every frame. This is a compositor
+    // animation stalled at the block's start, at none of the page's positions.
+    let y = 0;
+    const frames = moving().map(f => {
+      if (f.t < BLOCK.from - 5 || f.t >= BLOCK.from + 50) {
+        y += 3;
+      }
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+    const proof = busyWindowProof(frames, BLOCK, {axis: 'y', control});
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
   });
 
   it('still fails when the element changes once inside the block and then freezes', () => {
     const proof = busyWindowProof(sheet({freezeAfterFirst: true}), BLOCK, {
       axis: 'y',
       control,
+      setBeforeBlock: released,
     });
     expect(proof.verdict.pass, proof.summary).toBe(false);
   });
@@ -479,7 +567,35 @@ describe('a hold that starts before the block', () => {
       }
       return {...f, box: {...f.box!, y}} as TrackedFrame;
     });
-    const proof = busyWindowProof(frames, BLOCK, {axis: 'y', control});
+    // Even at the last position before the judged part, as if the page had
+    // set it.
+    const proof = busyWindowProof(frames, BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: frames.filter(f => f.t < BLOCK.from + 20).at(-1)!.box!.y,
+    });
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+    expect(proof.onScreenFromMs).toBeNull();
+  });
+
+  it('is not excused when its first held frame is the one at the block start', () => {
+    // Moving up to the frame presented as the block starts, then held on it
+    // and the frames after until 250 ms in. The hold has two frames before
+    // the judged part, at the position the page set, but starts inside the
+    // block.
+    let y = 0;
+    const frames = moving().map(f => {
+      if (f.t <= BLOCK.from || f.t >= BLOCK.from + 250) {
+        y += 3;
+      }
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+    const held = frames.find(f => f.t >= BLOCK.from)!.box!.y;
+    const proof = busyWindowProof(frames, BLOCK, {
+      axis: 'y',
+      control,
+      setBeforeBlock: held,
+    });
     expect(proof.verdict.pass, proof.summary).toBe(false);
     expect(proof.onScreenFromMs).toBeNull();
   });

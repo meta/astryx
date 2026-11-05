@@ -34,11 +34,14 @@ const COMPONENT_FILE = 'packages/core/src/Calendar/Calendar.tsx';
 const INFRA_FILE = 'packages/core/src/utils/plainDate.ts';
 const DATE_PARSER_INFRA_FILE = 'packages/core/src/utils/dateParser.ts';
 const COLLATOR_INFRA_FILE = 'packages/core/src/i18n/useCollator.ts';
+const LIST_FORMATTER_INFRA_FILE = 'packages/core/src/i18n/useListFormatter.ts';
 const RELATIVE_TIME_INFRA_FILE =
   'packages/core/src/Timestamp/formatRelativeTime.ts';
 const NUMBER_PARSER_INFRA_FILE =
   'packages/core/src/NumberInput/numberParser.ts';
 const TIME_FORMAT_INFRA_FILE = 'packages/core/src/utils/timeFormat.ts';
+const CALENDAR_DATE_PARSER_INFRA_FILE =
+  'packages/core/src/utils/calendarDateParser.ts';
 const NUMBER_PARSER_TEST_ORACLE_FILE =
   'packages/core/src/NumberInput/numberParser.test.ts';
 const NUMBER_PARSER_DOCBLOCK_ORACLE_FILE =
@@ -132,6 +135,10 @@ tester.run('no-raw-intl-locale', rule, {
       filename: COLLATOR_INFRA_FILE,
     },
     {
+      code: `new Intl.ListFormat(locale, {type: 'unit', style: 'short'});`,
+      filename: LIST_FORMATTER_INFRA_FILE,
+    },
+    {
       code: `new Intl.RelativeTimeFormat(locale, {style: 'narrow'});`,
       filename: RELATIVE_TIME_INFRA_FILE,
     },
@@ -142,6 +149,18 @@ tester.run('no-raw-intl-locale', rule, {
     {
       code: `new Intl.DateTimeFormat(locale, {hour: 'numeric'}).resolvedOptions();`,
       filename: TIME_FORMAT_INFRA_FILE,
+    },
+    {
+      code: `new Intl.DateTimeFormat(locale, {calendar, timeZone: 'UTC'}).formatToParts(ms);`,
+      filename: CALENDAR_DATE_PARSER_INFRA_FILE,
+    },
+    {
+      code: `new Intl.DisplayNames(locale, {type: 'calendar'}).of(calendar);`,
+      filename: CALENDAR_DATE_PARSER_INFRA_FILE,
+    },
+    {
+      code: `text.toLocaleLowerCase(locale);`,
+      filename: CALENDAR_DATE_PARSER_INFRA_FILE,
     },
     // -- Named test-oracle files retain meaningful explicit-locale fixtures. --
     {
@@ -279,6 +298,22 @@ tester.run('no-raw-intl-locale', rule, {
       code: `new Intl.DateTimeFormat(undefined, {hour: 'numeric'});`,
       filename: TIME_FORMAT_INFRA_FILE,
       errors: [ambientIntlInImplementation],
+    },
+    {
+      code: `new Intl.DateTimeFormat(undefined, {calendar: 'persian'});`,
+      filename: CALENDAR_DATE_PARSER_INFRA_FILE,
+      errors: [ambientIntlInImplementation],
+    },
+    {
+      code: `text.toLocaleLowerCase();`,
+      filename: CALENDAR_DATE_PARSER_INFRA_FILE,
+      errors: [ambientIntlInImplementation],
+    },
+    {
+      // The helper is approved only at its own path.
+      code: `new Intl.DateTimeFormat(locale, {calendar}).formatToParts(ms);`,
+      filename: 'packages/core/src/DateInput/calendarDateParser.ts',
+      errors: [rawIntlLocale],
     },
     {
       code: `new Intl.RelativeTimeFormat();`,
@@ -479,6 +514,11 @@ tester.run('no-raw-intl-locale', rule, {
     {
       code: `new Intl.Collator(navigator.language, options);`,
       filename: COLLATOR_INFRA_FILE,
+      errors: [navigatorLocale],
+    },
+    {
+      code: `new Intl.ListFormat(navigator.language);`,
+      filename: LIST_FORMATTER_INFRA_FILE,
       errors: [navigatorLocale],
     },
 

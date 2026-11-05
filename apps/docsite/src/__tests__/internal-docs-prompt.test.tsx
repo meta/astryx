@@ -42,14 +42,16 @@ declare const jsdom: {reconfigure(options: {url: string}): void};
 
 let Prompt: typeof InternalDocsPrompt;
 let href: typeof internalDocsHref;
-const internalOrigin = 'https://astryx.internalmeta.com';
-const probeOrigin = 'https://codebunny.internalmeta.com';
+const internalOrigin = 'https://docs.example.test';
+const probeOrigin = 'https://probe.example.test';
 const message = {type: 'codebunny:access-check:v1', reachable: true};
 
 beforeEach(async () => {
   vi.resetModules();
   vi.useFakeTimers();
   vi.stubEnv('NEXT_PUBLIC_DOCS_TARGET', 'latest');
+  vi.stubEnv('NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN', internalOrigin);
+  vi.stubEnv('NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN', probeOrigin);
   jsdom.reconfigure({
     url: 'https://astryx.atmeta.com/components/Button?tab=props',
   });
@@ -125,6 +127,62 @@ describe('InternalDocsPrompt', () => {
       /<InternalDocsReachabilityProvider>\s*\{children\}\s*<\/InternalDocsReachabilityProvider>/,
     );
     expect(layout).not.toContain('<InternalDocsPrompt');
+  });
+
+  it.each([
+    ['neither origin', undefined, undefined],
+    ['only the docs origin', internalOrigin, undefined],
+    ['only the probe origin', undefined, probeOrigin],
+    ['an empty docs origin', '', probeOrigin],
+    ['a malformed probe origin', internalOrigin, 'not a url'],
+    ['a non-https probe origin', internalOrigin, 'http://probe.example.test'],
+  ])(
+    'never probes or renders with %s configured',
+    async (_, docsOrigin, accessCheckOrigin) => {
+      vi.stubEnv('NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN', docsOrigin);
+      vi.stubEnv('NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN', accessCheckOrigin);
+      await loadPrompt();
+      const append = vi.spyOn(document.body, 'append');
+      await mount();
+      await act(async () => vi.advanceTimersByTime(5000));
+      expect(append).not.toHaveBeenCalled();
+      expect(document.querySelector('iframe')).toBeNull();
+      expect(prompt()).toBeNull();
+      if (!docsOrigin) {
+        expect(href('/docs', 'a=1')).toBeUndefined();
+      }
+    },
+  );
+
+  it('keeps only the public Canary notice when the origins are not configured', async () => {
+    vi.stubEnv('NEXT_PUBLIC_DOCS_TARGET', 'canary');
+    vi.stubEnv('NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN', undefined);
+    vi.stubEnv('NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN', undefined);
+    await loadPrompt();
+    await mount();
+    await act(async () => vi.advanceTimersByTime(5000));
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(prompt()?.textContent).toContain("You're viewing Canary docs");
+    expect(prompt()?.outerHTML).not.toMatch(
+      /Meta internal|Meta-specific components/,
+    );
+  });
+
+  it('uses the exact configured origins, without a trailing path', async () => {
+    vi.stubEnv('NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN', `${internalOrigin}/`);
+    vi.stubEnv('NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN', ` ${probeOrigin}/x `);
+    await loadPrompt();
+    await mount();
+    const target = frame();
+    expect(target.src).toBe(
+      `${probeOrigin}/embed/access-check?parent_origin=https%3A%2F%2Fastryx.atmeta.com`,
+    );
+    showPrompt();
+    expect(
+      screen
+        .getByRole('link', {name: 'Meta internal docs'})
+        .getAttribute('href'),
+    ).toBe(`${internalOrigin}/components/Button?tab=props`);
   });
 
   it('does not start another probe inside an embedded document', async () => {
@@ -227,9 +285,9 @@ describe('InternalDocsPrompt', () => {
 
   it.each([
     'https://evil.example',
-    'https://codebunny.internalmeta.com.evil.example',
-    'http://codebunny.internalmeta.com',
-    'https://astryx.internalmeta.com',
+    'https://probe.example.test.evil.example',
+    'http://probe.example.test',
+    'https://docs.example.test',
     'null',
   ])('ignores messages from the wrong origin: %s', async origin => {
     await mount();

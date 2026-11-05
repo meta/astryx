@@ -36,7 +36,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  dependency-check:
+  # test-deps: its scope is the dependency files the trigger lists, so a pull
+  # request that starts it always changed one; a merge-group entry always runs
+  # it. Nothing inside reclassifies.
+  test-deps:
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
     runs-on: ubuntu-latest
     permissions:
@@ -47,38 +50,5 @@ jobs:
         with:
           fetch-depth: 50
 
-      - name: Classify changed files
-        if: github.event_name == 'pull_request'
-        id: scope
-        run: |
-          git fetch origin ${{ github.base_ref }} --depth=50
-          MERGE_BASE=$(git merge-base HEAD origin/${{ github.base_ref }} 2>/dev/null || echo "")
-          if [ -z "$MERGE_BASE" ]; then
-            printf 'docsite_only=false\nspec_only=false\ntooling_only=false\n' >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          CLASSIFIER_ROOT="$RUNNER_TEMP/change-scope"
-          CLASSIFIER_DIR="$CLASSIFIER_ROOT/.github/scripts"
-          REGISTRY_DIR="$CLASSIFIER_ROOT/scripts"
-          mkdir -p "$CLASSIFIER_DIR" "$REGISTRY_DIR"
-          CLASSIFIER="$CLASSIFIER_DIR/change-scope.cjs"
-          MATCHER="$CLASSIFIER_DIR/knowledge-paths.cjs"
-          REGISTRY="$REGISTRY_DIR/component-packages.cjs"
-          if git show "origin/${{ github.base_ref }}:.github/scripts/change-scope.cjs" > "$CLASSIFIER" 2>/dev/null \
-            && git show "origin/${{ github.base_ref }}:.github/scripts/knowledge-paths.cjs" > "$MATCHER" 2>/dev/null \
-            && git show "origin/${{ github.base_ref }}:scripts/component-packages.cjs" > "$REGISTRY" 2>/dev/null; then
-            git diff --name-status "$MERGE_BASE"...HEAD \
-              | node "$CLASSIFIER" --github-output
-          else
-            # Missing trusted policy cannot grant a specialized lane.
-            printf 'docsite_only=false\nspec_only=false\ntooling_only=false\n' \
-              >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Skip dependency checks for spec-only changes
-        if: steps.scope.outputs.spec_only == 'true'
-        run: echo "Spec-only PR — package dependencies cannot change"
-
       - uses: meta/lexical/.github/actions/internal-registry/dependency-check@internal-registry-dependency-check-v1
-        if: steps.scope.outputs.spec_only != 'true'
         continue-on-error: true

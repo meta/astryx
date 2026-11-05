@@ -8,7 +8,7 @@
  *   EmptyState, AlertDialog, Icon, Spinner, Text, useBusyAnnouncement, and
  *   the i18n translator
  * @output Exports TokenizerBottomSheet — the touch surface of
- *   `Tokenizer experimental.presentation="bottom-sheet"`: one tall modal sheet
+ *   `Tokenizer presentation="bottom-sheet"`: one tall modal sheet
  *   with a search row on top, stable-order checkbox rows, progressive
  *   long-list rendering, an optional create row, and a confirmed Clear all
  * @position Internal presentation surface of Tokenizer. Loaded on demand by
@@ -23,7 +23,7 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Tokenizer/Tokenizer.tsx (the trigger and the lazy host)
- * - /packages/core/src/Tokenizer/Tokenizer.spec.md (FR16–FR24, AR6, PR6)
+ * - /docs/specs/components/Tokenizer/Tokenizer.spec.md (FR16–FR24, AR6, PR6)
  */
 
 import {
@@ -35,8 +35,8 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
-import {AlertDialog} from '../AlertDialog/AlertDialog';
 import {BottomSheet} from '../BottomSheet/BottomSheet';
 import {Button} from '../Button/Button';
 import {EmptyState} from '../EmptyState/EmptyState';
@@ -49,10 +49,28 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {Text} from '../Text/Text';
-import {useTranslator} from '../i18n/useTranslator';
+import {SheetConfirmation} from '../internal/SheetConfirmation';
+import {
+  hasSameSelection,
+  nameSheetDraftChange,
+  type SheetDraftChange,
+} from '../internal/sheetDraft';
+import {useDismissSearchOnTouchDrag} from '../internal/useDismissSearchOnTouchDrag';
 import {warnOnce} from '../utils/devWarning';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
-import {colorVars, radiusVars, spacingVars} from '../theme/tokens.stylex';
+import {
+  colorVars,
+  radiusVars,
+  sizeVars,
+  spacingVars,
+} from '../theme/tokens.stylex';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Tokenizer/TokenizerBottomSheet.generated';
+
+registerEnglishFallback(english);
 
 /**
  * Sentinel prefix for the create row's synthetic item. Kept identical to the
@@ -81,12 +99,12 @@ const styles = stylex.create({
   searchRow: {
     paddingBlockEnd: spacingVars['--spacing-2'],
   },
-  // PanelSearchInput sizes its field to the 32px option rows of a dropdown
-  // panel. The sheet's rows are 44px thumb targets, so the field grows to
-  // match them and the query reads as the first row of the list.
+  // A dropdown panel is already a bordered box, so its search field has no
+  // border. The sheet is not, so its field takes the shared input box at the
+  // `lg` height.
   searchField: {
-    minHeight: 44,
-    paddingBlock: spacingVars['--spacing-2'],
+    minHeight: sizeVars['--size-element-lg'],
+    paddingBlock: spacingVars['--spacing-1'],
   },
   list: {
     display: 'flex',
@@ -185,7 +203,10 @@ const styles = stylex.create({
 export interface TokenizerBottomSheetProps<T extends SearchableItem> {
   /** Whether the sheet is open. */
   isOpen: boolean;
-  /** Called with `false` when the sheet dismisses or Done is pressed. */
+  /**
+   * Called with `false` when the sheet closes: Save, a clean dismissal, or a
+   * confirmed discard.
+   */
   onOpenChange: (isOpen: boolean) => void;
   /** The trigger, which takes focus back after the sheet closes. */
   finalFocusRef: RefObject<HTMLElement | null>;
@@ -201,10 +222,10 @@ export interface TokenizerBottomSheetProps<T extends SearchableItem> {
   /** The field label; names the sheet, the search field, and the list. */
   label: string;
   searchSource: SearchSource<T>;
-  /** The committed selection. */
+  /** The committed selection; the draft the sheet edits starts from it. */
   value: T[];
-  /** Whether `maxEntries` is reached. */
-  isAtMax: boolean;
+  /** The selection limit, enforced on the draft. */
+  maxEntries: number | undefined;
   hasCreate: boolean;
   maxMenuItems: number;
   minQueryLength: number;
@@ -212,38 +233,35 @@ export interface TokenizerBottomSheetProps<T extends SearchableItem> {
   /** The no-results message; a string becomes the empty state's title. */
   emptySearchText: ReactNode;
   /**
-   * Tokenizer's add path — duplicate checks and the create sentinel — asked
-   * to stay silent: the sheet announces the change itself, from inside its
-   * dialog, where `useAnnounce` routes it (`spec:AST-086` FR14). Returns
-   * whether the item was added.
+   * Save's one report: the whole draft and the last edit that still holds.
+   * The sheet announces each edit itself when it happens, from inside its
+   * dialog, where `useAnnounce` routes it; nothing is announced on Save.
    */
-  onAdd: (item: T, options: {silent: true}) => boolean;
-  /** Tokenizer's remove path, silent for the same reason. */
-  onRemove: (item: T, options: {silent: true}) => boolean;
-  /** Tokenizer's clear-all path. */
-  onClearAll: () => void;
+  onCommit: (items: T[], change: SheetDraftChange<T>) => void;
   onChangeQuery?: (query: string) => void;
 }
 
 /**
  * The touch surface of Tokenizer's `bottom-sheet` presentation.
  *
- * Rows keep their position while the sheet is open: the items selected when it
- * opened lead, in `value` order, then selected items the results do not carry,
- * then the results. Toggling a row changes its checkbox and nothing else; the
- * next open takes a fresh snapshot and regroups selected-first.
- */
-/**
- * The sheet: BottomSheet around the content. Split in two so the content —
+ * One open sheet edits one draft that starts as `value`; rows, the create row
+ * and Clear all change the draft, and Save reports it once. Rows keep their
+ * position while the sheet is open: the items selected when it opened lead,
+ * in `value` order, then draft-selected items the results do not carry, then
+ * the results; the next open takes a fresh snapshot and regroups
+ * selected-first.
+ *
+ * The sheet is BottomSheet around the content, split in two so the content —
  * search, rows, footer, and every announcement about them — is rendered
  * inside the sheet's dialog, where `useAnnounce` routes into it while it is
- * open (`spec:AST-086` FR14): a component that renders a modal and announces
- * about its content is inside that modal only when the announcing code is.
+ * open: a component that renders a modal and announces about its content is
+ * inside that modal only when the announcing code is.
  *
  * The outer part also tells the content how a close came about: a close the
- * person made (Done, swipe, scrim, Escape) clears the query so the next open
+ * person made (Save, swipe, scrim, Escape) clears the query so the next open
  * lists the bootstrap set, while a close the field forced (becoming disabled
- * while open) keeps it (`component:Tokenizer` FR18).
+ * while open) keeps it. A swipe, scrim or Escape close of a changed draft is
+ * routed to the content first, which asks before discarding.
  */
 export function TokenizerBottomSheet<T extends SearchableItem>({
   isOpen,
@@ -256,7 +274,9 @@ export function TokenizerBottomSheet<T extends SearchableItem>({
   // this handle, from the closing event, so a close the field forces by
   // becoming disabled (which never comes through here) keeps it.
   const clearQueryRef = useRef<(() => void) | null>(null);
-  const requestClose = () => {
+  // Set by the content: a dismissal asks first while the draft is changed.
+  const requestDismissRef = useRef<(() => void) | null>(null);
+  const closeSheet = () => {
     clearQueryRef.current?.();
     onOpenChange(false);
   };
@@ -266,8 +286,10 @@ export function TokenizerBottomSheet<T extends SearchableItem>({
       onOpenChange={next => {
         if (next) {
           onOpenChange(true);
+        } else if (requestDismissRef.current != null) {
+          requestDismissRef.current();
         } else {
-          requestClose();
+          closeSheet();
         }
       }}
       finalFocusRef={finalFocusRef}
@@ -279,7 +301,8 @@ export function TokenizerBottomSheet<T extends SearchableItem>({
         isOpen={isOpen}
         label={label}
         clearQueryRef={clearQueryRef}
-        onRequestClose={requestClose}
+        requestDismissRef={requestDismissRef}
+        onCloseSheet={closeSheet}
       />
     </BottomSheet>
   );
@@ -293,30 +316,31 @@ type TokenizerSheetContentProps<T extends SearchableItem> = Omit<
 > & {
   /** Set by the content: clears and reports its query; called on a user close. */
   clearQueryRef: RefObject<(() => void) | null>;
-  /** Close the sheet as the person's own act (Done). */
-  onRequestClose: () => void;
+  /** Set by the content: a swipe, scrim or Escape close, which asks first while the draft is changed. */
+  requestDismissRef: RefObject<(() => void) | null>;
+  /** Close the sheet as the person's own act. */
+  onCloseSheet: () => void;
 };
 
 function TokenizerSheetContent<T extends SearchableItem>({
   isOpen,
   initialQuery,
   clearQueryRef,
-  onRequestClose,
+  requestDismissRef,
+  onCloseSheet,
   label,
   searchSource,
   value,
-  isAtMax,
+  maxEntries,
   hasCreate,
   maxMenuItems,
   minQueryLength,
   debounceMs,
   emptySearchText,
-  onAdd,
-  onRemove,
-  onClearAll,
+  onCommit,
   onChangeQuery,
 }: TokenizerSheetContentProps<T>) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   // Whether a checkbox row holds focus, kept by the list's own focus events,
@@ -328,11 +352,12 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // trigger's press — so an open sheet with no confirmation pending carries
   // no closed dialog (`architecture:component-style-authoring` INV7). Dialog
   // has an entrance animation and no exit, so a close is its unmount; the
-  // sheet then places focus itself, in the Effect below, once the modal is
-  // gone and the sheet's content can take focus again: on the search field
-  // after a confirmed clear — the clear is spent, and the search field is
-  // where the next selection starts (FR24, `spec:AST-085` FR4) — and back on
-  // Clear all after a cancel. A confirmed clear is announced there too — a
+  // close handler commits that unmount at once and then places focus itself,
+  // now that the modal is gone and the sheet's content can take focus again
+  // (`architecture:react-component-runtime` INV2). After a clear, Clear all
+  // is aria-disabled but stays focusable, so it keeps focus (FR24,
+  // `spec:AST-085` FR4). Focus on the search field opens the on-screen
+  // keyboard over the cleared rows. A confirmed clear is announced too — a
   // change the person hears about, as an add or a remove is
   // (`component:Tokenizer` AR6) — after the confirmation's dialog has gone,
   // so the sheet is the modal on top and the words are delivered inside it
@@ -340,27 +365,40 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // sheet makes goes through `useAnnounce`, called inside the sheet's
   // dialog, so FR14 routes the words into it while the sheet is open.
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
+  const [isDiscardConfirmationOpen, setIsDiscardConfirmationOpen] =
+    useState(false);
   const clearAllRef = useRef<HTMLButtonElement>(null);
-  const afterConfirmationRef = useRef<'search' | 'clear-all' | null>(null);
   const announce = useAnnounce();
   const closeClearConfirmation = (confirmed: boolean) => {
-    afterConfirmationRef.current = confirmed ? 'search' : 'clear-all';
-    setIsClearConfirmationOpen(false);
-  };
-  useEffect(() => {
-    if (isClearConfirmationOpen || afterConfirmationRef.current == null) {
-      return;
-    }
-    const destination = afterConfirmationRef.current;
-    afterConfirmationRef.current = null;
-    if (destination === 'search') {
-      searchRef.current?.focus();
+    // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the confirmation must be gone before focus moves into the sheet and the words are routed into it
+    flushSync(() => setIsClearConfirmationOpen(false));
+    clearAllRef.current?.focus();
+    if (confirmed) {
       announce(t('@astryx.tokenizer.allRemoved'));
-    } else {
-      clearAllRef.current?.focus();
     }
-  }, [announce, isClearConfirmationOpen, t]);
-  const selectedIds = useMemo(() => new Set(value.map(v => v.id)), [value]);
+  };
+  // Keep editing: the confirmation is gone, and focus returns to the search
+  // field, where the sheet's own reading order starts.
+  const closeDiscardConfirmation = () => {
+    // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the confirmation must be gone before focus moves back into the sheet
+    flushSync(() => setIsDiscardConfirmationOpen(false));
+    searchRef.current?.focus({preventScroll: true});
+  };
+
+  // ---- draft ----
+  // One open sheet edits one draft. The caller's `value` is unchanged until
+  // Save, so a dismissal can discard cleanly; `lastDraftChangeRef` is the
+  // edit Save names when it still holds.
+  const [valueAtOpen, setValueAtOpen] = useState<T[]>(() => [...value]);
+  const [draftValue, setDraftValue] = useState<T[]>(() => [...value]);
+  const lastDraftChangeRef = useRef<SheetDraftChange<T> | null>(null);
+  const isDraftDirty = !hasSameSelection(valueAtOpen, draftValue);
+  const selectedIds = useMemo(
+    () => new Set(draftValue.map(v => v.id)),
+    [draftValue],
+  );
+  const isAtMax = maxEntries != null && draftValue.length >= maxEntries;
+  const isDraftOverMax = maxEntries != null && draftValue.length > maxEntries;
 
   // ---- sheet session ----
   // Starts from the field's copy, which `onChangeQuery` keeps current, so the
@@ -421,7 +459,12 @@ function TokenizerSheetContent<T extends SearchableItem>({
     setWasOpen(isOpen);
     if (isOpen) {
       setSelectedItemsAtOpen(value);
+      setValueAtOpen([...value]);
+      setDraftValue([...value]);
+      lastDraftChangeRef.current = null;
       setRenderedItemCount(LIST_RENDER_BATCH_SIZE);
+      setIsClearConfirmationOpen(false);
+      setIsDiscardConfirmationOpen(false);
       // An open lists the bootstrap set, or searches a query kept across a
       // close the field forced (FR18), and that load is pending; a kept
       // query below the threshold leaves nothing pending, since no search
@@ -533,7 +576,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
       selectedAtOpenMatches.map(item => item.id),
     );
     const resultIds = new Set(results.map(item => item.id));
-    const selectedItemsMissingFromResults = value.filter(
+    const selectedItemsMissingFromResults = draftValue.filter(
       item =>
         !selectedAtOpenIds.has(item.id) &&
         !resultIds.has(item.id) &&
@@ -547,7 +590,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
       ...selectedItemsMissingFromResults,
       ...results.filter(item => !selectedAtOpenIds.has(item.id)),
     ];
-  }, [query, results, selectedItemsAtOpen, value]);
+  }, [query, results, selectedItemsAtOpen, draftValue]);
 
   const renderedItems = visibleItems.slice(0, renderedItemCount);
 
@@ -569,16 +612,14 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // `action` is declared on `SearchableItem` for the grid-adopting hosts; the
   // sheet rows have not adopted it, so a row renders the item without the
   // control and says so (`spec:AST-058` FR9), as the inline panel does.
-  useEffect(() => {
-    if (results.some(item => item.action != null)) {
-      warnOnce(
-        'tokenizer-sheet:item-action',
-        'Tokenizer',
-        'A result carries `action`, which the bottom-sheet rows do not render ' +
-          'yet; the item is shown without it.',
-      );
-    }
-  }, [results]);
+  if (results.some(item => item.action != null)) {
+    warnOnce(
+      'tokenizer-sheet:item-action',
+      'Tokenizer',
+      'A result carries `action`, which the bottom-sheet rows do not render ' +
+        'yet; the item is shown without it.',
+    );
+  }
 
   // The pending Spinner below stays named, as the inline field's does
   // (`family:input-fields` FR7), but is not a live region; the sheet announces
@@ -601,7 +642,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
     const lowered = trimmedQuery.toLowerCase();
     if (
       selectedIds.has(trimmedQuery) ||
-      value.some(item => item.label.toLowerCase() === lowered) ||
+      draftValue.some(item => item.label.toLowerCase() === lowered) ||
       results.some(item => item.label.toLowerCase() === lowered)
     ) {
       return null;
@@ -616,7 +657,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
     isAtMax,
     isPending,
     selectedIds,
-    value,
+    draftValue,
     results,
     t,
   ]);
@@ -641,6 +682,43 @@ function TokenizerSheetContent<T extends SearchableItem>({
     setQuery(next);
     onChangeQuery?.(next);
   };
+
+  // A swipe, scrim or Escape close: asks first while the draft is changed.
+  useImperativeHandle(
+    requestDismissRef,
+    () => () => {
+      if (isDraftDirty) {
+        setIsDiscardConfirmationOpen(true);
+      } else {
+        onCloseSheet();
+      }
+    },
+    [isDraftDirty, onCloseSheet],
+  );
+
+  const handleSave = () => {
+    if (isDraftOverMax) {
+      return;
+    }
+    const change = isDraftDirty
+      ? nameSheetDraftChange(
+          valueAtOpen,
+          draftValue,
+          lastDraftChangeRef.current,
+        )
+      : null;
+    if (change != null) {
+      onCommit([...draftValue], change);
+    }
+    onCloseSheet();
+  };
+
+  // Focus moves to the sheet's panel, not the page body behind the modal.
+  // The keyboard then leaves and the query stays.
+  const listDragProps = useDismissSearchOnTouchDrag(
+    () => [searchRef.current],
+    () => listRef.current?.closest<HTMLElement>('[tabindex="-1"]'),
+  );
 
   const searchLabel = t('@astryx.tokenizer.search', {label});
   // An empty state only once the search has settled; while pending the busy
@@ -725,6 +803,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
           placeholder={t('@astryx.tokenizer.searchPlaceholder')}
           value={query}
           onValueChange={handleQueryChange}
+          hasInputBox
           fieldXstyle={styles.searchField}
         />
       </div>
@@ -736,6 +815,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
         aria-busy={isPending || undefined}
         data-rendered-count={renderedItems.length}
         data-total-count={visibleItems.length}
+        {...listDragProps}
         onFocusCapture={event => {
           isRowFocusedRef.current =
             event.target instanceof HTMLElement &&
@@ -775,13 +855,18 @@ function TokenizerSheetContent<T extends SearchableItem>({
               variant="secondary"
               size="lg"
               onClick={() => {
-                if (onAdd(createItem, {silent: true})) {
-                  // The created value, as the inline field announces it; the
-                  // item's label is the row's caption ("Create …").
-                  announce(
-                    t('@astryx.tokenizer.tokenAdded', {label: trimmedQuery}),
-                  );
-                }
+                const base = {id: trimmedQuery, label: trimmedQuery};
+                const createdItem = base as T;
+                setDraftValue(current => [...current, createdItem]);
+                lastDraftChangeRef.current = {
+                  item: createdItem,
+                  type: 'create',
+                };
+                // The created value, as the inline field announces it; the
+                // item's label is the row's caption ("Create …").
+                announce(
+                  t('@astryx.tokenizer.tokenAdded', {label: trimmedQuery}),
+                );
                 // The same path a typed change takes, so the bootstrap
                 // reload shows its pending state and reports the change.
                 handleQueryChange('');
@@ -863,14 +948,18 @@ function TokenizerSheetContent<T extends SearchableItem>({
                         return;
                       }
                       if (isSelected) {
-                        if (onRemove(item, {silent: true})) {
-                          announce(
-                            t('@astryx.tokenizer.tokenRemoved', {
-                              label: item.label,
-                            }),
-                          );
-                        }
-                      } else if (onAdd(item, {silent: true})) {
+                        setDraftValue(current =>
+                          current.filter(selected => selected.id !== item.id),
+                        );
+                        lastDraftChangeRef.current = {item, type: 'remove'};
+                        announce(
+                          t('@astryx.tokenizer.tokenRemoved', {
+                            label: item.label,
+                          }),
+                        );
+                      } else {
+                        setDraftValue(current => [...current, item]);
+                        lastDraftChangeRef.current = {item, type: 'add'};
                         announce(
                           t('@astryx.tokenizer.tokenAdded', {
                             label: item.label,
@@ -903,38 +992,42 @@ function TokenizerSheetContent<T extends SearchableItem>({
           </div>
         )}
       </div>
-      {isQueryEmpty && (
-        <div {...stylex.props(styles.footer)}>
-          <Button
-            label={t('@astryx.tokenizer.clearAll')}
-            variant="secondary"
-            size="lg"
-            isDisabled={value.length === 0}
-            // With a tooltip, Button's disabled mode is `aria-disabled`: the
-            // action keeps its focus order and says why it does nothing
-            // (`spec:AST-085` FR1), instead of leaving the tab order as a
-            // natively disabled button does — a confirmed Clear all returns
-            // focus here before the search field takes it (FR24).
-            tooltip={
-              value.length === 0
-                ? t('@astryx.tokenizer.nothingToClear')
-                : undefined
-            }
-            ref={clearAllRef}
-            onClick={() => setIsClearConfirmationOpen(true)}
-            xstyle={styles.footerAction}
-          />
-          <Button
-            label={t('@astryx.tokenizer.done')}
-            variant="primary"
-            size="lg"
-            onClick={onRequestClose}
-            xstyle={styles.footerAction}
-          />
-        </div>
-      )}
+      <div {...stylex.props(styles.footer)}>
+        <Button
+          label={t('@astryx.tokenizer.clearAll')}
+          variant="secondary"
+          size="lg"
+          isDisabled={draftValue.length === 0}
+          // With a tooltip, Button uses aria-disabled, so Clear all stays
+          // focusable after a clear and says why it does nothing
+          // (`spec:AST-085` FR1; FR24).
+          tooltip={
+            draftValue.length === 0
+              ? t('@astryx.tokenizer.nothingToClear')
+              : undefined
+          }
+          ref={clearAllRef}
+          onClick={() => setIsClearConfirmationOpen(true)}
+          xstyle={styles.footerAction}
+        />
+        <Button
+          label={t('@astryx.tokenizer.save')}
+          variant="primary"
+          size="lg"
+          isDisabled={isDraftOverMax}
+          // Over the limit (a `value` already over it at open, or a lowered
+          // limit while open) Save keeps its tab stop and says why it waits.
+          tooltip={
+            isDraftOverMax
+              ? t('@astryx.tokenizer.selectionLimit', {count: maxEntries ?? 0})
+              : undefined
+          }
+          onClick={handleSave}
+          xstyle={styles.footerAction}
+        />
+      </div>
       {isClearConfirmationOpen && (
-        <AlertDialog
+        <SheetConfirmation
           isOpen
           onOpenChange={next => {
             if (!next) {
@@ -943,10 +1036,37 @@ function TokenizerSheetContent<T extends SearchableItem>({
           }}
           title={t('@astryx.tokenizer.clearAllTitle')}
           description={t('@astryx.tokenizer.clearAllDescription', {label})}
+          cancelLabel={t('@astryx.alertDialog.cancel')}
           actionLabel={t('@astryx.tokenizer.clearSelection')}
           onAction={() => {
-            onClearAll();
+            // A clear is a removal of the draft's last item, for Save's
+            // `remove` when it is the last edit that holds.
+            const lastItem = draftValue[draftValue.length - 1];
+            if (lastItem != null) {
+              setDraftValue([]);
+              lastDraftChangeRef.current = {item: lastItem, type: 'remove'};
+            }
             closeClearConfirmation(true);
+          }}
+        />
+      )}
+      {isDiscardConfirmationOpen && (
+        <SheetConfirmation
+          isOpen
+          onOpenChange={next => {
+            if (!next) {
+              closeDiscardConfirmation();
+            }
+          }}
+          title={t('@astryx.tokenizer.discardChangesTitle')}
+          description={t('@astryx.tokenizer.discardChangesDescription', {
+            label,
+          })}
+          cancelLabel={t('@astryx.tokenizer.keepEditing')}
+          actionLabel={t('@astryx.tokenizer.discardChanges')}
+          onAction={() => {
+            setIsDiscardConfirmationOpen(false);
+            onCloseSheet();
           }}
         />
       )}

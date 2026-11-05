@@ -946,6 +946,49 @@ describe('TabMenu keyboard navigation (roving tabindex)', () => {
     expect(analytics).toHaveFocus();
   });
 
+  it('still navigates when the tablist is inside a popover', async () => {
+    const user = userEvent.setup();
+    render(
+      <div popover="manual">
+        <TabList value="home" onChange={() => {}} role="tablist">
+          <Tab value="home" label="Home" panelId="home-panel" />
+          <Tab value="settings" label="Settings" panelId="settings-panel" />
+        </TabList>
+      </div>,
+    );
+
+    screen.getByRole('tab', {name: 'Home', hidden: true}).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(
+      screen.getByRole('tab', {name: 'Settings', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('leaves horizontal arrows to the open menu', async () => {
+    const user = userEvent.setup();
+    render(
+      <TabList value="home" onChange={() => {}}>
+        <Tab value="home" label="Home" />
+        <TabMenu label="More" options={menuOptions} />
+      </TabList>,
+    );
+
+    const trigger = screen.getByRole('button', {name: 'More'});
+    await user.click(trigger);
+    const item = screen.getByRole('menuitemradio', {
+      name: 'Reports',
+      hidden: true,
+    });
+    item.focus();
+
+    fireEvent.keyDown(item, {key: 'ArrowRight'});
+    expect(item).toHaveFocus();
+
+    fireEvent.keyDown(item, {key: 'ArrowLeft'});
+    expect(item).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('moves the roving tab stop with arrow navigation', async () => {
     const user = userEvent.setup();
     render(
@@ -1706,6 +1749,91 @@ describe('pressed state', () => {
     await user.click(tab);
     expect(onClick).not.toHaveBeenCalled();
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('does not run a disabled tab’s caller handlers other than focus and blur', () => {
+    const onKeyDown = vi.fn();
+    const onPointerDown = vi.fn();
+    const onMouseDown = vi.fn();
+    const onFocus = vi.fn();
+    const onBlur = vi.fn();
+    render(
+      <TabList value="home" onChange={() => {}}>
+        <Tab value="home" label="Home" />
+        <Tab
+          value="settings"
+          label="Settings"
+          aria-disabled="true"
+          onKeyDown={onKeyDown}
+          onPointerDown={onPointerDown}
+          onMouseDown={onMouseDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
+        />
+      </TabList>,
+    );
+    const tab = screen.getByRole('button', {name: 'Settings'});
+    fireEvent.pointerDown(tab);
+    fireEvent.mouseDown(tab);
+    fireEvent.keyDown(tab, {key: 'x'});
+    expect(onPointerDown).not.toHaveBeenCalled();
+    expect(onMouseDown).not.toHaveBeenCalled();
+    expect(onKeyDown).not.toHaveBeenCalled();
+    fireEvent.focus(tab);
+    fireEvent.blur(tab);
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    expect(onBlur).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not run a disabled link tab’s caller handlers', () => {
+    const onKeyDown = vi.fn();
+    const onPointerDown = vi.fn();
+    const onMouseDown = vi.fn();
+    const {container} = render(
+      <TabList value="home" onChange={() => {}}>
+        <Tab value="home" label="Home" />
+        <Tab
+          value="settings"
+          label="Settings"
+          href="/settings"
+          aria-disabled="true"
+          onKeyDown={onKeyDown}
+          onPointerDown={onPointerDown}
+          onMouseDown={onMouseDown}
+        />
+      </TabList>,
+    );
+    const tab = container.querySelector('a[aria-disabled="true"]');
+    if (tab == null) {
+      throw new Error('the disabled link tab did not render an anchor');
+    }
+    fireEvent.pointerDown(tab);
+    fireEvent.mouseDown(tab);
+    fireEvent.keyDown(tab, {key: 'x'});
+    expect(onPointerDown).not.toHaveBeenCalled();
+    expect(onMouseDown).not.toHaveBeenCalled();
+    expect(onKeyDown).not.toHaveBeenCalled();
+  });
+
+  it('still runs an enabled tab’s caller handlers', () => {
+    const onKeyDown = vi.fn();
+    const onPointerDown = vi.fn();
+    render(
+      <TabList value="home" onChange={() => {}}>
+        <Tab value="home" label="Home" />
+        <Tab
+          value="settings"
+          label="Settings"
+          onKeyDown={onKeyDown}
+          onPointerDown={onPointerDown}
+        />
+      </TabList>,
+    );
+    const tab = screen.getByRole('button', {name: 'Settings'});
+    fireEvent.pointerDown(tab);
+    fireEvent.keyDown(tab, {key: 'x'});
+    expect(onPointerDown).toHaveBeenCalledTimes(1);
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
   });
 
   it('removes navigation from a disabled link tab', () => {
