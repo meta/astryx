@@ -29,6 +29,7 @@ import {Profiler, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {readFileSync} from 'node:fs';
 import {
+  cleanup,
   act,
   render,
   screen,
@@ -939,6 +940,62 @@ describe('DateTimeInput touch surface', () => {
     expect(actions()).toEqual([true, true, true]);
     await fadeEnd('wheels');
     expect(actions()).toEqual([false, false, false]);
+  });
+
+  it('Done hands focus from the wheels to the calendar in the toggle\u2019s commit', () => {
+    // One Done press with focus on Done or on the title first: its commits,
+    // and where focus ends.
+    const pressDone = (isFocusOnDone: boolean) => {
+      let commits = 0;
+      withMonthLayout(() => {
+        render(
+          <Profiler
+            id="sheet"
+            onRender={() => {
+              commits += 1;
+            }}>
+            <DateTimeInput
+              label="Meeting"
+              value={'2026-03-15T10:00' as ISODateTimeString}
+              onChange={() => {}}
+            />
+          </Profiler>,
+        );
+        openDateSheet();
+      });
+      const surface = (which: 'calendar' | 'wheels') =>
+        document.querySelector<HTMLElement>(`[data-date-surface="${which}"]`)!;
+      const title = document.querySelector<HTMLElement>(
+        'button[aria-label$="Choose month and year"]',
+      )!;
+      fireEvent.click(title);
+      // Done sits in the wheels' footer, so a tap on it leaves focus there.
+      const done = [...surface('wheels').querySelectorAll('button')].find(
+        button => button.textContent?.trim() === 'Done',
+      )!;
+      (isFocusOnDone ? done : title).focus();
+      // A running exit on both surfaces, so neither settles inside the press.
+      for (const which of ['calendar', 'wheels'] as const) {
+        surface(which).getAnimations = () =>
+          [
+            {transitionProperty: 'opacity', playState: 'running'},
+          ] as unknown as Animation[];
+      }
+      commits = 0;
+      fireEvent.click(done);
+      const result = {
+        commits,
+        isInCalendar: surface('calendar').contains(document.activeElement),
+      };
+      cleanup();
+      return result;
+    };
+    const fromDone = pressDone(true);
+    const fromTitle = pressDone(false);
+    expect(fromDone.isInCalendar).toBe(true);
+    expect(fromTitle.isInCalendar).toBe(false);
+    // The hand-off rides the toggle's own commit and costs none of its own.
+    expect(fromDone.commits).toBe(fromTitle.commits);
   });
 
   it('keeps Save date disabled until a valid date exists', () => {

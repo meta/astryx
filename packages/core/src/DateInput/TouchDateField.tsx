@@ -819,7 +819,7 @@ export function TouchDateField({
   const calendarPanelRef = useRef<HTMLDivElement | null>(null);
   const wheelsPanelRef = useRef<HTMLDivElement | null>(null);
   const {isTouch} = useTouchPresentation();
-  const {isCalendarInert, isWheelsInert, isFading} = useFadeInert(
+  const {isCalendarInert, isWheelsInert, isFading, followFocus} = useFadeInert(
     isWheelOpen,
     calendarPanelRef,
     wheelsPanelRef,
@@ -1241,7 +1241,10 @@ export function TouchDateField({
   // A live hidden wheel would hold the compositor to the main thread during
   // the fade. The buttons keep their identity, so React skips them.
   const closeSheet = useCallback(() => setIsSheetOpen(false), []);
-  const closeWheels = useCallback(() => setIsWheelOpen(false), []);
+  const closeWheels = useCallback(() => {
+    followFocus(false);
+    setIsWheelOpen(false);
+  }, [followFocus]);
   const monthArrowButtons = useMemo(
     () => (
       <>
@@ -1358,7 +1361,10 @@ export function TouchDateField({
         <button
           ref={monthYearButtonRef}
           type="button"
-          onClick={() => setIsWheelOpen(open => !open)}
+          onClick={() => {
+            followFocus(!isWheelOpen);
+            setIsWheelOpen(!isWheelOpen);
+          }}
           aria-expanded={isWheelOpen}
           // One string, not a template: the comma and the word order are
           // the translator's to choose, not English's.

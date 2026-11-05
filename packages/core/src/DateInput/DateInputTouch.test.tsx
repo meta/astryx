@@ -30,6 +30,7 @@ import {
 } from 'vitest';
 import {
   act,
+  cleanup,
   render,
   screen,
   fireEvent,
@@ -39,7 +40,7 @@ import {
 import {readFileSync} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {useState} from 'react';
+import {Profiler, useState} from 'react';
 import type {ISODateString} from '../utils';
 import {InputGroup} from '../InputGroup';
 import {InternationalizationProvider} from '../i18n';
@@ -2415,6 +2416,50 @@ describe('DateInput — month/year wheels', () => {
     expect(actions()).toEqual([true, true, true, true]);
     await fadeEnd('wheels');
     expect(actions()).toEqual([false, false, false, true]);
+  });
+
+  it('a title press hands focus from the calendar to the wheels in the toggle\u2019s commit', () => {
+    // One title press with focus on `target`: its commits, and where focus ends.
+    const press = (target: () => HTMLElement) => {
+      let commits = 0;
+      withLayout(() => {
+        render(
+          <Profiler
+            id="sheet"
+            onRender={() => {
+              commits += 1;
+            }}>
+            <Controlled initial="2026-03-21" />
+          </Profiler>,
+        );
+        fireEvent.click(field());
+      });
+      // A running exit on both panels, so neither settles inside the press.
+      for (const which of ['calendar', 'wheels'] as const) {
+        (panel(which) as HTMLElement).getAnimations = () =>
+          [
+            {transitionProperty: 'opacity', playState: 'running'},
+          ] as unknown as Animation[];
+      }
+      target().focus();
+      commits = 0;
+      openWheels();
+      const result = {
+        commits,
+        isInWheels: panel('wheels').contains(document.activeElement),
+      };
+      cleanup();
+      return result;
+    };
+    // An assistive technology can press the title while focus stays on a day.
+    const fromDay = press(() =>
+      panel('calendar').querySelector<HTMLElement>('[data-date]')!,
+    );
+    const fromTitle = press(title);
+    expect(fromDay.isInWheels).toBe(true);
+    expect(fromTitle.isInWheels).toBe(false);
+    // The hand-off rides the toggle's own commit and costs none of its own.
+    expect(fromDay.commits).toBe(fromTitle.commits);
   });
 
   it('the year wheel keeps the month', () => {
