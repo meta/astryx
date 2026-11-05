@@ -149,10 +149,13 @@ describe('useScrollableArea', () => {
   let frames: FrameRequestCallback[];
   // A computed `direction` set by a stylesheet alone: no attribute changes.
   let stylesheetDirection: string | null;
+  // The callbacks handed to ResizeObserver, to report a resize from a test.
+  let resizeObservers: ResizeObserverCallback[];
 
   beforeEach(() => {
     frames = [];
     stylesheetDirection = null;
+    resizeObservers = [];
     vi.stubGlobal(
       'requestAnimationFrame',
       vi.fn((callback: FrameRequestCallback) => {
@@ -163,7 +166,8 @@ describe('useScrollableArea', () => {
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     vi.stubGlobal(
       'ResizeObserver',
-      vi.fn(function () {
+      vi.fn(function (callback: ResizeObserverCallback) {
+        resizeObservers.push(callback);
         return {observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn()};
       }),
     );
@@ -306,6 +310,53 @@ describe('useScrollableArea', () => {
 
     unmount();
     expect(pending.size).toBe(0);
+  });
+
+  it('leaves an ancestor that moves on the compositor alone, and measures on its direction and its size', async () => {
+    mockOwnedComputedStyle();
+    render(<Fixture axis="block" />);
+    const viewport = screen.getByTestId('viewport');
+    const ancestor = viewport.parentElement!;
+    // Let the mount's own style writes reach the observer, and settle.
+    await act(async () => {});
+    flushFrame();
+    await act(async () => {});
+    flushFrame();
+    const framesBefore = frames.length;
+    const styleReads = vi.mocked(window.getComputedStyle).mock.calls.length;
+
+    // A surface dragged under a finger writes its transform, and a custom
+    // property for its scrim, on every input sample.
+    for (const offset of [8, 16, 24]) {
+      await act(async () => {
+        ancestor.style.transform = `translateY(${offset}px)`;
+        ancestor.style.setProperty('--_scrim-opacity', `${1 - offset / 100}`);
+      });
+    }
+    expect(frames.length).toBe(framesBefore);
+    expect(vi.mocked(window.getComputedStyle).mock.calls).toHaveLength(
+      styleReads,
+    );
+
+    // The axis mapping is the ancestor's to change.
+    await act(async () => {
+      ancestor.style.direction = 'rtl';
+    });
+    expect(frames.length).toBe(framesBefore + 1);
+    flushFrame();
+
+    // A size change reaches the hook through its resize observer, whatever
+    // ancestor style caused it.
+    const framesBeforeResize = frames.length;
+    act(() => {
+      for (const callback of resizeObservers) {
+        callback(
+          [{target: viewport} as ResizeObserverEntry],
+          {} as ResizeObserver,
+        );
+      }
+    });
+    expect(frames.length).toBe(framesBeforeResize + 1);
   });
 
   it('keeps the tab stop through a writing-mode change that moves the overflowing axis', async () => {
