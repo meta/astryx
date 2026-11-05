@@ -3767,6 +3767,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-merged-refs-auto-grow-text-area",
+      "path": "examples/use-merged-refs/auto-grow-text-area",
+      "aliases": []
+    },
+    {
       "name": "example-use-outline-from-markdown-docs-article",
       "path": "examples/use-outline-from-markdown/docs-article",
       "aliases": []

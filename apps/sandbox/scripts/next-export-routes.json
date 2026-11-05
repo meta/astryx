@@ -804,6 +804,7 @@
     "/templates/useLinkComponentHookUsage/",
     "/templates/useListFocusHookUsage/",
     "/templates/useLocaleHookUsage/",
+    "/templates/useMergedRefsHookUsage/",
     "/templates/useOutlineFromMarkdownHookUsage/",
     "/templates/useOverflowHookUsage/",
     "/templates/usePressFeedbackHookUsage/",
