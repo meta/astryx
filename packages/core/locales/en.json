@@ -2558,5 +2558,9 @@
   "@astryx.mediaPlayer.announceSpeed": {
     "defaultMessage": "Speed {rate}×",
     "description": "Screen reader announcement after a keyboard shortcut changes how fast a lab media player plays. `rate` is already formatted, e.g. \"1.5\"; × means times normal speed."
+  },
+  "@astryx.navigationStack.back": {
+    "defaultMessage": "Back",
+    "description": "Label of the back button in a lab NavigationStack's bar when the screen it returns to has no title of its own. Returns to the previous screen; keep it short, as on an iOS navigation bar."
   }
 }

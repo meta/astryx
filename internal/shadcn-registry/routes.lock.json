@@ -3757,6 +3757,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-calendar-days-month-grid",
+      "path": "examples/use-calendar-days/month-grid",
+      "aliases": []
+    },
+    {
       "name": "example-use-clickable-container-clickable-project-card",
       "path": "examples/use-clickable-container/clickable-project-card",
       "aliases": []
@@ -3817,6 +3822,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-input-container-search-field-wrapper",
+      "path": "examples/use-input-container/search-field-wrapper",
+      "aliases": []
+    },
+    {
       "name": "example-use-input-status-icon-coupon-code-status",
       "path": "examples/use-input-status-icon/coupon-code-status",
       "aliases": []
@@ -3867,6 +3877,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-overlay-product-quick-view",
+      "path": "examples/use-overlay/product-quick-view",
+      "aliases": []
+    },
+    {
       "name": "example-use-pan-gesture-a-draggable-box",
       "path": "examples/use-pan-gesture/a-draggable-box",
       "aliases": []
@@ -3884,6 +3899,11 @@
     {
       "name": "example-use-press-feedback-pressable-card",
       "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scroll-lock-full-screen-mobile-menu",
+      "path": "examples/use-scroll-lock/full-screen-mobile-menu",
       "aliases": []
     },
     {
@@ -3934,6 +3954,11 @@
     {
       "name": "example-use-table-selection-table-floating-bulk-actions",
       "path": "examples/use-table-selection/table-floating-bulk-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-table-sortable-state-multi-sort-orders",
+      "path": "examples/use-table-sortable-state/multi-sort-orders",
       "aliases": []
     },
     {
@@ -4034,6 +4059,11 @@
     {
       "name": "hook-use-app-shell-mobile",
       "path": "hooks/use-app-shell-mobile",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-calendar-days",
+      "path": "hooks/use-calendar-days",
       "aliases": []
     },
     {
@@ -4202,6 +4232,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-overlay",
+      "path": "hooks/use-overlay",
+      "aliases": []
+    },
+    {
       "name": "hook-use-pan-gesture",
       "path": "hooks/use-pan-gesture",
       "aliases": []
@@ -4299,6 +4334,11 @@
     {
       "name": "hook-use-table-sortable",
       "path": "hooks/use-table-sortable",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-sortable-state",
+      "path": "hooks/use-table-sortable-state",
       "aliases": []
     },
     {
