@@ -376,8 +376,7 @@ than adding a DropdownMenu-owned heading target.
   it, against `spec:AST-094` FR31 and FR32.
 - **Still mouse after a finger (FR22).** Known defect: after a finger, a still
   mouse's first press lands on the entering menu's shield and does nothing,
-  against FR22's touch-only scope (a side effect of the press-ignore rule); the
-  fix lets a press whose own pointerType is mouse pass the shield.
+  against FR22's touch-only scope.
 - **Delegated Trigger Button gaps (FR3).** The Trigger button scales on a press
   under reduced motion and holds a fixed height, as `component:Button` records,
   against `design:reduced-motion` DR1 and `spec:AST-102` FR4.
