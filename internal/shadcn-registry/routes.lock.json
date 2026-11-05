@@ -3732,6 +3732,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-input-container-search-field-wrapper",
+      "path": "examples/use-input-container/search-field-wrapper",
+      "aliases": []
+    },
+    {
       "name": "example-use-input-status-icon-coupon-code-status",
       "path": "examples/use-input-status-icon/coupon-code-status",
       "aliases": []
