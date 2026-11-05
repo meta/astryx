@@ -6,8 +6,8 @@ id: architecture:native-swift-accessibility
 authority: current
 archive_reason: null
 superseded_by: null
-approved_by: cixzhang
-approved_at: 2026-10-23
+approved_by: imdreamrunner
+approved_at: 2026-11-04
 owners: [cixzhang]
 applies_to: [packages/native/]
 verified_by: [.github/scripts/native-swift.sh]
