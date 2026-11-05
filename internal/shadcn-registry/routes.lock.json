@@ -3812,6 +3812,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-scroll-lock-full-screen-mobile-menu",
+      "path": "examples/use-scroll-lock/full-screen-mobile-menu",
+      "aliases": []
+    },
+    {
       "name": "example-use-scroll-overflow-filter-strip-edge-fades",
       "path": "examples/use-scroll-overflow/filter-strip-edge-fades",
       "aliases": []
