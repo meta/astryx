@@ -248,7 +248,7 @@ export const myTheme = defineTheme({
     //   palette.neutral.light[100],
     //   palette.neutral.dark[15],
     // ],
-    '--color-accent': ['#0064E0', '#2694FE'],
+    '--color-accent': ['#0064E0', '#0171E3'],
     // Changing an accent means owning its on-colour: this is the label that
     // sits on top of the fill above, in each mode.
     '--color-on-accent': ['#FFFFFF', '#FFFFFF'],

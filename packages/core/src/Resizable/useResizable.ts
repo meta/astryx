@@ -338,6 +338,21 @@ const collapseControls = new WeakMap<ResizableProps, CollapseControls>();
  */
 const effectiveMaxima = new WeakMap<ResizableProps, number>();
 
+/**
+ * The props behind a component's `resizable` slot. It takes useResizable's
+ * output directly, and still takes that output's `props`.
+ */
+export function resizablePropsOf(
+  value: ResizableRegion | ResizableProps,
+): ResizableProps {
+  return 'props' in value ? value.props : value;
+}
+
+/** Whether a `resizable` value is useResizable's output for one region. */
+export function isResizableRegion(value: unknown): value is ResizableRegion {
+  return typeof value === 'object' && value !== null && 'props' in value;
+}
+
 /** The reported maximum for `props`, or `undefined` for a hand-built object. */
 export function getEffectiveMaxPx(props: ResizableProps): number | undefined {
   return effectiveMaxima.get(props);
@@ -521,7 +536,7 @@ function useResizableController(
       return;
     }
     const passed = optionsRef.current;
-    const resizable = createResizableAs('useResizable', passed);
+    const resizable = createResizableAs('useResizable', null, passed);
     slot.set({resizable, passed});
   }, [slot]);
   useIsomorphicLayoutEffect(() => {
@@ -598,7 +613,7 @@ function useResizableController(
       return entry.resizable;
     }
     const passed = optionsRef.current;
-    const resizable = createResizableAs('useResizable', passed);
+    const resizable = createResizableAs('useResizable', null, passed);
     readResizableInternals(resizable)?.suspend();
     slot.set({resizable, passed});
     return resizable;

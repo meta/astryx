@@ -8,8 +8,8 @@
  *   useAdaptivePresentation, and TokenizerBottomSheet (lazy)
  * @output Exports Tokenizer multi-select typeahead component
  * @position Composed component; forwards DOM ref and exposes focus control via
- *   handleRef. The `presentation` prop swaps the inline combobox for a
- *   trigger that opens TokenizerBottomSheet.
+ *   handleRef. The `presentation` prop swaps the inline combobox for a field
+ *   box whose trigger opens TokenizerBottomSheet.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Tokenizer/index.ts
@@ -48,6 +48,7 @@ import {
 } from '../Field/fieldParts';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {hasInteractiveAncestor} from '../hooks/useClickableContainer';
 import {TokenizerClearAllMessageContext} from './TokenizerClearAllMessageContext';
 import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -303,8 +304,8 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * How the field presents its choices.
    * - `'popover'`: the inline combobox with its anchored suggestion menu, on
    *   every device.
-   * - `'bottom-sheet'`: a trigger showing the selected tokens that opens one
-   *   tall modal sheet: a search row on top, full-width checkbox rows that
+   * - `'bottom-sheet'`: a field showing the selected tokens, whose trigger
+   *   opens one tall modal sheet: a search row on top, full-width checkbox rows that
    *   keep their place while the sheet is open, a create row with
    *   `hasCreate`, and a footer pinned in every state with a confirmed Clear
    *   all and Save. The sheet edits a draft: `onChange` fires once, when Save
@@ -315,12 +316,16 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    *   otherwise the popover — the same resolution Selector uses. The server
    *   render and the hydrating render are the popover.
    *
-   * In the sheet presentation the trigger is the control: `ref`, `id`,
-   * `aria-*`, and `data-*` reach it. `renderItem`, `renderToken`,
-   * `endContent`, `hasClear`, `hasEntriesOnFocus`, `menuWidth`,
-   * `tokenOverflowBehavior`, and `hasAutoFocus` have no surface to act on
-   * and warn once in development. Pass `'popover'` to keep the inline field
-   * and those props on every device.
+   * In the sheet presentation the field's box keeps the inline field's box,
+   * theming target and focus ring, and holds the trigger, the tokens and
+   * `endContent`. The trigger is the control: `ref`, `id`, `aria-*`, and
+   * `data-*` reach it. `endContent` renders at the field's
+   * inline end and `renderToken` renders the field's tokens, as in the inline
+   * field. `renderItem`, `hasClear` (the sheet has its own Clear all),
+   * `hasEntriesOnFocus`, `menuWidth`, `tokenOverflowBehavior` (the field
+   * wraps its tokens), and `hasAutoFocus` have no surface to act on and warn
+   * once in development. Pass `'popover'` to keep the inline field and those
+   * props on every device.
    * @default 'adaptive'
    */
   presentation?: TokenizerPresentation;
@@ -487,20 +492,52 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
     paddingInline: spacingVars['--spacing-1'],
   },
-  // The sheet presentation's trigger: the field's own control box, as a
-  // button. It wraps tokens like the inline field, but there is no input to
-  // type into, so the cursor says "press".
-  sheetTrigger: {
+  // The sheet presentation's field: the inline field's own control box. A
+  // button cannot contain controls, so the trigger, the tokens and the end lane
+  // are siblings in this box. `endContent` and a custom token can then hold their
+  // own controls. There is no input to type into, so the cursor says "press".
+  sheetField: {
     width: '100%',
-    fontFamily: 'inherit',
-    fontSize: 'inherit',
-    color: 'inherit',
-    textAlign: 'start',
-    appearance: 'none',
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
+  },
+  // The box carries no aria-disabled: that would expose a caller's operable
+  // `endContent` as disabled. The trigger carries it, so the box keys its
+  // disabled cursor on the prop.
+  sheetFieldDisabled: {
+    cursor: 'default',
+  },
+  // With tokens, the button covers the box beneath them. A tap on a token or
+  // on empty space then opens the sheet. The box draws the focus ring, so the
+  // button draws none.
+  sheetTrigger: {
+    appearance: 'none',
+    flexGrow: 1,
+    alignSelf: 'stretch',
+    display: 'flex',
+    alignItems: 'center',
+    minWidth: 0,
+    padding: 0,
+    margin: 0,
+    borderWidth: 0,
+    borderStyle: 'none',
+    backgroundColor: 'transparent',
+    fontFamily: 'inherit',
+    fontSize: 'inherit',
+    lineHeight: 'inherit',
+    color: 'inherit',
+    textAlign: 'start',
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
+    outline: 'none',
+  },
+  sheetTriggerWithTokens: {
+    position: 'absolute',
+    inset: 0,
   },
   // An aria-disabled button gets no system disabled paint in forced colors;
   // GrayText is the platform's disabled affordance there. Defaults repeat the
@@ -906,8 +943,6 @@ export function Tokenizer<T extends SearchableItem>({
     ? (
         [
           ['renderItem', renderItem],
-          ['renderToken', renderToken],
-          ['endContent', endContent],
           ['hasClear', hasClear || undefined],
           ['hasEntriesOnFocus', hasEntriesOnFocus || undefined],
           ['menuWidth', menuWidth],
@@ -989,12 +1024,32 @@ export function Tokenizer<T extends SearchableItem>({
     [tooltipAnchorRef],
   );
 
+  // A swap also removes `endContent` and a custom token's remove. If focus is
+  // in the box when it detaches, the new control takes it. The box also anchors
+  // the disabled-message tooltip.
+  const sheetFieldCallbackRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      tooltipAnchorRef(el);
+      if (el == null) {
+        return;
+      }
+      return () => {
+        if (el.contains(el.ownerDocument.activeElement)) {
+          isFocusPendingHandOffRef.current = true;
+        }
+        tooltipAnchorRef(null);
+      };
+    },
+    [tooltipAnchorRef],
+  );
+
   // The sheet presentation has no input; the public ref reaches the trigger,
-  // the control it stands for (`family:input-fields` FR10).
+  // the control it stands for (`family:input-fields` FR10). The
+  // disabled-message tooltip anchors to the field box around it, as it
+  // anchors to the inline field's wrapper.
   const triggerMergedRef = useMergedRefs<HTMLButtonElement>(
     triggerRef,
     ref as React.Ref<HTMLButtonElement> | undefined,
-    disabledMessageTooltip.ref,
     handOffFocusRef,
   );
 
@@ -1019,6 +1074,14 @@ export function Tokenizer<T extends SearchableItem>({
   // `endContent`, a clear button, or all three — so its width is measured
   // rather than assumed, and the input reserves it.
   const [laneRef, laneReserve] = useEndLaneReserve(END_LANE_INSET);
+  // `laneRef` publishes the lane's width, so token rows and the placeholder
+  // stop short of it. `sheetLaneRef` tells a tap in the lane from a tap on the
+  // field.
+  const sheetLaneRef = useRef<HTMLDivElement | null>(null);
+  const sheetLaneMergedRef = useMergedRefs<HTMLDivElement>(
+    laneRef,
+    sheetLaneRef,
+  );
   // A composing component can lock tokens (PowerSearch's read-only filters
   // and read-only field). No remove path removes a locked token.
   const isItemRemovable = use(TokenizerItemRemovableContext);
@@ -1556,92 +1619,91 @@ export function Tokenizer<T extends SearchableItem>({
     </div>
   );
 
+  // A `renderToken` token's own remove control in the sheet field removes at
+  // once, as it does in the inline field. Its control leaves with it, so
+  // focus moves to the trigger.
+  const handleSheetTokenRemove = (item: T) => {
+    if (handleRemove(item)) {
+      triggerRef.current?.focus();
+    }
+  };
+  // A tap on a token, the placeholder or empty space opens the sheet, as a tap
+  // on the trigger does. The trigger, `endContent` and a custom token's
+  // controls handle their own clicks.
+  const handleSheetFieldClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const trigger = triggerRef.current;
+    const target = event.target;
+    if (trigger == null || !(target instanceof Element)) {
+      return;
+    }
+    if (
+      trigger.contains(target) ||
+      sheetLaneRef.current?.contains(target) ||
+      hasInteractiveAncestor(target, event.currentTarget)
+    ) {
+      return;
+    }
+    trigger.click();
+  };
+
+  // The caller's onFocus and onBlur report focus entering and leaving the whole
+  // box, as for the inline wrapper. A move between the trigger, `endContent`
+  // and a custom token's controls stays inside the field.
+  const handleSheetFieldFocus = (event: React.FocusEvent<HTMLDivElement>) => {
+    // BottomSheet focuses the trigger only after its exit completes; that
+    // focus is the signal that the retained sheet can leave. If the
+    // resolution moved to the popover meanwhile, the inline input takes the
+    // focus over once it mounts.
+    const isReturningFromSheet =
+      (event.target as EventTarget) === triggerRef.current &&
+      !isSheetOpen &&
+      isSheetPresented;
+    if (isReturningFromSheet) {
+      setIsSheetPresented(false);
+    }
+    const relatedTarget = event.relatedTarget;
+    if (
+      relatedTarget instanceof Node &&
+      event.currentTarget.contains(relatedTarget)
+    ) {
+      return;
+    }
+    // Focus that returns from the field's own sheet, or that a presentation swap
+    // hands over, does not enter from outside. The caller's onFocus stays quiet
+    // for it (`family:input-fields` FR10).
+    const isInsideTheField =
+      (isReturningFromSheet && hasReportedFocusRef.current) ||
+      isHandingOffFocusRef.current;
+    if (!isInsideTheField) {
+      hasReportedFocusRef.current = true;
+      onFocus?.(event);
+    }
+  };
+  const handleSheetFieldBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    // Focus moving into the sheet, or to another control in the box, is
+    // still the field's. Only a blur to somewhere else reports.
+    const relatedTarget = event.relatedTarget;
+    if (
+      isSheetOpen ||
+      (relatedTarget instanceof Node &&
+        event.currentTarget.contains(relatedTarget))
+    ) {
+      return;
+    }
+    hasReportedFocusRef.current = false;
+    isFocusPendingHandOffRef.current = false;
+    onBlur?.(event);
+  };
+
   let tokenizerContent: ReactNode;
   if (isSheetPresentation) {
     tokenizerContent = (
       <>
-        <button
-          // The field-level pass-through props (`data-*`, `aria-*`) were typed
-          // for the inline input; here the control is a button.
-          {...(restWithoutClick as React.ButtonHTMLAttributes<HTMLButtonElement>)}
-          ref={triggerMergedRef}
-          type="button"
-          id={inputId}
-          aria-labelledby={fieldLabelledBy}
-          aria-haspopup="dialog"
-          aria-expanded={isSheetOpen}
-          aria-disabled={isDisabled || undefined}
-          // The description is what the inline input's is, in its order —
-          // the caller's ids, the field description, the status message, the
-          // disabled reason (`spec:AST-085` FR5: a disabled control exposes
-          // its description and reason on itself) — then the hidden count and
-          // the rendered tokens themselves, each by id: the
-          // accessible-description algorithm reads the referenced elements in
-          // order and separates them, so every label renders once
-          // (`architecture:component-style-authoring` INV7) and no locale's
-          // list punctuation is written here (AR6).
-          aria-describedby={
-            [
-              ariaDescribedByProp,
-              ariaDescribedBy,
-              value.length > 0 ? triggerTokensId : null,
-              ...value.map(item => tokenElementId(item.id)),
-            ]
-              .filter(Boolean)
-              .join(' ') || undefined
-          }
-          // The open runs first and the caller's onClick after it, as the
-          // inline input composes its click: a caller observes the click but
-          // cannot cancel the field's own handling
-          // (`family:input-fields` FR10).
-          onClick={composeEventHandlers<React.MouseEvent<HTMLButtonElement>>(
-            () => {
-              if (isDisabled) {
-                return;
-              }
-              setIsSheetPresented(true);
-              setSheetInitialQuery(sheetQueryRef.current);
-              setIsSheetOpen(true);
-            },
-            // Typed for the input by the base props; here the control is the
-            // trigger button, and the handler only reads the event.
-            callerOnClick as unknown as
-              React.MouseEventHandler<HTMLButtonElement> | undefined,
-          )}
-          onFocus={event => {
-            // BottomSheet focuses the trigger only after its exit completes;
-            // that focus is the signal that the retained sheet can leave. If
-            // the resolution moved to the popover meanwhile, the inline input
-            // takes the focus over once it mounts. The field's own sheet is
-            // part of the field: focus coming back from it, or handed over by
-            // a presentation swap, is not focus entering from outside, so the
-            // caller's onFocus — "when focus enters the tokenizer from
-            // outside" — stays quiet for it (`family:input-fields` FR10).
-            const isReturningFromSheet = !isSheetOpen && isSheetPresented;
-            if (isReturningFromSheet) {
-              setIsSheetPresented(false);
-            }
-            const isInsideTheField =
-              (isReturningFromSheet && hasReportedFocusRef.current) ||
-              isHandingOffFocusRef.current;
-            if (!isInsideTheField) {
-              hasReportedFocusRef.current = true;
-              onFocus?.(event);
-            }
-          }}
-          onBlur={event => {
-            // Focus moving into the sheet is still the field's: the flag
-            // stays, and the caller's onBlur — "when focus leaves the
-            // tokenizer entirely" — stays quiet. Only a blur to somewhere
-            // else reports.
-            if (isSheetOpen) {
-              return;
-            }
-            hasReportedFocusRef.current = false;
-            isFocusPendingHandOffRef.current = false;
-            onBlur?.(event);
-          }}
-          onKeyDown={onKeyDown}
+        <div
+          ref={sheetFieldCallbackRef}
+          onClick={handleSheetFieldClick}
+          onFocus={handleSheetFieldFocus}
+          onBlur={handleSheetFieldBlur}
           {...mergeProps(
             themeProps('tokenizer', {
               size,
@@ -1651,8 +1713,9 @@ export function Tokenizer<T extends SearchableItem>({
             stylex.props(
               inputWrapperStyles.base,
               styles.wrapper,
-              styles.sheetTrigger,
-              // The trigger keeps the inline field's height for its size step,
+              styles.sheetField,
+              isDisabled && styles.sheetFieldDisabled,
+              // The field keeps the inline field's height for its size step,
               // as Selector's bottom-sheet trigger does; the sheet's own rows
               // and search field carry the touch-sized targets.
               sizeStyles[size],
@@ -1675,8 +1738,77 @@ export function Tokenizer<T extends SearchableItem>({
               {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
             </span>
           )}
-          {value.length > 0 ? (
-            value.map(item => (
+          <button
+            // The field-level pass-through props (`data-*`, `aria-*`) were typed
+            // for the inline input; here the control is a button.
+            {...(restWithoutClick as React.ButtonHTMLAttributes<HTMLButtonElement>)}
+            ref={triggerMergedRef}
+            type="button"
+            id={inputId}
+            aria-labelledby={fieldLabelledBy}
+            aria-haspopup="dialog"
+            aria-expanded={isSheetOpen}
+            aria-disabled={isDisabled || undefined}
+            // The description follows the inline input's order: the caller's
+            // ids, the field description, the status message, then the
+            // disabled reason (`spec:AST-085` FR5). The hidden count and the
+            // token labels follow, each by id. The algorithm separates
+            // referenced elements, so no list punctuation is written here
+            // (AR6). A default token is display-only and is its own label. A
+            // custom token can hold controls, so a hidden copy of its item
+            // label stands in.
+            aria-describedby={
+              [
+                ariaDescribedByProp,
+                ariaDescribedBy,
+                value.length > 0 ? triggerTokensId : null,
+                ...value.map(item => tokenElementId(item.id)),
+              ]
+                .filter(Boolean)
+                .join(' ') || undefined
+            }
+            // The open runs first and the caller's onClick after it, as the
+            // inline input composes its click: a caller observes the click but
+            // cannot cancel the field's own handling
+            // (`family:input-fields` FR10).
+            onClick={composeEventHandlers<React.MouseEvent<HTMLButtonElement>>(
+              () => {
+                if (isDisabled) {
+                  return;
+                }
+                setIsSheetPresented(true);
+                setSheetInitialQuery(sheetQueryRef.current);
+                setIsSheetOpen(true);
+              },
+              // Typed for the input by the base props; here the control is the
+              // trigger button, and the handler only reads the event.
+              callerOnClick as unknown as
+                React.MouseEventHandler<HTMLButtonElement> | undefined,
+            )}
+            onKeyDown={onKeyDown}
+            {...stylex.props(
+              styles.sheetTrigger,
+              value.length > 0 && styles.sheetTriggerWithTokens,
+              // With no token the placeholder stops short of the end lane, as
+              // the inline input's text does.
+              value.length === 0 && laneReserve,
+            )}>
+            {value.length === 0 && (
+              <span
+                {...stylex.props(
+                  styles.sheetTriggerPlaceholder,
+                  isDisabled && styles.sheetTriggerPlaceholderDisabled,
+                )}>
+                {placeholder ?? ''}
+              </span>
+            )}
+          </button>
+          {value.map(item =>
+            renderToken ? (
+              <span key={item.id} {...stylex.props(styles.token)}>
+                {renderToken(item, () => handleSheetTokenRemove(item))}
+              </span>
+            ) : (
               <Token
                 key={item.id}
                 id={tokenElementId(item.id)}
@@ -1685,22 +1817,27 @@ export function Tokenizer<T extends SearchableItem>({
                 isDisabled={isDisabled}
                 xstyle={isDisabled ? styles.sheetTokenDisabled : undefined}
               />
-            ))
-          ) : (
-            <span
-              {...stylex.props(
-                styles.sheetTriggerPlaceholder,
-                isDisabled && styles.sheetTriggerPlaceholderDisabled,
-              )}>
-              {placeholder ?? ''}
-            </span>
+            ),
           )}
-        </button>
+          {isRenderable(endContent) && (
+            <div
+              ref={sheetLaneMergedRef}
+              {...stylex.props(styles.endSection, endSectionSizeStyles[size])}>
+              {endContent}
+            </div>
+          )}
+        </div>
         {value.length > 0 && (
           <VisuallyHidden id={triggerTokensId}>
             {t('@astryx.tokenizer.selectedCount', {count: value.length})}
           </VisuallyHidden>
         )}
+        {renderToken != null &&
+          value.map(item => (
+            <span key={item.id} id={tokenElementId(item.id)} hidden>
+              {item.label}
+            </span>
+          ))}
         {/* Form carriers, gated exactly as the inline branch gates its own: a
             disabled field submits nothing. */}
         {htmlName != null &&

@@ -94,7 +94,8 @@ concurrency:
 
 jobs:
   # Admit the whole run under CI's ceiling of about ninety concurrent jobs
-  # (spec:AST-030 FR16, DEC-16), in two slim jobs: `room` waits until the
+  # (spec:AST-030 FR16, DEC-16), in two jobs (slim on a pull request, standard
+  # on a dispatch): `room` waits until the
   # Storybook build has room and starts it, and `admission` waits for the rest
   # of the run unless it already fit. Every job here but build-storybook and
   # ci-full needs admission, directly or through the jobs it needs, so a
@@ -109,11 +110,13 @@ jobs:
   # inside the fifteen-minute job budget.
   room:
     # Finds room for the run's first job, its Storybook build, and records
-    # whether the whole run fit on that look. A pull-request run finding ten
-    # others already waiting, and no room, is turned away: CI is full.
+    # whether the whole run fit on that look. A pull-request run that finds no
+    # room waits, up to its longest wait.
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
-    runs-on: ubuntu-slim
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 20 || 15 }}
+    # A dispatch (a main or release check) may wait longer than a slim job's
+    # fifteen-minute cap, so it waits on a standard runner (spec:AST-030 DEC-16).
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && 'ubuntu-latest' || 'ubuntu-slim' }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 130 || 15 }}
     permissions:
       actions: read
       contents: read
@@ -135,20 +138,22 @@ jobs:
         id: room
         uses: ./.ci-admission/.github/actions/ci-admission
         continue-on-error: true
-        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 16 || 13 }}
+        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
           peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 16 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
-          max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 12 }}
-          max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}
+          max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
+          max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 3}'
 
   admission:
     needs: [room]
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
-    runs-on: ubuntu-slim
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 20 || 15 }}
+    # A dispatch (a main or release check) may wait longer than a slim job's
+    # fifteen-minute cap, so it waits on a standard runner (spec:AST-030 DEC-16).
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && 'ubuntu-latest' || 'ubuntu-slim' }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 130 || 15 }}
     permissions:
       actions: read
       contents: read
@@ -172,7 +177,7 @@ jobs:
         id: rest
         uses: ./.ci-admission/.github/actions/ci-admission
         continue-on-error: true
-        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 16 || 13 }}
+        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: rest
           fits: ${{ needs.room.outputs.fits }}
@@ -181,8 +186,8 @@ jobs:
           next: ${{ needs.room.outputs.next }}
           peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 16 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
-          max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 12 }}
-          max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}
+          max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
+          max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 3}'
 
       # A pull-request run that waited its longest while another started at
@@ -195,9 +200,9 @@ jobs:
           exit 1
 
   # Stops a pull-request run that CI is full for, with the reason, so it builds
-  # nothing: room found no room and ten other pull-request runs waiting, or the
-  # run waited its longest while another started at its longest wait. It
-  # cancels the run when its token can. A fork's read-only token cannot; then
+  # nothing: the run waited its longest while another started at its longest
+  # wait, or a run that waited longer still waits. It cancels the run when its
+  # token can. A fork's read-only token cannot; then
   # admission fails, the jobs behind it skip or stop, and build, test and
   # docsite-test fail with the same reason, never skip or pass.
   ci-full:
@@ -464,9 +469,11 @@ jobs:
           printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
           VALIDATOR="$RUNNER_TEMP/release-policy/scripts/release/active-release.mjs"
           ACTIVE_BRANCHES=$(node "$VALIDATOR" list-active --root "$GITHUB_WORKSPACE")
+          # The merge commit's first parent: the main commit it was built on.
+          # A main that moved since would read its new files as deletions.
           node "$VALIDATOR" validate-merge-back \
             --root "$GITHUB_WORKSPACE" \
-            --base origin/main \
+            --base HEAD^1 \
             --release-ref "v$VERSION" \
             --active-branches "$ACTIVE_BRANCHES"
 
@@ -550,9 +557,9 @@ jobs:
           echo "::notice title=Heavy CI deferred::Heavy CI deferred: runs when marked ready and before merge. Mark the pull request ready, reopen it, or re-run all jobs of this run to run everything."
           echo "Heavy CI deferred: runs when marked ready and before merge." >> "$GITHUB_STEP_SUMMARY"
 
-  docsite-test:
+  docsite-build:
     needs: [room, admission, heavy-ci]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled()) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled() && needs.heavy-ci.outputs.deferred != 'true' && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true') }}
     # The Next.js production build uses every core it gets.
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -565,29 +572,22 @@ jobs:
     env:
       NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN: https://docs.example.test
       NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: https://probe.example.test
+    outputs:
+      lab_only: ${{ steps.scope.outputs.lab_only }}
+      # The browser contracts apply: the docsite was built, and the change is
+      # shared infrastructure or more than component tests, stories, spec
+      # records and changesets.
+      browser: ${{ steps.browser.outputs.applies }}
     steps:
-      - name: Require a branch in this repository or the ci:run label
-        if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) }}
-        run: |
-          echo "::error::Waiting for a maintainer's ci:run label: an outside contributor's pull request runs CI once a maintainer adds it (spec:AST-030 FR17)."
-          exit 1
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
-      # everything is in scope when it cannot decide.
-      - name: Stop when CI is full
-        if: needs.room.outputs.full == 'true' || needs.admission.outputs.full == 'true'
-        run: |
-          echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
-          exit 1
-
-      # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
-      # required check fails with the reason, never passes as skipped.
-      - name: Heavy CI deferred
-        if: needs.heavy-ci.outputs.deferred == 'true'
-        run: |
-          echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
-          exit 1
-
+      # everything is in scope when it cannot decide. `touches` is false only
+      # when every changed file outside the docsite app is a test, a story
+      # (or Storybook file), a spec record, a changeset, or an a11y-spec or
+      # interaction-harness file. The browser contracts still run when the
+      # classifier calls the change shared infrastructure (`full_suite`: the
+      # harnesses, Storybook config, a shared test), as for every owner
+      # (spec:AST-030 FR13).
       - name: Check out the scope action
         uses: actions/checkout@v7
         with:
@@ -598,6 +598,8 @@ jobs:
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
+        with:
+          paths: '^(?:apps/docsite/|(?!(?:.*/)?__tests__/|.*\.(?:test|spec)\.[cm]?[jt]sx?$|apps/storybook/|.*\.stories\.[jt]sx?$|docs/specs/|\.changeset/|internal/a11y-spec/|internal/interaction-harness/))'
 
       - name: 'Lab-only: Lab tests + Storybook build'
         if: steps.scope.outputs.lab_only == 'true'
@@ -620,14 +622,6 @@ jobs:
         if: (steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true')
         run: node scripts/check-knowledge.mjs
 
-      - name: Install Playwright
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
-        run: npx playwright install chromium
-
-      # The production build (and the data generation inside it) imports every
-      # theme package's built entry and the canary component packages, on top
-      # of core. Core builds first; the rest depend on it and not on each
-      # other, so they build side by side.
       - name: Build docsite workspace dependencies
         if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: |
@@ -652,26 +646,60 @@ jobs:
         if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: pnpm -F @astryxdesign/docsite build
 
-      # test-docsite (the data tests) runs in the background while
-      # test-docsite-e2e (the browser contracts) drives the same build; the
-      # e2e step stays its own step so it can move to another tier alone.
-      - name: test-docsite (start the data tests)
-        id: data
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
-        # errexit off inside: a failing test run must still record its exit
-        # code, written whole so the result step never reads half a file.
-        run: (set +e; pnpm -F @astryxdesign/docsite test > docsite-data.log 2>&1; echo $? > docsite-data.exit.tmp; mv docsite-data.exit.tmp docsite-data.exit) &
+      - name: Decide whether the browser contracts apply
+        id: browser
+        run: echo "applies=${{ (steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true') && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite == 'true') }}" >> "$GITHUB_OUTPUT"
 
-      - name: test-docsite-e2e (browser contracts)
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
-        run: pnpm test:docsite-browser
-
-      - name: test-docsite (data test results)
-        if: ${{ !cancelled() && steps.data.outcome == 'success' }}
+      # docsite-browser serves this build, never one of its own. The commit
+      # stamp lets it check that the build is of the commit it checked out.
+      - name: Stamp the build with its commit
+        if: steps.browser.outputs.applies == 'true'
         run: |
-          while [ ! -f docsite-data.exit ]; do sleep 2; done
-          cat docsite-data.log
-          exit "$(cat docsite-data.exit)"
+          git rev-parse HEAD > apps/docsite/.next/BUILD_COMMIT
+          # The sizes behind the upload, largest first, and what it leaves out.
+          du -sh apps/docsite/.next/* apps/docsite/.next/server/* apps/docsite/src/generated apps/docsite/public/monaco apps/docsite/public/vendor 2>/dev/null | sort -rh | head -15
+          for kind in '*.map' '*.nft.json'; do
+            echo "left out, $kind: $(find apps/docsite/.next -path apps/docsite/.next/cache -prune -o -name "$kind" -type f -print0 | du -ch --files0-from=- 2>/dev/null | tail -1)"
+          done
+
+      # Everything `next start` reads that the build generated and the
+      # repository ignores: the server and static output, the generated data
+      # and theme, the ShadCN registry and the playground's vendored assets.
+      # Not the compile
+      # cache, the build traces, source maps or file traces (*.nft.json, for
+      # a standalone deployment), which serving never reads.
+      - name: Upload the docsite build
+        if: steps.browser.outputs.applies == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: docsite-build
+          path: |
+            apps/docsite/.next/
+            !apps/docsite/.next/cache/
+            !apps/docsite/.next/trace
+            !apps/docsite/.next/trace-build
+            !apps/docsite/.next/diagnostics/
+            !apps/docsite/.next/types/
+            !apps/docsite/.next/**/*.map
+            !apps/docsite/.next/**/*.nft.json
+            apps/docsite/src/generated/
+            apps/docsite/src/themes/astryx.js
+            apps/docsite/src/themes/astryx.css
+            apps/docsite/public/playground-types.json
+            apps/docsite/public/monaco/
+            apps/docsite/public/vendor/
+            apps/docsite/public/shadcn/
+          include-hidden-files: true
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 1
+          # HTML, RSC payloads and JavaScript compress well; the default level
+          # takes most of that at a fraction of the highest level's time.
+          compression-level: 6
+
+      - name: test-docsite (data tests)
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        run: pnpm -F @astryxdesign/docsite test
 
       # A docsite-only change skips test-node, and the registry generator
       # lives in the docsite.
@@ -679,14 +707,116 @@ jobs:
         if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: node internal/shadcn-registry/verify-production-gate.mjs
 
+  # The docsite browser contracts, against the build docsite-build uploaded:
+  # the same commit, never rebuilt. A planner-driven matrix (one leg today;
+  # playwright-legs.mjs splits the spec files by recorded time, so a second
+  # leg is a one-line change).
+  docsite-browser:
+    name: docsite-browser (${{ matrix.leg }}/${{ strategy.job-total }})
+    needs: [docsite-build]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.docsite-build.result == 'success' && needs.docsite-build.outputs.browser == 'true') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [1]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN: https://docs.example.test
+      NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: https://probe.example.test
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup
+
+      - name: Install Playwright
+        run: npx playwright install chromium
+
+      - name: Download the docsite build
+        uses: actions/download-artifact@v8
+        with:
+          name: docsite-build
+          path: apps/docsite
+
+      - name: Require the build of this commit
+        run: |
+          built=$(cat apps/docsite/.next/BUILD_COMMIT)
+          here=$(git rev-parse HEAD)
+          echo "build: $built; checkout: $here"
+          test "$built" = "$here"
+
+      - name: Plan this leg's browser contracts
+        id: plan
+        run: |
+          node .github/scripts/playwright-legs.mjs plan \
+            --key docsite --config apps/docsite/playwright.config.ts \
+            --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
+            --out "$RUNNER_TEMP/docsite-leg.txt"
+
+      - name: test-docsite-e2e (browser contracts)
+        if: steps.plan.outputs.files != '0'
+        run: pnpm test:docsite-browser --test-list "$RUNNER_TEMP/docsite-leg.txt"
+
+      # Only a leg whose contracts ran has evidence; one that stopped before
+      # them reports that failure alone.
       - name: Upload docsite browser evidence
-        if: always() && steps.scope.outcome == 'success' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: always() && steps.plan.outcome == 'success' && steps.plan.outputs.files != '0'
         uses: actions/upload-artifact@v7
         with:
-          name: docsite-browser-evidence
+          name: docsite-browser-evidence-${{ matrix.leg }}
           path: test-results/docsite/
           if-no-files-found: error
           retention-days: 7
+
+  # The required docsite context (spec:AST-030 FR7): passes only when the
+  # build passed and every browser leg passed, or the build's scope found no
+  # browser contract to run. A skipped or cancelled leg otherwise fails it.
+  docsite-test:
+    needs: [room, admission, heavy-ci, docsite-build, docsite-browser]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled()) }}
+    runs-on: ubuntu-slim
+    permissions: {}
+    steps:
+      - name: Require a branch in this repository or the ci:run label
+        if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) }}
+        run: |
+          echo "::error::Waiting for a maintainer's ci:run label: an outside contributor's pull request runs CI once a maintainer adds it (spec:AST-030 FR17)."
+          exit 1
+
+      - name: Stop when CI is full
+        if: needs.room.outputs.full == 'true' || needs.admission.outputs.full == 'true'
+        run: |
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
+          exit 1
+
+      # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
+      # required check fails with the reason, never passes as skipped.
+      - name: Heavy CI deferred
+        if: needs.heavy-ci.outputs.deferred == 'true'
+        run: |
+          echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
+          exit 1
+
+      - name: 'Lab-only: Lab tests + Storybook build'
+        if: needs.docsite-build.outputs.lab_only == 'true'
+        run: |
+          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
+
+      - name: Require the docsite build and its browser contracts
+        env:
+          BUILD_RESULT: ${{ needs.docsite-build.result }}
+          BROWSER: ${{ needs.docsite-build.outputs.browser }}
+          BROWSER_RESULT: ${{ needs.docsite-browser.result }}
+        run: |
+          echo "docsite-build: $BUILD_RESULT; browser contracts apply: ${BROWSER:-unknown}; docsite-browser: $BROWSER_RESULT"
+          [ "$BUILD_RESULT" = success ] || exit 1
+          if [ "$BROWSER" = true ]; then
+            [ "$BROWSER_RESULT" = success ] || exit 1
+          else
+            [ "$BROWSER" = false ] && [ "$BROWSER_RESULT" = skipped ] || exit 1
+          fi
 
   # Tests run as two parallel lanes joined by `test` below.
   #
@@ -846,22 +976,30 @@ jobs:
             # A change only to the Lab package runs every Lab test across the
             # same legs, and the guards below as any scoped run does
             # (spec:AST-030 FR26).
-            pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} packages/lab/
-            node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"
+            .github/scripts/run-named.sh "Lab tests" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} packages/lab/
+            # The guard run leaves out the tests the run above already ran, so
+            # no test runs twice. Every leg splits the same reduced list, so a
+            # leg that cannot list them fails rather than split a different one.
+            .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project ui packages/lab/ --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"
+            .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"
             mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
             if [ "${#GUARDS[@]}" -gt 0 ]; then
-              pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+              .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
             fi
           elif [ "$SCOPED" = true ]; then
-            pnpm test:ui --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+            .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:ui --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
             # Tests no module graph relates to the change run too: guards
             # that read sources, and tests that load a changed package from
             # its build (by name or its dist/).
             # The list goes through a file so a failing lister fails the step.
-            node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"
+            # The guard run leaves out the tests the run above already ran, so
+            # no test runs twice. Every leg splits the same reduced list, so a
+            # leg that cannot list them fails rather than split a different one.
+            .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project ui --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"
+            .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"
             mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
             if [ "${#GUARDS[@]}" -gt 0 ]; then
-              pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+              .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
             fi
           else
             pnpm test:ui --shard=${{ matrix.shard }}/${{ strategy.job-total }}
@@ -974,20 +1112,31 @@ jobs:
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}
         run: |
           if [ "$SCOPED" = true ]; then
-            pnpm test:node --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+            .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:node --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
             # Tests no module graph relates to the change run too: guards
             # that read sources, and tests that load a changed package from
             # its build (by name or its dist/).
             # The list goes through a file so a failing lister fails the step.
-            node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"
+            # The guard run leaves out the tests the run above already ran, so
+            # no test runs twice. Every leg splits the same reduced list, so a
+            # leg that cannot list them fails rather than split a different one.
+            .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"
+            .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"
             mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
             if [ "${#GUARDS[@]}" -gt 0 ]; then
-              pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+              .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
             fi
           else
             pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
           fi
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+
+      # A Lab-only change may carry a Lab component's CLI discovery entry; the
+      # committed list must match its generator (spec:AST-030 FR26).
+      - name: 'Lab-only: CLI official-packages check'
+        if: matrix.shard == 1 && steps.scope.outputs.lab_only == 'true'
+        # One Node-project test file: Vitest finds its project from the path.
+        run: pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1
 
       # Theme-family compilation is owned by `theme-build`, not Build. Until
       # that surface has an admitted dedicated lane, broad CI keeps its browser
@@ -996,6 +1145,18 @@ jobs:
       - name: Install Playwright for theme-family contract
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: npx playwright install chromium
+
+      # The Node tests above run before any browser is installed, so they skip
+      # offline-media's real-browser cases. This step runs them once Chromium
+      # is in place, under the install's own condition; with
+      # ASTRYX_OFFLINE_MEDIA_BROWSER set, a missing browser fails them.
+      # ci-browser-gated-tests.test.mjs keeps this step after the install.
+      - name: Offline-media browser cases
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_OFFLINE_MEDIA_BROWSER: '1'
+        # One Node-project test file: Vitest finds its project from the path.
+        run: pnpm exec vitest run .github/scripts/lib/offline-media.test.mjs --maxWorkers=1
 
       - name: Run the theme-family contract
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
@@ -1033,7 +1194,9 @@ jobs:
     needs: [heavy-ci, native-swift-runner]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled())) }}
     runs-on: ${{ needs.native-swift-runner.outputs.applies == 'true' && 'macos-15' || 'ubuntu-slim' }}
-    timeout-minutes: 30
+    # The slim branch only reports that Swift is out of scope; a slim job
+    # stops at fifteen minutes.
+    timeout-minutes: ${{ needs.native-swift-runner.outputs.applies == 'true' && 30 || 15 }}
     permissions:
       contents: read
     steps:
@@ -1060,7 +1223,7 @@ jobs:
   # (spec:AST-026 FR10, draft): every item through the pinned client. It runs
   # for an explicit release check until the production registry launches; the
   # network-free production gate runs on every pull request that can change
-  # the registry: with the Node unit tests, and in docsite-test for a
+  # the registry: with the Node unit tests, and in docsite-build for a
   # docsite-only change.
   test-registry-e2e:
     name: test-registry-e2e (${{ matrix.leg }}, ${{ matrix.mode }})
@@ -1140,6 +1303,7 @@ jobs:
         test-native-swift,
         pr-interaction,
         pr-interaction-webkit,
+        pr-component-a11y-contracts,
       ]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
     runs-on: ubuntu-slim
@@ -1221,6 +1385,7 @@ jobs:
           TEST_NATIVE_SWIFT_RESULT: ${{ needs.test-native-swift.result }}
           PR_INTERACTION_RESULT: ${{ needs.pr-interaction.result }}
           PR_INTERACTION_WEBKIT_RESULT: ${{ needs.pr-interaction-webkit.result }}
+          PR_COMPONENT_A11Y_CONTRACTS_RESULT: ${{ needs.pr-component-a11y-contracts.result }}
         run: node .github/scripts/ci-test-join.mjs
 
   # Build the packages and Storybook, and analyze components (parallel with
@@ -1464,6 +1629,21 @@ jobs:
       - name: 'Lab-only: typecheck Lab and its stories'
         if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only == 'true'
         run: pnpm -F @astryxdesign/lab -F @astryxdesign/storybook typecheck
+
+      # A Lab-only change whose route lock differs from the merge base checks
+      # the lock against the registry the docsite builds from these packages
+      # (spec:AST-030 FR26). Without a merge base, it checks anyway.
+      - name: 'Lab-only: check the ShadCN route lock'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only == 'true'
+        env:
+          DOCSITE_TARGET: canary
+          MERGE_BASE: ${{ steps.merge-base.outputs.sha }}
+        run: |
+          if [ -n "$MERGE_BASE" ] && git diff --quiet "$MERGE_BASE" HEAD -- internal/shadcn-registry/routes.lock.json 2>/dev/null; then
+            echo "The route lock matches the merge base."
+            exit 0
+          fi
+          node apps/docsite/scripts/generate-data.mjs
 
       - name: Verify package exports
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
@@ -2293,7 +2473,7 @@ jobs:
     # Frame evidence measures timing: four cores, one Playwright worker.
     # One runner ran every proof in about ten minutes and passed the job's
     # fifteen once its checkout was slow. Two legs share the spec files by
-    # their recorded times (interaction-legs.mjs), so each runs in about five
+    # their recorded times (playwright-legs.mjs), so each runs in about five
     # minutes, and a leg with the slowest checkout seen still ends with about
     # four minutes to spare. `test` reads the job's result, which is success
     # only when every leg passed.
@@ -2329,7 +2509,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(interaction-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/interaction-durations\.json$|\.github/actions/test-scope/)'
+          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -2351,10 +2531,10 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/interaction-legs/.github/scripts" "$RUNNER_TEMP/interaction-legs/scripts/lib"
-          cp .test-scope/.github/scripts/interaction-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/scripts/playwright-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/scripts/lib/duration-split.mjs "$RUNNER_TEMP/interaction-legs/scripts/lib/"
           cp .test-scope/.github/scripts/a11y-pr-contracts.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
-          cp .test-scope/.github/interaction-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
+          cp .test-scope/.github/playwright-leg-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
 
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
@@ -2414,9 +2594,10 @@ jobs:
         id: plan
         if: steps.scope.outputs.applies == 'true'
         run: |
-          node "$RUNNER_TEMP/interaction-legs/.github/scripts/interaction-legs.mjs" plan --project chromium \
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
+            --key interaction-chromium --config playwright.interaction.config.ts --project chromium \
             --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
-            --durations "$RUNNER_TEMP/interaction-legs/.github/interaction-durations.json" \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --out "$RUNNER_TEMP/interaction-leg.txt"
 
       - name: Run interaction proofs
@@ -2462,6 +2643,18 @@ jobs:
         leg: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Playwright's own image for the version the lockfile resolves, with
+    # WebKit and its system libraries already installed. Installing those on
+    # the runner took up to fifteen minutes when the package mirror was slow,
+    # which cancelled the leg before a proof ran. A guard test keeps the tag
+    # equal to the lockfile's Playwright version.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    # A container's steps default to `sh`; keep the runner's bash.
+    defaults:
+      run:
+        shell: bash
     permissions:
       # The heavy-suite caps read the author's pull requests and runs.
       actions: read
@@ -2488,9 +2681,11 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(interaction-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/interaction-durations\.json$|\.github/actions/test-scope/)'
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/Layer/(inputHold|modalOutlet)\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
+          # Lists the changed files, so the planner adds a changed spec.
+          component-audit: 'true'
 
       - name: Require this pull request's Storybook build
         if: steps.scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
@@ -2500,7 +2695,7 @@ jobs:
 
       - name: Skip the WebKit proofs outside their scope
         if: steps.scope.outputs.applies != 'true'
-        run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, and none of their shared setup)."
+        run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, no interaction spec, and none of their shared setup)."
 
       # The head checkout below replaces the workspace, scope checkout
       # included, so the leg planner, the modules it imports (the shared
@@ -2510,10 +2705,10 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/interaction-legs/.github/scripts" "$RUNNER_TEMP/interaction-legs/scripts/lib"
-          cp .test-scope/.github/scripts/interaction-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/scripts/playwright-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/scripts/lib/duration-split.mjs "$RUNNER_TEMP/interaction-legs/scripts/lib/"
           cp .test-scope/.github/scripts/a11y-pr-contracts.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
-          cp .test-scope/.github/interaction-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
+          cp .test-scope/.github/playwright-leg-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
 
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
@@ -2541,6 +2736,12 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
+      # The container runs as root over a workspace the runner owns, and git
+      # refuses a repository another user owns unless it is marked safe.
+      - name: Trust the checkout in the container
+        if: steps.scope.outputs.applies == 'true'
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Verify evidence checkout
         if: steps.scope.outputs.applies == 'true'
         env:
@@ -2560,28 +2761,44 @@ jobs:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
           path: apps/storybook/dist
 
-      # WebKit needs system libraries the runner image lacks; --with-deps
-      # installs them.
+      # The image carries WebKit, Chromium's headless shell and their system
+      # libraries; `install` finds them in place and downloads nothing. A spec
+      # that decodes a WebKit recording does so in the headless shell.
       - name: Install Playwright WebKit
         if: steps.scope.outputs.applies == 'true'
-        run: pnpm install --frozen-lockfile && npx playwright install --with-deps webkit
+        run: pnpm install --frozen-lockfile && npx playwright install webkit chromium-headless-shell
 
       # This leg's share of the WebKit spec files, from the paths the lane
       # covers, by their recorded times. The planner and the times come from
-      # the scope checkout, as for the Chromium legs.
+      # the scope checkout, as for the Chromium legs. An interaction spec the
+      # pull request changes runs here too, wherever it lives.
       - name: Plan this leg's WebKit interaction proofs
         id: plan
         if: steps.scope.outputs.applies == 'true'
+        env:
+          CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
         run: |
-          node "$RUNNER_TEMP/interaction-legs/.github/scripts/interaction-legs.mjs" plan --project webkit \
+          CHANGED_SPECS=()
+          if [ -n "${CHANGED_FILES:-}" ] && [ -s "$CHANGED_FILES" ]; then
+            while IFS= read -r file; do
+              case "$file" in
+                *.interaction.browser.spec.ts) [ -f "$file" ] && CHANGED_SPECS+=("$file") ;;
+              esac
+            done < "$CHANGED_FILES"
+          else
+            echo "::warning title=Changed specs not planned::The scope step could not list the changed files, so a changed interaction spec outside this lane's paths does not run here."
+          fi
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
+            --key interaction-webkit --config playwright.interaction.config.ts --project webkit \
             --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
-            --durations "$RUNNER_TEMP/interaction-legs/.github/interaction-durations.json" \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --out "$RUNNER_TEMP/interaction-leg.txt" -- \
             packages/core/src/gestures/ \
             packages/core/src/motion/__tests__/animatedLayout.interaction \
             packages/core/src/motion/__tests__/animator.interaction \
             packages/core/src/hooks/__tests__/usePager.interaction \
-            internal/interaction-harness/
+            internal/interaction-harness/ \
+            "${CHANGED_SPECS[@]}"
 
       # WebKit renders through Mesa's llvmpipe, which sizes its thread pool
       # from the CPUs the process may run on. A container's CPU quota is not
@@ -2604,6 +2821,8 @@ jobs:
           fi
           export LP_NUM_THREADS
           echo "llvmpipe threads: $LP_NUM_THREADS"
+          # Which Mesa software rasterizer the frames go through.
+          echo "Mesa DRI drivers: $(ls /usr/lib/x86_64-linux-gnu/dri 2>/dev/null | tr '\n' ' ')"
           pnpm exec playwright test \
             --test-list "$RUNNER_TEMP/interaction-leg.txt" \
             --config playwright.interaction.config.ts \
@@ -3650,34 +3869,6 @@ jobs:
             --head-sha "$HEAD_SHA" \
             --out touched-components.json
 
-      # A scoped or always browser accessibility spec the change adds or
-      # modifies runs here by itself (spec:AST-030 FR12), so it is checked on
-      # its own pull request; audit and release-only specs still wait. No such
-      # file, no work.
-      - name: Find the changed browser accessibility specs
-        id: specs
-        env:
-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
-        run: |
-          list="$RUNNER_TEMP/changed-a11y-specs.txt"
-          : > "$list"
-          if [ -n "$FILES_PATH" ] && [ -f "$FILES_PATH" ]; then
-            # The same spec globs playwright.config.ts runs.
-            node --input-type=module -e '
-              import fs from "node:fs";
-              import {isA11ySpecFile} from "./.github/scripts/lib/a11y-spec-files.mjs";
-              const paths = fs.readFileSync(process.argv[1], "utf8").split("\n");
-              for (const file of paths.filter(isA11ySpecFile)) console.log(file);
-            ' "$FILES_PATH" > "$list"
-          fi
-          echo "path=$list" >> "$GITHUB_OUTPUT"
-          if [ -s "$list" ]; then
-            echo "has_specs=true" >> "$GITHUB_OUTPUT"
-            echo "Changed browser accessibility specs:"; cat "$list"
-          else
-            echo "has_specs=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Skip when no component changed or the change is wide
         if: steps.touched.outputs.has_components != 'true'
         env:
@@ -3691,13 +3882,13 @@ jobs:
           fi
 
       - name: Setup Node and pnpm
-        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        if: steps.touched.outputs.has_components == 'true'
         uses: ./.github/actions/setup
         with:
           install: 'false'
 
       - name: Download Storybook artifact
-        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        if: steps.touched.outputs.has_components == 'true'
         uses: actions/download-artifact@v8
         with:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
@@ -3705,7 +3896,7 @@ jobs:
 
       - name: Install Playwright
         id: playwright
-        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        if: steps.touched.outputs.has_components == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
       # The same changed-component filters an opted-in pull request uses.
@@ -3751,22 +3942,6 @@ jobs:
             test -s "rtl-reports/$PACKAGE.json"
           done
 
-      # Only the changed spec files, in Chromium, with their routing lines read
-      # from this merge commit; a changed release-only or audit spec still
-      # waits. A failing or unfinished spec turns this advisory job red, and a
-      # file over the budget is reported as not run.
-      - name: Run the changed browser accessibility specs
-        id: changed-specs
-        if: always() && steps.playwright.outcome == 'success' && steps.specs.outputs.has_specs == 'true'
-        # The runner runs at most four changed files and stops at eight
-        # minutes; this bounds a hung browser inside the job's 15 minutes.
-        timeout-minutes: 9
-        env:
-          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          WORKFLOW_SHA: ${{ github.sha }}
-          SPECS_PATH: ${{ steps.specs.outputs.path }}
-        run: node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH"
-
       # The visual result comes from pr-visual, the one visual owner: its
       # default touched check, or its full check under ci:run-visual.
       - name: Download pr-visual's verdict
@@ -3800,7 +3975,7 @@ jobs:
             --out touched-components.json
 
       - name: Upload touched-components results
-        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true' || steps.specs.outputs.has_specs == 'true')
+        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true')
         uses: actions/upload-artifact@v7
         with:
           name: touched-components
@@ -3808,7 +3983,189 @@ jobs:
             touched-components.json
             a11y-report.json
             rtl-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The accessibility contracts of the components a pull request touches: the
+  # browser accessibility specs it changes, then each touched component's own
+  # scoped and release-only specs, inside an eight-minute budget. The job needs
+  # only the Storybook build, so it runs beside the test owners and ends before
+  # the slowest of them. The `test` join reads its result: a failing contract
+  # blocks the merge with no new required context. Out of scope (no component
+  # or browser accessibility spec changed, or a specialized lane), every step
+  # after the scope step skips and the job succeeds. A wide change runs only
+  # the changed specs. A file that does not fit the budget is reported as not
+  # run, and the job still succeeds.
+  pr-component-a11y-contracts:
+    name: Component accessibility contracts
+    needs: [room, admission, heavy-ci, build-storybook]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
+    # One core per Playwright worker, as the release contract legs run.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          paths: '^(packages/[^/]+/src/|internal/a11y-spec/)'
+          outside-pull-request: skip
+          component-audit: 'true'
+
+      - name: Require this pull request's Storybook build
+        if: steps.scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
+        run: |
+          echo "The contracts read this pull request's Storybook build, which did not succeed."
+          exit 1
+
+      - name: Skip the contracts outside their scope
+        if: steps.scope.outputs.applies != 'true'
+        run: echo "No component or browser accessibility spec changed; no contract to run."
+
+      # The tested merge commit, as the touched-components job checks out: a
+      # head that predates these scripts does not have them. The specs run at
+      # the head (see "Check out the head that built the Storybook").
+      - name: Check out the selection scripts
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The changed-spec list and the folder rule both read this list. Without
+      # it, a contract would not run and the job would still pass.
+      - name: Require the changed-file list
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
+        run: |
+          echo "::error::The scope step could not list the changed files, so the contracts to run are unknown. Re-run the job."
+          exit 1
+
+      - name: Download analysis artifact
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-analysis
+
+      # The same touched components as the touched-components job. More than
+      # five, or a change to shared styles, is a wide change: no owned spec
+      # runs, and the comment points to the ci:run-<suite> labels.
+      - name: Decide the touched components
+        id: touched
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+        run: |
+          GITHUB_STEP_SUMMARY=/dev/null node .github/scripts/touched-components.mjs scope \
+            --analysis analysis.json \
+            --files "$FILES_PATH" \
+            --out "$RUNNER_TEMP/touched-components.json"
+
+      - name: Find the changed browser accessibility specs
+        id: specs
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+        run: |
+          list="$RUNNER_TEMP/changed-a11y-specs.txt"
+          : > "$list"
+          if [ -n "$FILES_PATH" ] && [ -f "$FILES_PATH" ]; then
+            # The same spec globs playwright.config.ts runs.
+            node --input-type=module -e '
+              import fs from "node:fs";
+              import {isA11ySpecFile} from "./.github/scripts/lib/a11y-spec-files.mjs";
+              const paths = fs.readFileSync(process.argv[1], "utf8").split("\n");
+              for (const file of paths.filter(isA11ySpecFile)) console.log(file);
+            ' "$FILES_PATH" > "$list"
+          fi
+          echo "path=$list" >> "$GITHUB_OUTPUT"
+          if [ -s "$list" ]; then
+            echo "has_specs=true" >> "$GITHUB_OUTPUT"
+            echo "Changed browser accessibility specs:"; cat "$list"
+          else
+            echo "has_specs=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip when no contract applies
+        if: steps.scope.outputs.applies == 'true' && steps.touched.outputs.has_components != 'true' && steps.specs.outputs.has_specs != 'true'
+        env:
+          WIDE: ${{ steps.touched.outputs.wide_change }}
+          COUNT: ${{ steps.touched.outputs.component_count }}
+        run: |
+          if [ "$WIDE" = true ]; then
+            echo "Wide change ($COUNT components) with no changed spec: add ci:run-a11y to run the scoped accessibility specs."
+          else
+            echo "No touched component and no changed spec; no contract to run."
+          fi
+
+      # The specs, their helpers and the lockfile come from the same commit as
+      # the Storybook build. A merge commit has specs that the head Storybook
+      # does not have, and those specs fail. Merge-level interactions are the
+      # job of the post-merge and release checks.
+      - name: Check out the head that built the Storybook
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node and pnpm
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        run: pnpm install --frozen-lockfile && npx playwright install chromium
+
+      # The runner and the routing lines come from the merge commit, so an
+      # older head is routed by current policy. The specs run at the head; a
+      # spec that the head does not have is not listed and does not run. A
+      # failing or unfinished spec fails the job, and so the test join. A file
+      # that does not fit the budget is not run and does not fail the job.
+      - name: Run the touched components' accessibility contracts
+        id: contracts
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        # The runner stops at eight minutes; this bounds a hung browser and
+        # the spec listing inside the job's 15 minutes.
+        timeout-minutes: 10
+        env:
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          SPECS_PATH: ${{ steps.specs.outputs.path }}
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          OWNERS: ${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners || '' }}
+          A11Y_CONTRACT_WORKERS: 4
+        run: |
+          runner="$RUNNER_TEMP/a11y-pr-contracts.mjs"
+          git cat-file -e "$WORKFLOW_SHA^{commit}" 2>/dev/null || git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA"
+          git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"
+          node "$runner" --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS"
+
+      - name: Upload contract evidence
+        if: always() && (steps.contracts.outcome == 'success' || steps.contracts.outcome == 'failure')
+        uses: actions/upload-artifact@v7
+        with:
+          name: component-a11y-contracts
+          path: |
             pr-a11y-evidence/
+            pr-a11y-output/
           if-no-files-found: ignore
           retention-days: 7
 
