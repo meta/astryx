@@ -179,6 +179,31 @@ export const focusOutlineStyles = stylex.create({
     },
   },
   /**
+   * Like {@link focusOutlineStyles.focusWithinFirstChild}, but the ring is an
+   * overlay pseudo-element painted above the wrapper's content, inset by the
+   * ring's width. It is for a primary that would cover a ring the wrapper
+   * draws itself: a scroller with an edge-fade mask is its own stacking
+   * context. The wrapper must be positioned and must not use `::after`. Pair
+   * it with {@link focusOutlineStyles.suppressed} on the primary.
+   */
+  focusOverlayFirstChild: {
+    '::after': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+      pointerEvents: 'none',
+      borderRadius: 'inherit',
+      outlineWidth: focusOutlineLonghands.outlineWidth,
+      outlineColor: focusOutlineLonghands.outlineColor,
+      outlineOffset: `calc(-1 * ${FOCUS_OUTLINE_WIDTH})`,
+      outlineStyle: {
+        default: 'none',
+        ':has(> :first-child:focus-visible)':
+          focusOutlineLonghands.outlineStyle,
+      },
+    },
+  },
+  /**
    * Draws no ring, and keeps the UA's own off — for an element whose ring an
    * ancestor paints.
    *

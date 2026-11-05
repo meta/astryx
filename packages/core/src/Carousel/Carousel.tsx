@@ -170,27 +170,6 @@ const styles = stylex.create({
     overflow: 'clip',
     overflowClipMargin: '1px',
   },
-  // The scroller's keyboard ring is an overlay on the root, painted after the
-  // scroller: the scroller's edge-fade mask would erase a ring the scroller
-  // painted itself, and makes the scroller a stacking context that covers a
-  // ring painted by the root. The ring sits inside the root's clipped box.
-  focusRingOverlay: {
-    '--_carousel-ring-style': {
-      default: 'none',
-      ':has(> :first-child:focus-visible)': focusVars['--focus-outline-style'],
-    },
-    '::after': {
-      content: '""',
-      position: 'absolute',
-      inset: 0,
-      pointerEvents: 'none',
-      borderRadius: 'inherit',
-      outlineStyle: 'var(--_carousel-ring-style)',
-      outlineWidth: focusVars['--focus-outline-width'],
-      outlineColor: focusVars['--focus-outline-color'],
-      outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
-    },
-  },
   scroller: {
     display: 'flex',
     alignItems: 'center',
@@ -616,8 +595,9 @@ export function Carousel({
         themeProps('carousel'),
         stylex.props(
           styles.root,
-          // The scroller is the root's first child and its tab stop.
-          styles.focusRingOverlay,
+          // The scroller is the root's first child and its tab stop. Its
+          // edge-fade mask would cover a ring the root draws itself.
+          focusOutlineStyles.focusOverlayFirstChild,
           xstyle,
         ),
         className,
