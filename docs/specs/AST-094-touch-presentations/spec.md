@@ -856,37 +856,40 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
 
 ## Current-state impact
 
-- `architecture:theme-tokens` and `architecture:theme-authoring-contract`: the
-  three motion knobs join the motion configuration (FR4, DEC-15,
-  `spec:AST-108`). - `architecture:interaction-modality`: the touch-presentation
-  conditions (FR13) sit beside the shared modality state, and INV13 gives every
-  action group one press tracking (DEC-17). -
-  `architecture:react-component-runtime`: FR24 states the caller-visible outcome
-  of INV5 and INV7 for touch work; both are unchanged. - Under FR41:
-  ContextMenu's trigger, DropdownMenu's built-in trigger and its menu, and
+- `architecture:theme-tokens` and `architecture:theme-authoring-contract`:
+  the three motion knobs join the motion configuration (FR4, DEC-15,
+  `spec:AST-108`).
+- `architecture:interaction-modality`: the touch-presentation conditions
+  (FR13) sit beside the shared modality state, and INV13 gives every action
+  group one press tracking (DEC-17).
+- `architecture:react-component-runtime`: FR24 states the caller-visible
+  outcome of INV5 and INV7 for touch work; both are unchanged.
+- Under FR41: ContextMenu's trigger, DropdownMenu's built-in trigger and its menu, and
   Slider's track already turn selection off at all times (the menus also the
-  callout), and that stays. A held finger on other rows and controls with a hold
-  action can start a selection or the callout today, and no shared, press-scoped
-  suppression exists. - `family:buttons`: the control and cell press profiles
-  (FR11). - Each overlay member's own record (Dialog, BottomSheet, Drawer,
-  Popover, the menus): its touch exit and its Reduce Motion cross-fade (FR7,
-  FR8), since members own their animation (`family:overlay-dismissal` AV6). -
-  `design:reduced-motion` owns the reduced-motion rule FR8 applies. -
-  `component:Selector` DEC-1: `adaptive` resolves through the FR13 touch rule (a
-  coarse pointer and the `spec:AST-012` FR9 compact definition) instead of its
-  own width-and-pointer query, with `presentation` as the way back (FR25). -
-  `component:DropdownMenu` and `component:ContextMenu`: an omitted
-  `presentation`, released as `'popover'`, follows FR29 and FR33 under a finger;
-  `presentation="popover"` keeps the released behavior (FR25). -
-  `module:DropdownMenu/useMenuPress`: the released 500 ms `longPressDelayMs`
-  default gives way to FR29's timing; a caller that passes it keeps it (FR25). -
-  `module:DropdownMenu/useMenuPress`: its finger and pen rules (FR1–FR3, FR6,
+  callout), and that stays. A held finger on other rows and controls with a
+  hold action can start a selection or the callout today, and no shared,
+  press-scoped suppression exists.
+- `family:buttons`: the control and cell press profiles (FR11).
+- Each overlay member's own record (Dialog, BottomSheet, Drawer, Popover, the
+  menus): its touch exit and its Reduce Motion cross-fade (FR7, FR8), since
+  members own their animation (`family:overlay-dismissal` AV6).
+- `design:reduced-motion` owns the reduced-motion rule FR8 applies.
+- `component:Selector` DEC-1: `adaptive` resolves through the FR13 touch rule
+  (a coarse pointer and the `spec:AST-012` FR9 compact definition) instead of
+  its own width-and-pointer query, with `presentation` as the way back (FR25).
+- `component:DropdownMenu` and `component:ContextMenu`: an omitted
+  `presentation`, released as `'popover'`, follows FR29 and FR33 under a
+  finger; `presentation="popover"` keeps the released behavior (FR25).
+- `module:DropdownMenu/useMenuPress`: the released 500 ms `longPressDelayMs`
+  default gives way to FR29's timing; a caller that passes it keeps it (FR25).
+- `module:DropdownMenu/useMenuPress`: its finger and pen rules (FR1–FR3, FR6,
   FR7, FR9, FR11) follow FR26–FR30, FR33, and FR11's profiles under every
   primary pointer; its mouse rules (the mouse halves of FR1–FR3) and its
-  non-gesture rules stay in the module. - `spec:AST-057`: a trackpad's
-  horizontal scroll swipes a row (DEC-7), following the fingers and settling to
-  the nearest detent (FR43); a mouse drag and a mouse wheel never do. -
-  `component:BottomSheet`: a `form` or `required` sheet rubber-bands past its
+  non-gesture rules stay in the module.
+- `spec:AST-057`: a trackpad's horizontal scroll swipes a row (DEC-7),
+  following the fingers and settling to the nearest detent (FR43); a mouse
+  drag and a mouse wheel never do.
+- `component:BottomSheet`: a `form` or `required` sheet rubber-bands past its
   resting place under a finger as under a trackpad (FR3, FR43), with the same
   stretch for the same travel; a mouse wheel scrolls its content and never moves
   it. Past its tallest detent, every finger's pull stretches it on FR3's rubber
@@ -896,80 +899,85 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   (`component:BottomSheet` FR18). Past its tallest detent, a mouse and a pen
   keep FR18's resisted stretch of at most 48 px, an exception to FR43's same
   rubber band (`spec:AST-017` FR59). Implementation gap: a finger drags it one
-  for one below rest. - The shared pager (Carousel's paging presentation,
-  Lightbox's viewer): a trackpad swipe follows FR43's pager rule in Lightbox's
-  viewer and in Carousel's paging presentation, under every pointer
-  (`component:Lightbox` FR11). - `architecture:react-component-runtime` INV13:
-  gestures attach for every pointer, within FR24's listener budget. -
-  `design:user-states` DR1, DR3 and `family:buttons`: press timing follows
-  FR11's profiles under every pointer, the fine-pointer profile included. -
-  Every `family:action-groups` member outside the menu press model: a press that
-  slides across sibling actions acts on the action it lifts on (FR26–FR28),
-  under the touch presentation (`family:action-groups` FR1). - Every component
-  under a coarse pointer: no box grows for touch, and a touch target reaches 44
-  px only through an invisible hit area clamped by its neighbors, unless a
-  component or module record sets its own (FR42). - `component:DropdownMenu`,
-  `component:ContextMenu` and `component:Popover`: under a finger they follow
-  FR26–FR35 as each applies. - `component:AlertDialog`, `component:Dialog`,
-  `component:BottomSheet`, `component:BottomSheetSwitcher`, `component:Drawer`,
-  `component:MobileNav` and `component:Lightbox`: under a finger, a tap or a
-  drag during the entrance is held (FR35), an exception during the entrance to
+  for one below rest.
+- The shared pager (Carousel's paging presentation, Lightbox's viewer): a
+  trackpad swipe follows FR43's pager rule in Lightbox's viewer and in
+  Carousel's paging presentation, under every pointer (`component:Lightbox`
+  FR11).
+- `architecture:react-component-runtime` INV13: gestures attach for every
+  pointer, within FR24's listener budget.
+- `design:user-states` DR1, DR3 and `family:buttons`: press timing follows
+  FR11's profiles under every pointer, the fine-pointer profile included.
+- Every `family:action-groups` member outside the menu press model: a press
+  that slides across sibling actions acts on the action it lifts on
+  (FR26–FR28), under the touch presentation (`family:action-groups` FR1).
+- Every component under a coarse pointer: no box grows for touch, and a
+  touch target reaches 44 px only through an invisible hit area clamped by
+  its neighbors, unless a component or module record sets its own (FR42).
+- `component:DropdownMenu`, `component:ContextMenu` and `component:Popover`:
+  under a finger they follow FR26–FR35 as each applies.
+- `component:AlertDialog`, `component:Dialog`, `component:BottomSheet`,
+  `component:BottomSheetSwitcher`, `component:Drawer`, `component:MobileNav`
+  and `component:Lightbox`: under a finger, a tap or a drag during the
+  entrance is held (FR35), an exception during the entrance to
   `component:BottomSheet` FR7, `component:BottomSheetSwitcher` FR6,
   `component:Popover` DEC-8 (a Popover presented as a sheet),
   `component:MobileNav` FR4 and `family:overlay-dismissal` AV4, which otherwise
   let a scrim or overlay tap close at any time (`spec:AST-003` FR10 and
-  `architecture:layer-runtime` INV14 leave dismissal to the component). Toast
-  and a non-modal sheet (`component:BottomSheetSwitcher` FR5 and its Non-modal
-  state) do not hold the page: the page behind them stays live, and only the
-  sheet itself holds a tap or a drag while it enters. Dialog, Drawer and
-  MobileNav hold an entrance only under a coarse primary pointer: where the
-  primary pointer is fine and the screen also takes touch (a touchscreen
+  `architecture:layer-runtime` INV14 leave dismissal to the component). Toast and a non-modal sheet (`component:BottomSheetSwitcher` FR5 and its
+  Non-modal state) do not hold the page: the page behind them stays live, and
+  only the sheet itself holds a tap or a drag while it enters. Dialog, Drawer
+  and MobileNav hold an entrance only under a coarse primary pointer: where
+  the primary pointer is fine and the screen also takes touch (a touchscreen
   laptop), a finger's tap or drag during the entrance is not held. After a
   finger, the first press of a mouse that has not moved since lands on the
   entering presentation's shield and does nothing, where FR35 keeps today's
-  behavior for a mouse (DEC-16); a move of the mouse lowers the shield first. -
-  BottomSheet, Toast, Lightbox, NavigationStack and keyboard dismissal: a drag
-  that commits follows FR36–FR40. - `spec:AST-100` owns release velocity, which
-  FR17 reads. - Under FR45, motion that a tap, a hold, a key or the program
-  starts plays the theme's duration and easing tokens in a tap component, and
-  the component's springs from rest in a gesture component, under a finger as
-  under a mouse. The records that state such motion carry it: on tokens,
-  `component:DropdownMenu` FR21, `component:Popover` FR9,
-  `component:AlertDialog` FR6, `component:TreeList` FR8 and
-  `component:ProgressBar` FR4; on springs, `component:Switch` FR9, FR10 and
-  FR15, `component:SegmentedControl` FR9 and FR10, `component:Slider` FR7,
-  `component:ContextMenu` FR5, `component:Lightbox` FR5, FR12 and FR16 and
-  `component:DateInput` FR14. A tap component's touch exit that a tap, a key or
-  the program starts plays `spec:AST-090`'s `--duration-exit` and `--ease-exit`,
-  and no exit switch removes it (FR7; `spec:AST-090` FR14 and DEC-5 carry it).
-  On Switch and SegmentedControl, every change under a touch presentation
-  settles on the spring, as it does today; without a touch presentation a click,
-  a key or a change of value keeps the theme's curve, unchanged. Implementation
-  gap: ProgressBar's fill still moves linearly for `progress.fillTrackMs` times
-  the share of the track moved under a coarse pointer (`component:ProgressBar`
-  FR4); and DateInput's sheet wheel turns onto a clamped or a tapped row on its
-  measured tap spin, not `springs.settle` (`component:DateInput` FR14). - Under
-  FR45, a swipe row is a gesture component: a close or return that a tap or
-  Escape starts (`spec:AST-057` FR5, FR7) plays the row's spring from rest, and
-  a swipe that closes it keeps its measured spring from the release. - Under
-  FR45, `spec:AST-107`'s `settleTo` and an `animate` call without a velocity
-  play a spring for motion that no gesture drives. Their records keep their
-  springs until each carries FR45. - Under FR43 and FR45, a part that follows a
-  pointer follows every pointer and its release springs from the release
-  velocity under every pointer: `component:Switch` FR15's thumb under a mouse or
-  a pen, `component:Slider` FR7's coast after a mouse or a pen release,
-  `component:SegmentedControl` FR10's settle after a mouse or a pen release, and
-  `component:DateInput` FR15's wheel under a trackpad wherever the sheet shows.
-  Implementation gap: Switch's thumb does not follow a mouse or a pen, Slider's
-  mouse and pen releases do not coast, SegmentedControl's mouse and pen releases
-  slide on the theme's duration, and DateInput's wheel takes a trackpad only
-  under a coarse primary pointer. - `design:user-states` DR1 and DR3,
-  `spec:AST-025` FR14 and `spec:AST-013` FR3 each carry an amendment for touch
-  presentations (FR11, FR14, Platform support); `design:motion` DR3 and DR5
-  (draft) are departed from or met as FR4 and FR8 state. - Consumer docs: none
-  until a component ships its touch presentation; each component documents its
-  own, including the `presentation` value that keeps the released surface
-  (FR25).
+  behavior for a mouse (DEC-16); a move of the mouse lowers the shield first.
+- BottomSheet, Toast, Lightbox, NavigationStack and keyboard dismissal: a
+  drag that commits follows FR36–FR40.
+- `spec:AST-100` owns release velocity, which FR17 reads.
+- Under FR45, motion that a tap, a hold, a key or the program starts plays the
+  theme's duration and easing tokens in a tap component, and the component's
+  springs from rest in a gesture component, under a finger as under a mouse. The
+  records that state such motion carry it: on tokens, `component:DropdownMenu`
+  FR21, `component:Popover` FR9, `component:AlertDialog` FR6,
+  `component:TreeList` FR8 and `component:ProgressBar` FR4; on springs,
+  `component:Switch` FR9, FR10 and FR15, `component:SegmentedControl` FR9 and
+  FR10, `component:Slider` FR7, `component:ContextMenu` FR5,
+  `component:Lightbox` FR5, FR12 and FR16 and `component:DateInput` FR14. A tap
+  component's touch exit that a tap, a key or the program starts plays
+  `spec:AST-090`'s `--duration-exit` and `--ease-exit`, and no exit switch
+  removes it (FR7; `spec:AST-090` FR14 and DEC-5 carry it). On Switch and
+  SegmentedControl, every change under a touch presentation settles on the
+  spring, as it does today; without a touch presentation a click, a key or a
+  change of value keeps the theme's curve, unchanged. Implementation gap:
+  ProgressBar's fill still moves linearly for `progress.fillTrackMs` times the
+  share of the track moved under a coarse pointer (`component:ProgressBar` FR4);
+  and DateInput's sheet wheel turns onto a clamped or a tapped row on its
+  measured tap spin, not `springs.settle` (`component:DateInput` FR14).
+- Under FR45, a swipe row is a gesture component: a close or return that a tap
+  or Escape starts (`spec:AST-057` FR5, FR7) plays the row's spring from rest,
+  and a swipe that closes it keeps its measured spring from the release.
+- Under FR45, `spec:AST-107`'s `settleTo` and an `animate` call without a
+  velocity play a spring for motion that no gesture drives. Their records keep
+  their springs until each carries FR45.
+- Under FR43 and FR45, a part that follows a pointer follows every pointer
+  and its release springs from the release velocity under every pointer:
+  `component:Switch` FR15's thumb under a mouse or a pen, `component:Slider`
+  FR7's coast after a mouse or a pen release, `component:SegmentedControl`
+  FR10's settle after a mouse or a pen release, and `component:DateInput`
+  FR15's wheel under a trackpad wherever the sheet shows. Implementation gap:
+  Switch's thumb does not follow a mouse or a pen, Slider's mouse and pen
+  releases do not coast, SegmentedControl's mouse and pen releases slide on
+  the theme's duration, and DateInput's wheel takes a trackpad only under a
+  coarse primary pointer.
+- `design:user-states` DR1 and DR3, `spec:AST-025` FR14 and `spec:AST-013` FR3
+  each carry an amendment for touch presentations (FR11, FR14, Platform
+  support); `design:motion` DR3 and DR5 (draft) are departed from or met as
+  FR4 and FR8 state.
+- Consumer docs: none until a component ships its touch presentation; each
+  component documents its own, including the `presentation` value that keeps
+  the released surface (FR25).
 
 Motion that FR45 moves, by component. Each component's record carries its own line, except Carousel, whose trackpad paging this record states through the shared pager (FR43):
 

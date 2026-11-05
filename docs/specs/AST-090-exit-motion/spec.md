@@ -212,56 +212,62 @@ governs them in a touch presentation.
 - `architecture:theme-tokens`: `--ease-exit`, `--duration-exit`,
   `--duration-exit-dialog`, and `--duration-exit-layer` join the canonical
   vocabulary, with their theme template and generated token documentation
-  projections (INV1, INV7). - `architecture:layer-runtime`: a layer closes when
-  its close is requested, as it does with the exit off, and its exit plays after
-  that on the runtime's shared exit copy (INV14), drawn in the top layer where
-  the layer was. Native close reconciliation stays single-fired (INV6). A
-  leaving active or blocking owner keeps its place on the dismissal stack until
-  its exit ends, except a closing pinned Tooltip, which leaves it when its exit
-  starts (FR5). A leaving Dialog keeps supplying its modal outlet until it is
-  hidden (FR13); BottomSheet's outlet behavior does not change. -
-  `architecture:component-style-authoring`: no claim changes. A layer's exit is
-  the one transient exit copy INV7 allows, made by the shared mechanism and
-  removed when the exit ends (FR9). - `family:overlay-dismissal`: no claim
-  changes. A leaving member stays present for FR2 until it is hidden, except a
-  closing pinned Tooltip, which leaves the stack when its exit starts (FR5), and
-  animation stays member-owned (AV6). - `spec:AST-003`: no claim changes. A
-  leaving surface keeps its interaction role (FR1), a leaving passive dependent
-  such as an unpinned `Tooltip` still never shields an owner (FR4, DEC-1), and a
-  closing pinned `Tooltip` gives up Escape when its exit starts (FR4, DEC-6). A
-  leaving dialog is still the current native modal, so it keeps its outlet and
-  toasts stay operable above it (FR16, FR18). - `spec:AST-094`: a touch
-  presentation keeps the exit FR7 and FR8 give it (FR14). One that a tap, a key
-  or the program starts plays `--duration-exit` and `--ease-exit` in a tap
-  component and the component's spring in a gesture component, and one a gesture
-  drives keeps its velocity spring (`spec:AST-094` FR7, FR45, DEC-26). -
-  `spec:AST-108`: no claim changes. Its FR2 admits `--ease-exit` at the same
-  curve at every `character`; a spring-driven exit plays its own exit role and a
-  CSS part beside it takes the spring's settle time (FR3, FR4a); and an exit
-  duration set as a reference to a tempo-scaled token follows `tempo` (FR5). -
-  `design:reduced-motion`: no claim changes. Under reduced motion a pointer
+  projections (INV1, INV7).
+- `architecture:layer-runtime`: a layer closes when its close is requested, as
+  it does with the exit off, and its exit plays after that on the runtime's
+  shared exit copy (INV14), drawn in the top layer where the layer was. Native
+  close reconciliation stays single-fired (INV6). A leaving active or blocking
+  owner keeps its place on the dismissal stack until its exit ends, except a
+  closing pinned Tooltip, which leaves it when its exit starts
+  (FR5). A
+  leaving Dialog keeps supplying its modal outlet until it is hidden (FR13);
+  BottomSheet's outlet behavior does not change.
+- `architecture:component-style-authoring`: no claim changes. A layer's exit
+  is the one transient exit copy INV7 allows, made by the shared mechanism and
+  removed when the exit ends (FR9).
+- `family:overlay-dismissal`: no claim changes. A leaving member stays present
+  for FR2 until it is hidden, except a closing pinned Tooltip,
+  which leaves the stack when its exit starts (FR5), and animation stays
+  member-owned (AV6).
+- `spec:AST-003`: no claim changes. A leaving surface keeps its interaction role
+  (FR1), a leaving passive dependent such as an unpinned `Tooltip` still never
+  shields an owner (FR4, DEC-1), and a closing pinned `Tooltip`
+  gives up Escape when its exit starts (FR4, DEC-6). A leaving dialog is still the current native modal, so
+  it keeps its outlet and toasts stay operable above it (FR16, FR18).
+- `spec:AST-094`: a touch presentation keeps the exit FR7 and FR8 give it
+  (FR14). One that a tap, a key or the program starts plays `--duration-exit`
+  and `--ease-exit` in a tap component and the component's spring in a gesture
+  component, and one a gesture drives keeps its velocity spring (`spec:AST-094`
+  FR7, FR45, DEC-26).
+- `spec:AST-108`: no claim changes. Its FR2 admits `--ease-exit` at the same
+  curve at every `character`; a spring-driven exit plays its own exit role and
+  a CSS part beside it takes the spring's settle time (FR3, FR4a); and an exit
+  duration set as a reference to a tempo-scaled token follows `tempo` (FR5).
+- `design:reduced-motion`: no claim changes. Under reduced motion a pointer
   presentation's exit completes at once (DR3, FR10), and a touch presentation's
-  exit cross-fades through `spec:AST-094` FR8 (DR2). - `design:motion` (draft):
-  exits apply DR1, DR2, and DR5. This record holds the exit tokens and behavior
-  that its content boundary leaves to other records. - `component:Dialog`: its
-  `visibility` concept (open, closed) gains a leaving phase. With dialog exits
-  on, a Dialog whose caller has closed it stays presented, with the page behind
-  it inert and toasts still operable above it, until its exit ends (FR6, FR9,
-  FR13). AR2 keeps its focus-return claim; FR6 states when the return happens. -
-  `component:Popover`: AR4 keeps its focus-return claim; FR6 states when the
-  return happens for a layer. - `component:BottomSheet`: its close in a pointer
-  presentation reads `--ease-exit`. BottomSheet is a gesture component: in a
-  touch presentation, a close that a tap, a key or the program starts plays the
-  sheet's spring from rest, and a swipe or a drag that closes it keeps its
-  measured spring from the release (`spec:AST-094` FR7, FR45). Implementation
-  gap: a coarse-pointer close started by a tap or key plays `--duration-medium`
-  today. - Consumer docs: `motion` describes both curves, that exits are off by
-  default in a pointer presentation, how a theme turns each kind on, that a
-  touch exit is never removed, that a tap component's tap-started one plays the
-  theme's exit timing, and that a sheet's and the Lightbox's touch close springs
-  (FR14), and that callers keep content rendered while a surface closes. The
-  token tables and the theme template list the new tokens, and each member
-  component's docs describe its exit.
+  exit cross-fades through `spec:AST-094` FR8 (DR2).
+- `design:motion` (draft): exits apply DR1, DR2, and DR5. This record holds the
+  exit tokens and behavior that its content boundary leaves to other records.
+- `component:Dialog`: its `visibility` concept (open, closed) gains a leaving
+  phase. With dialog exits on, a Dialog whose caller has closed it stays
+  presented, with the page behind it inert and toasts still operable above it,
+  until its exit ends (FR6, FR9, FR13). AR2 keeps its focus-return claim; FR6
+  states when the return happens.
+- `component:Popover`: AR4 keeps its focus-return claim; FR6 states when the
+  return happens for a layer.
+- `component:BottomSheet`: its close in a pointer presentation reads
+  `--ease-exit`. BottomSheet is a gesture component: in a touch presentation, a
+  close that a tap, a key or the program starts plays the sheet's spring from
+  rest, and a swipe or a drag that closes it keeps its measured spring from the
+  release (`spec:AST-094` FR7, FR45). Implementation gap: a coarse-pointer close
+  started by a tap or key plays `--duration-medium` today.
+- Consumer docs: `motion` describes both curves, that exits are off by default
+  in a pointer presentation, how a theme turns each kind on, that a touch exit
+  is never removed, that a tap component's tap-started one plays the theme's
+  exit timing, and that a sheet's and the Lightbox's touch close springs (FR14),
+  and that callers keep content rendered while a surface closes. The token
+  tables and the theme template list the new tokens, and each member component's
+  docs describe its exit.
 
 ## Verification
 

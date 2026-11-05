@@ -182,13 +182,14 @@ settles on `switchControl.travel` from rest too, and the thumb lifts on
 `switchControl.lift` while a finger presses and settles back on
 `switchControl.settle` after at least `switchControl.minimumLiftMs`
 (`spec:AST-094` FR45); the other rows stay measured references the switch does
-not play. Implementation gap: under a coarse primary pointer the switch still
-plays `switchControl.wellOn` and `switchControl.wellOff` for a tap instead of
-changing the track colour on the travel spring's pace, and under a fine primary
-pointer the thumb does not follow a drag and a release settles on the theme's
-duration. Without a touch presentation a click, a key or a change of `value`
-slides the thumb and the track colour on `--duration-fast` and
-`--ease-standard`, which stays the released behavior, not a gap.
+not play. Implementation gap: under a touch presentation the switch still plays
+`switchControl.wellOn` and `switchControl.wellOff` for every change, a tap, a
+click, a key or a change of `value`, instead of changing the track colour on the
+travel spring's pace, and under a fine primary pointer the thumb does not follow
+a drag and a release settles on the theme's duration. Without a touch
+presentation a click, a key or a change of `value` slides the thumb and the
+track colour on `--duration-fast` and `--ease-standard`, which stays the
+released behavior, not a gap.
 
 | Role                          | Default                                 | Use                                                          |
 | ----------------------------- | --------------------------------------- | ------------------------------------------------------------ |
