@@ -79,7 +79,7 @@ const playbackCallbacks = [
 export const docs = {
   name: 'MediaPlayer',
   displayName: 'Media Player',
-  group: 'Media',
+  group: 'MediaPlayer',
   category: 'Content',
   keywords: [
     'video',
@@ -364,6 +364,7 @@ export const docs = {
     {
       name: 'MediaPlayerVideo',
       displayName: 'Media Player Video',
+      isHiddenFromOverview: true,
       description:
         'The native video element of a MediaPlayer. It takes the native video attributes except `controls`; pass `<track>` elements as children.',
       props: [
@@ -386,6 +387,7 @@ export const docs = {
     {
       name: 'MediaPlayerAudio',
       displayName: 'Media Player Audio',
+      isHiddenFromOverview: true,
       description:
         'The native audio element of a MediaPlayer. It renders nothing visible and takes the native audio attributes except `controls`.',
       props: [{name: 'src', type: 'string', description: 'URL of the audio.'}],
@@ -393,6 +395,7 @@ export const docs = {
     {
       name: 'MediaPlayButton',
       displayName: 'Media Play Button',
+      isHiddenFromOverview: true,
       description:
         'Plays and pauses. After the end it shows Replay and plays from the start.',
       props: [
@@ -409,6 +412,7 @@ export const docs = {
     {
       name: 'MediaSeekButton',
       displayName: 'Media Seek Button',
+      isHiddenFromOverview: true,
       description:
         'Skips back or forward by a fixed number of seconds, shown on its icon.',
       props: [
@@ -426,12 +430,14 @@ export const docs = {
     {
       name: 'MediaMuteButton',
       displayName: 'Media Mute Button',
+      isHiddenFromOverview: true,
       description: 'Mutes and unmutes. Its icon follows the volume.',
       props: [sizeProp, ...styleProps],
     },
     {
       name: 'MediaVolumeSlider',
       displayName: 'Media Volume Slider',
+      isHiddenFromOverview: true,
       description:
         'Sets the volume. It renders nothing where script cannot set the volume, such as iOS Safari, where the hardware buttons own it.',
       props: [
@@ -447,6 +453,7 @@ export const docs = {
     {
       name: 'MediaTimeSlider',
       displayName: 'Media Time Slider',
+      isHiddenFromOverview: true,
       description:
         'The timeline. Dragging previews the time and seeks on release; arrow keys skip 5 seconds and Page Up and Page Down skip 10. It runs left to right in every direction. The track shows the buffered range, and optional chapters and markers; a pointer over it previews the time, the chapter, and the nearest marker.',
       props: [...timelineProps, ...styleProps],
@@ -454,6 +461,7 @@ export const docs = {
     {
       name: 'MediaTime',
       displayName: 'Media Time',
+      isHiddenFromOverview: true,
       description:
         'Shows playback time as m:ss or h:mm:ss. A live stream shows “Live”.',
       props: [
@@ -469,6 +477,7 @@ export const docs = {
     {
       name: 'MediaCaptionsButton',
       displayName: 'Media Captions Button',
+      isHiddenFromOverview: true,
       description:
         'Turns captions on and off. It renders nothing when the media has no caption or subtitle track.',
       props: [sizeProp, ...styleProps],
@@ -476,6 +485,7 @@ export const docs = {
     {
       name: 'MediaFullscreenButton',
       displayName: 'Media Fullscreen Button',
+      isHiddenFromOverview: true,
       description:
         'Enters and exits fullscreen with the player’s own element, so the controls come along. iPhone shows the system player instead. It renders nothing where fullscreen is not available.',
       props: [sizeProp, ...styleProps],
@@ -483,6 +493,7 @@ export const docs = {
     {
       name: 'MediaPlaybackRateButton',
       displayName: 'Media Playback Rate Button',
+      isHiddenFromOverview: true,
       description:
         'Shows the playback speed. A press switches between normal speed and the last other speed, the way the mute button switches the sound off and on; from normal speed with no other speed yet, it steps up one speed.',
       props: [sizeProp, ...styleProps],
@@ -490,6 +501,7 @@ export const docs = {
     {
       name: 'MediaPlaybackRateSlider',
       displayName: 'Media Playback Rate Slider',
+      isHiddenFromOverview: true,
       description:
         'Sets the playback speed in steps and shows the speed in a tooltip while it is hovered, dragged, or focused. AudioPlayer reveals it beside the speed button.',
       props: [
@@ -512,6 +524,7 @@ export const docs = {
     {
       name: 'MediaPlaybackRateMenu',
       displayName: 'Media Playback Rate Menu',
+      isHiddenFromOverview: true,
       description:
         'Shows the playback speed and opens a menu of speeds with the current one checked. It keeps the controls visible while the menu is open.',
       props: [
