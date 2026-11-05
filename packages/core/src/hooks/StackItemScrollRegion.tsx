@@ -51,6 +51,7 @@ export function StackItemScrollRegion({
       ref: mergedRef,
       role: region.role,
       'aria-label': region['aria-label'],
+      tabIndex: elementProps.tabIndex ?? region.tabIndex,
     },
     children,
   );

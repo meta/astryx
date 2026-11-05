@@ -4,9 +4,10 @@
  * @file useScrollRegionProps.test.tsx
  * @input LayoutContent, LayoutPanel and StackItem, with the overflow observer
  *   replaced by one the test drives
- * @output Regression coverage for naming a scrolling region: only while it
- *   scrolls, the caller's role and label first, a translated default, and the
- *   observer stopping
+ * @output Regression coverage for naming a scrolling region and its Tab
+ *   stop: only while it scrolls, the caller's role, label and tabIndex first,
+ *   a translated default, focus kept when overflow ends, and the observer
+ *   stopping
  * @position Unit contract of useScrollRegionProps through its three callers;
  *   the Chromium spec in __tests__ reads the real accessibility tree
  */
@@ -120,11 +121,35 @@ describe('a scrolling LayoutContent', () => {
     expect(region).not.toHaveAttribute('aria-label');
   });
 
-  it('leaves the tab index to the browser', () => {
+  it('is a Tab stop only while it overflows', () => {
+    render(<LayoutContent data-testid="region">Body</LayoutContent>);
+    const region = screen.getByTestId('region');
+    expect(region).not.toHaveAttribute('tabindex');
+    setOverflow(region, true);
+    expect(region).toHaveAttribute('tabindex', '0');
+    setOverflow(region, false);
+    expect(region).not.toHaveAttribute('tabindex');
+  });
+
+  it('keeps focus when it stops overflowing while focused', () => {
     render(<LayoutContent data-testid="region">Body</LayoutContent>);
     const region = screen.getByTestId('region');
     setOverflow(region, true);
-    expect(region).not.toHaveAttribute('tabindex');
+    act(() => region.focus());
+    setOverflow(region, false);
+    expect(region).toHaveAttribute('tabindex', '-1');
+    expect(region).toHaveFocus();
+  });
+
+  it("keeps the caller's tabIndex", () => {
+    render(
+      <LayoutContent data-testid="region" tabIndex={-1}>
+        Body
+      </LayoutContent>,
+    );
+    const region = screen.getByTestId('region');
+    setOverflow(region, true);
+    expect(region).toHaveAttribute('tabindex', '-1');
   });
 
   it("still gives the caller's ref the root, and stops observing on unmount", () => {
@@ -154,6 +179,7 @@ describe('a scrolling LayoutPanel', () => {
     setOverflow(region, true);
     expect(region).toHaveAttribute('role', 'group');
     expect(region).toHaveAttribute('aria-label', 'Content');
+    expect(region).toHaveAttribute('tabindex', '0');
   });
 
   it("keeps the caller's role and label, and does not observe it", () => {
@@ -186,6 +212,23 @@ describe('a scrollable StackItem', () => {
     setOverflow(region, false);
     expect(region).not.toHaveAttribute('role');
     expect(region).not.toHaveAttribute('aria-label');
+  });
+
+  it("is a Tab stop only while it overflows, and keeps the caller's tabIndex", () => {
+    const {rerender} = render(
+      <StackItem data-testid="region" isScrollable>
+        Items
+      </StackItem>,
+    );
+    const region = screen.getByTestId('region');
+    setOverflow(region, true);
+    expect(region).toHaveAttribute('tabindex', '0');
+    rerender(
+      <StackItem data-testid="region" isScrollable tabIndex={-1}>
+        Items
+      </StackItem>,
+    );
+    expect(screen.getByTestId('region')).toHaveAttribute('tabindex', '-1');
   });
 
   it("keeps the caller's role and aria-label, and its ref", () => {

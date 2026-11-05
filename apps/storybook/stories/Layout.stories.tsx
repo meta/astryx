@@ -1596,3 +1596,68 @@ export const NestedInAppShellWide: Story = {
     </VStack>
   ),
 };
+
+const KEYBOARD_PARAGRAPHS = Array.from(
+  {length: 8},
+  (_, index) =>
+    `Paragraph ${index + 1}. This text is longer than the card, so the content area scrolls. A keyboard user reaches it with Tab and scrolls it with the arrow keys.`,
+);
+
+/**
+ * Keyboard scrolling of a named content area. An overflowing area whose
+ * content holds no focusable control is a Tab stop, and the arrow keys scroll
+ * it. An area that starts with a button, or that fits, adds no extra stop.
+ */
+export const KeyboardScrolling: Story = {
+  name: 'Keyboard Scrolling',
+  render: () => (
+    <VStack gap={4} xstyle={styles.storySection}>
+      <HStack gap={2}>
+        <Button label="Before" />
+      </HStack>
+      <HStack gap={4} wrap="wrap">
+        <Card width={280} height={200}>
+          <Layout
+            content={
+              <LayoutContent label="Text only, overflowing">
+                {KEYBOARD_PARAGRAPHS.map(paragraph => (
+                  <p key={paragraph} {...stylex.props(styles.bodyText)}>
+                    {paragraph}
+                  </p>
+                ))}
+              </LayoutContent>
+            }
+          />
+        </Card>
+        <Card width={280} height={200}>
+          <Layout
+            content={
+              <LayoutContent label="Starts with a button, overflowing">
+                <Button label="Inside button" />
+                {KEYBOARD_PARAGRAPHS.map(paragraph => (
+                  <p key={paragraph} {...stylex.props(styles.bodyText)}>
+                    {paragraph}
+                  </p>
+                ))}
+              </LayoutContent>
+            }
+          />
+        </Card>
+        <Card width={280} height={200}>
+          <Layout
+            content={
+              <LayoutContent label="Text only, fits">
+                <p {...stylex.props(styles.bodyText)}>
+                  Short text that fits, so the area does not scroll.
+                </p>
+              </LayoutContent>
+            }
+          />
+        </Card>
+      </HStack>
+      <HStack gap={2}>
+        <Button label="After" />
+      </HStack>
+    </VStack>
+  ),
+};

@@ -204,6 +204,7 @@ export function LayoutContent({
       ref={mergedRef}
       role={region.role}
       aria-label={region['aria-label']}
+      tabIndex={region.tabIndex}
       {...mergeProps(
         themeProps('layout-content'),
         stylex.props(
