@@ -21,9 +21,9 @@
 
 import {type CSSProperties, type SVGProps, useId} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {mergeProps} from '@astryxdesign/core/utils';
 import {iconVars} from './tokens.stylex';
+import {iconColorStyles} from './colors.stylex';
 import {variations, opticalSize} from './variations.stylex';
 import {themeProps} from '@astryxdesign/core/utils';
 
@@ -111,17 +111,6 @@ const styles = stylex.create({
     paddingInlineStart: iconVars['--icon-inline-offset'],
     paddingBlockStart: iconVars['--icon-block-offset'],
   },
-});
-
-const colorStyles = stylex.create({
-  primary: {color: colorVars['--color-icon-primary']},
-  secondary: {color: colorVars['--color-icon-secondary']},
-  disabled: {color: colorVars['--color-icon-disabled']},
-  accent: {color: colorVars['--color-accent']},
-  positive: {color: colorVars['--color-icon-success']},
-  negative: {color: colorVars['--color-icon-error']},
-  warning: {color: colorVars['--color-icon-warning']},
-  inherit: {color: 'inherit'},
 });
 
 // =============================================================================
@@ -376,7 +365,7 @@ export function SVGIcon({
         themeProps('svg-icon', {variation, size, color}),
         stylex.props(
           styles.root,
-          colorStyles[color],
+          iconColorStyles[color],
           variations[variation],
           opticalSize[size],
         ),

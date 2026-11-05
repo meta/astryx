@@ -61,7 +61,9 @@ export function parseSVGPaths(svg: string): WeightedIconPath[] {
     if (d == null) {
       continue;
     }
-    paths.push(/fill-rule="evenodd"/.test(attrs) ? {d, evenOdd: true} : {d});
+    paths.push(
+      /fill-rule=["']evenodd["']/.test(attrs) ? {d, evenOdd: true} : {d},
+    );
   }
   return paths;
 }

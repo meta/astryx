@@ -55,6 +55,11 @@ const blocks = names.map(name => {
       if (parseSVGPaths(svg).length === 0) {
         failures.push(`${file}: no <path d="..."> to draw`);
       }
+      // The parser reads only filled <path> elements: anything else would be dropped.
+      const unread = svg.match(/<(circle|ellipse|rect|line|polyline|polygon|use|text)\b|\stransform=/);
+      if (unread != null) {
+        failures.push(`${file}: ${unread[0].trim()} is not read; convert it to a <path>`);
+      }
     }
   }
   const icon = buildWeightedIcon(name, drawings, {...(weights ? {weights} : {}), ...(viewBox ? {viewBox} : {})});
@@ -62,7 +67,7 @@ const blocks = names.map(name => {
 });
 
 if (failures.length > 0) {
-  console.error(`No drawing read from:\n${failures.join('\n')}`);
+  console.error(`Drawings not fully read:\n${failures.join('\n')}`);
   process.exit(1);
 }
 

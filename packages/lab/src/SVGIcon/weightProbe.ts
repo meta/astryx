@@ -26,8 +26,7 @@ const WEIGHT_PROBE_FAMILY = 'AstryxWeightProbe';
 const WEIGHT_PROBE_WOFF2 =
   'd09GMgABAAAAAAF8AA0AAAAAA3gAAAEqAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP0hWQVJCBmAANC8kChQ0MDgBNgIkAwgLBgAEIAWBHwcmG6wCSJ4Dbju8irW92Oh6kugpxBHF73Wz914orQn1haE0i7NEfoVGyjhDMSqx3PQe4nGGeCocqpVjz8Tigex/gProjx0HFGASWG5hEFKioUWYlo2QwKAbOy9qONhMS92/KOAAAAQbggtRMzPAEwWlFALzlgGfTGkTXVMAjyUGQ/uHEPTdgELDgSY40N2g64JhQcIE3t9R4gArn3EygMg37R8CFOgIGjqgg9CSdQkQBJyp2oftsbBjaTSDpdETjGrevv+jyvtDEL54adqir/D2Dz97+oCOIoKmQGj/MJkCC0WwFwiC0hCqWQCWfCAQuwgo3a5AWHKoSV8Vd84vlxX3Zdjw/twP3bo8UEXd1V44y2GYwzD0Bp3VwhJKxRIDrVPzhGbSYAAJZjW2DwA=';
 
-// The documents that already have the probe. The face stays for the
-// document's lifetime, so it is added once per document, on first use.
+// The face stays for the document's lifetime, so each document gets it once.
 const registeredDocuments = new WeakSet<Document>();
 
 /**

@@ -24,9 +24,9 @@
 
 import type {CSSProperties, SVGProps} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {mergeProps, themeProps} from '@astryxdesign/core/utils';
 import {iconVars} from './tokens.stylex';
+import {iconColorStyles} from './colors.stylex';
 import {opticalSize} from './variations.stylex';
 import {weightProbeStyles, weightRanges} from './weighted.stylex';
 import {registerWeightProbe} from './weightProbe';
@@ -98,17 +98,6 @@ const styles = stylex.create({
     height: 0,
     overflow: 'hidden',
   },
-});
-
-const colorStyles = stylex.create({
-  primary: {color: colorVars['--color-icon-primary']},
-  secondary: {color: colorVars['--color-icon-secondary']},
-  disabled: {color: colorVars['--color-icon-disabled']},
-  accent: {color: colorVars['--color-accent']},
-  positive: {color: colorVars['--color-success']},
-  negative: {color: colorVars['--color-error']},
-  warning: {color: colorVars['--color-warning']},
-  inherit: {color: 'inherit'},
 });
 
 type RangeKey = keyof typeof weightRanges;
@@ -197,7 +186,7 @@ export function WeightedSVGIcon({
       ref={installWeightProbe}
       {...mergeProps(
         themeProps('weighted-svg-icon', {size, color}),
-        stylex.props(styles.root, colorStyles[color], opticalSize[size]),
+        stylex.props(styles.root, iconColorStyles[color], opticalSize[size]),
       )}>
       <span {...stylex.props(weightProbeStyles.probe)}>
         <svg

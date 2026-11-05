@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {StrictMode} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {createPortal} from 'react-dom';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
@@ -10,6 +11,9 @@ import {
   weightedIconSymbolId,
 } from './WeightedSVGIcon';
 import {buildWeightedIcon, parseSVGPaths} from './buildWeightedIcon';
+import {iconColorStyles} from './colors.stylex';
+import {SVGIcon} from './SVGIcon';
+import {checkIcon} from './icons';
 import {bellWeightedIcon, weightedStarterIcons} from './weightedIcons';
 
 const svg = (d: string) => `<svg viewBox="0 0 24 24"><path d="${d}"/></svg>`;
@@ -146,6 +150,26 @@ describe('the weight probe font', () => {
     expect(addToFrame).toHaveBeenCalledTimes(1);
     unmount();
     iframe.remove();
+  });
+
+  it('paints each color with the same icon role as SVGIcon', () => {
+    for (const color of ['positive', 'negative', 'warning'] as const) {
+      const roleClasses = (
+        stylex.props(iconColorStyles[color]).className ?? ''
+      ).split(' ');
+      const {container, unmount} = render(
+        <>
+          <WeightedSVGIcon icon={bellWeightedIcon} color={color} />
+          <SVGIcon icon={checkIcon} color={color} />
+        </>,
+      );
+      for (const root of container.querySelectorAll(
+        '.astryx-weighted-svg-icon, .astryx-svg-icon',
+      )) {
+        expect(root).toHaveClass(...roleClasses);
+      }
+      unmount();
+    }
   });
 
   it('keeps a caller className beside its own classes', () => {
