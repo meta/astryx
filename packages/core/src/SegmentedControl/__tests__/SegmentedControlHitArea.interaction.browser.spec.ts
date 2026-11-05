@@ -14,6 +14,7 @@
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
+  drag,
   openStory,
   tap,
   touchDriver,
@@ -22,9 +23,6 @@ import {
 } from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
-
-/** The large segment's own height, px: the band adds none. */
-const LG_SEGMENT_HEIGHT = 32;
 
 interface Box {
   left: number;
@@ -87,18 +85,40 @@ async function measure(page: Page) {
 const centerX = (box: Box) => (box.left + box.right) / 2;
 
 test.describe('SegmentedControl touch target (spec:AST-094 FR42), under a finger', () => {
-  test('a segment’s hit area grows toward 44 px tall, and its box does not change', async ({
+  test('a segment’s hit area grows toward 44 px tall without growing its box', async ({
     page,
   }) => {
     await openStory(page, storybook(), 'core-segmentedcontrol--below-a-button');
     await waitForHitArea(page);
     const {segment, button, insets} = await measure(page);
-    expect(segment.bottom - segment.top).toBe(LG_SEGMENT_HEIGHT);
+    // The theme sets the segment's height; the band adds none to its box.
+    const height = segment.bottom - segment.top;
+    expect(height).toBeLessThan(44);
     // Below: nothing near, so the band reaches the full 44 px share.
-    expect(insets.bottom).toBe((44 - LG_SEGMENT_HEIGHT) / 2);
+    expect(insets.bottom).toBe((44 - height) / 2);
     // Above: the band stops at half the gap to the button.
     expect(insets.top).toBeLessThanOrEqual((segment.top - button.bottom) / 2);
     expect(insets.top).toBeGreaterThan(0);
+  });
+
+  test('a drag that lifts past a segment’s band, in the button’s half of the gap, commits nothing', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), 'core-segmentedcontrol--below-a-button');
+    await waitForHitArea(page);
+    const driver = await touchDriver(page);
+    const {segment, button, insets} = await measure(page);
+    const month$ = page.locator('#storybook-root [data-value="month"]');
+    const x = Math.min(centerX(segment), (button.left + button.right) / 2);
+    const from = {x, y: (segment.top + segment.bottom) / 2};
+    const to = {x, y: segment.top - insets.top - 2};
+    if (driver.engine === 'webkit') {
+      await driver.drag(from, to);
+    } else {
+      await driver.play(drag(from, to, {steps: 8}));
+    }
+    await page.waitForTimeout(400);
+    await expect(month$).toHaveAttribute('aria-checked', 'true');
   });
 
   test('a tap on the band below a segment selects it', async ({page}) => {
@@ -108,7 +128,10 @@ test.describe('SegmentedControl touch target (spec:AST-094 FR42), under a finger
     const {segment, insets} = await measure(page);
     const segment$ = page.locator('#storybook-root [data-value="day"]');
     await expect(segment$).toHaveAttribute('aria-checked', 'false');
-    await tapAt(driver, {x: centerX(segment), y: segment.bottom + insets.bottom - 2});
+    await tapAt(driver, {
+      x: centerX(segment),
+      y: segment.bottom + insets.bottom - 2,
+    });
     await expect(segment$).toHaveAttribute('aria-checked', 'true');
   });
 

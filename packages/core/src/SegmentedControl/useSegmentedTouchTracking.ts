@@ -8,7 +8,7 @@
  *   the control is enabled
  * @output useSegmentedTouchTracking (a press of any pointer, landing to
  *   lift, and its ClickWait), and segmentTargetAt, measureSegments,
- *   measureControlBounds and liftTargetAt, the segment a pointer counts for
+ *   measureLiftArea and liftTargetAt, the segment a pointer counts for
  * @position Internal to SegmentedControl; drives useSegmentedSelectionMotion.ts
  *
  * SYNC: When modified, update:
@@ -102,29 +102,24 @@ export function segmentTargetAt(
 }
 
 /**
- * The segment a lift at viewport (`x`, `y`) commits: inside the control's
- * `bounds`, the one `segmentTargetAt` counts it for; outside them, none. A
- * press that slides off cancels, because the control selects rather than
- * toggles: a second press would not undo it.
+ * The segment a lift at viewport (`x`, `y`) commits: inside any box of the
+ * control's lift `area`, the one `segmentTargetAt` counts it for; outside
+ * them, none. A press that slides off cancels, because the control selects
+ * rather than toggles: a second press would not undo it.
  */
 export function liftTargetAt(
   x: number,
   y: number,
-  bounds: ControlBounds,
+  area: ReadonlyArray<ControlBounds>,
   segments: ReadonlyArray<SegmentSpan>,
 ): HTMLElement | null {
-  if (
-    x < bounds.left ||
-    x > bounds.right ||
-    y < bounds.top ||
-    y > bounds.bottom
-  ) {
-    return null;
-  }
-  return segmentTargetAt(x, segments);
+  const isInside = area.some(
+    box => x >= box.left && x <= box.right && y >= box.top && y <= box.bottom,
+  );
+  return isInside ? segmentTargetAt(x, segments) : null;
 }
 
-const NO_BOUNDS: ControlBounds = {left: 0, top: 0, right: -1, bottom: -1};
+const NO_AREA: ReadonlyArray<ControlBounds> = [];
 
 /** A measured hit inset on `element`, px (0 when none is written). */
 function hitInset(element: HTMLElement, side: keyof HitInsets): number {
@@ -135,24 +130,29 @@ function hitInset(element: HTMLElement, side: keyof HitInsets): number {
 }
 
 /**
- * The box a lift may commit in: the control's own box, grown to each
- * segment's touch hit band (utils/hitArea), so a tap on a band selects its
- * segment. Under a fine pointer no band is written and this is the box.
+ * The boxes a lift may commit in: the control's own box, and each segment's
+ * box grown by its own touch hit band (utils/hitArea), so a tap on a band
+ * selects its segment. Each band is kept apart: a band a neighbor clamped
+ * stays clamped, though another segment's band reaches further. Under a fine
+ * pointer no band is written, and the segments sit inside the control's box.
  */
-export function measureControlBounds(
+export function measureLiftArea(
   track: HTMLElement,
   segments: ReadonlyArray<SegmentSpan>,
-): ControlBounds {
-  const rect = track.getBoundingClientRect();
-  let {left, top, right, bottom} = rect;
-  for (const {element} of segments) {
-    const box = element.getBoundingClientRect();
-    left = Math.min(left, box.left - hitInset(element, 'left'));
-    top = Math.min(top, box.top - hitInset(element, 'top'));
-    right = Math.max(right, box.right + hitInset(element, 'right'));
-    bottom = Math.max(bottom, box.bottom + hitInset(element, 'bottom'));
-  }
-  return {left, top, right, bottom};
+): ReadonlyArray<ControlBounds> {
+  const {left, top, right, bottom} = track.getBoundingClientRect();
+  return [
+    {left, top, right, bottom},
+    ...segments.map(({element}) => {
+      const box = element.getBoundingClientRect();
+      return {
+        left: box.left - hitInset(element, 'left'),
+        top: box.top - hitInset(element, 'top'),
+        right: box.right + hitInset(element, 'right'),
+        bottom: box.bottom + hitInset(element, 'bottom'),
+      };
+    }),
+  ];
 }
 
 /**
@@ -181,7 +181,7 @@ export function useSegmentedTouchTracking(
   /** The segments as the finger found them (disabled ones too). */
   const segmentsRef = useRef<SegmentSpan[]>([]);
   /** The control's box as the finger found it: a lift outside it cancels. */
-  const boundsRef = useRef<ControlBounds>(NO_BOUNDS);
+  const areaRef = useRef<ReadonlyArray<ControlBounds>>(NO_AREA);
   const trackerRef = useRef<ActionGroupTracker | null>(null);
   const tracker = (trackerRef.current ??= createActionGroupTracker(() => ({
     roots: () => [trackRef.current],
@@ -195,7 +195,7 @@ export function useSegmentedTouchTracking(
       x: number,
       y: number,
       _targets: ReadonlyArray<ActionGroupTarget>,
-    ) => liftTargetAt(x, y, boundsRef.current, segmentsRef.current),
+    ) => liftTargetAt(x, y, areaRef.current, segmentsRef.current),
     onActivated: (item, cancelled) => {
       const track = trackRef.current;
       const value = item.dataset.value;
@@ -245,7 +245,7 @@ export function useSegmentedTouchTracking(
           clickWait.end();
           isDraggingRef.current = false;
           segmentsRef.current = measureSegments(track);
-          boundsRef.current = measureControlBounds(track, segmentsRef.current);
+          areaRef.current = measureLiftArea(track, segmentsRef.current);
           tracker.begin(touch.x, touch.y);
           motion.begin(track, tracker.beganOn, touch.pointerType === 'touch');
           break;
