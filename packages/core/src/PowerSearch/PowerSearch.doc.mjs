@@ -142,7 +142,7 @@ export const docs = {
       name: 'timezoneID',
       type: 'string',
       description:
-        'IANA zone a date-only date_absolute value, and each absolute part of a date_range, is read and written in: the day shows, edits and stores (as that midnight) in it; unset, a day is its UTC day. A date_absolute with isDateOnly: false shows and edits its date and time in it; unset, in the viewer\'s zone. E.g. "America/New_York". Date values are written in the InternationalizationProvider calendar, such as calendar="persian"; filter values stay Unix seconds. Its editor, a DateInput or (for date_range) a DateRangeInput, shows dates the way that input does, which can still be Gregorian.',
+        'IANA zone a date-only date_absolute value, and each absolute part of a date_range, is read and written in: the day shows, edits and stores (as that midnight) in it; unset, a day is its UTC day. A date_absolute with isDateOnly: false shows and edits its date and time in it; unset, in the viewer\'s zone. E.g. "America/New_York". Date values are written in the InternationalizationProvider calendar, such as calendar="persian"; filter values stay Unix seconds.',
     },
     {
       name: 'handleRef',
@@ -450,7 +450,7 @@ export const docsZh = {
       name: 'timezoneID',
       type: 'string',
       description:
-        '仅日期的 date_absolute 值及 date_range 的每个绝对端点读写所用的 IANA 时区：该日在此时区显示、编辑并以其午夜存储；未设置时为 UTC 日。isDateOnly: false 的 date_absolute 值在此时区显示并编辑其日期和时间；未设置时为查看者所在时区。例如 "America/New_York"。日期值使用 InternationalizationProvider 的历法（如 calendar="persian"）显示；筛选值仍为 Unix 秒数。值的编辑器（DateInput，date_range 则为 DateRangeInput）按该输入框的方式显示日期，可能仍为公历。',
+        '仅日期的 date_absolute 值及 date_range 的每个绝对端点读写所用的 IANA 时区：该日在此时区显示、编辑并以其午夜存储；未设置时为 UTC 日。isDateOnly: false 的 date_absolute 值在此时区显示并编辑其日期和时间；未设置时为查看者所在时区。例如 "America/New_York"。日期值使用 InternationalizationProvider 的历法（如 calendar="persian"）显示；筛选值仍为 Unix 秒数。',
     },
     {
       name: 'handleRef',
@@ -572,7 +572,7 @@ export const docsDense = {
     menuWidth: 'Main field/search menu width in pixels.',
     popoverSaveButtonLabel: 'Label for save button in edit popover.',
     timezoneID:
-      'IANA zone a date-only value reads and writes in; unset, its UTC day. Dates show in the provider calendar; editors show dates as their DateInput or DateRangeInput does.',
+      'IANA zone a date-only value reads and writes in; unset, its UTC day. Dates show in the provider calendar.',
     handleRef:
       'Imperative handle w/ focusTypeahead() + blurTypeahead() methods.',
     endContent:
