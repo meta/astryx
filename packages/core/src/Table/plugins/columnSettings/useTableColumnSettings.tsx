@@ -61,8 +61,9 @@ export interface ColumnSettingsOption<TColumnKey extends string = string> {
  *
  * @template TColumnKey - String literal union of column keys
  */
-export type UseTableColumnSettingsConfig<TColumnKey extends string = string> =
-  UseTableColumnSettingsStateConfig<TColumnKey>;
+export type UseTableColumnSettingsConfig<
+  TColumnKey extends string = string,
+> = UseTableColumnSettingsStateConfig<TColumnKey>;
 
 // =============================================================================
 // Plugin Hook

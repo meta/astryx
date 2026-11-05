@@ -15,7 +15,10 @@
  */
 
 import {useState, useCallback} from 'react';
-import type {TableFilterState, TableFilterValue} from './useTableFiltering';
+import type {
+  TableFilterState,
+  TableFilterValue,
+} from './useTableFiltering';
 
 export interface UseTableFilterStateResult {
   /** Current filter state — pass to useTableFiltering. */
@@ -50,7 +53,9 @@ export interface UseTableFilterStateResult {
 export function useTableFilterState(
   initialState?: TableFilterState,
 ): UseTableFilterStateResult {
-  const [filters, setFilters] = useState<TableFilterState>(initialState ?? {});
+  const [filters, setFilters] = useState<TableFilterState>(
+    initialState ?? {},
+  );
 
   const onFilterChange = useCallback(
     (key: string, value: TableFilterValue | null) => {

@@ -169,7 +169,9 @@ export interface UseTableColumnSettingsStateReturn<
  * <Table data={data} columns={allColumns} plugins={{ columnSettings: plugin }} />
  * ```
  */
-export function useTableColumnSettingsState<TColumnKey extends string = string>(
+export function useTableColumnSettingsState<
+  TColumnKey extends string = string,
+>(
   config: UseTableColumnSettingsStateConfig<TColumnKey>,
 ): UseTableColumnSettingsStateReturn<TColumnKey> {
   const {columns, activeColumnKeys} = config;

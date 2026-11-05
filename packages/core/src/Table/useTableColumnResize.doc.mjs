@@ -13,7 +13,7 @@ export const docs = {
       name: 'columnWidths',
       type: 'Record<string, number>',
       description:
-        "Controlled pixel-width overrides keyed by column key. When a key is present it overrides the column's declared width.",
+        'Controlled pixel-width overrides keyed by column key. When a key is present it overrides the column\'s declared width.',
     },
     {
       name: 'onColumnResizeEnd',
@@ -51,8 +51,7 @@ export const docsZh = {
     {
       name: 'columnWidths',
       type: 'Record<string, number>',
-      description:
-        '受控的像素宽度覆盖，按列键索引。存在某键时会覆盖该列声明的宽度。',
+      description: '受控的像素宽度覆盖，按列键索引。存在某键时会覆盖该列声明的宽度。',
     },
     {
       name: 'onColumnResizeEnd',

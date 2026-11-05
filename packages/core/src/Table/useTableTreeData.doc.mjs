@@ -19,7 +19,7 @@ export const docs = {
     {
       name: 'onToggleItem',
       type: '(item: T) => void',
-      description: "Toggle a row's expansion.",
+      description: 'Toggle a row\'s expansion.',
       required: true,
     },
     {
@@ -100,8 +100,7 @@ export const docsDense = {
     hasExpandableRows: 'false => plugin is a no-op (no expanders/indent/ARIA)',
     indent:
       "indent step per level: 'sm' | 'md' | 'lg' (spacing-3/4/6). Defaults to 'md'.",
-    treeColumnKey:
-      'column carrying indent + expander. Defaults to first column.',
+    treeColumnKey: 'column carrying indent + expander. Defaults to first column.',
     hasExpandAllControl:
       'show expand-all/collapse-all toggle in tree column header. Needs isAllExpanded + onExpandAll/onCollapseAll (from useTableTreeState). Defaults to false.',
     isAllExpanded:
