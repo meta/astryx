@@ -208,6 +208,16 @@ then have contradictory winners.
 
 - **INV12 — The stock accent pair meets 4.5:1.** `--color-on-accent` on
   `--color-accent` meets 4.5:1 in light and dark mode in Core's defaults.
+- **INV13 — Hue text is page text.** `--color-text-<hue>` is coloured text
+  on the default page and card surfaces, at 4.5:1 or more against them in each
+  colour mode, and at 4.5:1 or more on its own `--color-background-<hue>` plate
+  over those surfaces. It is not ink for a stronger plate. The floors bind
+  Core's defaults and Astryx's first-party themes in light and dark mode; a
+  value a third-party theme sets is that theme's own. A theme that needs ink
+  for a plate stronger than its hue background defines a local token (INV8).
+  Reported current gap: the dark values in the y2k, butter, and gothic themes
+  are plate ink and fall below the page floor; bringing them to INV13 is a
+  conformance follow-up, not part of this record change.
 
 This record does not own:
 
@@ -300,6 +310,38 @@ Rejected: keeping spacing in `px` while type is `rem` (text grows into fixed
 boxes); converting author-written `px` in custom themes (a theme's own
 decision).
 
+### DEC-2 — Hue text reads on the page
+
+**Decider:** pending
+
+A person reading coloured text, such as a field's status message, a syntax
+token, or a schedule label, sees it on the page or a card. In some first-party
+themes the dark value of `--color-text-<hue>` is ink for a strong plate, so it
+is near-invisible on the page. The name's grammar (INV10) already says it is
+text for the `text` paint property, so it follows the same floor as status
+text (INV13). One value works on the page and on the translucent hue plate.
+
+Rejected: reading `--color-text-<hue>` as plate ink and moving page text to
+status roles, which renames the meaning of a released token and leaves every
+current page use wrong.
+
+### DEC-3 — A colour pair a theme breaks is reported, and accent content is derived
+
+**Decider:** pending
+
+A theme author who tunes one colour by hand, such as a darker dark-mode
+accent, can silently drop the paired label below its floor. Nothing tells
+them, and people see unreadable buttons. Theme generation already derives
+status content when a theme sets only the fill
+(`architecture:theme-compilation` INV17). It now derives `--color-on-accent`
+the same way, and the compiler reports any pair below its floor
+(`architecture:theme-compilation` INV18). A value the theme sets still wins,
+and output does not change because of a report.
+
+Rejected: documentation only, which leaves the failure invisible until someone
+measures pixels. Rejected: rewriting a theme's own value to meet the floor,
+which overrides the author's decision.
+
 ## Verification
 
 | Invariant                    | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Failure signal                                                                                                                                                                                                                                                                 |
@@ -312,5 +354,6 @@ decision).
 | INV10                        | `tokens.test.ts` name check over Astryx's own `colorDefaults` and `domainTokenDefaults` only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | A colour token Astryx defines fits none of the five shapes                                                                                                                                                                                                                     |
 | INV11                        | `scripts/check-muted-status-contrast.test.mjs` (resolves global and Banner pale-surface role pairs), `scripts/check-badge-contrast.test.mjs` (resolves Core Badge defaults plus theme overrides), `scripts/check-status-text-contrast.test.mjs` (resolves `--color-on-<status>` on each strong fill, and `--color-text-<status>`, `--color-icon-<status>`, and `--color-border-<status>` against the surface and card tokens and checks that each status fill and text colour is chromatic in every first-party theme), `neutralTheme.test.ts` (pins reviewed role values and pairings), `tailwind-theme.test.ts` (pins the status utilities, including the released base ones), forced-colors assertions in the Badge, StatusDot, and Banner tests, and theme alias-generation tests | A status role is missing, mispaired, grey, routed to the wrong public utility, or falls below its contrast threshold in light or dark mode, a status fill loses its border in forced-colors mode, or a released status fill or utility changes value without a recorded reason |
 | INV12                        | `packages/core/src/theme/contrast.test.ts` "the stock accent pair meets 4.5:1 in the light/dark theme" (current values: light `#0064E0`, dark `#0171E3`, label `#FFFFFF`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | The stock `--color-on-accent` on `--color-accent` falls below 4.5:1 in light or dark mode                                                                                                                                                                                      |
+| INV13                        | A contrast check over Core's defaults and every first-party theme in light and dark mode: each `--color-text-<hue>` against the default page and card surfaces and over its own `--color-background-<hue>` plate                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | A hue text value below 4.5:1 on the page, on a card, or on its plate                                                                                                                                                                                                           |
 | Released token compatibility | Type checking plus representative package/source builds                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | A released CSS variable or typed token name disappears without an explicit migration decision                                                                                                                                                                                  |
 | Visual defaults              | Real Chromium examples in light, dark, status, and high-contrast contexts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | A changed default produces unreadable or semantically inconsistent output                                                                                                                                                                                                      |
