@@ -621,23 +621,54 @@ test('in the sheet, a drag is decided once it has moved 10 px either way: slow 3
     x: center.x - length * Math.cos((degrees * Math.PI) / 180),
     y: center.y + length * Math.sin((degrees * Math.PI) / 180),
   });
-  /** Plays `script`, sampling the sheet's drop and the grid's offset per move. */
+  /**
+   * Plays `script` while the page records, every frame, the sheet's drop and
+   * the grid's offset. The page samples them itself: an evaluate per move
+   * would slow the script on a loaded runner and blunt the fast flick.
+   */
   const play = async (script: Parameters<typeof driver.play>[0]) => {
-    const seen = {sheetDrop: 0, monthsMin: Infinity, monthsMax: -Infinity};
-    await driver.play(script, {
-      onEvent: async step => {
-        if (step.type === 'touchMove') {
-          seen.sheetDrop = Math.max(
-            seen.sheetDrop,
-            Math.abs((await sheetTop()) - topBefore),
-          );
-          const months = await monthsIn(viewport);
-          seen.monthsMin = Math.min(seen.monthsMin, months);
-          seen.monthsMax = Math.max(seen.monthsMax, months);
+    await sheet.evaluate((sheetElement, top) => {
+      const months = document.querySelector('[data-scroller="months"]');
+      const track = months?.querySelector('[data-month-track]');
+      const seen = {
+        sheetDrop: 0,
+        monthsMin: Infinity,
+        monthsMax: -Infinity,
+        frame: 0,
+      };
+      const sample = () => {
+        if (months == null || track == null) {
+          return;
         }
-      },
+        const drop = Math.abs(sheetElement.getBoundingClientRect().y - top);
+        seen.sheetDrop = Math.max(seen.sheetDrop, drop);
+        const box = months.getBoundingClientRect();
+        const offset =
+          (box.left - track.getBoundingClientRect().left) / box.width;
+        seen.monthsMin = Math.min(seen.monthsMin, offset);
+        seen.monthsMax = Math.max(seen.monthsMax, offset);
+        seen.frame = requestAnimationFrame(sample);
+      };
+      sample();
+      (window as unknown as {splitSeen: typeof seen}).splitSeen = seen;
+    }, topBefore);
+    await driver.play(script);
+    return page.evaluate(() => {
+      const {splitSeen} = window as unknown as {
+        splitSeen: {
+          sheetDrop: number;
+          monthsMin: number;
+          monthsMax: number;
+          frame: number;
+        };
+      };
+      cancelAnimationFrame(splitSeen.frame);
+      return {
+        sheetDrop: splitSeen.sheetDrop,
+        monthsMin: splitSeen.monthsMin,
+        monthsMax: splitSeen.monthsMax,
+      };
     });
-    return seen;
   };
 
   // 35°, slow (4 px steps): the sideways travel reaches 10 px first. The
