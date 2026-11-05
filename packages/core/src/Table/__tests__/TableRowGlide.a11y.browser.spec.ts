@@ -332,12 +332,18 @@ test('the chevron turns on the glide; column lines and Reduce Motion change at o
   const timing = await page
     .locator('[data-expansion-toggle] > *')
     .first()
-    .evaluate(glyph =>
-      (glyph as HTMLElement).style.getPropertyValue(
+    .evaluate(glyph => ({
+      easing: (glyph as HTMLElement).style.getPropertyValue(
         'transition-timing-function',
       ),
-    );
-  expect(timing.startsWith('linear(')).toBe(true);
+      duration: (glyph as HTMLElement).style.getPropertyValue(
+        'transition-duration',
+      ),
+    }));
+  expect(timing).toEqual({
+    easing: 'var(--ease-move)',
+    duration: 'var(--duration-medium-min)',
+  });
 
   for (const dividers of ['columns', 'grid']) {
     await mount(page, 'gliding-rows', `&args=dividers:${dividers}`);

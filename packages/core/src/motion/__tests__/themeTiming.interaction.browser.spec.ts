@@ -18,26 +18,11 @@
 
 import {fileURLToPath} from 'node:url';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
-import {build, type Plugin} from 'esbuild';
+import {build} from 'esbuild';
 import type * as ThemeTimingModule from '../themeTiming';
+import {stylexDeclarations} from './stylexDeclarationsPlugin';
 
 let script = '';
-
-// The token file declares its variables through StyleX, which the build
-// compiles away; the page needs only the plain defaults beside them.
-const stylexDeclarations: Plugin = {
-  name: 'stylex-declarations',
-  setup(builder) {
-    builder.onResolve({filter: /^@stylexjs\/stylex$/}, () => ({
-      path: 'stylex',
-      namespace: 'stylex-declarations',
-    }));
-    builder.onLoad({filter: /.*/, namespace: 'stylex-declarations'}, () => ({
-      contents: 'export const defineVars = values => values;',
-      loader: 'js',
-    }));
-  },
-};
 
 test.beforeAll(async () => {
   const result = await build({

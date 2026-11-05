@@ -732,9 +732,12 @@ describe('the edge reveal of a resized element, with no copy (spec:AST-105 FR9)'
     expect(pane.style.getPropertyValue('inline-size')).toBe('');
     expect(conceal.cancel).toHaveBeenCalled();
     const [reveal] = clipsOf(pane);
-    expect(String(reveal.keyframes[0].clipPath)).toBe(
-      `inset(0px ${260 - shown}px 0px 0px)`,
+    const start = Number(
+      /^inset\(0px ([\d.]+)px 0px 0px\)$/.exec(
+        String(reveal.keyframes[0].clipPath),
+      )?.[1],
     );
+    expect(start).toBeCloseTo(260 - shown, 9);
   });
 
   it('cancel ends it at once and puts back what it held', () => {
