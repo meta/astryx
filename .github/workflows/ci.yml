@@ -1150,7 +1150,7 @@ jobs:
       # offline-media's real-browser cases. This step runs them once Chromium
       # is in place, under the install's own condition; with
       # ASTRYX_OFFLINE_MEDIA_BROWSER set, a missing browser fails them.
-      # ci-offline-media-browser.test.mjs keeps this step after the install.
+      # ci-browser-gated-tests.test.mjs keeps this step after the install.
       - name: Offline-media browser cases
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         env:
