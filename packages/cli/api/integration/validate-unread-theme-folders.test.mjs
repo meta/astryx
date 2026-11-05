@@ -15,6 +15,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {validateLocalIntegration} from './validate-integration.mjs';
 import {integrationAddTheme} from './add-theme.mjs';
+import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 
 let tmpDir;
 
@@ -76,8 +77,8 @@ describe('unread theme folders', () => {
     ]);
     expect(issues.map(issue => issue.message)).toEqual([
       'Folder "themes/Tide_Pool/" holds modules but no <name>Theme source or .doc.mjs descriptor, so Astryx does not read it as a theme. Fix: rename it to .Tide_Pool so Astryx skips it; a theme folder needs a lower-kebab name.',
-      'Folder "themes/reef/" holds modules but no <name>Theme source or .doc.mjs descriptor, so Astryx does not read it as a theme. Fix: if it is a theme, add reefTheme.ts and reefTheme.doc.mjs to it (`astryx integration add theme reef` writes both) and move its code into reefTheme.ts; if not, rename it to .reef so Astryx skips it.',
-      'Folder "themes/sand/" holds modules but no <name>Theme source or .doc.mjs descriptor, so Astryx does not read it as a theme. Fix: if it is a theme, add sandTheme.ts and sandTheme.doc.mjs to it (`astryx integration add theme sand` writes both) and move its code into sandTheme.ts; if not, rename it to .sand so Astryx skips it.',
+      `Folder "themes/reef/" holds modules but no <name>Theme source or .doc.mjs descriptor, so Astryx does not read it as a theme. Fix: if it is a theme, add reefTheme.ts and reefTheme.doc.mjs to it (\`${formatCliCommand('integration add theme reef', tmpDir)}\` writes both) and move its code into reefTheme.ts; if not, rename it to .reef so Astryx skips it.`,
+      `Folder "themes/sand/" holds modules but no <name>Theme source or .doc.mjs descriptor, so Astryx does not read it as a theme. Fix: if it is a theme, add sandTheme.ts and sandTheme.doc.mjs to it (\`${formatCliCommand('integration add theme sand', tmpDir)}\` writes both) and move its code into sandTheme.ts; if not, rename it to .sand so Astryx skips it.`,
     ]);
   });
 

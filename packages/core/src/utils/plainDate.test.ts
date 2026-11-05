@@ -1,12 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, afterEach} from 'vitest';
 import {
   type PlainDate,
   plainDateCreate,
   plainDateFromISO,
   plainDateToISO,
   plainDateToDate,
+  dateTimeFormatFor,
   plainDateFromDate,
   plainDateToday,
   getDaysInMonth,
@@ -27,10 +28,17 @@ import {
   plainDateSetEndOfWeekExclusive,
   plainDateGetWeekNumber,
   plainDateFormat,
+  plainDateFormatStandaloneMonthYear,
+  plainDateWeekdayNames,
+  plainDateFormatDayNumber,
   formatSharedDate,
+  SHARED_DATE_FORMAT_OPTIONS,
+  DATE_FORMAT_LONG,
   DATE_FORMAT_WITH_WEEKDAY,
   DATE_FORMAT_MONTH_YEAR,
   plainDateWeekFieldName,
+  plainDateFormatToParts,
+  nearestAcceptedDate,
 } from './plainDate';
 import type {ISODateString} from './dateTypes';
 
@@ -711,13 +719,176 @@ describe('plainDateGetWeekNumber', () => {
     expect(plainDateGetWeekNumber({year: 2026, month: 1, day: 4})).toBe(1);
   });
 
+  // Regression: the week number must not depend on the host timezone's DST
+  // offset. Zones whose DST ends after New Year (southern hemisphere) used to
+  // add a phantom hour to the Thursday-vs-Jan-1 day count, and in years whose
+  // Jan 1 is a Friday that hour rounded a whole week up.
+  describe('DST independence', () => {
+    const originalTZ = process.env.TZ;
+
+    afterEach(() => {
+      if (originalTZ === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = originalTZ;
+      }
+    });
+
+    it.each(['Australia/Sydney', 'Pacific/Auckland', 'America/Santiago'])(
+      'does not round week 14 up to 15 in %s (DST ends after New Year)',
+      zone => {
+        process.env.TZ = zone;
+        // 2021-01-01 is a Friday, so every ISO Thursday falls on a whole
+        // multiple of 7 days into the year. 2021-04-05..11 is ISO week 14.
+        expect(plainDateGetWeekNumber({year: 2021, month: 4, day: 5})).toBe(14);
+        expect(plainDateGetWeekNumber({year: 2021, month: 4, day: 8})).toBe(14);
+        expect(plainDateGetWeekNumber({year: 2021, month: 4, day: 11})).toBe(
+          14,
+        );
+      },
+    );
+
+    it('keeps late-December weeks correct in Australia/Sydney', () => {
+      process.env.TZ = 'Australia/Sydney';
+      // 2027-12-30 (Thursday) is ISO week 52, not 53.
+      expect(plainDateGetWeekNumber({year: 2027, month: 12, day: 30})).toBe(52);
+    });
+  });
+
   it('keeps years 1-99 instead of mapping them to 1900-1999', () => {
     // 0004-01-01 is a Thursday (ISO week 1); 1904-01-01 was a Friday.
     expect(plainDateGetWeekNumber({year: 4, month: 1, day: 1})).toBe(1);
   });
 });
 
+describe('plainDateFormatStandaloneMonthYear', () => {
+  const october = {year: 2026, month: 10, day: 1};
+
+  it.each([
+    ['es-ES', 'Octubre de 2026'],
+    ['fr-FR', 'Octobre 2026'],
+    ['it-IT', 'Ottobre 2026'],
+    ['nl-NL', 'Oktober 2026'],
+    ['pl-PL', 'Październik 2026'],
+    ['ru-RU', 'Октябрь 2026 г.'],
+    ['uk-UA', 'Жовтень 2026 р.'],
+    ['es-MX', 'Octubre de 2026'],
+  ])('capitalizes the stand-alone month in %s', (locale, label) => {
+    expect(plainDateFormatStandaloneMonthYear(october, locale)).toBe(label);
+  });
+
+  it.each([
+    ['vi-VN', 'tháng 10 năm 2026'],
+    ['en-US', 'October 2026'],
+    ['pt-BR', 'outubro de 2026'],
+  ])('keeps the Intl label in %s', (locale, label) => {
+    expect(plainDateFormatStandaloneMonthYear(october, locale)).toBe(label);
+  });
+});
+
+describe('plainDateFormatToParts', () => {
+  it.each([
+    [{dateStyle: 'full'}],
+    [{timeZone: 'Asia/Tokyo', dateStyle: 'long'}],
+    [{hour: 'numeric', day: 'numeric'}],
+  ] as const)('joins to the plainDateFormat text for %o', options => {
+    const pd = plainDateFromISO('2026-11-03');
+    const parts = plainDateFormatToParts(pd, options, 'fa-IR');
+    expect(parts.map(part => part.value).join('')).toBe(
+      plainDateFormat(pd, options, 'fa-IR'),
+    );
+  });
+});
+
 describe('plainDateFormat', () => {
+  it('keeps one formatter per locale and options, whatever order the options are in', () => {
+    // A month of day labels, as a calendar renders them, reuses one formatter.
+    const first = dateTimeFormatFor('en-NZ', DATE_FORMAT_WITH_WEEKDAY);
+    expect(dateTimeFormatFor('en-NZ', DATE_FORMAT_WITH_WEEKDAY)).toBe(first);
+    expect(
+      dateTimeFormatFor('en-NZ', {
+        year: 'numeric',
+        day: 'numeric',
+        month: 'long',
+        weekday: 'long',
+      }),
+    ).toBe(first);
+    // Other options, or another locale, get their own.
+    expect(dateTimeFormatFor('en-NZ', DATE_FORMAT_MONTH_YEAR)).not.toBe(first);
+    expect(dateTimeFormatFor('en-ZA', DATE_FORMAT_WITH_WEEKDAY)).not.toBe(
+      first,
+    );
+  });
+
+  it('formats the same date after the host zone moves', () => {
+    // The page stays open while the device travels east: a formatter cached
+    // in the first zone must not move the date.
+    const zone = process.env.TZ;
+    try {
+      process.env.TZ = 'America/Los_Angeles';
+      expect(
+        plainDateFormat(
+          {year: 2026, month: 2, day: 1},
+          DATE_FORMAT_MONTH_YEAR,
+          'en-IE',
+        ),
+      ).toBe('February 2026');
+      process.env.TZ = 'America/New_York';
+      expect(
+        plainDateFormat(
+          {year: 2026, month: 2, day: 1},
+          DATE_FORMAT_MONTH_YEAR,
+          'en-IE',
+        ),
+      ).toBe('February 2026');
+      process.env.TZ = 'Pacific/Kiritimati';
+      expect(
+        plainDateFormat(
+          {year: 2026, month: 2, day: 1},
+          DATE_FORMAT_WITH_WEEKDAY,
+          'en-IE',
+        ),
+      ).toBe('Sunday 1 February 2026');
+    } finally {
+      if (zone === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = zone;
+      }
+    }
+  });
+
+  it('prints a zone name or a time of day in the host zone, as before', () => {
+    // A PlainDate has neither: such fields read local midnight in the zone
+    // current at the call, not the UTC the date-only path formats in.
+    const zone = process.env.TZ;
+    try {
+      process.env.TZ = 'America/Los_Angeles';
+      const withZone = plainDateFormat(
+        {year: 2026, month: 1, day: 25},
+        {...DATE_FORMAT_LONG, timeZoneName: 'short'},
+        'en-US',
+      );
+      expect(withZone).toContain('January 25, 2026');
+      expect(withZone).toContain('PST');
+      expect(withZone).not.toContain('UTC');
+      process.env.TZ = 'America/New_York';
+      expect(
+        plainDateFormat(
+          {year: 2026, month: 1, day: 25},
+          {...DATE_FORMAT_LONG, timeZoneName: 'short'},
+          'en-US',
+        ),
+      ).toContain('EST');
+    } finally {
+      if (zone === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = zone;
+      }
+    }
+  });
+
   it('returns a human-readable date string with weekday', () => {
     const result = plainDateFormat(
       {year: 2026, month: 1, day: 25},
@@ -793,6 +964,47 @@ describe('formatSharedDate', () => {
     expect(formatSharedDate(pd, 'system_date')).toBe('2026-01-25');
   });
 
+  describe.each([
+    {calendar: 'persian', locale: 'en', year: '1405'},
+    {calendar: 'persian', locale: 'fa', year: '۱۴۰۵'},
+    {calendar: 'hebrew', locale: 'en', year: '5787'},
+    {calendar: 'hebrew', locale: 'he', year: '5787'},
+    {calendar: 'buddhist', locale: 'en', year: '2569'},
+    {calendar: 'buddhist', locale: 'th', year: '2569'},
+  ] as const)('in $calendar under $locale', ({calendar, locale, year}) => {
+    const day: PlainDate = {year: 2026, month: 10, day: 30};
+
+    it.each(['date', 'date_long', 'date_weekday'] as const)(
+      'writes %s in the calendar',
+      format => {
+        const value = formatSharedDate(day, format, locale, calendar);
+        expect(value).toBe(
+          plainDateFormat(
+            day,
+            {...SHARED_DATE_FORMAT_OPTIONS[format], calendar},
+            locale,
+          ),
+        );
+        expect(value).toContain(year);
+        expect(value).not.toContain('2026');
+      },
+    );
+
+    it('keeps system_date Gregorian ISO', () => {
+      expect(formatSharedDate(day, 'system_date', locale, calendar)).toBe(
+        '2026-10-30',
+      );
+    });
+  });
+
+  it('defaults to the Gregorian calendar', () => {
+    const day: PlainDate = {year: 2026, month: 10, day: 30};
+    expect(formatSharedDate(day, 'date_long', 'fa')).toBe(
+      formatSharedDate(day, 'date_long', 'fa', 'gregory'),
+    );
+    expect(formatSharedDate(day, 'date_long', 'en')).toBe('October 30, 2026');
+  });
+
   it('follows the passed locale rather than the host locale (#5074)', () => {
     expect(formatSharedDate(pd, 'date_long', 'es-ES')).toBe(
       '25 de enero de 2026',
@@ -808,5 +1020,137 @@ describe('plainDateWeekFieldName', () => {
 
   it('never returns an empty name', () => {
     expect(plainDateWeekFieldName('zxx').length).toBeGreaterThan(0);
+  });
+});
+
+describe('plainDateFormatDayNumber', () => {
+  it.each([
+    ['en', 15, '15'],
+    ['fa-IR', 15, '۱۵'],
+    ['ar-EG', 15, '١٥'],
+    ['en-u-nu-arab', 31, '٣١'],
+  ])('writes the number in the digits of %s', (locale, value, expected) => {
+    expect(plainDateFormatDayNumber(value, locale)).toBe(expected);
+  });
+
+  it('keeps the Gregorian number in a locale whose default calendar differs', () => {
+    // fa-IR formats dates in the Persian calendar by default; a day number
+    // must still be the Gregorian day it was given.
+    expect(plainDateFormatDayNumber(1, 'fa-IR')).toBe('۱');
+  });
+
+  it('adds no grouping separator', () => {
+    expect(plainDateFormatDayNumber(1234, 'en')).toBe('1234');
+  });
+
+  it('writes the digits of a given numbering system', () => {
+    expect(plainDateFormatDayNumber(8, 'fa-IR', 'latn')).toBe('8');
+    expect(plainDateFormatDayNumber(8, 'en', 'arabext')).toBe('۸');
+    expect(plainDateFormatDayNumber(8, 'fa-IR')).toBe('۸');
+  });
+});
+
+describe('plainDateWeekdayNames', () => {
+  it('formats the abbreviated weekday names Sunday first', () => {
+    expect(plainDateWeekdayNames('en')).toEqual([
+      'Sun',
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+    ]);
+    expect(plainDateWeekdayNames('id-ID')).toEqual([
+      'Min',
+      'Sen',
+      'Sel',
+      'Rab',
+      'Kam',
+      'Jum',
+      'Sab',
+    ]);
+  });
+
+  it('formats the narrow width on request', () => {
+    expect(plainDateWeekdayNames('en', 'narrow')).toEqual([
+      'S',
+      'M',
+      'T',
+      'W',
+      'T',
+      'F',
+      'S',
+    ]);
+  });
+
+  it('returns null for a language the platform has no data for', () => {
+    expect(plainDateWeekdayNames('xx-ZZ')).toBeNull();
+  });
+});
+
+describe('nearestAcceptedDate', () => {
+  const d = plainDateFromISO;
+  const isWeekend = (pd: PlainDate) =>
+    plainDateDayOfWeek(pd) === 0 || plainDateDayOfWeek(pd) === 6;
+
+  it('returns the target inside the bounds', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {
+        min: d('2026-01-01'),
+        max: d('2026-12-31'),
+      }),
+    ).toEqual(d('2026-11-04'));
+  });
+
+  it('clamps a target before min to min', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {min: d('2027-03-01')}),
+    ).toEqual(d('2027-03-01'));
+  });
+
+  it('clamps a target after max to max', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {max: d('2025-06-30')}),
+    ).toEqual(d('2025-06-30'));
+  });
+
+  it('moves a disabled target to the nearest enabled day', () => {
+    // 2026-11-07 is a Saturday: Friday is one day away, Monday two.
+    expect(
+      nearestAcceptedDate(d('2026-11-07'), {isDateDisabled: isWeekend}),
+    ).toEqual(d('2026-11-06'));
+    // 2026-11-08 is a Sunday: Monday is one day away, Friday two.
+    expect(
+      nearestAcceptedDate(d('2026-11-08'), {isDateDisabled: isWeekend}),
+    ).toEqual(d('2026-11-09'));
+  });
+
+  it('prefers the later day on a tie', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {
+        isDateDisabled: pd => plainDateIsEqual(pd, d('2026-11-04')),
+      }),
+    ).toEqual(d('2026-11-05'));
+  });
+
+  it('searches only inside the bounds', () => {
+    // max is a Saturday; the Sunday after it is outside the bounds.
+    expect(
+      nearestAcceptedDate(d('2026-12-01'), {
+        max: d('2026-11-07'),
+        isDateDisabled: pd => isWeekend(pd) || plainDateDayOfWeek(pd) === 5,
+      }),
+    ).toEqual(d('2026-11-05'));
+  });
+
+  it('returns the clamped date when every day in the window is disabled', () => {
+    expect(
+      nearestAcceptedDate(d('2026-11-04'), {
+        min: d('2026-11-10'),
+        isDateDisabled: () => true,
+        searchDays: 30,
+      }),
+    ).toEqual(d('2026-11-10'));
   });
 });

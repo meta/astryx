@@ -4,7 +4,7 @@
 
 /**
  * @file LayoutContent.tsx
- * @input Uses React StyleX, LayoutSlotsContext
+ * @input Uses React StyleX, LayoutSlotsContext, useScrollRegionProps
  * @output Exports LayoutContent component and LayoutContentProps
  * @position Scrollable main content area for Layout. Wraps the primary body content
  *   with automatic scroll containment and context-aware padding.
@@ -21,7 +21,9 @@ import {use} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {LayoutSlotsContext} from './LayoutSlotsContext';
-import {mergeProps} from '../utils';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useScrollRegionProps} from '../hooks/useScrollRegionProps';
+import {mergeProps} from '../utils/mergeProps';
 import type {SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -41,20 +43,11 @@ const styles = stylex.create({
     // Default: inner padding on all sides (will be overridden by position-specific styles)
     paddingInlineStart: `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
     paddingInlineEnd: `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
-    paddingBlockStart: {
-      default: `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
-      // When header has no divider, collapse top padding for seamless visual flow
-      [stylex.when.ancestor(
-        ':has(> .astryx-layout-header:not([data-divider]))',
-      )]: 0,
-    },
-    paddingBlockEnd: {
-      default: `var(--layout-padding-inner-y, ${spacingVars['--spacing-4']})`,
-      // When footer has no divider, collapse bottom padding for seamless visual flow
-      [stylex.when.ancestor(
-        ':has(> .astryx-layout-footer:not([data-divider]))',
-      )]: 0,
-    },
+    // A header or footer without a divider collapses the adjacent padding
+    // for a seamless visual flow: Layout's middle row sets these to 0px then
+    // (see Layout.tsx `middle`).
+    paddingBlockStart: `var(--_layout-flush-block-start, var(--layout-padding-inner-y, ${spacingVars['--spacing-4']}))`,
+    paddingBlockEnd: `var(--_layout-flush-block-end, var(--layout-padding-inner-y, ${spacingVars['--spacing-4']}))`,
     // Publish container padding vars for bleed children (Table, Divider, etc.)
     '--container-padding-inline-start': `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
     '--container-padding-inline-end': `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
@@ -141,6 +134,8 @@ export interface LayoutContentProps extends BaseProps<HTMLDivElement> {
   /**
    * Accessible label for the landmark.
    * Required when role is set and multiple landmarks of the same type exist.
+   * While the content scrolls, it also names the scrolling region, which
+   * otherwise takes a translated "Content".
    */
   label?: string;
 
@@ -201,12 +196,14 @@ export function LayoutContent({
   const {hasHeader, hasFooter, hasStart, hasEnd} = use(LayoutSlotsContext);
 
   const isZeroPadding = padding === 0;
+  const region = useScrollRegionProps({isScrollable, role, label});
+  const mergedRef = useMergedRefs(ref, region.ref);
 
   return (
     <div
-      ref={ref}
-      role={role}
-      aria-label={label}
+      ref={mergedRef}
+      role={region.role}
+      aria-label={region['aria-label']}
       {...mergeProps(
         themeProps('layout-content'),
         stylex.props(

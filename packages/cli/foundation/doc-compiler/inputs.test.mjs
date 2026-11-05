@@ -65,6 +65,7 @@ describe('collectDocInputs over what this repo ships', () => {
       fs.readFileSync(path.join(CLI_ROOT, 'package.json'), 'utf-8'),
     );
     for (const entry of files) {
+      if (entry.startsWith('!')) continue;
       const full = path.join(CLI_ROOT, entry);
       if (fs.statSync(full).isDirectory()) docFiles(full, shipped);
     }
@@ -91,12 +92,13 @@ describe('collectDocInputs over what this repo ships', () => {
       'Chat',
       'ChatComposerTokenElement',
       'ContextMenuItem',
-      'Heading',
       'Indicator',
       'Layer',
       'NavMenu',
       'Resizable',
       'SyntaxTheme',
+      'createAnimator',
+      'createPanGesture',
     ]);
   });
 
@@ -226,6 +228,7 @@ describe('collectDocInputs problems', () => {
       components: async () => [],
       templates: async () => [],
       themes: async () => [],
+      iconSets: async () => ({sets: []}),
       docs: async () => ({entries: () => []}),
       ...overrides,
     });

@@ -126,7 +126,10 @@ describe('theme build emits a live TextInput selector (#4109)', () => {
         `};\n`,
     );
 
-    const result = await runCli(['theme', 'build', themeFile, '-o', outFile]);
+    const result = await runCli(
+      ['theme', 'build', themeFile, '-o', outFile],
+      tmpDir,
+    );
     const css = fs.readFileSync(outFile, 'utf8');
 
     expect(result.status).toBe(0);
@@ -148,7 +151,7 @@ describe('theme build emits a live TextInput selector (#4109)', () => {
         `};\n`,
     );
 
-    await runCli(['theme', 'build', themeFile, '-o', outFile]);
+    await runCli(['theme', 'build', themeFile, '-o', outFile], tmpDir);
     const css = fs.readFileSync(outFile, 'utf8');
 
     expect(css).toContain('.astryx-text-input');

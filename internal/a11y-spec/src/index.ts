@@ -147,6 +147,10 @@ export {
 } from './patterns/landmark';
 
 export {SLIDER_PATTERN, type SliderStateFacts} from './patterns/slider';
+export {
+  PROGRESSBAR_PATTERN,
+  type ProgressbarStateFacts,
+} from './patterns/progressbar';
 export {TREE_VIEW_PATTERN, type TreeViewStateFacts} from './patterns/tree-view';
 export {CAROUSEL_PATTERN, type CarouselStateFacts} from './patterns/carousel';
 export {
@@ -163,7 +167,22 @@ export {
   type WindowSplitterStateFacts,
 } from './patterns/window-splitter';
 export {
+  MENU_BUTTON_PATTERN,
+  type MenuButtonStateFacts,
+} from './patterns/menu-button';
+export {MENU_PATTERN, type MenuStateFacts} from './patterns/menu';
+export {
   LINK_PATTERN,
   type LinkCurrentToken,
   type LinkStateFacts,
 } from './patterns/link';
+export {
+  TABLE_AST_020_FR15,
+  TABLE_PATTERN,
+  composeTablePattern,
+  tableApgRequirement,
+  type TableModuleContract,
+  type TableStateFacts,
+} from './patterns/table';
+export {TOOLBAR_PATTERN, type ToolbarStateFacts} from './patterns/toolbar';
+export {TOOLTIP_PATTERN, type TooltipStateFacts} from './patterns/tooltip';

@@ -4,7 +4,8 @@
 
 /**
  * @file useTypeahead.ts
- * @input Uses React useCallback/useRef
+ * @input Uses React useCallback/useEffect/useRef, shared type-to-select
+ *   matching (utils/typeaheadMatch)
  * @output Exports useTypeahead hook for first-character (type-to-focus) search
  * @position Core hook; adds APG typeahead to menus, listboxes, and other
  *   collections. Composes with useListFocus/useGridFocus (or any collection)
@@ -14,7 +15,8 @@
  * - /packages/core/src/hooks/index.ts
  */
 
-import {useCallback, useRef} from 'react';
+import {useCallback, useEffect, useRef} from 'react';
+import {findTypeaheadMatch, nextTypeaheadBuffer} from '../utils/typeaheadMatch';
 
 export interface UseTypeaheadOptions {
   /**
@@ -94,7 +96,9 @@ function isComposingKey(e: React.KeyboardEvent | KeyboardEvent): boolean {
  * First-character ("type-ahead") search for a collection.
  *
  * Buffers printable keystrokes (resetting after `resetMs` of inactivity),
- * matches items whose label starts with the buffer, and cycles from the
+ * matches items whose label starts with the buffer (ignoring case, accents,
+ * stroked letters and Turkish dotted/dotless i, the same in every locale:
+ * `architecture:internationalization` INV17), and cycles from the
  * current index — so pressing "s" repeatedly walks through the "s" items
  * instead of sticking on the first. Space is reserved for activation and is
  * only treated as typeahead while a buffer is already active.
@@ -135,6 +139,11 @@ export function useTypeahead(options: UseTypeaheadOptions): UseTypeaheadReturn {
     }
   }, []);
 
+  // A collection that unmounts, or that an `<Activity>` boundary hides,
+  // mid-typing leaves no reset timer running and comes back with an empty
+  // buffer, as the reset would have left it.
+  useEffect(() => reset, [reset]);
+
   const scheduleReset = useCallback(() => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
@@ -161,18 +170,19 @@ export function useTypeahead(options: UseTypeaheadOptions): UseTypeaheadReturn {
         return false;
       }
 
+      // A lone combining mark typed first is not a letter to jump to; after
+      // a letter it is part of that letter. A repeat of the same letter
+      // cycles rather than filtering deeper (APG behavior).
+      const nextBuffer = nextTypeaheadBuffer(bufferRef.current, e.key);
+      if (nextBuffer == null) {
+        return false;
+      }
+
       const labels = getItemLabels();
       if (labels.length === 0) {
         return false;
       }
 
-      // Pressing the SAME single character repeatedly cycles to the next match
-      // rather than filtering deeper (APG behavior).
-      const char = e.key.toLowerCase();
-      const isRepeatSameChar =
-        bufferRef.current.length > 0 &&
-        bufferRef.current.split('').every(c => c === char);
-      const nextBuffer = isRepeatSameChar ? char : bufferRef.current + char;
       bufferRef.current = nextBuffer;
       scheduleReset();
 
@@ -186,20 +196,16 @@ export function useTypeahead(options: UseTypeaheadOptions): UseTypeaheadReturn {
       // Once the buffer is longer it is refining a match, so the current item
       // stays in range. With nothing current there is nothing to advance past.
       const offset = hasCurrent && nextBuffer.length === 1 ? 1 : 0;
-
+      const order: number[] = [];
       for (let i = 0; i < count; i++) {
         const index = (start + offset + i + count) % count;
-        if (isDisabled?.(index)) {
-          continue;
+        if (!isDisabled?.(index)) {
+          order.push(index);
         }
-        const label = labels[index];
-        if (
-          label != null &&
-          label.trim().toLowerCase().startsWith(nextBuffer)
-        ) {
-          onMatch(index);
-          return true;
-        }
+      }
+      const match = findTypeaheadMatch(order, i => labels[i], nextBuffer);
+      if (match >= 0) {
+        onMatch(match);
       }
       return true;
     },

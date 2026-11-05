@@ -26,7 +26,8 @@ const meta: Meta<typeof Pagination> = {
     },
     hasFirstLast: {
       control: 'boolean',
-      description: 'input variant: show first/last («/») buttons',
+      description:
+        'input (default on) and compact (default off) variants: show first/last («/») buttons',
     },
     step: {
       control: 'number',
@@ -100,6 +101,14 @@ export const CountVariant: Story = {
 export const CompactVariant: Story = {
   name: 'Variant: Compact',
   render: () => <PaginationDemo page={1} totalPages={10} variant="compact" />,
+};
+
+export const CompactVariantFirstLast: Story = {
+  name: 'Variant: Compact (first/last)',
+  render: () => (
+    // « ‹ Page X of Y › » — first/last are opt-in for compact.
+    <PaginationDemo page={5} totalPages={10} variant="compact" hasFirstLast />
+  ),
 };
 
 export const DotsVariant: Story = {

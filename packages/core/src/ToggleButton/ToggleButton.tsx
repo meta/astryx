@@ -9,7 +9,8 @@
  * @position Thin wrapper over Button; adds controlled toggle pattern
  *
  * ToggleButton wraps Button with `isPressed` and adds:
- * - `onPressedChange` from internal `onClick`; `pressedChangeAction` via Button
+ * - `onPressedChange` from internal `onClick`, after any caller `onClick`;
+ *   `pressedChangeAction` via Button
  * - `pressedIcon` for outline-to-filled icon swap
  * - Font weight shift on press with width reservation to prevent layout shift
  * - Group integration via ToggleButtonGroupContext
@@ -28,7 +29,7 @@ import {Button, type ButtonSize} from '../Button';
 import type {Elevation} from '../utils/types';
 import {useToggleButtonGroup} from './ToggleButtonGroup';
 import type {BaseProps} from '../BaseProps';
-import {themeProps} from '../utils/themeProps';
+import {themeDataAttributes, themeProps} from '../utils/themeProps';
 import {mergeProps} from '../utils/mergeProps';
 
 // =============================================================================
@@ -258,6 +259,7 @@ export function ToggleButton({
   xstyle,
   className,
   style,
+  onClick: onClickProp,
   ...props
 }: ToggleButtonProps): ReactNode {
   const group = useToggleButtonGroup();
@@ -287,9 +289,18 @@ export function ToggleButton({
     if (isDisabled) {
       return;
     }
+    // A caller onClick (a trigger wrapper often supplies one) runs first and
+    // never replaces the toggle's own request (family:buttons FR5, FR11).
+    const wasPrevented = event.defaultPrevented;
+    onClickProp?.(event);
     if (group && value != null) {
       group.toggle(value);
       event.preventDefault();
+      return;
+    }
+    // A standalone toggle is cancelled only by the caller's own
+    // preventDefault(); Button then skips pressedChangeAction too.
+    if (!wasPrevented && event.defaultPrevented) {
       return;
     }
 
@@ -308,6 +319,7 @@ export function ToggleButton({
 
   // isIconOnly prop is the source of truth for icon-only rendering.
   const labelContent =
+    // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- switching to isRenderable would show `label` for children of '', false or true, a visible change that needs a decision
     children != null ? (
       <span {...stylex.props(labelStyles.wrapper)}>
         <span {...stylex.props(isPressed && labelStyles.pressed)}>
@@ -341,7 +353,6 @@ export function ToggleButton({
       isLoading={isLoading}
       isInterruptible
       isIconOnly={isIconOnly}
-      aria-pressed={isPressed}
       icon={resolvedIcon}
       tooltip={tooltip}
       {...mergeProps(
@@ -355,7 +366,14 @@ export function ToggleButton({
       style={style}
       onClick={handleClick}
       clickAction={clickAction}
-      {...props}>
+      {...props}
+      // The pressed state this component owns wins over a caller's
+      // same-named attributes (public-component-api INV5).
+      aria-pressed={isPressed}
+      {...themeDataAttributes({
+        isPressed: isPressed ? 'true' : 'false',
+        elevation,
+      })}>
       {labelContent}
     </Button>
   );

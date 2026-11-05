@@ -11,9 +11,11 @@
  * @output Exports RichTextEditorToolbar (a compact formatting toolbar with a
  *   RichText-owned 4px control gutter and horizontally scrollable action row)
  *   and RichTextEditorToolbarProps.
- * @position Experimental (richtext). Drop into RichTextEditor's `toolbar` slot to
+ * @position @astryxdesign/richtext. Drop into RichTextEditor's `toolbar` slot to
  *   add a flush top formatting toolbar. Themed via Astryx Toolbar, Selector,
- *   IconButton, and ToggleButton, so it inherits the active theme.
+ *   IconButton, and ToggleButton, so it inherits the active theme. Base props
+ *   pass through to the Astryx Toolbar exactly as Toolbar places them
+ *   (spec:AST-061/DEC-8).
  *
  * SYNC: When modified, update:
  * - /packages/richtext/src/index.ts (exports)
@@ -21,8 +23,8 @@
  * - /packages/richtext/src/RichTextEditor.test.tsx (tests)
  * - /apps/storybook/stories/RichTextEditor.stories.tsx (WithToolbar story)
  *
- * NOTE: Experimental `@astryxdesign/richtext` component (canary). `lexical` and
- * `@lexical/*` are OPTIONAL peer dependencies — install them to use this.
+ * NOTE: `lexical` and `@lexical/*` are OPTIONAL peer dependencies — install them
+ * to use this.
  * Behavior mirrors the Lexical playground toolbar (selection sync + format
  * commands); the UI is built from Astryx primitives so it matches the theme.
  *
@@ -42,6 +44,7 @@ import {
   useState,
   type FormEvent,
   type ReactNode,
+  type Ref,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
@@ -61,6 +64,7 @@ import {
 } from '@lexical/list';
 import {$getNearestNodeOfType, mergeRegister} from '@lexical/utils';
 import {TOGGLE_LINK_COMMAND, $isLinkNode, $createLinkNode} from '@lexical/link';
+import type {BaseProps} from '@astryxdesign/core';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {Selector, type SelectorOptionType} from '@astryxdesign/core/Selector';
@@ -78,7 +82,7 @@ import {
 } from '@astryxdesign/core/Layout';
 import {getExtendedIcon} from '@astryxdesign/core/Icon';
 import {useThemeName} from '@astryxdesign/core/theme';
-import {rtlStyles} from '@astryxdesign/core/utils';
+import {isRenderable, rtlStyles} from '@astryxdesign/core/utils';
 import {
   fontWeightVars,
   spacingVars,
@@ -451,7 +455,15 @@ function DirectionalGlyph({children}: {children: ReactNode}) {
   );
 }
 
-export interface RichTextEditorToolbarProps {
+export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
+  /**
+   * Ref to the toolbar's root element. Base props pass through to the
+   * underlying Astryx `Toolbar`: the ref, `className`, `style`, and `xstyle`
+   * reach its root, and `data-*`, other `aria-*` attributes, and DOM
+   * handlers reach the `role="toolbar"` element inside it. The toolbar names
+   * itself, so pass `label` rather than `aria-label`.
+   */
+  ref?: Ref<HTMLDivElement>;
   /**
    * Accessible label for the toolbar element.
    * @default 'Text formatting', translated for the active locale
@@ -471,7 +483,9 @@ export interface RichTextEditorToolbarProps {
   /**
    * Whether to show the insert/edit-link button. By default, pressing it opens
    * an Astryx Dialog. The form can add, update, or remove a link without
-   * losing the editor selection.
+   * losing the editor selection. With a collapsed selection, Insert link
+   * inserts the entered URL as link text at the caret; with a non-empty
+   * selection it links the selected text.
    *
    * Requires `LinkNode` to be registered (it is, by default) — no extra setup.
    * The entered URL is sanitized (see `sanitizeUrl`) so only
@@ -495,7 +509,7 @@ export interface RichTextEditorToolbarProps {
    * create same-tab links.
    * @default true
    */
-  linkOpensInNewTab?: boolean;
+  hasNewTabLinks?: boolean;
   /**
    * Extra items rendered at the end of the toolbar (after a divider). Use this
    * to compose product-specific controls (e.g. mentions, AI) alongside the
@@ -530,8 +544,11 @@ export function RichTextEditorToolbar({
   size = 'sm',
   hasLink = true,
   promptForUrl,
-  linkOpensInNewTab = true,
+  hasNewTabLinks = true,
   endContent,
+  xstyle,
+  ref,
+  ...rest
 }: RichTextEditorToolbarProps) {
   const [editor] = useLexicalComposerContext();
   const themeName = useThemeName();
@@ -679,27 +696,36 @@ export function RichTextEditorToolbar({
         return false;
       }
 
-      restoreLinkSelection();
-      const linkAttributes = linkOpensInNewTab
+      const linkAttributes = hasNewTabLinks
         ? {target: '_blank', rel: 'noopener noreferrer'}
         : {};
-      const handled = editor.dispatchCommand(TOGGLE_LINK_COMMAND, {
-        url,
-        ...linkAttributes,
-      });
-      if (!handled) {
-        editor.update(() => {
-          const selection = $getSelection();
-          if ($isRangeSelection(selection) && selection.isCollapsed()) {
+      const savedSelection = savedSelectionRef.current;
+      // One update restores the selection, decides, and applies. Inside a
+      // command listener (Cmd/Ctrl+K) Lexical queues an update, so a flag set
+      // in one update cannot steer code that runs after it.
+      editor.update(() => {
+        if (savedSelection) {
+          $setSelection(savedSelection.clone());
+        }
+        const selection = $getSelection();
+        if ($isRangeSelection(selection) && selection.isCollapsed()) {
+          const node = selection.anchor.getNode();
+          const isInLink = $isLinkNode(node) || $isLinkNode(node.getParent());
+          // At a caret outside a link there is no text to link, so the URL
+          // becomes the link's text. The toggle command would link the whole
+          // text node around the caret instead.
+          if (!isInLink) {
             const linkNode = $createLinkNode(url, linkAttributes);
             linkNode.append($createTextNode(trimmed));
             selection.insertNodes([linkNode]);
+            return;
           }
-        });
-      }
+        }
+        editor.dispatchCommand(TOGGLE_LINK_COMMAND, {url, ...linkAttributes});
+      });
       return true;
     },
-    [editor, linkOpensInNewTab, restoreLinkSelection],
+    [editor, hasNewTabLinks],
   );
 
   const toggleLink = useCallback(() => {
@@ -896,9 +922,11 @@ export function RichTextEditorToolbar({
   return (
     <>
       <Toolbar
+        {...rest}
+        ref={ref}
         label={label}
         size={size}
-        xstyle={toolbarScrollStyles.compactToolbar}
+        xstyle={[toolbarScrollStyles.compactToolbar, xstyle]}
         startContent={
           <HStack
             gap={1}
@@ -971,7 +999,7 @@ export function RichTextEditorToolbar({
                 onPressedChange={toggleLink}
               />
             )}
-            {endContent != null && (
+            {isRenderable(endContent) && (
               <>
                 <Divider orientation="vertical" />
                 {endContent}

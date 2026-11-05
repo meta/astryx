@@ -11,9 +11,17 @@
 
 import {readFileSync} from 'node:fs';
 import {describe, it, expect, vi} from 'vitest';
-import {render, screen, fireEvent, act} from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  createEvent,
+  act,
+  waitFor,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from './Button';
+import {Icon} from '../Icon/Icon';
 import * as stylex from '@stylexjs/stylex';
 import {
   hasPressedArm,
@@ -65,7 +73,7 @@ describe('Button', () => {
       'utf8',
     );
     expect(groupStylesSource).toContain(
-      "':where(.astryx-input-group > *):focus-visible'",
+      '`${DIRECT_INPUT_GROUP_ADDON}:focus-visible`',
     );
     expect(groupStylesSource).toMatch(
       /zIndex:\s*\{\s*default: null,\s*\[DIRECT_INPUT_GROUP_ADDON_FOCUS_VISIBLE\]: 2,/,
@@ -127,8 +135,9 @@ describe('Button', () => {
   it('shows isLoading state with spinner', () => {
     render(<Button label="Submit" isLoading />);
     const button = screen.getByRole('button');
-    // Button should be disabled when loading
-    expect(button).toBeDisabled();
+    // Busy is aria-disabled (focusable), not native disabled — see #4871.
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
     expect(button.className).toContain('styles.inactive');
     expect(button.className).not.toContain('styles.disabled');
   });
@@ -141,9 +150,16 @@ describe('Button', () => {
     expect(button.className).toContain('styles.disabled');
   });
 
+  it('keeps a caller-supplied aria-disabled and aria-busy', () => {
+    render(<Button label="Assign" aria-disabled="true" aria-busy={true} />);
+    const button = screen.getByRole('button', {name: 'Assign'});
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAttribute('aria-busy', 'true');
+  });
+
   it('sets aria-busy synchronously while clickAction is pending', async () => {
     // The spinner reveal is visually delayed (CSS animation-delay), but the
-    // loading DOM state — aria-busy and disabled — must not be delayed.
+    // loading DOM state — aria-busy and aria-disabled — must not be delayed.
     const user = userEvent.setup();
     let resolveAction: (() => void) | undefined;
     const clickAction = vi.fn(
@@ -157,7 +173,9 @@ describe('Button', () => {
 
     await user.click(button);
     expect(button).toHaveAttribute('aria-busy', 'true');
-    expect(button).toBeDisabled();
+    // Busy is aria-disabled (focusable), not native disabled — see #4871.
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
 
     await act(async () => {
       resolveAction?.();
@@ -165,6 +183,7 @@ describe('Button', () => {
     });
     expect(button).not.toHaveAttribute('aria-busy', 'true');
     expect(button).not.toBeDisabled();
+    expect(button).not.toHaveAttribute('aria-disabled');
   });
 
   it('renders the loading spinner with the inherit shade for every variant (#2717)', () => {
@@ -310,9 +329,10 @@ describe('Button', () => {
     );
     // endContent should still be in the DOM
     expect(screen.getByTestId('end')).toBeInTheDocument();
-    // Button should be disabled and have aria-busy
+    // Busy is aria-disabled (focusable), not native disabled — see #4871.
     const button = screen.getByRole('button');
-    expect(button).toBeDisabled();
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
     expect(button).toHaveAttribute('aria-busy', 'true');
   });
 
@@ -471,6 +491,101 @@ describe('Button', () => {
     expect(screen.getByRole('button')).toHaveAttribute('type', 'submit');
   });
 
+  describe('tooltip as description (FR12)', () => {
+    it('describes the button by a tooltip that adds to its name', () => {
+      render(<Button label="Save" tooltip="Save your changes" />);
+      const button = screen.getByRole('button', {name: 'Save'});
+      expect(button).toHaveAccessibleDescription('Save your changes');
+    });
+
+    it('adds no description when the tooltip repeats the visible name', () => {
+      render(<Button label="Close" tooltip=" Close " />);
+      const button = screen.getByRole('button', {name: 'Close'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('adds no description when an icon-only tooltip repeats its label', () => {
+      render(
+        <Button
+          label="Close"
+          tooltip="Close"
+          icon={<span>x</span>}
+          isIconOnly
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Close'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('keeps a caller description when the tooltip repeats the name', () => {
+      render(
+        <>
+          <span id="hint">Closes the panel</span>
+          <Button label="Close" tooltip="Close" aria-describedby="hint" />
+        </>,
+      );
+      const button = screen.getByRole('button', {name: 'Close'});
+      expect(button).toHaveAttribute('aria-describedby', 'hint');
+    });
+
+    it('keeps the description when aria-labelledby names the button', () => {
+      render(
+        <>
+          <span id="close-name">Close the editor</span>
+          <Button
+            label="Close"
+            tooltip="Close"
+            icon={<span>x</span>}
+            isIconOnly
+            aria-labelledby="close-name"
+          />
+        </>,
+      );
+      const button = screen.getByRole('button', {name: 'Close the editor'});
+      expect(button).toHaveAccessibleDescription('Close');
+    });
+
+    it('adds no description when a decorative Icon sits beside a repeated label', () => {
+      render(
+        <Button label="Edit" icon={<Icon icon="close" />} tooltip="Edit" />,
+      );
+      const button = screen.getByRole('button', {name: 'Edit'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('adds no description when a decorative Icon ends a repeated label', () => {
+      render(
+        <Button
+          label="Sort"
+          endContent={<Icon icon="close" />}
+          tooltip="Sort"
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Sort'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('keeps the description when endContent adds to the name', () => {
+      render(
+        <Button
+          label="Messages"
+          tooltip="Messages"
+          endContent={<span>3</span>}
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Messages 3'});
+      expect(button).toHaveAccessibleDescription('Messages');
+    });
+
+    it('compares with a caller aria-label, not the visible text', () => {
+      render(
+        <Button label="Clear" aria-label="Clear Search" tooltip="Clear" />,
+      );
+      const button = screen.getByRole('button', {name: 'Clear Search'});
+      expect(button).toHaveAccessibleDescription('Clear');
+    });
+  });
+
   it('uses aria-disabled instead of disabled when tooltip is present and button is disabled', () => {
     render(<Button label="Test" tooltip="Reason disabled" isDisabled />);
     const button = screen.getByRole('button');
@@ -516,6 +631,111 @@ describe('Button', () => {
     expect(handleKeyDown).toHaveBeenCalledTimes(1);
   });
 
+  it('uses aria-disabled instead of disabled while isLoading, so the button stays focusable (#4871)', () => {
+    render(<Button label="Save" isLoading />);
+    const button = screen.getByRole('button');
+    // Native disabled would move focus to <body> the moment the action
+    // starts, losing the keyboard user's place — busy must stay
+    // aria-disabled + focusable per the "Disabled vs Busy" convention.
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAttribute('aria-busy', 'true');
+    button.focus();
+    expect(button).toHaveFocus();
+  });
+
+  it('does not fire onClick while aria-disabled via isLoading', async () => {
+    const user = userEvent.setup();
+    const handleClick = vi.fn();
+    render(<Button label="Save" isLoading onClick={handleClick} />);
+    await user.click(screen.getByRole('button'));
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it('does not let a click on a busy button reach a wrapping ancestor handler', async () => {
+    // A native `disabled` element never dispatches a click, so it never
+    // reaches an ancestor either. aria-disabled (busy-only) is a real,
+    // interactive element that still dispatches one — preventDefault alone
+    // only cancels the button's own default action, not propagation, so
+    // an unrelated wrapper (a clickable row/card/backdrop) would otherwise
+    // still fire.
+    const user = userEvent.setup();
+    const ancestorClick = vi.fn();
+    render(
+      <div onClick={ancestorClick}>
+        <Button label="Save" isLoading />
+      </div>,
+    );
+    await user.click(screen.getByRole('button'));
+    expect(ancestorClick).not.toHaveBeenCalled();
+  });
+
+  it('does not let a click on a busy-only anchor Button reach a wrapping ancestor handler', async () => {
+    const user = userEvent.setup();
+    const ancestorClick = vi.fn();
+    render(
+      <div onClick={ancestorClick}>
+        <Button label="Docs" href="https://example.com" isLoading />
+      </div>,
+    );
+    await user.click(screen.getByRole('link'));
+    expect(ancestorClick).not.toHaveBeenCalled();
+  });
+
+  it('suppresses activation keys but passes other keys while aria-disabled via isLoading', async () => {
+    const user = userEvent.setup();
+    const handleKeyDown = vi.fn();
+    render(<Button label="Save" isLoading onKeyDown={handleKeyDown} />);
+    const button = screen.getByRole('button');
+    button.focus();
+    await user.keyboard('{Enter}');
+    expect(handleKeyDown).not.toHaveBeenCalled();
+
+    await user.keyboard('{Escape}');
+    expect(handleKeyDown).toHaveBeenCalledTimes(1);
+  });
+
+  it('suppresses activation keys but passes other keys on a busy-only anchor Button', async () => {
+    // The button-rendered path suppresses Enter/Space while aria-disabled;
+    // the anchor-rendered path (href set, busy-only) shares the same
+    // handleKeyDown but only wires onClick, so a consumer onKeyDown still
+    // received Enter/Space on a busy link.
+    const user = userEvent.setup();
+    const handleKeyDown = vi.fn();
+    render(
+      <Button
+        label="Docs"
+        href="https://example.com"
+        isLoading
+        onKeyDown={handleKeyDown}
+      />,
+    );
+    const link = screen.getByRole('link');
+    link.focus();
+    await user.keyboard('{Enter}');
+    expect(handleKeyDown).not.toHaveBeenCalled();
+
+    await user.keyboard('{Escape}');
+    expect(handleKeyDown).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps native disabled (not aria-disabled) when isDisabled and not busy, even without a tooltip', () => {
+    render(<Button label="Save" isDisabled />);
+    const button = screen.getByRole('button');
+    expect(button).toHaveAttribute('disabled');
+    expect(button).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('keeps native disabled when isDisabled and isLoading are both true (isDisabled wins)', () => {
+    render(<Button label="Save" isDisabled isLoading />);
+    const button = screen.getByRole('button');
+    // "isDisabled behavior unchanged: that stays native disabled" — busy-only
+    // aria-disabled is only for the case where busy is the SOLE reason the
+    // button can't be clicked, not when it's also genuinely isDisabled.
+    expect(button).toHaveAttribute('disabled');
+    expect(button).not.toHaveAttribute('aria-disabled');
+  });
+
   it('has a live region that announces loading state', () => {
     const {rerender} = render(<Button label="Submit" />);
     const button = screen.getByRole('button');
@@ -527,7 +747,17 @@ describe('Button', () => {
     expect(liveRegion).toHaveTextContent('Loading');
   });
 
-  it('localizes the loading announcement through the i18n catalog', () => {
+  it('mounts the loading live region empty when first rendered loading, then fills it (spec:AST-086 FR3)', async () => {
+    render(<Button label="Submit" isLoading />);
+    const button = screen.getByRole('button');
+    // The Spinner also has role="status", so grab the live region explicitly.
+    const regions = button.querySelectorAll('[role="status"]');
+    const liveRegion = regions[regions.length - 1];
+    expect(liveRegion).toHaveTextContent('');
+    await waitFor(() => expect(liveRegion).toHaveTextContent('Loading'));
+  });
+
+  it('localizes the loading announcement through the i18n catalog', async () => {
     render(
       <InternationalizationProvider
         locale="fr"
@@ -539,7 +769,7 @@ describe('Button', () => {
     // The Spinner also has role="status", so grab the live region explicitly.
     const regions = button.querySelectorAll('[role="status"]');
     const liveRegion = regions[regions.length - 1];
-    expect(liveRegion).toHaveTextContent('Chargement');
+    await waitFor(() => expect(liveRegion).toHaveTextContent('Chargement'));
   });
 
   describe('in a narrow row', () => {
@@ -663,8 +893,6 @@ describe('Button', () => {
   });
 
   it('exposes aria-busy on the link-rendered button while loading', () => {
-    // Non-interruptible loading disables the button, which falls back to
-    // <button> rendering — so an anchor only shows loading when interruptible.
     render(
       <Button
         label="Docs"
@@ -681,6 +909,38 @@ describe('Button', () => {
     render(<Button label="Docs" href="https://example.com" />);
     const link = screen.getByRole('link');
     expect(link).not.toHaveAttribute('aria-busy');
+  });
+
+  it('stays an anchor while busy-only, not a disabled <button> fallback (#4871)', () => {
+    // Non-interruptible busy is exactly the isBusyOnlyDisabled case: not
+    // isDisabled, blocked only because a fire-once action is in flight.
+    // Swapping the element to <button disabled> here would drop focus the
+    // same way the native disabled attribute did (credit @AKnassa, #4879).
+    render(<Button label="Docs" href="https://example.com" isLoading />);
+    const link = screen.getByRole('link', {name: 'Docs'});
+    expect(link.tagName).toBe('A');
+    expect(link).toHaveAttribute('href', 'https://example.com');
+    expect(link).toHaveAttribute('aria-busy', 'true');
+    expect(link).toHaveAttribute('aria-disabled', 'true');
+    expect(link).not.toHaveAttribute('disabled');
+  });
+
+  it('keeps a busy-only anchor focusable and guards its navigation', () => {
+    render(<Button label="Docs" href="https://example.com" isLoading />);
+    const link = screen.getByRole('link', {name: 'Docs'});
+    link.focus();
+    expect(link).toHaveFocus();
+
+    const event = createEvent.click(link);
+    fireEvent(link, event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('falls back to <button disabled> for a truly disabled href Button', () => {
+    render(<Button label="Docs" href="https://example.com" isDisabled />);
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    const button = screen.getByRole('button', {name: 'Docs'});
+    expect(button).toBeDisabled();
   });
 });
 

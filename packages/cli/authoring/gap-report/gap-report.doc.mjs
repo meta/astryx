@@ -15,7 +15,7 @@ export const doc = {
   displayName: 'GapReportHandler',
   namespace: 'authoring',
   description:
-    'A handler for `astryx gap-report`: a plain object with an `audience` and a `handle` function. Set it as `gapReport` in astryx.config, or export it as `gapReport` from an integration manifest. Every handler runs: the project handler first, then each integration handler in config order.',
+    "A handler for `{@command gap-report}`: a plain object with an `audience` and a `handle` function. Set it as `gapReport` in astryx.config, or export it as `gapReport` from an integration manifest. Handlers add up rather than replace each other: the project handler first, then each loaded integration's in load order (the `integrations` list, then autolinked ones), whichever package the report is about.",
   appliesTo:
     '`gapReport` in astryx.config.*, or the `gapReport` named export of astryx.integration.*',
   fields: [
@@ -104,7 +104,7 @@ export const doc = {
                   name: 'report.target.version',
                   type: 'string',
                   description:
-                    'The installed version. Null when it is not known.',
+                    "The integration's version from its package.json. Null for Core, and when the package.json has none.",
                   required: true,
                 },
                 {

@@ -2,8 +2,8 @@
 
 /**
  * @file LayerDismissal.stories.tsx
- * @input Uses Dialog, Popover, Tooltip, Lightbox, MobileNav, BottomSheet,
- *   Button, Layout from @astryxdesign/core; InfoTip from @astryxdesign/lab
+ * @input Uses Dialog, Popover, Tooltip, InfoTip, Lightbox, MobileNav,
+ *   BottomSheet, Button, Layout from @astryxdesign/core
  * @output Storybook stories demonstrating shared layer dismissal
  * @position Storybook; the visual contract for the layer dismissal stack
  *
@@ -16,6 +16,7 @@ import {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   Button,
+  ClickableCard,
   Dialog,
   DialogHeader,
   HoverCard,
@@ -25,13 +26,14 @@ import {
   LayoutFooter,
   Lightbox,
   MobileNav,
+  MoreMenu,
   Popover,
   Text,
   Tooltip,
   VStack,
 } from '@astryxdesign/core';
-import {BottomSheet, BottomSheetSwitcher} from '@astryxdesign/core/BottomSheet';
-import {InfoTip} from '@astryxdesign/lab/InfoTip';
+import {BottomSheet} from '@astryxdesign/core/BottomSheet';
+import {InfoTip} from '@astryxdesign/core/InfoTip';
 import type {Meta, StoryObj} from '@storybook/react-vite';
 
 const sheetStyles = stylex.create({
@@ -527,31 +529,32 @@ export const MobileNavAlone: Story = {render: () => <MobileNavAloneExample />};
  * next Escape closes the sheet.
  */
 function SheetWithHoverTipExample() {
-  const [activeSheet, setActiveSheet] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <>
       <Button
         label="Open sheet"
         variant="secondary"
-        onClick={() => setActiveSheet('details')}
+        onClick={() => setIsOpen(true)}
       />
-      <BottomSheetSwitcher
-        activeSheet={activeSheet}
-        onActiveSheetChange={setActiveSheet}
-        hasScrim={false}>
-        <BottomSheet sheetId="details" label="Details" height="hug" padding={0}>
-          <VStack gap={3} xstyle={sheetStyles.body}>
-            <Text type="body">
-              Hover the button to show the tip, then press Escape. The first
-              press closes only the tip; the next press closes the sheet.
-            </Text>
-            <Tooltip content="A hover tip, showing">
-              <Button label="Hover me" variant="secondary" />
-            </Tooltip>
-          </VStack>
-        </BottomSheet>
-      </BottomSheetSwitcher>
+      <BottomSheet
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        hasScrim={false}
+        label="Details"
+        height="hug"
+        padding={0}>
+        <VStack gap={3} xstyle={sheetStyles.body}>
+          <Text type="body">
+            Hover the button to show the tip, then press Escape. The first press
+            closes only the tip; the next press closes the sheet.
+          </Text>
+          <Tooltip content="A hover tip, showing">
+            <Button label="Hover me" variant="secondary" />
+          </Tooltip>
+        </VStack>
+      </BottomSheet>
     </>
   );
 }
@@ -726,7 +729,7 @@ export const PurposeFlipsWhileOpen: Story = {
 };
 
 /**
- * A lab InfoTip inside a modal, its tip showing. One Escape hides the tip and
+ * An InfoTip inside a modal, its tip showing. One Escape hides the tip and
  * leaves the modal open; a second closes the modal.
  *
  * The InfoTip used to `stopPropagation()` the press at its trigger, so the
@@ -1015,4 +1018,46 @@ function PinnedTooltipInModalExample() {
 
 export const PinnedTooltipInModal: Story = {
   render: () => <PinnedTooltipInModalExample />,
+};
+
+/**
+ * A menu and a popover written inside a clickable card. A press inside either
+ * open layer stays in the layer: choosing "Rename" counts a menu choice, and a
+ * click on the popover's text does nothing, but neither activates the card
+ * around them. A click on the card's own text still activates it.
+ */
+function PressInsideLayerExample() {
+  const [cardActivations, setCardActivations] = useState(0);
+  const [menuChoices, setMenuChoices] = useState(0);
+  return (
+    <VStack gap={3}>
+      <ClickableCard
+        label="Project Atlas"
+        onClick={() => setCardActivations(count => count + 1)}>
+        <HStack gap={2}>
+          <Text type="body">Project Atlas</Text>
+          <MoreMenu
+            items={[
+              {
+                label: 'Rename',
+                onClick: () => setMenuChoices(count => count + 1),
+              },
+            ]}
+          />
+          <Popover
+            label="Details"
+            content={<Text type="body">Owned by the design team.</Text>}>
+            <Button label="Details" variant="secondary" />
+          </Popover>
+        </HStack>
+      </ClickableCard>
+      <Text type="body">
+        Card activations: {cardActivations} · Menu choices: {menuChoices}
+      </Text>
+    </VStack>
+  );
+}
+
+export const PressInsideLayer: Story = {
+  render: () => <PressInsideLayerExample />,
 };

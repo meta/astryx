@@ -62,6 +62,8 @@
     "Dialog",
     "DialogHeader",
     "Divider",
+    "Drawer",
+    "DrawerHeader",
     "DropdownMenu",
     "DropdownMenuCheckboxItem",
     "DropdownMenuDivider",
@@ -540,6 +542,14 @@
     "DividerShowcase",
     "DividerVariants",
     "DividerVertical",
+    "DrawerForm",
+    "DrawerHeaderShowcase",
+    "DrawerHeaderSubtitleEndContent",
+    "DrawerHeaderWithCloseButton",
+    "DrawerScrim",
+    "DrawerShowcase",
+    "DrawerStart",
+    "DrawerWidths",
     "DropdownMenuActions",
     "DropdownMenuBottomSheet",
     "DropdownMenuGroupShowcase",
@@ -969,27 +979,13 @@
     "VStackBasic",
     "VStackShowcase"
   ],
-  "@astryxdesign/theme-butter/theme": [
-    "butter"
-  ],
-  "@astryxdesign/theme-chocolate/theme": [
-    "chocolate"
-  ],
-  "@astryxdesign/theme-gothic/theme": [
-    "gothic"
-  ],
-  "@astryxdesign/theme-matcha/theme": [
-    "matcha"
-  ],
-  "@astryxdesign/theme-neutral/theme": [
-    "neutral"
-  ],
-  "@astryxdesign/theme-stone/theme": [
-    "stone"
-  ],
-  "@astryxdesign/theme-y2k/theme": [
-    "y2k"
-  ],
+  "@astryxdesign/theme-butter/theme": ["butter"],
+  "@astryxdesign/theme-chocolate/theme": ["chocolate"],
+  "@astryxdesign/theme-gothic/theme": ["gothic"],
+  "@astryxdesign/theme-matcha/theme": ["matcha"],
+  "@astryxdesign/theme-neutral/theme": ["neutral"],
+  "@astryxdesign/theme-stone/theme": ["stone"],
+  "@astryxdesign/theme-y2k/theme": ["y2k"],
   "@astryxdesign/cli/command": [
     "blog",
     "build",
@@ -1090,8 +1086,5 @@
     "template-doc",
     "theme-doc"
   ],
-  "@astryxdesign/cli/enum": [
-    "error-codes",
-    "response-types"
-  ]
+  "@astryxdesign/cli/enum": ["error-codes", "response-types"]
 }

@@ -27,12 +27,11 @@ import {
 } from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSetOf} from '../../../foundation/debug/index.mjs';
-import {emit, section, text, records} from '../formatters/index.mjs';
+import {emit, formatDeprecation, section, text, records} from '../formatters/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {search as searchApi} from '../../../api/search/search.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
-import {findCoreDir} from '../../../foundation/fs/paths.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {doc as searchCommand} from './search.doc.mjs';
 import {doc as searchFn} from '../../../api/search/search.doc.mjs';
@@ -104,16 +103,22 @@ export function registerSearch(program) {
       // ── Text output ──────────────────────────────────────────────
       const run = getCliInvocation();
       const {query: q, matchCount, results} = result.data;
-      // Outside an app an open search covers the docs and themes alone. Say
-      // so, so that list does not read as "Astryx has no such component".
-      const note =
-        !options.type && !findCoreDir(process.cwd())
-          ? [
-              text(
-                '@astryxdesign/core is not installed here, so only the docs and themes were searched.',
-              ),
-            ]
-          : [];
+      // When Core could not be had, an open search covers the rest alone. Say
+      // so, on standard error and in the output, so the list does not read as
+      // "Astryx has no such component".
+      const partial = result.meta?.partial;
+      if (partial) {
+        console.error(
+          `astryx: components, hooks, and templates were not searched: ${partial.reason}`,
+        );
+      }
+      const note = partial
+        ? [
+            text(
+              'Components, hooks, and templates need @astryxdesign/core, which could not be found (see the line above), so only the docs and themes were searched.',
+            ),
+          ]
+        : [];
 
       // No matches is a valid, successful outcome — clean message, exit 0.
       if (results.length === 0) {
@@ -140,6 +145,7 @@ export function registerSearch(program) {
             'title',
             'displayName',
             'kind',
+            'deprecated',
             'score',
             'reason',
             'import',
@@ -155,6 +161,7 @@ export function registerSearch(program) {
             'title',
             'displayName',
             'kind',
+            'deprecated',
             'import',
             'description',
             'command',
@@ -172,7 +179,11 @@ export function registerSearch(program) {
         ),
         records(results, {
           fields,
-          format: {command: formatCliCommand, parent: formatCliCommand},
+          format: {
+            command: formatCliCommand,
+            parent: formatCliCommand,
+            deprecated: formatDeprecation,
+          },
         }),
         ...note,
         ...discoverHint(run, q, options.type),

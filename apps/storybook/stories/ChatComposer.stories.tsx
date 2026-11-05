@@ -108,7 +108,9 @@ export const Simplest: Story = {
  * soft-keyboard Return inserts a newline instead of sending (and never strands
  * a multi-line prompt); on a pointer device Enter sends as usual. The same
  * seam covers shortcuts like Cmd/Ctrl+Enter — just call submit yourself.
- * IME composition is always respected regardless.
+ * `enterKeyHint` keeps the touch keyboard's Return key honest: Send where
+ * Enter sends, Return where it inserts a line break. IME composition is
+ * always respected regardless.
  */
 export const EnterBehavior: Story = {
   render: () => {
@@ -125,6 +127,9 @@ export const EnterBehavior: Story = {
                 ? 'Enter inserts a newline on touch — use Send'
                 : 'Enter sends; Shift+Enter for a newline'
             }
+            // The Return key says what Enter does: Send where Enter sends,
+            // Return where it inserts a line break.
+            enterKeyHint={isCoarsePointer ? 'enter' : 'send'}
             onKeyDown={e => {
               if (isCoarsePointer && e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();

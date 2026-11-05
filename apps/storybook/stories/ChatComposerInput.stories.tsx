@@ -44,6 +44,17 @@ const USERS: SearchableItem<{role: string}>[] = [
   {id: 'jordan', label: 'Jordan Lee', auxiliaryData: {role: 'Product'}},
   {id: 'taylor', label: 'Taylor Kim', auxiliaryData: {role: 'Design'}},
   {id: 'morgan', label: 'Morgan Chen', auxiliaryData: {role: 'Infrastructure'}},
+  {
+    id: 'maria',
+    label: 'María José García de la Fuente',
+    auxiliaryData: {role: 'Research'},
+  },
+  {
+    id: 'rdj',
+    label: 'Robert Downey Jr.',
+    auxiliaryData: {role: 'Guest Speaker'},
+  },
+  {id: 'q4_review', label: 'Design Review: Q4', auxiliaryData: {role: 'Topic'}},
 ];
 
 const COMMANDS: SearchableItem<{description: string}>[] = [
@@ -372,6 +383,7 @@ export const MentionTrigger: Story = {
     const mentionTrigger: ChatComposerTrigger = {
       character: '@',
       searchSource: userSource,
+      hasMultiWordQuery: true,
       renderItem: item => (
         <TypeaheadItem
           item={item}
@@ -497,6 +509,7 @@ export const MultipleTriggers: Story = {
     const mentionTrigger: ChatComposerTrigger = {
       character: '@',
       searchSource: userSource,
+      hasMultiWordQuery: true,
       onSelect: item => ({
         value: `@${item.id}`,
         label: item.label,

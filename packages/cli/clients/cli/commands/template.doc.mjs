@@ -102,6 +102,7 @@ export const doc = {
       cli: 'astryx template --cdn public/demo.html',
     },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {
       code: 0,

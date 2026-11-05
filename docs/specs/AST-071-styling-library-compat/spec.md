@@ -18,6 +18,20 @@ affects_consumer_docs: []
 
 # Styling-library compatibility system spec
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": [
+    "packages/core/src/**",
+    "packages/lab/src/**",
+    "packages/charts/src/**",
+    "packages/richtext/src/**",
+    "packages/vega/src/**"
+  ]
+}
+```
+
 ## Intent
 
 A product styles Astryx components with whatever its codebase already uses:

@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(packages/core/src/TreeList/|packages/core/src/hooks/useTreeFocus|apps/storybook/stories/TreeListA11y)
 
 /**
  * @file TreeListRowNames.a11y.chromium.spec.ts
@@ -7,7 +8,7 @@
  * @position Chromium evidence for component:TreeList AR1 (component:TreeList's row-naming implementation gap, closed)
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   createChromiumHarness,
   holdMotionStill,

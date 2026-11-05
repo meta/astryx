@@ -11,7 +11,7 @@
  *   top toolbar slot, configurable editable-surface minimum height, and distinct
  *   read-only and disabled states that follow prop changes, RichTextEditorProps,
  *   RichTextEditorStatus, RichTextEditorStatusType, RichTextEditorSize
- * @position Experimental (richtext) implementation; consumed by the package index.ts and
+ * @position @astryxdesign/richtext implementation; consumed by the package index.ts and
  *   re-exported from @astryxdesign/richtext. Tested by RichTextEditor.test.tsx.
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -20,11 +20,8 @@
  * - /packages/richtext/src/index.ts (exports if types change)
  * - /apps/storybook/stories/RichTextEditor.stories.tsx (storybook stories)
  *
- * NOTE: This is an EXPERIMENTAL component in @astryxdesign/richtext (published only under
- * the `@canary` dist-tag, never as stable `latest`). It is the initial landing for the
- * OSS Lexical editor RFC; the goal is graduation to @astryxdesign/core after the
- * Component Specification Protocol. `lexical` and `@lexical/*` are OPTIONAL peer
- * dependencies — install them to use this component.
+ * NOTE: `lexical` and `@lexical/*` are OPTIONAL peer dependencies — install them to
+ * use this component.
  */
 
 import {
@@ -57,7 +54,12 @@ import type {BaseProps} from '@astryxdesign/core';
 import {useInputStatusIcon} from '@astryxdesign/core/hooks';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {useTranslator} from '@astryxdesign/core/i18n';
-import {mergeProps, themeProps, type SizeValue} from '@astryxdesign/core/utils';
+import {
+  isRenderable,
+  mergeProps,
+  themeProps,
+  type SizeValue,
+} from '@astryxdesign/core/utils';
 import {useSize} from '@astryxdesign/core/SizeContext';
 
 import {LexicalExtensionComposer} from '@lexical/react/LexicalExtensionComposer';
@@ -79,9 +81,10 @@ import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
+import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
+import {SelectAllScopePlugin} from './SelectAllScopePlugin';
 import {type Transformer} from '@lexical/markdown';
-export type {Transformer} from '@lexical/markdown';
 import {$generateHtmlFromNodes} from '@lexical/html';
 import {DEFAULT_NODES} from './editorNodes';
 import {$exportMarkdownKeepingSource} from './markdownSource';
@@ -230,7 +233,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
   },
   counterError: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-text-error'],
   },
 });
 
@@ -373,7 +376,7 @@ export interface RichTextEditorProps extends Omit<
    *   info-tip button that reveals the message
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusVariant | 'tooltip';
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
    * (e.g. `'100%'`).
@@ -446,6 +449,14 @@ export interface RichTextEditorProps extends Omit<
    * serializable props.
    */
   markdownExtensions?: ReadonlyArray<RichTextMarkdownExtension>;
+  /**
+   * CodeBlock language values a fence may name, each imported on its own,
+   * such as `graphql` from `@astryxdesign/core/CodeBlock/languages/graphql`,
+   * or made with `createCodeLanguage`. Pass the same list as `Markdown`'s
+   * `codeLanguages`, so reading and editing paint and label the same
+   * languages (spec:AST-061).
+   */
+  codeLanguages?: ReadonlyArray<CodeLanguage>;
   /** Whether to automatically focus the editor on mount. @default false */
   hasAutoFocus?: boolean;
   /**
@@ -474,9 +485,8 @@ export interface RichTextEditorProps extends Omit<
 
 /**
  * A WYSIWYG rich-text editor built on Lexical, styled with Astryx design
- * tokens. Experimental — ships from `@astryxdesign/richtext` (canary). `lexical` and
- * `@lexical/*` are optional peer dependencies — install them to use this
- * component.
+ * tokens. Ships from `@astryxdesign/richtext`. `lexical` and `@lexical/*` are
+ * optional peer dependencies — install them to use this component.
  *
  * The editor is intentionally minimal and extensible: pass `toolbar`, `nodes`,
  * and `plugins` to layer richer behaviour (formatting, mentions, hover cards)
@@ -520,6 +530,7 @@ export const RichTextEditor = function RichTextEditor({
   hasMarkdownShortcuts = true,
   transformers = DEFAULT_TRANSFORMERS,
   markdownExtensions,
+  codeLanguages,
   hasAutoFocus = false,
   tabEscapeHint: tabEscapeHintFromProps,
   maxLength,
@@ -594,7 +605,7 @@ export const RichTextEditor = function RichTextEditor({
   }
 
   const hasTabEscapeHint = editable && tabEscapeHint !== '';
-  const hasToolbar = toolbar != null && typeof toolbar !== 'boolean';
+  const hasToolbar = isRenderable(toolbar);
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
@@ -710,8 +721,8 @@ export const RichTextEditor = function RichTextEditor({
                 hasHorizontalScroll
               />
               <TableColumnFloorPlugin />
-              <CodeBlockHeaderPlugin />
-              <CodeSyntaxPlugin />
+              <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
+              <CodeSyntaxPlugin codeLanguages={codeLanguages} />
               {markdownExtensions != null && markdownExtensions.length > 0 ? (
                 <MarkdownExtensionsPlugin
                   extensions={markdownExtensions}
@@ -720,6 +731,7 @@ export const RichTextEditor = function RichTextEditor({
               ) : null}
               <TabIndentationPlugin />
               <TabFocusEscapePlugin />
+              <SelectAllScopePlugin />
               {hasMarkdownShortcuts && (
                 <MarkdownShortcutPlugin transformers={markdownTransformers} />
               )}
@@ -750,6 +762,7 @@ export const RichTextEditor = function RichTextEditor({
           <VisuallyHidden id={tabEscapeHintID}>{tabEscapeHint}</VisuallyHidden>
         )}
       </div>
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `maxLength` is a number; 0 still shows its counter */}
       {maxLength != null && (
         <div
           id={counterID}

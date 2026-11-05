@@ -20,11 +20,17 @@ import {useMemo} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Icon, type IconColor, type IconName} from '../../../Icon';
 import {Tooltip} from '../../../Tooltip';
-import {useTranslator} from '../../../i18n';
 import {warnOnce} from '../../../utils/devWarning';
 import {VisuallyHidden} from '../../../VisuallyHidden';
 import type {TableRowStatus, TableSemanticRowStatus} from '../../index';
 import type {TableColumn, TablePlugin} from '../../types';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/rowStatus/useTableRowStatus.generated';
+
+registerEnglishFallback(english);
 
 /**
  * Named colors supported by the custom row-status marker. These resolve to the
@@ -201,7 +207,7 @@ const styles = stylex.create({
 export function useTableRowStatus<T extends Record<string, unknown>>(
   config: UseTableRowStatusConfig<T>,
 ): TablePlugin<T> {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {getStatus} = config;
 
   return useMemo((): TablePlugin<T> => {

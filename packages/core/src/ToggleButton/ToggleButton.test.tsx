@@ -497,6 +497,78 @@ describe('ToggleButton', () => {
     expect(button).not.toHaveAttribute('aria-busy', 'true');
     await act(async () => {});
   });
+
+  // family:buttons FR5: a caller onClick on a standalone ToggleButton runs
+  // before onPressedChange and pressedChangeAction, never replaces the toggle
+  // request, and cancels it only by calling preventDefault() itself.
+  describe('with a caller onClick', () => {
+    it('runs the caller onClick first, then requests the next state and runs the Action', async () => {
+      const calls: string[] = [];
+      render(
+        <ToggleButton
+          label="Compact"
+          isPressed={false}
+          onClick={() => calls.push('onClick')}
+          onPressedChange={next => calls.push(`onPressedChange:${next}`)}
+          pressedChangeAction={next => {
+            calls.push(`pressedChangeAction:${next}`);
+          }}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole('button', {name: 'Compact'}));
+      await act(async () => {});
+
+      expect(calls).toEqual([
+        'onClick',
+        'onPressedChange:true',
+        'pressedChangeAction:true',
+      ]);
+    });
+
+    it('requests no next state when the caller onClick calls preventDefault', async () => {
+      const onPressedChange = vi.fn();
+      const pressedChangeAction = vi.fn();
+      render(
+        <ToggleButton
+          label="Compact"
+          isPressed={false}
+          onClick={event => event.preventDefault()}
+          onPressedChange={onPressedChange}
+          pressedChangeAction={pressedChangeAction}
+        />,
+      );
+
+      const button = screen.getByRole('button', {name: 'Compact'});
+      fireEvent.click(button);
+      await act(async () => {});
+
+      expect(onPressedChange).not.toHaveBeenCalled();
+      expect(pressedChangeAction).not.toHaveBeenCalled();
+      expect(button).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('still requests the next state when the click was already prevented before the caller onClick ran', () => {
+      const onPressedChange = vi.fn();
+      render(
+        <div onClickCapture={event => event.preventDefault()}>
+          <ToggleButton
+            label="Compact"
+            isPressed={false}
+            onClick={() => {}}
+            onPressedChange={onPressedChange}
+          />
+        </div>,
+      );
+
+      fireEvent.click(screen.getByRole('button', {name: 'Compact'}));
+
+      expect(onPressedChange).toHaveBeenCalledExactlyOnceWith(
+        true,
+        expect.anything(),
+      );
+    });
+  });
 });
 
 // =============================================================================
@@ -580,9 +652,90 @@ describe('ToggleButtonGroup (single)', () => {
   });
 });
 
+describe('ToggleButton caller attributes', () => {
+  // Spread so the pressed-state attributes are passed the way a wrapper that
+  // forwards arbitrary DOM props would pass them.
+  const callerProps: Record<string, string> = {
+    'data-is-pressed': 'bogus',
+    'aria-pressed': 'mixed',
+    'data-elevation': 'high',
+    'data-testid-extra': 'kept',
+  };
+
+  it('keeps the reflected pressed state when a caller passes its own', () => {
+    render(
+      <>
+        <ToggleButton
+          label="Unpressed"
+          isPressed={false}
+          onPressedChange={() => {}}
+          {...callerProps}
+        />
+        <ToggleButton
+          label="Pressed"
+          isPressed
+          onPressedChange={() => {}}
+          {...callerProps}
+        />
+      </>,
+    );
+    const unpressed = screen.getByRole('button', {name: 'Unpressed'});
+    const pressed = screen.getByRole('button', {name: 'Pressed'});
+    expect(unpressed).toHaveAttribute('data-is-pressed', 'false');
+    expect(unpressed).toHaveAttribute('aria-pressed', 'false');
+    expect(pressed).toHaveAttribute('data-is-pressed', 'true');
+    expect(pressed).toHaveAttribute('aria-pressed', 'true');
+    // The reflected elevation (the default, none) wins over a caller's too.
+    expect(unpressed).toHaveAttribute('data-elevation', 'none');
+    expect(pressed).toHaveAttribute('data-elevation', 'none');
+  });
+
+  it('still forwards other caller data attributes to the root', () => {
+    render(
+      <ToggleButton
+        label="Favorite"
+        isPressed={false}
+        onPressedChange={() => {}}
+        {...callerProps}
+      />,
+    );
+    expect(screen.getByRole('button', {name: 'Favorite'})).toHaveAttribute(
+      'data-testid-extra',
+      'kept',
+    );
+  });
+});
+
 // =============================================================================
 // ToggleButtonGroup — Multiple mode
 // =============================================================================
+
+describe('ToggleButtonGroup host props (public-component-api INV5)', () => {
+  it('passes className, style, id, aria-* and data-* to the group, keeping its own role and name', () => {
+    render(
+      <ToggleButtonGroup
+        label="Alignment"
+        value={null}
+        onChange={() => {}}
+        className="toolbar-group"
+        style={{marginTop: 8}}
+        id="alignment"
+        aria-describedby="alignment-hint"
+        data-section="format"
+        // A caller role or name never replaces the group's own.
+        {...{role: 'radiogroup', 'aria-label': 'Ignored'}}>
+        <ToggleButton value="left" label="Left" />
+      </ToggleButtonGroup>,
+    );
+    const group = screen.getByRole('group', {name: 'Alignment'});
+    expect(group).toHaveClass('toolbar-group');
+    expect(group).toHaveClass('astryx-toggle-button-group');
+    expect(group).toHaveStyle({marginTop: '8px'});
+    expect(group).toHaveAttribute('id', 'alignment');
+    expect(group).toHaveAttribute('aria-describedby', 'alignment-hint');
+    expect(group).toHaveAttribute('data-section', 'format');
+  });
+});
 
 describe('ToggleButtonGroup (multiple)', () => {
   function MultipleGroup() {
@@ -720,6 +873,29 @@ describe.each(['single', 'multiple'] as const)(
       );
       expect(onPressedChange).not.toHaveBeenCalled();
       expect(pressedChangeAction).not.toHaveBeenCalled();
+    });
+
+    // family:buttons FR11: a member's selection request comes from the group,
+    // and a caller onClick on the member must not replace it.
+    it('still asks the group to toggle a member that receives an onClick', async () => {
+      const onChange = vi.fn();
+      const onClick = vi.fn();
+      const groupProps =
+        type === 'single'
+          ? {type, value: null, onChange}
+          : {type, value: [], onChange};
+      render(
+        <ToggleButtonGroup {...groupProps} label="View">
+          <ToggleButton value="grid" label="Grid" onClick={onClick} />
+        </ToggleButtonGroup>,
+      );
+
+      await userEvent.setup().click(screen.getByRole('button', {name: 'Grid'}));
+
+      expect(onClick).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledExactlyOnceWith(
+        type === 'single' ? 'grid' : ['grid'],
+      );
     });
   },
 );

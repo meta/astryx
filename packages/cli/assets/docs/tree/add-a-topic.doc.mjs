@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/docs/add-a-topic`: add a doc topic to an
- * integration package, write its sections, and pick the doc kind for each
- * thing the package ships.
+ * @file `astryx docs authoring/building-blocks/docs/add-a-topic`: add a
+ * doc topic to an integration package, write its sections, and pick the doc
+ * kind for each thing the package ships.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
@@ -27,7 +27,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx integration add doc deploying\n# Read it the way an app will\nnpx astryx docs deploying',
+          code: '{@command integration add doc deploying}\n# Read it the way an app will\n{@command docs deploying}',
         },
         {
           type: 'code',
@@ -40,7 +40,7 @@ export const docs = {
           items: [
             'Name the topic in lowercase kebab-case, such as `deploying`. Readers type the name as a command argument, so it holds only letters, digits, `_`, and `-`.',
             'Keep the name stable: readers and links find the topic by it.',
-            'Pick a name no Core topic uses. To take over or add to a Core topic, see {@link generic:extend-or-replace}.',
+            'Pick a name `{@command docs}` does not already list: no Core topic, and no section such as `tokens` or `layout`. To take over or add to a Core topic, see {@link generic:extend-or-replace}.',
           ],
         },
       ],
@@ -57,15 +57,50 @@ export const docs = {
           type: 'code',
           lang: 'javascript',
           label: 'docs/deploying.doc.mjs',
-          code: "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'deploying',\n  title: 'Deploying',\n  description: 'Ship an app built with Acme widgets.',\n  sections: [{\n    id: 'build-before-you-ship',\n    title: 'Build before you ship',\n    content: [\n      {type: 'prose', text: 'Build the app, then upload the `dist` folder.'},\n      {type: 'code', lang: 'bash', code: 'npm run build'},\n      {type: 'list', style: 'unordered', items: ['Keep `dist` out of git.']},\n      {type: 'table', headers: ['Variable', 'Value'], rows: [['`NODE_ENV`', '`production`']]},\n    ],\n  }],\n};",
+          code: "/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */\nexport default {\n  type: 'generic',\n  name: 'deploying',\n  title: 'Deploying',\n  description: 'Ship an app built with Acme widgets.',\n  sections: [{\n    id: 'build-before-you-ship',\n    title: 'Build before you ship',\n    content: [\n      {type: 'prose', text: 'Build the app, then upload the `dist` folder.'},\n      {type: 'code', lang: 'bash', code: '{@@pm run build}'},\n      {type: 'list', style: 'unordered', items: ['Keep `dist` out of git.']},\n      {type: 'table', headers: ['Variable', 'Value'], rows: [['`NODE_ENV`', '`production`']]},\n    ],\n  }],\n};",
+        },
+        {
+          type: 'prose',
+          text: 'The sample sets a section `id`, so `package.json` needs the CLI peer `"@astryxdesign/cli": ">=0.6.4"`. Published 0.6.3 and earlier reject `id` and hide every doc topic your package ships, and `integration verify` fails without that peer; see {@link generic:versioning}.',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
-            'Content blocks are `prose`, `code`, `list`, and `table`, as shown; `heading`, with a `level` from 3 to 6 and a `text`; and `token-ref`, which inlines a token table from another topic.',
-            '`id` is optional: a stable key for the section. Without it, the key comes from the title. A stable CLI before 0.6.4 cannot read `id`; see {@link generic:versioning}.',
-            'Replace the `Overview` placeholder that `integration add` writes. Every field is in {@link generic:authoring}.',
+            'Replace the `Overview` placeholder `integration add` writes.',
+            'Every field is in {@link schema:reference-doc}.',
+          ],
+        },
+      ],
+    },
+    {
+      id: 'write-commands-without-a-runner',
+      title: 'Write commands for every reader',
+      content: [
+        {
+          type: 'prose',
+          text: "Write an Astryx command as `{@@command doctor}` and a package-manager step as `{@@pm install @acme/widgets}`, never with a runner such as npx or pnpm exec, or a package manager's own command, in front. The CLI shows each one with the command the reader runs: `pnpm exec astryx doctor` or `yarn astryx doctor`, `pnpm add @acme/widgets` or `npm install @acme/widgets`, or the `cliCommand` an integration sets. {@link generic:doc-syntax} lists every token. A command written bare, the word astryx and a command, is shown the same way. `doctor integration validate` (and so `integration check`) names each command written another way, with the token that replaces it; {@link generic:doc-syntax} lists what it checks. An install step, which runs before the CLI is installed, is `{@@pm dlx @astryxdesign/cli init}`.",
+        },
+        {
+          type: 'code',
+          lang: 'javascript',
+          label: 'docs/deploying.doc.mjs',
+          code: "{type: 'prose', text: 'Check the app with {@@command doctor} before you ship.'},\n{type: 'code', lang: 'bash', code: '{@@command doctor}'},",
+        },
+        {
+          type: 'code',
+          lang: 'text',
+          label:
+            "Read in an app whose integration sets cliCommand: 'acme astryx'",
+          code: 'Check the app with `acme astryx doctor` before you ship.\n\n```bash\nacme astryx doctor\n```',
+        },
+        {
+          type: 'list',
+          style: 'unordered',
+          items: [
+            'The CLI prefixes an inline code span that starts with the word astryx, a command at the start of a line, or after `&&`, `||`, `;` or `|`, in a `bash`, `sh`, `shell`, `zsh`, `console`, `text` or `markdown` code block or one with no language, and a table cell that holds only a command.',
+            'Code in other languages, such as a `js` example, and the word astryx in plain prose stay as written.',
+            '`--json` returns the doc as written, so a reader that shows it prefixes the commands itself.',
           ],
         },
       ],
@@ -135,8 +170,18 @@ export const docs = {
           items: [
             'Readers open a topic by its `name`, not its file name. Name the file after the doc, `<name>.doc.mjs`, so each one is easy to find.',
             'A topic with no `placement` is a flat topic: the docs list shows it under Topics, and readers open it by its name.',
-            'To give your package its own section in the docs tree instead, see {@link generic:sections-and-placement}.',
+            'For a section of your own in the docs tree, see {@link generic:sections-and-placement}.',
           ],
+        },
+      ],
+    },
+    {
+      id: 'global-mode',
+      title: 'In global mode',
+      content: [
+        {
+          type: 'prose',
+          text: 'In global mode: when users install your package for their computer, beside the global CLI, your doc topics show up in folders outside any project; inside a project, only if the project installs your package. See {@link namespace:global} and {@link generic:global-integrations}.',
         },
       ],
     },

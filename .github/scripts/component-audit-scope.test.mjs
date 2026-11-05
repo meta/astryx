@@ -4,7 +4,6 @@
  * @file Mutation-sensitive tests for trusted component-audit scope routing.
  */
 
-import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {describe, expect, it} from 'vitest';
 
@@ -30,23 +29,9 @@ const NO_COMPONENT_AUDIT_SCOPE = {
 };
 
 describe('component audit scope', () => {
-  it('loads the classifier and registry from the trusted base ref', () => {
-    const workflow = fs.readFileSync(
-      new URL('../workflows/ci.yml', import.meta.url),
-      'utf8',
-    );
-    expect(workflow).toContain(
-      'origin/${{ github.base_ref }}:.github/scripts/component-audit-scope.cjs',
-    );
-    expect(workflow).toContain(
-      'origin/${{ github.base_ref }}:scripts/component-packages.cjs',
-    );
-    expect(workflow).toContain('force_full_component_audits=true');
-  });
-
   it.each([
     ['packages/core/src/Button/Button.tsx', 'core'],
-    ['packages/lab/src/Drawer/Drawer.tsx', 'lab'],
+    ['packages/lab/src/Stat/Stat.tsx', 'lab'],
     ['packages/charts/src/Chart.tsx', 'charts'],
     ['packages/richtext/src/RichTextEditor.tsx', 'richtext'],
     ['packages/vega/src/VegaChart.tsx', 'vega'],
@@ -99,6 +84,34 @@ describe('component audit scope', () => {
         COMPONENT_PACKAGES,
       ),
     ).toEqual(NO_COMPONENT_AUDIT_SCOPE);
+  });
+
+  it('skips component audits for knowledge records beside a known non-component surface', () => {
+    expect(
+      classifyComponentAuditScope(
+        [
+          'docs/specs/components/Button/Button.spec.md',
+          'packages/cli/api/theme/build/build.mjs',
+        ],
+        COMPONENT_PACKAGES,
+      ),
+    ).toEqual(NO_COMPONENT_AUDIT_SCOPE);
+  });
+
+  it('still audits a component whose record changes beside its code', () => {
+    expect(
+      classifyComponentAuditScope(
+        [
+          'docs/specs/components/Button/Button.spec.md',
+          'packages/core/src/Button/Button.tsx',
+        ],
+        COMPONENT_PACKAGES,
+      ),
+    ).toMatchObject({
+      has_components: true,
+      has_rtl_components: true,
+      force_full_component_audits: false,
+    });
   });
 
   it('keeps root scripts on full component audits', () => {

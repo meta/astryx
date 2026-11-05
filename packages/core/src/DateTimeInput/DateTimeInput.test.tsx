@@ -11,9 +11,10 @@
 
 import {useState} from 'react';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../theme/tokens.stylex';
 import {getButton, queryButton} from '../__tests__/fastRoleQueries';
 import {DateTimeInput} from './DateTimeInput';
 import type {ISODateTimeString} from './DateTimeInput';
@@ -62,6 +63,69 @@ function expectResponsiveProbeClasses(
 }
 
 describe('DateTimeInput', () => {
+  it('Enter on a busy field does not submit the form', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-12T09:00' as ISODateTimeString}
+          onChange={() => {}}
+          isLoading
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    screen.getAllByRole('combobox')[0].focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Enter on a disabled field does not submit the form', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-12T09:00' as ISODateTimeString}
+          onChange={() => {}}
+          isDisabled
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    screen.getAllByRole('combobox')[0].focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Enter in the date segment submits the form when nothing is typed, and commits typed text without submitting', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    const onChange = vi.fn();
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-12T09:00' as ISODateTimeString}
+          onChange={onChange}
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    const dateInput = screen.getAllByRole('combobox')[0];
+    dateInput.focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    await user.clear(dateInput);
+    await user.type(dateInput, '2026-02-03');
+    await user.keyboard('{Enter}');
+    expect(onChange).toHaveBeenLastCalledWith('2026-02-03T09:00');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('renders with label', () => {
     render(<DateTimeInput label="Meeting time" onChange={() => {}} />);
     expect(screen.getByLabelText('Meeting time')).toBeInTheDocument();
@@ -178,8 +242,9 @@ describe('DateTimeInput', () => {
     const onChange = vi.fn();
     render(<DateTimeInput label="Meeting" onChange={onChange} />);
     const dateInput = screen.getByRole('combobox');
-    fireEvent.change(dateInput, {target: {value: '03/15/2026'}});
-    onChange.mockClear();
+    // A two-digit year commits only on Enter or blur.
+    fireEvent.change(dateInput, {target: {value: '03/15/26'}});
+    expect(onChange).not.toHaveBeenCalled();
 
     // The composing keydown (isComposing / legacy keyCode 229) that commits an
     // IME candidate must not be read as "commit the typed date".
@@ -238,6 +303,26 @@ describe('DateTimeInput', () => {
     expect(screen.getByDisplayValue('2:30 PM')).toBeInTheDocument();
   });
 
+  it("follows the provider locale's hour cycle when hourFormat is unset", () => {
+    const renderIn = (locale: string) => (
+      <InternationalizationProvider locale={locale}>
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-15T14:30' as ISODateTimeString}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>
+    );
+    const {rerender} = render(renderIn('en-US'));
+    expect(screen.getByDisplayValue('2:30 PM')).toBeInTheDocument();
+
+    rerender(renderIn('de-DE'));
+    expect(screen.getByDisplayValue('14:30')).toBeInTheDocument();
+
+    rerender(renderIn('ko-KR'));
+    expect(screen.getByDisplayValue('오후 2:30')).toBeInTheDocument();
+  });
+
   it('displays formatted time in 24h format', () => {
     render(
       <DateTimeInput
@@ -288,10 +373,52 @@ describe('DateTimeInput', () => {
     expect(screen.getByRole('combobox')).not.toHaveAttribute('aria-required');
   });
 
-  it('sets disabled on both inputs when isDisabled is true', () => {
+  it('keeps both disabled inputs focusable without native disabled (AST-085 FR1)', () => {
     render(<DateTimeInput label="Meeting" isDisabled onChange={() => {}} />);
-    expect(screen.getByRole('combobox')).toBeDisabled();
-    expect(screen.getByLabelText('Meeting time')).toBeDisabled();
+    for (const input of [
+      screen.getByRole('combobox'),
+      screen.getByLabelText('Meeting time'),
+    ]) {
+      expect(input).not.toHaveAttribute('disabled');
+      expect(input).toHaveAttribute('aria-disabled', 'true');
+      expect(input).toHaveAttribute('readonly');
+      input.focus();
+      expect(input).toHaveFocus();
+    }
+  });
+
+  it('restores the focus ring on a focused disabled field (AST-085 FR6)', () => {
+    // The same declarations as the field's ring style compile to the same
+    // atomic classes; the shared disabled style alone drops them.
+    const ringClasses = stylex
+      .props(
+        stylex.create({
+          ring: {
+            borderColor: {
+              default: colorVars['--color-border-emphasized'],
+              ':focus-within': colorVars['--color-accent'],
+            },
+            boxShadow: {
+              default: 'none',
+              ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+            },
+          },
+        }).ring,
+      )
+      .className!.split(' ')
+      .filter(name => !name.includes('__'));
+    render(<DateTimeInput label="Meeting" isDisabled onChange={() => {}} />);
+    for (const input of [
+      screen.getByRole('combobox'),
+      screen.getByLabelText('Meeting time'),
+    ]) {
+      const wrapper = input.closest(
+        '.astryx-date-time-input-date-segment, .astryx-date-time-input-time-segment',
+      )!;
+      for (const name of ringClasses) {
+        expect(wrapper).toHaveClass(name);
+      }
+    }
   });
 
   it('is not disabled by default', () => {
@@ -366,14 +493,25 @@ describe('DateTimeInput', () => {
   it('calendar button is disabled when isDisabled is true', () => {
     render(<DateTimeInput label="Meeting" isDisabled onChange={() => {}} />);
     const button = getButton('Open calendar');
-    expect(button).toBeDisabled();
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(button);
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   });
 
   it('disables inputs and button when isLoading is true', () => {
     render(<DateTimeInput label="Meeting" isLoading onChange={() => {}} />);
-    expect(screen.getByRole('combobox')).toBeDisabled();
-    expect(screen.getByLabelText('Meeting time')).toBeDisabled();
-    expect(getButton('Open calendar')).toBeDisabled();
+    for (const el of [
+      screen.getByRole('combobox'),
+      screen.getByLabelText('Meeting time'),
+      getButton('Open calendar'),
+    ]) {
+      expect(el).not.toHaveAttribute('disabled');
+      expect(el).toHaveAttribute('aria-disabled', 'true');
+    }
   });
 
   it('sets aria-busy when isLoading is true', () => {
@@ -714,6 +852,259 @@ describe('DateTimeInput', () => {
     });
   });
 
+  describe('typed text while the field is disabled or busy', () => {
+    const locks = ['isLoading', 'isDisabled'] as const;
+    type Lock = (typeof locks)[number];
+    type Props = React.ComponentProps<typeof DateTimeInput>;
+
+    function renderField(value: string) {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const props = {
+        label: 'Starts',
+        value: value as ISODateTimeString,
+        onChange,
+      } satisfies Props;
+      const {rerender} = render(<DateTimeInput {...props} />);
+      const setProps = (lock?: Lock, value?: string) =>
+        rerender(
+          <DateTimeInput
+            {...props}
+            isLoading={lock === 'isLoading'}
+            isDisabled={lock === 'isDisabled'}
+            {...(value != null && {value: value as ISODateTimeString})}
+          />,
+        );
+      return {user, onChange, input: screen.getByRole('combobox'), setProps};
+    }
+
+    function expectNoRejection(input: HTMLElement) {
+      expect(input).not.toHaveAttribute('aria-invalid');
+      expect(screen.queryByText('Invalid date')).not.toBeInTheDocument();
+    }
+
+    it.each(locks)(
+      'ignores Enter and blur while %s, then rejects the text once editable',
+      async lock => {
+        const {user, onChange, input, setProps} =
+          renderField('2026-03-15T09:00');
+        await user.clear(input);
+        await user.type(input, '3/15/2');
+
+        setProps(lock);
+        await user.keyboard('{Enter}');
+        await user.tab();
+        expect(input).toHaveValue('3/15/2');
+        expect(onChange).not.toHaveBeenCalled();
+        expectNoRejection(input);
+
+        setProps();
+        act(() => input.focus());
+        await user.tab();
+        expect(input).toHaveValue('3/15/2');
+        expect(onChange).not.toHaveBeenCalled();
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByText('Invalid date')).toBeInTheDocument();
+      },
+    );
+
+    it.each(locks)(
+      'hides a shown rejection while %s and shows it again once editable',
+      async lock => {
+        const {user, input, setProps} = renderField('2026-03-15T09:00');
+        await user.clear(input);
+        await user.type(input, '3/15/2');
+        await user.tab();
+        expect(screen.getByText('Invalid date')).toBeInTheDocument();
+
+        setProps(lock);
+        expect(input).toHaveValue('3/15/2');
+        expectNoRejection(input);
+
+        setProps();
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByText('Invalid date')).toBeInTheDocument();
+      },
+    );
+
+    it.each(locks)(
+      'commits a date typed before %s only once editable',
+      async lock => {
+        const {user, onChange, input, setProps} =
+          renderField('2026-01-12T09:00');
+        await user.clear(input);
+        // A two-digit year commits only on Enter or blur.
+        await user.type(input, '3/15/26');
+
+        setProps(lock);
+        await user.tab();
+        expect(input).toHaveValue('3/15/26');
+        expect(onChange).not.toHaveBeenCalled();
+
+        setProps();
+        act(() => input.focus());
+        await user.tab();
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenCalledWith('2026-03-15T09:00');
+      },
+    );
+
+    it.each(locks)(
+      'replaces the text with a new value while %s',
+      async lock => {
+        const {user, onChange, input, setProps} =
+          renderField('2026-03-15T09:00');
+        await user.clear(input);
+        await user.type(input, '3/15/2');
+
+        setProps(lock);
+        setProps(lock, '2026-04-01T09:00');
+        expect(input).toHaveValue('April 1, 2026');
+
+        setProps(undefined, '2026-04-01T09:00');
+        act(() => input.focus());
+        await user.tab();
+        expect(input).toHaveValue('April 1, 2026');
+        expect(onChange).not.toHaveBeenCalled();
+        expectNoRejection(input);
+      },
+    );
+
+    it.each(locks)(
+      'shows the old value once a %s change that did not take a typed date ends',
+      async lock => {
+        const {user, onChange, input, setProps} =
+          renderField('2026-01-12T09:00');
+        await user.clear(input);
+        await user.type(input, '3/15/2026');
+        expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-03-15T09:00');
+
+        setProps(lock);
+        await user.tab();
+        expect(input).toHaveValue('3/15/2026');
+
+        setProps();
+        expect(input).toHaveValue('January 12, 2026');
+        await user.clear(input);
+        await user.type(input, '3/15/2026');
+        expect(onChange).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it.each(
+      locks.flatMap(lock => [
+        [lock, 'blur'],
+        [lock, 'Enter'],
+      ]),
+    )(
+      'keeps a reported date in the focused field when %s ends, until %s',
+      async (lock, commit) => {
+        const {user, onChange, input, setProps} =
+          renderField('2026-01-12T09:00');
+        await user.clear(input);
+        await user.type(input, '3/15/2026');
+        expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-03-15T09:00');
+
+        setProps(lock);
+        setProps();
+        expect(input).toHaveFocus();
+        expect(input).toHaveValue('3/15/2026');
+
+        if (commit === 'blur') {
+          await user.tab();
+        } else {
+          await user.keyboard('{Enter}');
+        }
+        expect(input).toHaveValue('January 12, 2026');
+        expect(onChange).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it.each(locks)(
+      'shows the new value once a %s change that took a typed date ends',
+      async lock => {
+        const {user, input, setProps} = renderField('2026-01-12T09:00');
+        await user.clear(input);
+        await user.type(input, '3/15/2026');
+
+        setProps(lock, '2026-03-15T09:00');
+        await user.tab();
+        expect(input).toHaveValue('3/15/2026');
+
+        setProps(undefined, '2026-03-15T09:00');
+        expect(input).toHaveValue('March 15, 2026');
+      },
+    );
+
+    it.each([
+      ['fails', false, 'January 12, 2026'],
+      ['succeeds', true, 'March 15, 2026'],
+    ])(
+      'shows the resulting value after a changeAction save that %s',
+      async (_, takes, shown) => {
+        const user = userEvent.setup();
+        let settle = () => {};
+        function Field() {
+          const [value, setValue] = useState('2026-01-12T09:00');
+          const save = async (next: ISODateTimeString | undefined) =>
+            new Promise<void>(resolve => {
+              settle = () => {
+                if (takes && next) {
+                  setValue(next);
+                }
+                resolve();
+              };
+            });
+          return (
+            <DateTimeInput
+              label="Starts"
+              value={value as ISODateTimeString}
+              onChange={() => {}}
+              changeAction={save}
+            />
+          );
+        }
+        render(<Field />);
+        const input = screen.getByRole('combobox');
+        await user.clear(input);
+        await user.type(input, '3/15/2026');
+        expect(input).toHaveAttribute('aria-busy', 'true');
+        await user.tab();
+
+        await act(async () => settle());
+        expect(input).toHaveValue(shown);
+      },
+    );
+
+    it('keeps a reported date in the focused field when a changeAction save fails', async () => {
+      const user = userEvent.setup();
+      let fail = () => {};
+      function Field() {
+        const [value] = useState('2026-01-12T09:00');
+        const save = async () =>
+          new Promise<void>(resolve => {
+            fail = resolve;
+          });
+        return (
+          <DateTimeInput
+            label="Starts"
+            value={value as ISODateTimeString}
+            onChange={() => {}}
+            changeAction={save}
+          />
+        );
+      }
+      render(<Field />);
+      const input = screen.getByRole('combobox');
+      await user.clear(input);
+      await user.type(input, '3/15/2026');
+
+      await act(async () => fail());
+      expect(input).toHaveFocus();
+      expect(input).toHaveValue('3/15/2026');
+    });
+  });
+
   describe('invalid typed input feedback (WCAG 3.3.1)', () => {
     it('sets aria-invalid="true" on the date input when typed date is unparseable', () => {
       render(<DateTimeInput label="Meeting" onChange={() => {}} />);
@@ -872,6 +1263,12 @@ describe('DateTimeInput', () => {
       );
 
       const tooltip = screen.getByRole('tooltip', h);
+      // The calendar button keeps its enabled tab stop (spec:AST-085 FR1).
+      await user.tab();
+      expect(getButton('Open calendar')).toHaveFocus();
+      expect(
+        getButton('Open calendar').getAttribute('aria-describedby'),
+      ).toContain(tooltip.id);
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => {
@@ -948,11 +1345,48 @@ describe('DateTimeInput', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('remains natively disabled when disabled without a reason', () => {
-      render(<DateTimeInput label="When" onChange={() => {}} isDisabled />);
+    it('blocks typing, opening and a caller onClick when disabled without a reason (AST-085 FR2)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const onClick = vi.fn();
+      render(
+        <DateTimeInput
+          label="When"
+          onChange={onChange}
+          onClick={onClick}
+          isDisabled
+        />,
+      );
       const dateInput = screen.getByRole('combobox');
-      expect(dateInput).toBeDisabled();
-      expect(dateInput).not.toHaveAttribute('aria-disabled');
+      await user.click(dateInput);
+      await user.type(dateInput, '2026-03-15');
+      await user.keyboard('{ArrowDown}');
+      expect(dateInput).toHaveValue('');
+      expect(dateInput).toHaveAttribute('aria-expanded', 'false');
+      expect(onChange).not.toHaveBeenCalled();
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('drops a date draft instead of committing it when the field becomes disabled (AST-085 FR2)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const value = '2026-03-10T09:00' as ISODateTimeString;
+      const {rerender} = render(
+        <DateTimeInput label="When" value={value} onChange={onChange} />,
+      );
+      const dateInput = screen.getByRole('combobox');
+      await user.click(dateInput);
+      await user.clear(dateInput);
+      rerender(
+        <DateTimeInput
+          label="When"
+          value={value}
+          onChange={onChange}
+          isDisabled
+        />,
+      );
+      await user.tab();
+      expect(onChange).not.toHaveBeenCalled();
     });
 
     it('does not swap in the time format-hint placeholder on focus while disabled', () => {
@@ -1028,6 +1462,24 @@ describe('DateTimeInput', () => {
       await waitFor(() => {
         expect(politeRegion()).toHaveTextContent('2:31 PM');
       });
+    });
+
+    it('announces no step from a disabled time field (AST-085 FR2)', async () => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-15T14:30' as ISODateTimeString}
+          onChange={() => {}}
+          isDisabled
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByLabelText('Meeting time'), {
+        key: 'ArrowUp',
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(politeRegion()?.textContent ?? '').not.toContain('2:31 PM');
     });
 
     it('politely announces the new time after ArrowDown stepping', async () => {
@@ -1445,6 +1897,7 @@ describe('DateTimeInput', () => {
           .querySelector('[role="listbox"]')!
           .querySelectorAll('[role="option"]');
         fireEvent.mouseEnter(options[5]);
+        fireEvent.pointerMove(options[5], {screenX: 114, screenY: 114});
 
         expect(timeInput.getAttribute('aria-activedescendant')).toBe(
           options[5].id,
@@ -1624,9 +2077,50 @@ describe('DateTimeInput', () => {
       expect(timeInput).toHaveAttribute('aria-expanded', 'false');
     });
 
+    // architecture:layer-runtime: a press on the time field is inside its list.
+    it('keeps the time list open on a press in the time input, closes it on a press elsewhere', async () => {
+      const press = (target: Element) => {
+        fireEvent.pointerDown(target, {composed: true});
+        fireEvent.pointerUp(target, {composed: true});
+      };
+      render(
+        <>
+          <DateTimeInput
+            label="Meeting"
+            value={'2026-03-15T14:00' as ISODateTimeString}
+            timeOptionInterval={60}
+            onChange={() => {}}
+          />
+          <p>Elsewhere</p>
+        </>,
+      );
+      const timeInput = screen.getByLabelText('Meeting time');
+      fireEvent.keyDown(timeInput, {key: 'ArrowDown', altKey: true});
+      expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+      const listbox = document.getElementById(
+        timeInput.getAttribute('aria-controls')!,
+      );
+      // The list is a manual popover, so the browser does not light-dismiss
+      // it on a press in the time input.
+      expect(listbox?.closest('[popover]')).toHaveAttribute(
+        'popover',
+        'manual',
+      );
+
+      press(timeInput);
+      expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+      press(listbox!);
+      expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+
+      press(screen.getByText('Elsewhere'));
+      await waitFor(() => {
+        expect(timeInput).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
     it('closes the list when focus leaves the field entirely', () => {
-      // Light dismiss covers outside clicks and Escape, never a programmatic
-      // focus move. Without this the listbox is orphaned in the top layer.
+      // The outside-press watch covers outside presses and Escape stays on the
+      // layer stack, never a programmatic focus move. Without this the listbox is orphaned in the top layer.
       render(
         <>
           <DateTimeInput
@@ -2178,6 +2672,67 @@ describe('DateTimeInput', () => {
     });
   });
 
+  describe('calendar while the popover is closed', () => {
+    const calendarGrid = () => document.querySelector('[role="grid"]');
+
+    it('renders no calendar until the popover opens, and none after it closes', () => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-01-15T10:00' as ISODateTimeString}
+          onChange={() => {}}
+        />,
+      );
+      const toggle = getButton('Open calendar');
+      expect(calendarGrid()).toBeNull();
+
+      fireEvent.click(toggle);
+      expect(calendarGrid()).not.toBeNull();
+
+      fireEvent.click(toggle);
+      expect(calendarGrid()).toBeNull();
+    });
+
+    it('opens on the month of a date typed while closed', () => {
+      function Controlled() {
+        const [value, setValue] = useState<ISODateTimeString | undefined>(
+          '2026-01-15T10:00' as ISODateTimeString,
+        );
+        return (
+          <DateTimeInput label="Meeting" value={value} onChange={setValue} />
+        );
+      }
+      render(<Controlled />);
+      const dateInput = screen.getAllByRole('combobox')[0];
+
+      fireEvent.change(dateInput, {target: {value: 'March 5, 2027'}});
+      fireEvent.keyDown(dateInput, {key: 'ArrowDown'});
+
+      expect(calendarGrid()).toHaveAccessibleName('March 2027');
+    });
+
+    it('moves focus into the calendar on each open from the toggle', async () => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-01-15T10:00' as ISODateTimeString}
+          onChange={() => {}}
+        />,
+      );
+      const toggle = getButton('Open calendar');
+
+      for (let i = 0; i < 2; i++) {
+        fireEvent.click(toggle);
+        // The first calendar control takes focus, not the dialog surface.
+        await waitFor(() => {
+          expect(getButton('Previous month')).toHaveFocus();
+        });
+        fireEvent.click(toggle);
+        expect(calendarGrid()).toBeNull();
+      }
+    });
+  });
+
   describe('weekStartsOn', () => {
     // The calendar popover renders in the top layer; jsdom keeps the content in
     // the DOM but role queries skip it, so read the columnheaders directly.
@@ -2193,13 +2748,13 @@ describe('DateTimeInput', () => {
         <DateTimeInput label="When" onChange={() => {}} />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Su',
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
+        'Sun',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
       ]);
     });
 
@@ -2208,13 +2763,13 @@ describe('DateTimeInput', () => {
         <DateTimeInput label="When" onChange={() => {}} weekStartsOn={1} />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
-        'Su',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
+        'Sun',
       ]);
     });
 
@@ -2223,13 +2778,13 @@ describe('DateTimeInput', () => {
         <DateTimeInput label="When" onChange={() => {}} weekStartsOn="mon" />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
-        'Su',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
+        'Sun',
       ]);
     });
   });
