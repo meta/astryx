@@ -179,9 +179,12 @@ describe('browser-gated script tests in the workflows', () => {
     expect(run.step.run).toBe(
       `pnpm exec vitest run --config .github/scripts/vitest.browser-scripts.config.mjs ${CDN_BROWSER_TEST} --maxWorkers=1`,
     );
-    // The workflow starts for a change to the page renderer or its tests.
-    expect(WORKFLOWS['cli-smoke-test.yml'].on.pull_request.paths).toContain(
-      '.github/scripts/lib/cdn-*.mjs',
+    // The workflow starts for a change to the page renderer, its tests or
+    // the config the step runs (spec:AST-030 FR14).
+    const paths = WORKFLOWS['cli-smoke-test.yml'].on.pull_request.paths;
+    expect(paths).toContain('.github/scripts/lib/cdn-*.mjs');
+    expect(paths).toContain(
+      '.github/scripts/vitest.browser-scripts.config.mjs',
     );
   });
 

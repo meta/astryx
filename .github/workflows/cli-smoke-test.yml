@@ -27,6 +27,7 @@ on:
       - '.github/scripts/api-cli-parity-test.mjs'
       - '.github/scripts/cdn-template-smoke-test.mjs'
       - '.github/scripts/lib/cdn-*.mjs'
+      - '.github/scripts/vitest.browser-scripts.config.mjs'
       - '.github/workflows/cli-smoke-test.yml'
   merge_group:
 
