@@ -708,7 +708,7 @@ function tokenize(
   }
   // Latvian "1. adars" is a month, and also day 1 of "adars". It is the day
   // when no other number can be the day.
-  if (hasDigitName && !out.some(t => t.t === 'num' && t.v.length <= 2)) {
+  if (hasDigitName && !out.some(t => t.t === 'num' && Number(t.v) <= 31)) {
     return tokenize(s, lex, false);
   }
   return out;
