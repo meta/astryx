@@ -1659,10 +1659,11 @@ describe('CheckboxListItem press surface', () => {
     expect(hasPressedArm(wrapper)).toBe(true);
   });
 
-  it('holds one touch-query listener however many rows there are, and none once they unmount', () => {
-    // A repeated row adds no touch observer of its own. Every row reads one
-    // shared answer, on a fine pointer and on a coarse one alike.
-    for (const coarse of [false, true]) {
+  it.each([false, true])(
+    'adds no touch-query listener per row (coarse pointer: %s), and none remain once the rows unmount',
+    async coarse => {
+      // A repeated row adds no touch observer of its own. Every row reads a
+      // shared answer, on a fine pointer and on a coarse one alike.
       let live = 0;
       const count = (query: string, delta: number) => {
         if (query.includes('pointer: coarse')) {
@@ -1682,27 +1683,41 @@ describe('CheckboxListItem press surface', () => {
           dispatchEvent: () => false,
         })),
       );
-      const {unmount} = render(
-        <CheckboxList label="Many" value={['v0']} onChange={() => {}}>
-          {Array.from({length: 40}, (_, index) => (
-            <CheckboxListItem
-              key={index}
-              label={`Option ${index}`}
-              value={`v${index}`}
-            />
-          ))}
-        </CheckboxList>,
-      );
-      // The rows still answer the pointer they are on: under a finger the
-      // row owns its box's press, so the box carries no press marker.
-      const {control} = parts(rowOf('Option 3'));
-      expect(control.hasAttribute('data-astryx-pressable')).toBe(!coarse);
-      expect(live).toBe(1);
-      unmount();
-      expect(live).toBe(0);
+      /** The live listeners while `rows` rows are mounted, then after. */
+      const heldBy = async (rows: number) => {
+        const {unmount} = render(
+          <CheckboxList label="Many" value={['v0']} onChange={() => {}}>
+            {Array.from({length: rows}, (_, index) => (
+              <CheckboxListItem
+                key={index}
+                label={`Option ${index}`}
+                value={`v${index}`}
+              />
+            ))}
+          </CheckboxList>,
+        );
+        // The rows still answer the pointer they are on: under a finger the
+        // row owns its box's press, so the box carries no press marker.
+        const {control} = parts(rowOf('Option 0'));
+        expect(control.hasAttribute('data-astryx-pressable')).toBe(!coarse);
+        const mounted = live;
+        unmount();
+        // A ref's last release waits one microtask, so a ref that attaches
+        // again in the same commit keeps its watch.
+        await Promise.resolve();
+        return {mounted, after: live};
+      };
+      const one = await heldBy(1);
+      // The stub sees the shared watches, and each one stops with the rows.
+      expect(one.mounted).toBeGreaterThan(0);
+      expect(one.after).toBe(0);
+      const many = await heldBy(40);
+      // 40 rows hold what one row holds.
+      expect(many.mounted).toBe(one.mounted);
+      expect(many.after).toBe(0);
       vi.unstubAllGlobals();
-    }
-  });
+    },
+  );
 
   it('leaves a row that does not respond to presses out of it', () => {
     // A standalone row with no check handler delegates nothing, so its
