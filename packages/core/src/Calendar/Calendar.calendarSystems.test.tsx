@@ -22,6 +22,7 @@ import {
 } from '../DateTimeInput/DateTimeInput';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {withChineseTemporalAheadOfIntl} from '../__tests__/temporalAheadOfIntl';
 
 afterEach(() => {
   __resetLiveRegionsForTest();
@@ -226,62 +227,6 @@ describe('Calendar in the Ethiopic calendar', () => {
     await waitFor(() => expect(focusedDate()).toBe('2025-09-11'));
   });
 });
-
-interface TestPlainDate {
-  readonly year: number;
-  readonly month: number;
-  readonly day: number;
-  readonly daysInMonth: number;
-  with(fields: {day: number}): TestPlainDate;
-  add(duration: object): TestPlainDate;
-  subtract(duration: object): TestPlainDate;
-  withCalendar(calendar: string): TestPlainDate;
-}
-
-type TestPlainDateConstructor = new (
-  isoYear: number,
-  isoMonth: number,
-  isoDay: number,
-  calendar: string,
-) => TestPlainDate;
-
-/**
- * Runs `run` with a Temporal whose Chinese calendar is one day ahead of
- * Intl's, as native Temporal is at some month starts, such as 2027-02-06.
- */
-function withChineseTemporalAheadOfIntl(run: () => void) {
-  const globals = globalThis as unknown as {
-    Temporal: {PlainDate: TestPlainDateConstructor};
-  };
-  const real = globals.Temporal;
-  const shift = (inner: TestPlainDate): TestPlainDate => ({
-    year: inner.year,
-    month: inner.month,
-    day: inner.day,
-    daysInMonth: inner.daysInMonth,
-    with: fields => shift(inner.with(fields)),
-    add: duration => shift(inner.add(duration)),
-    subtract: duration => shift(inner.subtract(duration)),
-    withCalendar: calendar => inner.withCalendar(calendar).subtract({days: 1}),
-  });
-  function PlainDate(y: number, m: number, d: number, calendar: string) {
-    return calendar === 'chinese'
-      ? shift(
-          new real.PlainDate(y, m, d, 'iso8601')
-            .add({days: 1})
-            .withCalendar('chinese'),
-        )
-      : new real.PlainDate(y, m, d, calendar);
-  }
-  globals.Temporal = {
-    PlainDate: PlainDate as unknown as TestPlainDateConstructor,
-  };
-  try {
-    run();
-  } finally {
-    globals.Temporal = real;
-  }
-}
 
 describe('Calendar in the Chinese calendar', () => {
   it('names each day by the month and day the grid shows when Intl disagrees', () => {

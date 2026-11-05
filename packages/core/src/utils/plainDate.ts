@@ -9,6 +9,11 @@
 
 import type {ISODateString, PlainDate} from './dateTypes';
 import type {Locale} from '../i18n/types';
+import {
+  formatCalendarDate,
+  isCalendarSystem,
+  type CalendarSystem,
+} from './calendarSystem';
 import {firstCharacter} from './characters';
 import {standaloneMonthCapitalLanguages} from './standaloneMonthCapitals.generated';
 
@@ -455,13 +460,18 @@ export const DATE_FORMAT_SHORT_WITH_YEAR: Intl.DateTimeFormatOptions = {
  * when `options.calendar` is omitted. The explicit option remains supported for
  * compatibility with the public `Intl.DateTimeFormatOptions` signature; it is a
  * display-only escape hatch and does not change PlainDate arithmetic, parsing,
- * serialization, or any Astryx component's calendar semantics.
+ * serialization, or any Astryx component's calendar semantics. Another
+ * calendar names the month and day that Calendar shows in it.
  */
 export function plainDateFormat(
   pd: PlainDate,
   options: Intl.DateTimeFormatOptions,
   locale: Locale = 'en',
 ): string {
+  const calendar = options.calendar ?? 'gregory';
+  if (calendar !== 'gregory' && isCalendarSystem(calendar)) {
+    return formatCalendarDate(calendar, pd, options, locale);
+  }
   const [format, date] = plainDateFormatInput(pd, options, locale);
   return format.format(date);
 }
@@ -544,6 +554,20 @@ export function dateTimeFormatFor(
     dateTimeFormats.set(key, format);
   }
   return format;
+}
+
+/**
+ * @internal `dateTimeFormatFor`, except that without `options.timeZone` it
+ * builds a formatter for the call. A cached formatter keeps the host zone it
+ * was built in.
+ */
+export function dateTimeFormatAtCall(
+  locale: Locale,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  return options.timeZone === undefined
+    ? new Intl.DateTimeFormat(locale, options)
+    : dateTimeFormatFor(locale, options);
 }
 
 /**
@@ -639,14 +663,21 @@ export const SHARED_DATE_FORMAT_OPTIONS: Record<
  * members. The shared entry point DateInput uses for the named-format path;
  * Timestamp maps the same members onto {@link SHARED_DATE_FORMAT_OPTIONS} in
  * its own `formatTimestamp` switch (its input is a `Date`, not a `PlainDate`).
+ * The locale-aware members write the date in `calendar`, which defaults to
+ * Gregorian. `system_date` stays the Gregorian ISO date in every calendar.
  */
 export function formatSharedDate(
   pd: PlainDate,
   format: SharedDateFormat,
   locale: Locale = 'en',
+  calendar: CalendarSystem = 'gregory',
 ): string {
   if (format === 'system_date') {
     return plainDateToISO(pd);
   }
-  return plainDateFormat(pd, SHARED_DATE_FORMAT_OPTIONS[format], locale);
+  return plainDateFormat(
+    pd,
+    {...SHARED_DATE_FORMAT_OPTIONS[format], calendar},
+    locale,
+  );
 }

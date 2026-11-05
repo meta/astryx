@@ -32,6 +32,7 @@ import {
   plainDateWeekdayNames,
   plainDateFormatDayNumber,
   formatSharedDate,
+  SHARED_DATE_FORMAT_OPTIONS,
   DATE_FORMAT_LONG,
   DATE_FORMAT_WITH_WEEKDAY,
   DATE_FORMAT_MONTH_YEAR,
@@ -960,6 +961,47 @@ describe('formatSharedDate', () => {
 
   it('formats the ISO "system_date" shape', () => {
     expect(formatSharedDate(pd, 'system_date')).toBe('2026-01-25');
+  });
+
+  describe.each([
+    {calendar: 'persian', locale: 'en', year: '1405'},
+    {calendar: 'persian', locale: 'fa', year: '۱۴۰۵'},
+    {calendar: 'hebrew', locale: 'en', year: '5787'},
+    {calendar: 'hebrew', locale: 'he', year: '5787'},
+    {calendar: 'buddhist', locale: 'en', year: '2569'},
+    {calendar: 'buddhist', locale: 'th', year: '2569'},
+  ] as const)('in $calendar under $locale', ({calendar, locale, year}) => {
+    const day: PlainDate = {year: 2026, month: 10, day: 30};
+
+    it.each(['date', 'date_long', 'date_weekday'] as const)(
+      'writes %s in the calendar',
+      format => {
+        const value = formatSharedDate(day, format, locale, calendar);
+        expect(value).toBe(
+          plainDateFormat(
+            day,
+            {...SHARED_DATE_FORMAT_OPTIONS[format], calendar},
+            locale,
+          ),
+        );
+        expect(value).toContain(year);
+        expect(value).not.toContain('2026');
+      },
+    );
+
+    it('keeps system_date Gregorian ISO', () => {
+      expect(formatSharedDate(day, 'system_date', locale, calendar)).toBe(
+        '2026-10-30',
+      );
+    });
+  });
+
+  it('defaults to the Gregorian calendar', () => {
+    const day: PlainDate = {year: 2026, month: 10, day: 30};
+    expect(formatSharedDate(day, 'date_long', 'fa')).toBe(
+      formatSharedDate(day, 'date_long', 'fa', 'gregory'),
+    );
+    expect(formatSharedDate(day, 'date_long', 'en')).toBe('October 30, 2026');
   });
 
   it('follows the passed locale rather than the host locale (#5074)', () => {
