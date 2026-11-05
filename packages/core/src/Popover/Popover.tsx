@@ -8,9 +8,6 @@
  * @output Exports Popover with conditional overflow and content-first focus above the layer runtime's viewport fit
  * @position Layer component; declarative wrapper around usePopover hook
  *
- * Like every anchored layer, a popover that would run under the software
- * keyboard shrinks to stay above it (the layer runtime).
- *
  * For hover-triggered overlays, use HoverCard instead.
  *
  * `presentation` chooses the surface, with the vocabulary DropdownMenu and
@@ -437,8 +434,7 @@ const styles = stylex.create({
     // the layer, a frame before the overflow measure sees the shorter box.
     // Otherwise `visible`. The type names the two values the property takes.
     // SYNC: LAYER_KEYBOARD_OVERFLOW_PROPERTY (Layer/useLayerKeyboardClearance.ts).
-    overflow: 'var(--astryx-layer-keyboard-overflow, visible)' as
-      'auto' | 'visible',
+    overflow: 'var(--_layer-keyboard-overflow, visible)' as 'auto' | 'visible',
   },
   surfaceScrollable: {
     overflow: 'auto',

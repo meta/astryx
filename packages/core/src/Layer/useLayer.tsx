@@ -66,15 +66,15 @@ const styles = stylex.create({
   // The software keyboard's block-size cap, on the layer's own element. Every
   // layer sets it, an uncapped one to a limit no viewport cap reaches. So a
   // layer nested in a capped one does not inherit the outer cap. The surfaces
-  // inside a layer read it through `layerViewportInset.maxBlockSize`. The
-  // content of a capped layer overflows. So the cap also turns its surface
-  // into a scroll container, in the same commit, through the overflow
-  // property. The content never paints past the shorter box.
+  // inside a layer read it through `layerViewportInset.maxBlockSize`. The cap
+  // also writes the overflow a capped surface takes. Popover's surface reads
+  // it, so it scrolls from the commit that caps it. Both are private runtime
+  // state, never set by an app or a theme.
   // SYNC: the properties are LAYER_KEYBOARD_CAP_PROPERTY and
   // LAYER_KEYBOARD_OVERFLOW_PROPERTY (useLayerKeyboardClearance.ts).
   keyboardCap: (cap: string, overflow: 'auto' | 'visible') => ({
-    '--astryx-layer-keyboard-max-block-size': cap,
-    '--astryx-layer-keyboard-overflow': overflow,
+    '--_layer-keyboard-max-block-size': cap,
+    '--_layer-keyboard-overflow': overflow,
   }),
   // Base reset for all layers
   base: {

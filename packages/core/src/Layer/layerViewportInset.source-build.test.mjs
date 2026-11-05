@@ -75,7 +75,7 @@ describe('layer viewport inset stylesheet (spec:AST-059)', () => {
 
     expect(blockCaps).toContainEqual(
       expect.stringMatching(
-        /^calc\(min\(calc\(100dvb - .*safe-area-inset-top.*var\(--astryx-layer-keyboard-max-block-size, 100dvb\)/,
+        /^calc\(min\(calc\(100dvb - .*safe-area-inset-top.*var\(--_layer-keyboard-max-block-size, 100dvb\)/,
       ),
     );
     expect(inlineCaps).toContainEqual(

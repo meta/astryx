@@ -66,10 +66,10 @@ describe('layerViewportInset (spec:AST-059)', () => {
 
   it('caps the block axis to the room the software keyboard leaves while it caps the layer (FR9)', () => {
     expect(layerViewportInset.maxBlockSize).toContain(
-      'var(--astryx-layer-keyboard-max-block-size, 100dvb)',
+      'var(--_layer-keyboard-max-block-size, 100dvb)',
     );
     expect(layerViewportInset.maxBlockSizeFallback).toContain(
-      'var(--astryx-layer-keyboard-max-block-size, 100vh)',
+      'var(--_layer-keyboard-max-block-size, 100vh)',
     );
   });
 

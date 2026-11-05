@@ -156,7 +156,7 @@ const boxOf = async (locator: Locator) =>
       layer == null
         ? ''
         : getComputedStyle(layer)
-            .getPropertyValue('--astryx-layer-keyboard-max-block-size')
+            .getPropertyValue('--_layer-keyboard-max-block-size')
             .trim();
     return {
       top: rect.top,
@@ -381,7 +381,7 @@ async function firstFrameOpenedWithKeyboardUp(page: Page): Promise<FirstFrame> {
       }
       const bottom = layer.offsetTop + layer.offsetHeight;
       const cap = getComputedStyle(layer)
-        .getPropertyValue('--astryx-layer-keyboard-max-block-size')
+        .getPropertyValue('--_layer-keyboard-max-block-size')
         .trim();
       const observer = new ResizeObserver(() => {
         observer.disconnect();

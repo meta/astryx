@@ -51,8 +51,7 @@ export {
  * style). It holds the largest block size that keeps the layer clear of the
  * keyboard while it caps the layer. Otherwise it sets no limit.
  */
-export const LAYER_KEYBOARD_CAP_PROPERTY =
-  '--astryx-layer-keyboard-max-block-size';
+export const LAYER_KEYBOARD_CAP_PROPERTY = '--_layer-keyboard-max-block-size';
 
 /**
  * The custom property each layer's style sets beside the cap. It holds `auto`
@@ -60,8 +59,7 @@ export const LAYER_KEYBOARD_CAP_PROPERTY =
  * own overflow measure makes it a scroll container reads it as its overflow.
  * So it scrolls from the commit that caps it.
  */
-export const LAYER_KEYBOARD_OVERFLOW_PROPERTY =
-  '--astryx-layer-keyboard-overflow';
+export const LAYER_KEYBOARD_OVERFLOW_PROPERTY = '--_layer-keyboard-overflow';
 
 /**
  * Scrolls the nearest scroll container between `target` and `layer` the

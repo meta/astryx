@@ -5,7 +5,7 @@
  * @input Uses the spacing token, the device safe-area insets, the
  *   app-declared `--astryx-layer-inset-*` custom properties, and the
  *   keyboard cap each layer's own style declares
- *   (`--astryx-layer-keyboard-max-block-size`)
+ *   (`--_layer-keyboard-max-block-size`)
  * @output Exports the one definition of an anchored layer's viewport gutter
  *   and the size caps derived from it
  * @position Layer runtime geometry; read by useLayer and by consumers that
@@ -48,7 +48,7 @@ const INSET_INLINE_END = 'var(--astryx-layer-inset-inline-end, 0px)';
 // Each layer's own style declares the room the software keyboard leaves it
 // (useLayer.tsx's `keyboardCap`, from useLayerKeyboardClearance.ts). An
 // uncapped layer declares a limit out of reach.
-const KEYBOARD_CAP_PROPERTY = '--astryx-layer-keyboard-max-block-size';
+const KEYBOARD_CAP_PROPERTY = '--_layer-keyboard-max-block-size';
 
 const GUTTER_BLOCK_START = `calc(max(${SPACING}, env(safe-area-inset-top, 0px)) + ${INSET_BLOCK_START})`;
 const GUTTER_BLOCK_END = `calc(max(${SPACING}, env(safe-area-inset-bottom, 0px)) + ${INSET_BLOCK_END})`;
