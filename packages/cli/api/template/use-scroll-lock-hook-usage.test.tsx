@@ -3,15 +3,15 @@
 
 /**
  * The useScrollLock example locks the page while its full-screen menu is open,
- * without moving it, and frees it again when the menu closes. The
- * menu covers the page, so it also keeps keyboard focus inside itself
- * (useFocusTrap): focus moves in on open, Escape closes, and focus returns to
- * the Menu button.
+ * without moving it, and frees it again when the menu closes. The menu is a
+ * native <dialog> opened with showModal(), so it sits in the browser top layer
+ * above any page header. It keeps keyboard focus inside itself (useFocusTrap):
+ * focus moves in on open, Escape closes, and focus returns to the Menu button.
  */
 
 import {act} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import UseScrollLockHookUsage from '../../assets/templates/blocks/components/Hooks/useScrollLockHookUsage';
 
 // The node project does not compile StyleX, and the menu's styles are not under test.
@@ -45,9 +45,26 @@ function button(label: string): HTMLButtonElement {
   return match;
 }
 
-function menu(): HTMLElement | null {
-  return container.querySelector('nav[aria-label="Site menu"]');
+function menu(): HTMLDialogElement {
+  const dialog = container.querySelector('dialog');
+  if (dialog == null) {
+    throw new Error('no menu dialog rendered');
+  }
+  return dialog;
 }
+
+// jsdom has no showModal() or close().
+const showModal = vi.fn(function (this: HTMLDialogElement) {
+  this.setAttribute('open', '');
+});
+
+beforeEach(() => {
+  showModal.mockClear();
+  HTMLDialogElement.prototype.showModal = showModal;
+  HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+    this.removeAttribute('open');
+  };
+});
 
 afterEach(() => {
   act(() => root?.unmount());
@@ -64,9 +81,12 @@ describe('useScrollLock example', () => {
     renderExample();
     expect(document.documentElement.style.overflow).toBe('');
 
+    expect(menu().open).toBe(false);
+
     act(() => button('Menu').click());
 
-    expect(menu()).not.toBeNull();
+    expect(menu().open).toBe(true);
+    expect(showModal).toHaveBeenCalledTimes(1);
     expect(document.documentElement.style.overflow).toBe('hidden');
     expect(document.body.style.position).toBe('');
     expect(scrollTo).not.toHaveBeenCalled();
@@ -79,7 +99,7 @@ describe('useScrollLock example', () => {
 
     act(() => button('Close menu').click());
 
-    expect(menu()).toBeNull();
+    expect(menu().open).toBe(false);
     expect(document.documentElement.style.overflow).toBe('');
     expect(scrollTo).not.toHaveBeenCalled();
   });
@@ -91,10 +111,10 @@ describe('useScrollLock example', () => {
     expect(document.documentElement.style.overflow).toBe('hidden');
 
     act(() => {
-      menu()?.querySelector<HTMLAnchorElement>('a')?.click();
+      menu().querySelector<HTMLAnchorElement>('a')?.click();
     });
 
-    expect(menu()).toBeNull();
+    expect(menu().open).toBe(false);
     expect(document.documentElement.style.overflow).toBe('');
   });
 
@@ -106,11 +126,11 @@ describe('useScrollLock example', () => {
       opener.focus();
       opener.click();
     });
-    expect(menu()?.contains(document.activeElement)).toBe(true);
+    expect(menu().contains(document.activeElement)).toBe(true);
 
     act(() => button('Close menu').click());
 
-    expect(menu()).toBeNull();
+    expect(menu().open).toBe(false);
     expect(document.activeElement).toBe(opener);
   });
 
@@ -129,8 +149,21 @@ describe('useScrollLock example', () => {
       );
     });
 
-    expect(menu()).toBeNull();
+    expect(menu().open).toBe(false);
     expect(document.documentElement.style.overflow).toBe('');
     expect(document.activeElement).toBe(opener);
+  });
+
+  it('closes when the browser cancels the dialog', () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    renderExample();
+    act(() => button('Menu').click());
+
+    act(() => {
+      menu().dispatchEvent(new Event('cancel', {cancelable: true}));
+    });
+
+    expect(menu().open).toBe(false);
+    expect(document.documentElement.style.overflow).toBe('');
   });
 });

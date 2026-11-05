@@ -12,11 +12,15 @@ import {colorVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 
 const styles = stylex.create({
   menu: {
-    position: 'fixed',
-    inset: 0,
-    zIndex: 1000,
+    width: '100%',
+    height: '100%',
+    maxWidth: 'none',
+    maxHeight: 'none',
+    margin: 0,
+    borderWidth: 0,
     overflowY: 'auto',
     padding: spacingVars['--spacing-4'],
+    color: colorVars['--color-text-primary'],
     backgroundColor: colorVars['--color-background-surface'],
   },
 });
@@ -25,27 +29,39 @@ const MENU_ITEMS = ['Products', 'Pricing', 'Customers', 'Support'];
 
 export default function UseScrollLockHookUsage() {
   const [isOpen, setIsOpen] = useState(false);
-  const close = () => setIsOpen(false);
   useScrollLock(isOpen);
-  const {containerRef, focusFirst} = useFocusTrap<HTMLElement>({
+  const {containerRef, focusFirst} = useFocusTrap<HTMLDialogElement>({
     isActive: isOpen,
     onEscape: close,
   });
 
+  // The dialog leaves the top layer before the state change, so the page is
+  // no longer inert when the focus trap hands focus back to Menu.
+  function close() {
+    containerRef.current?.close();
+    setIsOpen(false);
+  }
+
   useEffect(() => {
-    if (isOpen) {
+    const dialog = containerRef.current;
+    if (isOpen && dialog != null && !dialog.open) {
+      dialog.showModal();
       focusFirst();
     }
-  }, [isOpen, focusFirst]);
+  }, [isOpen, containerRef, focusFirst]);
 
   return (
     <>
       <Button label="Menu" onClick={() => setIsOpen(true)} />
-      {isOpen && (
-        <nav
-          ref={containerRef}
-          aria-label="Site menu"
-          {...stylex.props(styles.menu)}>
+      <dialog
+        ref={containerRef}
+        aria-label="Menu"
+        onCancel={event => {
+          event.preventDefault();
+          close();
+        }}
+        {...stylex.props(styles.menu)}>
+        <nav aria-label="Site menu">
           <VStack gap={4} hAlign="start">
             <Button label="Close menu" variant="secondary" onClick={close} />
             {MENU_ITEMS.map(item => (
@@ -58,7 +74,7 @@ export default function UseScrollLockHookUsage() {
             ))}
           </VStack>
         </nav>
-      )}
+      </dialog>
     </>
   );
 }
