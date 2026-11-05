@@ -25,13 +25,15 @@ export const docs = {
     {
       name: 'options.year',
       type: 'number',
-      description: 'Year of the month to lay out.',
+      description:
+        'Year of the month to lay out, as options.calendar numbers it.',
       required: true,
     },
     {
       name: 'options.month',
       type: 'number',
-      description: 'Month to lay out, 1-based (1 is January, 12 is December).',
+      description:
+        "The month's position in its year under options.calendar, 1-based. In the Gregorian calendar 1 is January and 12 is December; other calendars number months as Temporal.PlainDate does, so a Hebrew leap year runs from 1 to 13.",
       required: true,
     },
     {
@@ -46,8 +48,16 @@ export const docs = {
       name: 'options.hasVariableRowCount',
       type: 'boolean',
       description:
-        'Use only as many week rows as the month needs (4 to 6) instead of a fixed 6-row grid.',
+        'Use only as many week rows as the month needs instead of a fixed 6-row grid. That is 4 to 6 for a Gregorian month, and 1 or 2 for the short thirteenth month of the Coptic and Ethiopic calendars.',
       default: 'false',
+      required: false,
+    },
+    {
+      name: 'options.calendar',
+      type: 'CalendarSystem',
+      description:
+        "The calendar system that numbers year, month and each day's dayNumber. Every day keeps its Gregorian date and iso. The hook never reads the InternationalizationProvider calendar. Calendars other than gregory, iso8601, buddhist, roc and japanese need Temporal; without it the hook uses Gregorian numbers and warns once in development.",
+      default: "'gregory'",
       required: false,
     },
   ],
@@ -56,7 +66,7 @@ export const docs = {
       name: 'days',
       type: 'CalendarDay[]',
       description:
-        'Every cell of the grid in order, including the days from the previous and next months that fill the first and last weeks. Each day has date (a PlainDate), iso (YYYY-MM-DD), isOutside (true for a day outside the month) and dayNumber (1 to 31).',
+        'Every cell of the grid in order, including the days from the previous and next months that fill the first and last weeks. Each day has date (a PlainDate), iso (YYYY-MM-DD), isOutside (true for a day outside the month) and dayNumber (its day of the calendar month).',
     },
     {
       name: 'weeks',
@@ -109,15 +119,18 @@ export const docsDense = {
     "Builds one month's day grid: every date incl. previous/next month filler days, grouped into weeks, + localized weekday names starting at weekStartsOn. Calendar's layout, for custom month views. Data only: rendering, selection, keyboard nav, a11y semantics are the caller's.",
   paramDescriptions: {
     options: 'month to lay out + how.',
-    'options.year': 'year of the month.',
-    'options.month': 'month, 1-based (1 = January).',
+    'options.year': 'year of the month, numbered by options.calendar.',
+    'options.month':
+      "month's position in its options.calendar year, 1-based (gregory 1 = January; Hebrew leap year 1-13).",
     'options.weekStartsOn':
       'first day of week, 0 (Sunday) to 6 (Saturday); first column of grid + dayNames.',
     'options.hasVariableRowCount':
-      'only as many week rows as needed (4-6) vs fixed 6 rows.',
+      'only as many week rows as needed (Gregorian 4-6, Coptic/Ethiopic 13th month 1-2) vs fixed 6 rows.',
+    'options.calendar':
+      "calendar system numbering year, month, dayNumber; default 'gregory'. Dates stay Gregorian; provider calendar ignored. Non-Gregorian-aligned systems need Temporal.",
   },
   returnDescriptions: {
-    days: 'every grid cell in order incl. filler days; each has date (PlainDate), iso, isOutside, dayNumber.',
+    days: 'every grid cell in order incl. filler days; each has date (PlainDate), iso, isOutside, dayNumber (day of the calendar month).',
     weeks: 'days grouped into rows of 7.',
     dayNames:
       'locale weekday header names starting at weekStartsOn; abbreviated where all fit, else narrow.',
