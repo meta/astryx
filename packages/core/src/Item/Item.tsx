@@ -1006,7 +1006,13 @@ export function Item({
       aria-disabled={isDisabled || undefined}
       {...(isInteractive ? pressable : undefined)}
       {...mergeProps(
-        themeProps('item', {density, align}),
+        themeProps('item', {
+          density,
+          align,
+          highlighted: isHighlighted ? 'highlighted' : null,
+          selected: isSelected ? 'selected' : null,
+          disabled: isDisabled ? 'disabled' : null,
+        }),
         focusOutlineProps.focusWithin(
           styles.root,
           densityStyles[density],
