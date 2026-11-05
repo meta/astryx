@@ -3874,21 +3874,25 @@ jobs:
         env:
           WIDE: ${{ steps.touched.outputs.wide_change }}
           COUNT: ${{ steps.touched.outputs.component_count }}
+          STORIES: ${{ steps.touched.outputs.changed_stories }}
         run: |
           if [ "$WIDE" = true ]; then
             echo "Wide change ($COUNT components): add ci:run-visual, ci:run-a11y or ci:run-rtl to run the full suite."
           else
-            echo "No component changed; nothing to audit."
+            echo "No component changed; no component audit."
+          fi
+          if [ "$STORIES" = true ]; then
+            echo "Changed stories no other audit covers are audited below."
           fi
 
       - name: Setup Node and pnpm
-        if: steps.touched.outputs.has_components == 'true'
+        if: (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')
         uses: ./.github/actions/setup
         with:
           install: 'false'
 
       - name: Download Storybook artifact
-        if: steps.touched.outputs.has_components == 'true'
+        if: (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')
         uses: actions/download-artifact@v8
         with:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
@@ -3896,7 +3900,7 @@ jobs:
 
       - name: Install Playwright
         id: playwright
-        if: steps.touched.outputs.has_components == 'true'
+        if: (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
       # The same changed-component filters an opted-in pull request uses.
@@ -3914,6 +3918,31 @@ jobs:
             --output a11y-report.json \
             --concurrency 4 \
             --components "$COMPONENTS"
+
+      # A story the change adds or changes that no other audit covers (one an
+      # untouched component owns, or an `a11y/` page no component owns) is
+      # audited on its own: new violations against the head's baseline fail
+      # the job (spec:AST-030 FR12). The touched components' audit already
+      # runs their own stories, so those are left out.
+      - name: Accessibility audit for changed stories no other audit covers
+        id: story-a11y
+        if: always() && steps.playwright.outcome == 'success' && steps.touched.outputs.changed_stories == 'true'
+        env:
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          TOUCHED_AUDIT: ${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners != '' }}
+        run: |
+          COVERED=''
+          if [ "$TOUCHED_AUDIT" = true ]; then
+            COVERED=$(node .github/scripts/a11y-pr-scope.mjs analysis.json)
+          fi
+          node .github/scripts/accessibility-audit.js \
+            --storybook-dir apps/storybook/dist \
+            --output a11y-stories-report.json \
+            --concurrency 4 \
+            --changed-story-files "$FILES_PATH" \
+            --covered-components "$COVERED" \
+            --baseline .head-baseline/.github/a11y-baseline.json \
+            --fail-on-new
 
       # A failed accessibility audit must not skip RTL: each suite reports
       # its own result.
@@ -3975,13 +4004,14 @@ jobs:
             --out touched-components.json
 
       - name: Upload touched-components results
-        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true')
+        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true' || steps.touched.outputs.changed_stories == 'true')
         uses: actions/upload-artifact@v7
         with:
           name: touched-components
           path: |
             touched-components.json
             a11y-report.json
+            a11y-stories-report.json
             rtl-reports/
           if-no-files-found: ignore
           retention-days: 7
