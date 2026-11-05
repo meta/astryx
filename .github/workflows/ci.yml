@@ -110,8 +110,8 @@ jobs:
   # inside the fifteen-minute job budget.
   room:
     # Finds room for the run's first job, its Storybook build, and records
-    # whether the whole run fit on that look. A pull-request run finding ten
-    # others already waiting, and no room, is turned away: CI is full.
+    # whether the whole run fit on that look. A pull-request run that finds no
+    # room waits, up to its longest wait.
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
     # A dispatch (a main or release check) may wait longer than a slim job's
     # fifteen-minute cap, so it waits on a standard runner (spec:AST-030 DEC-16).
@@ -200,9 +200,9 @@ jobs:
           exit 1
 
   # Stops a pull-request run that CI is full for, with the reason, so it builds
-  # nothing: room found no room and ten other pull-request runs waiting, or the
-  # run waited its longest while another started at its longest wait. It
-  # cancels the run when its token can. A fork's read-only token cannot; then
+  # nothing: the run waited its longest while another started at its longest
+  # wait, or a run that waited longer still waits. It cancels the run when its
+  # token can. A fork's read-only token cannot; then
   # admission fails, the jobs behind it skip or stop, and build, test and
   # docsite-test fail with the same reason, never skip or pass.
   ci-full:
@@ -1150,7 +1150,7 @@ jobs:
       # offline-media's real-browser cases. This step runs them once Chromium
       # is in place, under the install's own condition; with
       # ASTRYX_OFFLINE_MEDIA_BROWSER set, a missing browser fails them.
-      # ci-offline-media-browser.test.mjs keeps this step after the install.
+      # ci-browser-gated-tests.test.mjs keeps this step after the install.
       - name: Offline-media browser cases
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         env:
@@ -2509,7 +2509,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/)'
+          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -2643,6 +2643,18 @@ jobs:
         leg: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Playwright's own image for the version the lockfile resolves, with
+    # WebKit and its system libraries already installed. Installing those on
+    # the runner took up to fifteen minutes when the package mirror was slow,
+    # which cancelled the leg before a proof ran. A guard test keeps the tag
+    # equal to the lockfile's Playwright version.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
+    # A container's steps default to `sh`; keep the runner's bash.
+    defaults:
+      run:
+        shell: bash
     permissions:
       # The heavy-suite caps read the author's pull requests and runs.
       actions: read
@@ -2669,9 +2681,11 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/Layer/inputHold\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/)'
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/Layer/(inputHold|modalOutlet)\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
+          # Lists the changed files, so the planner adds a changed spec.
+          component-audit: 'true'
 
       - name: Require this pull request's Storybook build
         if: steps.scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
@@ -2681,7 +2695,7 @@ jobs:
 
       - name: Skip the WebKit proofs outside their scope
         if: steps.scope.outputs.applies != 'true'
-        run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, and none of their shared setup)."
+        run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, no interaction spec, and none of their shared setup)."
 
       # The head checkout below replaces the workspace, scope checkout
       # included, so the leg planner, the modules it imports (the shared
@@ -2722,6 +2736,12 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
+      # The container runs as root over a workspace the runner owns, and git
+      # refuses a repository another user owns unless it is marked safe.
+      - name: Trust the checkout in the container
+        if: steps.scope.outputs.applies == 'true'
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Verify evidence checkout
         if: steps.scope.outputs.applies == 'true'
         env:
@@ -2741,19 +2761,33 @@ jobs:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
           path: apps/storybook/dist
 
-      # WebKit needs system libraries the runner image lacks; --with-deps
-      # installs them.
+      # The image carries WebKit, Chromium's headless shell and their system
+      # libraries; `install` finds them in place and downloads nothing. A spec
+      # that decodes a WebKit recording does so in the headless shell.
       - name: Install Playwright WebKit
         if: steps.scope.outputs.applies == 'true'
-        run: pnpm install --frozen-lockfile && npx playwright install --with-deps webkit
+        run: pnpm install --frozen-lockfile && npx playwright install webkit chromium-headless-shell
 
       # This leg's share of the WebKit spec files, from the paths the lane
       # covers, by their recorded times. The planner and the times come from
-      # the scope checkout, as for the Chromium legs.
+      # the scope checkout, as for the Chromium legs. An interaction spec the
+      # pull request changes runs here too, wherever it lives.
       - name: Plan this leg's WebKit interaction proofs
         id: plan
         if: steps.scope.outputs.applies == 'true'
+        env:
+          CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
         run: |
+          CHANGED_SPECS=()
+          if [ -n "${CHANGED_FILES:-}" ] && [ -s "$CHANGED_FILES" ]; then
+            while IFS= read -r file; do
+              case "$file" in
+                *.interaction.browser.spec.ts) [ -f "$file" ] && CHANGED_SPECS+=("$file") ;;
+              esac
+            done < "$CHANGED_FILES"
+          else
+            echo "::warning title=Changed specs not planned::The scope step could not list the changed files, so a changed interaction spec outside this lane's paths does not run here."
+          fi
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
             --key interaction-webkit --config playwright.interaction.config.ts --project webkit \
             --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
@@ -2763,7 +2797,8 @@ jobs:
             packages/core/src/motion/__tests__/animatedLayout.interaction \
             packages/core/src/motion/__tests__/animator.interaction \
             packages/core/src/hooks/__tests__/usePager.interaction \
-            internal/interaction-harness/
+            internal/interaction-harness/ \
+            "${CHANGED_SPECS[@]}"
 
       # WebKit renders through Mesa's llvmpipe, which sizes its thread pool
       # from the CPUs the process may run on. A container's CPU quota is not
@@ -2786,6 +2821,8 @@ jobs:
           fi
           export LP_NUM_THREADS
           echo "llvmpipe threads: $LP_NUM_THREADS"
+          # Which Mesa software rasterizer the frames go through.
+          echo "Mesa DRI drivers: $(ls /usr/lib/x86_64-linux-gnu/dri 2>/dev/null | tr '\n' ' ')"
           pnpm exec playwright test \
             --test-list "$RUNNER_TEMP/interaction-leg.txt" \
             --config playwright.interaction.config.ts \
@@ -3837,21 +3874,25 @@ jobs:
         env:
           WIDE: ${{ steps.touched.outputs.wide_change }}
           COUNT: ${{ steps.touched.outputs.component_count }}
+          STORIES: ${{ steps.touched.outputs.changed_stories }}
         run: |
           if [ "$WIDE" = true ]; then
             echo "Wide change ($COUNT components): add ci:run-visual, ci:run-a11y or ci:run-rtl to run the full suite."
           else
-            echo "No component changed; nothing to audit."
+            echo "No component changed; no component audit."
+          fi
+          if [ "$STORIES" = true ]; then
+            echo "Changed stories no component owns are audited below."
           fi
 
       - name: Setup Node and pnpm
-        if: steps.touched.outputs.has_components == 'true'
+        if: (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')
         uses: ./.github/actions/setup
         with:
           install: 'false'
 
       - name: Download Storybook artifact
-        if: steps.touched.outputs.has_components == 'true'
+        if: (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')
         uses: actions/download-artifact@v8
         with:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
@@ -3859,7 +3900,7 @@ jobs:
 
       - name: Install Playwright
         id: playwright
-        if: steps.touched.outputs.has_components == 'true'
+        if: (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
       # The same changed-component filters an opted-in pull request uses.
@@ -3877,6 +3918,24 @@ jobs:
             --output a11y-report.json \
             --concurrency 4 \
             --components "$COMPONENTS"
+
+      # A story the change adds or changes that no component owns (an `a11y/`
+      # page, say) is in no touched component's audit, so it is audited on its
+      # own: new violations against the head's baseline fail the job
+      # (spec:AST-030 FR12).
+      - name: Accessibility audit for changed stories no component owns
+        id: story-a11y
+        if: always() && steps.playwright.outcome == 'success' && steps.touched.outputs.changed_stories == 'true'
+        env:
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+        run: |
+          node .github/scripts/accessibility-audit.js \
+            --storybook-dir apps/storybook/dist \
+            --output a11y-stories-report.json \
+            --concurrency 4 \
+            --changed-story-files "$FILES_PATH" \
+            --baseline .head-baseline/.github/a11y-baseline.json \
+            --fail-on-new
 
       # A failed accessibility audit must not skip RTL: each suite reports
       # its own result.
@@ -3938,13 +3997,14 @@ jobs:
             --out touched-components.json
 
       - name: Upload touched-components results
-        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true')
+        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true' || steps.touched.outputs.changed_stories == 'true')
         uses: actions/upload-artifact@v7
         with:
           name: touched-components
           path: |
             touched-components.json
             a11y-report.json
+            a11y-stories-report.json
             rtl-reports/
           if-no-files-found: ignore
           retention-days: 7

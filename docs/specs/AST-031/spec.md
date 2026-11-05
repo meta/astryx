@@ -181,6 +181,10 @@ fail-closed guard MUST break a test.
   the CLI offers to file via `gh issue create`. This fallback is consent-gated
   (`public` audience). Any other `issuesUrl` scheme produces a `routed_only`
   receipt. The fallback is suppressed entirely when at least one handler exists.
+  `astryx swizzle`'s receipt offers its `gh issue create` line when `gh` is on
+  PATH, whatever its login state. A logged-out `gh` asks for its own login when
+  the line runs. The text receipt shows the command; the JSON receipt keeps the
+  command and the issues URL.
 
 - **FR9 — Project config field.** `astryx.config` gains a `gapReport` field
   accepting a `GapReportHandler`. This is the project-level handler and runs

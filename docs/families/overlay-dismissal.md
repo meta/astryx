@@ -24,6 +24,8 @@ verified_by:
     packages/core/src/Popover/Popover.test.tsx,
     packages/core/src/Popover/__tests__/PopoverSecondDocument.a11y.chromium.spec.ts,
     packages/core/src/Dialog/__tests__/DialogSecondDocument.a11y.browser.spec.ts,
+    packages/core/src/BottomSheet/__tests__/BottomSheetCloseScroll.a11y.browser.spec.ts,
+    packages/core/src/Dialog/__tests__/DialogCloseScroll.a11y.browser.spec.ts,
   ]
 members:
   [
@@ -214,6 +216,11 @@ this record's current membership snapshot must be updated with it.
   target, in the opener's document, with the ring the last input in that
   document calls for (`architecture:interaction-modality` INV1); a BottomSheet,
   BottomSheetSwitcher, or Lightbox does the same in a Picture-in-Picture window.
+  The return does not scroll the page or any scroller to the return target. A
+  browser may record a focusable ancestor of the pressed control as the return
+  target (WebKit focuses the nearest focusable ancestor of a tapped button,
+  such as a `tabindex="-1"` main region); a reveal of that ancestor would
+  scroll the page to its top edge.
 
 - **FR10 — A backdrop press starts and ends on the backdrop.** Dialog with
   `purpose="info"`, Drawer's scrim, and CommandPalette through its Dialog
@@ -222,18 +229,30 @@ this record's current membership snapshot must be updated with it.
   text selection or a slider drag released past the edge, does not dismiss
   it, and a cancelled pointer ends the press. The rule is the same for a
   mouse, a pen, and a finger, and these members share one implementation.
+- **FR11 — The topmost surface consumes its outside press.** An outside press
+  that light-dismisses the topmost surface is consumed by it; a host surface
+  under it does not also light-dismiss on that press. A backdrop press that
+  closes a layer open inside a Dialog with `purpose="info"`, a Drawer with its
+  scrim, or CommandPalette (a menu, a popover, a combobox list, a date
+  calendar, a pinned tooltip, or a context menu) leaves the host open, and the
+  next backdrop press dismisses the host. A layer that hides on its own, such
+  as a tooltip whose trigger lost focus, does not consume the press. A press
+  that closes only the layer leaves focus inside the host: where the closed
+  layer returns it, or else on the host itself. The rule is the same for a
+  mouse, a pen, and a finger.
 
 ## Allowed component variation
 
 - **AV1 — Focus.** Members own focus entry, containment, movement, and the
-  return target. FR9 fixes the document focus returns in.
+  return target. FR9 fixes the document focus returns in, and that the return
+  does not scroll.
 - **AV2 — Modality.** Members may be modal or non-modal and own any inertness or
   backdrop behavior.
 - **AV3 — Positioning and hosting.** Members may use native dialog placement,
   CSS anchor positioning, fixed coordinates, or a component-owned host.
 - **AV4 — Outside dismissal.** Members own whether and how pointer, hover,
   focus-loss, backdrop, touch, or gesture interaction dismisses them; the
-  backdrop press of the members FR10 names follows FR10.
+  backdrop press of the members FR10 names follows FR10 and FR11.
 - **AV5 — Open-state API.** Members own controlled and uncontrolled state,
   defaults, callback names, and imperative commands.
 - **AV6 — Presentation.** Members own animation, visual treatment, and theming
@@ -289,10 +308,12 @@ modality, positioning, outside-dismissal, and open-state contracts.
 | FR8                | `useLayerDismissal.test.tsx`; `Popover.test.tsx`                                                                | members in the page and a same-origin iframe; a Popover alone and inside a Dialog, in an iframe                                                                                                                                                                                                                                                                                                                                                           | A press in one document dismisses a member of another, or a host closes over its nested layer                                                                       |
 | FR8                | `PopoverSecondDocument.a11y.chromium.spec.ts`                                                                   | a Popover in an iframe and in a Picture-in-Picture window, alone and with one open in the page                                                                                                                                                                                                                                                                                                                                                            | A press in the second document misses its own layer or dismisses the page's                                                                                         |
 | FR9                | `DialogSecondDocument.a11y.browser.spec.ts`                                                                     | a Dialog in an iframe and in a Picture-in-Picture window, closed by Escape or a control inside it, and a Dialog in an iframe opened from the page                                                                                                                                                                                                                                                                                                         | Focus lands outside the opener's document, or its ring does not follow the closing input                                                                            |
+| FR9                | `BottomSheetCloseScroll.a11y.browser.spec.ts`; `DialogCloseScroll.a11y.browser.spec.ts`                         | a BottomSheet and a Dialog whose trigger sits in a tall focusable region of a scrolled page, closed by a control inside, by the backdrop, and by Escape, in Chromium and WebKit                                                                                                                                                                                                                                                                           | The page's scroll offset or the trigger's place on screen changes across the close                                                                                  |
 | FR8, FR9           | Real-browser second-document checks; implementation gap: only Dialog and Popover have them                      | Dialog, Popover, DropdownMenu, MoreMenu, ContextMenu, Selector, MultiSelector, TopNavHeading, TopNavMenu, TopNavMegaMenu, SideNavHeading, SideNavItem, Tooltip and HoverCard, each in a same-origin iframe and in a Picture-in-Picture window: opens and takes Escape in the document it renders in (an unpinned Tooltip only when no other member is present; a pinned Tooltip before the member beneath it), and returns focus in the opener's document | The member opens or ranks in another document, a pinned Tooltip lets Escape reach the member beneath it, or focus lands on the frame element, the page, or the body |
 | FR8, FR9           | Real-browser second-document checks; implementation gap: none has them                                          | BottomSheet, BottomSheetSwitcher, and Lightbox in a Picture-in-Picture window: opens, takes Escape, and returns focus to its return target there                                                                                                                                                                                                                                                                                                          | The surface ranks in the page, or focus lands on the page or the body                                                                                               |
 | FR8                | Source check over Drawer and MobileNav                                                                          | Drawer and MobileNav rendered from a control in a second document                                                                                                                                                                                                                                                                                                                                                                                         | A page-level surface moves into the second document                                                                                                                 |
 | FR10               | `useBackdropPress.test.tsx`; `BackdropPress.a11y.chromium.spec.ts`                                              | Dialog (`purpose="info"`), Drawer scrim, and CommandPalette, with a mouse and a finger: a press that starts and ends on the backdrop, one that starts inside and ends on it, one that starts on it and ends inside, a cancelled pointer, and a backdrop start followed by a press inside                                                                                                                                                                  | A press that crosses the edge either way dismisses, a cancelled or earlier press carries over, or a press on the backdrop alone does not dismiss                    |
+| FR11               | `useBackdropPress.test.tsx`; `BackdropPress.a11y.chromium.spec.ts`                                              | Dialog (`purpose="info"`) and Drawer scrim with a menu open inside, with a mouse and a finger: a backdrop press, then a second one; a Dialog with a Typeahead list, a DateInput calendar, a pinned InfoTip, or a ContextMenu open inside, with a mouse; a DateTimeInput time list whose field blurs at mousedown; a press while a tooltip hides on its own; a press that closes no layer above                                                            | A press that closes the menu also closes the host, or the second press leaves the host open                                                                         |
 
 ## Decision links
 
@@ -333,7 +354,7 @@ Rejected: one order across documents, where a press in one window dismisses a su
 
 None. Focus entry, containment, movement, and the return target, modality,
 positioning, outside dismissal, and open-state APIs are outside this family
-contract; FR9 fixes only the document focus returns in. The mapped tests do not render a nested
+contract; FR9 fixes only the document focus returns in and that the return does not scroll. The mapped tests do not render a nested
 layer through a real portal; a real portal fixture is required before this
 contract can claim verified portal coverage.
 
