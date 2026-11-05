@@ -1597,6 +1597,22 @@ export const NestedInAppShellWide: Story = {
   ),
 };
 
+// A fixed frame that does not scroll itself, so only the content area can
+// be a Tab stop.
+const keyboardStyles = stylex.create({
+  frame: {
+    display: 'flex',
+    flexDirection: 'column',
+    width: 280,
+    height: 200,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: colorVars['--color-border'],
+    borderRadius: radiusVars['--radius-container'],
+  },
+});
+
 const KEYBOARD_PARAGRAPHS = Array.from(
   {length: 8},
   (_, index) =>
@@ -1616,7 +1632,7 @@ export const KeyboardScrolling: Story = {
         <Button label="Before" />
       </HStack>
       <HStack gap={4} wrap="wrap">
-        <Card width={280} height={200}>
+        <div {...stylex.props(keyboardStyles.frame)}>
           <Layout
             content={
               <LayoutContent label="Text only, overflowing">
@@ -1628,8 +1644,8 @@ export const KeyboardScrolling: Story = {
               </LayoutContent>
             }
           />
-        </Card>
-        <Card width={280} height={200}>
+        </div>
+        <div {...stylex.props(keyboardStyles.frame)}>
           <Layout
             content={
               <LayoutContent label="Starts with a button, overflowing">
@@ -1642,8 +1658,8 @@ export const KeyboardScrolling: Story = {
               </LayoutContent>
             }
           />
-        </Card>
-        <Card width={280} height={200}>
+        </div>
+        <div {...stylex.props(keyboardStyles.frame)}>
           <Layout
             content={
               <LayoutContent label="Text only, fits">
@@ -1653,7 +1669,7 @@ export const KeyboardScrolling: Story = {
               </LayoutContent>
             }
           />
-        </Card>
+        </div>
       </HStack>
       <HStack gap={2}>
         <Button label="After" />
