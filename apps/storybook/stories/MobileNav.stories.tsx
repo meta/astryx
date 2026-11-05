@@ -10,6 +10,8 @@ import {
   SideNavSection,
 } from '@astryxdesign/core/SideNav';
 import {Button} from '@astryxdesign/core/Button';
+import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
+import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Icon} from '@astryxdesign/core/Icon';
@@ -130,11 +132,7 @@ export const WithSideNavChildren: Story = {
           />
         </SideNavSection>
         <SideNavSection title="Settings">
-          <SideNavItem
-            label="General"
-            icon={Cog6ToothIcon}
-            href="/settings"
-          />
+          <SideNavItem label="General" icon={Cog6ToothIcon} href="/settings" />
         </SideNavSection>
       </>
     );
@@ -186,11 +184,7 @@ export const ResponsivePattern: Story = {
           />
         </SideNavSection>
         <SideNavSection title="Settings">
-          <SideNavItem
-            label="General"
-            icon={Cog6ToothIcon}
-            href="/settings"
-          />
+          <SideNavItem label="General" icon={Cog6ToothIcon} href="/settings" />
           <SideNavItem label="Team" icon={UserGroupIcon} href="/team" />
         </SideNavSection>
       </>
@@ -222,9 +216,7 @@ export const ResponsivePattern: Story = {
           header={
             <SideNavHeading
               icon={
-                <NavIcon
-                  icon={<CubeIcon style={{width: 16, height: 16}} />}
-                />
+                <NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />
               }
               heading="My App"
               headingHref="/"
@@ -291,11 +283,7 @@ export const CustomWidth: Story = {
               isSelected
               href="/dashboard"
             />
-            <SideNavItem
-              label="Projects"
-              icon={FolderIcon}
-              href="/projects"
-            />
+            <SideNavItem label="Projects" icon={FolderIcon} href="/projects" />
           </SideNavSection>
         </MobileNav>
       </>
@@ -328,11 +316,7 @@ export const WithoutTitle: Story = {
               isSelected
               href="/dashboard"
             />
-            <SideNavItem
-              label="Projects"
-              icon={FolderIcon}
-              href="/projects"
-            />
+            <SideNavItem label="Projects" icon={FolderIcon} href="/projects" />
           </SideNavSection>
         </MobileNav>
       </>
@@ -386,6 +370,84 @@ export const TallHeader: Story = {
             />
             <SideNavItem label="Projects" icon={FolderIcon} href="/projects" />
           </SideNavSection>
+        </MobileNav>
+      </>
+    );
+  },
+};
+
+// =============================================================================
+// Nested Dialog
+// =============================================================================
+
+const SEARCH_RESULTS = Array.from(
+  {length: 40},
+  (_, index) => `Search result ${index + 1}`,
+);
+
+/**
+ * A Dialog opened from inside the drawer, such as a search. Its results scroll
+ * with a finger while the drawer stays open behind it.
+ */
+export const NestedDialog: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [isSearchOpen, setIsSearchOpen] = useState(false);
+    return (
+      <>
+        <Button
+          label="Open Navigation"
+          icon={<Icon icon="menu" color="inherit" />}
+          variant="ghost"
+          onClick={() => setIsOpen(true)}
+          isIconOnly
+        />
+        <MobileNav
+          isOpen={isOpen}
+          onOpenChange={open => setIsOpen(open)}
+          header="Navigation">
+          <Button
+            label="Search"
+            variant="secondary"
+            onClick={() => setIsSearchOpen(true)}
+          />
+          <SideNavSection title="Main">
+            <SideNavItem
+              label="Dashboard"
+              icon={HomeIcon}
+              selectedIcon={HomeIconSolid}
+              isSelected
+              href="/dashboard"
+            />
+            <SideNavItem
+              label="Projects"
+              icon={FolderIcon}
+              selectedIcon={FolderIconSolid}
+              href="/projects"
+            />
+          </SideNavSection>
+          <Dialog
+            isOpen={isSearchOpen}
+            onOpenChange={open => setIsSearchOpen(open)}
+            maxHeight="60dvh">
+            <Layout
+              header={
+                <DialogHeader
+                  title="Search"
+                  onOpenChange={open => setIsSearchOpen(open)}
+                />
+              }
+              content={
+                <LayoutContent label="Search results">
+                  {SEARCH_RESULTS.map(result => (
+                    <Text key={result} type="body">
+                      {result}
+                    </Text>
+                  ))}
+                </LayoutContent>
+              }
+            />
+          </Dialog>
         </MobileNav>
       </>
     );

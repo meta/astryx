@@ -118,10 +118,9 @@ const styles = stylex.create({
     // depended on it being a scroll container.
     overflow: 'clip',
     overscrollBehavior: 'contain',
-    // Stop pans passing through (pull-to-refresh, background scroll), but
-    // leave pinch to the browser: the open nav covers the whole viewport, and
-    // pinch-zoom is how phone readers resize text (WCAG 1.4.4).
-    touchAction: 'pinch-zoom',
+    // No touch-action here: a browser resolves it through DOM ancestors, so a
+    // block on the dialog would also stop touch scrolling in a layer opened
+    // inside the drawer. The scrim and the header block pans instead.
     outline: 'none',
     // Native <dialog> uses display:none when closed.
     // Open state applied via isOpen prop to avoid :where([open]) specificity issues.
@@ -170,8 +169,19 @@ const styles = stylex.create({
       },
     },
   },
+  // The area beside the drawer. Stop pans passing through (pull-to-refresh,
+  // background scroll), but leave pinch to the browser: the open nav covers
+  // the whole viewport, and pinch-zoom is how phone readers resize text
+  // (WCAG 1.4.4).
+  scrim: {
+    position: 'absolute',
+    inset: 0,
+    touchAction: 'pinch-zoom',
+  },
   drawer: {
     position: 'absolute',
+    // Above the scrim, which follows it in the DOM.
+    zIndex: 1,
     top: 0,
     bottom: 0,
     display: 'flex',
@@ -240,6 +250,8 @@ const styles = stylex.create({
     minHeight: spacingVars['--spacing-12'],
     paddingInline: spacingVars['--spacing-2'],
     flexShrink: 0,
+    // The header does not scroll, so a pan on it would reach the page.
+    touchAction: 'pinch-zoom',
     borderBlockEndWidth: borderVars['--border-width'],
     borderBlockEndStyle: 'solid',
     borderBlockEndColor: colorVars['--color-border'],
@@ -255,9 +267,6 @@ const styles = stylex.create({
     overflowY: 'auto',
     overflowX: 'hidden',
     overscrollBehavior: 'contain',
-    // Re-enable vertical touch scrolling inside the drawer content (the
-    // dialog root allows only pinch-zoom, to block pull-to-refresh)
-    touchAction: 'pan-y pinch-zoom',
     paddingInline: spacingVars['--spacing-2'],
     paddingBlock: spacingVars['--spacing-2'],
   },
@@ -521,6 +530,7 @@ export function MobileNav({
   // slide out.
   useFocusRegionContainment(dialogRef, isOpen);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const scrimRef = useRef<HTMLDivElement>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
   // The input hold on the drawer's layer while it slides in under a coarse
   // primary pointer. It is null under a fine one and once the slide-in ends.
@@ -691,9 +701,12 @@ export function MobileNav({
   // Handle clicks on the dialog backdrop area (outside the drawer)
   const handleDialogClick = useCallback(
     (event: React.MouseEvent<HTMLDialogElement>) => {
-      // Only close if click was directly on the dialog element (the transparent overlay),
-      // not on the drawer or its children
-      if (event.target === event.currentTarget) {
+      // Only close on the overlay beside the drawer (the dialog itself or its
+      // scrim), not on the drawer or its children.
+      if (
+        event.target === event.currentTarget ||
+        event.target === scrimRef.current
+      ) {
         onOpenChange(false);
       }
     },
@@ -776,6 +789,11 @@ export function MobileNav({
               {/* Scrollable content */}
               <div {...stylex.props(styles.content)}>{children}</div>
             </div>
+            <div
+              ref={scrimRef}
+              aria-hidden="true"
+              {...stylex.props(styles.scrim)}
+            />
           </LayerContentBoundary>
         </LayerDepthProvider>
       </ModalAnnounceProvider>
