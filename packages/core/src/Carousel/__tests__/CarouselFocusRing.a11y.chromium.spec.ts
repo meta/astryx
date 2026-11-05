@@ -187,8 +187,9 @@ async function expectRingPaintsEveryEdge(page: Page, label: string) {
   const edges = {
     top: [box.x + box.width / 2, box.y + 1],
     bottom: [box.x + box.width / 2, box.y + box.height - 2],
-    start: [box.x + 1, box.y + box.height / 2],
-    end: [box.x + box.width - 2, box.y + box.height / 2],
+    // Above the vertically centred scroll buttons, which sit over the edges.
+    start: [box.x + 1, box.y + box.height / 4],
+    end: [box.x + box.width - 2, box.y + box.height / 4],
   } as const;
   for (const [edge, [x, y]] of Object.entries(edges)) {
     const painted = await pixel(page, Math.floor(x), Math.floor(y));
