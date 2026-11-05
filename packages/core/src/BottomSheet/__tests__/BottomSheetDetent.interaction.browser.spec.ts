@@ -16,8 +16,8 @@
  *
  * The settle's curve is recorded, not asserted: today it is the panel's
  * `--ease-standard` CSS transition over `--duration-medium` (SETTLE_EASING and
- * SETTLE_MS below), which starts a release at rest at a speed of its own, where
- * `spec:AST-094` FR38 starts it at the finger's. When the settle moves to the
+ * SETTLE_MS below), which starts a release at rest at a speed of its own. The
+ * touch model starts it at the finger's speed. When the settle moves to the
  * UIKit spring, `expectedSettle` becomes the spring from the motion constants,
  * and the curve and the velocity hand-off reported below become assertions.
  */
@@ -201,7 +201,7 @@ test('the settle lands on the detent, its curve recorded frame by frame', async 
   }
   // The curve is recorded, not asserted: today's settle is the theme's
   // transition, which starts a release at rest at a speed of its own, where
-  // spec:AST-094 FR38 starts it at the finger's; this records what it plays.
+  // the touch model starts it at the finger's; this records what it plays.
   // Seek the held settle to every frame time and read the presented transform.
   const samples = curveOf(
     await sampleCurve(sheet, timeline(SETTLE_MS)),
