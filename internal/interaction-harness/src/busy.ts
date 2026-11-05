@@ -12,7 +12,7 @@
  *   blocks as one, and `BusyWindowTooLateError`, for a block that began
  *   after the motion it was meant to catch had ended.
  *   `trackControl` and `controlClock` read the control's box and its own
- *   clock from the screencast.
+ *   clock from the screencast, a second control's too (`ahead`).
  * @position The busy-main-thread proof: an animation that runs on the
  *   compositor keeps advancing at display rate while JavaScript holds the main
  *   thread; one driven from the main thread (rAF, style writes, layout
@@ -44,20 +44,33 @@ export const CONTROL_SIDE = 12;
 const CONTROL_TRAVEL = 240;
 /** How long the control takes to travel `CONTROL_TRAVEL` one way, ms. */
 const CONTROL_LEG_MS = 400;
+/**
+ * The colour of the control ahead (`startBusyControl`'s `ahead`), apart from
+ * the first control's and the component's marker.
+ */
+export const AHEAD_CONTROL_RGB: readonly [number, number, number] = [
+  128, 0, 255,
+];
+/** Where the strip of the control ahead starts, CSS px: below the first's. */
+const AHEAD_TOP = CONTROL_SIDE + 4;
+/** How far the control ahead runs ahead of the first, ms: half a leg. */
+const AHEAD_MS = CONTROL_LEG_MS / 2;
 
 /**
  * The control in each frame (`startBusyControl`'s box): `trackMarker` with
- * `CONTROL_RGB`, searching only the strip the box crosses.
+ * `CONTROL_RGB`, searching only the strip the box crosses. With `ahead`, the
+ * control ahead, with `AHEAD_CONTROL_RGB` in its own strip.
  */
 export async function trackControl(
   page: Page,
   frames: readonly CastFrame[],
+  {ahead = false}: {ahead?: boolean} = {},
 ): Promise<TrackedFrame[]> {
   return trackMarker(page, frames, {
-    rgb: CONTROL_RGB,
+    rgb: ahead ? AHEAD_CONTROL_RGB : CONTROL_RGB,
     region: {
       x: 0,
-      y: 0,
+      y: ahead ? AHEAD_TOP - 2 : 0,
       width: CONTROL_SIDE + CONTROL_TRAVEL + 4,
       height: CONTROL_SIDE + 4,
     },
@@ -86,14 +99,32 @@ export async function trackControl(
  * compositor; see `blockMainThread`). Keep the component's marker out of the
  * strip it crosses (the top `CONTROL_SIDE` px, `CONTROL_SIDE +
  * CONTROL_TRAVEL` px wide).
+ *
+ * It resolves with `start`, the animation's start on the page clock (epoch
+ * ms). The control's own time at a frame, past this start, is that frame's
+ * time on the page clock (`controlClock`).
+ *
+ * With `ahead`, it starts a second control after the first: the same box in
+ * `AHEAD_CONTROL_RGB`, in the strip below, half a leg (200 ms) ahead.
+ * `controlClock` reads no frame within `CONTROL_EDGE` px of a turn. Wherever
+ * the first control is there, the one ahead is mid-leg, so the two read
+ * every frame. Track it with `trackControl(page, frames, {ahead: true})`, and
+ * keep the marker out of its strip too (the top `2 * CONTROL_SIDE + 4` px).
  */
 export async function startBusyControl(
   page: Page,
   {
-    rgb = CONTROL_RGB,
+    ahead = false,
+    rgb = ahead ? AHEAD_CONTROL_RGB : CONTROL_RGB,
     within,
-  }: {rgb?: readonly [number, number, number]; within?: Locator} = {},
+  }: {
+    ahead?: boolean;
+    rgb?: readonly [number, number, number];
+    within?: Locator;
+  } = {},
 ): Promise<{
+  /** The control's start on the page clock, epoch ms. */
+  readonly start: number;
   readonly raise: () => Promise<void>;
   readonly remove: () => Promise<void>;
 }> {
@@ -102,14 +133,14 @@ export async function startBusyControl(
       host.setAttribute('data-harness-control-host', ''),
     );
   }
-  await page.evaluate(
-    ({color, side, travel, legMs}) =>
-      new Promise<void>((resolve, reject) => {
+  const start = await page.evaluate(
+    ({color, side, travel, legMs, top, aheadMs}) =>
+      new Promise<number>((resolve, reject) => {
         const host = document.querySelector('[data-harness-control-host]');
         host?.removeAttribute('data-harness-control-host');
         const box = document.createElement('div');
-        box.setAttribute('data-harness-control', '');
-        box.style.cssText = `position:fixed;inset:auto;left:0;top:0;margin:0;padding:0;border:0;overflow:visible;width:${side}px;height:${side}px;background:rgb(${color.join(',')});z-index:2147483647;pointer-events:none;`;
+        box.setAttribute('data-harness-control', aheadMs > 0 ? 'ahead' : '');
+        box.style.cssText = `position:fixed;inset:auto;left:0;top:${top}px;margin:0;padding:0;border:0;overflow:visible;width:${side}px;height:${side}px;background:rgb(${color.join(',')});z-index:2147483647;pointer-events:none;`;
         if (host == null) {
           box.setAttribute('popover', 'manual');
           document.body.appendChild(box);
@@ -150,12 +181,38 @@ export async function startBusyControl(
           );
           return;
         }
+        if (aheadMs > 0) {
+          // Half a leg ahead of the first control, on the same timeline.
+          const first = [
+            ...document.querySelectorAll('[data-harness-control=""]'),
+          ]
+            .map(el => el.getAnimations()[0])
+            .find(running => running?.startTime != null);
+          if (first == null) {
+            box.remove();
+            reject(
+              new Error(
+                'startBusyControl: start the first control before the one ahead',
+              ),
+            );
+            return;
+          }
+          animation.startTime = Number(first.startTime) - aheadMs;
+        }
         const frame = gate?.frame ?? window.requestAnimationFrame.bind(window);
         const realNow = gate?.now ?? (() => performance.now());
         const deadline = realNow() + 5_000;
+        // The one ahead starts running at once: give it a frame on the
+        // compositor too.
+        let ticks = 0;
         const tick = () => {
-          if (!animation.pending && Number(animation.currentTime ?? 0) >= 16) {
-            resolve();
+          ticks += 1;
+          if (
+            !animation.pending &&
+            Number(animation.currentTime ?? 0) >= 16 &&
+            (aheadMs === 0 || ticks >= 2)
+          ) {
+            resolve(performance.timeOrigin + Number(animation.startTime));
           } else if (realNow() > deadline) {
             reject(new Error('startBusyControl: the control did not start'));
           } else {
@@ -169,9 +226,12 @@ export async function startBusyControl(
       side: CONTROL_SIDE,
       travel: CONTROL_TRAVEL,
       legMs: CONTROL_LEG_MS,
+      top: ahead ? AHEAD_TOP : 0,
+      aheadMs: ahead ? AHEAD_MS : 0,
     },
   );
   return {
+    start,
     raise: () =>
       page.evaluate(() => {
         for (const box of document.querySelectorAll<HTMLElement>(
@@ -212,7 +272,8 @@ const CONTROL_EDGE = 36;
  * A late or reordered frame moves only its own reading, and a gap moves none.
  *
  * A frame without the box gets no reading, and so does a frame within
- * `CONTROL_EDGE` px of a turn. A frame that repeats the position before it
+ * `CONTROL_EDGE` px of a turn. There a control started `ahead` is mid-leg:
+ * read it with its own clock. A frame that repeats the position before it
  * shows no new time, so it gets none either. Readings count up from the
  * origin a whole cycle or less before the first reading.
  */
