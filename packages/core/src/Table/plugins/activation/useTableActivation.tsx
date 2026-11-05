@@ -39,10 +39,7 @@ import {focusOutlineStyles} from '../../../utils/focusOutline.stylex';
 import {mergeRefs} from '../../../utils/mergeRefs';
 import {warnOnce} from '../../../utils/devWarning';
 import {isRtlElement} from '../../../hooks/isRtlElement';
-import {
-  hasInteractiveAncestor,
-  hasTextSelection,
-} from '../../../hooks/useClickableContainer';
+import {hasInteractiveAncestor} from '../../../hooks/useClickableContainer';
 import type {TablePlugin, BodyRowRenderProps} from '../../types';
 
 // =============================================================================
@@ -145,6 +142,12 @@ const ACTIVE_BAR_WIDTH_PX = 3;
  * outline, which draws over the cell in a system color. No selection
  * semantics are inferred: `aria-selected` is never written here.
  */
+/** Whether a row already exposes current state this module must not overwrite. */
+function hasCompetingCurrentOwner(row: Element | null): boolean {
+  const current = row?.getAttribute('aria-current');
+  return current != null && current !== 'true';
+}
+
 function applyRowActivationStyle(
   row: HTMLTableRowElement,
   isActive: boolean,
@@ -152,19 +155,21 @@ function applyRowActivationStyle(
   if (isActive) {
     // A pre-existing current-state owner keeps its semantics: activation
     // stays off this row rather than overwriting navigation or selection
-    // state it does not own.
-    const current = row.getAttribute('aria-current');
-    if (current != null && current !== 'true') {
+    // state it does not own. The declarative snapshot below cannot see the
+    // DOM, so a conflicting row sheds that paint here on mount.
+    if (hasCompetingCurrentOwner(row)) {
       warnOnce(
         'table-activation-current-owner',
         'useTableActivation',
         'Table row already exposes its own aria-current state, so row activation stays inert for it. ' +
           'Remove the competing state or the activation plugin for this row.',
       );
+      clearRowActivationStyle(row);
       return;
     }
     row.setAttribute('data-active', 'true');
     row.setAttribute('aria-current', 'true');
+    row.setAttribute('data-activation-current', 'true');
     row.classList.add(...getActiveWashClassNames());
   } else {
     clearRowActivationStyle(row);
@@ -208,8 +213,13 @@ function applyRowActivationStyle(
  */
 function clearRowActivationStyle(row: HTMLTableRowElement): void {
   row.removeAttribute('data-active');
-  if (row.getAttribute('aria-current') === 'true') {
-    row.removeAttribute('aria-current');
+  // Only the exposure this module wrote comes off: the marker tracks it, so
+  // a competing owner's value survives cleanup.
+  if (row.hasAttribute('data-activation-current')) {
+    row.removeAttribute('data-activation-current');
+    if (row.getAttribute('aria-current') === 'true') {
+      row.removeAttribute('aria-current');
+    }
   }
   if (activeWashClassNames != null && activeWashClassNames.length > 0) {
     row.classList.remove(...activeWashClassNames);
@@ -264,6 +274,20 @@ function shouldSuppressActivation(
   if (target !== row && hasInteractiveAncestor(target, row)) {
     return true;
   }
+  // A row another owner marked current stays fully inactive: presses neither
+  // request activation nor repaint it.
+  if (hasCompetingCurrentOwner(row)) {
+    return true;
+  }
+  // A press on a read-only control belongs to that control: the shared
+  // guard excludes `aria-readonly` from interactive, so without this the row
+  // would activate under it.
+  if (target !== row) {
+    const readonlyScope = target.closest('[aria-readonly="true"]');
+    if (readonlyScope != null && row.contains(readonlyScope)) {
+      return true;
+    }
+  }
   // An edit inside a contenteditable region is not a row press. The shared
   // guard does not cover contenteditable (it would change every other
   // clickable surface), so the row path checks it separately.
@@ -273,10 +297,62 @@ function shouldSuppressActivation(
   ) {
     return true;
   }
-  if (hasTextSelection(row)) {
+  if (selectionIntersectsRow(row)) {
     return true;
   }
   return false;
+}
+
+/**
+ * Whether a live text selection intersects the row. The shared
+ * `hasTextSelection` only sees selections anchored inside, so a drag that
+ * starts outside and covers the row would still activate it; an intersection
+ * check keeps the drag inert whichever end the anchor is on. Implemented from
+ * anchor/focus containment plus document order rather than
+ * `selection.containsNode`: equivalent semantics, and jsdom's `containsNode`
+ * answers true for disjoint nodes, which would make any page selection block
+ * every row under test.
+ */
+/**
+ * Whether two selection ends intersect the row: either end inside it, or the
+ * ends on opposite sides of it in document order (a drag spanning across the
+ * row). Pure over the end nodes so tests can pin the geometry without
+ * depending on Selection range normalization.
+ */
+export function selectionEndsIntersectRow(
+  row: Element,
+  anchorNode: Node | null,
+  focusNode: Node | null,
+): boolean {
+  if (anchorNode == null || focusNode == null) {
+    return false;
+  }
+  if (row.contains(anchorNode) || row.contains(focusNode)) {
+    return true;
+  }
+  // Either end inside the row is covered above; what remains is a selection
+  // spanning across it, with the ends on opposite sides in document order.
+  const anchorPosition = row.compareDocumentPosition(anchorNode);
+  const focusPosition = row.compareDocumentPosition(focusNode);
+  const anchorBefore =
+    (anchorPosition & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
+  const anchorAfter =
+    (anchorPosition & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  const focusBefore = (focusPosition & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
+  const focusAfter = (focusPosition & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  return (anchorBefore && focusAfter) || (anchorAfter && focusBefore);
+}
+
+function selectionIntersectsRow(row: Element): boolean {
+  if (typeof document === 'undefined' || !('getSelection' in document)) {
+    return false;
+  }
+  const selection = document.getSelection();
+  if (selection == null || selection.isCollapsed) {
+    return false;
+  }
+  const {anchorNode, focusNode} = selection;
+  return selectionEndsIntersectRow(row, anchorNode, focusNode);
 }
 
 // =============================================================================
@@ -510,6 +586,9 @@ export function useTableActivation<T extends Record<string, unknown>>(
               // A keypress that started in a nested control belongs to that
               // control, even when focus is inside an activatable row.
               if (event.target !== event.currentTarget) {
+                return;
+              }
+              if (hasCompetingCurrentOwner(event.currentTarget)) {
                 return;
               }
               // Holding Space must not scroll the page, with or without

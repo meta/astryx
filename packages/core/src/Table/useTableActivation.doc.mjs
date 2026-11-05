@@ -7,7 +7,7 @@ export const docs = {
   subComponentOf: 'Table',
   displayName: 'useTableActivation',
   description:
-    'Hook that returns a TablePlugin giving a data-driven Table one controlled current row for master-detail, preview, and inspector layouts. Eligible rows activate on primary click or Enter/Space and the controlled key reflects back as data-active plus component-owned active styling that reaches pinned cells. The consumer owns the activeKey state; the plugin never emits aria-selected or aria-current, so callers that need selection or navigation semantics own them through those surfaces. Requires an explicit idKey on the Table; without stable row identity activation stays inert. Do not combine with useTableGroupedRows: group headers cannot be told apart from product rows yet, so grouped composition stays unsupported until Table owns that distinction.',
+    'Hook that returns a TablePlugin giving a data-driven Table one controlled current row for master-detail, preview, and inspector layouts. Eligible rows activate on primary click or Enter/Space and the controlled key reflects back as data-active plus component-owned active styling that reaches pinned cells. The consumer owns the activeKey state; the plugin never emits aria-selected, so callers that need selection semantics own them through that surface. It owns only `aria-current="true"` on the eligible active row: adding your own `aria-current` to a row turns activation off for it. Requires an explicit idKey on the Table; without stable row identity activation stays inert. Do not combine with useTableGroupedRows: group headers cannot be told apart from product rows yet, so grouped composition stays unsupported until Table owns that distinction.',
   props: [
     {
       name: 'activeKey',
@@ -55,7 +55,7 @@ const activation = useTableActivation({
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'Returns a TablePlugin with one controlled current row for master-detail layouts. Eligible rows activate on primary click or Enter/Space; the key reflects as data-active plus active styling through pinned cells. Caller owns activeKey; no aria-selected or aria-current is emitted. Needs an explicit Table idKey; incompatible with grouped rows.',
+    'Returns a TablePlugin with one controlled current row for master-detail layouts. Eligible rows activate on primary click or Enter/Space; the key reflects as data-active plus active styling through pinned cells. Caller owns activeKey; no aria-selected is emitted, and only `aria-current="true"` on the eligible active row. Needs an explicit Table idKey; incompatible with grouped rows.',
   propDescriptions: {
     activeKey:
       'Controlled active row key, or null. Strict equality: "42" never matches 42.',

@@ -14,8 +14,10 @@ import {render, renderHook, screen, fireEvent} from '@testing-library/react';
 import {createPortal} from 'react-dom';
 import {Table} from '../../Table';
 import {useTableActivation} from './useTableActivation';
+import {selectionEndsIntersectRow} from './useTableActivation';
 import {useTableSelection} from '../selection/useTableSelection';
 import type {TableColumn, TablePlugin} from '../../types';
+import {__resetDevWarnings} from '../../../utils/devWarning';
 
 // =============================================================================
 // Test Data
@@ -149,6 +151,128 @@ describe('controlled active state', () => {
       expect(row.getAttribute('role')).toBeNull();
     }
   });
+
+  it('resolves only the first row of a repeated id and warns once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    __resetDevWarnings();
+    const onActivate = vi.fn();
+    const dupes: Member[] = [
+      {id: '1', name: 'Ada', team: 'Core'},
+      {id: '1', name: 'Ada 2', team: 'Infra'},
+    ];
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: '1',
+        onActivate,
+      });
+      return (
+        <Table
+          data={dupes}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    try {
+      render(<Harness />);
+      const rows = bodyRows();
+      expect(rows[0].getAttribute('data-active')).toBe('true');
+      expect(rows[1].hasAttribute('data-active')).toBe(false);
+      fireEvent.click(rows[1]);
+      expect(onActivate).not.toHaveBeenCalled();
+      expect(
+        warn.mock.calls.some(call =>
+          String(call[0]).includes('share an idKey value'),
+        ),
+      ).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('stays inert when the idKey property is missing from a row', () => {
+    const onActivate = vi.fn();
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: 'undefined',
+        onActivate,
+      });
+      return (
+        <Table
+          data={[{name: 'No id', team: 'Core'}] as Member[]}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    render(<Harness />);
+    const rows = bodyRows();
+    expect(rows[0].hasAttribute('data-active')).toBe(false);
+    expect(rows[0].hasAttribute('tabindex')).toBe(false);
+    fireEvent.click(rows[0]);
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('leaves a competing current-state owner in place and stays inert', () => {
+    const onActivate = vi.fn();
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: '1',
+        onActivate,
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin, currentOwner: currentOwnerPlugin()}}
+        />
+      );
+    }
+    function currentOwnerPlugin(): TablePlugin<Member> {
+      return {
+        transformBodyRow: props => ({
+          ...props,
+          htmlProps: {
+            ...props.htmlProps,
+            'aria-current': 'page' as const,
+          },
+        }),
+      };
+    }
+    render(<Harness />);
+    const rows = bodyRows();
+    expect(rows[0].getAttribute('aria-current')).toBe('page');
+    expect(rows[0].hasAttribute('data-active')).toBe(false);
+    fireEvent.click(rows[0]);
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('removes only the current exposure the module wrote', () => {
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: '1',
+        onActivate: () => {},
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    const {unmount} = render(<Harness />);
+    const rows = bodyRows();
+    // The module marked the row it exposed.
+    expect(rows[0].getAttribute('aria-current')).toBe('true');
+    expect(rows[0].hasAttribute('data-activation-current')).toBe(true);
+    unmount();
+    expect(rows[0].getAttribute('aria-current')).toBeNull();
+  });
 });
 
 // =============================================================================
@@ -273,6 +397,7 @@ describe('key equality', () => {
 
   it('stays inert without an explicit idKey and warns once', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    __resetDevWarnings();
     const onActivate = vi.fn();
     try {
       function Harness() {
@@ -387,6 +512,35 @@ describe('pointer activation', () => {
     expect(onActivate).not.toHaveBeenCalled();
   });
 
+  it('ignores presses on read-only controls', () => {
+    const onActivate = vi.fn();
+    const columns: TableColumn<Member>[] = [
+      {key: 'name', header: 'Name'},
+      {
+        key: 'team',
+        header: 'Team',
+        renderCell: () => <span aria-readonly="true">Core</span>,
+      },
+    ];
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: null,
+        onActivate,
+      });
+      return (
+        <Table
+          data={members}
+          columns={columns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    render(<Harness />);
+    fireEvent.click(screen.getAllByText('Core')[0]);
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
   it('ignores clicks from portalled controls', () => {
     const onActivate = vi.fn();
     const menuActivate = vi.fn();
@@ -451,7 +605,49 @@ describe('pointer activation', () => {
     document.getSelection()?.addRange(inRowRange);
     fireEvent.click(rows[1]);
     expect(onActivate).toHaveBeenCalledTimes(1);
+    // A drag anchored outside the row but covering it suppresses it too.
+    // (jsdom collapses cross-subtree ranges, so the spanning geometry is
+    // pinned directly on the pure helper below rather than through a live
+    // Selection here.)
     outsider.remove();
+  });
+
+  it('treats a selection spanning across the row as intersecting it', () => {
+    render(<ActiveHarness onActivate={vi.fn()} />);
+    const rows = bodyRows();
+    const before = document.createElement('p');
+    before.textContent = 'before';
+    const after = document.createElement('p');
+    after.textContent = 'after';
+    document.body.prepend(before);
+    document.body.append(after);
+    const inRow = rows[1].querySelector('td')!.firstChild!;
+    // Either end inside the row intersects.
+    expect(
+      selectionEndsIntersectRow(rows[1], inRow, before.firstChild),
+    ).toBe(true);
+    expect(
+      selectionEndsIntersectRow(rows[1], before.firstChild, inRow),
+    ).toBe(true);
+    // Ends on opposite sides of the row intersect, in either direction.
+    expect(
+      selectionEndsIntersectRow(rows[1], before.firstChild, after.firstChild),
+    ).toBe(true);
+    expect(
+      selectionEndsIntersectRow(rows[1], after.firstChild, before.firstChild),
+    ).toBe(true);
+    // Both ends on the same side do not.
+    expect(selectionEndsIntersectRow(rows[1], before, before.firstChild)).toBe(
+      false,
+    );
+    expect(selectionEndsIntersectRow(rows[1], after, after.firstChild)).toBe(
+      false,
+    );
+    expect(
+      selectionEndsIntersectRow(rows[1], before.firstChild, null),
+    ).toBe(false);
+    before.remove();
+    after.remove();
   });
 
   it('runs earlier handlers first and honors preventDefault cancellation', () => {

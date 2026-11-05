@@ -23,6 +23,7 @@ import {
   type Ref,
 } from 'react';
 import {isRenderable} from '../utils/isRenderable';
+import {warnOnce} from '../utils/devWarning';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {
@@ -599,6 +600,10 @@ function BaseTableInner<T extends Record<string, unknown>>({
         }
       : mergedStyle;
 
+  // Keys the body rows resolved so far, so a repeated id resolves only its
+  // first row and the rest stay inert with one development diagnostic.
+  const seenRowKeys = new Set<string | number>();
+
   let tableElement: ReactNode = (
     <table
       ref={ref}
@@ -630,19 +635,49 @@ function BaseTableInner<T extends Record<string, unknown>>({
           <TableBody>
             {hasData
               ? data.map((item, rowIndex) => {
+                  // The canonical key plugins consume. A missing property
+                  // key resolves to no identity (`String(undefined)` would
+                  // hand out a stable-looking `"undefined"` instead), and a
+                  // repeated key resolves only its first row: duplicates stay
+                  // inert with one development diagnostic rather than sharing
+                  // one current state.
+                  const rawKey =
+                    idKey == null
+                      ? undefined
+                      : typeof idKey === 'function'
+                        ? (idKey(item) ?? undefined)
+                        : (item[idKey] ?? undefined);
+                  let resolvedRowKey =
+                    rawKey === undefined
+                      ? undefined
+                      : typeof rawKey === 'number' ||
+                          typeof rawKey === 'string'
+                        ? rawKey
+                        : String(rawKey);
+                  if (resolvedRowKey !== undefined) {
+                    if (seenRowKeys.has(resolvedRowKey)) {
+                      warnOnce(
+                        'table-duplicate-row-key',
+                        'Table',
+                        'Table rows share an idKey value, so only the first such row carries stable identity. ' +
+                          'Give every row a unique id.',
+                      );
+                      resolvedRowKey = undefined;
+                    } else {
+                      seenRowKeys.add(resolvedRowKey);
+                    }
+                  }
                   const rowKey =
                     idKey == null
                       ? rowIndex
-                      : typeof idKey === 'function'
-                        ? idKey(item)
-                        : String(item[idKey]);
+                      : (resolvedRowKey ?? `row:${rowIndex}`);
                   return (
                     <MemoizedTableRow<T>
                       key={rowKey}
                       item={item}
                       rowIndex={rowIndex}
                       rowKey={rowKey}
-                      resolvedRowKey={idKey == null ? undefined : rowKey}
+                      resolvedRowKey={resolvedRowKey}
                       columns={resolvedColumns}
                       plugins={plugins}
                       textOverflow={textOverflow}
