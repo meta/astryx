@@ -58,6 +58,7 @@ import type {DayOfWeek, ISODateString, PlainDate} from '../utils/dateTypes';
 import {
   plainDateAddDays,
   plainDateDayOfWeek,
+  plainDateDiffDays,
   plainDateFormatDayNumber,
   plainDateIsEqual,
   plainDateToISO,
@@ -69,6 +70,8 @@ import {
   type ReducedMotionDip,
 } from '../motion/reducedMotion';
 import {
+  calendarShiftMonths,
+  calendarShiftYears,
   calendarYearMonthOf,
   formatCalendarDate,
   formatCalendarMonthLabel,
@@ -280,11 +283,13 @@ const dynamic = stylex.create({
   }),
 });
 
+/** The handle of MonthScroller and of MonthPager, its touch counterpart. */
 export interface MonthScrollerHandle {
   /** Bring a month to rest at the top of the scrollport. */
   scrollToMonth: (monthIndex: number, behavior?: ScrollBehavior) => void;
 }
 
+/** The props of MonthScroller and of MonthPager, its touch counterpart. */
 export interface MonthScrollerProps {
   /** Imperative handle for programmatic navigation (Today, the wheels). */
   handleRef?: React.RefObject<MonthScrollerHandle | null>;
@@ -764,7 +769,8 @@ export function MonthScroller({
   }, [paneSize, rowCount, minMonthIndex, isRTL, recenter]);
 
   // Move the keyboard focus by whole days and let the scroller follow. Paging
-  // by month is PageUp/PageDown; everything else is the APG grid vocabulary.
+  // by month is PageUp/PageDown (a year with Shift); everything else is the
+  // APG grid vocabulary.
   const moveFocus = useCallback(
     (from: PlainDate, deltaDays: number) => {
       const next = plainDateAddDays(from, deltaDays);
@@ -776,6 +782,9 @@ export function MonthScroller({
       setFocusedDate(next);
       if (nextIndex !== monthModel.indexOf(from)) {
         scrollToMonth(nextIndex, 'smooth');
+        // Report the month here, as MonthPager does. The scroll handler drops
+        // every report while a steered scroll runs, its arrival included.
+        onVisibleMonthChangeRef.current(nextIndex);
       }
     },
     [monthModel, minMonthIndex, maxMonthIndex, scrollToMonth],
@@ -815,11 +824,23 @@ export function MonthScroller({
           event.preventDefault();
           moveFocus(date, 6 - column);
           break;
+        // A month (a year with Shift), as Calendar does: the same day in the
+        // month before or after, or that month's last day.
+        case 'PageUp':
+        case 'PageDown': {
+          event.preventDefault();
+          const step = event.key === 'PageDown' ? 1 : -1;
+          const next = event.shiftKey
+            ? calendarShiftYears(monthModel.calendar, date, step)
+            : calendarShiftMonths(monthModel.calendar, date, step);
+          moveFocus(date, plainDateDiffDays(date, next));
+          break;
+        }
         default:
           break;
       }
     },
-    [isRTL, moveFocus, weekStartsOn],
+    [isRTL, monthModel, moveFocus, weekStartsOn],
   );
 
   // The focused day may have been in an unmounted pane a frame ago; focus it

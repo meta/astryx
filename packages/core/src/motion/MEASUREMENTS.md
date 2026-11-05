@@ -276,7 +276,16 @@ table only names them, and their values belong to the wheel's own table.
 
 Done (UIKit lab, iOS 26.2 simulator, Oct 23 2026; in the date picker's table):
 the month/year wheels changing the date, the AM/PM column following the hour,
-the turn back onto a bound, and the day clamped to the month.
+the turn back onto a bound, the day clamped to the month, the title following
+the drag, and the chevron's retarget and its state at a bound. The sheet split
+(M-DP01: 100 pt drags from the grid at 45° to 55°, slow and fast, logged per
+touch sample) followed on Oct 25 2026. A drag is decided on the first sample
+where either axis reaches the pan's hysteresis: the grid's when the horizontal
+travel has.
+
+| ID     | What            | App and gesture                                                                                                                        | Extract                                                                                                                                                  | Method | Feeds                                                       |
+| ------ | --------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
+| M-DP02 | Trackpad paging | `.date` `.inline` on an iPad with a pointer: two-finger horizontal swipes of 10 to 60 pt, slow and fast, and swipes 50 to 300 ms apart | whether the grid follows the swipe and pages on its end, the travel and speed that turn a month, and the gap after which a swipe counts as a new gesture | C      | the wheel step and quiet time in `DateInput/MonthPager.tsx` |
 
 ## Context menu (UIContextMenuInteraction)
 
