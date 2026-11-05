@@ -1029,10 +1029,8 @@ export function Item({
           // The touch press on a compositor layer (after the overlay, whose
           // own touch paint it turns off): the release keeps fading while
           // script runs.
-          isInteractive &&
-            (hasStateFill
-              ? rowPressLayerStyles.cellOnImage
-              : rowPressLayerStyles.cell),
+          isInteractive && rowPressLayerStyles.cell,
+          isInteractive && hasStateFill && rowPressLayerStyles.cellOnImage,
           isLinkRoot && styles.linkRoot,
           isHighlighted && styles.highlighted,
           isSelected && styles.selected,

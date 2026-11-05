@@ -85,3 +85,46 @@ for (const mode of ['light', 'dark'] as const) {
     });
   }
 }
+
+test.describe('under a finger', () => {
+  // A phone: coarse primary pointer. The press paints on the row's compositor
+  // layer, above the state fill.
+  test.use({hasTouch: true, isMobile: true});
+
+  for (const mode of ['light', 'dark'] as const) {
+    for (const label of ['Rest', 'Highlighted', 'Selected']) {
+      test(`a finger press paints a ${label.toLowerCase()} row (${mode})`, async ({
+        page,
+        context,
+      }) => {
+        await page.goto(
+          `${storybook.origin}/iframe.html?id=core-item--states&viewMode=story&globals=colorMode:${mode};astryxTheme:neutral`,
+        );
+        await holdMotionStill(page);
+        const row = page
+          .locator('#storybook-root .astryx-item')
+          .filter({hasText: label})
+          .first();
+        const box = await row.boundingBox();
+        if (box == null) {
+          throw new Error(`no ${label} row`);
+        }
+        const x = Math.round(box.x + box.width * 0.6);
+        const y = Math.round(box.y + 4);
+        const rest = await colourAt(page, x, y);
+        const cdp = await context.newCDPSession(page);
+        await cdp.send('Input.dispatchTouchEvent', {
+          type: 'touchStart',
+          touchPoints: [{x, y, id: 1}],
+        });
+        await expect
+          .poll(async () => differs(await colourAt(page, x, y), rest))
+          .toBe(true);
+        await cdp.send('Input.dispatchTouchEvent', {
+          type: 'touchEnd',
+          touchPoints: [],
+        });
+      });
+    }
+  }
+});
