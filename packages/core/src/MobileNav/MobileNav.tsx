@@ -118,8 +118,8 @@ const styles = stylex.create({
     // depended on it being a scroll container.
     overflow: 'clip',
     overscrollBehavior: 'contain',
-    // The scrim and the header block pans. The dialog sets no touch-action, so
-    // a layer in the drawer keeps its own.
+    // Only the scrim blocks pans. The dialog sets no touch-action, so a layer
+    // in the drawer keeps its own.
     outline: 'none',
     // Native <dialog> uses display:none when closed.
     // Open state applied via isOpen prop to avoid :where([open]) specificity issues.
@@ -168,10 +168,9 @@ const styles = stylex.create({
       },
     },
   },
-  // The area beside the drawer. Stop pans passing through (pull-to-refresh,
-  // background scroll), but leave pinch to the browser: the open nav covers
-  // the whole viewport, and pinch-zoom is how phone readers resize text
-  // (WCAG 1.4.4).
+  // The area beside the drawer. Pans here would reach the page, so block
+  // them. Leave pinch to the browser. The nav covers the viewport, and pinch
+  // is how readers enlarge text (WCAG 1.4.4).
   scrim: {
     position: 'absolute',
     inset: 0,
@@ -249,8 +248,6 @@ const styles = stylex.create({
     minHeight: spacingVars['--spacing-12'],
     paddingInline: spacingVars['--spacing-2'],
     flexShrink: 0,
-    // The header does not scroll, so a pan on it would reach the page.
-    touchAction: 'pinch-zoom',
     borderBlockEndWidth: borderVars['--border-width'],
     borderBlockEndStyle: 'solid',
     borderBlockEndColor: colorVars['--color-border'],
@@ -700,8 +697,6 @@ export function MobileNav({
   // Handle clicks on the dialog backdrop area (outside the drawer)
   const handleDialogClick = useCallback(
     (event: React.MouseEvent<HTMLDialogElement>) => {
-      // Only close on the overlay beside the drawer (the dialog itself or its
-      // scrim), not on the drawer or its children.
       if (
         event.target === event.currentTarget ||
         event.target === scrimRef.current

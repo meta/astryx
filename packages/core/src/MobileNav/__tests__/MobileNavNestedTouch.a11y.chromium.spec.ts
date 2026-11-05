@@ -6,8 +6,8 @@
  *   input (CDP)
  * @output Browser evidence that a Dialog opened inside the open drawer keeps
  *   touch scrolling: no ancestor of its content restricts panning, its
- *   results scroll under a finger drag, and the scrim and the header still
- *   block background pans
+ *   results scroll under a finger drag, and the scrim still blocks
+ *   background pans
  * @position Some browsers resolve `touch-action` through every DOM ancestor,
  *   so a block on the drawer would reach a layer inside it. Chromium stops at
  *   the nearest scroll container and scrolls the results either way, so the
@@ -105,7 +105,7 @@ test('a Dialog opened inside the drawer keeps touch scrolling', async ({
   );
 });
 
-test('the scrim and the header block background pans and allow pinch', async ({
+test('the scrim blocks background pans and allows pinch, and the header restricts nothing', async ({
   page,
 }) => {
   await page.goto(
@@ -122,5 +122,5 @@ test('the scrim and the header block background pans and allow pinch', async ({
       header: header == null ? null : getComputedStyle(header).touchAction,
     };
   });
-  expect(values).toEqual({scrim: 'pinch-zoom', header: 'pinch-zoom'});
+  expect(values).toEqual({scrim: 'pinch-zoom', header: 'auto'});
 });

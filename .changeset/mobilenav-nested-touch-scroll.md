@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] The open `MobileNav` drawer blocks background pans on its scrim and header instead of on the whole drawer, so a Dialog or other layer opened inside it keeps its own touch scrolling in a browser that resolves `touch-action` through DOM ancestors. Pinch-zoom still works over the nav.
+[fix] The open `MobileNav` drawer blocks background pans on the scrim beside it instead of on the whole drawer, so no drawer element restricts `touch-action` for a Dialog or other layer rendered inside it. Pinch-zoom still works over the nav.
 
 @cixzhang
