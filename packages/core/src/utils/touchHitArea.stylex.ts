@@ -6,7 +6,7 @@
  * @output Exports `touchHitAreaStyles.layer`, a host's invisible hit band
  *   under a coarse pointer
  * @position Internal styling utility for CheckboxInput, RadioListItem, List
- *   rows and InfoTip. Each keeps its insets live with `useTouchHitArea`
+ *   rows, InfoTip and SegmentedControl segments. Each keeps its insets live with `useTouchHitArea`
  *   (utils/touchHitArea.ts).
  *
  * The band is the host's `::after`, grown past each edge by the measured

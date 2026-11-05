@@ -7,8 +7,8 @@
  * @input The radiogroup element, the selection motion controller and whether
  *   the control is enabled
  * @output useSegmentedTouchTracking (a press of any pointer, landing to
- *   lift, and its ClickWait), and segmentTargetAt, measureSegments and
- *   liftTargetAt, the segment a pointer counts for
+ *   lift, and its ClickWait), and segmentTargetAt, measureSegments,
+ *   measureControlBounds and liftTargetAt, the segment a pointer counts for
  * @position Internal to SegmentedControl; drives useSegmentedSelectionMotion.ts
  *
  * SYNC: When modified, update:
@@ -28,6 +28,7 @@ import {
 import {lockSelection} from '../gestures/selectionLock';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {awaitBrowserClick, clickForLift} from '../utils/browserClickWait';
+import {HIT_INSET_PROPERTIES, type HitInsets} from '../utils/hitArea';
 import {
   SEGMENT_SELECTOR,
   type SegmentedSelectionMotion,
@@ -125,6 +126,35 @@ export function liftTargetAt(
 
 const NO_BOUNDS: ControlBounds = {left: 0, top: 0, right: -1, bottom: -1};
 
+/** A measured hit inset on `element`, px (0 when none is written). */
+function hitInset(element: HTMLElement, side: keyof HitInsets): number {
+  const value = Number.parseFloat(
+    element.style.getPropertyValue(HIT_INSET_PROPERTIES[side]),
+  );
+  return Number.isFinite(value) ? value : 0;
+}
+
+/**
+ * The box a lift may commit in: the control's own box, grown to each
+ * segment's touch hit band (utils/hitArea), so a tap on a band selects its
+ * segment. Under a fine pointer no band is written and this is the box.
+ */
+export function measureControlBounds(
+  track: HTMLElement,
+  segments: ReadonlyArray<SegmentSpan>,
+): ControlBounds {
+  const rect = track.getBoundingClientRect();
+  let {left, top, right, bottom} = rect;
+  for (const {element} of segments) {
+    const box = element.getBoundingClientRect();
+    left = Math.min(left, box.left - hitInset(element, 'left'));
+    top = Math.min(top, box.top - hitInset(element, 'top'));
+    right = Math.max(right, box.right + hitInset(element, 'right'));
+    bottom = Math.max(bottom, box.bottom + hitInset(element, 'bottom'));
+  }
+  return {left, top, right, bottom};
+}
+
 /**
  * Tracks a press on the control as UIKit's segmented control does. The press
  * tracker reports the press from landing to lift. It never claims the
@@ -133,8 +163,8 @@ const NO_BOUNDS: ControlBounds = {left: 0, top: 0, right: -1, bottom: -1};
  * still ends the press.
  *
  * The lift decides the segment, wherever the press began. Inside the control,
- * the segment under the pointer counts, else the nearest one. Outside the
- * control, nothing counts.
+ * or on a segment's touch hit band, the segment under the pointer counts,
+ * else the nearest one. Outside them, nothing counts.
  *
  * A tap gets the browser's own click. A drag gets no click from the browser,
  * so the tracker clicks the segment at the lift. Either way the item's
@@ -215,13 +245,7 @@ export function useSegmentedTouchTracking(
           clickWait.end();
           isDraggingRef.current = false;
           segmentsRef.current = measureSegments(track);
-          const rect = track.getBoundingClientRect();
-          boundsRef.current = {
-            left: rect.left,
-            top: rect.top,
-            right: rect.right,
-            bottom: rect.bottom,
-          };
+          boundsRef.current = measureControlBounds(track, segmentsRef.current);
           tracker.begin(touch.x, touch.y);
           motion.begin(track, tracker.beganOn, touch.pointerType === 'touch');
           break;
