@@ -86,6 +86,10 @@
     "reason": "ChartTooltip uses explicitly physical left/right/top viewport placement and clamping. It has no logical start/end placement, direction-dependent control order, horizontal scrolling action, or coarse form hit target; tooltip rows inherit bidi layout without component-specific directional logic."
   },
   {
+    "component": "charts/LineChart",
+    "reason": "LineChart adds no directional layout of its own: the SVG lines sit on a Cartesian data scale with physical axes and grid, the legend is owned by ChartLegend (measured RTL-ready), the tooltip by ChartTooltip, and the title and subtitle are block-flow text. It owns no inline-axis placement or order, directional glyph, scroll, drag, overlay, or keyboard behavior."
+  },
+  {
     "component": "richtext/RichTextEditorAutoLinkPlugin",
     "reason": "RichTextEditorAutoLinkPlugin renders no visual or interactive DOM of its own. It transforms typed URL and email text into native-direction links inside the editor and owns no directional glyph, layout, placement, order, scrolling, dragging, overlay, or keyboard behavior."
   },
