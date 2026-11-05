@@ -112,12 +112,16 @@ export function claimContextMenuPress(layer: HTMLElement): void {
   };
   holdCapture(true);
   // Hit testing ignores the capture, so it finds what is under the pointer.
+  // It runs in the layer's own tree: in an open shadow root the document
+  // would answer with the shadow host.
+  const root = layer.getRootNode() as Document | ShadowRoot;
+  const scope =
+    root !== layer.ownerDocument && typeof root.elementFromPoint === 'function'
+      ? root
+      : layer.ownerDocument;
   const followPointer = (event: PointerEvent) => {
     if (event.pointerId === pointerId) {
-      const under = layer.ownerDocument.elementFromPoint(
-        event.clientX,
-        event.clientY,
-      );
+      const under = scope.elementFromPoint(event.clientX, event.clientY);
       holdCapture(under == null || !layer.contains(under));
     }
   };
