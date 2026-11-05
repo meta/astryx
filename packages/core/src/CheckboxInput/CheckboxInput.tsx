@@ -60,6 +60,8 @@ import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
+import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
+import {registerBoxHold} from '../utils/boxHold';
 import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
 import {
   registerEnglishFallback,
@@ -69,6 +71,9 @@ import english from '../i18n/generated-english/CheckboxInput/CheckboxInput.gener
 import {CheckboxRowPressContext} from './CheckboxRowPressContext';
 
 registerEnglishFallback(english);
+// Registered here, not in the press controller, so a page with no box carries
+// none of its code.
+registerBoxHold();
 
 /** Written by the touch press controller while the row is pressed. */
 const PRESSED_ON = '[data-astryx-press="on"]';
@@ -561,6 +566,10 @@ export function CheckboxInput({
           ownsPress && interactionOverlayStyles.pressedAlpha,
         )}>
         <div
+          // iOS answers a long hold on the box with a text selection and no
+          // click. The press controller holds the row's selection for a press
+          // on the marked box, and checks it if no click comes.
+          {...(isDisabled ? undefined : pressBoxProps)}
           {...stylex.props(
             styles.checkboxWrapper,
             wrapperSizeStyles[size],
