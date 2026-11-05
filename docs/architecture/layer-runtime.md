@@ -562,6 +562,12 @@ layers use Layer rendering without joining Escape/platform dismissal.
 - **INV18 — Only a shown layer's trigger is an anchor.**
   A trigger carries its CSS anchor name only while its layer is shown; a closed trigger is not an anchor, so a surface that moves around it keeps its transform animation off the main thread.
   A layer that animates out counts as shown until its animations end.
+- **INV19 — Content in a layer sizes against the layer.** The content root of
+  every layer that hosts page-like content (Dialog, Drawer, BottomSheet,
+  Lightbox, and MobileNav) is an inline-size container. Container queries and
+  container-relative units inside it, including Layout regions' widths,
+  resolve against the layer and never against a container around the layer's
+  opener (`spec:AST-038`) (DEC-1).
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
@@ -722,10 +728,25 @@ app-declared inset.
 runtime and must move to `shipped` before its requirements are incorporated into
 this current architecture record.
 
+### DEC-1 — Layers are size containers
+
+**Decider:** pending
+
+A person opening a dialog from a narrow page section sees the dialog's title,
+filters, and pager squeezed and centred, because Layout regions inside measure
+the section the dialog came from. A dialog is its own space, so its content
+measures the dialog. This matches the layer content boundary, which already
+stops the opener's layout from reaching layer content (`spec:AST-038`).
+
+Rejected: Layout regions measuring with percentages instead of container
+units, which breaks their sizing in every page container. Rejected: asking
+apps to add a container inside each dialog.
+
 ## Verification
 
 | Invariant    | Evidence                                                                                                                                                                                                                                                                             | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV19        | Real-browser checks: a Dialog, a Drawer, and a BottomSheet opened from a section that is itself an inline-size container, each holding a Layout with a header and footer, at 390 and 1440 px                                                                                         | Layout regions measured against the opener's container                                                                                                                                                                                                                                                                                                                                                                       |
 | INV1, INV2   | `useLayer.test.tsx` and `layerHost.test.ts`                                                                                                                                                                                                                                          | Invalid DOM, stale host, lost theme/writing context, or portal mistaken for top-layer promotion                                                                                                                                                                                                                                                                                                                              |
 | INV3–INV5    | `useLayer.test.tsx` and `anchorName.test.ts`                                                                                                                                                                                                                                         | A mode leaks geometry, RTL resolves from the wrong context, fallback clips, or a sibling anchor is lost                                                                                                                                                                                                                                                                                                                      |
 | INV11        | `layerViewportInset.test.ts`, `useLayer.test.tsx`, and the `Core/Layer` viewport-inset stories under the story play guard at a desktop and a phone viewport; `BaseTypeahead.incremental.test.tsx` and the Typeahead incremental-results stories for the `spec:AST-092` FR6 exception | A second gutter definition, a `100%`-of-span cap, a layer narrower than its explicit size, a layer box wider than the viewport, a layer inside the gutter, or a layer that slides toward an off-screen anchor; for an open Typeahead popup, a later list for the same query that flips it to the other side or grows it past the room on its side, or a first list for a query that is capped to the span beside the trigger |
