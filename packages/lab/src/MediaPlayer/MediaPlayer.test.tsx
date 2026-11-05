@@ -263,6 +263,19 @@ describe('VideoPlayer', () => {
     expect(screen.getByRole('button', {name: 'Play'})).toBeInTheDocument();
   });
 
+  it('shows the bar beside the replay control after the end', async () => {
+    const user = userEvent.setup();
+    const {video} = renderVideoPlayer();
+    const playback = fakePlayback(video);
+    act(() => screen.getByRole('button', {name: 'Play'}).focus());
+    await user.keyboard('{Enter}');
+    act(() => {
+      playback.end();
+    });
+    await user.click(screen.getByRole('button', {name: 'Replay'}));
+    expect(screen.getByRole('button', {name: 'Pause'})).toBeInTheDocument();
+  });
+
   it('keeps the loading spinner out of the accessibility tree', () => {
     const {video} = renderVideoPlayer();
     fakePlayback(video);

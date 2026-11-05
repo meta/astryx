@@ -124,10 +124,10 @@ const styles = stylex.create({
     translate: `0 ${spacingVars['--spacing-2']}`,
     pointerEvents: 'none',
   },
-  // The large play control replaces the bar before playback and after the
-  // end. The bar stays in the tab order, because the large control is
-  // pointer-only, so keyboard focus inside the bar shows it.
-  barBehindLargePlay: {
+  // Before playback, the large play control takes the bar's place. The bar
+  // stays in the tab order, because the large control is pointer-only, so
+  // keyboard focus inside the bar shows it.
+  barBeforePlayback: {
     opacity: {
       default: 0,
       ':focus-within': 1,
@@ -428,12 +428,11 @@ function VideoControlBar({
   markers?: readonly MediaTimelineMarker[];
 }) {
   const {isControlsVisible} = useMediaPlayerContext('VideoPlayer');
-  const showsLargePlay = useMediaSelector(
+  // After the end, the bar stays available beside the replay control, so the
+  // timeline stays in reach.
+  const isBeforePlayback = useMediaSelector(
     'VideoPlayer',
-    state =>
-      state.error == null &&
-      !(state.isWaiting && state.hasStarted) &&
-      (!state.hasStarted || state.isEnded),
+    state => state.error == null && !state.hasStarted,
   );
   const barRef = useRef<HTMLDivElement | null>(null);
   const volumeReveal = useContainerReveal();
@@ -448,7 +447,7 @@ function VideoControlBar({
           styles.frosted,
           styles.bar,
           !isControlsVisible && styles.barHidden,
-          showsLargePlay && styles.barBehindLargePlay,
+          isBeforePlayback && styles.barBeforePlayback,
         )}>
         <MediaPlayButton />
         <MediaTimeSlider chapters={chapters} markers={markers} />
