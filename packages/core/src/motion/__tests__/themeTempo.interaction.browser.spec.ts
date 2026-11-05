@@ -113,7 +113,7 @@ async function travels(
 }
 
 test.describe('the springs follow the theme tempo (spec:AST-108 FR3)', () => {
-  test("a spring inside a tempo 1.5 scope draws at 1.5 × t what it draws at t outside it", async ({
+  test('a spring inside a tempo 1.5 scope draws at 1.5 × t what it draws at t outside it', async ({
     page,
   }) => {
     await openScopes(page);
@@ -161,9 +161,7 @@ async function glideMs(page: Page, row: string): Promise<number> {
   await section.getByRole('button', {name: 'Shipping details'}).click();
   const after = section.locator('[data-after-collapsible]');
   await expect
-    .poll(async () =>
-      after.evaluate(element => element.getAnimations().length),
-    )
+    .poll(async () => after.evaluate(element => element.getAnimations().length))
     .toBeGreaterThan(0);
   return after.evaluate(element => {
     const glide = element
