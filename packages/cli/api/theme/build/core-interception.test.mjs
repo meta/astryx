@@ -177,6 +177,27 @@ describe("Core's entries", () => {
     }
   });
 
+  it('patchCommonJs wraps a root whose body requires other files before it defines defineTheme', () => {
+    const {theme} = project({
+      'package.json': CORE_PACKAGE,
+      'theme.cjs': 'module.exports = {};',
+      'util.cjs': 'module.exports = {name: input => input.name};',
+      'index.cjs':
+        "const util = require('./util.cjs');\nexports.defineTheme = input => ({...input, defined: util.name(input)});\n",
+    });
+    const interception = interceptCore(themeNamespace(), null);
+    const patch = interception.patchCommonJs(theme);
+    try {
+      const root = createRequire(theme)('@astryxdesign/core');
+      expect(interception.observed(root.defineTheme({name: 'reef'}))).toBe(
+        true,
+      );
+      expect(patch.covered).toBe(true);
+    } finally {
+      patch.undo();
+    }
+  });
+
   it('patchCommonJs skips the entries of a package config it cannot read', () => {
     const {theme} = project({
       'package.json': '{"name": "@astryxdesign/core", "exports": ',

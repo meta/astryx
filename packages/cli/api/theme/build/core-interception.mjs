@@ -544,10 +544,12 @@ export function interceptCore(coreThemeModule, coreRootModule) {
       if (rootFile) {
         /** @type {any} */
         const loader = Module;
-        /** Wraps the root if its file has loaded; false while it has not. */
+        /** Wraps the root once its file has run; false until then. */
         const wrapLoadedRoot = () => {
           const loaded = loader._cache[rootFile];
-          if (!loaded) return false;
+          // A CommonJS module is cached before its body runs, so a require
+          // inside the root's own body sees it partly built.
+          if (!loaded?.loaded) return false;
           if (!wrap(loaded.exports)) covered = false;
           return true;
         };
