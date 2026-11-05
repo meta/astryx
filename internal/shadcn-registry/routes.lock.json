@@ -568,6 +568,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-circle-check-indicator",
+      "path": "components/lab/circle-check-indicator",
+      "aliases": []
+    },
+    {
       "name": "component-lab-circular-progress",
       "path": "components/lab/circular-progress",
       "aliases": []
@@ -1959,6 +1964,11 @@
     {
       "name": "example-create-animator-playing-cards-in-plain-java-script",
       "path": "examples/create-animator/playing-cards-in-plain-java-script",
+      "aliases": []
+    },
+    {
+      "name": "example-create-pan-gesture-a-playing-card-without-react",
+      "path": "examples/create-pan-gesture/a-playing-card-without-react",
       "aliases": []
     },
     {
@@ -3712,6 +3722,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-icon-status-row",
+      "path": "examples/use-icon/status-row",
+      "aliases": []
+    },
+    {
       "name": "example-use-image-mode-photo-caption",
       "path": "examples/use-image-mode/photo-caption",
       "aliases": []
@@ -3754,6 +3769,11 @@
     {
       "name": "example-use-overflow-editor-toolbar",
       "path": "examples/use-overflow/editor-toolbar",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-playing-card",
+      "path": "examples/use-pan-gesture/a-playing-card",
       "aliases": []
     },
     {
@@ -3872,6 +3892,11 @@
       "aliases": []
     },
     {
+      "name": "hook-create-pan-gesture",
+      "path": "hooks/create-pan-gesture",
+      "aliases": []
+    },
+    {
       "name": "hook-use-animated-layout",
       "path": "hooks/use-animated-layout",
       "aliases": []
@@ -3949,6 +3974,11 @@
     {
       "name": "hook-use-hover-card",
       "path": "hooks/use-hover-card",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-icon",
+      "path": "hooks/use-icon",
       "aliases": []
     },
     {
@@ -4044,6 +4074,11 @@
     {
       "name": "hook-use-overflow",
       "path": "hooks/use-overflow",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-pan-gesture",
+      "path": "hooks/use-pan-gesture",
       "aliases": []
     },
     {

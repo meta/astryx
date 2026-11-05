@@ -122,8 +122,8 @@ function touchPointerType(touch: Touch): string {
   return (touch as StylusTouch).touchType === 'stylus' ? 'pen' : 'touch';
 }
 
-// A mouse's stretch past fully open: a resisted fraction of the drag, capped
-// at OVERSCROLL_MAX.
+// A mouse's or a pen's stretch past fully open: a resisted fraction of the
+// drag, capped at OVERSCROLL_MAX.
 const OVERSCROLL_RESISTANCE = 0.35;
 // SYNC: must not exceed MIN_RESERVE in BottomSheetPanel.tsx, the smallest
 // reserve the sheet keeps below the screen.

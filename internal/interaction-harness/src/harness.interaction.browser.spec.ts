@@ -1324,11 +1324,12 @@ test.describe('frame evidence', () => {
   test('in the WebKit container, compiled shaders outlive the run', async ({
     browser,
   }, testInfo) => {
-    // The official Playwright image keeps its browsers here.
+    // Only webkit-container.mjs sets ASTRYX_WEBKIT_CONTAINER, and only it
+    // keeps the shader cache on the host.
     test.skip(
       testInfo.project.name !== 'webkit' ||
-        process.env.PLAYWRIGHT_BROWSERS_PATH !== '/ms-playwright',
-      'runs inside webkit-container.mjs',
+        process.env.ASTRYX_WEBKIT_CONTAINER !== '1',
+      'no host-kept shader cache: runs only under webkit-container.mjs',
     );
     // A cache inside the container dies with it: every run then compiled each
     // shader again, 450–700 ms in the first frame of a blurred layer.
@@ -2592,6 +2593,81 @@ test.describe('curve sampling', () => {
       0.15,
     );
     expect(Math.max(...samples.map(s => s.value))).toBeGreaterThan(200); // the overshoot is presented
+  });
+});
+
+// A full-size veil on the fixture's box, drawn by its ::before.
+const VEIL_STYLE =
+  "#box::before { content: ''; position: absolute; inset: 0; background: #000; opacity: 0; }";
+
+test.describe('pseudo-element animations', () => {
+  test('sampleCurve reads a ::before animation when given its pseudo-element', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate((el, veil) => {
+      const style = document.createElement('style');
+      style.textContent = veil;
+      document.head.append(style);
+      el.animate(
+        [
+          {opacity: 0, transform: 'translateY(0px)'},
+          {opacity: 1, transform: 'translateY(40px)'},
+        ],
+        {duration: 300, easing: 'linear', pseudoElement: '::before'},
+      );
+    }, VEIL_STYLE);
+    await holdAnimations(page, box);
+    const samples = await sampleCurve(box, [0, 75, 150, 225, 300], {
+      pseudoElement: '::before',
+    });
+    // Labelled by the veil's own clock: the last read just inside its end.
+    expect(samples.at(-1)).toMatchObject({t: 300, presentedAt: 299.5});
+    const fade = compareCurve(curveOf(samples, 'opacity'), t => t / 300, 0.005);
+    expect(fade.maxError, JSON.stringify(fade.worst)).toBeLessThanOrEqual(
+      0.005,
+    );
+    const move = compareCurve(
+      curveOf(samples, 'translateY'),
+      t => (40 * t) / 300,
+      0.05,
+    );
+    expect(move.maxError, JSON.stringify(move.worst)).toBeLessThanOrEqual(0.05);
+    // Without it, the box itself, which does not move.
+    const [boxAt150] = await sampleCurve(box, [150]);
+    expect(boxAt150.opacity).toBe(1);
+    expect(boxAt150.transform.translateY).toBe(0);
+  });
+
+  test('waitForRest waits out a ::before animation', async ({page}) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate((el, veil) => {
+      const style = document.createElement('style');
+      style.textContent = veil;
+      document.head.append(style);
+      (window as unknown as {__veil: Animation}).__veil = el.animate(
+        [{opacity: 0}, {opacity: 1}],
+        {
+          duration: 600,
+          easing: 'linear',
+          fill: 'forwards',
+          pseudoElement: '::before',
+        },
+      );
+    }, VEIL_STYLE);
+    // Its subtree read includes the element's pseudo-elements.
+    await waitForRest(box);
+    const veil = await box.evaluate(element => {
+      const a = (window as unknown as {__veil: Animation}).__veil;
+      return {
+        playState: a.playState,
+        currentTime: Number(a.currentTime),
+        opacity: getComputedStyle(element, '::before').opacity,
+      };
+    });
+    expect(veil).toMatchObject({playState: 'finished', opacity: '1'});
   });
 });
 

@@ -17,6 +17,8 @@ import {
   formatCalendarInstant,
   formatCalendarInstantRange,
   formatCalendarMonthLabel,
+  formatCalendarYearLabel,
+  calendarYearSpansEras,
   isCalendarSystemAvailable,
   isGregorianAligned,
   isInCalendarMonth,
@@ -450,5 +452,117 @@ describe('dates from calendar fields', () => {
     expect(calendarMonthsInYear('hebrew', iso('2024-02-10'))).toBe(13);
     expect(calendarMonthsInYear('hebrew', iso('2025-03-01'))).toBe(12);
     expect(calendarMonthsInYear('gregory', iso('2025-03-01'))).toBe(12);
+  });
+});
+
+describe('formatCalendarYearLabel', () => {
+  it.each([
+    [2019, 1, 1, '平成31'],
+    [2019, 4, 30, '平成31'],
+    [2019, 5, 1, '令和元'],
+    [2019, 7, 1, '令和元'],
+    [1989, 1, 22, '平成元'],
+    [1989, 1, 3, '昭和64'],
+    [1989, 7, 1, '平成元'],
+    [1926, 12, 31, '昭和元'],
+    [1912, 7, 1, '明治45'],
+  ])(
+    'labels Japanese year %i with month %i and day %i as %s',
+    (year, month, day, label) => {
+      expect(
+        formatCalendarYearLabel('japanese', year, 'ja-JP', {month, day}),
+      ).toBe(label);
+    },
+  );
+
+  it('clamps the day to the month', () => {
+    expect(
+      formatCalendarYearLabel('japanese', 1926, 'ja-JP', {month: 12, day: 99}),
+    ).toBe('昭和元');
+  });
+
+  it('keeps one label for a year without an era change', () => {
+    expect(
+      formatCalendarYearLabel('japanese', 2020, 'ja-JP', {month: 1, day: 1}),
+    ).toBe('令和2');
+    expect(formatCalendarYearLabel('japanese', 2020, 'ja-JP')).toBe('令和2');
+    expect(formatCalendarYearLabel('persian', 1405, 'en')).toBe('1405 AP');
+    expect(formatCalendarYearLabel('roc', 1912, 'zh-TW')).toBe('民國1');
+    expect(formatCalendarYearLabel('buddhist', 2026, 'th-TH')).toBe(
+      'พ.ศ. 2569',
+    );
+    expect(formatCalendarYearLabel('chinese', 2027, 'zh')).toBe('2027');
+    expect(formatCalendarYearLabel('gregory', 2026, 'en')).toBe('2026');
+  });
+
+  it('writes the era year in the locale order', () => {
+    expect(
+      formatCalendarYearLabel('japanese', 2019, 'en', {month: 1, day: 1}),
+    ).toBe('31 Heisei');
+  });
+
+  it('finds the years that span an era change from the calendar data', () => {
+    const spans = [1868, 1912, 1926, 1989, 2019, 2020].filter(year =>
+      calendarYearSpansEras('japanese', year, 'ja-JP'),
+    );
+    expect(spans).toEqual([1868, 1912, 1926, 1989, 2019]);
+    expect(calendarYearSpansEras('chinese', 2027, 'zh')).toBe(false);
+    expect(calendarYearSpansEras('gregory', 2019, 'en')).toBe(false);
+  });
+});
+
+describe('formatCalendarMonthLabel with a kept day', () => {
+  const month = (isoDate: string) =>
+    calendarMonthOf('japanese', iso(isoDate as ISODateString));
+
+  it.each([
+    ['1989-01-01', 3, '昭和64年1月'],
+    ['1989-01-01', 22, '平成元年1月'],
+    ['1926-12-01', 26, '昭和元年12月'],
+    ['1926-12-01', 24, '大正15年12月'],
+    ['1912-07-01', 30, '大正元年7月'],
+    ['1868-10-01', 23, '明治元年10月'],
+  ])('names the era of day %s + %i as %s', (start, day, label) => {
+    expect(
+      formatCalendarMonthLabel('japanese', month(start), 'ja-JP', day),
+    ).toBe(label);
+  });
+
+  it('clamps the day to the month', () => {
+    expect(
+      formatCalendarMonthLabel('japanese', month('1926-12-01'), 'ja-JP', 99),
+    ).toBe('昭和元年12月');
+  });
+
+  it('keeps the middle-of-month label for a month without an era change', () => {
+    expect(
+      formatCalendarMonthLabel('japanese', month('2019-01-01'), 'ja-JP', 22),
+    ).toBe('平成31年1月');
+    expect(
+      formatCalendarMonthLabel('japanese', month('2019-05-01'), 'ja-JP', 1),
+    ).toBe('令和元年5月');
+    expect(
+      formatCalendarMonthLabel(
+        'persian',
+        calendarMonthOf('persian', iso('2026-11-02')),
+        'en',
+        1,
+      ),
+    ).toBe(
+      formatCalendarMonthLabel(
+        'persian',
+        calendarMonthOf('persian', iso('2026-11-02')),
+        'en',
+      ),
+    );
+    expect(
+      formatCalendarMonthLabel('gregory', month('1989-01-01'), 'en', 3),
+    ).toBe('January 1989');
+  });
+
+  it('keeps the middle-of-month label without a day', () => {
+    expect(
+      formatCalendarMonthLabel('japanese', month('1989-01-01'), 'ja-JP'),
+    ).toBe('平成元年1月');
   });
 });

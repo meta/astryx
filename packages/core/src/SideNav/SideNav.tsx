@@ -621,7 +621,6 @@ export function SideNav({
     onCollapseChange: onCollapsedChange,
   });
 
-  // The region that sizes the rail: the caller's, or SideNav's own.
   const region = ownerRegion ?? resizableHook;
   const collapsed = region.isCollapsed;
 
