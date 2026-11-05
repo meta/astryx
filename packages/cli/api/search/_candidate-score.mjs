@@ -35,7 +35,6 @@
  * "cable" is not "table".
  */
 
-import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {
   stem,
   wordForms,
@@ -43,7 +42,7 @@ import {
   startsAWordOf,
   wordsOf,
   joined,
-  isTypo,
+  typoDistance,
 } from './_words.mjs';
 import {pluralOf} from './_query.mjs';
 
@@ -224,8 +223,8 @@ export function scoreCandidate(
         consider(60, `name contains "${term}"`);
       }
       if (fuzzy) {
-        const dist = levenshteinDistance(term, nameLower);
-        if (isTypo(term, nameLower, dist)) {
+        const dist = typoDistance(term, nameLower);
+        if (dist != null) {
           consider(
             dist === 1 ? 80 : dist === 2 ? 40 : 20,
             `similar name (distance ${dist})`,
@@ -280,8 +279,8 @@ export function scoreCandidate(
     }
     if (startsAWordOf(term, kw)) consider(70, `keyword "${kw}"`);
     if (fuzzy) {
-      const dist = levenshteinDistance(term, kwLower);
-      if (isTypo(term, kwLower, dist) && dist <= 2) {
+      const dist = typoDistance(term, kwLower);
+      if (dist != null && dist <= 2) {
         consider(dist === 1 ? 70 : 30, `keyword "${kw}" (distance ${dist})`);
       }
     }
