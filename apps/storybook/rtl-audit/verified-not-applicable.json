@@ -62,6 +62,10 @@
     "reason": "No direction-sensitive visual, layout, or behavior. The track and fill are concentric SVG circles sharing one center; size, stroke, dash, and clockwise rotation are intentionally identical in LTR and RTL. The optional label is vertically stacked and centered, with no inline positioning or directional glyph."
   },
   {
+    "component": "lab/CircleCheckIndicator",
+    "reason": "CircleCheckIndicator draws one centered circle: an inset-shadow ring when unchecked, and a filled circle when checked or partial. Flex centers the checkmark or the partial-state bar inside it. The checkmark is one SVG path that draws the same in LTR and RTL, as Core's Indicator marks do, and its only offset is on the block axis. The bar, the press layer (inset 0), and the forced-colors border are symmetric. Only colour and shadow animate. It is aria-hidden and owns no inline placement, order, scrolling, dragging, overlay, or keyboard behavior. In its mapped stories, CheckboxInput and CheckboxList place it, order each row, and own the native input, and the audit covers them separately."
+  },
+  {
     "component": "core/BottomSheet",
     "reason": "BottomSheet owns no inline axis to mirror. The sheet is a centered column inside an insetInline: 0 container; its borders and top corner radii are identical on both inline edges; and its handle spans both inline edges with a centered pill. Motion and scrolling are block-axis only, and header and close chrome come from caller content."
   },
