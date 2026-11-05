@@ -38,6 +38,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 
 /**
  * NavItem styles with hover/selected states
@@ -212,6 +213,11 @@ export function TopNavItem({
   // disabled paths of Link and SideNavItem.)
   const Root = isDisabled ? 'a' : LinkComponent;
 
+  // A disabled item runs no caller handler other than `onFocus` and `onBlur`
+  // (spec:AST-085 FR2), as a natively disabled control runs none. `onClick` is
+  // handled separately below.
+  const callerProps = withholdCallerHandlers(props, isDisabled);
+
   // =========================================================================
   // Drawer mode — render as a SideNavItem-style vertical list element
   // =========================================================================
@@ -251,7 +257,7 @@ export function TopNavItem({
           className,
           style,
         )}
-        {...props}
+        {...callerProps}
         onClick={handleDrawerClick}>
         {icon}
         {!isIconOnly && (children ?? label)}
@@ -289,7 +295,7 @@ export function TopNavItem({
         className,
         style,
       )}
-      {...props}>
+      {...callerProps}>
       {icon}
       {!isIconOnly && (children ?? label)}
     </Root>
