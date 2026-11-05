@@ -4,7 +4,7 @@
  * @file datePicker.ts
  * @input Nothing; data only
  * @output Exports `datePicker`: the rules UIDatePicker adds to its calendar
- *   and wheels. The calendar's month grid pages like a paging scroll view.
+ *   and wheels. Its calendar pages, selects and toggles to the wheels.
  *   The month/year wheels change the date, the AM/PM column follows the hour,
  *   a column turns back onto a bound, and a day clamps to its month.
  * @position The date picker domain of the UIKit constants table
@@ -17,6 +17,40 @@
 
 export const datePicker = {
   calendar: {
+    selection: {
+      /**
+       * A tap on a day selects it at once, with no animation. The new day's
+       * circle and numeral take their style in the frame of the lift, and
+       * `valueChanged` fires then.
+       * @source measured: UIKit lab, iOS 26.2 simulator, `.date` `.inline`,
+       *   taps on two days with every CAAnimation logged (none on the day
+       *   cells) and `valueChanged` timestamps 81–95 ms after touch-down,
+       *   Oct 23 2026
+       */
+      tapAnimates: false,
+    },
+    monthYearToggle: {
+      /**
+       * A tap on the title fades the month and year wheels in while the day
+       * grid, the weekday row and both chevrons fade out. Each fade takes
+       * 0.25 s on UIKit's default curve, and a second tap reverses it.
+       * @source measured: UIKit lab, iOS 26.2 simulator, `.date` `.inline`,
+       *   title taps opening and closing the wheels: five CABasicAnimation
+       *   opacity 0.25 s (`_UICalendarMonthYearSelector`, the
+       *   `UICollectionView`, `_UICalendarWeekdayView`, both buttons) under
+       *   one `UIView.animate` 0.25 s with options 4, Oct 23 2026
+       */
+      fadeMs: 250,
+      /**
+       * The title's chevron turns a quarter turn with the fades. It points
+       * along the reading direction for the calendar and down for the wheels.
+       * @source measured: UIKit lab, iOS 26.2 simulator, `.date` `.inline`,
+       *   the title's UIImageView: CABasicAnimation transform 0.25 s from a
+       *   −90° rotation on opening and from +90° on closing, to identity,
+       *   Oct 23 2026
+       */
+      chevronTurnDegrees: 90,
+    },
     pager: {
       /**
        * While a finger drags the month grid, the title names the month

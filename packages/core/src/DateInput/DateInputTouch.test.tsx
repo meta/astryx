@@ -58,17 +58,41 @@ import {
   DEFAULT_MONTH_REACH,
 } from './monthGeometry';
 import {WHEEL_ROW_HEIGHT} from './wheelOptions';
+import {datePicker} from '../motion/uikit/datePicker';
+import {timing} from '../motion/uikit/timing';
 import {SWIPE_DISTANCE} from './useOwnScrollGesture';
 import {DRAG_SLOP} from './usePointerDragScroll';
 import {SCROLL_QUIET_MS} from './useScrollSettle';
 import {useCalendarDays} from '../Calendar/hooks/useCalendarDays';
 import type * as CalendarDaysModule from '../Calendar/hooks/useCalendarDays';
+import {Button} from '../Button';
+import type * as ButtonModule from '../Button';
+import {IconButton} from '../IconButton';
+import type * as IconButtonModule from '../IconButton';
+import {MonthYearWheels} from './MonthYearWheels';
+import type * as MonthYearWheelsModule from './MonthYearWheels';
+import {SHEET_SETTLE_MS} from './useWheelsWarmUp';
 
 // A pass-through spy: each call is one month pane rendering, which the
 // month/year toggle test counts. It wraps the module `MonthPane` imports.
 vi.mock('../Calendar/hooks/useCalendarDays', async importOriginal => {
   const actual = await importOriginal<typeof CalendarDaysModule>();
   return {...actual, useCalendarDays: vi.fn(actual.useCalendarDays)};
+});
+
+// Pass-through render spies: each call is one render, which the month/year
+// toggle test reads (the toggle must not re-render these).
+vi.mock('../Button', async importOriginal => {
+  const actual = await importOriginal<typeof ButtonModule>();
+  return {...actual, Button: vi.fn(actual.Button)};
+});
+vi.mock('../IconButton', async importOriginal => {
+  const actual = await importOriginal<typeof IconButtonModule>();
+  return {...actual, IconButton: vi.fn(actual.IconButton)};
+});
+vi.mock('./MonthYearWheels', async importOriginal => {
+  const actual = await importOriginal<typeof MonthYearWheelsModule>();
+  return {...actual, MonthYearWheels: vi.fn(actual.MonthYearWheels)};
 });
 
 // ---------------------------------------------------------------------------
@@ -2345,6 +2369,54 @@ describe('DateInput — month/year wheels', () => {
     expect(button('Done')).toBeInTheDocument();
   });
 
+  it('keeps the header actions and both footer actions out of reach while the toggle fades', async () => {
+    renderAndOpen();
+    // A running exit on both panels, so their own `inert` waits for the
+    // fade's end (useFadeInert).
+    for (const which of ['calendar', 'wheels'] as const) {
+      (panel(which) as HTMLElement).getAnimations = () =>
+        [
+          {transitionProperty: 'opacity', playState: 'running'},
+        ] as unknown as Animation[];
+    }
+    const button = (label: string) =>
+      [...document.querySelectorAll('dialog[open] button')].find(
+        el => el.textContent?.trim() === label,
+      );
+    const isBlocked = (element: Element | null | undefined) =>
+      element?.closest('[inert]') != null;
+    const actions = () =>
+      [
+        document.querySelector('[data-arrows="months"]'),
+        document.querySelector('[data-action="reset"]'),
+        button('Save'),
+        button('Done'),
+      ].map(isBlocked);
+    const fadeEnd = async (which: 'calendar' | 'wheels') => {
+      const event = new Event('transitionend', {bubbles: true});
+      Object.assign(event, {propertyName: 'opacity'});
+      act(() => {
+        panel(which).dispatchEvent(event);
+      });
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
+    };
+
+    // Opening: the arrows, Reset and Save leave with the toggle. Done waits
+    // for the fade, so a tap on Done cannot reach Save beneath it.
+    openWheels();
+    expect(actions()).toEqual([true, true, true, true]);
+    await fadeEnd('calendar');
+    expect(actions()).toEqual([true, true, true, false]);
+
+    // Closing: Done leaves with the toggle, and the calendar's actions wait.
+    fireEvent.click(title());
+    expect(actions()).toEqual([true, true, true, true]);
+    await fadeEnd('wheels');
+    expect(actions()).toEqual([false, false, false, true]);
+  });
+
   it('the year wheel keeps the month', () => {
     renderAndOpen(<Controlled initial="2026-03-21" {...FIVE_YEARS} />);
     openWheels();
@@ -3230,6 +3302,23 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     expect(vi.mocked(useCalendarDays)).not.toHaveBeenCalled();
   });
 
+  it('under a finger: the month/year toggle re-renders none of the sheet\u2019s buttons, only the wheels it brings live', async () => {
+    // The toggle changes the title's chevron, the panels' classes and the
+    // wheels' `isActive`. Every button keeps its element, so React skips it,
+    // and the wheels render once.
+    renderAndOpen();
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, SHEET_SETTLE_MS + 500));
+    });
+    vi.mocked(MonthYearWheels).mockClear();
+    vi.mocked(Button).mockClear();
+    vi.mocked(IconButton).mockClear();
+    fireEvent.click(document.querySelector('[data-title="month-year"]')!);
+    expect(vi.mocked(Button)).not.toHaveBeenCalled();
+    expect(vi.mocked(IconButton)).not.toHaveBeenCalled();
+    expect(vi.mocked(MonthYearWheels)).toHaveBeenCalledTimes(1);
+  });
+
   it('under a finger: MonthPager pages the months with the shared pager, each pane on its own layer', () => {
     const source = read('MonthPager.tsx');
     // UIKit's paging scroll view, not native scroll snapping: iOS gives a
@@ -3521,7 +3610,7 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     // The layer fades, both directions — the transition is on the shown
     // state, so entering and leaving it both animate.
     expect(overlay).toContain("transitionProperty: 'opacity, visibility'");
-    expect(overlay).toContain('transitionDuration: SWAP_DURATION');
+    expect(overlay).toContain('default: SWAP_DURATION');
     expect(declarations(source, 'panelOverlayHidden')).toContain('opacity: 0');
 
     // And it is opaque while it does, in the token the sheet paints itself
@@ -3576,10 +3665,8 @@ describe('DateInput — scroll CSS (definition-level)', () => {
    */
   it('fades the uncovered chrome on the same timing as the layer', () => {
     const source = read('TouchDateField.tsx');
-    for (const name of ['weekdays', 'monthArrows']) {
-      expect(declarations(source, name)).toContain(
-        'transitionDuration: SWAP_DURATION',
-      );
+    for (const name of ['weekdays', 'monthArrows', 'headerReset']) {
+      expect(declarations(source, name)).toContain('default: SWAP_DURATION');
       expect(declarations(source, `${name}Hidden`)).toContain('opacity: 0');
     }
   });
@@ -3624,6 +3711,12 @@ describe('DateInput — scroll CSS (definition-level)', () => {
    * The title chevron is the exception and keeps the token: it rotates, and
    * rotation is travel.
    */
+  /**
+   * UIDatePicker's month/year toggle: every fade and the chevron's quarter
+   * turn on `UIView.animate`'s default ease-in-ease-out, 0.25 s
+   * (motion/uikit/datePicker.ts `calendar.monthYearToggle`). StyleX inlines
+   * only literals, so the tokens repeat the table; they must stay it.
+   */
   it('fades linearly, and eases only the thing that travels', () => {
     const source = read('TouchDateField.tsx');
     const styles = source.slice(
@@ -3634,25 +3727,64 @@ describe('DateInput — scroll CSS (definition-level)', () => {
       styles.indexOf('  titleChevronOpen: {'),
     );
     expect(chevron).toContain("transitionProperty: 'transform'");
-    expect(chevron).toContain(
-      "transitionTimingFunction: easeVars['--ease-standard']",
-    );
+    expect(chevron).toContain("default: easeVars['--ease-standard']");
     // The chevron is the only eased transition; every fade is linear.
     expect(
-      styles.match(/transitionTimingFunction: easeVars\['--ease-standard'\]/g),
+      styles.match(/default: easeVars\['--ease-standard'\]/g),
     ).toHaveLength(1);
-    expect(styles.match(/transitionTimingFunction: 'linear'/g)).toHaveLength(4);
+    expect(styles.match(/default: 'linear'/g)).toHaveLength(4);
+  });
+
+  /**
+   * Under a finger the swap is UIDatePicker's month/year toggle: every fade
+   * and the chevron's turn take 0.25 s on ease-in-ease-out. They read the
+   * motion roles' CSS variables (motion/uikit/datePicker.ts
+   * `calendar.monthYearToggle`). StyleX inlines only literals, so the tokens repeat the table
+   * as the variables' fallbacks; they must stay it.
+   */
+  it('under a finger: fades and turns on UIDatePicker\u2019s toggle clock, from the table', () => {
+    const source = read('TouchDateField.tsx');
+    const styles = source.slice(
+      source.indexOf('const styles = stylex.create('),
+    );
+    // The arrows, Reset, the weekday row and the layer above fade on the
+    // toggle's clock under a finger, in CSS: one touch key each.
+    expect(
+      styles.match(/'@media \(pointer: coarse\)': TOGGLE_CURVE/g),
+    ).toHaveLength(5);
+    expect(styles).not.toContain("-webkit-touch-callout: none)': TOGGLE");
+    const chevron = declarations(source, 'titleChevron');
+    expect(chevron).toContain("'@media (pointer: coarse)': TOGGLE_CURVE");
+    // At rest it points along the reading direction (mirrored under RTL,
+    // with the same function list in both states so the turn stays a turn).
+    expect(chevron).toContain('default: `rotate(-${CHEVRON_TURN})`');
+    expect(chevron).toContain(
+      '\':is([dir="rtl"] *)\': `scaleX(-1) rotate(-${CHEVRON_TURN})`',
+    );
+    const open = declarations(source, 'titleChevronOpen');
+    expect(open).toContain("default: 'rotate(0deg)'");
+    expect(open).toContain("':is([dir=\"rtl\"] *)': 'scaleX(-1) rotate(0deg)'");
+    // Not in tokens.stylex.ts: that module is a released subpath.
+    const tokens = read('monthYearToggle.stylex.ts');
+    const toggle = datePicker.calendar.monthYearToggle;
+    // Prettier may break a long value onto its own line.
+    const flat = tokens.replace(/:\s+'/g, ": '");
+    // Internal motion roles (spec:AST-094 FR4): the toggle's 0.25 s is
+    // timing.stateChangeMs, read through its variable.
+    expect(toggle.fadeMs).toBe(timing.stateChangeMs);
+    expect(flat).toContain(
+      `duration: 'var(--motion-timing-state-change-ms, ${timing.stateChangeMs}ms)'`,
+    );
+    expect(flat).toContain(
+      `curve: 'var(--motion-timing-curves-move, cubic-bezier(${timing.curves.move.join(', ')}))'`,
+    );
+    expect(tokens).toContain(`chevronTurn: '${toggle.chevronTurnDegrees}deg'`);
   });
 
   /**
    * Everything in the swap runs for the same time, so it reads as one change
-   * rather than several. The chevron included — it used to run
-   * `--duration-medium` against a 220ms swap and was still turning well after
-   * the wheels had settled.
-   *
-   * A token rather than a literal, so a consumer's motion scale carries: the
-   * Storybook theme resolves `--duration-fast` to 125ms, not the default
-   * 175ms, and the swap follows it without knowing.
+   * rather than several, the chevron included: today's token with a mouse,
+   * UIKit's 0.25 s under a finger.
    */
   it('runs the whole swap on one duration', () => {
     const source = read('TouchDateField.tsx');
@@ -3661,11 +3793,85 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     );
     // The arrows, Reset, the weekday row, the layer beneath, the layer
     // above, and the chevron.
-    expect(styles.match(/transitionDuration: SWAP_DURATION/g)).toHaveLength(6);
-    // And no leftover hand-rolled timing beside them.
+    expect(styles.match(/default: SWAP_DURATION/g)).toHaveLength(6);
+    expect(
+      styles.match(/'@media \(pointer: coarse\)': TOGGLE_DURATION/g),
+    ).toHaveLength(6);
     expect(styles).not.toContain('PANEL_FADE_MS');
     expect(source).toContain(
       "const SWAP_DURATION = durationVars['--duration-fast']",
+    );
+    expect(source).toContain(
+      'const TOGGLE_DURATION = monthYearToggleMotion.duration',
+    );
+  });
+
+  it('under a finger: selects a tapped day at once, as UIDatePicker does', () => {
+    // datePicker.calendar.selection.tapAnimates: no animation on a tap. The
+    // shared pane fades a selection only for MonthScroller, the mouse calendar.
+    const pane = read('MonthPane.tsx');
+    const puck = declarations(pane, 'puck');
+    expect(puck.some(line => line.startsWith('transition'))).toBe(false);
+    expect(declarations(pane, 'puckFade')).toContain(
+      "transitionProperty: 'background-color, color, border-color'",
+    );
+    expect(read('MonthScroller.tsx')).toContain('hasSelectionFade');
+    expect(read('MonthPager.tsx')).not.toContain('hasSelectionFade');
+  });
+
+  it('under a finger: cross-fades the DateTimeInput sheet\u2019s month/year toggle on the same clock', () => {
+    const source = read('../DateTimeInput/TouchDateTimeField.tsx');
+    // The calendar and the wheels cross-fade, and the header's actions fade,
+    // on the toggle's clock under a finger; with a mouse the swap stays
+    // instant.
+    for (const object of ['touchDateSurface', 'touchHeaderActions']) {
+      const lines = declarations(source, object);
+      expect(lines).toContain("default: 'none'");
+      expect(lines).toContain(
+        "'@media (pointer: coarse)': 'opacity, visibility'",
+      );
+      expect(lines).toContain("'@media (pointer: coarse)': TOGGLE_DURATION");
+      expect(lines).toContain("'@media (pointer: coarse)': TOGGLE_CURVE");
+    }
+    const chevron = declarations(source, 'touchTitleChevron');
+    expect(chevron).toContain("'@media (pointer: coarse)': TOGGLE_CURVE");
+    expect(declarations(source, 'touchTitleChevronOpen')).toContain(
+      "default: 'rotate(0deg)'",
+    );
+    expect(source).toContain(
+      'const chevronDipRef = useChevronDip(isWheelOpen)',
+    );
+  });
+
+  it('follows design:reduced-motion: a mouse at once, a touch screen the policy\u2019s cross-fade, no turn', () => {
+    const source = read('TouchDateField.tsx');
+    const styles = source.slice(
+      source.indexOf('const styles = stylex.create('),
+    );
+    // The policy's two keys (motion/reducedMotion.ts) come last in each
+    // property, so they win over the finger's value. A touch screen
+    // cross-fades; otherwise the change is at once.
+    expect(styles).not.toContain("'@media (prefers-reduced-motion: reduce)': ");
+    const fadeKey =
+      "'@media (prefers-reduced-motion: reduce) and (pointer: coarse)':";
+    const instantKey =
+      "'@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':";
+    // Five fades plus the layer beneath take the policy's duration; the
+    // chevron does not turn.
+    expect(
+      styles.match(
+        /'@media \(prefers-reduced-motion: reduce\) and \(pointer: coarse\)':\s*reducedMotionFadeConsts\.duration/g,
+      ),
+    ).toHaveLength(5);
+    expect(styles.split(instantKey).length - 1).toBe(6);
+    expect(styles.split(fadeKey).length - 1).toBeGreaterThanOrEqual(6);
+    const chevron = declarations(source, 'titleChevron').join('\n');
+    expect(chevron).toContain(
+      "'@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s'",
+    );
+    expect(chevron).toContain('RM_DIP_HALF');
+    expect(source).toContain(
+      'const chevronDipRef = useChevronDip(isWheelOpen)',
     );
   });
 
