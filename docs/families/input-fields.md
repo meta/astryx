@@ -271,6 +271,22 @@ another implementation helper.
   PowerSearch, CommandPalette, and ChatComposer. A member whose field brings up
   no keyboard, such as DateRangeInput, FileInput, ComplexSelector, or a touch
   picker field with no input mode, is outside it.
+- **FR14 — An error is identified in text.** A member whose status is an error
+  sets `aria-invalid="true"` on its control and links text that names the error
+  through `aria-describedby`. When the caller gives no message, the member links
+  the translated default error text instead, so an error is never shown by
+  colour and icon alone (WCAG 2.2 SC 3.3.1). The default text is announced and
+  placed like a message (FR8, `component:Field` FR4) (DEC-11).
+- **FR15 — A group error marks its members.** An InputGroup or a group Field
+  with an error status sets `aria-invalid="true"` on every member control that
+  has no status of its own, and each member's description links the group's
+  error text. A member with its own status keeps it (DEC-12).
+- **FR16 — A required control takes part in form validation.** A member marked
+  required sets the native `required` attribute on its native form control as
+  well as `aria-required`, so the browser blocks submission and names the first
+  empty control. A form with `noValidate` keeps the app's own validation. A
+  member whose control is not a native form control keeps `aria-required` and
+  reports a missing value through its error status (DEC-13).
 
 ## Allowed component variation
 
@@ -439,6 +455,9 @@ The exhaustive coverage obligation follows the membership and adoption tables.
 | FR11     | `InputClearButton.test.tsx` tooltip and accessible-name assertions, plus real-Chromium hover captures                                                                                                                                                                                                                    | a long field label; a locale override; light and dark                                                                             | The tooltip repeats the field label, or the accessible name loses the field label                                                                                                                                                                                                                                                          |
 | FR12     | `Typeahead.test.tsx`, `BaseTypeahead.test.tsx`, `Tokenizer.test.tsx`, `Selector.test.tsx`, and `MultiSelector.test.tsx` cases for both attributes, with Enter keeping its member-owned effect; `SearchKeyboard.interaction.browser.spec.ts` on a touch-emulated phone, where the search input a tap focuses carries both | Typeahead; Tokenizer; Selector and MultiSelector search row; a phone viewport with touch emulation                                | A missing attribute, or an Enter whose effect changes with the label, fails                                                                                                                                                                                                                                                                |
 | FR13     | TBD (gap): the per-field keyboard focus tests and simulator evidence `spec:AST-099` FR9 names                                                                                                                                                                                                                            | each member FR13 covers, in the page, a sheet, a docked bar Core moves, a floating bar, and a bar with its own `translate`        | A focused field left under the keyboard in a scroller (including one inside a fixed container FR9 leaves to the app), a Core host, or a docked bar Core moves, or a public prop for the behavior; a field with no scroller between it and a floating, own-`translate`, or full-viewport host is the app's to position and is not a failure |
+| FR14     | Accessibility-tree tests for TextInput, TextArea, Selector, and DateInput with an error status, with and without a message                                                                                                                                                                                               | An error with `aria-invalid` but no linked text, or a default text that is not announced, fails                                   |
+| FR15     | InputGroup and group Field accessibility-tree tests with a group error, with and without a member's own status                                                                                                                                                                                                           | A member without its own status that is not marked invalid, or a member status that is replaced, fails                            |
+| FR16     | Form submission tests in a real browser: a required empty TextInput, Selector, and CheckboxInput, with and without `noValidate`                                                                                                                                                                                          | A submission that is not blocked, a first invalid control that is not named, or validation that runs under `noValidate`, fails    |
 
 ## Decision links
 
@@ -587,6 +606,43 @@ A member's search input already knows that Enter searches or commits a result,
 so it labels the key itself (`architecture:public-component-api` INV4), as
 NumberInput picks its number keyboard (`component:NumberInput` FR1). Search
 terms are names and identifiers that autocorrect rewrites, so correction is off.
+
+### DEC-11 — An error always has text
+
+**Decider:** pending
+
+A screen-reader user who reaches a field marked invalid hears that it is
+invalid but nothing about why when the caller gave no message. The field now
+links a translated default error text in that case, so the error is identified
+in text without a new prop or a required message.
+
+Rejected: making `message` required on an error status, which breaks every
+current caller under `spec:AST-017`. Rejected: leaving it to callers, which is
+the current failure.
+
+### DEC-12 — A group error reaches each member
+
+**Decider:** pending
+
+A person who tabs into one input of a grouped field hears no error, because the
+group's error sits on the group and not on the input. Each member without its
+own status now carries the group's invalid state and text.
+
+Rejected: describing the group only, which screen readers do not read on the
+member.
+
+### DEC-13 — Required controls use the browser's validation
+
+**Decider:** pending
+
+A person who submits a form with an empty required field gets no block and no
+pointer to the field unless the app wrote its own validator. Native `required`
+gives that for free, and `noValidate` keeps the opt-out for apps with their own
+validation.
+
+Rejected: keeping `aria-required` only, which leaves every app to rebuild
+required validation. Rejected: an opt-in prop, which adds API for the default
+people need.
 
 ## Open questions
 
