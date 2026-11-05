@@ -175,6 +175,47 @@ describe('placeLayerExitCopy', () => {
     }
   });
 
+  it('shows the copy of a layer inside again after the copy of the layer around it, so it stays on top', () => {
+    // The popover API, with an open state the top-layer order is read from.
+    const shown: Element[] = [];
+    Object.defineProperty(HTMLElement.prototype, 'showPopover', {
+      configurable: true,
+      writable: true,
+      value(this: HTMLElement) {
+        this.setAttribute('data-open', '');
+        shown.push(this);
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'hidePopover', {
+      configurable: true,
+      writable: true,
+      value(this: HTMLElement) {
+        this.removeAttribute('data-open');
+      },
+    });
+    const matches = HTMLElement.prototype.matches;
+    vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
+      this: HTMLElement,
+      selector: string,
+    ) {
+      return selector === ':popover-open'
+        ? this.hasAttribute('data-open')
+        : matches.call(this, selector);
+    });
+    try {
+      const outer = layer();
+      const inner = layer();
+      inner.id = 'inner';
+      outer.querySelector('#list')!.append(inner);
+      const innerCopy = place(inner);
+      const outerCopy = place(outer);
+      expect(shown.slice(-2)).toEqual([outerCopy, innerCopy]);
+      expect(innerCopy.hasAttribute('data-open')).toBe(true);
+    } finally {
+      Reflect.deleteProperty(HTMLElement.prototype, 'hidePopover');
+    }
+  });
+
   it('keeps one copy per layer: a second takes only that layer\u2019s first away', () => {
     popoverApi(true);
     const element = layer();
