@@ -2,8 +2,8 @@
 
 'use client';
 
-import {usePathname} from 'next/navigation';
-import Link from 'next/link';
+import {usePathname} from '../../../../router';
+import Link from '../../../../router';
 import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
 
 const NAV_ITEMS = [

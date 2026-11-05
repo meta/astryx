@@ -132,4 +132,23 @@ describe('astryx theme palette generate', () => {
       code: 'ERR_PALETTE_GENERATION',
     });
   });
+
+  it('returns ERR_WRITE_FAILED for an output path it cannot use', async () => {
+    fs.writeFileSync(path.join(temporaryDirectory, 'blocker'), '');
+    const {status, stdout} = await runCli(
+      [
+        '--json',
+        'theme',
+        'palette',
+        'generate',
+        'palette.config.json',
+        '--out',
+        'blocker/ocean.palette.ts',
+      ],
+      {cwd: temporaryDirectory},
+    );
+
+    expect(status).toBe(1);
+    expect(JSON.parse(stdout)).toMatchObject({code: 'ERR_WRITE_FAILED'});
+  });
 });

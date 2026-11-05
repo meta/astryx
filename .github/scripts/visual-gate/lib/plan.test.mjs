@@ -24,6 +24,7 @@ import {
   storiesInPackages,
   summarizeBaselineAccounting,
   uncoveredTargets,
+  visualComponentScope,
 } from './plan.mjs';
 
 const story = (value, packageName = '@astryxdesign/core', stableVisual = true) => ({
@@ -53,7 +54,7 @@ const themeOverrides = {
 describe('storiesInPackages', () => {
   const mixed = [
     ...stories,
-    story({id: 'lab-drawer--default', title: 'Lab/Drawer', name: 'Default', component: 'Drawer'}, '@astryxdesign/lab', false),
+    story({id: 'lab-stat--default', title: 'Lab/Stat', name: 'Default', component: 'Stat'}, '@astryxdesign/lab', false),
     story({id: 'charts-bar--default', title: 'Charts/Bar', name: 'Default', component: 'Bar'}, '@astryxdesign/charts', false),
   ];
 
@@ -110,10 +111,10 @@ describe('canonicalBaselineStories', () => {
   it('drops a canary component even when its story is titled under a canonical group', () => {
     const labInCore = story(
       {
-        id: 'core-drawer--default',
-        title: 'Core/Drawer',
+        id: 'core-stat--default',
+        title: 'Core/Stat',
         name: 'Default',
-        component: 'Drawer',
+        component: 'Stat',
         componentPackage: '@astryxdesign/lab',
       },
       '@astryxdesign/lab',
@@ -760,5 +761,20 @@ describe('uncoveredTargets', () => {
   it('names targets no shot can reach', () => {
     const plan = buildPlan({stories, targets, themeOverrides, defaultTheme: 'neutral', tiers: ['surface']});
     expect(uncoveredTargets(targets, plan)).toEqual([{key: 'tooltip', component: 'Tooltip'}]);
+  });
+});
+
+describe('visualComponentScope (spec:AST-030 FR13)', () => {
+  it('audits every touched component and each reverse-dependent folder with a stable story', () => {
+    expect(
+      visualComponentScope(stories, ['Button'], ['Badge', 'Button', 'Tooltip', 'Badge']),
+    ).toEqual({components: ['Button', 'Badge'], dropped: ['Tooltip']});
+  });
+
+  it('audits reverse dependents alone when nothing was touched directly', () => {
+    expect(visualComponentScope(stories, [], ['Badge'])).toEqual({
+      components: ['Badge'],
+      dropped: [],
+    });
   });
 });

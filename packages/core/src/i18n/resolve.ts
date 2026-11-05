@@ -11,20 +11,26 @@
  *   2. Per-locale override for a parent locale (pt-BR → pt)
  *   3. Shipped catalog entry for the exact locale
  *   4. Shipped catalog entry for a parent locale (pt-BR → pt)
- *   5. Shipped en catalog (the source of truth, always present)
+ *   5. Shipped English: the English registered by the loaded modules that
+ *      name the key (englishFallback.ts), or the whole catalog on public
+ *      paths that resolve arbitrary keys
  *   6. The key itself (dev-visible fallback, warns once)
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/i18n/useTranslator.ts
+ * - /packages/core/src/i18n/englishFallback.ts
  * - /packages/core/src/i18n/__tests__/resolve.test.ts
  */
 
 import IntlMessageFormat from 'intl-messageformat';
-import type {Catalog, Locale, MessagesByLocale, Overrides} from './types';
-import enSource from '../../locales/en.json' with {type: 'json'};
+import type {
+  Locale,
+  Overrides,
+  ProviderMessagesByLocale,
+  RuntimeCatalog,
+} from './types';
+import {englishFallback} from './englishFallback';
 import {warnOnce, __resetDevWarnings} from '../utils/devWarning';
-
-const EN_CATALOG = enSource as Catalog;
 
 /**
  * Cache of parsed ICU MessageFormat objects keyed by `${locale}::${message}`.
@@ -75,7 +81,7 @@ export function resolveLocaleChain(locale: Locale): Locale[] {
 
 function getLookup(
   locale: Locale,
-  messages: MessagesByLocale,
+  messages: ProviderMessagesByLocale,
   overrides?: Overrides,
 ): Record<string, string> {
   const lookup: Record<string, string> = {};
@@ -95,8 +101,10 @@ function getLookup(
   for (const tag of chain) {
     if (messages[tag]) {
       for (const [key, value] of Object.entries(messages[tag])) {
-        if (lookup[key] === undefined && value?.defaultMessage !== null) {
-          lookup[key] = value?.defaultMessage;
+        const message =
+          typeof value === 'string' ? value : value?.defaultMessage;
+        if (lookup[key] === undefined && message != null) {
+          lookup[key] = message;
         }
       }
     }
@@ -105,15 +113,20 @@ function getLookup(
   return lookup;
 }
 
+/**
+ * `english` defaults to the shipped English registry; tests pass a fixed map
+ * to compare one module's English with the whole catalog.
+ */
 export function getResolve(
   locale: Locale,
-  messages: MessagesByLocale,
+  messages: ProviderMessagesByLocale,
   overrides?: Overrides,
+  english: RuntimeCatalog = englishFallback,
 ) {
   const lookup = getLookup(locale, messages, overrides);
 
   return (key: string, values: Record<string, unknown> | undefined) => {
-    const result = lookup[key] ?? EN_CATALOG[key]?.defaultMessage;
+    const result = lookup[key] ?? english[key];
     if (result === undefined) {
       // Fires ONLY when a key is missing from every source including the
       // shipped `en` catalog — a real bug (typo, stale catalog, deleted key).

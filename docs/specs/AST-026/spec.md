@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 4
 template_version: 1
 kind: system-spec
 id: spec:AST-026
@@ -201,6 +201,11 @@ existing template slug. Keep `displayName` editorial. Use these path families:
 Allow a doc to override its leaf with `registry.slug` and retain old relative
 paths with `registry.aliases`. Check all names and paths against a reviewed lock
 so a rename cannot silently break existing install commands.
+
+Every item is also served at `<name>.json` in the registry root with its
+canonical bytes. Standard clients build that address from the index name, in
+search results and in `@namespace/<name>` installs. Each alias path also keeps
+the name it stood for, so a renamed item still installs by its old name.
 
 ### DEC-5 — Use `/shadcn`, exact releases, and canary previews
 

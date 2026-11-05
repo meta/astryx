@@ -33,10 +33,12 @@ import type {LinkComponentType} from '../Link/types';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {navItemStyles, type NavItemSize} from '../NavItem/navItemStyles.stylex';
 import {mergeProps} from '../utils';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {usePressFeedback} from '../hooks/usePressFeedback';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 
 /**
  * NavItem styles with hover/selected states
@@ -71,6 +73,16 @@ const styles = stylex.create({
         '@media (hover: hover)': colorVars['--color-neutral'],
       },
       ':active': colorVars['--color-neutral'],
+      // The touch press model writes these instead of `:active`; the selected
+      // item keeps its fill under a finger the way it does under a mouse, and
+      // paints no overlay at any phase of the press.
+      '[data-astryx-press="on"]': colorVars['--color-neutral'],
+      '[data-astryx-press="fading"]': colorVars['--color-neutral'],
+    },
+    backgroundImage: {
+      default: null,
+      '[data-astryx-press="on"]': 'none',
+      '[data-astryx-press="fading"]': 'none',
     },
   },
   iconOnly: {
@@ -185,9 +197,12 @@ export function TopNavItem({
   ref,
   ...props
 }: TopNavItemProps) {
+  const pressable = usePressFeedback();
   const LinkComponent = useLinkComponent(as);
   const renderMode = useTopNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(
+    renderMode === 'drawer',
+  );
 
   // A disabled item renders as a plain <a> with no href: an href-less anchor
   // is not focusable and exposes no link affordance, so programmatic focus +
@@ -198,18 +213,21 @@ export function TopNavItem({
   // disabled paths of Link and SideNavItem.)
   const Root = isDisabled ? 'a' : LinkComponent;
 
+  // A disabled item runs no caller handler except `onFocus` and `onBlur`, as a
+  // natively disabled control runs none.
+  const callerProps = withholdCallerHandlers(props, isDisabled);
+
   // =========================================================================
   // Drawer mode — render as a SideNavItem-style vertical list element
   // =========================================================================
   if (renderMode === 'drawer') {
+    const activate = closeDrawerAfter(onClick);
     const handleDrawerClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
       if (isDisabled) {
         preventDefaultClick(e);
         return;
       }
-      // Forward the original onClick if present
-      onClick?.(e);
-      closeMobileNav();
+      activate?.(e);
     };
 
     return (
@@ -221,6 +239,7 @@ export function TopNavItem({
         aria-current={isSelected ? 'page' : undefined}
         aria-disabled={isDisabled || undefined}
         tabIndex={isDisabled ? -1 : undefined}
+        {...pressable}
         {...mergeProps(
           themeProps('top-nav-item', {
             mode: 'drawer',
@@ -237,7 +256,7 @@ export function TopNavItem({
           className,
           style,
         )}
-        {...props}
+        {...callerProps}
         onClick={handleDrawerClick}>
         {icon}
         {!isIconOnly && (children ?? label)}
@@ -259,6 +278,7 @@ export function TopNavItem({
       aria-current={isSelected ? 'page' : undefined}
       aria-disabled={isDisabled || undefined}
       tabIndex={isDisabled ? -1 : undefined}
+      {...pressable}
       {...mergeProps(
         themeProps('top-nav-item', {
           selected: isSelected ? 'selected' : null,
@@ -274,7 +294,7 @@ export function TopNavItem({
         className,
         style,
       )}
-      {...props}>
+      {...callerProps}>
       {icon}
       {!isIconOnly && (children ?? label)}
     </Root>

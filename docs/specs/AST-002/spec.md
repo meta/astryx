@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 4
 template_version: 1
 kind: system-spec
 id: spec:AST-002
@@ -7,7 +7,7 @@ authority: current
 archive_reason: null
 superseded_by: null
 approved_by: cixzhang
-approved_at: 2026-09-01
+approved_at: 2026-10-03
 phase: accepted
 owners: [cixzhang, imdreamrunner]
 affects_architecture: []
@@ -172,11 +172,14 @@ A public API proposal is admitted only when it passes both gates:
   behavior without changing public API or behavior beyond current authority MUST do
   so. Any additional public delta follows `architecture:knowledge-contracts`
   independently. A separable contradictory or unsettled tagalong MUST be removed or
-  split before review asks the repair to carry a new owner decision. Existing current
-  authority may settle an intentional remaining delta; only a surviving, intentional
-  gap requires owner judgment. Implementation convenience, removal of an internal
-  wrapper, or exposure of existing internal fields is not evidence that an API should
-  exist.
+  split before review asks the repair to carry a new owner decision, except an
+  undeclared public API row, which goes to human review for an owner's decision
+  rather than being removed or split by review (`architecture:knowledge-contracts`
+  change coupling step 6). Existing current authority may settle an intentional
+  remaining delta; only a surviving, intentional gap, or an undeclared public API
+  row, requires owner judgment. Implementation convenience, removal of an internal
+  wrapper, or exposure of existing internal fields is not evidence that an API
+  should exist.
 - **FR20 — Callsite impact and decision burden are explicit.** A public API change
   shows representative before and after callsites, including defaults and
   compatibility, and names every new choice the caller must understand or make. That
@@ -208,6 +211,10 @@ A public API proposal is admitted only when it passes both gates:
   hooks and utilities they explicitly co-own. Family, architecture, and system
   records own their respective shared semantics. The component's `.doc.mjs`
   remains the consumer syntax and reference authority.
+- `module:Markdown/headingLinks` applies FR18 and DEC-8 to one admitted public
+  module: its factory returns an opaque entry for the existing plugin list rather
+  than adding a broad Markdown prop. The module record owns the API and behavior;
+  this system record owns only that admission result.
 - Component specs inherit current family contracts and record only local public
   concepts, additions, and explicit exceptions; they do not copy shared rules.
 - Public module and utility function review compares the verb with the function's
@@ -220,8 +227,10 @@ A public API proposal is admitted only when it passes both gates:
 
 For every public API or public behavior delta, identify the canonical owner and
 apply the routing defined by `architecture:knowledge-contracts`. This spec owns
-API admission and semantic-shape requirements; it does not copy review outcomes
-or pull-request disposition.
+API admission and semantic-shape requirements; the
+[Release compatibility and versioning spec](../AST-017/spec.md) owns lifecycle,
+classification, deprecation, correction, and release treatment. Neither record copies
+review outcomes or pull-request disposition.
 
 A draft record may provide context and route the unresolved question, but it
 cannot clear current authority. Exact-head owner discussion supplies decision
@@ -242,7 +251,7 @@ still determine whether the implementation satisfies it.
   or other behavior its mechanism cannot perform. Solve the component behavior
   first; consider API only when a clear, enforceable caller-owned distinction
   remains.
-- [PR #5373](https://github.com/facebook/astryx/pull/5373) is evidence that
+- [PR #5373](https://github.com/meta/astryx/pull/5373) is evidence that
   parallel public and package-internal operations for one semantic action create
   avoidable surface area. Its particular operation names and options are not
   policy.
@@ -426,7 +435,10 @@ its API and behavior within that contract. Any additional public primitive or
 observable behavior follows `architecture:knowledge-contracts`: first conform,
 remove, or split a separable contradiction or unsettled tagalong; then reuse an
 existing current decision when one settles an intentional surviving delta. Ask the
-owner only for a surviving decision the team actually wants to pursue.
+owner only for a surviving decision the team actually wants to pursue. An
+undeclared public API row is the exception: change coupling step 6 of
+`architecture:knowledge-contracts` sends it to human review for an owner's
+decision, and review does not remove or split it.
 
 Rejected: promoting internal focus targets, gesture memory, DOM slots, timers, or
 other existing fields merely because removing an internal wrapper or fixing one

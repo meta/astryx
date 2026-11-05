@@ -18,33 +18,74 @@
  * deduped, so each leaf stays a thin projection.
  */
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
-  findCoreDir,
+  requireCoreDir as requireAnswerCoreDir,
   discoverExternalPackages,
 } from '../../foundation/fs/paths.mjs';
 import {
   CORE_PACKAGE,
   discoverComponents,
+  docStem,
   findComponentReadme,
   findComponentSource,
   findExternalComponentDoc,
-  findIntegrationComponentDoc,
-  findIntegrationComponentSource,
+  findIntegrationComponent,
+  integrationMemberEntry,
+  isIntegrationMember,
+  recordedDocName,
   resolveImportPath,
   resolveIntegrationImportPath as resolveIntegrationImport,
+  unscopedComponentOwners,
 } from '../../foundation/discovery/component-discovery.mjs';
 import {Project} from '../../foundation/config/project.mjs';
-import {loadDocs} from '../../foundation/discovery/component-loader.mjs';
+import {loadComponentDoc as loadValidatedComponentDoc} from '../../foundation/discovery/component-loader.mjs';
+import {resolveComponentReplacements} from '../../foundation/discovery/component-replacement.mjs';
 import {searchComponents} from '../../foundation/text/string-utils.mjs';
-import {AstryxError} from '../error.mjs';
+import {
+  rankComponentSuggestions,
+  synonymMatches,
+} from '../../foundation/text/suggest-order.mjs';
+import {AstryxError, coreDirOrThrow} from '../error.mjs';
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
+import {
+  componentLinkProvider,
+  linkComponentDoc,
+  loadDocsCatalog,
+} from '../docs/_adapter.mjs';
 
-export {CORE_PACKAGE};
+/** How far below the first suggestion's score a later one may be. */
+const NEAR_FIRST = 10;
+
+/** @type {Record<string, {synonyms?: string[]}> | undefined} */
+let cards;
+/**
+ * Search's component cards (each component's other names), read once.
+ * @returns {Record<string, {synonyms?: string[]}>}
+ */
+function searchCards() {
+  if (!cards) {
+    try {
+      cards = JSON.parse(
+        fs.readFileSync(
+          new URL('../search/_cards.json', import.meta.url),
+          'utf8',
+        ),
+      );
+    } catch {
+      cards = {};
+    }
+  }
+  return /** @type {Record<string, {synonyms?: string[]}>} */ (cards);
+}
+
+export {CORE_PACKAGE, unscopedComponentOwners};
 
 /**
- * A loaded component doc. `loadDocs` returns the authored `.doc.mjs` shape,
- * which is either a single-component or multi-component doc; this loose view
- * captures the fields the API reads across both forms.
+ * A loaded component doc. The shared validated loader accepts stamped and legacy
+ * component docs; this loose view captures the fields the API reads across both.
  * @typedef {object} LoadedComponentDoc
  * @property {string} [name]
  * @property {string} [description]
@@ -56,9 +97,7 @@ export {CORE_PACKAGE};
  */
 
 /**
- * Options object for `loadDocs`, matching its declared parameter shape (used
- * as a cast target so `lang` (which the API may hold as `string|null`) type
- * checks against `loadDocs`'s `lang?: string`).
+ * Options object for the shared component-doc loader.
  * @typedef {{zh?: boolean, dense?: boolean, lang?: string}} LoadDocsOpts
  */
 
@@ -71,6 +110,8 @@ export {CORE_PACKAGE};
  * @property {string|null} sourcePath
  * @property {string|undefined} issuesUrl
  * @property {import('../../foundation/integrations/integrations.mjs').LoadedIntegration|null} integration
+ * @property {import('../../foundation/discovery/component-discovery.mjs').NameHold} hold
+ *   how the owner holds the name, for the owner rule
  */
 
 /**
@@ -110,15 +151,7 @@ export {CORE_PACKAGE};
  * @returns {string}
  */
 export function requireCoreDir(cwd) {
-  const coreDir = findCoreDir(cwd);
-  if (!coreDir) {
-    throw new AstryxError(
-      'Could not find @astryxdesign/core package',
-      undefined,
-      ERROR_CODES.ERR_CORE_NOT_FOUND,
-    );
-  }
-  return coreDir;
+  return coreDirOrThrow(requireAnswerCoreDir, cwd);
 }
 
 /**
@@ -140,6 +173,38 @@ export async function loadIntegrationsSafely(cwd) {
 }
 
 /**
+ * Every component replacement the loaded integrations declare
+ * (spec:AST-035 FR10–FR15): the active one for each replaced Core component,
+ * and the findings Doctor reports. With no Core directory, only the opt-in
+ * and value findings are computed.
+ * @param {string|null} coreDir
+ * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
+ * @returns {Promise<import('../../foundation/discovery/component-replacement.mjs').ComponentReplacements>}
+ */
+export function loadComponentReplacements(coreDir, loadedIntegrations) {
+  return resolveComponentReplacements(coreDir, loadedIntegrations);
+}
+
+/**
+ * The integration component that answers to the Core component name
+ * `dirName` for unqualified lookup, or undefined when none replaces it.
+ * @param {string} coreDir
+ * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
+ * @param {string} dirName
+ * @returns {Promise<import('../../foundation/discovery/component-replacement.mjs').ActiveComponentReplacement | undefined>}
+ */
+export async function resolveComponentReplacement(
+  coreDir,
+  loadedIntegrations,
+  dirName,
+) {
+  if (loadedIntegrations.length === 0) return undefined;
+  return (
+    await resolveComponentReplacements(coreDir, loadedIntegrations)
+  ).forTarget(dirName);
+}
+
+/**
  * Resolve a loaded integration by package name.
  * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
  * @param {string} packageName
@@ -147,6 +212,34 @@ export async function loadIntegrationsSafely(cwd) {
  */
 function findLoadedIntegration(loadedIntegrations, packageName) {
   return loadedIntegrations.find(i => i.name === packageName) ?? null;
+}
+
+/**
+ * Read the exact installed version available to a package-qualified component
+ * selector. Legacy docs packages do not expose a reliable version here, so a
+ * version-qualified lookup never falls through to them.
+ * @param {string} coreDir
+ * @param {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]} loadedIntegrations
+ * @param {string} packageName
+ * @returns {string|null}
+ */
+export function installedComponentPackageVersion(
+  coreDir,
+  loadedIntegrations,
+  packageName,
+) {
+  if (packageName === CORE_PACKAGE) {
+    try {
+      const pkg = JSON.parse(
+        fs.readFileSync(path.join(coreDir, 'package.json'), 'utf8'),
+      );
+      return typeof pkg.version === 'string' ? pkg.version : null;
+    } catch {
+      return null;
+    }
+  }
+  const integration = findLoadedIntegration(loadedIntegrations, packageName);
+  return typeof integration?.version === 'string' ? integration.version : null;
 }
 
 /**
@@ -180,17 +273,19 @@ export function resolveOwners(coreDir, dirName, loadedIntegrations) {
       sourcePath: findComponentSource(coreDir, dirName),
       issuesUrl: undefined,
       integration: null,
+      hold: 'core',
     });
   }
   for (const integration of loadedIntegrations) {
-    const docPath = findIntegrationComponentDoc(integration, dirName);
-    if (!docPath) continue;
+    const found = findIntegrationComponent(integration, dirName);
+    if (!found) continue;
     owners.push({
       package: integration.name,
-      docPath,
-      sourcePath: findIntegrationComponentSource(integration, dirName),
+      docPath: found.docPath,
+      sourcePath: found.sourcePath,
       issuesUrl: integration.issuesUrl,
       integration,
+      hold: found.hold,
     });
   }
   return owners;
@@ -248,6 +343,34 @@ export function classifyScope(
 }
 
 /**
+ * Internal ambiguity marker. Single-component callers still receive the same
+ * AstryxError code, message, and suggestions; batch callers can additionally
+ * project every installed candidate without parsing prose.
+ */
+export class ComponentAmbiguityError extends AstryxError {
+  /** @type {import('./component.type.mjs').ComponentBatchCandidate[]} */
+  candidates;
+
+  /**
+   * @param {ComponentOwner[]} owners
+   * @param {string} dirName
+   */
+  constructor(owners, dirName) {
+    super(
+      `Component "${dirName}" is provided by multiple packages. Re-run with --package <pkg> to choose one.`,
+      owners.map(o => ({name: o.package, reason: 'provides this component'})),
+      ERROR_CODES.ERR_AMBIGUOUS_COMPONENT,
+    );
+    this.candidates = owners.map(owner => ({
+      package: owner.package,
+      component: dirName,
+      kind: 'component',
+      installed: true,
+    }));
+  }
+}
+
+/**
  * Refuse to guess when the name is owned by MORE THAN ONE package (core and/or
  * integrations) and the caller did not scope with --package. Legacy
  * `pkg.astryx.docs` externals are intentionally NOT part of this ambiguity set.
@@ -257,11 +380,7 @@ export function classifyScope(
  */
 export function assertUnambiguousOwners(owners, dirName) {
   if (owners.length > 1) {
-    throw new AstryxError(
-      `Component "${dirName}" is provided by multiple packages. Re-run with --package <pkg> to choose one.`,
-      owners.map(o => ({name: o.package, reason: 'provides this component'})),
-      ERROR_CODES.ERR_UNKNOWN_COMPONENT,
-    );
+    throw new ComponentAmbiguityError(owners, dirName);
   }
 }
 
@@ -278,6 +397,39 @@ export function resolveLegacyExternalDoc(ext, dirName) {
 }
 
 /**
+ * Whether a legacy external package documents `dirName`.
+ * @param {string} cwd
+ * @param {string} dirName
+ * @returns {boolean}
+ */
+export function legacyExternalDocuments(cwd, dirName) {
+  return discoverExternalPackages(cwd).some(
+    ext => resolveLegacyExternalDoc(ext, dirName) != null,
+  );
+}
+
+/**
+ * Whether a legacy docs package keeps `dirName` over these owners, each of which
+ * holds it only as an export a doc records.
+ * @param {string} cwd
+ * @param {string} dirName
+ * @param {Array<{hold?: string, docPath?: string | null}>} owners
+ * @returns {boolean}
+ */
+export function legacyExternalKeeps(cwd, dirName, owners) {
+  return (
+    owners.length > 0 &&
+    owners.every(
+      owner =>
+        owner.hold === 'doc' &&
+        owner.docPath != null &&
+        docStem(owner.docPath).toLowerCase() !== dirName.toLowerCase(),
+    ) &&
+    legacyExternalDocuments(cwd, dirName)
+  );
+}
+
+/**
  * The core source file for `dirName` (the no-scope `--source` path reads core
  * directly — it does NOT fall back to externals or fuzzy search).
  * @param {string} coreDir
@@ -291,6 +443,8 @@ export function resolveCoreSourcePath(coreDir, dirName) {
 /**
  * Resolve a bare (unscoped) name to a `.doc.mjs`: core first, then back-compat
  * externals, then a conservative fuzzy search. Throws ERR_UNKNOWN_COMPONENT
+ * for a genuinely unknown name, and ERR_AMBIGUOUS_COMPONENT when multiple
+ * packages provide the same name
  * (with candidate suggestions when close) or ERR_NO_DOC.
  * @param {string} dirName - bare component name (no `XDS` prefix)
  * @param {{coreDir: string, cwd: string, name: string}} ctx - `name` is the caller's original (prefixed) input, used in error text
@@ -339,15 +493,34 @@ export async function resolveUnscopedDoc(dirName, {coreDir, cwd, name}) {
         resolvedOwnerPackage = CORE_PACKAGE;
         resolvedSourcePath = findComponentSource(coreDir, resolvedName);
       } else {
+        // How many to suggest: the near-top results, at most five and at
+        // least two. Which ones, and in what order, is the suggestion
+        // ranking's call.
         const threshold = Math.max(topScore - 20, 1);
-        const candidates = results
-          .filter(r => r.score >= threshold)
-          .slice(0, 5);
-        if (candidates.length < 2)
-          candidates.push(...results.slice(candidates.length, 2));
+        const count = Math.max(
+          results.filter(r => r.score >= threshold).slice(0, 5).length,
+          Math.min(2, results.length),
+        );
+        const candidates = rankComponentSuggestions(
+          dirName,
+          results,
+          Object.values(components).flat(),
+          synonymMatches(dirName, searchCards()),
+        ).slice(0, count);
+        // Past the first two suggestions, only the ones about as close as
+        // the first (within NEAR_FIRST points), or a close spelling of the
+        // whole typed name (a typo): a weaker match after a strong one reads
+        // as noise. The list only gets shorter and keeps at least two.
+        const typed = dirName.toLowerCase();
+        const nearFirst = candidates.filter(
+          (c, i) =>
+            i < 2 ||
+            c.score >= candidates[0].score - NEAR_FIRST ||
+            levenshteinDistance(c.name.toLowerCase(), typed) <= 2,
+        );
         throw new AstryxError(
           `No component named "${name}"`,
-          candidates.map(c => ({name: c.name, reason: c.reason})),
+          nearFirst.map(c => ({name: c.name, reason: c.reason})),
           ERROR_CODES.ERR_UNKNOWN_COMPONENT,
         );
       }
@@ -381,9 +554,22 @@ export async function resolveUnscopedDoc(dirName, {coreDir, cwd, name}) {
  */
 export async function loadComponentDoc(docPath, opts = {}) {
   const {zh = false, dense = false, lang = null} = opts;
-  return /** @type {LoadedComponentDoc} */ (
-    await loadDocs(docPath, /** @type {LoadDocsOpts} */ ({zh, dense, lang}))
-  );
+  try {
+    return /** @type {LoadedComponentDoc} */ (
+      await loadValidatedComponentDoc(
+        docPath,
+        /** @type {LoadDocsOpts} */ ({zh, dense, lang}),
+      )
+    );
+  } catch (err) {
+    throw new AstryxError(
+      `Cannot load component metadata: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+      undefined,
+      ERROR_CODES.ERR_INVALID_DOC,
+    );
+  }
 }
 
 /**
@@ -483,4 +669,161 @@ export function scopeSubComponent(docs, dirName, coreDir) {
   if (docs.theming) scoped.theming = docs.theming;
 
   return {scoped, matchingComponent};
+}
+
+/**
+ * The doc an integration owner shows for `dirName`: when `dirName` is a member
+ * its family doc lists under its own name (`AcmeSlide` in an `AcmeCarousel`
+ * doc), the doc scoped to that member as {@link scopeSubComponent} scopes
+ * Core's, keeping the import the family doc states; otherwise `docs` itself.
+ * @param {LoadedComponentDoc} docs
+ * @param {OwnershipSubject} owner
+ * @param {string} dirName
+ * @returns {LoadedComponentDoc & {parentDoc?: string, import?: string}}
+ */
+export function scopeIntegrationMember(docs, owner, dirName) {
+  const record = {name: dirName, docPath: owner.docPath ?? null};
+  if (!isIntegrationMember(record)) return docs;
+  const entry = integrationMemberEntry(docs, record);
+  // The files list the member but the doc this process loaded has no entry
+  // for it (the doc changed after it loaded): never answer with the family.
+  if (entry == null) {
+    throw new AstryxError(
+      `No component named "${dirName}": its family doc changed after this process loaded it.`,
+      undefined,
+      ERROR_CODES.ERR_UNKNOWN_COMPONENT,
+    );
+  }
+  // Built from the entry, as scopeSubComponent scopes Core's, so a member that
+  // shares the doc's own `name` is scoped too.
+  /** @type {LoadedComponentDoc & {parentDoc?: string, import?: string}} */
+  const scoped = {
+    name: dirName,
+    description: entry.description,
+    props: entry.props,
+    components: [entry],
+    // The name the family doc opens under, for every member.
+    parentDoc:
+      owner.integration && record.docPath
+        ? recordedDocName(owner.integration, record.docPath)
+        : docs.name === dirName && record.docPath
+          ? docStem(record.docPath)
+          : docs.name,
+  };
+  if (docs.usage) scoped.usage = docs.usage;
+  if (docs.theming) scoped.theming = docs.theming;
+  if (docs.import) scoped.import = docs.import;
+  return scoped;
+}
+
+/**
+ * A search response with every inline `{@link <target>}` in a component
+ * result's description resolved to the command that opens the doc it names,
+ * as `astryx component` prints it (spec:AST-047 FR9). The response object is
+ * kept, with its results replaced.
+ * @template {{data: {results: any[]}}} R
+ * @param {R} response
+ * @param {string} cwd
+ * @returns {Promise<R>}
+ */
+export async function linkSearchResponse(response, cwd) {
+  const results = response.data.results;
+  if (
+    !results.some(
+      result =>
+        result?.domain === 'component' &&
+        typeof result.description === 'string' &&
+        result.description.includes('{@'),
+    )
+  ) {
+    return response;
+  }
+  const linked = [];
+  for (const result of results) {
+    if (
+      result?.domain !== 'component' ||
+      typeof result.description !== 'string' ||
+      !result.description.includes('{@')
+    ) {
+      linked.push(result);
+      continue;
+    }
+    const read = await linkComponentResponse(
+      {
+        type: 'component.detail',
+        package: result.package,
+        data: {description: result.description},
+      },
+      cwd,
+    );
+    linked.push({...result, description: read.data.description});
+  }
+  response.data = {...response.data, results: linked};
+  return response;
+}
+
+/**
+ * A component read with every inline `{@link <target>}` in its doc text
+ * resolved to the command that opens the doc it names (spec:AST-047 FR9), in
+ * the detail, its props projection, and each list entry. A Core component's
+ * links resolve against the CLI's own docs; an integration's against that
+ * integration's. A link that names no doc prints as written.
+ * @template {{type: string, package?: string, data?: any}} R
+ * @param {R} response
+ * @param {string} cwd
+ * @returns {Promise<R>}
+ */
+export async function linkComponentResponse(response, cwd) {
+  const {type} = response;
+  if (
+    type !== 'component.detail' &&
+    type !== 'component.detail.props' &&
+    type !== 'component.list'
+  ) {
+    return response;
+  }
+  // Doc tokens render in the same pass as links.
+  if (!JSON.stringify(response.data ?? null).includes('{@')) {
+    return response;
+  }
+  const catalog = await loadDocsCatalog(cwd);
+  /** @type {Map<string, string>} */
+  const declared = new Map();
+  for (const integration of await loadIntegrationsSafely(cwd)) {
+    const id = /** @type {any} */ (integration).providerId;
+    if (typeof id === 'string') declared.set(integration.name, id);
+  }
+  /**
+   * @param {any} doc
+   * @param {string | undefined} owner
+   */
+  const link = async (doc, owner) => {
+    if (typeof owner !== 'string') return doc;
+    try {
+      return (
+        await linkComponentDoc(
+          catalog,
+          componentLinkProvider(owner, declared.get(owner)),
+          doc,
+        )
+      ).doc;
+    } catch {
+      // An owner that is not a provider id links nothing; its text reads as
+      // written.
+      return doc;
+    }
+  };
+  if (type !== 'component.list') {
+    return {...response, data: await link(response.data, response.package)};
+  }
+  /** @type {Record<string, any[]>} */
+  const components = {};
+  for (const [group, entries] of Object.entries(
+    response.data.components ?? {},
+  )) {
+    const linked = [];
+    for (const entry of entries) linked.push(await link(entry, entry?.package));
+    components[group] = linked;
+  }
+  return {...response, data: {...response.data, components}};
 }

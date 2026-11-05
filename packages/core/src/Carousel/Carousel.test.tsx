@@ -2,15 +2,18 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {createRef} from 'react';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Carousel, type CarouselHandle} from './Carousel';
 
 // Mock ResizeObserver (not available in jsdom)
 class MockResizeObserver {
+  /** The shared observer, so a test can deliver a resize. */
+  static last: MockResizeObserver | null = null;
   callback: ResizeObserverCallback;
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
+    MockResizeObserver.last = this;
   }
   observe() {}
   unobserve() {}
@@ -19,6 +22,157 @@ class MockResizeObserver {
 vi.stubGlobal('ResizeObserver', MockResizeObserver);
 
 describe('Carousel', () => {
+  // Retained local tests (AST-021 FR6): the carousel contract keeps the
+  // aria-roledescription outcomes ADVISORY until a current Carousel record
+  // adopts the APG parts, so these component assertions remain the gate for
+  // the slide and region role descriptions. Removal blocker: component:Carousel
+  // adopting APG Carousel's aria-roledescription as current.
+  it('has carousel ARIA attributes', () => {
+    render(
+      <Carousel aria-label="Photos">
+        <div>Item</div>
+      </Carousel>,
+    );
+    const region = screen.getByRole('region', {name: 'Photos'});
+    expect(region).toHaveAttribute('aria-roledescription', 'carousel');
+  });
+
+  it('exposes each slide as a group with aria-roledescription="slide" and a positional name', () => {
+    render(
+      <Carousel aria-label="Photos">
+        <div>One</div>
+        <div>Two</div>
+        <div>Three</div>
+      </Carousel>,
+    );
+    // APG carousel pattern: each slide container is role=group with
+    // aria-roledescription="slide" and an "N of M" accessible name. (The
+    // scroll area around them is a group too, named like the carousel.)
+    const slides = screen.getAllByRole('group', {name: /^Slide /});
+    expect(slides).toHaveLength(3);
+    slides.forEach((slide, i) => {
+      expect(slide).toHaveAttribute('aria-roledescription', 'slide');
+      expect(slide).toHaveAccessibleName(`Slide ${i + 1} of 3`);
+    });
+  });
+
+  describe('scroll area (spec:AST-025 FR12)', () => {
+    function getScroller() {
+      return screen.getByRole('group', {name: 'Photos'});
+    }
+
+    function setOverflow(el: HTMLElement, overflowing: boolean) {
+      Object.defineProperty(el, 'scrollWidth', {
+        value: overflowing ? 500 : 200,
+        configurable: true,
+      });
+      Object.defineProperty(el, 'clientWidth', {
+        value: 200,
+        configurable: true,
+      });
+      fireEvent.scroll(el);
+    }
+
+    it('is a group named like the carousel', () => {
+      render(
+        <Carousel aria-label="Photos">
+          <div>One</div>
+          <div>Two</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      expect(scroller).toHaveAttribute('role', 'group');
+      expect(scroller).toHaveAccessibleName('Photos');
+      // It is the region's scroll container, not a slide.
+      expect(scroller).not.toHaveAttribute('aria-roledescription');
+      expect(scroller.parentElement).toBe(
+        screen.getByRole('region', {name: 'Photos'}),
+      );
+    });
+
+    // Named by its owner (spec:AST-025 FR12): the caller's label above, else
+    // the carousel's translated default.
+    it("takes the carousel's translated default name when the caller gives none", () => {
+      render(
+        <Carousel>
+          <div>One</div>
+          <div>Two</div>
+        </Carousel>,
+      );
+      const scroller = screen.getByRole('group', {name: 'Carousel'});
+      expect(scroller).toHaveAccessibleName('Carousel');
+      expect(scroller.parentElement).toBe(
+        screen.getByRole('region', {name: 'Carousel'}),
+      );
+    });
+
+    it('takes a tab stop only while its content overflows', () => {
+      render(
+        <Carousel aria-label="Photos">
+          <div>One</div>
+          <div>Two</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      // Fitting: out of the tab order, still focusable from script (FR2).
+      setOverflow(scroller, false);
+      expect(scroller).toHaveAttribute('tabindex', '-1');
+      act(() => scroller.focus());
+      expect(scroller).toHaveFocus();
+      act(() => scroller.blur());
+      // Overflowing: a tab stop.
+      setOverflow(scroller, true);
+      expect(scroller).toHaveAttribute('tabindex', '0');
+      // Fitting again: leaves the tab order.
+      setOverflow(scroller, false);
+      expect(scroller).toHaveAttribute('tabindex', '-1');
+    });
+
+    // The content can come to overflow, or stop, with the scroll area
+    // keeping its size: the tab stop follows it.
+    it('follows its content: slides added or removed, or a slide that grows, move the tab stop', async () => {
+      const slides = (count: number) =>
+        Array.from({length: count}, (_, i) => <div key={i}>Slide {i}</div>);
+      const view = render(<Carousel aria-label="Photos">{slides(1)}</Carousel>);
+      const scroller = getScroller();
+      // A 200 px scroll area; 150 px of content per slide, plus what a slide
+      // grows by.
+      let grown = 0;
+      Object.defineProperty(scroller, 'clientWidth', {
+        value: 200,
+        configurable: true,
+      });
+      Object.defineProperty(scroller, 'scrollWidth', {
+        configurable: true,
+        get: () => scroller.children.length * 150 + grown,
+      });
+      expect(scroller).toHaveAttribute('tabindex', '-1');
+
+      view.rerender(<Carousel aria-label="Photos">{slides(2)}</Carousel>);
+      await act(async () => {});
+      expect(scroller).toHaveAttribute('tabindex', '0');
+
+      view.rerender(<Carousel aria-label="Photos">{slides(1)}</Carousel>);
+      await act(async () => {});
+      expect(scroller).toHaveAttribute('tabindex', '-1');
+
+      // The one slide's content grows past the scroll area.
+      grown = 100;
+      const observer = MockResizeObserver.last;
+      act(() => {
+        observer?.callback(
+          [
+            {
+              target: scroller.firstElementChild,
+            } as unknown as ResizeObserverEntry,
+          ],
+          observer,
+        );
+      });
+      expect(scroller).toHaveAttribute('tabindex', '0');
+    });
+  });
+
   it('renders children', () => {
     render(
       <Carousel aria-label="Test carousel">
@@ -30,27 +184,31 @@ describe('Carousel', () => {
     expect(screen.getByTestId('item-2')).toBeInTheDocument();
   });
 
-  it('has carousel ARIA attributes', () => {
+  it('reflects the rendered child count, skipping null and boolean children', () => {
     render(
       <Carousel aria-label="Photos">
-        <div>Item</div>
+        <div>One</div>
+        {null}
+        {false}
+        <div>Two</div>
       </Carousel>,
     );
-    const region = screen.getByRole('region', {name: 'Photos'});
-    expect(region).toHaveAttribute('aria-roledescription', 'carousel');
-  });
-
-  it('makes the scroll container keyboard-focusable', () => {
-    render(
-      <Carousel aria-label="Photos">
-        <div>Item</div>
-      </Carousel>,
-    );
-    // The inner scroll container overflows, so it must be reachable by
-    // keyboard (axe: scrollable-region-focusable).
-    const region = screen.getByRole('region', {name: 'Photos'});
-    const scroller = region.firstElementChild;
-    expect(scroller).toHaveAttribute('tabindex', '0');
+    expect(
+      screen.getByRole('group', {name: 'Slide 1 of 2'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('group', {name: 'Slide 2 of 2'}),
+    ).toBeInTheDocument();
+    // Exactly two slides render: null and false children produce no empty
+    // slide (child filtering stays component-owned). The scroller is a named
+    // group too, so count the slides by their role description.
+    expect(
+      screen
+        .getAllByRole('group')
+        .filter(
+          group => group.getAttribute('aria-roledescription') === 'slide',
+        ),
+    ).toHaveLength(2);
   });
 
   it('applies data-testid', () => {
@@ -92,59 +250,6 @@ describe('Carousel', () => {
     );
     expect(screen.getByLabelText('Scroll left')).toBeInTheDocument();
     expect(screen.getByLabelText('Scroll right')).toBeInTheDocument();
-  });
-
-  describe('slide semantics', () => {
-    it('exposes each slide as a group with aria-roledescription="slide" and a positional name', () => {
-      render(
-        <Carousel aria-label="Photos">
-          <div>One</div>
-          <div>Two</div>
-          <div>Three</div>
-        </Carousel>,
-      );
-      // APG carousel pattern: each slide container is role=group with
-      // aria-roledescription="slide" and an "N of M" accessible name.
-      const slides = screen.getAllByRole('group');
-      expect(slides).toHaveLength(3);
-      slides.forEach((slide, i) => {
-        expect(slide).toHaveAttribute('aria-roledescription', 'slide');
-        expect(slide).toHaveAccessibleName(`Slide ${i + 1} of 3`);
-      });
-    });
-
-    it('reflects the rendered child count, skipping null and boolean children', () => {
-      render(
-        <Carousel aria-label="Photos">
-          <div>One</div>
-          {null}
-          {false}
-          <div>Two</div>
-        </Carousel>,
-      );
-      const slides = screen.getAllByRole('group');
-      expect(slides).toHaveLength(2);
-      expect(
-        screen.getByRole('group', {name: 'Slide 1 of 2'}),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole('group', {name: 'Slide 2 of 2'}),
-      ).toBeInTheDocument();
-    });
-
-    it('keeps the container region semantics unchanged around labelled slides', () => {
-      render(
-        <Carousel aria-label="Gallery">
-          <div>One</div>
-          <div>Two</div>
-        </Carousel>,
-      );
-      const region = screen.getByRole('region', {name: 'Gallery'});
-      expect(region).toHaveAttribute('aria-roledescription', 'carousel');
-      const slides = screen.getAllByRole('group');
-      expect(slides).toHaveLength(2);
-      slides.forEach(slide => expect(region).toContainElement(slide));
-    });
   });
 
   it('disables edge scroll buttons instead of removing them from the tab order', () => {
@@ -535,7 +640,7 @@ describe('Carousel', () => {
       fireEvent.scroll(el);
     }
 
-    it('hands focus to the opposite button when the edge disables the one in use', async () => {
+    it('hands focus to the scroll area when the edge disables the one in use', async () => {
       const user = userEvent.setup();
       render(
         <Carousel aria-label="Gallery">
@@ -552,7 +657,7 @@ describe('Carousel', () => {
       await user.click(next);
 
       expect(next).toBeDisabled();
-      expect(document.activeElement).toBe(screen.getByLabelText('Scroll left'));
+      expect(document.activeElement).toBe(getScroller());
       expect(document.activeElement).not.toBe(document.body);
     });
 
@@ -575,9 +680,7 @@ describe('Carousel', () => {
       await user.click(previous);
 
       expect(previous).toBeDisabled();
-      expect(document.activeElement).toBe(
-        screen.getByLabelText('Scroll right'),
-      );
+      expect(document.activeElement).toBe(getScroller());
     });
 
     it('hands off under RTL, where the scroll axis is inverted', async () => {
@@ -621,7 +724,7 @@ describe('Carousel', () => {
       await user.click(next);
 
       expect(next).toBeDisabled();
-      expect(document.activeElement).toBe(screen.getByLabelText('Scroll left'));
+      expect(document.activeElement).toBe(getScroller());
     });
 
     it('hands off when scroll-snap carries the container past what the press asked for', async () => {
@@ -642,7 +745,7 @@ describe('Carousel', () => {
       await user.click(next);
 
       expect(next).toBeDisabled();
-      expect(document.activeElement).toBe(screen.getByLabelText('Scroll left'));
+      expect(document.activeElement).toBe(getScroller());
     });
 
     it('falls back to the scroll container when the carousel stops overflowing', async () => {
@@ -717,7 +820,7 @@ describe('Carousel', () => {
       // rather than loosening the guard -- is caught.
       await user.click(screen.getByLabelText('Scroll right'));
 
-      expect(document.activeElement).toBe(screen.getByLabelText('Scroll left'));
+      expect(document.activeElement).toBe(getScroller());
     });
 
     it('does not move focus on a press that leaves the direction available', async () => {
@@ -764,8 +867,7 @@ describe('Carousel', () => {
         </Carousel>,
       );
       makeScrollable(getScroller(), 400);
-      const previous = screen.getByLabelText('Scroll left');
-      const focus = vi.spyOn(previous, 'focus');
+      const focus = vi.spyOn(getScroller(), 'focus');
 
       await user.click(screen.getByLabelText('Scroll right'));
 
@@ -805,8 +907,7 @@ describe('Carousel', () => {
       makeScrollable(getScroller(), 400);
       await user.click(screen.getByLabelText('Scroll right'));
 
-      const previous = screen.getByLabelText('Scroll left');
-      expect(document.activeElement).toBe(previous);
+      expect(document.activeElement).toBe(getScroller());
       // Park focus outside and re-render: the transition is spent, so nothing
       // may pull focus back in.
       const outside = document.createElement('button');
@@ -932,5 +1033,4 @@ describe('Carousel', () => {
       );
     });
   });
-
 });

@@ -22,7 +22,8 @@ export const docs = {
       ],
     },
     {
-      title: 'Surface Colors',
+      id: 'surface-colors',
+      title: 'Color Tokens',
   category: 'foundations',
       content: [
         {
@@ -37,9 +38,14 @@ export const docs = {
       ],
     },
     {
-      title: 'Usage',
+      id: 'usage',
+      title: 'Use color tokens in StyleX',
   category: 'foundations',
       content: [
+        {
+          type: 'prose',
+          text: 'Import the typed color tokens and use them in `stylex.create()`; they resolve to the active theme and color mode.',
+        },
         {
           type: 'code',
           lang: 'tsx',

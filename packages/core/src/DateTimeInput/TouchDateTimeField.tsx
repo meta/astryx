@@ -4,7 +4,7 @@
 
 /**
  * @file TouchDateTimeField.tsx
- * @input Uses React, Field, BottomSheet, SegmentedControl, DateInput month picker primitives, Wheel, StyleX intrinsic flex layout
+ * @input Uses React, Field, BottomSheet, SegmentedControl, DateInput month picker primitives, the resolved calendar, Wheel and the pickers' touch layer (TimeWheels), the touch presentation, StyleX intrinsic flex layout
  * @output Exports TouchDateTimeField — the coarse-pointer surface behind DateTimeInput
  * @position Internal component; consumed by DateTimeInput.tsx
  *
@@ -34,6 +34,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
 import {useCalendarConstraints, type ISODateString} from '../Calendar';
@@ -47,13 +48,14 @@ import {
 } from '../Field';
 import {useInputStatusIcon, useMergedRefs} from '../hooks';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
-import {useTranslator, InternationalizationContext} from '../i18n';
 import {SegmentedControl, SegmentedControlItem} from '../SegmentedControl';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
+import {useFieldInputStyling} from '../Field/fieldParts';
 import {
   colorVars,
   fontWeightVars,
@@ -67,33 +69,47 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {rtlStyles} from '../utils/rtlStyles';
 import {themeProps} from '../utils/themeProps';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
+import {formatLocaleTime} from '../utils/timeFormat';
+import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
 import {
-  formatDisplayTime12h,
-  formatDisplayTime24h,
   formatISOTime,
   isImeKeyEvent,
   isRenderable,
-  isTimeInRange,
   clampTime,
   mergeProps,
   parseISOTime,
   type ISOTimeString,
 } from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {joinAriaIDs} from '../utils/inputAria';
 import {
-  DATE_FORMAT_LONG,
-  DATE_FORMAT_MONTH_YEAR,
-  DATE_FORMAT_WEEKDAY_ONLY,
-  plainDateFormat,
   plainDateFromISO,
   plainDateToday,
   type PlainDate,
 } from '../utils/plainDate';
+import {
+  calendarDayOfMonth,
+  formatCalendarMonthLabel,
+} from '../utils/calendarSystem';
+import {formatCalendarDateText} from '../utils/calendarDateParser';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {
   MonthScroller,
   type MonthScrollerHandle,
 } from '../DateInput/MonthScroller';
 import {MonthYearWheels} from '../DateInput/MonthYearWheels';
 import {Wheel, type WheelOption} from '../DateInput/Wheel';
+import {TimeWheels} from '../DateInput/datePickerTouch';
+import {
+  hour12From24,
+  hour24From12,
+  hourRowsInHalf,
+  meridiemRows,
+  minuteRows,
+  secondRows,
+  wheelBounds,
+} from '../TimeInput/timeWheelRules';
+import {useTouchPresentation} from '../utils/touchPresentation';
 import {
   dateInputTouchGeometry,
   dateInputTouchSizes,
@@ -101,10 +117,17 @@ import {
 import {
   DEFAULT_MONTH_REACH,
   clampIndex,
-  fromMonthIndex,
-  monthIndexOf,
+  createMonthModel,
 } from '../DateInput/monthGeometry';
 import type {DateTimeInputProps, ISODateTimeString} from './DateTimeInput';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import {InternationalizationContext} from '../i18n/InternationalizationContext';
+import english from '../i18n/generated-english/DateTimeInput/TouchDateTimeField.generated';
+
+registerEnglishFallback(english);
 
 function splitDateTime(dt: ISODateTimeString | undefined): {
   date: ISODateString | undefined;
@@ -395,45 +418,6 @@ function normalizeISOTime(
   return parsed ? formatISOTime(parsed, hasSeconds) : undefined;
 }
 
-function timeToSeconds(time: ISOTimeString | undefined): number | null {
-  if (time === undefined) {
-    return null;
-  }
-  const parsed = parseISOTime(time);
-  return parsed == null
-    ? null
-    : parsed.hour * 3600 + parsed.minute * 60 + parsed.second;
-}
-
-function twoDigits(value: number): string {
-  return String(value).padStart(2, '0');
-}
-
-function hour12From24(hour: number): number {
-  return hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-}
-
-function hour24From12(hour: number, meridiem: number): number {
-  if (meridiem === 0) {
-    return hour === 12 ? 0 : hour;
-  }
-  return hour === 12 ? 12 : hour + 12;
-}
-
-function rangeOverlaps(
-  startSecond: number,
-  endSecond: number,
-  min: ISOTimeString | undefined,
-  max: ISOTimeString | undefined,
-): boolean {
-  const minSecond = timeToSeconds(min);
-  const maxSecond = timeToSeconds(max);
-  return (
-    (minSecond == null || endSecond >= minSecond) &&
-    (maxSecond == null || startSecond <= maxSecond)
-  );
-}
-
 type TouchDateTimePanel = 'date' | 'time';
 
 export function TouchDateTimeField({
@@ -466,14 +450,31 @@ export function TouchDateTimeField({
   // Desktop-only: the touch Date panel shows one swipe-paged month at a time.
   numberOfMonths: _numberOfMonths,
   weekStartsOn: weekStartsOnProp = 0,
+  calendar: calendarProp,
   width,
-  xstyle,
-  className,
-  style,
+  containerXstyle,
+  containerClassName,
+  containerStyle,
+  controlXstyle,
+  controlClassName,
+  controlStyle,
   ref,
-  ...rest
+  ...restProps
 }: DateTimeInputProps) {
-  const t = useTranslator();
+  const {rest, container} = useFieldInputStyling('DateTimeInput', restProps, {
+    containerXstyle,
+    containerClassName,
+    containerStyle,
+  });
+  const {
+    id: idProp,
+    'aria-describedby': ariaDescribedByProp,
+    'aria-labelledby': ariaLabelledByProp,
+    onClick: onClickProp,
+    onKeyDown: onKeyDownProp,
+    ...controlProps
+  } = rest;
+  const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {locale} = use(InternationalizationContext);
   const placeholder =
@@ -483,7 +484,15 @@ export function TouchDateTimeField({
   const resolvedTimeLabel =
     timeLabel ?? t('@astryx.dateTimeInput.timeSuffix', {label});
   const size = useSize(sizeProp, 'md');
-  const dateInputId = useId();
+  const generatedID = useId();
+  const dateInputId = idProp ?? generatedID;
+  const fieldLabelID = useId();
+  // A caller aria-labelledby names the date input together with the field's
+  // own label.
+  const controlLabelledBy =
+    ariaLabelledByProp != null
+      ? joinAriaIDs(fieldLabelID, ariaLabelledByProp)
+      : undefined;
   const timeInputId = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
@@ -518,6 +527,7 @@ export function TouchDateTimeField({
       status?.message ? statusMessageID : null,
       statusTooltipDescribedBy,
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
+      ariaDescribedByProp,
     ]
       .filter(Boolean)
       .join(' ') || undefined;
@@ -537,8 +547,18 @@ export function TouchDateTimeField({
   });
 
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const sheetBodyRef = useRef<HTMLDivElement | null>(null);
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8). A change made in the open modal sheet starts it while
+  // the sheet is open, so it is announced from inside the sheet.
+  useBusyAnnouncement(
+    isBusy,
+    t('@astryx.spinner.loading'),
+    isSheetOpen ? sheetBodyRef : dateInputRef,
+  );
   const [activePanel, setActivePanel] = useState<TouchDateTimePanel>('date');
   const [isWheelOpen, setIsWheelOpen] = useState(false);
+  const {isTouch} = useTouchPresentation();
   const [draftTime, setDraftTime] = useState<ISOTimeString | undefined>(() =>
     normalizeISOTime(splitDateTime(value).time, hasSeconds),
   );
@@ -561,77 +581,89 @@ export function TouchDateTimeField({
     [timeForWheels],
   );
   const weekStartsOn = normalizeDayOfWeek(weekStartsOnProp);
+  const calendar = useCalendarSystem(calendarProp, 'DateTimeInput');
+  const monthModel = useMemo(() => createMonthModel(calendar), [calendar]);
 
-  useEffect(() => {
+  // The draft follows the controlled time, and an external clear resets it.
+  // Adjusted during render when the value changes, so no commit paints the
+  // previous draft.
+  const [draftSource, setDraftSource] = useState({
+    time: normalizedValueTime,
+    value: optimisticValue,
+  });
+  // Object.is, matching the dependency comparison of the effect this replaces.
+  if (
+    !Object.is(draftSource.time, normalizedValueTime) ||
+    !Object.is(draftSource.value, optimisticValue)
+  ) {
+    setDraftSource({time: normalizedValueTime, value: optimisticValue});
     if (normalizedValueTime !== undefined) {
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- mirrors an externally controlled time into the sheet-local draft
       setDraftTime(normalizedValueTime);
     } else if (optimisticValue === undefined) {
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- external clear resets the sheet-local draft too
       setDraftTime(undefined);
     }
-  }, [normalizedValueTime, optimisticValue]);
+  }
 
+  // Indexes belong to the calendar, so DateTimeInput remounts this surface
+  // when the calendar changes.
   const [anchorMonthIndex] = useState(() =>
-    monthIndexOf(selectedDate ?? plainDateToday()),
+    monthModel.indexOf(selectedDate ?? plainDateToday()),
   );
   const minMonthIndex =
     calendarMin != null
-      ? monthIndexOf(plainDateFromISO(calendarMin))
+      ? monthModel.indexOf(plainDateFromISO(calendarMin))
       : anchorMonthIndex - DEFAULT_MONTH_REACH;
   const maxMonthIndex =
     calendarMax != null
-      ? monthIndexOf(plainDateFromISO(calendarMax))
+      ? monthModel.indexOf(plainDateFromISO(calendarMax))
       : anchorMonthIndex + DEFAULT_MONTH_REACH;
   const [monthIndex, setMonthIndex] = useState(() =>
     clampIndex(anchorMonthIndex, minMonthIndex, maxMonthIndex),
   );
-  const {year, month} = fromMonthIndex(monthIndex);
+  // min/max can narrow underneath the mounted sheet. Keep the visible month in
+  // range during render, so no commit shows an out-of-range month; the month
+  // scroller is keyed on the range and remounts at the clamped month.
+  const clampedMonthIndex = clampIndex(
+    monthIndex,
+    minMonthIndex,
+    maxMonthIndex,
+  );
+  // Object.is, matching the dependency comparison of the effect this replaces
+  // (a NaN index would otherwise never compare equal and re-render forever).
+  if (!Object.is(clampedMonthIndex, monthIndex)) {
+    setMonthIndex(clampedMonthIndex);
+  }
   const canStepBack = monthIndex > minMonthIndex;
   const canStepForward = monthIndex < maxMonthIndex;
 
-  useEffect(() => {
-    const clamped = clampIndex(monthIndex, minMonthIndex, maxMonthIndex);
-    if (clamped !== monthIndex) {
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- min/max can change underneath the mounted sheet; keep the visible month in range
-      setMonthIndex(clamped);
-      scrollerHandleRef.current?.scrollToMonth(clamped, 'auto');
-    }
-  }, [monthIndex, minMonthIndex, maxMonthIndex]);
-
-  const dayNames = useMemo(
-    () =>
-      Array.from({length: 7}, (_, offset) =>
-        plainDateFormat(
-          {year: 1970, month: 1, day: 4 + ((weekStartsOn + offset) % 7)},
-          DATE_FORMAT_WEEKDAY_ONLY,
-          locale,
-        ),
-      ),
-    [weekStartsOn, locale],
+  const weekdayHeaders = useMemo(
+    () => getWeekdayHeaders(locale, weekStartsOn),
+    [locale, weekStartsOn],
   );
-  const monthYearLabel = plainDateFormat(
-    {year, month, day: 1},
-    DATE_FORMAT_MONTH_YEAR,
+  // The day the picker keeps: the selected date's day of its month. A month
+  // with an era change takes its heading era from this day.
+  const keptDay =
+    selectedDate == null ? 1 : calendarDayOfMonth(calendar, selectedDate);
+  const monthYearLabel = formatCalendarMonthLabel(
+    calendar,
+    monthModel.monthAt(monthIndex),
     locale,
+    keptDay,
   );
 
   const dateDisplayValue = useMemo(() => {
     if (selectedDate == null) {
       return '';
     }
-    return plainDateFormat(selectedDate, DATE_FORMAT_LONG, locale);
-  }, [selectedDate, locale]);
+    return formatCalendarDateText(selectedDate, 'date_long', locale, calendar);
+  }, [calendar, selectedDate, locale]);
 
   const timeDisplayValue = useMemo(() => {
     const displayTime = normalizedValueTime ?? draftTime;
     return displayTime
-      ? (hourFormat === '12h' ? formatDisplayTime12h : formatDisplayTime24h)(
-          displayTime,
-          hasSeconds,
-        )
+      ? formatLocaleTime(displayTime, locale, hourFormat, hasSeconds)
       : '';
-  }, [draftTime, normalizedValueTime, hourFormat, hasSeconds]);
+  }, [draftTime, normalizedValueTime, locale, hourFormat, hasSeconds]);
 
   const timeBoundsForDate = useCallback(
     (date: ISODateString | undefined) => ({
@@ -733,13 +765,13 @@ export function TouchDateTimeField({
   const handleResetInSheet = useCallback(() => {
     fireChange(undefined);
     setDraftTime(undefined);
-    const currentMonth = monthIndexOf(today);
+    const currentMonth = monthModel.indexOf(today);
     if (currentMonth < minMonthIndex || currentMonth > maxMonthIndex) {
       return;
     }
     setMonthIndex(currentMonth);
     scrollerHandleRef.current?.scrollToMonth(currentMonth, 'smooth');
-  }, [fireChange, today, minMonthIndex, maxMonthIndex]);
+  }, [fireChange, monthModel, today, minMonthIndex, maxMonthIndex]);
 
   const handleDateSelect = useCallback(
     (nextDate: ISODateString) => {
@@ -804,106 +836,32 @@ export function TouchDateTimeField({
   );
 
   const timeBounds = timeBoundsForDate(valueParts.date);
-  const hourOptions: WheelOption[] = useMemo(() => {
-    if (hourFormat === '24h') {
-      return Array.from({length: 24}, (_, hour) => ({
-        value: hour,
-        label: twoDigits(hour),
-        isDisabled: !rangeOverlaps(
-          hour * 3600,
-          hour * 3600 + 3599,
-          timeBounds.min,
-          timeBounds.max,
-        ),
-      }));
-    }
-    const meridiem = parsedWheelTime.hour < 12 ? 0 : 1;
-    // In 12-hour mode the hour column is interpreted inside the active AM/PM
-    // half, so disabled rows describe reachability within that half only.
-    return Array.from({length: 12}, (_, index) => {
-      const hour = index + 1;
-      const hour24 = hour24From12(hour, meridiem);
-      return {
-        value: hour,
-        label: String(hour),
-        isDisabled: !rangeOverlaps(
-          hour24 * 3600,
-          hour24 * 3600 + 3599,
-          timeBounds.min,
-          timeBounds.max,
-        ),
-      };
-    });
-  }, [hourFormat, parsedWheelTime.hour, timeBounds.min, timeBounds.max]);
-
+  const bounds = useMemo(
+    () => wheelBounds(timeBounds.min, timeBounds.max),
+    [timeBounds.min, timeBounds.max],
+  );
+  const hourOptions: WheelOption[] = useMemo(
+    () => hourRowsInHalf(parsedWheelTime.hour, hourFormat, bounds),
+    [bounds, hourFormat, parsedWheelTime.hour],
+  );
   const minuteOptions: WheelOption[] = useMemo(
-    () =>
-      Array.from({length: 60}, (_, minute) => {
-        const start = parsedWheelTime.hour * 3600 + minute * 60;
-        return {
-          value: minute,
-          label: twoDigits(minute),
-          isDisabled: !rangeOverlaps(
-            start,
-            start + (hasSeconds ? 59 : 0),
-            timeBounds.min,
-            timeBounds.max,
-          ),
-        };
-      }),
-    [hasSeconds, parsedWheelTime.hour, timeBounds.min, timeBounds.max],
+    () => minuteRows(parsedWheelTime.hour, hasSeconds, bounds),
+    [bounds, hasSeconds, parsedWheelTime.hour],
   );
-
   const secondOptions: WheelOption[] = useMemo(
-    () =>
-      Array.from({length: 60}, (_, second) => ({
-        value: second,
-        label: twoDigits(second),
-        isDisabled: !isTimeInRange(
-          formatISOTime(
-            {
-              hour: parsedWheelTime.hour,
-              minute: parsedWheelTime.minute,
-              second,
-            },
-            true,
-          ),
-          timeBounds.min,
-          timeBounds.max,
-        ),
-      })),
-    [
-      parsedWheelTime.hour,
-      parsedWheelTime.minute,
-      timeBounds.min,
-      timeBounds.max,
-    ],
+    () => secondRows(parsedWheelTime.hour, parsedWheelTime.minute, bounds),
+    [bounds, parsedWheelTime.hour, parsedWheelTime.minute],
   );
-
   const meridiemOptions: WheelOption[] = useMemo(
-    () => [
-      {
-        value: 0,
-        label: t('@astryx.dateTimeInput.meridiemAM'),
-        isDisabled: !rangeOverlaps(
-          0,
-          11 * 3600 + 3599,
-          timeBounds.min,
-          timeBounds.max,
-        ),
-      },
-      {
-        value: 1,
-        label: t('@astryx.dateTimeInput.meridiemPM'),
-        isDisabled: !rangeOverlaps(
-          12 * 3600,
-          23 * 3600 + 3599,
-          timeBounds.min,
-          timeBounds.max,
-        ),
-      },
-    ],
-    [t, timeBounds.min, timeBounds.max],
+    () =>
+      meridiemRows(
+        {
+          am: t('@astryx.dateTimeInput.meridiemAM'),
+          pm: t('@astryx.dateTimeInput.meridiemPM'),
+        },
+        bounds,
+      ),
+    [bounds, t],
   );
 
   const handleVisibleMonthChange = useCallback(
@@ -1086,8 +1044,8 @@ export function TouchDateTimeField({
                 isWheelOpen && styles.touchDateSurfaceHidden,
               )}>
               <div aria-hidden="true" {...stylex.props(styles.touchWeekdays)}>
-                {dayNames.map(name => (
-                  <div key={name} {...stylex.props(styles.touchWeekday)}>
+                {weekdayHeaders.map(({dayOfWeek, name}) => (
+                  <div key={dayOfWeek} {...stylex.props(styles.touchWeekday)}>
                     {name}
                   </div>
                 ))}
@@ -1095,6 +1053,7 @@ export function TouchDateTimeField({
               <MonthScroller
                 key={`${minMonthIndex}:${maxMonthIndex}`}
                 handleRef={scrollerHandleRef}
+                monthModel={monthModel}
                 minMonthIndex={minMonthIndex}
                 maxMonthIndex={maxMonthIndex}
                 initialMonthIndex={monthIndex}
@@ -1140,7 +1099,9 @@ export function TouchDateTimeField({
                 {...stylex.props(styles.touchWheelSpacer)}
               />
               <MonthYearWheels
+                monthModel={monthModel}
                 monthIndex={monthIndex}
+                keptDay={keptDay}
                 minMonthIndex={minMonthIndex}
                 maxMonthIndex={maxMonthIndex}
                 onChange={next => {
@@ -1175,49 +1136,69 @@ export function TouchDateTimeField({
             activePanel !== 'time' && styles.touchPanelHidden,
           )}>
           <div {...stylex.props(styles.touchTimeWheels)}>
-            <Wheel
-              label={t('@astryx.dateTimeInput.hourWheel')}
-              options={hourOptions}
-              value={
-                hourFormat === '24h'
-                  ? parsedWheelTime.hour
-                  : hour12From24(parsedWheelTime.hour)
-              }
-              isActive={activePanel === 'time'}
-              onChange={hour =>
-                commitWheelTime(
-                  hourFormat === '24h'
-                    ? composeWheelTime({hour24: hour})
-                    : composeWheelTime({hour12: hour}),
-                )
-              }
-            />
-            <Wheel
-              label={t('@astryx.dateTimeInput.minuteWheel')}
-              options={minuteOptions}
-              value={parsedWheelTime.minute}
-              isActive={activePanel === 'time'}
-              onChange={minute => commitWheelTime(composeWheelTime({minute}))}
-            />
-            {hasSeconds && (
-              <Wheel
-                label={t('@astryx.dateTimeInput.secondWheel')}
-                options={secondOptions}
-                value={parsedWheelTime.second}
+            {isTouch ? (
+              <TimeWheels
+                time={parsedWheelTime}
+                hourFormat={hourFormat}
+                hasSeconds={hasSeconds}
+                min={timeBounds.min}
+                max={timeBounds.max}
                 isActive={activePanel === 'time'}
-                onChange={second => commitWheelTime(composeWheelTime({second}))}
-              />
-            )}
-            {hourFormat === '12h' && (
-              <Wheel
-                label={t('@astryx.dateTimeInput.meridiemWheel')}
-                options={meridiemOptions}
-                value={parsedWheelTime.hour < 12 ? 0 : 1}
-                isActive={activePanel === 'time'}
-                onChange={meridiem =>
-                  commitWheelTime(composeWheelTime({meridiem}))
+                onCommit={time =>
+                  commitWheelTime(formatISOTime(time, hasSeconds))
                 }
               />
+            ) : (
+              <>
+                <Wheel
+                  label={t('@astryx.dateTimeInput.hourWheel')}
+                  options={hourOptions}
+                  value={
+                    hourFormat === '24h'
+                      ? parsedWheelTime.hour
+                      : hour12From24(parsedWheelTime.hour)
+                  }
+                  isActive={activePanel === 'time'}
+                  onChange={hour =>
+                    commitWheelTime(
+                      hourFormat === '24h'
+                        ? composeWheelTime({hour24: hour})
+                        : composeWheelTime({hour12: hour}),
+                    )
+                  }
+                />
+                <Wheel
+                  label={t('@astryx.dateTimeInput.minuteWheel')}
+                  options={minuteOptions}
+                  value={parsedWheelTime.minute}
+                  isActive={activePanel === 'time'}
+                  onChange={minute =>
+                    commitWheelTime(composeWheelTime({minute}))
+                  }
+                />
+                {hasSeconds && (
+                  <Wheel
+                    label={t('@astryx.dateTimeInput.secondWheel')}
+                    options={secondOptions}
+                    value={parsedWheelTime.second}
+                    isActive={activePanel === 'time'}
+                    onChange={second =>
+                      commitWheelTime(composeWheelTime({second}))
+                    }
+                  />
+                )}
+                {hourFormat === '12h' && (
+                  <Wheel
+                    label={t('@astryx.dateTimeInput.meridiemWheel')}
+                    options={meridiemOptions}
+                    value={parsedWheelTime.hour < 12 ? 0 : 1}
+                    isActive={activePanel === 'time'}
+                    onChange={meridiem =>
+                      commitWheelTime(composeWheelTime({meridiem}))
+                    }
+                  />
+                )}
+              </>
             )}
           </div>
           <div {...stylex.props(styles.touchFooter)}>
@@ -1236,10 +1217,12 @@ export function TouchDateTimeField({
 
   return (
     <Field
+      {...container}
       label={label}
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={dateInputId}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
       descriptionID={description ? descriptionID : undefined}
       isOptional={isOptional}
       isRequired={isRequired}
@@ -1260,16 +1243,15 @@ export function TouchDateTimeField({
         ref={el => {
           disabledMessageTooltip.ref(el);
         }}
-        {...rest}
         {...mergeProps(
           themeProps('date-time-input', {
             size,
             status: status?.type ?? null,
             disabled: isDisabled ? 'disabled' : null,
           }),
-          stylex.props(styles.touchRow, xstyle),
-          className,
-          style,
+          stylex.props(styles.touchRow, controlXstyle),
+          controlClassName,
+          controlStyle,
         )}>
         <div
           onClick={event => {
@@ -1287,6 +1269,7 @@ export function TouchDateTimeField({
               sizeStyles[size],
               styles.touchDateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&
@@ -1297,7 +1280,7 @@ export function TouchDateTimeField({
           <button
             type="button"
             onClick={() => openSheet('date')}
-            disabled={isEffectivelyDisabled}
+            aria-disabled={isEffectivelyDisabled || undefined}
             aria-label={t('@astryx.dateInput.openCalendar')}
             tabIndex={-1}
             {...stylex.props(
@@ -1315,6 +1298,7 @@ export function TouchDateTimeField({
             />
           </button>
           <input
+            {...controlProps}
             ref={mergedDateInputRef}
             id={dateInputId}
             type="text"
@@ -1323,11 +1307,19 @@ export function TouchDateTimeField({
             readOnly
             inputMode="none"
             onChange={() => {}}
-            onClick={() => openSheet('date')}
-            onKeyDown={event => handleInputKeyDown(event, 'date')}
+            onClick={
+              isEffectivelyDisabled
+                ? undefined
+                : chainEventHandlers(() => openSheet('date'), onClickProp)
+            }
+            onKeyDown={chainEventHandlers(
+              (event: React.KeyboardEvent<HTMLInputElement>) =>
+                handleInputKeyDown(event, 'date'),
+              onKeyDownProp,
+            )}
+            aria-labelledby={controlLabelledBy}
             placeholder={placeholder}
-            disabled={isEffectivelyDisabled && !showsDisabledMessage}
-            aria-disabled={showsDisabledMessage ? 'true' : undefined}
+            aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
             aria-describedby={ariaDescribedBy}
             aria-required={isEffectivelyRequired ? 'true' : undefined}
             aria-invalid={status?.type === 'error' ? 'true' : undefined}
@@ -1348,7 +1340,7 @@ export function TouchDateTimeField({
               onClick={handleClear}
             />
           )}
-          {isBusy && <Spinner size="sm" />}
+          {isBusy && <Spinner size="sm" aria-hidden="true" />}
           {isRenderable(statusIcon) && statusIcon}
         </div>
 
@@ -1368,6 +1360,7 @@ export function TouchDateTimeField({
               sizeStyles[size],
               styles.touchTimeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&
@@ -1378,7 +1371,7 @@ export function TouchDateTimeField({
           <button
             type="button"
             onClick={() => openSheet('time')}
-            disabled={isEffectivelyDisabled}
+            aria-disabled={isEffectivelyDisabled || undefined}
             aria-label={t('@astryx.dateTimeInput.openTimePicker', {
               label: resolvedTimeLabel,
             })}
@@ -1407,8 +1400,7 @@ export function TouchDateTimeField({
             onClick={() => openSheet('time')}
             onKeyDown={event => handleInputKeyDown(event, 'time')}
             placeholder={timePlaceholder}
-            disabled={isEffectivelyDisabled && !showsDisabledMessage}
-            aria-disabled={showsDisabledMessage ? 'true' : undefined}
+            aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
             aria-label={resolvedTimeLabel}
             aria-describedby={ariaDescribedBy}
             aria-required={isEffectivelyRequired ? 'true' : undefined}
@@ -1429,8 +1421,13 @@ export function TouchDateTimeField({
           isOpen={isSheetOpen}
           onOpenChange={handleSheetOpenChange}
           label={t('@astryx.dateTimeInput.dialogLabel')}
-          height="hug">
-          <div {...stylex.props(styles.touchSheetBody)}>{surface}</div>
+          height="hug"
+          // touchSheetBody owns the inset, including the band under the grab
+          // handle.
+          padding={0}>
+          <div ref={sheetBodyRef} {...stylex.props(styles.touchSheetBody)}>
+            {surface}
+          </div>
         </BottomSheet>
         {showsDisabledMessage &&
           disabledMessageTooltip.renderTooltip(disabledMessage)}

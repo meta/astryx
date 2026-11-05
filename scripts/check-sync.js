@@ -18,6 +18,11 @@ const path = require('node:path');
 
 const ROOT = path.resolve(__dirname, '..');
 const CORE_SRC = path.join(ROOT, 'packages/core/src');
+// Packages that keep their components as flat files rather than one directory
+// each. They get the dead-reference check (check 2), which is file-level; the
+// README and showcase checks are keyed on a component directory and do not
+// apply.
+const FLAT_SRC_DIRS = [path.join(ROOT, 'packages/richtext/src')];
 const SHOWCASE_DIR = path.join(
   ROOT,
   'packages/cli/assets/templates/blocks/components',
@@ -51,6 +56,61 @@ function isComponentSourceFile(fileName, dirPath) {
     );
   }
   return false;
+}
+
+/** The `/`-rooted paths a file's `SYNC:` block lists. */
+function parseSyncRefs(content) {
+  const syncRefs = [];
+  let inSync = false;
+  for (const line of content.split('\n')) {
+    if (line.includes('SYNC:')) {
+      inSync = true;
+      continue;
+    }
+    if (inSync) {
+      const match = line.match(/\*\s*-\s*(\/[^\s()]+)/);
+      if (match) {
+        syncRefs.push(match[1]);
+      } else if (
+        line.trim() === '*' ||
+        line.trim() === '*/' ||
+        line.includes('Last synced') ||
+        line.includes('@')
+      ) {
+        break;
+      }
+    }
+  }
+  return syncRefs;
+}
+
+// Flat packages: dead SYNC references only.
+//
+// `isComponentSourceFile` requires a sibling `{Name}.doc.mjs` to tell a
+// component apart from an internal PascalCase helper. That heuristic needs one
+// directory per component: in a flat package every file is a sibling of the
+// single doc, so it would accept everything or — as richtext shows, where only
+// RichTextEditor.doc.mjs exists — reject the other components outright. That
+// is how RichTextView.tsx came to carry a SYNC reference to a file that does
+// not exist. Here the predicate is simply "a source file carrying a SYNC
+// block", which is exactly the set this check is about.
+for (const srcDir of FLAT_SRC_DIRS) {
+  if (!fs.existsSync(srcDir)) continue;
+  const rel = path.relative(ROOT, srcDir);
+  for (const file of fs.readdirSync(srcDir)) {
+    if (!/^[A-Z]\w+\.tsx?$/.test(file) || file.includes('.test.')) continue;
+    const content = fs.readFileSync(path.join(srcDir, file), 'utf-8');
+    if (!content.includes('SYNC:')) continue;
+    for (const ref of parseSyncRefs(content)) {
+      if (!fs.existsSync(path.resolve(ROOT, ref.slice(1)))) {
+        addViolation(
+          'dead-ref',
+          `${rel}/${file}`,
+          `SYNC references non-existent path: ${ref}`,
+        );
+      }
+    }
+  }
 }
 
 // Get all component directories (dirs with at least one component source file)
@@ -89,29 +149,7 @@ for (const comp of componentDirs) {
 
     if (!content.includes('SYNC:')) continue;
 
-    // Extract all SYNC bullet paths
-    const syncRefs = [];
-    const lines = content.split('\n');
-    let inSync = false;
-    for (const line of lines) {
-      if (line.includes('SYNC:')) {
-        inSync = true;
-        continue;
-      }
-      if (inSync) {
-        const match = line.match(/\*\s*-\s*(\/[^\s()]+)/);
-        if (match) {
-          syncRefs.push(match[1]);
-        } else if (
-          line.trim() === '*' ||
-          line.trim() === '*/' ||
-          line.includes('Last synced') ||
-          line.includes('@')
-        ) {
-          break;
-        }
-      }
-    }
+    const syncRefs = parseSyncRefs(content);
 
     // Check 2: All referenced paths exist
     for (const ref of syncRefs) {

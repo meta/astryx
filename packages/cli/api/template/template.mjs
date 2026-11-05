@@ -15,14 +15,22 @@
  *   ./list, ./show, ./skeleton, ./copy, ./cdn and shared discovery in foundation/discovery.
  */
 
-import {discoverAll, pkgOf} from '../../foundation/discovery/template-adapter.mjs';
+import {
+  discoverAll,
+  discoverAllResolved,
+  discoverAllUnresolved,
+  pkgOf,
+  templateLookupIds,
+} from '../../foundation/discovery/template-adapter.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {orderByAffinity} from '../../foundation/text/suggest-order.mjs';
 import {templateList} from './list/list.mjs';
 import {templateShow} from './show/show.mjs';
 import {templateSkeleton} from './skeleton/skeleton.mjs';
 import {templateCopy} from './copy/copy.mjs';
 import {templateCdn} from './cdn/cdn.mjs';
+import {loadTemplateIconSets} from './_adapter.mjs';
 
 // Re-export the shared discovery/IO + cross-command helpers so this module
 // stays the single import surface for the template family (same exports as
@@ -35,10 +43,13 @@ export {
   discoverCoreTemplates,
   discoverIntegrationTemplatesForOne,
   stripTemplateAssetRefs,
+  replaceDemoMedia,
+  replaceDemoContent,
   listTemplates,
   findRelatedBlocks,
   findShowcase,
   extractComponents,
+  pkgOf,
 } from '../../foundation/discovery/template-adapter.mjs';
 
 /**
@@ -78,6 +89,51 @@ export async function template(name, options = {}) {
     cwd = process.cwd(),
   } = options;
 
+  if (cdn) {
+    const ignored = [
+      name ? '<name>' : null,
+      list ? '--list' : null,
+      skeleton ? '--skeleton' : null,
+      type ? '--type' : null,
+      packageFilter ? '--package' : null,
+    ].filter(Boolean);
+    if (ignored.length > 0) {
+      throw new AstryxError(
+        `\`--cdn\` cannot be combined with ${ignored.join(', ')}: the CDN starter does not use templates.`,
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+  }
+  if (list) {
+    const ignored = [
+      name ? '<name>' : null,
+      targetPath ? '<path>' : null,
+      skeleton ? '--skeleton' : null,
+      overwrite ? '--overwrite' : null,
+    ].filter(Boolean);
+    if (ignored.length > 0) {
+      throw new AstryxError(
+        `\`--list\` cannot be combined with ${ignored.join(', ')}: it lists templates and does not scaffold.`,
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+  }
+  if (skeleton) {
+    const ignored = [
+      targetPath ? '<path>' : null,
+      overwrite ? '--overwrite' : null,
+    ].filter(Boolean);
+    if (ignored.length > 0) {
+      throw new AstryxError(
+        `\`--skeleton\` cannot be combined with ${ignored.join(', ')}: it prints the skeleton and does not write files.`,
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+  }
+
   // The CDN starter ships as an asset rather than as a discovered template, so
   // it answers before discovery — nothing here needs a name resolved.
   if (cdn) {
@@ -88,23 +144,59 @@ export async function template(name, options = {}) {
     });
   }
 
-  const templates = await discoverAll(cwd);
+  const templates =
+    packageFilter === '@astryxdesign/core'
+      ? await discoverAllUnresolved(cwd)
+      : packageFilter
+        ? await discoverAllResolved(cwd)
+        : await discoverAll(cwd);
 
   if (list || (!name && !skeleton)) {
     return templateList(templates, {type, package: packageFilter});
   }
 
-  // Resolve `name` to a single template. The same id can appear across types
-  // and/or packages (e.g. a core "hero" page and an integration "hero"
-  // block); narrow with --type / --package.
-  let candidates = templates.filter(t => t.dirName === name);
-  if (type) candidates = candidates.filter(t => t.type === type);
-  if (packageFilter) candidates = candidates.filter(t => pkgOf(t) === packageFilter);
+  // Resolve `name` to a single template. Without an explicit package, an active
+  // integration replacement owns the Core id it names. Package-qualified lookup
+  // stays exact, which keeps the original addressable as
+  // `--package @astryxdesign/core`.
+  let pool = templates;
+  if (type) pool = pool.filter(t => t.type === type);
+  if (packageFilter) pool = pool.filter(t => pkgOf(t) === packageFilter);
+  // With no name there is nothing to replace; `--skeleton` alone must still
+  // fail as an unknown template.
+  const replacements =
+    packageFilter || name == null ? [] : pool.filter(t => t.replaces === name);
+  let candidates = packageFilter
+    ? pool.filter(t => t.dirName === (name ?? ''))
+    : replacements.length > 0
+      ? replacements
+      : pool.filter(t => templateLookupIds(t).includes(name ?? ''));
+
+  // A rejected same-id declaration must not displace Core for the bare command,
+  // but a different-kind integration template remains reachable with --type.
+  if (!packageFilter && !type && candidates.length > 1) {
+    const core = candidates.filter(t => pkgOf(t) === '@astryxdesign/core');
+    const rejected = candidates.filter(t => pkgOf(t) !== '@astryxdesign/core');
+    if (
+      core.length === 1 &&
+      rejected.length === candidates.length - 1 &&
+      rejected.every(
+        t => t.replacementRejected && t.replacementTarget === (name ?? ''),
+      )
+    ) {
+      candidates = core;
+    }
+  }
 
   if (name && candidates.length === 0) {
     throw new AstryxError(
       `Unknown template "${name}"`,
-      templates.map(t => ({name: t.dirName, reason: `${t.type} template`})),
+      orderByAffinity(name, templates, t => [t.dirName, t.name], {
+        closest: true,
+      }).map(t => ({
+        name: t.dirName,
+        reason: `${t.type} template`,
+      })),
       ERROR_CODES.ERR_UNKNOWN_TEMPLATE,
     );
   }
@@ -124,9 +216,12 @@ export async function template(name, options = {}) {
     return templateSkeleton(match, templates);
   }
 
+  // The project's icon set decides how the template's icons are written
+  // (AST-084 FR9): both the printed source and the copied file follow it.
+  const iconSets = await loadTemplateIconSets(cwd);
   if (show || !targetPath) {
-    return templateShow(match);
+    return templateShow(match, {iconSets});
   }
 
-  return templateCopy(match, {targetPath, cwd, overwrite});
+  return templateCopy(match, {targetPath, cwd, overwrite, iconSets});
 }

@@ -38,7 +38,7 @@ import {
   typographyVars,
 } from '../theme/tokens.stylex';
 import {useChatMessageContext} from './ChatContext';
-import {mergeProps} from '../utils';
+import {isRenderable, mergeProps} from '../utils';
 import type {SizeValue} from '../utils/types';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
@@ -64,6 +64,7 @@ export interface ChatMessageBubbleProps extends BaseProps<HTMLDivElement> {
 
   /**
    * Sender name rendered above the bubble, aligned with bubble text padding.
+   * Non-rendering scalar values omit the aligned wrapper; numeric zero remains.
    * Use when the first content in a message is a bubble.
    * If the first content is raw (no bubble), use ChatMessage's `name`
    * prop instead.
@@ -72,6 +73,7 @@ export interface ChatMessageBubbleProps extends BaseProps<HTMLDivElement> {
 
   /**
    * Metadata content rendered below the bubble, aligned with bubble text padding.
+   * Non-rendering scalar values omit the aligned wrapper; numeric zero remains.
    * Use when the last content in a message is a bubble.
    * If the last content is raw (no bubble), use ChatMessage's `metadata`
    * prop instead.
@@ -289,9 +291,12 @@ export function ChatMessageBubble({
         ? styles.metadataPaddingSpacious
         : styles.metadataPaddingBalanced;
 
+  const hasName = isRenderable(name);
+  const hasMetadata = isRenderable(metadata);
+
   return (
     <>
-      {name && (
+      {hasName && (
         <div
           data-chat-name
           {...stylex.props(
@@ -324,7 +329,7 @@ export function ChatMessageBubble({
         )}>
         {children}
       </div>
-      {metadata && (
+      {hasMetadata && (
         <div
           {...stylex.props(
             metadataPaddingStyle,

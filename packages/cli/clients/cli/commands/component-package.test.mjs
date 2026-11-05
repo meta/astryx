@@ -5,6 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {component} from '../../../api/component/component.mjs';
+import {runCli} from '../../../test-utils/run-cli.mjs';
 
 // These tests create a minimal monorepo fixture with:
 // - packages/core (symlinked to real @astryxdesign/core for loadDocs compatibility)
@@ -119,5 +120,50 @@ describe('component() with --package option', () => {
     expect(result.data.component).toBe('ProfileCard');
     expect(result.data.source).toContain('ProfileCardShowcase');
     expect(result.data.aspectRatio).toBeCloseTo(16 / 9);
+  });
+
+  // A legacy package ships docs only: --source and --blocks answer the same
+  // way scoped as unscoped, never falling back to the plain doc.
+  it('--package + --source reports the missing source, like the unscoped lookup', async () => {
+    await expect(
+      component('ProfileCard', {cwd: tmpDir, source: true}),
+    ).rejects.toMatchObject({code: 'ERR_NO_SOURCE'});
+    await expect(
+      component('ProfileCard', {cwd: tmpDir, package: '@test/ext', source: true}),
+    ).rejects.toMatchObject({code: 'ERR_NO_SOURCE'});
+  });
+
+  it('--package + --blocks returns the blocks, like the unscoped lookup', async () => {
+    const unscoped = await component('ProfileCard', {cwd: tmpDir, blocks: true});
+    const scoped = await component('ProfileCard', {cwd: tmpDir, package: '@test/ext', blocks: true});
+    expect(scoped.type).toBe('component.detail.blocks');
+    expect(scoped.data).toEqual(unscoped.data);
+  });
+
+  // `cwd` is an explicit API input: --blocks must discover from it, as
+  // --showcase does, not from the process working directory.
+  it('--blocks discovers blocks from options.cwd, like --showcase', async () => {
+    const showcase = await component('ProfileCard', {cwd: tmpDir, showcase: true});
+    expect(showcase.data.source).toContain('ProfileCardShowcase');
+
+    const blocks = await component('ProfileCard', {cwd: tmpDir, blocks: true});
+    expect(blocks.type).toBe('component.detail.blocks');
+    expect(blocks.data.showcase?.name).toBe('ProfileCardShowcase');
+  });
+
+  // List and detail report one import for a legacy package component; the
+  // text list projects the JSON value instead of deriving a Core path.
+  it('the names list gives a legacy package component the import its detail reports', async () => {
+    const detail = await component('ProfileCard', {cwd: tmpDir});
+    const list = await component(undefined, {cwd: tmpDir, list: true});
+    const entry = Object.values(list.data.components)
+      .flat()
+      .find(e => e.name === 'ProfileCard' && e.package === '@test/ext');
+    expect(entry?.import).toBe(detail.data.import);
+
+    const text = await runCli(['component', '--list'], tmpDir);
+    expect(text.code).toBe(0);
+    expect(text.stdout).toContain(`name:   ProfileCard\nimport: ${detail.data.import}  [@test/ext]`);
+    expect(text.stdout).not.toMatch(/^import: +@astryxdesign\/core\S* +\[@test\/ext\]$/m);
   });
 });

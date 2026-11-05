@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useState} from 'react';
+import {useState, type CSSProperties} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Stepper, Step} from '@astryxdesign/core/Stepper';
@@ -9,6 +9,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {Text} from '@astryxdesign/core/Text';
 import {Icon} from '@astryxdesign/core/Icon';
 import {Badge} from '@astryxdesign/core/Badge';
+import {Popover} from '@astryxdesign/core/Popover';
 
 const meta: Meta<typeof Stepper> = {
   title: 'Core/Stepper',
@@ -238,19 +239,19 @@ export const StatusAllStates: Story = {
           <Step
             step={1}
             label="Success"
-            description="--color-success"
+            description="--color-icon-success"
             status="success"
           />
           <Step
             step={2}
             label="Warning"
-            description="--color-warning"
+            description="--color-icon-warning"
             status="warning"
           />
           <Step
             step={3}
             label="Error"
-            description="--color-error"
+            description="--color-icon-error"
             status="error"
           />
           <Step
@@ -741,6 +742,47 @@ export const OnTrackVertical: Story = {
           <Step step={2} label="Set up integrations" />
           <Step step={3} label="Import data" />
           <Step step={4} label="Launch" />
+        </Stepper>
+      </div>
+    );
+  },
+};
+
+// The outer track holds its connectors 6px off each indicator. The popover is
+// a layer opened from a step, so the Stepper inside it starts from its own 0px
+// default: its connectors run into the indicators rather than copying the gap.
+export const OnTrackGapInLayer: Story = {
+  name: 'On-Track — Gap Stops at a Layer',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(true);
+    return (
+      <div
+        style={{maxWidth: 400, '--step-connector-gap': '6px'} as CSSProperties}>
+        <Stepper
+          activeStep={1}
+          orientation="vertical"
+          indicatorPosition="on-track">
+          <Step step={0} label="Create workspace" />
+          <Step step={1} label="Set up integrations">
+            <Popover
+              label="Integration steps"
+              isOpen={isOpen}
+              onOpenChange={setIsOpen}
+              placement="end"
+              content={
+                <Stepper
+                  activeStep={1}
+                  orientation="vertical"
+                  indicatorPosition="on-track">
+                  <Step step={0} label="Connect" />
+                  <Step step={1} label="Map fields" />
+                  <Step step={2} label="Sync" />
+                </Stepper>
+              }>
+              <Button label="Integration steps" variant="secondary" />
+            </Popover>
+          </Step>
+          <Step step={2} label="Launch" />
         </Stepper>
       </div>
     );

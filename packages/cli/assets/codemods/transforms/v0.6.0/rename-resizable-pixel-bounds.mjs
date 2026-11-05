@@ -8,6 +8,9 @@
  * released conflict rule (the unified property wins when both are present).
  * A spread or computed property can change precedence invisibly, so dynamic
  * objects stay unchanged and receive a manual-migration TODO instead.
+ * Named and namespace imports both count, and a type-only wrapper (`as`,
+ * `satisfies`, a non-null assertion, parentheses) does not make a
+ * configuration dynamic.
  */
 
 export const meta = {
@@ -32,6 +35,26 @@ const MANUAL_MIGRATION_COMMENT =
   ' TODO(astryx upgrade): This useResizable configuration contains a spread ' +
   'or computed property. Rename minSizePx/maxSizePx to minSize/maxSize ' +
   'manually without changing property precedence. ';
+
+const TYPE_WRAPPERS = new Set([
+  'TSAsExpression',
+  'TSSatisfiesExpression',
+  'TSTypeAssertion',
+  'TSNonNullExpression',
+  'ParenthesizedExpression',
+]);
+
+/**
+ * The expression under type-only wrappers such as `{...} as const`.
+ * @param {any} node
+ */
+function unwrap(node) {
+  let current = node;
+  while (current && TYPE_WRAPPERS.has(current.type)) {
+    current = current.expression;
+  }
+  return current;
+}
 
 /** @param {any} property */
 function staticPropertyName(property) {
@@ -128,6 +151,8 @@ export default function transformer(file, api) {
   const root = j(file.source);
   /** @type {Map<string, any>} */
   const bindings = new Map();
+  /** @type {Map<string, any>} */
+  const namespaces = new Map();
 
   root.find(j.ImportDeclaration).forEach((/** @type {any} */ path) => {
     if (!IMPORT_SOURCES.has(path.node.source.value)) return;
@@ -138,17 +163,40 @@ export default function transformer(file, api) {
       ) {
         const local = specifier.local?.name ?? 'useResizable';
         bindings.set(local, path.scope.lookup(local) ?? path.scope);
+      } else if (specifier.type === 'ImportNamespaceSpecifier') {
+        const local = specifier.local.name;
+        namespaces.set(local, path.scope.lookup(local) ?? path.scope);
       }
     }
   });
-  if (bindings.size === 0) return undefined;
+  if (bindings.size === 0 && namespaces.size === 0) return undefined;
+
+  /**
+   * @param {any} callee
+   * @param {any} scope
+   */
+  const isUseResizable = (callee, scope) => {
+    if (callee.type === 'Identifier') {
+      return (
+        bindings.has(callee.name) &&
+        scope.lookup(callee.name) === bindings.get(callee.name)
+      );
+    }
+    return (
+      callee.type === 'MemberExpression' &&
+      !callee.computed &&
+      callee.object.type === 'Identifier' &&
+      callee.property.type === 'Identifier' &&
+      callee.property.name === 'useResizable' &&
+      namespaces.has(callee.object.name) &&
+      scope.lookup(callee.object.name) === namespaces.get(callee.object.name)
+    );
+  };
 
   let changed = false;
   root.find(j.CallExpression).forEach((/** @type {any} */ path) => {
-    const callee = path.node.callee;
-    if (callee.type !== 'Identifier' || !bindings.has(callee.name)) return;
-    if (path.scope.lookup(callee.name) !== bindings.get(callee.name)) return;
-    const config = path.node.arguments[0];
+    if (!isUseResizable(path.node.callee, path.scope)) return;
+    const config = unwrap(path.node.arguments[0]);
     if (config?.type !== 'ObjectExpression') return;
 
     changed = migrateObject(j, config) || changed;
@@ -158,13 +206,12 @@ export default function transformer(file, api) {
         staticPropertyName(property) === 'regions',
     );
     if (!regions || !('value' in regions)) return;
-    const regionsObject = regions.value;
+    const regionsObject = unwrap(regions.value);
     if (regionsObject?.type !== 'ObjectExpression') return;
     for (const region of regionsObject.properties) {
-      if (!('value' in region) || region.value?.type !== 'ObjectExpression') {
-        continue;
-      }
-      changed = migrateObject(j, region.value) || changed;
+      const regionConfig = 'value' in region ? unwrap(region.value) : null;
+      if (regionConfig?.type !== 'ObjectExpression') continue;
+      changed = migrateObject(j, regionConfig) || changed;
     }
   });
 

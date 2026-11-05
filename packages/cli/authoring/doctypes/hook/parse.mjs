@@ -8,7 +8,7 @@
 import {FunctionDocKindSchema} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
-/** @typedef {import('../types').HookDoc} HookDoc */
+/** @typedef {import('../types.js').HookDoc} HookDoc */
 
 /**
  * Validate an unknown value as a stamped function/hook doc, or throw.

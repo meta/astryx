@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi} from 'vitest';
+import {createRef} from 'react';
 import {render, screen} from '@testing-library/react';
 import {ChatTokenizedText} from './ChatTokenizedText';
 
@@ -77,6 +78,64 @@ describe('ChatTokenizedText', () => {
     expect(container.textContent).toContain('Before');
     expect(container.textContent).toContain('after');
     expect(container.textContent).toContain('@Cindy Zhang');
+  });
+
+  it('ignores empty token values instead of creating zero-width matches', () => {
+    render(
+      <ChatTokenizedText
+        tokens={[
+          {value: '', label: 'Empty'},
+          {value: '@alice', label: '@Alice'},
+        ]}>
+        Hello @alice
+      </ChatTokenizedText>,
+    );
+
+    expect(screen.getByText('@Alice')).toBeInTheDocument();
+    expect(screen.queryByText('Empty')).not.toBeInTheDocument();
+  });
+
+  it('renders plain text when every token value is empty', () => {
+    render(
+      <ChatTokenizedText
+        tokens={[
+          {value: '', label: 'First empty'},
+          {value: '', label: 'Second empty'},
+        ]}>
+        Hello world
+      </ChatTokenizedText>,
+    );
+
+    expect(screen.getByText('Hello world')).toBeInTheDocument();
+    expect(screen.queryByText('First empty')).not.toBeInTheDocument();
+    expect(screen.queryByText('Second empty')).not.toBeInTheDocument();
+  });
+
+  it('renders custom tokens only for actual matches', () => {
+    const renderCustom = vi.fn(() => <span>Custom token</span>);
+
+    const {rerender} = render(
+      <ChatTokenizedText tokens={[{value: '@custom', render: renderCustom}]}>
+        Hello @custom
+      </ChatTokenizedText>,
+    );
+    expect(screen.getByText('Custom token')).toBeInTheDocument();
+    expect(renderCustom).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ChatTokenizedText tokens={[{value: '@custom', render: renderCustom}]}>
+        Hello world
+      </ChatTokenizedText>,
+    );
+    expect(screen.queryByText('Custom token')).not.toBeInTheDocument();
+    expect(renderCustom).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards refs to the root span', () => {
+    const ref = createRef<HTMLSpanElement>();
+    render(<ChatTokenizedText ref={ref}>Plain text</ChatTokenizedText>);
+    expect(ref.current?.tagName).toBe('SPAN');
+    expect(ref.current?.textContent).toBe('Plain text');
   });
 
   it('forwards rest props (data-*, id) to the root element', () => {

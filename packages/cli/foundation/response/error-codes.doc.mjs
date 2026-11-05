@@ -12,7 +12,7 @@ export const doc = {
   type: 'enum',
   name: 'error-codes',
   displayName: 'Error Codes',
-  namespace: 'cli',
+  namespace: 'cli/api',
   description:
     'Stable, append-only machine-readable error codes on the --json error envelope (envelope.code). Codes never change or get removed; branch on these, not on prose.',
   members: [
@@ -36,17 +36,16 @@ export const doc = {
     {
       value: 'ERR_INVALID_OPTION',
       description:
-        'An unknown flag/option was passed (Commander `unknownOption`).',
+        'An unknown option was passed, --json was given to a command without JSON output.',
     },
     {
       value: 'ERR_INVALID_ARGUMENT',
       description:
-        "An option/argument had a value Commander's parser rejected.",
+        'An argument or option value is invalid: wrong type, out of range, an unknown choice, an extra argument, or a conflicting combination.',
     },
     {
       value: 'ERR_MISSING_ARGUMENT',
-      description:
-        'A required positional argument was omitted (Commander `missingArgument`).',
+      description: 'A required argument or option value was omitted.',
     },
     {
       value: 'ERR_INVALID_LANG',
@@ -134,12 +133,11 @@ export const doc = {
     },
     {
       value: 'ERR_UNKNOWN_PACKAGE',
-      description: 'No package matched the requested name (discover).',
+      description: 'No package matched the requested name.',
     },
     {
       value: 'ERR_UNKNOWN_AGENT',
-      description:
-        'An unrecognized `--agent` value was passed to agent-docs/init.',
+      description: 'An unrecognized `--agent` value was passed to init.',
     },
     {
       value: 'ERR_UNKNOWN_FEATURE',
@@ -152,7 +150,18 @@ export const doc = {
     },
     {
       value: 'ERR_CODEMOD_FAILED',
-      description: 'One or more codemods failed during an upgrade run.',
+      description:
+        'A codemod or post-codemod hook failed during an upgrade run; the error carries a `receipt` that lists the files the run already changed.',
+    },
+    {
+      value: 'ERR_CODEMOD_PROTECTED',
+      description:
+        'A required codemod change remains blocked by a protected consumer file.',
+    },
+    {
+      value: 'ERR_CODEMOD_PROTECTION_SOURCE',
+      description:
+        'A working-tree protection declaration could not be read or parsed.',
     },
     {
       value: 'ERR_NOT_FOUND',
@@ -187,8 +196,7 @@ export const doc = {
     },
     {
       value: 'ERR_FILE_EXISTS',
-      description:
-        'Refused to overwrite an existing file in non-interactive mode.',
+      description: 'Refused to overwrite an existing file.',
     },
     {
       value: 'ERR_PATH_TRAVERSAL',
@@ -204,7 +212,7 @@ export const doc = {
     {
       value: 'ERR_THEME_INVALID',
       description:
-        'A theme definition or contributed theme catalog is invalid.',
+        'A theme definition or contributed theme descriptor is invalid.',
     },
     {
       value: 'ERR_THEME_LOAD',
@@ -263,12 +271,80 @@ export const doc = {
     {
       value: 'ERR_UNCLASSIFIED_EXIT',
       description:
-        'Recorded in the debug log, never printed: a command exited non-zero without going through cliError/jsonError, so no stable code was available.',
+        'Recorded in the debug log, never printed: a command exited non-zero without reporting an error code.',
     },
     {
       value: 'ERR_SIGNAL_TERMINATED',
       description:
         'Recorded in the debug log, never printed: the process was ended by a signal (Ctrl-C, SIGTERM) before the command reached a terminal path.',
+    },
+
+    // Global mode
+    {
+      value: 'ERR_VERSIONS_UNAVAILABLE',
+      description:
+        "Nothing could answer this run, and nothing was written: the project's own CLI could not start and nothing else could answer, or the Core a command needs outside a project could not be installed.",
+    },
+    {
+      value: 'ERR_PROJECT_REQUIRED',
+      description:
+        'The command needs a project (an app with Astryx installed, or an integration package) and was run outside one. Nothing was written.',
+    },
+
+    // Render (experimental: may change or be removed in a patch release)
+    {
+      value: 'ERR_RENDER_COMPILE',
+      stability: 'experimental',
+      description:
+        'The page given to render does not compile. A stylesheet the page imports that is not valid CSS is reported this way too, naming the file. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_NO_DEFAULT_EXPORT',
+      stability: 'experimental',
+      description:
+        'The page given to render has no default export to render. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_MISSING_DEPENDENCY',
+      stability: 'experimental',
+      description:
+        'The page imports a package that is not installed where the page is. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_BROWSER_API',
+      stability: 'experimental',
+      description:
+        'The page reads a browser-only API, such as window or document, while rendering. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_ASSET_TOO_LARGE',
+      stability: 'experimental',
+      description:
+        'A local file the page uses is too large to inline into one file. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_TIMEOUT',
+      stability: 'experimental',
+      description:
+        'The page did not finish rendering in time and was stopped. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_FAILED',
+      stability: 'experimental',
+      description:
+        'The page threw while rendering. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_NOT_ASTRYX',
+      stability: 'experimental',
+      description:
+        '`render --reverse` was given a file with no embedded source and no Astryx markup. Nothing was written. Raised only by the experimental render command.',
+    },
+    {
+      value: 'ERR_RENDER_SOURCE_DAMAGED',
+      stability: 'experimental',
+      description:
+        '`render --reverse` refused the received file, and nothing was written: its embedded source is damaged (not valid, or a file does not match its checksum), lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a page module, stylesheet, JSON file or image. Raised only by the experimental render command.',
     },
   ],
 };

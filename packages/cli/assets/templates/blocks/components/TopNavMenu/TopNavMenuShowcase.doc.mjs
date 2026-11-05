@@ -11,4 +11,10 @@ export const doc = {
   isShowcase: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['TopNav', 'TopNavMenu', 'TopNavItem'],
+  icons: {
+    ChartBarIcon: 'chart',
+    Cog6ToothIcon: 'settings',
+    MagnifyingGlassIcon: 'search',
+    UsersIcon: 'users',
+  },
 };

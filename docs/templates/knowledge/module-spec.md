@@ -1,6 +1,6 @@
 ---
 schema_version: 3
-template_version: 2
+template_version: 4
 kind: module
 id: module:<ParentComponent>/<PublicName>
 authority: draft
@@ -16,6 +16,8 @@ references: [architecture:<surface>, design:<surface>, spec:AST-000/DEC-0]
 ---
 
 # <PublicName> module contract
+
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
 
 ## Contract at a glance
 
@@ -87,6 +89,20 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Anatomy or state | Design requirement     | Representation authority                     | Module contract     |
 | ---------------- | ---------------------- | -------------------------------------------- | ------------------- |
 | `<role/state>`   | `design:<surface>/DR1` | `<prescribed, human-selected, or unsettled>` | `<FR/AR reference>` |
+
+Use the optional table below only for durable module-local visual intent that a
+future redesign must reconsider. Reuse or amend an existing row before adding
+one. Exact pixel tuning normally stays in code and visual evidence. Put shared or
+cross-component rules in `docs/design/` and link them from the relationship table
+above. Use `DD1`, `DD2`, and so on; IDs remain stable and unique within this
+record.
+
+### Design decisions
+
+<!-- design-decisions:v1 -->
+
+| ID  | Decision | Intent or reason | Applies to | Allowed variation |
+| --- | -------- | ---------------- | ---------- | ----------------- |
 
 ### Theming anatomy
 

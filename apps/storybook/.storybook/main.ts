@@ -15,6 +15,7 @@ import type {StorybookConfig} from '@storybook/react-vite';
 // tsconfig already resolves for typecheck.
 import {astryxStylex} from '../../../packages/build/src/vite.ts';
 import path from 'node:path';
+import stylexResolution from '../../../scripts/stylex-module-resolution.cjs';
 import {fileURLToPath} from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -191,10 +192,7 @@ const config: StorybookConfig = {
             dev: false,
             styleResolution: 'application-order',
             aliases: stylexAliases,
-            unstable_moduleResolution: {
-              type: 'commonJS',
-              rootDir: rootDir,
-            },
+            unstable_moduleResolution: stylexResolution.stylexModuleResolution,
             lightningcssOptions: {
               targets: lightningcssTargets,
             },

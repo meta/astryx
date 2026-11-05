@@ -25,6 +25,125 @@ function assertiveRegion(): HTMLElement | null {
 }
 
 describe('useAnnounce', () => {
+  it.each(['polite', 'assertive'] as const)(
+    'cancels every queued %s write when cleared',
+    politeness => {
+      vi.useFakeTimers();
+      try {
+        const {result} = renderHook(() => useAnnounce());
+        result.current('First', politeness);
+        result.current('Second', politeness);
+        const region =
+          politeness === 'polite' ? politeRegion()! : assertiveRegion()!;
+        const write = vi.spyOn(region, 'textContent', 'set');
+        result.current('', politeness);
+        act(() => {
+          vi.advanceTimersByTime(50);
+        });
+        expect(write.mock.calls).toEqual([['']]);
+        write.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each(['polite', 'assertive'] as const)(
+    'joins %s messages announced in the same frame, in order (AST-086 FR9)',
+    politeness => {
+      vi.useFakeTimers();
+      try {
+        const {result} = renderHook(() => useAnnounce());
+        result.current('3 results', politeness);
+        result.current('Filter applied', politeness);
+        const region =
+          politeness === 'polite' ? politeRegion()! : assertiveRegion()!;
+        const write = vi.spyOn(region, 'textContent', 'set');
+        act(() => {
+          vi.advanceTimersByTime(50);
+        });
+        // One write exposes both; neither is dropped or exposed alone.
+        expect(write.mock.calls).toEqual([['3 results Filter applied']]);
+        write.mockRestore();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it('keeps an identical message repeated in the same frame once (AST-086 FR9)', () => {
+    vi.useFakeTimers();
+    try {
+      const {result} = renderHook(() => useAnnounce());
+      result.current('1 result');
+      result.current('Filter applied');
+      result.current('1 result');
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+      expect(politeRegion()!.textContent).toBe('1 result Filter applied');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts a new announcement for a message after the joined one is exposed (AST-086 FR9)', () => {
+    vi.useFakeTimers();
+    try {
+      const {result} = renderHook(() => useAnnounce());
+      result.current('First');
+      result.current('Second');
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+      expect(politeRegion()).toHaveTextContent('First Second');
+      result.current('Third');
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+      expect(politeRegion()!.textContent).toBe('Third');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears messages joined but not yet exposed (AST-086 FR9)', () => {
+    vi.useFakeTimers();
+    try {
+      const {result} = renderHook(() => useAnnounce());
+      result.current('First');
+      result.current('Second');
+      result.current('');
+      result.current('Third');
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+      // The clear dropped First and Second; only the later message is exposed.
+      expect(politeRegion()!.textContent).toBe('Third');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('cancels queued writes on reset', () => {
+    vi.useFakeTimers();
+    try {
+      const {result} = renderHook(() => useAnnounce());
+      result.current('Saved');
+      result.current('Failed', 'assertive');
+      const polite = politeRegion()!;
+      const assertive = assertiveRegion()!;
+      __resetLiveRegionsForTest();
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+      expect(polite.textContent).toBe('');
+      expect(assertive.textContent).toBe('');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('mounts empty polite and assertive live regions on first announce', async () => {
     const {result} = renderHook(() => useAnnounce());
     // Regions do not exist until first use.

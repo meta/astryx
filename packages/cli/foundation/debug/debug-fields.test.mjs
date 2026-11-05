@@ -20,9 +20,6 @@ import {captureEnv} from './event.mjs';
 import {parseDebugEvent} from '../../authoring/debug/parse.mjs';
 
 const ATTRIBUTION_ENV_KEYS = [
-  'ASTRYX_AGENT_ID',
-  'ASTRYX_AGENT_SESSION_ID',
-  'ASTRYX_AGENT_METADATA',
   'AGENT',
   'AGENT_SESSION_ID',
   'CURSOR_TRACE_ID',
@@ -262,14 +259,14 @@ describe('DebugEvent additive fields', () => {
 describe('environment attribution', () => {
   it('detects an explicit agent and hashes its session id', () => {
     clearAttributionEnv();
-    vi.stubEnv('ASTRYX_AGENT_ID', 'test-agent');
-    vi.stubEnv('ASTRYX_AGENT_SESSION_ID', 'agent-session-123');
+    vi.stubEnv('AGENT', 'test-agent');
+    vi.stubEnv('AGENT_SESSION_ID', 'agent-session-123');
     const env = captureEnv();
     expect(env).toMatchObject({
       agent: 'test-agent',
       agentIdentity: 'test-agent',
       agentSessionId: null,
-      agentSessionIdSource: 'ASTRYX_AGENT_SESSION_ID',
+      agentSessionIdSource: 'AGENT_SESSION_ID',
       invocationSource: 'ai',
     });
     expect(env.agentSessionIdHash).toBe(
@@ -287,40 +284,21 @@ describe('environment attribution', () => {
     });
   });
 
-  it('parses comma-separated metadata', () => {
+  it('reads no Astryx-owned or metadata variable for attribution', () => {
     clearAttributionEnv();
+    // The removed variables, set: none of them attributes the run.
+    vi.stubEnv('ASTRYX_AGENT_ID', 'old-agent');
+    vi.stubEnv('ASTRYX_AGENT_SESSION_ID', 'old-session');
     vi.stubEnv(
       'ASTRYX_AGENT_METADATA',
-      'id=future-agent,invocation_id=future-session,malformed',
+      'id=old-agent,session_id=old-session,invocation_id=old-invocation',
     );
-    const env = captureEnv();
-    expect(env).toMatchObject({
-      agentIdentity: 'future-agent',
-      agentSessionId: null,
-      agentSessionIdSource: 'ASTRYX_AGENT_METADATA.invocation_id',
-      invocationSource: 'ai',
+    vi.stubEnv('AGENT_METADATA', JSON.stringify({id: 'meta-agent'}));
+    expect(captureEnv()).toMatchObject({
+      agentIdentity: null,
+      agentSessionIdHash: null,
+      agentSessionIdSource: null,
     });
-    expect(env.agentSessionIdHash).toBe(
-      createHash('sha256').update('future-session', 'utf8').digest('hex'),
-    );
-  });
-
-  it('parses JSON metadata', () => {
-    clearAttributionEnv();
-    vi.stubEnv(
-      'ASTRYX_AGENT_METADATA',
-      JSON.stringify({id: 'json-agent', session_id: 'json-session'}),
-    );
-    const env = captureEnv();
-    expect(env).toMatchObject({
-      agentIdentity: 'json-agent',
-      agentSessionId: null,
-      agentSessionIdSource: 'ASTRYX_AGENT_METADATA.session_id',
-      invocationSource: 'ai',
-    });
-    expect(env.agentSessionIdHash).toBe(
-      createHash('sha256').update('json-session', 'utf8').digest('hex'),
-    );
   });
 
   it('leaves agent fields null without a signal', () => {

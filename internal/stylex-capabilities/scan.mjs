@@ -15,8 +15,17 @@ import stylexPlugin from '@stylexjs/babel-plugin';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {createRequire} from 'node:module';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '../..');
+const requireFromCore = createRequire(
+  path.join(repoRoot, 'packages/core/package.json'),
+);
+const typescriptPreset = requireFromCore.resolve('@babel/preset-typescript');
+const stylexPackagePath = requireFromCore.resolve(
+  '@stylexjs/stylex/package.json',
+);
 
 // ============================================================================
 // Test cases — each is a minimal StyleX snippet testing one CSS feature
@@ -336,18 +345,18 @@ const s = stylex.create({ w: (w) => ({ width: w + 'px' }) });`,
   {
     category: 'Variables',
     name: 'stylex.defineVars',
+    filename: 'test.stylex.ts',
     code: `import * as stylex from '@stylexjs/stylex';
 export const vars = stylex.defineVars({ primary: 'blue', secondary: 'green' });`,
   },
   {
     category: 'Variables',
     name: 'stylex.createTheme',
+    filename: 'test.stylex.ts',
     code: `import * as stylex from '@stylexjs/stylex';
 export const vars = stylex.defineVars({ primary: 'blue' });
 export const theme = stylex.createTheme(vars, { primary: 'red' });`,
   },
-
-
 
   // stylex.when — ancestor/sibling state selectors
   {
@@ -387,7 +396,7 @@ const s = stylex.create({ t: { opacity: { default: 1, [stylex.when.ancestor(':di
 const s = stylex.create({ t: { color: { default: 'red', [stylex.when.ancestor('[data-selected]')]: 'blue' } } });`,
   },
 
-    // stylex.when — descendant and sibling selectors
+  // stylex.when — descendant and sibling selectors
   {
     category: 'Ancestor/Sibling Selectors',
     name: 'stylex.when.descendant(:hover)',
@@ -431,7 +440,7 @@ const s = stylex.create({ t: { positionTryOptions: pt } });`,
     category: 'StyleX APIs',
     name: 'stylex.viewTransitionClass()',
     code: `import * as stylex from '@stylexjs/stylex';
-const vtc = stylex.viewTransitionClass();
+const vtc = stylex.viewTransitionClass({ old: { opacity: 0 }, new: { opacity: 1 } });
 const s = stylex.create({ t: { viewTransitionName: vtc } });`,
   },
   {
@@ -456,7 +465,7 @@ export const vars = stylex.defineVars({ primary: stylex.types.color('blue') });`
 export const vars = stylex.defineVars({ spacing: stylex.types.length('16px') });`,
   },
 
-    // Bleeding-edge CSS features
+  // Bleeding-edge CSS features
   {
     category: 'Bleeding Edge',
     name: '@scope',
@@ -619,18 +628,35 @@ const s = stylex.create({ t: { overscrollBehavior: 'contain' } });`,
 
 function testFeature(test) {
   if (test.skipTest) {
-    return { ...test };
+    return {...test};
   }
   try {
     const result = babel.transformSync(test.code, {
       filename: test.filename || 'test.tsx',
-      presets: ['@babel/preset-typescript'],
-      plugins: [[stylexPlugin, {dev: true, runtimeInjection: true}]],
+      presets: [typescriptPreset],
+      plugins: [
+        [
+          stylexPlugin,
+          {
+            dev: true,
+            runtimeInjection: true,
+            propertyValidationMode: 'throw',
+            unstable_moduleResolution: {
+              type: 'commonJS',
+              rootDir: repoRoot,
+            },
+          },
+        ],
+      ],
     });
     // Check if StyleX actually processed it (look for inject calls)
     const hasInject = result.code.includes('_inject');
     const hasStylex = result.code.includes('stylex');
-    const output = result.code.split('\n').filter(l => l.includes('ltr:')).map(l => l.trim()).join('\n');
+    const output = result.code
+      .split('\n')
+      .filter(l => l.includes('ltr:'))
+      .map(l => l.trim())
+      .join('\n');
 
     // Validate output — some features compile but produce invalid CSS
     const invalidPatterns = [
@@ -646,13 +672,18 @@ function testFeature(test) {
       supported: !hasInvalidOutput,
       hasInject,
       output,
-      ...(hasInvalidOutput ? {invalidReason: 'Compiles but produces invalid CSS output'} : {}),
+      ...(hasInvalidOutput
+        ? {invalidReason: 'Compiles but produces invalid CSS output'}
+        : {}),
     };
   } catch (e) {
+    const message = String(e.message)
+      .replaceAll(repoRoot, '<repo>')
+      .split('\n')[0];
     return {
       ...test,
       supported: false,
-      error: e.message.split('\n')[0],
+      error: message,
     };
   }
 }
@@ -664,12 +695,7 @@ function testFeature(test) {
 const results = tests.map(testFeature);
 
 // Get StyleX version
-const stylexPkg = JSON.parse(
-  fs.readFileSync(
-    path.resolve(__dirname, '../../node_modules/@stylexjs/stylex/package.json'),
-    'utf8',
-  ),
-);
+const stylexPkg = JSON.parse(fs.readFileSync(stylexPackagePath, 'utf8'));
 
 // Group by category
 const categories = {};
@@ -695,7 +721,9 @@ for (const [cat, items] of Object.entries(categories)) {
   for (const item of items) {
     const status = item.supported ? '✅' : '❌';
     const output = item.supported
-      ? item.output ? `\`${item.output.slice(0, 80)}\`` : '(processed)'
+      ? item.output
+        ? `\`${item.output.slice(0, 80)}\``
+        : '(processed)'
       : item.error?.slice(0, 60) || 'Error';
     md += `| ${item.name} | ${status} | ${output} |\n`;
   }
@@ -715,7 +743,9 @@ for (const [cat, items] of Object.entries(categories)) {
 const outPath = path.resolve(__dirname, 'CAPABILITIES.md');
 fs.writeFileSync(outPath, md);
 console.log(`Written to ${outPath}`);
-console.log(`\n${supported}/${total} features supported (StyleX v${stylexPkg.version})`);
+console.log(
+  `\n${supported}/${total} features supported (StyleX v${stylexPkg.version})`,
+);
 
 // Also write JSON for programmatic use
 const jsonPath = path.resolve(__dirname, 'capabilities.json');

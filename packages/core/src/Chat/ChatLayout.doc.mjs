@@ -6,7 +6,7 @@ export const docs = {
   name: 'ChatLayout',
   subComponentOf: 'Chat',
   displayName: 'Chat Layout',
-  description: 'Layout shell for full chat interfaces. Messages flow in normal page flow, composer is fixed to the bottom with a frosted glass dock. Adapts density (compact/balanced/spacious) automatically via container width observation. Includes built-in auto-scroll, a "New messages" scroll-to-bottom button, and a frosted glass blur layer behind the composer. By default the layout root is the scroll container; pass scrollRef to delegate scrolling to a parent element or the document body.',
+  description: 'Layout shell for full chat interfaces. Messages flow in normal page flow, composer is fixed to the bottom with a frosted glass dock. Set density (compact/balanced/spacious) to control spacing, message max-width, and blur layer sizing. Includes built-in auto-scroll, a "New messages" scroll-to-bottom button, and a frosted glass blur layer behind the composer. By default the layout root is the scroll container; pass scrollRef to delegate scrolling to a parent element or the document body.',
   props: [
     {
       name: 'children',
@@ -53,9 +53,15 @@ export const docs = {
       type: 'React.RefObject<HTMLElement | null>',
       description: 'External scroll container ref. When provided, auto-scroll and scroll-to-bottom target this element instead of the layout root. Use when the chat is embedded in a page where a parent element or the document body scrolls.',
     },
+    {
+      name: 'density',
+      type: "'compact' | 'balanced' | 'spacious'",
+      description: 'Visual density: controls dock padding, message-area max-width and inline padding, and the height of the frosted glass blur layer.',
+      default: "'balanced'",
+    },
   ],
   usage: {
-    description: 'ChatLayout is the layout shell for full-page chat interfaces. It renders messages in normal page flow and docks the composer to the bottom with a frosted glass blur layer. Density adapts automatically via container width observation. Use it to wrap ChatMessageList and ChatComposer for a complete chat experience with built-in auto-scroll and a scroll-to-bottom button.',
+    description: 'ChatLayout is the layout shell for full-page chat interfaces. It renders messages in normal page flow and docks the composer to the bottom with a frosted glass blur layer. Set the density prop to control spacing; it defaults to balanced. Use it to wrap ChatMessageList and ChatComposer for a complete chat experience with built-in auto-scroll and a scroll-to-bottom button.',
     bestPractices: [
       {
         guidance: true,
@@ -111,20 +117,21 @@ export const docs = {
 export const docsZh = {
   name: 'ChatLayout',
   displayName: 'Chat Layout',
-  description: '完整聊天界面的布局外壳。消息在页面中自然流动，编写器固定在底部，带有毛玻璃效果。通过容器宽度自动适配密度。',
+  description: '完整聊天界面的布局外壳。消息在页面中自然流动，编写器固定在底部，带有毛玻璃效果。通过 density 属性控制密度。',
   propDescriptions: {
     children: '消息内容，通常是 ChatMessageList。在页面中自然流动。',
     composer: '编写器元素，通常是 ChatComposer。固定在底部，带有毛玻璃底座。',
     emptyState: '子元素为空时显示的内容。',
     scrollButton: '编写器上方的滚动到底部按钮。默认使用 ChatLayoutScrollButton。传入 null 隐藏。',
     scrollRef: '外部滚动容器引用。提供时，自动滚动和滚动到底部将目标指向此元素。',
+    density: '视觉密度：控制底座内边距、消息区最大宽度和毛玻璃层高度。',
   },
 };
 
 export const docsDense = {
   name: 'ChatLayout',
   displayName: 'Chat Layout',
-  description: 'layout shell for full chat; msgs in page flow, composer fixed bottom w/ frosted glass dock; auto density via container width; scrollRef delegates to parent/body',
+  description: 'layout shell for full chat; msgs in page flow, composer fixed bottom w/ frosted glass dock; density prop (default balanced); scrollRef delegates to parent/body',
   usage: {
     bestPractices: [
       {guidance: true, description: 'Pass ChatMessageList as children and ChatComposer as composer prop for complete chat.'},
@@ -140,5 +147,6 @@ export const docsDense = {
     emptyState: 'content when children empty',
     scrollButton: 'scroll-to-bottom btn; defaults to ChatLayoutScrollButton; pass null to hide',
     scrollRef: 'external scroll container ref; targets parent/body instead of layout root',
+    density: 'visual density; dock padding, message max-width, blur height',
   },
 };

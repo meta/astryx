@@ -93,9 +93,9 @@ type TransferListSelectorShellProp =
   | 'size'
   | 'width'
   | 'placement'
-  | 'xstyle'
-  | 'className'
-  | 'style'
+  | 'controlXstyle'
+  | 'controlClassName'
+  | 'controlStyle'
   | 'data-testid';
 
 type TransferListContentProp =
@@ -217,27 +217,24 @@ export function TransferListSelector<T extends string = string>({
   const cancelLabel =
     cancelLabelFromProps ?? t('@astryx.transferListSelector.cancel');
   const [draftValue, setDraftValue] = useState<readonly T[]>(value);
-  const previousAppliedValueRef = useRef<readonly T[]>([...value]);
-  const previousCommitBehaviorRef = useRef(commitBehavior);
 
   const resetDraft = useCallback(() => {
     setDraftValue([...value]);
   }, [value]);
 
-  useEffect(() => {
-    const previousAppliedValue = previousAppliedValueRef.current;
-    previousAppliedValueRef.current = [...value];
-    if (!areOrderedValuesEqual(previousAppliedValue, value)) {
-      resetDraft();
-    }
-  }, [resetDraft, value]);
-
-  useEffect(() => {
-    if (previousCommitBehaviorRef.current !== commitBehavior) {
-      resetDraft();
-    }
-    previousCommitBehaviorRef.current = commitBehavior;
-  }, [commitBehavior, resetDraft]);
+  // A changed applied value or commit behavior discards the staged draft.
+  // Adjusted during render, so no commit paints the discarded draft.
+  const [draftSource, setDraftSource] = useState(() => ({
+    value: [...value],
+    commitBehavior,
+  }));
+  if (
+    !areOrderedValuesEqual(draftSource.value, value) ||
+    !Object.is(draftSource.commitBehavior, commitBehavior)
+  ) {
+    setDraftSource({value: [...value], commitBehavior});
+    setDraftValue([...value]);
+  }
 
   const resolvedWidth =
     typeof width === 'number'

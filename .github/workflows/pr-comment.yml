@@ -10,32 +10,21 @@
 # drift between a fork path and a same-repo path.
 #
 # Safety: resolves scope and PR identity from the GitHub API. Privileged jobs
-# check out only trusted default-branch code. PR-built static artifacts are
-# published only after exact run/PR/repository checks; report fields remain
-# untrusted data and are rendered by default-branch code.
+# check out only trusted default-branch code. Both preview links are the
+# branch's Vercel alias, known without waiting for a deployment.
 
 name: PR Comment
 
 on:
   workflow_run:
     workflows: ['CI']
-    types: [requested, in_progress, completed]
+    types: [completed]
 
 permissions: {}
 
-# The event already carries a stable head-repository/branch identity. Acquire
-# this shared lock before resolving the PR so a rerun can cancel older
-# invalidation, report-publication, or acceptance mutations for the same head.
-# Post-merge promotion does not join this cancellation group: it serializes
-# durably with every baseline publisher, then recaptures the merged commit and
-# requires its canonical pixels to match the latest completed accepted CI.
-concurrency:
-  group: visual-acceptance-head-${{ github.event.workflow_run.head_repository.id }}-${{ github.event.workflow_run.head_branch }}
-  cancel-in-progress: ${{ github.event.action == 'requested' || github.event.action == 'in_progress' }}
-
 jobs:
   resolve:
-    if: github.event.workflow_run.event == 'pull_request'
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-slim
     permissions:
       contents: read
@@ -54,18 +43,28 @@ jobs:
       source_conclusion: ${{ steps.identity.outputs.source_conclusion }}
       spec_only: ${{ steps.identity.outputs.spec_only }}
       tooling_only: ${{ steps.identity.outputs.tooling_only }}
+      failed: ${{ steps.checkout.outcome == 'failure' || steps.identity.outcome == 'failure' }}
     steps:
       - name: Checkout trusted default-branch code
+        id: checkout
+        continue-on-error: true
         uses: actions/checkout@v7
         with:
           ref: main
 
       - name: Resolve trusted PR identity
+        continue-on-error: true
         id: identity
+        # Steps continue on error, so a failed checkout no longer skips this
+        # one by itself.
+        if: steps.checkout.outcome == 'success'
         uses: actions/github-script@v9
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
             const {pathToFileURL} = require('node:url');
             const {resolveWorkflowRunPullRequest} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href
@@ -113,70 +112,11 @@ jobs:
             core.setOutput('spec_only', String(changeScope.specOnly));
             core.setOutput('tooling_only', String(changeScope.toolingOnly));
 
-  invalidate:
-    needs: resolve
-    if: >-
-      (github.event.action == 'requested' || github.event.action == 'in_progress') &&
-      needs.resolve.outputs.valid == 'true' &&
-      needs.resolve.outputs.spec_only != 'true' &&
-      needs.resolve.outputs.tooling_only != 'true'
-    runs-on: ubuntu-slim
-    permissions:
-      pull-requests: write
-      statuses: write
-    steps:
-      - name: Invalidate visible approval for the new evidence run
-        uses: actions/github-script@v9
-        with:
-          retries: 3
-          script: |
-            const {owner, repo} = context.repo;
-            const run = context.payload.workflow_run;
-            const pr = Number('${{ needs.resolve.outputs.pr_number }}');
-            const head = '${{ needs.resolve.outputs.head_sha }}';
-            await github.rest.repos.createCommitStatus({
-              owner,
-              repo,
-              sha: head,
-              context: 'visual-acceptance',
-              state: 'pending',
-              description: `CI run ${run.id}/${run.run_attempt} is producing fresh visual evidence.`,
-            });
-            try {
-              await github.rest.issues.removeLabel({
-                owner, repo, issue_number: pr, name: 'visual-approved',
-              });
-            } catch (error) {
-              if (error.status !== 404) throw error;
-            }
-
-  spec-only-visual:
-    needs: resolve
-    if: >-
-      github.event.action == 'completed' &&
-      needs.resolve.outputs.valid == 'true' &&
-      (needs.resolve.outputs.spec_only == 'true' ||
-      needs.resolve.outputs.tooling_only == 'true')
-    runs-on: ubuntu-slim
-    permissions:
-      statuses: write
-    steps:
-      - name: Mark spec-only visual scope complete
-        uses: actions/github-script@v9
-        env:
-          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
-        with:
-          retries: 3
-          script: |
-            const {owner, repo} = context.repo;
-            await github.rest.repos.createCommitStatus({
-              owner, repo, sha: process.env.HEAD_SHA,
-              context: 'visual-acceptance', state: 'success',
-              description: 'Classified change — no visual scope.',
-            });
-
   spec-only-reconcile:
     needs: resolve
+    concurrency:
+      group: pr-report-${{ needs.resolve.outputs.pr_number }}
+      cancel-in-progress: false
     if: >-
       github.event.action == 'completed' &&
       needs.resolve.outputs.valid == 'true' &&
@@ -187,13 +127,25 @@ jobs:
       actions: read
       contents: read
       pull-requests: write
+    outputs:
+      failed: ${{ steps.scope.outcome == 'failure' || steps.checkout.outcome == 'failure' || steps.reconcile.outcome == 'failure' }}
     steps:
+      - name: Report no visual scope
+        id: scope
+        continue-on-error: true
+        run: echo 'No visual scope applies; canonical visual checks are not applicable.' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Checkout trusted default-branch code
+        id: checkout
+        continue-on-error: true
         uses: actions/checkout@v7
         with:
           ref: main
 
       - name: Remove stale preview links from an existing report
+        id: reconcile
+        continue-on-error: true
+        if: steps.checkout.outcome == 'success'
         uses: actions/github-script@v9
         env:
           PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
@@ -209,6 +161,9 @@ jobs:
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
             const {pathToFileURL} = require('node:url');
             const {reconcilePrComment} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href
@@ -231,62 +186,149 @@ jobs:
               },
               createIfMissing: false,
               fallbackMessage:
-                'The current change has no preview-producing surface. Preview links are not shown.',
+                'The current change has no visual or preview-producing scope. Visual checks are not applicable; preview links are not shown.',
             });
 
-  deploy-preview:
+  # The changed visual frames behind the report's thumbnails, on the pull
+  # request's assets branch. The only job here that writes repository
+  # contents: it runs trusted code from main (never pull-request code), keeps
+  # no credentials in its checkout, and publish-frames.mjs writes only
+  # assets/pr-<n>, and only validated PNG/WebP frames.
+  frames:
     needs: resolve
-    if: >-
-      github.event.action == 'completed' &&
-      needs.resolve.outputs.valid == 'true' &&
-      needs.resolve.outputs.spec_only != 'true' &&
-      needs.resolve.outputs.tooling_only != 'true'
-    permissions:
-      actions: read
-      contents: write
-      pull-requests: read
-    uses: ./.github/workflows/deploy-preview.yml
-    with:
-      pr_number: ${{ needs.resolve.outputs.pr_number }}
-      head_sha: ${{ needs.resolve.outputs.head_sha }}
-      head_repository: ${{ needs.resolve.outputs.head_repo }}
-      head_repository_id: ${{ needs.resolve.outputs.head_repo_id }}
-      head_ref: ${{ needs.resolve.outputs.head_ref }}
-      base_repository: ${{ needs.resolve.outputs.base_repo }}
-      source_run_id: ${{ needs.resolve.outputs.run_id }}
-      source_run_attempt: ${{ needs.resolve.outputs.run_attempt }}
-      source_conclusion: ${{ needs.resolve.outputs.source_conclusion }}
-    secrets: inherit
-
-  comment:
-    needs: [resolve, deploy-preview]
-    # Reconcile after the trusted publisher settles. A failed publisher still
-    # runs this job so stale links are removed rather than retained.
+    concurrency:
+      group: pr-frames-${{ needs.resolve.outputs.pr_number }}
+      cancel-in-progress: false
     if: >-
       always() &&
       github.event.action == 'completed' &&
       needs.resolve.outputs.valid == 'true' &&
       needs.resolve.outputs.spec_only != 'true' &&
       needs.resolve.outputs.tooling_only != 'true'
-    runs-on: 2-core-ubuntu-arm
+    runs-on: ubuntu-24.04-arm
     permissions:
-      pull-requests: write
-      statuses: write
       actions: read
-      contents: write # immutable validated visual evidence on gh-pages
+      contents: write
+    outputs:
+      image_base: ${{ steps.frames.outputs.image_base }}
+      published: ${{ steps.frames.outputs.published }}
+      failed: >-
+        ${{ steps.checkout.outcome == 'failure' ||
+        steps.setup.outcome == 'failure' ||
+        steps.visual.outcome == 'failure' ||
+        steps.frames.outcome == 'failure' }}
     steps:
       - name: Checkout trusted default-branch code
+        id: checkout
+        continue-on-error: true
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Setup Node and pnpm
+        id: setup
+        continue-on-error: true
+        if: steps.checkout.outcome == 'success'
+        uses: ./.github/actions/setup
+
+      - name: Download canonical visual report
+        id: visual-download
+        if: steps.setup.outcome == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: visual-pr-report
+          path: visual-pr-report
+          run-id: ${{ needs.resolve.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      # The same re-encoding the comment job applies: only JSON and
+      # re-encoded PNGs from the exact CI attempt.
+      - name: Prepare canonical visual report
+        id: visual
+        continue-on-error: true
+        if: steps.visual-download.outcome == 'success'
+        env:
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+          RUN_ID: ${{ needs.resolve.outputs.run_id }}
+          RUN_ATTEMPT: ${{ needs.resolve.outputs.run_attempt }}
+        run: |
+          node .github/scripts/visual-gate/publish-pr-report.mjs \
+            --input visual-pr-report \
+            --output trusted-visual \
+            --head-sha "$HEAD_SHA" \
+            --run-id "$RUN_ID" \
+            --run-attempt "$RUN_ATTEMPT"
+
+      - name: Publish changed visual frames
+        id: frames
+        continue-on-error: true
+        if: steps.visual.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+        run: |
+          node .github/scripts/visual-gate/publish-frames.mjs \
+            --input trusted-visual \
+            --pr "$PR_NUMBER" \
+            --head-sha "$HEAD_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --limit 12
+
+  comment:
+    needs: [resolve, frames]
+    concurrency:
+      group: pr-report-${{ needs.resolve.outputs.pr_number }}
+      cancel-in-progress: false
+    # Storybook and Sandbox links are the branch's Vercel alias.
+    # Visual evidence remains attached to the exact CI run.
+    if: >-
+      always() &&
+      github.event.action == 'completed' &&
+      needs.resolve.outputs.valid == 'true' &&
+      needs.resolve.outputs.spec_only != 'true' &&
+      needs.resolve.outputs.tooling_only != 'true'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      pull-requests: write
+      # actions: the artifacts and the source run's job list; deployments:
+      # this head's Vercel preview state.
+      actions: read
+      deployments: read
+    # The artifact downloads are optional (a run may not produce them), so
+    # they are not failures of this job.
+    outputs:
+      failed: >-
+        ${{ steps.checkout.outcome == 'failure' ||
+        steps.setup.outcome == 'failure' ||
+        steps.identity.outcome == 'failure' ||
+        steps.cross-check.outcome == 'failure' ||
+        steps.visual.outcome == 'failure' ||
+        steps.ci-history.outcome == 'failure' ||
+        steps.publish.outcome == 'failure' }}
+    steps:
+      - name: Checkout trusted default-branch code
+        id: checkout
+        continue-on-error: true
         uses: actions/checkout@v7
         with:
           ref: main
 
       - name: Setup Node and pnpm
+        id: setup
+        continue-on-error: true
         uses: ./.github/actions/setup
 
       # Recheck the exact source run and current PR immediately before any
       # privileged report or status mutation.
       - name: Reconfirm trusted PR identity
+        continue-on-error: true
         id: identity
+        # Steps continue on error, so a failed checkout or install no longer
+        # skips the rest by itself. Every later step requires a valid identity.
+        if: steps.setup.outcome == 'success'
         uses: actions/github-script@v9
         env:
           PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
@@ -301,12 +343,16 @@ jobs:
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
             const {pathToFileURL} = require('node:url');
-            const {confirmSourceRunIdentity} = await import(
+            const {confirmOrStandDown} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href
             );
-            const identity = await confirmSourceRunIdentity({
+            const identity = await confirmOrStandDown({
               github,
+              core,
               ...context.repo,
               expected: {
                 prNumber: Number(process.env.PR_NUMBER),
@@ -320,6 +366,10 @@ jobs:
                 sourceConclusion: process.env.SOURCE_CONCLUSION,
               },
             });
+            if (identity === null) {
+              core.setOutput('valid', 'false');
+              return;
+            }
             core.setOutput('valid', 'true');
             core.setOutput('pr_number', String(identity.prNumber));
             core.setOutput('head_sha', identity.headSha);
@@ -332,68 +382,34 @@ jobs:
             core.setOutput('run_attempt', String(identity.sourceRunAttempt));
             core.setOutput('source_conclusion', identity.sourceConclusion);
 
-      - name: Derive trusted stable visual scope
-        id: scope
-        if: steps.identity.outputs.valid == 'true'
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const fs = require('node:fs');
-            const {spawnSync} = require('node:child_process');
-            const {owner, repo} = context.repo;
-            const pullNumber = Number('${{ steps.identity.outputs.pr_number }}');
-            const {data: pr} = await github.rest.pulls.get({owner, repo, pull_number: pullNumber});
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner, repo, pull_number: pullNumber, per_page: 100,
-            });
-            if (files.length !== pr.changed_files) {
-              core.setFailed(
-                `GitHub returned ${files.length} of ${pr.changed_files} changed files; refusing visual-scope classification.`,
-              );
-              return;
-            }
-            const manifestPaths = new Set();
-            for (const {filename} of files) {
-              const theme = filename.match(/^packages\/themes\/([^/]+)\//);
-              const pkg = filename.match(/^packages\/([^/]+)\//);
-              if (theme) manifestPaths.add(`packages/themes/${theme[1]}/package.json`);
-              else if (pkg) manifestPaths.add(`packages/${pkg[1]}/package.json`);
-            }
-            const manifests = {};
-            const [headOwner, headRepo] = pr.head.repo.full_name.split('/');
-            for (const manifestPath of manifestPaths) {
-              try {
-                const {data} = await github.rest.repos.getContent({
-                  owner: headOwner, repo: headRepo, path: manifestPath, ref: pr.head.sha,
-                });
-                if (!Array.isArray(data) && data.content) {
-                  manifests[manifestPath] = JSON.parse(Buffer.from(data.content, 'base64').toString());
-                }
-              } catch (error) {
-                if (error.status !== 404) throw error;
-              }
-            }
-            fs.writeFileSync('visual-scope-manifests.json', JSON.stringify(manifests));
-            const result = spawnSync(
-              process.execPath,
-              ['.github/scripts/visual-scope.mjs', '--manifests', 'visual-scope-manifests.json'],
-              {input: `${files.map((file) => file.filename).join('\n')}\n`, encoding: 'utf8'},
-            );
-            if (result.status !== 0) {
-              core.setFailed(result.stderr || 'Stable visual scope classification failed.');
-              return;
-            }
-            const scope = JSON.parse(result.stdout);
-            fs.writeFileSync('trusted-scope.json', JSON.stringify(scope));
-            core.setOutput('stable', String(scope.hasStableVisual));
-            core.setOutput('broad', String(scope.broadStableVisual));
-
       - name: Download analysis artifact from the CI run
         if: steps.identity.outputs.valid == 'true'
         uses: actions/download-artifact@v8
         with:
           name: pr-analysis
           path: pr-analysis
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Download base size stats from the CI run
+        if: steps.identity.outputs.valid == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-size-base
+          path: pr-size-base
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      # The touched-components check's per-component results (or its wide-
+      # change flag); absent when the check did not run.
+      - name: Download the touched-components report from the CI run
+        if: steps.identity.outputs.valid == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: touched-components
+          path: touched-components
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
@@ -408,28 +424,33 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-      - name: Download trusted preview deployment result
+      - name: Download canonical visual report
+        id: visual-download
         if: steps.identity.outputs.valid == 'true'
         uses: actions/download-artifact@v8
         with:
-          name: preview-deployment-${{ steps.identity.outputs.run_id }}-${{ steps.identity.outputs.run_attempt }}
-          path: preview-deployment
+          name: visual-pr-report
+          path: visual-pr-report
+          run-id: ${{ steps.identity.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-      - name: Download Storybook for trusted visual capture
-        if: >-
-          steps.identity.outputs.valid == 'true' &&
-          steps.scope.outputs.stable == 'true' &&
-          steps.scope.outputs.broad != 'true'
+      # A failed run may be a deferred agent-lane push (spec:AST-030 FR20),
+      # whose report says so instead of an unavailable analysis.
+      - name: Download the heavy-CI deferral from the CI run
+        id: deferral-download
+        if: steps.identity.outputs.valid == 'true' && steps.identity.outputs.source_conclusion == 'failure'
         uses: actions/download-artifact@v8
         with:
-          pattern: storybook-*
-          path: apps/storybook/dist
-          merge-multiple: true
-          run-id: ${{ github.event.workflow_run.id }}
+          name: heavy-ci-deferred-${{ steps.identity.outputs.run_attempt }}
+          path: heavy-ci-deferred
+          run-id: ${{ steps.identity.outputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
 
       - name: Cross-check artifact identity
+        id: cross-check
+        continue-on-error: true
         if: steps.identity.outputs.valid == 'true' && hashFiles('pr-analysis/pr-meta.json') != ''
         env:
           EXPECTED_PR: ${{ steps.identity.outputs.pr_number }}
@@ -453,128 +474,58 @@ jobs:
           });
           NODE
 
-      - name: Fetch the trusted visual baseline
-        if: steps.identity.outputs.valid == 'true' && steps.scope.outputs.stable == 'true'
-        run: |
-          rm -rf /tmp/gh-pages
-          git clone --depth=1 --single-branch --branch gh-pages \
-            "https://github.com/${GITHUB_REPOSITORY}.git" /tmp/gh-pages
-
-      - name: Capture the trusted stable visual scope
-        if: >-
-          steps.identity.outputs.valid == 'true' &&
-          steps.scope.outputs.stable == 'true' &&
-          steps.scope.outputs.broad != 'true'
+      # Only JSON and re-encoded PNGs from the exact CI attempt are published.
+      # No browser, baseline comparison, acceptance, or status authority lives here.
+      - name: Prepare canonical visual report
+        id: visual
+        continue-on-error: true
+        if: steps.identity.outputs.valid == 'true' && steps.visual-download.outcome == 'success'
         env:
-          ASTRYX_VISUAL_SHA: ${{ steps.identity.outputs.head_sha }}
-          ASTRYX_VISUAL_RUN_ID: ${{ steps.identity.outputs.run_id }}
-          ASTRYX_VISUAL_RUN_ATTEMPT: ${{ steps.identity.outputs.run_attempt }}
-          ASTRYX_PR_HEAD_SHA: ${{ steps.identity.outputs.head_sha }}
-          ASTRYX_PR_BASE_SHA: ${{ steps.identity.outputs.base_sha }}
-        run: |
-          npx playwright install chromium
-          node .github/scripts/visual-gate/visual-acceptance.mjs trusted-plan \
-            --scope trusted-scope.json \
-            --baseline /tmp/gh-pages/visual-gate/baseline \
-            --storybook-dir apps/storybook/dist \
-            --output trusted-plan.json
-          node .github/scripts/visual-gate/gate.mjs capture \
-            --storybook-dir apps/storybook/dist \
-            --out trusted-capture \
-            --plan-file trusted-plan.json
-
-      - name: Derive trusted broad visual deferral
-        if: >-
-          steps.identity.outputs.valid == 'true' &&
-          steps.scope.outputs.stable == 'true' &&
-          steps.scope.outputs.broad == 'true'
-        env:
-          PR_NUMBER: ${{ steps.identity.outputs.pr_number }}
-          HEAD_SHA: ${{ steps.identity.outputs.head_sha }}
-          BASE_SHA: ${{ steps.identity.outputs.base_sha }}
-          RUN_ID: ${{ steps.identity.outputs.run_id }}
-          RUN_ATTEMPT: ${{ steps.identity.outputs.run_attempt }}
-        run: |
-          node .github/scripts/visual-gate/visual-acceptance.mjs trusted-defer \
-            --scope trusted-scope.json \
-            --baseline /tmp/gh-pages/visual-gate/baseline \
-            --output trusted-visual \
-            --pr "$PR_NUMBER" \
-            --head "$HEAD_SHA" \
-            --base "$BASE_SHA" \
-            --run-id "$RUN_ID" \
-            --run-attempt "$RUN_ATTEMPT"
-
-      # The Storybook bundle is untrusted. Default-branch code chooses the plan,
-      # captures it in an off-origin-blocked browser, derives the comparison,
-      # validates/re-encodes PNGs, and generates the report. PR-authored verdicts
-      # and job conclusions are never authority for the required status.
-      - name: Derive trusted visual evidence and report
-        if: >-
-          steps.identity.outputs.valid == 'true' &&
-          steps.scope.outputs.stable == 'true' &&
-          steps.scope.outputs.broad != 'true'
-        env:
-          PR_NUMBER: ${{ steps.identity.outputs.pr_number }}
           HEAD_SHA: ${{ steps.identity.outputs.head_sha }}
           RUN_ID: ${{ steps.identity.outputs.run_id }}
           RUN_ATTEMPT: ${{ steps.identity.outputs.run_attempt }}
         run: |
           node .github/scripts/visual-gate/publish-pr-report.mjs \
-            --input trusted-capture \
+            --input visual-pr-report \
             --output trusted-visual \
-            --baseline /tmp/gh-pages/visual-gate/baseline \
-            --scope trusted-scope.json \
-            --pr "$PR_NUMBER" \
             --head-sha "$HEAD_SHA" \
             --run-id "$RUN_ID" \
             --run-attempt "$RUN_ATTEMPT"
 
-      - name: Resolve trusted visual evidence path
-        id: visual
-        if: >-
-          steps.identity.outputs.valid == 'true' &&
-          steps.scope.outputs.stable == 'true'
-        env:
-          PR_NUMBER: ${{ steps.identity.outputs.pr_number }}
-          HEAD_SHA: ${{ steps.identity.outputs.head_sha }}
-          RUN_ID: ${{ steps.identity.outputs.run_id }}
-          RUN_ATTEMPT: ${{ steps.identity.outputs.run_attempt }}
-        run: |
-          test -f trusted-visual/evidence.json
-          test -f trusted-visual/verdict.json
-          test -f trusted-visual/index.html
-          echo "ready=true" >> "$GITHUB_OUTPUT"
-          echo "path=pr/${PR_NUMBER}/visual/${HEAD_SHA}/${RUN_ID}/${RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      # The CI-impact baseline (recent pull-request runs) is read once a day
+      # and kept as an artifact, so later CI-changing PRs that day reuse it.
+      - name: Find today's CI history
+        id: ci-history
+        continue-on-error: true
+        if: steps.identity.outputs.valid == 'true'
+        uses: actions/github-script@v9
+        with:
+          retries: 3
+          script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
+            // Only this repository's own runs on main keep the history, at any
+            // commit (lib/main-artifact.cjs).
+            const {mainArtifactRunId} = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/main-artifact.cjs`);
+            const name = `ci-history-${new Date().toISOString().slice(0, 10)}`;
+            const runId = await mainArtifactRunId({github, ...context.repo, name});
+            core.setOutput('name', name);
+            core.setOutput('run_id', runId ?? '');
 
-      - name: Publish immutable visual evidence
-        id: publish
-        if: steps.visual.outputs.ready == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EVIDENCE_PATH: ${{ steps.visual.outputs.path }}
-        run: >
-          node .github/scripts/gh-pages-publisher.mjs immutable-path
-          --source trusted-visual
-          --destination "$EVIDENCE_PATH"
-          --scope pr-visual/evidence
-          --message "Visual evidence: ${EVIDENCE_PATH}"
-
-      - name: Refresh trusted visual state checkout
-        if: steps.publish.outputs.published == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ steps.identity.outputs.pr_number }}
-          HEAD_SHA: ${{ steps.identity.outputs.head_sha }}
-        run: >
-          rm -rf /tmp/gh-pages &&
-          git clone --depth=1 --filter=blob:none --sparse --single-branch --branch gh-pages
-          "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" /tmp/gh-pages &&
-          git -C /tmp/gh-pages sparse-checkout set
-          visual-gate/baseline
-          "pr/${PR_NUMBER}/visual/${HEAD_SHA}"
+      - name: Download today's CI history
+        if: steps.identity.outputs.valid == 'true' && steps.ci-history.outputs.run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ steps.ci-history.outputs.name }}
+          run-id: ${{ steps.ci-history.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ci-history
 
       - name: Generate and post PR comment
+        id: publish
+        continue-on-error: true
         if: always() && steps.identity.outputs.valid == 'true'
         uses: actions/github-script@v9
         env:
@@ -588,11 +539,14 @@ jobs:
           RUN_ID: ${{ steps.identity.outputs.run_id }}
           RUN_ATTEMPT: ${{ steps.identity.outputs.run_attempt }}
           SOURCE_CONCLUSION: ${{ steps.identity.outputs.source_conclusion }}
-          VISUAL_PUBLISHED: ${{ steps.publish.outputs.published }}
-          VISUAL_PATH: ${{ steps.visual.outputs.path }}
+          VISUAL_IMAGE_BASE: ${{ needs.frames.outputs.image_base }}
+          VISUAL_PUBLISHED: ${{ needs.frames.outputs.published }}
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
             const {pathToFileURL} = require('node:url');
             const {reconcilePrComment} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href
@@ -613,75 +567,66 @@ jobs:
                 sourceRunAttempt: Number(process.env.RUN_ATTEMPT),
                 sourceConclusion: process.env.SOURCE_CONCLUSION,
               },
-              visualPublished: process.env.VISUAL_PUBLISHED === 'true',
-              visualReportPath: process.env.VISUAL_PATH,
+              fallbackMessage: require('node:fs').existsSync('heavy-ci-deferred/heavy-ci-deferred.json')
+                ? 'Heavy CI deferred: runs when marked ready and before merge. Lint, typecheck and any path-filtered checks ran on this push.'
+                : undefined,
+              visualFrames: {
+                imageBase: process.env.VISUAL_IMAGE_BASE,
+                published: process.env.VISUAL_PUBLISHED,
+              },
             });
 
-      - name: Evaluate visual acceptance state
-        if: always() && steps.identity.outputs.valid == 'true'
-        env:
-          SCOPE_OUTCOME: ${{ steps.scope.outcome }}
-          HAS_STABLE_VISUAL: ${{ steps.scope.outputs.stable }}
-          VISUAL_READY: ${{ steps.visual.outputs.ready }}
-          VISUAL_PUBLISHED: ${{ steps.publish.outputs.published }}
-          PR_NUMBER: ${{ steps.identity.outputs.pr_number }}
-          HEAD_SHA: ${{ steps.identity.outputs.head_sha }}
-        run: |
-          if [ "$SCOPE_OUTCOME" != "success" ]; then
-            printf '%s\n' '{"state":"failure","reason":"scope","description":"Stable visual scope could not be evaluated."}' > visual-state.json
-          elif [ "$HAS_STABLE_VISUAL" != "true" ]; then
-            printf '%s\n' '{"state":"success","reason":"scope","description":"No stable visual scope."}' > visual-state.json
-          elif [ "$VISUAL_READY" != "true" ] || [ "$VISUAL_PUBLISHED" != "true" ]; then
-            printf '%s\n' '{"state":"failure","reason":"capture","description":"Stable visual evidence could not be published."}' > visual-state.json
-          else
-            node .github/scripts/visual-gate/visual-acceptance.mjs state \
-              --pages /tmp/gh-pages --pr "$PR_NUMBER" --head "$HEAD_SHA" > visual-state.json
-          fi
+      - name: Keep today's CI history
+        if: steps.identity.outputs.valid == 'true' && steps.ci-history.outputs.name != '' && steps.ci-history.outputs.run_id == '' && hashFiles('ci-history/ci-history.json') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.ci-history.outputs.name }}
+          path: ci-history/ci-history.json
+          retention-days: 2
 
-      - name: Publish visual acceptance status
-        if: always() && steps.identity.outputs.valid == 'true'
+  # The CI-completion lane runs on workflow_run, so GitHub attaches its jobs to
+  # main's latest commit. Main's checks must show main's health, not a pull
+  # request's. The jobs above therefore never fail the run: every fallible step
+  # continues on error, and this job reports their outcome as the PR Comment
+  # status on the pull request's own head.
+  report:
+    needs: [resolve, spec-only-reconcile, frames, comment]
+    if: >-
+      always() &&
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      (needs.resolve.outputs.valid == 'true' ||
+      needs.resolve.outputs.failed == 'true')
+    runs-on: ubuntu-slim
+    permissions:
+      statuses: write
+    steps:
+      - name: Report the outcome on the pull request head
+        continue-on-error: true
         uses: actions/github-script@v9
         env:
-          PR_NUMBER: ${{ steps.identity.outputs.pr_number }}
-          HEAD_SHA: ${{ steps.identity.outputs.head_sha }}
-          VISUAL_PATH: ${{ steps.visual.outputs.path }}
+          # The source run's head is the pull request head it tested, taken from
+          # the trusted event rather than from any job output.
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          FAILED: >-
+            ${{ needs.resolve.outputs.failed == 'true' ||
+            needs.spec-only-reconcile.outputs.failed == 'true' ||
+            needs.frames.outputs.failed == 'true' ||
+            needs.comment.outputs.failed == 'true' ||
+            contains(needs.*.result, 'failure') ||
+            contains(needs.*.result, 'cancelled') }}
         with:
           retries: 3
           script: |
-            const fs = require('node:fs');
-            const {owner, repo} = context.repo;
-            const pr = Number(process.env.PR_NUMBER);
-            let state = {state: 'failure', reason: 'state', description: 'Visual acceptance state could not be evaluated.'};
-            if (fs.existsSync('visual-state.json')) {
-              try {
-                state = JSON.parse(fs.readFileSync('visual-state.json', 'utf8'));
-              } catch (error) {
-                core.warning(`Could not read visual state: ${error.message}`);
-              }
-            }
+            const failed = process.env.FAILED === 'true';
             await github.rest.repos.createCommitStatus({
-              owner, repo, sha: process.env.HEAD_SHA, context: 'visual-acceptance',
-              state: state.state, description: state.description.slice(0, 140),
-              ...(process.env.VISUAL_PATH
-                ? {target_url: `https://facebook.github.io/astryx/${process.env.VISUAL_PATH}/`}
-                : {}),
+              ...context.repo,
+              sha: process.env.HEAD_SHA,
+              context: 'PR Comment',
+              state: failed ? 'failure' : 'success',
+              target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              description: failed
+                ? 'A PR report step failed or was cancelled. See the run.'
+                : 'No PR report step failed.',
             });
-            const label = 'visual-approved';
-            if (state.reason === 'accepted') {
-              try {
-                await github.rest.issues.getLabel({owner, repo, name: label});
-              } catch (error) {
-                if (error.status !== 404) throw error;
-                await github.rest.issues.createLabel({
-                  owner, repo, name: label, color: '2da44e',
-                  description: 'Current visual bundle has an explicit acceptance record',
-                });
-              }
-              await github.rest.issues.addLabels({owner, repo, issue_number: pr, labels: [label]});
-            } else {
-              try {
-                await github.rest.issues.removeLabel({owner, repo, issue_number: pr, name: label});
-              } catch (error) {
-                if (error.status !== 404) throw error;
-              }
-            }

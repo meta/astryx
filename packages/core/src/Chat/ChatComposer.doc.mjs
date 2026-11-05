@@ -8,6 +8,20 @@ export const docs = {
   displayName: 'Chat Composer',
   description:
     'Layout shell for a chat composer. Arranges named slots (drawer, header, input, footer, send) with page-radius container, elevation, a keyboard-only editor focus ring, and concentric inner radius for child elements.',
+  usage: {
+    description:
+      'ChatComposer is the message-entry shell for a chat surface. It coordinates a controlled or uncontrolled draft, provides a default token-capable input and send/stop action, and arranges optional drawer, header, footer, and status content. Custom inputs and send controls can join the same value, submission, disabled, stop, and focus contract through useChatComposerContext().',
+    anatomy: [
+      {name: 'Composer frame', required: true, description: 'Outer composition root that groups the body with an optional status message above or below it.'},
+      {name: 'Composer body', required: true, description: 'Rounded, elevated surface containing the header, input, and footer.'},
+      {name: 'Drawer', required: false, description: 'Content before the body for attachments or other expandable context, typically ChatComposerDrawer.'},
+      {name: 'Header', required: false, description: 'Row for start-aligned actions and end-aligned contextual information.'},
+      {name: 'Input', required: true, description: 'Default ChatComposerInput or a custom editor connected through useChatComposerContext().'},
+      {name: 'Footer', required: true, description: 'Row for caller-supplied footer and send actions plus the primary action.'},
+      {name: 'Send or stop action', required: true, description: 'Default ChatSendButton or a custom sendButton; it submits the current draft or requests interruption.'},
+      {name: 'Status message', required: false, description: 'Error or warning feedback rendered before or after the composer body.'},
+    ],
+  },
   playground: {
     wrapper: {component: 'Stack', props: {width: 480}},
   },

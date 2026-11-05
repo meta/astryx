@@ -14,7 +14,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import {describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {createRepository} from './lib/git-fixture.mjs';
+import {TEMPLATE_RUBRIC} from '../packages/cli/assets/docs/tree/template-grading-rubric.doc.mjs';
 
 import {
   TEMPLATE_CATEGORIES,
@@ -32,6 +34,22 @@ import {
   templateGrade,
   validateLedger,
 } from './template-score-ledger.mjs';
+
+/**
+ * The folder every temporary file of these tests lives in, the CLI's included
+ * (its TMPDIR), removed once they finish, so a run leaves nothing behind in the
+ * system temp directory. It is made in beforeAll, not when the module loads:
+ * Vitest skips both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-template-score-ledger-test-'),
+  );
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..');
 const SCRIPT = path.join(REPO_ROOT, 'scripts', 'template-score-ledger.mjs');
@@ -93,17 +111,24 @@ describe('the public ledger contract', () => {
   it('uses the one wiki file and branch shared by every write path', () => {
     expect(TEMPLATE_LEDGER_FILENAME).toBe('template-scores.json');
     expect(TEMPLATE_LEDGER_URL).toBe(
-      'https://raw.githubusercontent.com/wiki/facebook/astryx/template-scores.json',
+      'https://raw.githubusercontent.com/wiki/meta/astryx/template-scores.json',
     );
-    expect(WIKI_REMOTE).toBe('https://github.com/facebook/astryx.wiki.git');
+    expect(WIKI_REMOTE).toBe('https://github.com/meta/astryx.wiki.git');
     expect(WIKI_BRANCH).toBe('master');
     expect(ensureWikiClone).toBeTypeOf('function');
   });
 
   it('uses the rubric grade boundaries', () => {
+    expect(TEMPLATE_RUBRIC.version).toBe('1.4');
     expect(
       [100, 90, 89.9, 75, 74.9, 60, 59.9, 40, 39.9, 0].map(templateGrade),
     ).toEqual(['A', 'A', 'B', 'B', 'C', 'C', 'D', 'D', 'F', 'F']);
+  });
+
+  it('reads category ids and weights from the shipped rubric doc', () => {
+    expect(TEMPLATE_CATEGORIES).toEqual(
+      TEMPLATE_RUBRIC.categories.map(({id, title, max}) => ({id, title, max})),
+    );
   });
 
   it('carries the complete 100-point category vocabulary', () => {
@@ -428,7 +453,7 @@ function cli(argv, {cwd = REPO_ROOT, input, env} = {}) {
       cwd,
       input,
       encoding: 'utf8',
-      env: {...process.env, ...env},
+      env: {...process.env, TMPDIR: TEMP_ROOT, ...env},
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     return {code: 0, out};
@@ -440,30 +465,37 @@ function cli(argv, {cwd = REPO_ROOT, input, env} = {}) {
   }
 }
 
-function identify(directory) {
-  git(directory, 'config', 'user.name', 'Template Ledger Test');
-  git(directory, 'config', 'user.email', 'template-ledger-test@example.com');
-}
-
 function makeWiki(seedLedger) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'template-ledger-wiki-'));
+  const root = fs.mkdtempSync(path.join(TEMP_ROOT, 'template-ledger-wiki-'));
   const bare = path.join(root, 'wiki.git');
-  const seed = path.join(root, 'seed');
   const clone = path.join(root, 'clone');
 
-  git(root, 'init', '--bare', '--initial-branch=master', bare);
-  git(root, 'clone', bare, seed);
-  identify(seed);
-  fs.writeFileSync(
-    path.join(seed, TEMPLATE_LEDGER_FILENAME),
-    `${JSON.stringify(seedLedger, null, 2)}\n`,
+  createRepository(
+    bare,
+    [
+      {
+        ref: `refs/heads/${WIKI_BRANCH}`,
+        message: 'seed',
+        files: {
+          [TEMPLATE_LEDGER_FILENAME]: `${JSON.stringify(seedLedger, null, 2)}\n`,
+        },
+      },
+    ],
+    {bare: true, branch: WIKI_BRANCH},
   );
-  git(seed, 'add', '-A');
-  git(seed, 'commit', '-m', 'seed');
-  git(seed, 'push', 'origin', WIKI_BRANCH);
-
-  git(root, 'clone', '--depth', '1', `file://${bare}`, clone);
-  identify(clone);
+  // The clone's own config names who commits there.
+  git(
+    root,
+    'clone',
+    '-c',
+    'user.name=Template Ledger Test',
+    '-c',
+    'user.email=template-ledger-test@example.com',
+    '--depth',
+    '1',
+    `file://${bare}`,
+    clone,
+  );
   return {
     root,
     bare,
@@ -581,7 +613,7 @@ describe('--record', () => {
 
   it('refuses to create a partial ledger at a nonexistent local path', () => {
     const root = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'template-ledger-missing-'),
+      path.join(TEMP_ROOT, 'template-ledger-missing-'),
     );
     const ledger = path.join(root, TEMPLATE_LEDGER_FILENAME);
     const result = cli(

@@ -11,7 +11,9 @@ import {
   integrationAddDoc,
   integrationAddTemplate,
 } from './add-contribution.mjs';
+import {iconNewSet} from '../icon/new-set/new-set.mjs';
 import {validateLocalIntegration} from './validate-integration.mjs';
+import {NAMESPACE_DOCS_CLI} from '../../foundation/integrations/cli-requirement.mjs';
 
 let tmpDir;
 
@@ -77,6 +79,7 @@ describe('integrationAdd component', () => {
       path.join(tmpDir, 'components/MyWidget.doc.mjs'),
       'utf-8',
     );
+    expect(doc).toContain("@astryxdesign/cli/authoring').ComponentDoc");
     expect(doc).toContain("type: 'component'");
     expect(doc).toContain("name: 'MyWidget'");
     expect(doc).toContain('props: []');
@@ -118,14 +121,14 @@ describe('integrationAdd component', () => {
     );
     expect(pkg.exports).toEqual({
       '.': './index.mjs',
-      './components/MyWidget.tsx': './components/MyWidget.tsx',
+      './components/MyWidget': './components/MyWidget.tsx',
     });
     expect(
       fs.readFileSync(
         path.join(tmpDir, 'components/MyWidget.doc.mjs'),
         'utf-8',
       ),
-    ).toContain('import: "@acme/integration/components/MyWidget.tsx"');
+    ).toContain('import: "@acme/integration/components/MyWidget"');
   });
 
   it('does not create exports when the package has no exports map', async () => {
@@ -143,7 +146,7 @@ describe('integrationAdd component', () => {
     setup({
       exports: {
         '.': './index.mjs',
-        './components/MyWidget.tsx': './different.tsx',
+        './components/MyWidget': './different.tsx',
       },
     });
 
@@ -304,12 +307,149 @@ describe('integrationAdd doc', () => {
       path.join(tmpDir, 'docs/my-guide.doc.mjs'),
       'utf-8',
     );
+    expect(doc).toContain("@astryxdesign/cli/authoring').ReferenceDoc");
     expect(doc).toContain("type: 'generic'");
     expect(doc).toContain("name: 'my-guide'");
 
     const validation = await validateLocalIntegration(tmpDir);
     const docErrors = validation.issues.filter(i => i.code === 'invalid_doc');
     expect(docErrors).toEqual([]);
+  });
+
+  it('refuses to write from a folder with no package.json into the package above it', async () => {
+    setupBare();
+    const inside = path.join(tmpDir, 'kit');
+    fs.mkdirSync(inside);
+    await expect(
+      integrationAdd('doc', 'my-guide', {cwd: inside, parent: 'acme'}),
+    ).rejects.toMatchObject({
+      code: 'ERR_INVALID_ARGUMENT',
+      message: expect.stringContaining('has no package.json'),
+    });
+    expect(fs.existsSync(path.join(tmpDir, 'docs'))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, 'astryx.integration.mjs'))).toBe(false);
+  });
+
+  it('finds an integration from a folder inside it', async () => {
+    setup();
+    const inside = path.join(tmpDir, 'src');
+    fs.mkdirSync(inside);
+    const result = await integrationAdd('doc', 'my-guide', {cwd: inside});
+    expect(result.data.files).toContain('docs/my-guide.doc.mjs');
+    expect(fs.existsSync(path.join(tmpDir, 'docs/my-guide.doc.mjs'))).toBe(true);
+  });
+
+  it('places a guide in a namespace of the package, writing the namespace once', async () => {
+    setup();
+    const first = await integrationAdd('doc', 'deploying', {
+      cwd: tmpDir,
+      parent: 'acme',
+    });
+    expect(first.data.files).toEqual(
+      expect.arrayContaining(['docs/deploying.doc.mjs', 'docs/acme.doc.mjs']),
+    );
+    const guide = fs.readFileSync(path.join(tmpDir, 'docs/deploying.doc.mjs'), 'utf-8');
+    expect(guide).toContain("placement: {parent: 'namespace:acme', slot: 'guides'}");
+    const namespace = fs.readFileSync(path.join(tmpDir, 'docs/acme.doc.mjs'), 'utf-8');
+    expect(namespace).toContain("type: 'namespace'");
+    expect(namespace).toContain("guides: {title: 'Guides', accepts: {kinds: ['generic']}}");
+
+    // The namespace doc needs a CLI that reads it, declared as an optional peer.
+    const pkg = JSON.parse(fs.readFileSync(path.join(tmpDir, 'package.json'), 'utf-8'));
+    expect(pkg.peerDependencies).toEqual({'@astryxdesign/cli': '>=0.6.4'});
+    expect(pkg.peerDependenciesMeta).toEqual({'@astryxdesign/cli': {optional: true}});
+
+    const second = await integrationAdd('doc', 'upgrading', {
+      cwd: tmpDir,
+      parent: 'acme',
+    });
+    expect(second.data.files).not.toContain('docs/acme.doc.mjs');
+
+    const validation = await validateLocalIntegration(tmpDir);
+    expect(validation.issues.filter(i => i.code === 'invalid_doc')).toEqual([]);
+  });
+
+  it('finds the --parent namespace by its name, wherever its file is, and uses its slot', async () => {
+    setup({manifest: "export default {docs: './docs'};\n"});
+    fs.mkdirSync(path.join(tmpDir, 'docs', 'ns'), {recursive: true});
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'ns', 'acme.doc.mjs'),
+      "export default {type: 'namespace', name: 'acme', title: 'Acme', summary: 'Acme.', slots: {items: {title: 'Items', accepts: {kinds: ['generic']}}}};\n",
+    );
+    const result = await integrationAdd('doc', 'deploying', {cwd: tmpDir, parent: 'acme'});
+    expect(result.data.files).not.toContain('docs/acme.doc.mjs');
+    expect(fs.existsSync(path.join(tmpDir, 'docs', 'acme.doc.mjs'))).toBe(false);
+    expect(fs.readFileSync(path.join(tmpDir, 'docs', 'deploying.doc.mjs'), 'utf-8')).toContain(
+      "placement: {parent: 'namespace:acme', slot: 'items'}",
+    );
+  });
+
+  it('refuses --parent when its file is not that namespace, or the namespace has no slot for a guide', async () => {
+    setup({manifest: "export default {docs: './docs'};\n"});
+    fs.mkdirSync(path.join(tmpDir, 'docs'), {recursive: true});
+    const nsFile = path.join(tmpDir, 'docs', 'acme.doc.mjs');
+    fs.writeFileSync(
+      nsFile,
+      "export default {type: 'generic', name: 'acme', title: 'Acme', description: 'A topic.', sections: [{title: 'Only', content: [{type: 'prose', text: 'x'}]}]};\n",
+    );
+    await expect(
+      integrationAdd('doc', 'deploying', {cwd: tmpDir, parent: 'acme'}),
+    ).rejects.toMatchObject({code: 'ERR_FILE_EXISTS'});
+    // A fresh file: the module loader keeps the first import of a path.
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'beta.doc.mjs'),
+      "export default {type: 'namespace', name: 'beta', title: 'Beta', summary: 'Beta.', slots: {items: {title: 'Items', accepts: {kinds: ['function']}}}};\n",
+    );
+    await expect(
+      integrationAdd('doc', 'deploying', {cwd: tmpDir, parent: 'beta'}),
+    ).rejects.toMatchObject({
+      code: 'ERR_INVALID_ARGUMENT',
+      message: expect.stringContaining('no slot that takes a guide'),
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'gamma.doc.mjs'),
+      "export default {type: 'namespace', name: 'gamma', title: 'Gamma', summary: 'Gamma.', slots: {guides: {title: 'Guides', accepts: {kinds: ['function']}}, more: {title: 'More', accepts: {kinds: ['generic']}}, extra: {title: 'Extra', accepts: {kinds: ['generic']}}}};\n",
+    );
+    await expect(
+      integrationAdd('doc', 'deploying', {cwd: tmpDir, parent: 'gamma'}),
+    ).rejects.toMatchObject({
+      code: 'ERR_INVALID_ARGUMENT',
+      message: expect.stringContaining('more than one slot that takes a guide (more, extra)'),
+    });
+    expect(fs.existsSync(path.join(tmpDir, 'docs', 'deploying.doc.mjs'))).toBe(false);
+  });
+
+  it('raises a CLI peer that admits a CLI too old for namespace docs, and keeps one that does not', async () => {
+    setup();
+    const file = path.join(tmpDir, 'package.json');
+    const write = (/** @type {string} */ range) => {
+      const pkg = JSON.parse(fs.readFileSync(file, 'utf-8'));
+      pkg.peerDependencies = {'@astryxdesign/cli': range};
+      fs.writeFileSync(file, `${JSON.stringify(pkg, null, 2)}\n`);
+    };
+    write('^0.6.0');
+    await integrationAdd('doc', 'deploying', {cwd: tmpDir, parent: 'acme'});
+    expect(JSON.parse(fs.readFileSync(file, 'utf-8')).peerDependencies).toEqual({
+      '@astryxdesign/cli': `>=${NAMESPACE_DOCS_CLI}`,
+    });
+    write('^9.1.0');
+    await integrationAdd('doc', 'upgrading', {cwd: tmpDir, parent: 'acme'});
+    expect(JSON.parse(fs.readFileSync(file, 'utf-8')).peerDependencies).toEqual({
+      '@astryxdesign/cli': '^9.1.0',
+    });
+  });
+
+  it('refuses --parent with a relationship, or a namespace name that is not a route segment', async () => {
+    setup();
+    await expect(
+      integrationAdd('doc', 'x', {cwd: tmpDir, parent: 'acme', replaces: 'getting-started'}),
+    ).rejects.toMatchObject({code: 'ERR_INVALID_ARGUMENT'});
+    await expect(
+      integrationAdd('doc', 'x', {cwd: tmpDir, parent: 'Acme Kit'}),
+    ).rejects.toMatchObject({code: 'ERR_INVALID_ARGUMENT'});
+    await expect(
+      integrationAdd('template', 'x', {cwd: tmpDir, parent: 'acme'}),
+    ).rejects.toMatchObject({code: 'ERR_INVALID_ARGUMENT'});
   });
 
   it('includes replaces in the generated doc', async () => {
@@ -390,12 +530,15 @@ describe('integrationAdd template', () => {
     expect(result.data.kind).toBe('template');
     expect(result.data.name).toBe('my-widget');
     expect(result.data.root).toEqual({path: './templates', created: true});
-    expect(result.data.files).toContain('templates/my-widget.template.mjs');
+    expect(result.data.files).toContain('templates/my-widget.doc.mjs');
     expect(result.data.files).toContain('templates/my-widget.tsx');
 
     const spec = fs.readFileSync(
-      path.join(tmpDir, 'templates/my-widget.template.mjs'),
+      path.join(tmpDir, 'templates/my-widget.doc.mjs'),
       'utf-8',
+    );
+    expect(spec).toContain(
+      "@astryxdesign/cli/authoring').IntegrationTemplateDoc",
     );
     expect(spec).toContain("type: 'page'");
     expect(spec).toContain("name: 'my-widget'");
@@ -421,7 +564,7 @@ describe('integrationAdd template', () => {
     );
     expect(pkg.exports).toEqual({
       '.': './index.mjs',
-      './templates/my-widget.tsx': './templates/my-widget.tsx',
+      './templates/my-widget': './templates/my-widget.tsx',
     });
   });
 
@@ -432,10 +575,11 @@ describe('integrationAdd template', () => {
       templateType: 'block',
     });
     const spec = fs.readFileSync(
-      path.join(tmpDir, 'templates/my-card.template.mjs'),
+      path.join(tmpDir, 'templates/my-card.doc.mjs'),
       'utf-8',
     );
     expect(spec).toContain("type: 'block'");
+    expect(spec).toContain('aspectRatio: 1');
   });
 
   it('rejects an invalid template type', async () => {
@@ -676,6 +820,37 @@ describe('custom root preservation', () => {
   });
 });
 
+describe('typed descriptor conformance', () => {
+  it('emits a strongly typed .doc.mjs for every canonical item writer', async () => {
+    setup();
+    await integrationAdd('component', 'MyWidget', {cwd: tmpDir});
+    await integrationAdd('doc', 'my-guide', {cwd: tmpDir});
+    await integrationAdd('template', 'my-page', {cwd: tmpDir});
+    await integrationAdd('theme', 'ocean', {cwd: tmpDir});
+    await iconNewSet('outline', {cwd: tmpDir});
+
+    // Codemod and agent-doc keep their released formats for compatibility;
+    // no new kind may copy those exceptions.
+    for (const [relativePath, type] of [
+      ['components/MyWidget.doc.mjs', 'ComponentDoc'],
+      ['docs/my-guide.doc.mjs', 'ReferenceDoc'],
+      ['templates/my-page.doc.mjs', 'IntegrationTemplateDoc'],
+      ['themes/ocean/oceanTheme.doc.mjs', 'ThemeDoc'],
+      ['icon-sets/outline/outline.doc.mjs', 'IconSetDoc'],
+    ]) {
+      const source = fs.readFileSync(path.join(tmpDir, relativePath), 'utf-8');
+      expect(source).toContain(`@astryxdesign/cli/authoring').${type}`);
+      expect(source).toContain('export default {');
+    }
+    expect(
+      fs.existsSync(path.join(tmpDir, 'templates/my-page.template.mjs')),
+    ).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, 'themes/manifest.json'))).toBe(
+      false,
+    );
+  });
+});
+
 describe('public per-kind APIs', () => {
   it('exposes narrow functions for every non-theme contribution kind', async () => {
     setup();
@@ -693,6 +868,7 @@ describe('public per-kind APIs', () => {
         to: '1.0.0',
       }),
       integrationAddAgentDoc('Use MyWidget.', {cwd: tmpDir, dryRun: true}),
+      iconNewSet('outline', {cwd: tmpDir, dryRun: true}),
     ]);
 
     expect(results.map(result => result.data.kind)).toEqual([
@@ -701,6 +877,7 @@ describe('public per-kind APIs', () => {
       'template',
       'codemod',
       'agent-doc',
+      'icon-set',
     ]);
   });
 });
@@ -711,6 +888,7 @@ describe('public dispatcher', () => {
     const result = await integrationAdd('theme', 'ocean', {cwd: tmpDir});
     expect(result.data).toMatchObject({kind: 'theme', name: 'ocean'});
     expect(result.data.files).toContain('themes/ocean/oceanTheme.ts');
+    expect(result.data.files).toContain('themes/ocean/oceanTheme.doc.mjs');
   });
 
   it('refuses a kind-specific option on the wrong kind', async () => {
@@ -730,4 +908,83 @@ describe('public dispatcher', () => {
       integrationAdd(/** @type {any} */ ('plugin'), 'thing', {cwd: tmpDir}),
     ).rejects.toThrow(/component, doc, template, codemod, agent-doc, or theme/);
   });
+});
+
+describe('dry-run receipts match the real write', () => {
+  /** Package states each writer has to plan for. */
+  const STATES = {
+    'no manifest': {pkg: {files: ['dist']}},
+    'an empty manifest': {pkg: {}, manifest: 'export default {};\n'},
+    'declared roots and an exports map': {
+      pkg: {files: ['dist'], exports: {'.': './dist/index.js'}},
+      manifest:
+        "export default {\n  components: './components',\n  docs: './docs',\n  templates: './templates',\n  codemods: './codemods',\n  themes: './themes',\n  experimental: {iconSets: './icon-sets'},\n};\n",
+    },
+  };
+  /** @type {Array<[any, string, Record<string, unknown>]>} */
+  const KINDS = [
+    ['component', 'AcmeWidget', {}],
+    ['doc', 'deploying', {}],
+    ['template', 'account-page', {}],
+    ['template', 'account-card', {templateType: 'block'}],
+    ['codemod', 'rename-widget', {to: '1.2.0'}],
+    ['agent-doc', 'Run acme verify before finishing.', {}],
+    ['theme', 'ocean', {}],
+    ['icon-set', 'outline', {}],
+  ];
+
+  /** Every file under the package, keyed by project path, with its bytes. */
+  function snapshot() {
+    /** @type {Record<string, string>} */
+    const files = {};
+    /** @param {string} dir */
+    const walk = dir => {
+      for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) walk(full);
+        else {
+          files[path.relative(tmpDir, full).split(path.sep).join('/')] =
+            fs.readFileSync(full, 'base64');
+        }
+      }
+    };
+    walk(tmpDir);
+    return files;
+  }
+
+  for (const [stateName, state] of Object.entries(STATES)) {
+    for (const [kind, name, options] of KINDS) {
+      it(`${kind} ${name} in a package with ${stateName}`, async () => {
+        fs.writeFileSync(
+          path.join(tmpDir, 'package.json'),
+          `${JSON.stringify({name: '@acme/integration', version: '1.0.0', ...state.pkg}, null, 2)}\n`,
+        );
+        if (state.manifest != null) {
+          fs.writeFileSync(
+            path.join(tmpDir, 'astryx.integration.mjs'),
+            state.manifest,
+          );
+        }
+        const before = snapshot();
+
+        // An icon set is experimental: its own call, not an integrationAdd kind.
+        const add = (/** @type {Record<string, unknown>} */ more) =>
+          kind === 'icon-set'
+            ? iconNewSet(name, {cwd: tmpDir, ...options, ...more})
+            : integrationAdd(kind, name, {cwd: tmpDir, ...options, ...more});
+        const plan = await add({dryRun: true});
+        expect(snapshot()).toEqual(before);
+
+        const written = await add({});
+        const after = snapshot();
+        const changed = Object.keys(after)
+          .filter(file => after[file] !== before[file])
+          .sort();
+
+        expect(written.data.root).toEqual(plan.data.root);
+        expect(written.data.files).toEqual(plan.data.files);
+        expect([...written.data.files].sort()).toEqual(changed);
+      });
+    }
+  }
 });

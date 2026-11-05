@@ -5,19 +5,23 @@ export const doc = {
   type: 'command',
   name: 'integration',
   displayName: 'astryx integration',
-  namespace: 'cli',
+  namespace: 'cli/commands',
   summary: 'Author and verify an Astryx integration package',
   description:
-    'Add contributions that are valid on arrival, then prove the packed package exposes the same contributions a consumer will receive.',
-  subcommands: ['add', 'pack'],
+    'Add contributions to your package, check them on every build with `integration check --strict`, then check the packed package the way an app receives it. The guides start at {@link namespace:authoring}.',
+  subcommands: ['add', 'check', 'verify', 'pack'],
   examples: [
     {
       label: 'Add a component',
       cli: 'astryx integration add component AcmeWidget',
     },
     {
-      label: 'Check the package tarball',
-      cli: 'astryx integration pack --check',
+      label: 'Check the package in CI, as part of its build',
+      cli: 'astryx integration check --strict',
+    },
+    {
+      label: 'Check the package before publishing',
+      cli: 'astryx integration verify',
     },
   ],
   exitCodes: [

@@ -9,19 +9,16 @@
  * display order. Arrow keys (←/→) also navigate; Escape closes.
  *
  * @input Template metadata, selected index, open state, and navigation callbacks.
- * @output A responsive dialog with live preview and template actions.
+ * @output A responsive dialog with immediate selected fill-mode previews up to
+ * 1440×900 while open, selection-scoped pending navigation, and template actions.
  * @position Shared preview controller for the templates gallery.
  *
- * The header surfaces template metadata (name, description) on
- * the left. All controls cluster on the right of the header: a
- * copy-to-clipboard CLI scaffold command, an Open in Playground action,
- * and the close button. The row wraps when the controls no longer fit
- * beside the title, and the fullscreen (phone) variant stacks the commands
- * and the primary action full width, with the close button pinned to the
- * top-inline-end corner — the header must never widen the dialog.
+ * The header surfaces template metadata (name, description) with the close
+ * button. Install commands and the Open in Playground action live in the
+ * footer, where the fullscreen (phone) variant stacks them at full width.
  *
- * The preview sits in a padded, framed (border + radius) surface below the
- * header. The prev/next arrows are position:fixed inside the top-layer
+ * The preview sits in a framed surface with compact spacing below the header.
+ * The prev/next arrows are position:fixed inside the top-layer
  * <dialog>, so they sit in the backdrop gutters outside the dialog box.
  */
 
@@ -43,6 +40,7 @@ import {
   Layout,
   LayoutHeader,
   LayoutContent,
+  LayoutFooter,
 } from '@astryxdesign/core/Layout';
 import {Button} from '@astryxdesign/core/Button';
 import {Skeleton} from '@astryxdesign/core/Skeleton';
@@ -51,15 +49,6 @@ import {Tooltip} from '@astryxdesign/core/Tooltip';
 import {TemplatePreviewSurface} from './TemplatePreviewSurface';
 import {buildTemplatePlaygroundHref} from './playgroundLink';
 import {trackCopy, trackOpenPlayground, trackNavigate} from '../lib/analytics';
-import {CURRENT_TARGET} from '../lib/docsVersions';
-import {
-  shadcnRegistryIsPreview,
-  shadcnRegistryOrigin,
-} from '../generated/shadcnRegistry';
-import {
-  shadcnInstallCommand,
-  shadcnPageItemPath,
-} from '../lib/shadcnRegistry.mjs';
 
 export interface TemplatePreviewItem {
   slug: string;
@@ -81,8 +70,8 @@ interface TemplatePreviewDialogProps {
 }
 
 const styles = stylex.create({
-  dialogTall: {
-    height: '86vh',
+  dialogDesktop: {
+    height: 'min(1078px, calc(100dvh - 32px))',
     borderRadius: 'var(--radius-page)',
   },
   body: {
@@ -96,9 +85,6 @@ const styles = stylex.create({
   },
   headerRow: {
     width: '100%',
-    // The header never widens the dialog: a long command or a wide action row
-    // shrinks or truncates instead. Without this the fullscreen dialog's
-    // clipped body can be scrolled sideways by focus and never scrolled back.
     maxWidth: '100%',
     minWidth: 0,
     position: 'relative' as const,
@@ -111,34 +97,25 @@ const styles = stylex.create({
     position: 'absolute' as const,
     top: 0,
     insetInlineEnd: 0,
+    flexShrink: 0,
   },
   desktopHeaderMeta: {
-    // Grow into the free space, but keep a readable floor: when the actions
-    // no longer fit beside a 240px title block the header wraps instead of
-    // squeezing the title to nothing.
     flexGrow: 1,
     flexShrink: 1,
-    flexBasis: '240px',
+    maxWidth: 800,
     minWidth: 0,
   },
   mobileHeaderMeta: {
+    maxWidth: 800,
     minWidth: 0,
     paddingInlineEnd: 48,
   },
-  actionsRow: {
+  footerRow: {
     width: '100%',
     minWidth: 0,
   },
-  // Standard (desktop) header: the action cluster shares one line with the
-  // title, so it has to be allowed to shrink — otherwise a narrow window
-  // pushes "Open in Playground" past the dialog edge.
-  actionsGroup: {
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  // Command rows and the primary action stack on the fullscreen (mobile)
-  // header, so each one gets the full width instead of competing for it.
   commandStack: {
+    flexGrow: 1,
     flexShrink: 1,
     minWidth: 0,
   },
@@ -188,25 +165,19 @@ const styles = stylex.create({
   },
 });
 
-type CopiedCommand = 'astryx' | 'shadcn' | null;
+type CopiedCommand = 'astryx' | null;
 
 interface TemplatePreviewHeaderProps {
   item: TemplatePreviewItem;
   isFullscreen: boolean;
-  copiedCommand: CopiedCommand;
-  onCopyCommand: (kind: Exclude<CopiedCommand, null>) => void;
   onClose: () => void;
 }
 
 function TemplatePreviewHeader({
   item,
   isFullscreen,
-  copiedCommand,
-  onCopyCommand,
   onClose,
 }: TemplatePreviewHeaderProps) {
-  const playgroundHref = buildTemplatePlaygroundHref(item.slug);
-
   const metadata = (
     <VStack
       gap={0.5}
@@ -222,7 +193,42 @@ function TemplatePreviewHeader({
     </VStack>
   );
 
-  const copyButton = (
+  const closeButton = (
+    <Button
+      variant="secondary"
+      isIconOnly
+      label="Close preview"
+      size="lg"
+      icon={<Icon icon="close" color="inherit" />}
+      onClick={onClose}
+      xstyle={isFullscreen ? styles.closeButton : styles.noShrink}
+    />
+  );
+
+  return (
+    <HStack gap={4} vAlign="start" justify="between" xstyle={styles.headerRow}>
+      {metadata}
+      {closeButton}
+    </HStack>
+  );
+}
+
+interface TemplatePreviewFooterProps {
+  item: TemplatePreviewItem;
+  isFullscreen: boolean;
+  copiedCommand: CopiedCommand;
+  onCopyCommand: () => void;
+}
+
+function TemplatePreviewFooter({
+  item,
+  isFullscreen,
+  copiedCommand,
+  onCopyCommand,
+}: TemplatePreviewFooterProps) {
+  const playgroundHref = buildTemplatePlaygroundHref(item.slug);
+
+  const installCommands = (
     <VStack gap={1} xstyle={styles.commandStack}>
       <HStack gap={2} vAlign="center" xstyle={styles.commandGroup}>
         <Text type="supporting" color="secondary" xstyle={styles.commandLabel}>
@@ -243,44 +249,10 @@ function TemplatePreviewHeader({
               color="inherit"
             />
           }
-          onClick={() => onCopyCommand('astryx')}
+          onClick={onCopyCommand}
           xstyle={styles.noShrink}
         />
       </HStack>
-      {CURRENT_TARGET === 'canary' && (
-        <HStack gap={2} vAlign="center" xstyle={styles.commandGroup}>
-          <Text
-            type="supporting"
-            color="secondary"
-            xstyle={styles.commandLabel}>
-            {shadcnRegistryIsPreview ? 'shadcn preview (expires)' : 'shadcn'}
-          </Text>
-          <Code xstyle={styles.commandCode}>
-            {shadcnInstallCommand(
-              shadcnPageItemPath(item.slug),
-              shadcnRegistryOrigin,
-            )}
-          </Code>
-          <Button
-            variant="ghost"
-            isIconOnly
-            size="lg"
-            label={
-              copiedCommand === 'shadcn'
-                ? 'Copied!'
-                : 'Copy ShadCN install command'
-            }
-            icon={
-              <Icon
-                icon={copiedCommand === 'shadcn' ? 'check' : 'copy'}
-                color="inherit"
-              />
-            }
-            onClick={() => onCopyCommand('shadcn')}
-            xstyle={styles.noShrink}
-          />
-        </HStack>
-      )}
     </VStack>
   );
 
@@ -302,44 +274,15 @@ function TemplatePreviewHeader({
     />
   );
 
-  const closeButton = (
-    <Button
-      variant="secondary"
-      isIconOnly
-      label="Close preview"
-      size="lg"
-      icon={<Icon icon="close" color="inherit" />}
-      onClick={onClose}
-      xstyle={isFullscreen ? styles.closeButton : undefined}
-    />
-  );
-
-  // Fullscreen (mobile) stacks the actions: a phone cannot fit the command
-  // rows and the primary action on one line, and squeezing them there is what
-  // pushed the header past the viewport.
-  const actions = isFullscreen ? (
-    <VStack gap={2} xstyle={styles.actionsRow}>
-      {copyButton}
-      {playgroundButton}
-    </VStack>
-  ) : (
-    <HStack gap={2} vAlign="center" xstyle={styles.actionsGroup}>
-      {copyButton}
-      {playgroundButton}
-      {closeButton}
-    </HStack>
-  );
-
   return isFullscreen ? (
-    <VStack gap={3} xstyle={styles.headerRow}>
-      {metadata}
-      {actions}
-      {closeButton}
+    <VStack gap={2} xstyle={styles.footerRow}>
+      {installCommands}
+      {playgroundButton}
     </VStack>
   ) : (
-    <HStack gap={4} vAlign="start" wrap="wrap" xstyle={styles.headerRow}>
-      {metadata}
-      {actions}
+    <HStack gap={4} vAlign="center" justify="between" xstyle={styles.footerRow}>
+      {installCommands}
+      {playgroundButton}
     </HStack>
   );
 }
@@ -354,6 +297,8 @@ export function TemplatePreviewDialog({
 }: TemplatePreviewDialogProps) {
   const [copiedCommand, setCopiedCommand] = useState<CopiedCommand>(null);
   const [isPending, startTransition] = useTransition();
+  const [pendingPreviewItem, setPendingPreviewItem] =
+    useState<TemplatePreviewItem | null>(null);
 
   // Release the top layer when this dialog is torn down while still open.
   //
@@ -381,11 +326,22 @@ export function TemplatePreviewDialog({
 
   const count = items.length;
   const current = items[index];
-  // The deferred index drives the heavy preview surface — it lags behind
-  // the committed index during a transition, keeping the old template
-  // visible and the dialog interactive while the next one loads.
+  // Router work may outlive closing or selecting another card. Retire its
+  // preview state during render so it cannot cover a newer selection.
+  if (
+    pendingPreviewItem !== null &&
+    (!isOpen || pendingPreviewItem !== current)
+  ) {
+    setPendingPreviewItem(null);
+  }
+  const isPreviewPending =
+    isPending && isOpen && pendingPreviewItem === current;
+  // Only pending prev/next navigation may retain the deferred preview beneath
+  // its skeleton. Opening a card or syncing a URL must show the current item
+  // immediately, even if the mounted dialog's deferred index is still stale.
   const deferredIndex = useDeferredValue(index);
   const deferredCurrent = items[deferredIndex];
+  const previewCurrent = isPreviewPending ? deferredCurrent : current;
 
   const go = (delta: number) => {
     if (count === 0) {
@@ -398,6 +354,7 @@ export function TemplatePreviewDialog({
       direction: delta > 0 ? 'next' : 'prev',
       item: items[nextIndex]?.slug,
     });
+    setPendingPreviewItem(current);
     startTransition(() => {
       onIndexChange(nextIndex);
     });
@@ -430,29 +387,18 @@ export function TemplatePreviewDialog({
   }
 
   const astryxCommand = `npx @astryxdesign/cli template ${current.slug} ./src/app/${current.slug}`;
-  const shadcnCommand = shadcnInstallCommand(
-    shadcnPageItemPath(current.slug),
-    shadcnRegistryOrigin,
-  );
-  const handleCopyCmd = useCallback(
-    (kind: Exclude<CopiedCommand, null>) => {
-      if (kind === 'shadcn' && CURRENT_TARGET !== 'canary') {
-        return;
-      }
-      const command = kind === 'astryx' ? astryxCommand : shadcnCommand;
-      navigator.clipboard.writeText(command).then(() => {
-        setCopiedCommand(kind);
-        trackCopy({
-          page: 'templates',
-          target: kind === 'astryx' ? 'cli_command' : 'install_command',
-          item: current.slug,
-          category: current.category,
-        });
-        setTimeout(() => setCopiedCommand(null), 2000);
+  const handleCopyCmd = useCallback(() => {
+    navigator.clipboard.writeText(astryxCommand).then(() => {
+      setCopiedCommand('astryx');
+      trackCopy({
+        page: 'templates',
+        target: 'cli_command',
+        item: current.slug,
+        category: current.category,
       });
-    },
-    [astryxCommand, shadcnCommand, current.slug, current.category],
-  );
+      setTimeout(() => setCopiedCommand(null), 2000);
+    });
+  }, [astryxCommand, current.slug, current.category]);
 
   const isFullscreen = variant === 'fullscreen';
 
@@ -461,19 +407,17 @@ export function TemplatePreviewDialog({
       isOpen={isOpen}
       onOpenChange={onOpenChange}
       variant={variant}
-      width={isFullscreen ? undefined : 1400}
-      maxHeight={isFullscreen ? undefined : '92vh'}
-      xstyle={isFullscreen ? undefined : styles.dialogTall}
+      width={isFullscreen ? undefined : 1472}
+      maxHeight={isFullscreen ? undefined : 'calc(100dvh - 32px)'}
+      xstyle={isFullscreen ? undefined : styles.dialogDesktop}
       aria-label={current.name}>
       <Layout
         height="fill"
         header={
-          <LayoutHeader xstyle={styles.dialogHeader}>
+          <LayoutHeader paddingBlockEnd={2} xstyle={styles.dialogHeader}>
             <TemplatePreviewHeader
               item={current}
               isFullscreen={isFullscreen}
-              copiedCommand={copiedCommand}
-              onCopyCommand={handleCopyCmd}
               onClose={() => onOpenChange(false)}
             />
           </LayoutHeader>
@@ -483,17 +427,27 @@ export function TemplatePreviewDialog({
             <div {...stylex.props(styles.body)} ref={hostRef}>
               {isOpen && (
                 <TemplatePreviewSurface
-                  key={deferredCurrent.slug}
-                  slug={deferredCurrent.slug}
+                  key={previewCurrent.slug}
+                  slug={previewCurrent.slug}
                 />
               )}
-              {isPending && (
+              {isPreviewPending && (
                 <div {...stylex.props(styles.skeletonOverlay)}>
                   <Skeleton width="100%" height="100%" />
                 </div>
               )}
             </div>
           </LayoutContent>
+        }
+        footer={
+          <LayoutFooter>
+            <TemplatePreviewFooter
+              item={current}
+              isFullscreen={isFullscreen}
+              copiedCommand={copiedCommand}
+              onCopyCommand={handleCopyCmd}
+            />
+          </LayoutFooter>
         }
       />
 

@@ -4,7 +4,7 @@
 
 /**
  * @file CollapsibleGroupContext.tsx
- * @input Uses React createContext
+ * @input Layer-scoped React context
  * @output Exports CollapsibleGroupContext, CollapsibleGroupContextValue,
  *   CollapsibleGroupPresentationContext, CollapsibleGroupPresentationValue,
  *   CollapsibleGroupDensity, and CollapsibleChevronPosition types
@@ -17,6 +17,7 @@
  */
 
 import {createContext} from 'react';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 /**
  * Context value provided by CollapsibleGroup to coordinate collapsible children.
@@ -78,6 +79,6 @@ export interface CollapsibleGroupPresentationValue {
  * children so nested collapsibles never inherit row chrome.
  */
 export const CollapsibleGroupPresentationContext =
-  createContext<CollapsibleGroupPresentationValue | null>(null);
+  createLayerScopedContext<CollapsibleGroupPresentationValue | null>(null);
 CollapsibleGroupPresentationContext.displayName =
   'CollapsibleGroupPresentationContext';

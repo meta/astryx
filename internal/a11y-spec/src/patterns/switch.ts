@@ -765,7 +765,7 @@ export const SWITCH_PATTERN: PatternContract<SwitchStateFacts> =
         verifiedBy:
           "the repository visual gate and the component's own focus-ring styling",
         reason:
-          'A focus indicator is a painted result. Astryx switches draw theirs on the track through an ancestor `:has(:focus-visible)` condition, so proving it means comparing pixels, which is the visual layer.',
+          "A focus indicator is a painted result. Astryx switches draw theirs on the track when the switch's own input, the track's preceding sibling, matches `:focus-visible`, so proving it means comparing pixels, which is the visual layer.",
       },
       '2.4.11-focus-not-obscured': {
         owner: 'the composing page',

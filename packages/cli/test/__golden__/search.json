@@ -1,0 +1,59 @@
+{
+  "apiVersion": 1,
+  "type": "search",
+  "data": {
+    "query": "zorblax",
+    "matchCount": 4,
+    "results": [
+      {
+        "domain": "component",
+        "name": "AcmeCard",
+        "package": "@acme/kit",
+        "score": 90,
+        "reason": "keyword \"zorblax\"",
+        "description": "A zorblax card that groups one topic.",
+        "import": "@acme/kit",
+        "command": "astryx component AcmeCard"
+      },
+      {
+        "domain": "doc",
+        "name": "acme-guide",
+        "package": "@acme/kit",
+        "score": 50,
+        "reason": "description mentions \"zorblax\"",
+        "description": "How zorblax cards fit together.",
+        "title": "Guides › Acme guide",
+        "command": "astryx docs acme-guide --index",
+        "parent": "astryx docs guides"
+      },
+      {
+        "domain": "template",
+        "name": "hero",
+        "package": "@acme/kit",
+        "score": 50,
+        "reason": "description mentions \"zorblax\"",
+        "description": "A zorblax hero block.",
+        "displayName": "Zorblax hero",
+        "kind": "block",
+        "command": "astryx template hero --type block"
+      },
+      {
+        "domain": "theme",
+        "name": "ocean",
+        "package": "@acme/kit",
+        "score": 50,
+        "reason": "description mentions \"zorblax\"",
+        "description": "A zorblax blue.",
+        "displayName": "Ocean",
+        "command": "astryx theme add ocean"
+      }
+    ]
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
+  }
+}

@@ -4,13 +4,11 @@
 /**
  * Generates apps/sandbox/public/xle-tokenizer.mjs
  *
- * The Layout DSL page counts tokens CLIENT-SIDE. Rather than bundle
- * gpt-tokenizer through webpack (which hard-fails the whole build if the
- * package isn't installed), we esbuild-bundle its o200k_base encoding into a
- * single self-contained ESM module here, served from public/ and loaded via a
- * `webpackIgnore` dynamic import. If esbuild or gpt-tokenizer are unavailable,
- * we emit a heuristic module with the same export shape — so the sandbox
- * always builds and the page always has a counter.
+ * The Layout DSL page counts tokens CLIENT-SIDE. gpt-tokenizer is optional, so
+ * a self-contained ESM module is generated under public/ rather than making the
+ * Vite bundle depend on it. The browser imports that module by URL. If esbuild
+ * or gpt-tokenizer is unavailable, a heuristic module with the same export
+ * shape is written instead, so the page always has a counter.
  *
  * Runs in the sandbox `generate` chain.
  */
@@ -53,7 +51,9 @@ try {
     `✓ xle-tokenizer.mjs: gpt-tokenizer o200k_base (${(out.length / 1024 / 1024).toFixed(1)} MB bundled)`,
   );
 } catch {
-  console.warn('xle-tokenizer.mjs: gpt-tokenizer/esbuild unavailable — wrote heuristic fallback');
+  console.warn(
+    'xle-tokenizer.mjs: gpt-tokenizer/esbuild unavailable — wrote heuristic fallback',
+  );
 }
 
 mkdirSync(dirname(OUT), {recursive: true});

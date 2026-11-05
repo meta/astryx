@@ -9,7 +9,7 @@
  * SYNC: When TransferListSelector.tsx behavior changes, update this test.
  */
 
-import {useState} from 'react';
+import {Profiler, useState} from 'react';
 import {afterAll, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   fireEvent,
@@ -106,7 +106,7 @@ function Harness({
 async function openSelector(
   name = 'Visible fields',
 ): Promise<HTMLButtonElement> {
-  const trigger = screen.getByRole('button', {
+  const trigger = screen.getByRole('combobox', {
     name,
   }) as HTMLButtonElement;
   fireEvent.keyDown(trigger, {key: 'ArrowDown'});
@@ -416,7 +416,7 @@ describe('TransferListSelector', () => {
     );
 
     expect(
-      screen.getByRole('button', {name: 'Visible fields'}),
+      screen.getByRole('combobox', {name: 'Visible fields'}),
     ).toHaveTextContent('3 selected');
   });
 
@@ -461,7 +461,9 @@ describe('TransferListSelector', () => {
     expect(cancel).toBeEnabled();
     expect(fieldset).not.toContainElement(cancel);
     expect(apply).toBeDisabled();
-    expect(screen.getByRole('button', {name: 'Visible fields'})).toBeDisabled();
+    expect(
+      screen.getByRole('combobox', {name: 'Visible fields'}),
+    ).toHaveAttribute('aria-disabled', 'true');
 
     view.rerender(
       <TransferListSelector
@@ -557,12 +559,12 @@ describe('TransferListSelector', () => {
     expect(
       screen.getByText('Choose the columns shown in the table.'),
     ).toBeVisible();
-    expect(screen.getByTestId('column-selector')).toHaveAttribute(
-      'data-size',
-      'sm',
-    );
+    // data-testid lands on the trigger button inside the control box.
     expect(
-      screen.getByRole('button', {name: 'Table columns'}),
+      screen.getByTestId('column-selector').closest('.astryx-complex-selector'),
+    ).toHaveAttribute('data-size', 'sm');
+    expect(
+      screen.getByRole('combobox', {name: 'Table columns'}),
     ).toHaveTextContent('Customize columns');
     expect(
       screen.getByTestId('column-selector').closest('.astryx-field'),
@@ -601,5 +603,44 @@ describe('TransferListSelector', () => {
     expect(popover?.getAttribute('style')).toContain(
       'position-area: self-block-end span-self-inline-end',
     );
+  });
+});
+
+describe('TransferListSelector draft reset timing', () => {
+  it('replaces a staged draft in the same commit as an external value change', async () => {
+    const user = userEvent.setup();
+    const frames: boolean[] = [];
+    const onRender = () =>
+      frames.push(
+        screen.queryByRole('button', {name: 'Remove Owner', ...hidden}) != null,
+      );
+    const ui = (value: string[]) => (
+      <Profiler id="selector" onRender={onRender}>
+        <TransferListSelector
+          label="Visible fields"
+          options={OPTIONS}
+          value={value}
+          onChange={() => {}}
+          commitBehavior="staged"
+        />
+      </Profiler>
+    );
+    const view = render(ui(['name', 'status']));
+    await openSelector();
+    await user.click(
+      screen.getByRole('button', {name: 'Add Owner', ...hidden}),
+    );
+    expect(
+      screen.getByRole('button', {name: 'Remove Owner', ...hidden}),
+    ).toBeInTheDocument();
+
+    frames.length = 0;
+    view.rerender(ui(['name']));
+
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames).not.toContain(true);
+    expect(
+      screen.getByRole('button', {name: 'Add Owner', ...hidden}),
+    ).toBeInTheDocument();
   });
 });

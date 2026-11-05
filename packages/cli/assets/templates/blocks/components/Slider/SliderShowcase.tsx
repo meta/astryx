@@ -12,7 +12,7 @@ export default function SliderShowcase() {
       label="Volume"
       value={value}
       onChange={setValue}
-      style={{width: 300}}
+      containerStyle={{width: 300}}
     />
   );
 }

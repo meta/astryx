@@ -1,22 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Regression test for `astryx init` "Next steps" theme guidance.
+ * @file Regression tests for `astryx init` app-theme next steps.
  *
- * The init command previously steered users toward the slower runtime
- * style-injection path:
- *
- *   import { neutralTheme } from '@astryxdesign/theme-neutral'
- *   <Theme theme={neutralTheme}>...</Theme>
- *
- * ...which contradicted the runtime console warning emitted by core's
- * <Theme> component (packages/core/src/theme/Theme.tsx) recommending the
- * pre-built path, and left users with an unstyled app because the base CSS
- * imports were never mentioned (facebook/astryx#3080).
- *
- * These assertions lock in the corrected guidance: base CSS imports, the
- * pre-built (`/built` + `theme.css`) theme path, and the custom-theme build
- * command.
+ * The guidance follows the generated-module workflow: base CSS once, add an
+ * installed theme, import the generated record once, extend to customize, and
+ * eject only to make an independent source fork.
  */
 
 import {describe, it, expect} from 'vitest';
@@ -30,17 +19,23 @@ describe('init Next steps theme guidance', () => {
     expect(text).toContain("'@astryxdesign/core/astryx.css'");
   });
 
-  it('uses the pre-built theme path matching the runtime recommendation', () => {
-    expect(text).toContain("'@astryxdesign/theme-neutral/built'");
-    expect(text).toContain("'@astryxdesign/theme-neutral/theme.css'");
+  it('adds an installed theme through the CLI', () => {
+    expect(text).toContain('npm install @astryxdesign/theme-neutral');
+    expect(text).toContain('npx astryx theme add neutral');
   });
 
-  it('mentions building custom themes via `astryx theme build`', () => {
-    expect(text).toContain('astryx theme build <file>');
+  it('wires the generated theme record once', () => {
+    expect(text).toContain("{ themes, defaultThemeSlug } from './astryx-themes'");
+    expect(text).toContain('themes[defaultThemeSlug]');
   });
 
-  it('does not steer users to the runtime style-injection import', () => {
-    // The bare source import (no `/built`) is the slow runtime-injection path.
-    expect(text).not.toContain("from '@astryxdesign/theme-neutral'");
+  it('names extension for customization and eject only for a source fork', () => {
+    expect(text).toContain('Extend an imported theme');
+    expect(text).toContain('npx astryx theme eject <slug>');
+    expect(text).toContain('only to fork source');
+  });
+
+  it('does not teach a direct package theme import', () => {
+    expect(text).not.toContain("from '@astryxdesign/theme-neutral");
   });
 });

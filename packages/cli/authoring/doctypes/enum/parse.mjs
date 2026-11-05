@@ -8,7 +8,7 @@
 import {EnumDocKindSchema} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
-/** @typedef {import('../types').EnumDoc} EnumDoc */
+/** @typedef {import('../types.js').EnumDoc} EnumDoc */
 
 /**
  * Validate an unknown value as a stamped enum doc, or throw.

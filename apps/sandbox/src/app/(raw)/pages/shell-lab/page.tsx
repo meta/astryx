@@ -3,7 +3,7 @@
 'use client';
 
 import {Suspense, useState, useCallback, useEffect, useMemo} from 'react';
-import {useSearchParams} from 'next/navigation';
+import {useSearchParams} from 'react-router-dom';
 import * as stylex from '@stylexjs/stylex';
 
 import {AppShell} from '@astryxdesign/core/AppShell';
@@ -981,7 +981,7 @@ export default function ShellLabPage() {
 }
 
 function ShellLabContent() {
-  const searchParams = useSearchParams();
+  const [searchParams] = useSearchParams();
 
   // Initialize config from URL params on mount
   const initialConfig = useMemo(

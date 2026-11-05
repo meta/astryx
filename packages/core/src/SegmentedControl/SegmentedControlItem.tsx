@@ -9,6 +9,7 @@
  * @position Child item; renders as a radio button within the segmented control
  *
  * SYNC: When modified, update:
+ * - /packages/core/src/SegmentedControl/useSegmentedSelectionMotion.ts (the title marker)
  * - /packages/core/src/SegmentedControl/SegmentedControl.doc.mjs
  * - /packages/core/src/SegmentedControl/index.ts
  * - /packages/core/src/SegmentedControl/SegmentedControl.test.tsx
@@ -16,6 +17,9 @@
  */
 
 import React, {type ReactNode} from 'react';
+import {joinAriaIDs} from '../utils/inputAria';
+import {segmentDisabledProps} from '../privateAttributes/segmentDisabled.stylex';
+import {segmentTitleProps} from '../privateAttributes/segmentTitle.stylex';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -34,6 +38,8 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {usePressFeedback} from '../hooks/usePressFeedback';
+import {isRenderable} from '../utils/isRenderable';
 
 export interface SegmentedControlItemProps extends BaseProps<HTMLButtonElement> {
   ref?: React.Ref<HTMLButtonElement>;
@@ -88,6 +94,9 @@ const styles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     whiteSpace: 'nowrap',
+    // In both layouts a segment may be narrower than its label, so the
+    // label's ellipsis can engage when the control is capped by its container.
+    minWidth: 0,
     transitionProperty: 'color, background-color, box-shadow',
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
@@ -125,6 +134,10 @@ const styles = stylex.create({
     minWidth: 0,
     justifyContent: 'center',
   },
+  // An icon-only segment has no label to truncate, so it keeps its size.
+  iconOnly: {
+    flexShrink: 0,
+  },
   icon: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -135,6 +148,12 @@ const styles = stylex.create({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     minWidth: 0,
+  },
+  // Under a finger, script animates the selection change, because the surface
+  // slides. A CSS transition would run a second, main-thread version of the
+  // same change.
+  touchPresentation: {
+    transitionProperty: 'none',
   },
 });
 
@@ -184,30 +203,32 @@ export function SegmentedControlItem({
   isDisabled = false,
   onClick: onClickProp,
   xstyle,
+  'aria-describedby': ariaDescribedByProp,
   ...rest
 }: SegmentedControlItemProps) {
+  const pressable = usePressFeedback();
   const ctx = useSegmentedControlContext();
 
   const isSelected = ctx.value === value;
   const isItemDisabled = isDisabled || ctx.isDisabled;
-  // When the whole group is disabled with a disabledMessage, keep the selected
-  // segment focusable so the group's reason tooltip is keyboard-discoverable.
-  // Per-item disabling (`isDisabled` on the item) always drops out of the tab
-  // order. Activation stays blocked by the isItemDisabled guard in handleClick.
-  const keepsSelectedFocusable =
-    isSelected && (ctx.hasDisabledMessage ?? false) && !isDisabled;
   const size: SegmentedControlSize = ctx.size;
   const isFill = ctx.layout === 'fill';
 
   // Consumer-first: a consumer onClick can call preventDefault() to opt out of
   // selection; otherwise selection proceeds when enabled and not selected.
-  const handleClick = composeEventHandlers(onClickProp, () => {
-    if (!isItemDisabled && !isSelected) {
-      ctx.onChange(value);
-    }
-  });
+  // A disabled segment invokes no caller callback (spec:AST-085 FR2), so the
+  // consumer onClick is left out while it is disabled, including the selected
+  // segment of a group disabled with a reason, which stays focusable.
+  const handleClick = composeEventHandlers(
+    isItemDisabled ? undefined : onClickProp,
+    () => {
+      if (!isItemDisabled && !isSelected) {
+        ctx.onChange(value);
+      }
+    },
+  );
 
-  const iconElement = icon ? (
+  const iconElement = isRenderable(icon) ? (
     <span {...stylex.props(styles.icon, iconSizeStyles[size])}>{icon}</span>
   ) : null;
 
@@ -220,15 +241,17 @@ export function SegmentedControlItem({
       aria-checked={isSelected}
       aria-disabled={isItemDisabled || undefined}
       aria-label={isLabelHidden ? label : undefined}
+      // A caller description, then the group's disabled reason, which
+      // describes each segment (FR7).
+      aria-describedby={joinAriaIDs(ariaDescribedByProp, ctx.disabledReasonID)}
       data-value={value}
-      // Disabled items (including when the whole group is disabled) are not tab
-      // stops — otherwise the selected segment stays keyboard-focusable but is
-      // silently dead (arrows and activation are no-ops) (navigation-13). The
-      // exception is a whole-group disabledMessage, where the selected segment
-      // stays focusable so the reason tooltip is keyboard-discoverable.
-      tabIndex={
-        (isSelected && !isItemDisabled) || keepsSelectedFocusable ? 0 : -1
-      }
+      // The group's fallback Tab stop skips segments disabled on their own.
+      {...segmentDisabledProps(isDisabled)}
+      {...(!isSelected && !isItemDisabled ? pressable : undefined)}
+      // The selected segment holds the Tab stop, disabled or not (spec:AST-085
+      // FR1); activation stays blocked by the isItemDisabled guard. With no
+      // selected segment, the group places the stop (SegmentedControl FR2).
+      tabIndex={isSelected ? 0 : -1}
       onClick={handleClick}
       {...mergeProps(
         themeProps('segmented-control-item', {
@@ -240,6 +263,7 @@ export function SegmentedControlItem({
           styles.base,
           sizeStyles[size],
           isFill && styles.fill,
+          isLabelHidden && styles.iconOnly,
           isSelected && styles.selected,
           // The shared hover and pressed overlay, on the segments a press can
           // change: the selected segment keeps its raised surface as it is.
@@ -247,12 +271,15 @@ export function SegmentedControlItem({
             !isItemDisabled &&
             interactionOverlayStyles.backgroundColor,
           isItemDisabled && styles.disabled,
+          ctx.isTouchPresentation === true && styles.touchPresentation,
           xstyle,
         ),
       )}>
       {iconElement}
       {!isLabelHidden && (
-        <span {...stylex.props(styles.labelText)}>{label}</span>
+        <span {...segmentTitleProps} {...stylex.props(styles.labelText)}>
+          {label}
+        </span>
       )}
     </button>
   );

@@ -7,8 +7,8 @@
  * @position Shared URL policy for parser, transforms, and renderer
  */
 
-const PARSER_DANGEROUS_URL_PATTERN =
-  /^(?:javascript:|data:text\/html|vbscript:)/i;
+import {isSafeUrl, sanitizeUrl} from '../utils/safeUrl';
+
 const RENDER_DANGEROUS_URL_PATTERN = /^(?:javascript:|data:|vbscript:)/i;
 
 function normalizeMarkdownUrl(url: string): string {
@@ -19,7 +19,13 @@ function normalizeMarkdownUrl(url: string): string {
 
 /** Preserve the released parser policy for no-plugin output compatibility. */
 export function isSafeMarkdownParserUrl(url: string): boolean {
-  return !PARSER_DANGEROUS_URL_PATTERN.test(normalizeMarkdownUrl(url));
+  return isSafeUrl(url);
+}
+
+/** Navigation and image rendering deliberately have different policies. */
+export function sanitizeMarkdownLinkUrl(url: string): string | null {
+  const normalized = sanitizeUrl(url);
+  return normalized === '' ? null : normalized;
 }
 
 export function sanitizeMarkdownUrl(url: string): string | null {

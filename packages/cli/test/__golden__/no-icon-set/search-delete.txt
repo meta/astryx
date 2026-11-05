@@ -1,0 +1,96 @@
+Results for "delete" (19)
+name:        AlertDialog
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/AlertDialog
+command:     pnpm exec astryx component AlertDialog
+name:        global/uninstall
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs global/uninstall --index
+parent:      pnpm exec astryx docs global
+name:        Dialog
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Dialog
+command:     pnpm exec astryx component Dialog
+name:        cli/api/functions/theme-template
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/api/functions/theme-template
+parent:      pnpm exec astryx docs cli/api/functions
+name:        cli/commands/theme-template
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs cli/commands/theme-template
+parent:      pnpm exec astryx docs cli/commands
+name:        global/computer-agent-guide
+section:     choose
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs global/computer-agent-guide choose
+parent:      pnpm exec astryx docs global/computer-agent-guide --index
+name:        global/uninstall
+section:     agent-guide
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs global/uninstall agent-guide
+parent:      pnpm exec astryx docs global/uninstall --index
+name:        global/uninstall
+section:     reset
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs global/uninstall reset
+parent:      pnpm exec astryx docs global/uninstall --index
+name:        migration/migration-setup
+section:     foundation-smoke-test
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs migration/migration-setup foundation-smoke-test
+parent:      pnpm exec astryx docs migration/migration-setup --index
+name:        use-a-theme
+section:     migrating-earlier-theme-copies
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs use-a-theme migrating-earlier-theme-copies
+parent:      pnpm exec astryx docs use-a-theme --index
+name:        AlertDialogDeleteConfirmation
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template AlertDialogDeleteConfirmation --type block
+name:        ButtonWithIcon
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template ButtonWithIcon --type block
+name:        PopoverConfirmAction
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template PopoverConfirmAction --type block
+name:        ToastAction
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template ToastAction --type block
+name:        useContainerRevealHookUsage
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template useContainerRevealHookUsage --type block
+name:        Button
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Button
+command:     pnpm exec astryx component Button
+name:        ButtonGroup
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/ButtonGroup
+command:     pnpm exec astryx component ButtonGroup
+name:        IconButton
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/IconButton
+command:     pnpm exec astryx component IconButton
+name:        ToggleButton
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/ToggleButton
+command:     pnpm exec astryx component ToggleButton

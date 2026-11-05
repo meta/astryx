@@ -15,7 +15,15 @@ import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+
+/** The StyleX runtime that Core ships with, resolved the way Core resolves it. */
+const CORE_PACKAGE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../../core/package.json',
+);
 
 /**
  * Build a fake @astryxdesign/core under <project>/node_modules with a single
@@ -147,7 +155,7 @@ describe('swizzle — core feedback routing via config', () => {
     expect(result.code).toBe(0);
     const env = JSON.parse(result.stdout);
     expect(env.data.feedback.issuesUrl).toBe(
-      'https://github.com/facebook/astryx/issues/new',
+      'https://github.com/meta/astryx/issues/new',
     );
   });
 });
@@ -303,9 +311,19 @@ describe('swizzle — StyleX build setup note (#3373)', () => {
     const humanResult = await runCli(['swizzle', 'Styled', '-f'], project);
     expect(humanResult.code).toBe(0);
     expect(humanResult.stdout).toMatch(/StyleX compiler/i);
-    expect(humanResult.stdout).toMatch(/unstyled/i);
+    expect(humanResult.stdout).toMatch(/importing them throws "Unexpected 'stylex\.create' call at runtime"/);
+    expect(humanResult.stdout).not.toMatch(/unstyled/i);
     expect(humanResult.stdout).toMatch(/next\/font/i);
-    expect(humanResult.stdout).toMatch(/astryx docs styling/);
+    // The fixture has no `astryx` bin installed, so the note names the scoped package.
+    expect(humanResult.stdout).toMatch(/@astryxdesign\/cli@\S+ docs styling/);
+  });
+
+  // The note quotes what StyleX does without a compiler; this keeps it true.
+  it('matches what the StyleX runtime does when styles are not compiled', () => {
+    const stylex = createRequire(CORE_PACKAGE)('@stylexjs/stylex');
+    expect(() => stylex.create({root: {color: 'red'}})).toThrow(
+      /Unexpected 'stylex\.create' call at runtime/,
+    );
   });
 
   it('does not print the StyleX note for components without StyleX', async () => {
@@ -320,5 +338,38 @@ describe('swizzle — StyleX build setup note (#3373)', () => {
     const humanResult = await runCli(['swizzle', 'Plain', '-f'], project);
     expect(humanResult.code).toBe(0);
     expect(humanResult.stdout).not.toMatch(/StyleX compiler/i);
+  });
+});
+
+describe('swizzle — shared modules outside the component folder (spec:AST-110 FR4)', () => {
+  it('names the owner modules it copied beside the component', async () => {
+    const core = path.join(project, 'node_modules', '@astryxdesign', 'core');
+    const rowDir = path.join(core, 'src', 'Row');
+    fs.mkdirSync(rowDir, {recursive: true});
+    fs.mkdirSync(path.join(core, 'src', 'privateAttributes'), {recursive: true});
+    fs.mkdirSync(path.join(core, 'src', 'motion'), {recursive: true});
+    fs.writeFileSync(
+      path.join(core, 'package.json'),
+      '{"name":"@astryxdesign/core","version":"0.0.13"}',
+    );
+    fs.writeFileSync(
+      path.join(rowDir, 'Row.tsx'),
+      `import {rowStyles} from '../privateAttributes/row.stylex';\nexport const Row = () => null;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'privateAttributes', 'row.stylex.ts'),
+      `import {fade} from '../motion/fade.stylex';\nexport const rowStyles = fade;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'motion', 'fade.stylex.ts'),
+      `export const fade = 1;\n`,
+    );
+    writeProjectPackageJson(project);
+
+    const humanResult = await runCli(['swizzle', 'Row', '-f'], project);
+    expect(humanResult.code).toBe(0);
+    expect(humanResult.stdout).toContain(
+      'Shared modules: ../privateAttributes/row.stylex.ts, ../motion/fade.stylex.ts (copied whole; their imports between each other stay relative)',
+    );
   });
 });

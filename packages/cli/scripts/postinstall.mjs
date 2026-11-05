@@ -7,7 +7,7 @@
  * installed as a project dependency and the project hasn't run init yet, print a
  * one-line next-step so agents/humans discover it.
  *
- * Reuses the ONE setup check (isAstryxInitialized) from the dependency-free leaf
+ * Reuses the ONE setup check (isAstryxPromptInReach) from the dependency-free leaf
  * ../foundation/agent-docs/agent-doc-state.mjs — node builtins only, so it is
  * genuinely safe to load at install time (importing agent-docs.mjs would drag in
  * the full CLI module graph). Non-interactive, never fails the install, and
@@ -24,7 +24,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 // is safe to load at install time.
 import {
   shouldNudge,
-  SETUP_NUDGE,
+  setupNudge,
 } from '../foundation/agent-docs/agent-doc-state.mjs';
 
 const HERE = fileURLToPath(import.meta.url);
@@ -41,12 +41,31 @@ async function projectIsSetUp(root) {
     // Dep-free leaf (node builtins only) — safe to load mid-install. NOT
     // agent-docs.mjs, whose static graph (component discovery, package-manager
     // detection, …) isn't guaranteed importable yet during this postinstall.
-    const {isAstryxInitialized} = await import(
+    const {isAstryxPromptInReach} = await import(
       '../foundation/agent-docs/agent-doc-state.mjs'
     );
-    return isAstryxInitialized(root);
+    return isAstryxPromptInReach(root);
   } catch {
     return false; // best-effort — if the check can't load, fall through and nudge
+  }
+}
+
+/**
+ * The stem the CLI's picker prints for this project. At install time no
+ * integration is loaded, so this is the package-manager guess. Falls back to
+ * the contract's scoped form when the picker cannot load.
+ * @param {string} root
+ * @returns {Promise<string | undefined>}
+ */
+export async function cliInvocation(root) {
+  try {
+    // Node builtins only, like the contract.
+    const {getCliInvocation} = await import(
+      '../foundation/env/package-manager.mjs'
+    );
+    return getCliInvocation(root);
+  } catch {
+    return undefined;
   }
 }
 
@@ -58,7 +77,7 @@ async function main() {
     isSetUp: await projectIsSetUp(root),
   });
   if (nudge) {
-    process.stdout.write(SETUP_NUDGE);
+    process.stdout.write(setupNudge(await cliInvocation(root)));
   }
 }
 

@@ -14,6 +14,7 @@
 
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import {ERROR_CODES} from '../response/error-codes.mjs';
 
 /**
  * Error thrown by path-safety guards. Carries a stable `code`
@@ -38,7 +39,7 @@ export class PathSafetyError extends Error {
  *
  *   - Absolute paths (e.g. `/tmp/x`) — re-rooted by `path.join` is silent;
  *     better to fail loudly. Pass `{allowAbsolute: true}` to opt in.
- *   - Paths that escape via `..` segments.
+ *   - Paths that escape via `..` segments or a symlink, dangling or not.
  *
  * Returns the resolved absolute path on success.
  *
@@ -50,7 +51,8 @@ export class PathSafetyError extends Error {
  * @param {string} [options.label='path'] - Human-readable name of the arg
  *   being checked (used in error messages, e.g. 'output directory').
  * @returns {string} Absolute resolved path inside `rootDir`.
- * @throws {PathSafetyError}
+ * @throws {PathSafetyError} An escape carries the registered
+ *   `ERR_PATH_TRAVERSAL`, so it reaches an envelope correctly even uncaught.
  */
 export function assertWithin(targetPath, rootDir, options = {}) {
   const {allowAbsolute = false, label = 'path'} = options;
@@ -83,40 +85,68 @@ export function assertWithin(targetPath, rootDir, options = {}) {
     throw new PathSafetyError(
       `Invalid ${label} "${targetPath}": resolves outside the project root ` +
         `(${absRoot}). Path traversal is not allowed.`,
-      'PATH_TRAVERSAL',
+      ERROR_CODES.ERR_PATH_TRAVERSAL,
     );
   }
 
   // path.resolve is purely lexical — it does NOT follow symlinks, so a symlink
   // INSIDE the root that points outside would pass the check above while the
-  // real write lands outside root. Canonicalize the deepest EXISTING ancestor
-  // (the target itself usually doesn't exist yet) and re-check against the
-  // realpath'd root. This closes the symlink-escape hole for every command that
-  // writes through this guard.
+  // real write lands outside root. Canonicalize both paths through every
+  // symlink, dangling ones included (a write through a dangling link creates
+  // its target), and re-check.
   try {
-    const realRoot = fs.realpathSync(absRoot);
-    let existing = resolved;
-    while (!fs.existsSync(existing)) {
-      const parent = path.dirname(existing);
-      if (parent === existing) break;
-      existing = parent;
-    }
-    const realExisting = fs.realpathSync(existing);
+    const realRoot = canonicalPath(absRoot);
+    const realTarget = canonicalPath(resolved);
     const realRootWithSep = realRoot.endsWith(path.sep) ? realRoot : realRoot + path.sep;
-    if (realExisting !== realRoot && !realExisting.startsWith(realRootWithSep)) {
+    if (realTarget !== realRoot && !realTarget.startsWith(realRootWithSep)) {
       throw new PathSafetyError(
         `Invalid ${label} "${targetPath}": resolves outside the project root ` +
           `(${absRoot}) via a symlink. Path traversal is not allowed.`,
-        'PATH_TRAVERSAL',
+        ERROR_CODES.ERR_PATH_TRAVERSAL,
       );
     }
   } catch (err) {
     if (err instanceof PathSafetyError) throw err;
-    // realpath can fail if the root doesn't exist (ENOENT) or on a race; fall
-    // back to the lexical result already validated above rather than crash.
+    // A symlink loop, a permission error, or a race; fall back to the lexical
+    // result already validated above rather than crash.
   }
 
   return resolved;
+}
+
+/** Linux's MAXSYMLINKS; a longer chain is treated as a loop. */
+const MAX_SYMLINK_HOPS = 40;
+
+/**
+ * `target` with every symlink resolved, including a dangling one, which
+ * `fs.realpathSync` refuses. Components below the deepest existing entry are
+ * appended as given.
+ *
+ * @param {string} target absolute path
+ * @param {number} [hops] symlinks followed so far
+ * @returns {string}
+ * @throws when the chain exceeds {@link MAX_SYMLINK_HOPS} or `lstat` fails
+ *   for a reason other than a missing entry
+ */
+function canonicalPath(target, hops = 0) {
+  if (hops > MAX_SYMLINK_HOPS) throw new Error(`Too many symlinks: ${target}`);
+  let stat;
+  try {
+    stat = fs.lstatSync(target);
+  } catch (err) {
+    const code = /** @type {NodeJS.ErrnoException} */ (err).code;
+    if (code !== 'ENOENT' && code !== 'ENOTDIR') throw err;
+    const parent = path.dirname(target);
+    if (parent === target) return target;
+    return path.join(canonicalPath(parent, hops), path.basename(target));
+  }
+  try {
+    return fs.realpathSync(target);
+  } catch (err) {
+    if (!stat.isSymbolicLink()) throw err;
+  }
+  const link = fs.readlinkSync(target);
+  return canonicalPath(path.resolve(fs.realpathSync(path.dirname(target)), link), hops + 1);
 }
 
 /**

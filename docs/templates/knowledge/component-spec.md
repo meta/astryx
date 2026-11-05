@@ -1,6 +1,6 @@
 ---
 schema_version: 3
-template_version: 5
+template_version: 7
 kind: component
 id: component:<Name>
 authority: draft
@@ -20,6 +20,8 @@ system_specs: [spec:AST-000/DEC-0]
 ---
 
 # <Name> component contract
+
+<!-- Describe the system, not the project: present tense, what it does. No proposals, history, pull requests, or research in the record; see docs/contributing/spec-writing.md and report its rubric results in the pull request. -->
 
 ## Contract at a glance
 
@@ -119,6 +121,20 @@ The component implements design requirements without copying their rationale.
 An `unsettled` representation remains a human decision; principles do not let an
 agent invent the answer.
 
+Use the optional table below only for durable component-local visual intent that
+a future redesign must reconsider. Reuse or amend an existing row before adding
+one. Exact pixel tuning normally stays in code and visual evidence. Put shared or
+cross-component rules in `docs/design/` and link them from the relationship table
+above. Use `DD1`, `DD2`, and so on; IDs remain stable and unique within this
+record.
+
+### Design decisions
+
+<!-- design-decisions:v1 -->
+
+| ID  | Decision | Intent or reason | Applies to | Allowed variation |
+| --- | -------- | ---------------- | ---------- | ----------------- |
+
 ### Theming anatomy
 
 <!--
@@ -167,7 +183,7 @@ edit an existing component contract merely to backlink to those drafts.
 
 ## Decision log
 
-<!-- Record a durable boundary or requirement, not a review transcript. Keep a rejected alternative only when it is consequential and likely to recur. -->
+<!-- Record the boundary or requirement, not how it was reached. A rejected alternative is at most one line here, kept only when it is consequential and likely to recur. -->
 
 ### DEC-1 — `<component-local decision>`
 

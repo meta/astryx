@@ -19,7 +19,10 @@ const FEED = `<?xml version="1.0" encoding="UTF-8"?>
     <item>
       <title>How Astryx works</title>
       <link>${SITE_URL}/blog/how-astryx-works</link>
+      <description>Under the hood &amp; more</description>
       <category>engineering</category>
+      <author>Ada</author>
+      <author>Grace</author>
       <pubDate>Mon, 29 Jun 2026 00:00:00 GMT</pubDate>
       <atom:link rel="alternate" type="text/plain" href="${SITE_URL}/blog/how-astryx-works.txt" />
     </item>
@@ -37,6 +40,23 @@ function stubFetch(routes) {
     if (!r) return {ok: false, status: 404, text: async () => 'not found'};
     return {ok: r.status < 400, status: r.status, text: async () => r.body};
   });
+}
+
+/**
+ * Every non-empty field prints as a `key: value` line under its JSON key.
+ * @param {string} stdout
+ * @param {Record<string, unknown>} fields
+ */
+function expectFields(stdout, fields) {
+  const lines = stdout.split('\n');
+  for (const [key, value] of Object.entries(fields)) {
+    if (value == null || value === '' || (Array.isArray(value) && !value.length)) continue;
+    const shown = Array.isArray(value) ? value.join(', ') : String(value);
+    expect(
+      lines.some(line => line.startsWith(`${key}:`) && line.trimEnd().endsWith(shown)),
+      `${key}: ${shown}`,
+    ).toBe(true);
+  }
 }
 
 beforeEach(() => {
@@ -83,8 +103,29 @@ describe('blog CLI — json-enabled', () => {
     const {status, stdout} = await runCli(['blog']);
     expect(status).toBe(0);
     expect(stdout).toMatch(/Astryx blog/);
-    expect(stdout).toMatch(/feed:/);
+    expect(stdout).toMatch(/^feedUrl:/m);
     expect(stdout).toMatch(/how-astryx-works/);
+  });
+
+  it('the text list projects every JSON field under its JSON key', async () => {
+    const env = JSON.parse((await runCli(['blog', '--json'])).stdout);
+    const {status, stdout} = await runCli(['blog']);
+    expect(status).toBe(0);
+    expectFields(stdout, {feedUrl: env.data.feedUrl});
+    for (const post of env.data.posts) expectFields(stdout, post);
+    expect(stdout).not.toMatch(/^feed:/m);
+  });
+
+  it('the text detail projects every JSON field, then the post body', async () => {
+    const env = JSON.parse(
+      (await runCli(['blog', 'how-astryx-works', '--json'])).stdout,
+    );
+    const {status, stdout} = await runCli(['blog', 'how-astryx-works']);
+    expect(status).toBe(0);
+    const {text, ...fields} = env.data;
+    expectFields(stdout, fields);
+    expect(stdout).toContain(text);
+    expect(stdout).not.toMatch(/^feed:/m);
   });
 
   it('surfaces the API error code and exits non-zero for an unknown slug (--json)', async () => {

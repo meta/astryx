@@ -5,8 +5,9 @@
  *
  * v0.3.0 removes the authoring factories. Authoring is now types + parsers: an
  * author writes a plain object and stamps its `type` directly. This transform
- * rewrites every factory call to the plain object the factory used to return,
- * then drops the now-dead factory imports:
+ * rewrites factory calls imported from the retired Astryx authoring entrypoints
+ * to the plain object the factory used to return, then drops the now-dead
+ * factory imports:
  *
  *   createConfig(o) / createIntegration(o)        -> o        (no discriminant)
  *   createComponentDoc(o)                         -> { ...o, type: 'component' }
@@ -25,8 +26,9 @@
  *
  * Import aliases are followed (`import {createDoc as mk}` → calls to `mk`), and
  * the factory specifiers are removed afterward (the whole import statement goes
- * if nothing else was imported from it). Run this BEFORE
- * `migrate-authoring-imports`, which repoints the surviving type imports.
+ * if nothing else was imported from it). Same-named imports from other packages
+ * remain untouched. Run this BEFORE `migrate-authoring-imports`, which repoints
+ * the surviving type imports.
  */
 
 export const meta = {
@@ -35,12 +37,23 @@ export const meta = {
     'Rewrites createConfig/createIntegration/createComponentDoc/' +
     'createFunctionDoc/createDoc/createPageTemplate/createBlockTemplate/' +
     'createCodemod/createConfigCodemod calls to the plain object they returned ' +
-    "(stamping the doc/template/codemod `type` discriminant), and removes the " +
+    '(stamping the doc/template/codemod `type` discriminant), and removes the ' +
     'now-dead factory imports. Authoring is types + parsers in v0.3.0 — there ' +
     'are no factories.',
   pr: '#4612',
   fileExtensions: ['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'],
 };
+
+/** Legacy Astryx authoring entrypoints that exported the removed factories. */
+const AUTHORING_SOURCES = new Set([
+  '@astryxdesign/cli/config',
+  '@astryxdesign/cli/doc',
+  '@astryxdesign/cli/integration',
+  '@astryxdesign/cli/template',
+  '@astryxdesign/cli/codemod',
+  '@astryxdesign/core/authoring',
+  '@astryxdesign/core/config',
+]);
 
 /**
  * Factory name → the `type` discriminant it stamped, or `null` for the config /
@@ -108,6 +121,7 @@ export default function transformer(file, api) {
   /** @type {Map<string, string>} */
   const localToFactory = new Map();
   root.find(j.ImportDeclaration).forEach((/** @type {any} */ path) => {
+    if (!AUTHORING_SOURCES.has(path.node.source.value)) return;
     for (const spec of path.node.specifiers ?? []) {
       if (spec.type !== 'ImportSpecifier') continue;
       const importedName = spec.imported?.name;
@@ -163,6 +177,7 @@ export default function transformer(file, api) {
   // Drop the now-dead factory import specifiers; remove any import statement
   // left empty.
   root.find(j.ImportDeclaration).forEach((/** @type {any} */ path) => {
+    if (!AUTHORING_SOURCES.has(path.node.source.value)) return;
     const specs = path.node.specifiers ?? [];
     const kept = specs.filter(
       (/** @type {any} */ spec) =>

@@ -14,6 +14,7 @@ export const docs = {
       {guidance: true, description: 'Slice the list yourself and pass only the avatars you want visible; 3-5 is typical. The group renders exactly the children it is given and never slices for you.'},
       {guidance: true, description: 'Use AvatarGroupOverflow for custom overflow content like a popover trigger or "add member" button.'},
       {guidance: true, description: 'Pass status dots, click handlers, or tooltips directly on each Avatar child.'},
+      {guidance: true, description: 'Wrap an Avatar child in HoverCard or Tooltip to show more on hover; the avatars still overlap. Set tooltip={false} on the wrapped Avatar so its built-in name tooltip does not compete.'},
       {guidance: true, description: 'Make avatars interactive with href or onClick to link to profiles. Interactive avatars share a single Tab stop; arrow keys move between them, and the group announces a keyboard hint to assistive tech. This follows the WAI-ARIA APG roving tabindex technique for managing focus in a composite: https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/#kbd_roving_tabindex'},
       {guidance: false, description: "Don't nest AvatarGroups; use a single group with all avatars."},
       {guidance: false, description: "Don't set size on the child avatars. The group's size wins over each child's own size prop, including when the group leaves size at its default, so a child's size is silently ignored inside a group."},
@@ -47,9 +48,10 @@ export const docs = {
     },
     {
       name: 'size',
-      type: 'AvatarSize',
+      type:
+        "'xsm' | 'sm' | 'md' | 'lg' | 'xl' | 16 | 20 | 24 | 32 | 36 | 40 | 48 | 60 | 64 | 72 | 96 | 128 | 144 | 180",
       description:
-        "Size applied to all avatars via context. This wins over each child Avatar's own size prop, including when it is left at the default, so set the size here rather than on the children.",
+        "Size applied to all avatars: named sizes are 'xsm' (20px), 'sm' (24px), 'md' (36px), 'lg' (48px), and 'xl' (128px); numeric sizes must be one of the pixel values listed in the type. The group's size always overrides each child Avatar's size, including when the group uses its default size.",
       default: "'md'",
     },
     {
@@ -88,6 +90,7 @@ export const docsZh = {
       {guidance: true, description: '自行切分列表，只传入需要显示的头像，通常 3-5 个为佳。组件只渲染传入的子元素，不会自动切分。'},
       {guidance: true, description: '使用 AvatarGroupOverflow 自定义溢出内容，如弹出触发器或"添加成员"按钮。'},
       {guidance: true, description: '直接在每个 Avatar 子元素上传递状态点、点击处理器或工具提示。'},
+      {guidance: true, description: '可以用 HoverCard 或 Tooltip 包裹 Avatar 子元素以在悬停时显示更多信息，头像仍会重叠。请在被包裹的 Avatar 上设置 tooltip={false}，避免与内置的名称提示冲突。'},
       {guidance: false, description: '不要嵌套 AvatarGroup，使用单个组包含所有头像。'},
       {guidance: false, description: '不要在子头像上设置 size。分组的 size 会覆盖每个子 Avatar 自身的 size，即使分组使用默认值也是如此。'},
     ],
@@ -104,6 +107,7 @@ export const docsDense = {
       {guidance: true, description: 'Slice the list yourself; pass only visible avatars (3-5 typical). No auto-slicing.'},
       {guidance: true, description: 'Use AvatarGroupOverflow for custom overflow (popover, add button).'},
       {guidance: true, description: 'Pass status dots / click handlers directly on each Avatar.'},
+      {guidance: true, description: 'Avatars may be wrapped in HoverCard/Tooltip; overlap kept. Set tooltip={false} on the wrapped Avatar.'},
       {guidance: true, description: 'Interactive avatars (href/onClick) share one Tab stop; arrows rove between them + the overflow button (APG roving tabindex).'},
       {guidance: false, description: "Don't nest AvatarGroups."},
       {guidance: false, description: "Don't set size on children; the group's size always wins, default included."},

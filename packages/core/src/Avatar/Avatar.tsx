@@ -5,7 +5,7 @@
 /**
  * @file Avatar.tsx
  * @input Uses React, HTMLAttributes, ReactNode, useState, useRef; useTooltip
- *   (Tooltip hook) for the optional name-on-hover tooltip; useTranslator (i18n)
+ *   (Tooltip hook) for the optional name-on-hover tooltip; useComponentTranslator (i18n)
  * @output Exports Avatar component, AvatarProps, AvatarSize types
  * @position Core implementation; consumed by index.ts
  *
@@ -50,7 +50,14 @@ import {useTooltip} from '../Tooltip/useTooltip';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
-import {useTranslator, type TranslatorFn} from '../i18n';
+import type {TranslatorFn} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Avatar/Avatar.generated';
+
+registerEnglishFallback(english);
 
 /**
  * The offset ratio for positioning elements on a circle's edge at 45°.
@@ -193,6 +200,19 @@ const styles = stylex.create({
     fontWeight: fontWeightVars['--font-weight-medium'],
     textTransform: 'uppercase',
   },
+  // After `fallback` on a lone Avatar: in forced colors its initials and
+  // default icon take the color around them, which the browser forces to
+  // CanvasText, so a control that paints itself disabled (GrayText) or
+  // selected (HighlightText) carries them with it; an
+  // authored color would be forced to CanvasText whatever the control shows.
+  // A grouped face keeps it: its ring's opaque fill is forced to Canvas, so
+  // only CanvasText is sure to read on it.
+  loneFallback: {
+    color: {
+      default: colorVars['--color-text-secondary'],
+      '@media (forced-colors: active)': 'currentColor',
+    },
+  },
   status: {
     position: 'absolute',
   },
@@ -267,11 +287,12 @@ const groupStyles = stylex.create({
     backgroundColor: colorVars['--color-background-surface'],
     boxSizing: 'content-box',
   },
+  // Every avatar takes the overlap, not just `:not(:first-child)`: a
+  // HoverCard or Tooltip wraps its trigger in its own element, which makes
+  // every wrapped avatar a first child. AvatarGroup pads its start edge by the
+  // same amount so the first avatar still sits inside the group's box.
   overlap: {
-    marginInlineStart: {
-      default: null,
-      ':not(:first-child)': 'var(--_avatar-group-overlap)',
-    },
+    marginInlineStart: 'var(--_avatar-group-overlap)',
   },
 });
 
@@ -384,25 +405,55 @@ export interface AvatarProps extends BaseProps<HTMLDivElement> {
 }
 
 /**
- * Generates initials from a name string.
- * Takes the first letter of the first two words.
+ * A character that can stand for a word in initials: a letter, a digit, or an
+ * emoji. Punctuation and other symbols, such as `(`, `"` or `-`, cannot.
+ *
+ * Built at runtime, not written as a literal: for targets without property
+ * escapes, or when no browserslist is set, Babel's
+ * transform-unicode-property-regex rewrites a `\p{…}` literal, and the copy
+ * bundled with Next.js lacks the Unicode data it needs, so a source build fails
+ * with "Unknown property". A literal is safe once Next's bundled Babel ships
+ * that data.
+ */
+const INITIAL_CHARACTER = new RegExp(
+  '[\\p{L}\\p{N}\\p{Extended_Pictographic}\\p{Regional_Indicator}]',
+  'u',
+);
+
+/**
+ * The first character of a word that can stand for it in initials, skipping
+ * leading punctuation, or '' when the word has none (a lone `-` or `()`).
+ */
+function initialCharacter(word: string): string {
+  const index = word.search(INITIAL_CHARACTER);
+  return index === -1 ? '' : firstCharacter(word.slice(index));
+}
+
+/**
+ * Generates initials from a name string: the first letter, digit or emoji of
+ * the first and last words. Words with none of those, such as a lone `-`, are
+ * skipped, and leading punctuation within a word is ignored. Returns '' when
+ * no word yields an initial.
  * @example
  * ```
- * getInitials('John Doe')
- * getInitials('Alice')
+ * getInitials('John Doe') // 'JD'
+ * getInitials('Alice') // 'A'
+ * getInitials('Northwind Workbench (automation)') // 'NA'
  * ```
  */
 function getInitials(name: string): string {
-  const words = name.trim().split(/\s+/);
-  if (words.length === 0) {
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .map(initialCharacter)
+    .filter(initial => initial !== '');
+  if (initials.length === 0) {
     return '';
   }
-  if (words.length === 1) {
-    return firstCharacter(words[0]).toUpperCase();
+  if (initials.length === 1) {
+    return initials[0].toUpperCase();
   }
-  return (
-    firstCharacter(words[0]) + firstCharacter(words[words.length - 1])
-  ).toUpperCase();
+  return (initials[0] + initials[initials.length - 1]).toUpperCase();
 }
 
 /**
@@ -554,8 +605,11 @@ export function Avatar({
   // truthy), leaving an empty plate behind a blank accessible name.
   const meaningfulName = meaningful(name);
   const meaningfulAlt = meaningful(alt);
-  const showInitials = !showImage && !showFallbackImage && meaningfulName;
-  const showIcon = !showImage && !showFallbackImage && !meaningfulName;
+  // A name made only of punctuation ("—", "()") still names the avatar, but
+  // yields no initials; it falls back to the default icon, not an empty plate.
+  const initials = meaningfulName ? getInitials(meaningfulName) : '';
+  const showInitials = !showImage && !showFallbackImage && initials !== '';
+  const showIcon = !showImage && !showFallbackImage && initials === '';
 
   // A meaningful accessible name comes from `alt`/`name`, composed with the
   // status element's `label` when one is present ("Jane Doe, Online") — the
@@ -565,7 +619,7 @@ export function Avatar({
   // neither a name nor a labelled status, the avatar is decorative — expose
   // it as `presentation`/`aria-hidden` rather than announcing a meaningless
   // generic "Avatar" (obs-9).
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const nameLabel = meaningfulAlt || meaningfulName;
   // This render can only see a label introspected off a directly-passed
   // element. A status inside a consumer's own wrapper reports through the ref
@@ -750,23 +804,29 @@ export function Avatar({
               themeProps('avatar-fallback', {size: resolvedSize}),
               stylex.props(
                 styles.fallback,
+                avatarGroup == null && styles.loneFallback,
                 dynamicStyles.fontSize(numericSize),
               ),
             )}>
-            {getInitials(meaningfulName)}
+            {initials}
           </div>
         )}
         {showIcon && (
           <div
             {...mergeProps(
               themeProps('avatar-fallback', {size: resolvedSize}),
-              stylex.props(styles.fallback),
+              stylex.props(
+                styles.fallback,
+                avatarGroup == null && styles.loneFallback,
+              ),
             )}>
             <DefaultIcon size={numericSize} />
           </div>
         )}
       </div>
-      {status && (
+      {/* The status slot renders for a truthy value only. A falsy one, 0
+          included, renders nothing, not a stray "0". */}
+      {Boolean(status) && (
         <div
           {...stylex.props(
             styles.status,

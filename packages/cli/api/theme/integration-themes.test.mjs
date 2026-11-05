@@ -4,48 +4,56 @@ import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {themeAdd} from './add/add.mjs';
+import {themeEject} from './eject/eject.mjs';
 
 let tmpDir;
 
-function installThemeIntegration(
-  packageName,
-  slug,
-  source = 'export const oceanTheme = {};\n',
-  extraFiles = {},
-) {
+function installThemeIntegration(packageName, slug, source, extraFiles = {}) {
   const packageDir = path.join(
     tmpDir,
     'node_modules',
     ...packageName.split('/'),
   );
   const themeDir = path.join(packageDir, 'themes', slug);
+  const stem = `${slug.replace(/-([a-z0-9])/gu, (_, character) => character.toUpperCase())}Theme`;
   fs.mkdirSync(themeDir, {recursive: true});
+  fs.mkdirSync(path.join(packageDir, 'dist'), {recursive: true});
   fs.writeFileSync(
     path.join(packageDir, 'package.json'),
-    JSON.stringify({name: packageName, version: '1.0.0'}),
+    JSON.stringify({
+      name: packageName,
+      version: '1.0.0',
+      exports: {
+        [`./themes/${slug}`]: `./dist/${slug}.js`,
+        [`./themes/${slug}.css`]: `./dist/${slug}.css`,
+      },
+    }),
   );
   fs.writeFileSync(
     path.join(packageDir, 'astryx.integration.mjs'),
-    `export default {themes: './themes'};\n`,
+    `export default {themes: './themes'};
+`,
   );
   fs.writeFileSync(
-    path.join(packageDir, 'themes', 'manifest.json'),
-    JSON.stringify({
-      version: 1,
-      themes: [
-        {
-          slug,
-          displayName: slug === 'neutral' ? 'Neutral Plus' : 'Ocean',
-          description: 'Integration-owned theme.',
-          maintained: true,
-          entry: 'oceanTheme.ts',
-          exportName: 'oceanTheme',
-          files: ['oceanTheme.ts', ...Object.keys(extraFiles)],
-        },
-      ],
-    }),
+    path.join(themeDir, `${stem}.doc.mjs`),
+    `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */
+export default {type: 'theme', name: '${slug}', displayName: '${slug === 'neutral' ? 'Neutral Plus' : 'Ocean'}', description: 'Integration-owned theme.', maintained: true};
+`,
   );
-  fs.writeFileSync(path.join(themeDir, 'oceanTheme.ts'), source);
+  fs.writeFileSync(
+    path.join(themeDir, `${stem}.ts`),
+    source ??
+      `export const ${stem} = {};
+`,
+  );
+  fs.writeFileSync(
+    path.join(packageDir, 'dist', `${slug}.js`),
+    `export const ${stem} = {name: '${slug}', __built: true};\n`,
+  );
+  fs.writeFileSync(
+    path.join(packageDir, 'dist', `${slug}.css`),
+    `[data-astryx-theme="${slug}"] {}\n`,
+  );
   for (const [relativePath, contents] of Object.entries(extraFiles)) {
     const file = path.join(themeDir, relativePath);
     fs.mkdirSync(path.dirname(file), {recursive: true});
@@ -70,10 +78,10 @@ afterEach(() => {
   fs.rmSync(tmpDir, {recursive: true, force: true});
 });
 
-describe('themeAdd with integration themes', () => {
-  it('copies source from an installed integration and records its owner', async () => {
+describe('package and integration themes', () => {
+  it('ejects source from an installed integration and records its owner', async () => {
     installThemeIntegration('@acme/themes', 'ocean');
-    const result = await themeAdd('ocean', {cwd: tmpDir});
+    const result = await themeEject('ocean', {cwd: tmpDir});
 
     expect(result.data.package).toBe('@acme/themes');
     expect(result.data.outputDir).toBe(path.join('src', 'themes', 'ocean'));
@@ -85,23 +93,49 @@ describe('themeAdd with integration themes', () => {
     ).toContain('oceanTheme');
   });
 
-  it('copies nested files listed by an integration theme catalog', async () => {
+  it('ejects the complete nested integration theme directory', async () => {
     installThemeIntegration(
       '@acme/themes',
       'ocean',
       "import {oceanBlue} from './tokens/colors';\nexport const oceanTheme = {oceanBlue};\n",
-      {'tokens/colors.ts': "export const oceanBlue = '#0064e0';\n"},
+      {
+        'tokens/colors.ts': "export const oceanBlue = '#0064e0';\n",
+        'receipts/palette.json': '{"version":1}\n',
+      },
     );
 
-    const result = await themeAdd('ocean', {cwd: tmpDir});
+    const result = await themeEject('ocean', {cwd: tmpDir});
 
-    expect(result.data.files).toEqual(['oceanTheme.ts', 'tokens/colors.ts']);
+    expect(result.data.files).toEqual([
+      'oceanTheme.ts',
+      'oceanTheme.doc.mjs',
+      'receipts/palette.json',
+      'tokens/colors.ts',
+    ]);
+    expect(
+      fs.readFileSync(
+        path.join(tmpDir, 'src', 'themes', 'ocean', 'oceanTheme.doc.mjs'),
+        'utf-8',
+      ),
+    ).toContain("type: 'theme'");
+    expect(
+      fs.readFileSync(
+        path.join(tmpDir, 'src', 'themes', 'ocean', 'oceanTheme.doc.mjs'),
+        'utf-8',
+      ),
+    ).toContain('maintained: false');
     expect(
       fs.readFileSync(
         path.join(tmpDir, 'src', 'themes', 'ocean', 'tokens', 'colors.ts'),
         'utf-8',
       ),
     ).toContain('oceanBlue');
+    expect(
+      fs.readFileSync(
+        path.join(tmpDir, 'src', 'themes', 'ocean', 'receipts', 'palette.json'),
+        'utf-8',
+      ),
+    ).toBe('{"version":1}\n');
   });
 
   it('rejects a nested destination symlink that escapes the project', async () => {
@@ -123,7 +157,7 @@ describe('themeAdd with integration themes', () => {
         process.platform === 'win32' ? 'junction' : 'dir',
       );
 
-      await expect(themeAdd('ocean', {cwd: tmpDir})).rejects.toMatchObject({
+      await expect(themeEject('ocean', {cwd: tmpDir})).rejects.toMatchObject({
         code: 'ERR_PATH_TRAVERSAL',
       });
       expect(fs.existsSync(path.join(outsideDir, 'colors.ts'))).toBe(false);
@@ -141,12 +175,13 @@ describe('themeAdd with integration themes', () => {
     });
     const result = await themeAdd('neutral', {
       cwd: tmpDir,
+      import: true,
       package: '@acme/themes',
     });
-    expect(result.data.package).toBe('@acme/themes');
+    expect(result.data.themes[0]?.owner).toBe('@acme/themes');
   });
 
-  it('reports a selected installed package with a corrupted theme catalog', async () => {
+  it('reports a selected installed package with a corrupted theme directory', async () => {
     installThemeIntegration(
       '@acme/themes',
       'ocean',
@@ -170,7 +205,7 @@ describe('themeAdd with integration themes', () => {
       themeAdd('ocean', {cwd: tmpDir, package: '@acme/themes'}),
     ).rejects.toMatchObject({
       code: 'ERR_THEME_INVALID',
-      message: expect.stringContaining('tokens/colors.ts'),
+      message: expect.stringContaining('./tokens/colors'),
     });
   });
 

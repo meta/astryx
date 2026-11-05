@@ -1,9 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
+import {expect, waitFor} from 'storybook/test';
 import {useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
-import {InputGroup} from '@astryxdesign/core/InputGroup';
+import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import {Selector, SelectorOption} from '@astryxdesign/core/Selector';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {RadioIndicator} from '@astryxdesign/core/Indicator';
@@ -62,7 +63,7 @@ const meta: Meta<typeof Selector> = {
     },
     variant: {
       control: 'radio',
-      options: ['input', 'ghost'],
+      options: ['input', 'secondary', 'ghost'],
       description: 'Visual trigger style',
     },
     placement: {
@@ -139,6 +140,28 @@ export const Default: Story = {
   },
   args: {
     placeholder: 'Select a fruit...',
+  },
+};
+
+const LONG_LIST = Array.from({length: 120}, (_, i) => `Team ${i + 1}`);
+
+/**
+ * A long option list: the list scrolls, End and PageDown scroll it, and a
+ * mouse resting over it keeps the highlight where the keys put it.
+ */
+export const LongList: Story = {
+  tags: ['!autodocs'],
+  render: () => {
+    const [value, setValue] = useState<string | undefined>(undefined);
+    return (
+      <Selector
+        label="Team"
+        options={LONG_LIST}
+        value={value}
+        onChange={v => setValue(v)}
+        presentation="popover"
+      />
+    );
   },
 };
 
@@ -572,6 +595,45 @@ export const OptionDescriptions: Story = {
 };
 
 // Size variants
+const compactSizingTheme = defineTheme({
+  name: 'selector-compact-sizing',
+  tokens: {
+    '--spacing-5': '10px',
+    '--size-element-sm': '24px',
+    '--size-element-md': '28px',
+    '--size-element-lg': '32px',
+  },
+});
+
+// A spacing scale taller than the small token can hold, like the docsite
+// Playground's largest preset: `--spacing-5` (40px) equals the small size
+// token, so an uncapped spacing row plus borders would overshoot it.
+const wideSpacingSizingTheme = defineTheme({
+  name: 'selector-wide-spacing-sizing',
+  typography: {scale: {base: 18, ratio: 1.414}},
+  tokens: {
+    '--spacing-5': '40px',
+    '--size-element-sm': '40px',
+    '--size-element-md': '48px',
+    '--size-element-lg': '56px',
+  },
+});
+
+// Label text too large for the small token: the trigger must keep it visible
+// rather than cap its row to the token.
+const largeTextSizingTheme = defineTheme({
+  name: 'selector-large-text-sizing',
+  tokens: {'--spacing-5': '40px', '--text-label-size': '32px'},
+});
+
+// Wide spacing with the default size ramp and label: a built-in one-line value
+// lands on its token, and a caller-rendered value that sets a larger font with
+// its own line height grows the trigger to fit.
+const wideSpacingDefaultSizesTheme = defineTheme({
+  name: 'selector-wide-spacing-default-sizes',
+  tokens: {'--spacing-5': '40px'},
+});
+
 export const SizeVariants: Story = {
   render: () => {
     const [value1, setValue1] = useState<string | undefined>();
@@ -604,10 +666,192 @@ export const SizeVariants: Story = {
           onChange={setValue3}
           placeholder="Large size (36px)"
         />
+        <Theme theme={compactSizingTheme}>
+          {(['sm', 'md', 'lg'] as const).map(size => (
+            <div key={size} style={{display: 'grid', gap: 8}}>
+              {(
+                [
+                  'plain',
+                  'start',
+                  'option',
+                  'status',
+                  'tooltip',
+                  'clear',
+                  'loading',
+                  'custom',
+                  'readonly',
+                ] as const
+              ).map(state => (
+                <Selector
+                  key={state}
+                  label={`Compact ${size} ${state}`}
+                  size={size}
+                  options={[
+                    {
+                      value: 'apple',
+                      label: 'Apple',
+                      icon: state === 'option' ? UserIcon : undefined,
+                    },
+                  ]}
+                  value="apple"
+                  onChange={() => {}}
+                  startIcon={state === 'start' ? UserIcon : undefined}
+                  status={
+                    state === 'status' || state === 'tooltip'
+                      ? {type: 'warning', message: 'Check selection'}
+                      : undefined
+                  }
+                  statusVariant={state === 'tooltip' ? 'tooltip' : 'attached'}
+                  hasClear={state === 'clear'}
+                  isLoading={state === 'loading'}
+                  isReadOnly={state === 'readonly'}
+                  renderValue={
+                    state === 'custom'
+                      ? option => <span>{option.label}</span>
+                      : undefined
+                  }
+                />
+              ))}
+              <Selector
+                label={`Compact ${size} multiline`}
+                data-testid="compact-multiline"
+                size={size}
+                options={['Apple']}
+                value="Apple"
+                onChange={() => {}}
+                renderValue={option => (
+                  <>
+                    <div>{option.label}</div>
+                    <div>Second line</div>
+                  </>
+                )}
+              />
+            </div>
+          ))}
+        </Theme>
+        <Theme theme={wideSpacingSizingTheme}>
+          {(['sm', 'md', 'lg'] as const).map(size => (
+            <div key={size} style={{display: 'grid', gap: 8}}>
+              {(['plain', 'clear'] as const).map(state => (
+                <Selector
+                  key={state}
+                  label={`Wide spacing ${size} ${state}`}
+                  size={size}
+                  options={['Apple']}
+                  value="Apple"
+                  onChange={() => {}}
+                  hasClear={state === 'clear'}
+                />
+              ))}
+              <Selector
+                label={`Wide spacing ${size} multiline`}
+                data-testid="wide-multiline"
+                size={size}
+                options={['Apple']}
+                value="Apple"
+                onChange={() => {}}
+                renderValue={option => (
+                  <>
+                    <div>{option.label}</div>
+                    <div>Second line</div>
+                  </>
+                )}
+              />
+            </div>
+          ))}
+        </Theme>
+        <Theme theme={largeTextSizingTheme}>
+          <Selector
+            label="Large text small"
+            data-testid="large-text"
+            size="sm"
+            options={['Ågypj']}
+            value="Ågypj"
+            onChange={() => {}}
+          />
+        </Theme>
+        <Theme theme={wideSpacingDefaultSizesTheme}>
+          <Selector
+            label="Wide spacing default small"
+            size="sm"
+            options={['Apple']}
+            value="Apple"
+            onChange={() => {}}
+          />
+          <Selector
+            label="Wide spacing large custom value"
+            data-testid="large-custom"
+            size="sm"
+            options={['Ågypj']}
+            value="Ågypj"
+            onChange={() => {}}
+            renderValue={option => (
+              <div style={{fontSize: 32, lineHeight: 1.25}}>{option.label}</div>
+            )}
+          />
+        </Theme>
       </div>
     );
   },
   decorators: [Story => <Story />],
+  play: async ({canvasElement}) => {
+    await document.fonts.ready;
+    const triggers =
+      canvasElement.querySelectorAll<HTMLElement>('.astryx-selector');
+    expect(triggers).toHaveLength(45);
+    for (const trigger of triggers) {
+      const styles = getComputedStyle(trigger);
+      const size = Number.parseFloat(
+        styles.getPropertyValue(`--size-element-${trigger.dataset.size}`),
+      );
+      const height = trigger.getBoundingClientRect().height;
+      // `data-testid` lands on the trigger button inside the control box.
+      const testId =
+        trigger.querySelector<HTMLElement>('[data-testid]')?.dataset.testid;
+      if (testId === 'large-text' || testId === 'large-custom') {
+        // Text larger than the token can hold keeps its whole line box.
+        const walker = document.createTreeWalker(trigger, NodeFilter.SHOW_TEXT);
+        let text: Node | null = walker.nextNode();
+        while (text && !text.textContent?.includes('Ågypj')) {
+          text = walker.nextNode();
+        }
+        // The nearest ancestor that clips: the built-in label, or the
+        // renderValue wrapper around caller content.
+        let clipElement = text?.parentElement ?? null;
+        while (
+          clipElement &&
+          clipElement !== trigger &&
+          getComputedStyle(clipElement).overflowY === 'visible'
+        ) {
+          clipElement = clipElement.parentElement;
+        }
+        expect(clipElement).toBeTruthy();
+        if (!text || !clipElement) {
+          continue;
+        }
+        const range = document.createRange();
+        range.selectNodeContents(text);
+        const textBox = range.getBoundingClientRect();
+        const clip = clipElement.getBoundingClientRect();
+        expect(textBox.top).toBeGreaterThanOrEqual(clip.top - 0.5);
+        expect(textBox.bottom).toBeLessThanOrEqual(clip.bottom + 0.5);
+        expect(height).toBeGreaterThan(size);
+      } else if (testId?.endsWith('-multiline')) {
+        // Two text rows, plus whatever padding remains once the first row
+        // fills the token (padding never goes below zero).
+        const row = Number.parseFloat(styles.lineHeight);
+        const borders =
+          Number.parseFloat(styles.borderTopWidth) +
+          Number.parseFloat(styles.borderBottomWidth);
+        expect(height, trigger.textContent ?? '').toBeCloseTo(
+          Math.max(size + row, 2 * row + borders),
+          1,
+        );
+      } else {
+        expect(height, trigger.textContent ?? '').toBeCloseTo(size, 1);
+      }
+    }
+  },
 };
 
 // Ghost variant for toolbar composition
@@ -653,6 +897,81 @@ export const GhostVariant: Story = {
           statusVariant="tooltip"
         />
         <Button label="Export" variant="ghost" />
+      </div>
+    );
+  },
+  decorators: [Story => <Story />],
+};
+
+// Secondary variant for nav composition beside secondary buttons
+export const SecondaryVariant: Story = {
+  render: () => {
+    const [platform, setPlatform] = useState<string | undefined>('all');
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          width: 'max-content',
+        }}>
+        <Button label="Share" variant="secondary" />
+        <Selector
+          label="Platform"
+          isLabelHidden
+          variant="secondary"
+          size="md"
+          options={[
+            {value: 'all', label: 'All platforms'},
+            {value: 'ios', label: 'iOS'},
+            {value: 'android', label: 'Android'},
+          ]}
+          value={platform}
+          onChange={setPlatform}
+        />
+        <Button label="Export" variant="secondary" />
+      </div>
+    );
+  },
+  decorators: [Story => <Story />],
+};
+
+// Secondary trigger as the first, middle, and last member of an InputGroup:
+// it keeps its neutral fill and takes the group's row height and seam edges.
+export const SecondaryInInputGroup: Story = {
+  render: () => {
+    const options = [
+      {value: 'all', label: 'All platforms'},
+      {value: 'ios', label: 'iOS'},
+      {value: 'android', label: 'Android'},
+    ];
+    const selector = (label: string) => (
+      <Selector
+        label={label}
+        isLabelHidden
+        variant="secondary"
+        options={options}
+        value="all"
+        onChange={() => {}}
+      />
+    );
+    return (
+      <div
+        data-secondary-input-group-matrix
+        style={{display: 'grid', gap: 16, width: 320}}>
+        <InputGroup label="Secondary first" isLabelHidden>
+          {selector('Platform first')}
+          <InputGroupText>.app</InputGroupText>
+        </InputGroup>
+        <InputGroup label="Secondary middle" isLabelHidden>
+          <InputGroupText>@</InputGroupText>
+          {selector('Platform middle')}
+          <InputGroupText>.app</InputGroupText>
+        </InputGroup>
+        <InputGroup label="Secondary last" isLabelHidden>
+          <InputGroupText>@</InputGroupText>
+          {selector('Platform last')}
+        </InputGroup>
       </div>
     );
   },
@@ -1094,12 +1413,12 @@ export const DefaultSelectionIndicator: Story = {
 };
 
 /**
- * `indicatorPosition="start"` moves the mark to the leading edge, the way a
- * native menu marks its chosen row.
+ * `indicatorPosition="start"` moves a rendered mark to the leading edge, the
+ * way a native menu marks its chosen row.
  *
- * The column is reserved on every row, not just the chosen one, so the labels
- * stay on one line — the default check draws nothing when unchecked, and
- * without the column only the chosen label would be indented.
+ * The default check draws nothing when unchecked, so its empty mark wrapper
+ * collapses. Unselected labels gain that space; the selected label may shift or
+ * have less available width while its visible mark remains at the logical start.
  */
 export const StartIndicatorPosition: Story = {
   render: () => {
@@ -1115,4 +1434,223 @@ export const StartIndicatorPosition: Story = {
       />
     );
   },
+};
+
+type IndicatorSpaceEvidenceConfig = {
+  direction: 'ltr' | 'rtl';
+  indicatorPosition: 'start' | 'end';
+  name: string;
+  presentation: 'popover' | 'bottom-sheet';
+  usesRadioIndicator: boolean;
+  width: '12rem' | '24rem';
+};
+
+const indicatorEvidenceOptions = [
+  {
+    value: 'selected',
+    label: 'Selected option with a deliberately long readable label',
+  },
+  {
+    value: 'unselected',
+    label: 'Unselected option with a deliberately long readable label',
+  },
+];
+
+function createIndicatorSpaceEvidenceStory(
+  config: IndicatorSpaceEvidenceConfig,
+): Story {
+  const surfaceTarget =
+    config.presentation === 'popover' ? 'selector-popup' : 'bottom-sheet';
+  const theme = defineTheme({
+    name: `selector-ast004-${config.name}`,
+    components: {
+      [surfaceTarget]: {
+        base: {width: config.width, maxWidth: config.width},
+      },
+    },
+    ...(config.usesRadioIndicator ? {indicators: {check: RadioIndicator}} : {}),
+  });
+
+  return {
+    globals: {direction: config.direction},
+    parameters: {
+      docs: {
+        description: {
+          story:
+            'AST-004 evidence: the open selection surface keeps visible marks at the configured logical edge and gives empty marks no layout width.',
+        },
+      },
+    },
+    render: (_args, context) => (
+      <Theme
+        theme={theme}
+        mode={context.globals.colorMode === 'dark' ? 'dark' : 'light'}>
+        <div
+          data-ast004-indicator-space={config.name}
+          style={{width: config.width}}>
+          <Selector
+            label="Project with long option labels"
+            options={indicatorEvidenceOptions}
+            value="selected"
+            onChange={() => {}}
+            indicatorPosition={config.indicatorPosition}
+            presentation={config.presentation}
+            placement="below"
+            width="100%"
+            isDefaultOpen
+          />
+        </div>
+      </Theme>
+    ),
+    play: async ({canvasElement}) => {
+      await waitFor(() => {
+        expect(document.querySelector('[role="listbox"]')).not.toBeNull();
+      });
+      await document.fonts.ready;
+      await new Promise<void>(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      );
+
+      const selector = canvasElement.querySelector<HTMLElement>(
+        `[data-ast004-indicator-space="${config.name}"]`,
+      );
+      const listbox = document.querySelector<HTMLElement>('[role="listbox"]');
+      const selectedRow = listbox?.querySelector<HTMLElement>(
+        '[role="option"][aria-selected="true"]',
+      );
+      const unselectedRow = listbox?.querySelector<HTMLElement>(
+        '[role="option"][aria-selected="false"]',
+      );
+      if (
+        selector == null ||
+        listbox == null ||
+        selectedRow == null ||
+        unselectedRow == null
+      ) {
+        throw new Error(`AST-004 evidence did not render ${config.name}`);
+      }
+      expect(getComputedStyle(selectedRow).direction).toBe(config.direction);
+
+      const markColumn = (row: HTMLElement) =>
+        (config.indicatorPosition === 'start'
+          ? row.firstElementChild
+          : row.lastElementChild) as HTMLElement;
+      const contentColumn = (row: HTMLElement) =>
+        (config.indicatorPosition === 'start'
+          ? row.lastElementChild
+          : row.firstElementChild) as HTMLElement;
+      const selectedMark = markColumn(selectedRow);
+      const unselectedMark = markColumn(unselectedRow);
+      const selectedContent = contentColumn(selectedRow);
+      const unselectedContent = contentColumn(unselectedRow);
+
+      expect(selectedMark.getBoundingClientRect().width).toBeGreaterThan(0);
+      if (config.usesRadioIndicator) {
+        expect(unselectedMark.getBoundingClientRect().width).toBeGreaterThan(0);
+        expect(
+          Math.abs(
+            selectedContent.getBoundingClientRect().width -
+              unselectedContent.getBoundingClientRect().width,
+          ),
+        ).toBeLessThanOrEqual(1);
+      } else {
+        expect(getComputedStyle(unselectedMark).display).toBe('none');
+        expect(unselectedMark.getBoundingClientRect().width).toBe(0);
+        expect(unselectedContent.getBoundingClientRect().width).toBeGreaterThan(
+          selectedContent.getBoundingClientRect().width,
+        );
+      }
+
+      expect(selectedContent.textContent).toContain(
+        'Selected option with a deliberately long readable label',
+      );
+      expect(unselectedContent.textContent).toContain(
+        'Unselected option with a deliberately long readable label',
+      );
+      expect(selectedContent.getBoundingClientRect().width).toBeGreaterThan(0);
+      expect(unselectedContent.getBoundingClientRect().width).toBeGreaterThan(
+        0,
+      );
+
+      const markRect = selectedMark.getBoundingClientRect();
+      const contentRect = selectedContent.getBoundingClientRect();
+      const markIsAtInlineStart =
+        config.direction === 'rtl'
+          ? markRect.left >= contentRect.right
+          : markRect.right <= contentRect.left;
+      expect(markIsAtInlineStart).toBe(config.indicatorPosition === 'start');
+
+      if (config.presentation === 'popover') {
+        const popup = document.querySelector<HTMLElement>(
+          '.astryx-selector-popup',
+        );
+        if (popup == null) {
+          throw new Error(
+            `AST-004 Popover evidence did not render ${config.name}`,
+          );
+        }
+        const popoverHost = popup.closest<HTMLElement>('[popover]');
+        if (popoverHost == null) {
+          throw new Error(`AST-004 Popover host did not render ${config.name}`);
+        }
+        expect(popoverHost.matches(':popover-open')).toBe(true);
+      } else {
+        const dialog = document.querySelector<HTMLDialogElement>('dialog');
+        if (dialog == null) {
+          throw new Error(
+            `AST-004 BottomSheet evidence did not render ${config.name}`,
+          );
+        }
+        expect(dialog.matches(':modal')).toBe(true);
+      }
+    },
+  };
+}
+
+export const IndicatorSpacePopoverNarrowStart: Story = {
+  ...createIndicatorSpaceEvidenceStory({
+    name: 'popover-narrow-start-default-ltr',
+    presentation: 'popover',
+    width: '12rem',
+    indicatorPosition: 'start',
+    direction: 'ltr',
+    usesRadioIndicator: false,
+  }),
+  tags: ['visual-baseline'],
+};
+
+export const IndicatorSpacePopoverWideEndRTL: Story = {
+  ...createIndicatorSpaceEvidenceStory({
+    name: 'popover-wide-end-radio-rtl',
+    presentation: 'popover',
+    width: '24rem',
+    indicatorPosition: 'end',
+    direction: 'rtl',
+    usesRadioIndicator: true,
+  }),
+  tags: ['visual-baseline'],
+};
+
+export const IndicatorSpaceBottomSheetNarrowEndRTL: Story = {
+  ...createIndicatorSpaceEvidenceStory({
+    name: 'bottom-sheet-narrow-end-default-rtl',
+    presentation: 'bottom-sheet',
+    width: '12rem',
+    indicatorPosition: 'end',
+    direction: 'rtl',
+    usesRadioIndicator: false,
+  }),
+  tags: ['visual-baseline'],
+};
+
+export const IndicatorSpaceBottomSheetWideStart: Story = {
+  ...createIndicatorSpaceEvidenceStory({
+    name: 'bottom-sheet-wide-start-radio-ltr',
+    presentation: 'bottom-sheet',
+    width: '24rem',
+    indicatorPosition: 'start',
+    direction: 'ltr',
+    usesRadioIndicator: true,
+  }),
+  tags: ['visual-baseline'],
 };

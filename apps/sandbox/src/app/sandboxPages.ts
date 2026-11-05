@@ -20,8 +20,8 @@
  *   1. Create the page under the appropriate route group
  *   2. Add an entry to the appropriate category below
  *
- * Note: hrefs use trailing slashes because the sandbox is a static export
- * with `trailingSlash: true` in next.config.mjs.
+ * Note: hrefs use trailing slashes because the Vite build writes a physical
+ * index.html for each route; static hosts redirect /route to /route/.
  */
 
 import {templates as autoDiscoveredTemplates} from '../generated/templateRegistry';
@@ -250,6 +250,17 @@ export const categories: SandboxCategory[] = [
         href: '/pages/markdown-perf/',
         description:
           'Compare complete Markdown rendering with bursty streaming performance and animation',
+      },
+      {
+        name: 'DiffViewer Perf',
+        href: '/pages/diffviewer-perf/',
+        description:
+          'Render and scroll many files and lines; compare unified and split',
+      },
+      {
+        name: 'Perf Scenes',
+        href: '/pages/perf-scenes/',
+        description: 'Fixed performance scenes to mount and profile by hand',
       },
       {
         name: 'Table Lab',

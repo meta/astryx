@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect} from 'vitest';
+import {afterEach, describe, it, expect} from 'vitest';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {rewriteImports, swizzle} from './swizzle.mjs';
@@ -76,12 +77,26 @@ describe('rewriteImports', () => {
     );
   });
 
-  it('keeps the barrel collapse for a component-local .stylex (not a subpath export)', () => {
-    // Only theme/tokens.stylex is a dedicated deep export; component-local
-    // .stylex files are re-exported through the directory barrel.
-    const input = `import { s } from '../Layer/layerAnimations.stylex';`;
+  it('rewrites ANY non-theme .stylex import to a deep path (not the barrel)', () => {
+    // Every .stylex module needs the deep path so the StyleX compiler can
+    // resolve styles at compile time. The barrel re-export loses identity.
+    const input = `import { interactionOverlayStyles } from '../utils/interactionOverlay.stylex';`;
     expect(rewriteImports(input)).toBe(
-      `import { s } from '@astryxdesign/core/Layer';`,
+      `import { interactionOverlayStyles } from '@astryxdesign/core/utils/interactionOverlay.stylex';`,
+    );
+  });
+
+  it('rewrites a Layout .stylex import to a deep path', () => {
+    const input = `import { container } from '../Layout/container.stylex';`;
+    expect(rewriteImports(input)).toBe(
+      `import { container } from '@astryxdesign/core/Layout/container.stylex';`,
+    );
+  });
+
+  it('rewrites a two-levels-up .stylex import to a deep path', () => {
+    const input = `import { focusOutlineProps } from '../../utils/focusOutline.stylex';`;
+    expect(rewriteImports(input)).toBe(
+      `import { focusOutlineProps } from '@astryxdesign/core/utils/focusOutline.stylex';`,
     );
   });
 });
@@ -104,4 +119,49 @@ describe('swizzle() API', () => {
       code: 'ERR_UNKNOWN_COMPONENT',
     });
   });
+});
+
+describe('swizzle rewriteImports compiles for components with .stylex imports', () => {
+  const OUT = 'tmp-swizzle-resolve-test';
+  afterEach(() => {
+    fs.rmSync(path.join(REPO, OUT), {recursive: true, force: true});
+  });
+
+  it('Button: every import in the copy resolves, in the core exports map or to a copied file', async () => {
+    const corePkg = JSON.parse(
+      fs.readFileSync(
+        path.join(REPO, 'packages/core/package.json'),
+        'utf-8',
+      ),
+    );
+    const exportKeys = new Set(Object.keys(corePkg.exports));
+
+    const r = await swizzle('Button', {cwd: REPO, output: './' + OUT});
+    const outputDir = path.join(REPO, r.data.outputDir);
+    const copied = r.data.files
+      .filter(f => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.includes('.test.'))
+      .map(f => path.join(outputDir, f));
+
+    for (const file of copied) {
+      const content = fs.readFileSync(file, 'utf-8');
+      for (const m of content.matchAll(/from ['"]([^'"]+)['"]/g)) {
+        const specifier = m[1];
+        if (specifier.startsWith('@astryxdesign/core/')) {
+          const subpath = './' + specifier.replace('@astryxdesign/core/', '');
+          expect(
+            exportKeys.has(subpath),
+            `${specifier} (subpath ${subpath}) must resolve in core exports`,
+          ).toBe(true);
+        } else if (specifier.startsWith('.')) {
+          // A relative import names a file the copy wrote: one of the
+          // component's own, or an owner module carried beside it (FR4).
+          const target = path.resolve(path.dirname(file), specifier);
+          expect(
+            ['', '.ts', '.tsx', '.mjs', '.js'].some(ext => fs.existsSync(target + ext)),
+            `${specifier} in ${path.relative(outputDir, file)} must name a copied file`,
+          ).toBe(true);
+        }
+      }
+    }
+  }, 30_000);
 });

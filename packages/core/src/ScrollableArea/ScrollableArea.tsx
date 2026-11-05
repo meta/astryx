@@ -12,6 +12,7 @@
  * - /packages/core/src/ScrollableArea/ScrollableArea.test.tsx
  * - /packages/core/src/ScrollableArea/ScrollableArea.doc.mjs
  * - /apps/storybook/stories/ScrollableArea.stories.tsx
+ * - /packages/cli/assets/templates/blocks/components/ScrollableArea/ (showcase blocks)
  */
 
 import type {ReactNode} from 'react';
@@ -51,6 +52,10 @@ const styles = stylex.create({
     WebkitOverflowScrolling: 'touch',
     scrollbarColor: {
       default: `${colorVars['--color-neutral']} transparent`,
+      // Touch screens keep the platform's own scroll indicator, which iOS
+      // shows only while scrolling, as UIScrollView does. A custom colour
+      // turns it into a faint bar that also shows in the gap a pull opens.
+      '@media (pointer: coarse)': 'auto',
       '@media (forced-colors: active)': 'auto',
     },
     scrollbarWidth: 'auto',

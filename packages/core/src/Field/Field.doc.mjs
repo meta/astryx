@@ -114,13 +114,14 @@ export const docs = {
     },
     {
       name: 'labelIcon',
-      type: 'IconType',
+      type: 'ReactNode | IconType',
       description: 'Icon to display before the label text. See `astryx docs icons` for valid semantic names.',
     },
     {
       name: 'labelTooltip',
       type: 'string',
-      description: 'Tooltip text to display in an info icon at the end of the label.',
+      description:
+        'Tooltip text to display in an info icon at the end of the label. Hover shows it; on a touch screen a tap on the icon opens it without focusing the field, while a mouse click on the icon focuses the field like the rest of the label.',
     },
     {
       name: 'status',
@@ -129,14 +130,14 @@ export const docs = {
     },
     {
       name: 'statusVariant',
-      type: "'attached' | 'detached'",
-      description: 'How the status message renders relative to the input. Attached overlaps the input border; detached floats below.',
+      type: "'attached' | 'detached' | 'tooltip'",
+      description: 'How status feedback is placed. Attached overlaps an eligible opaque, bordered, fixed-height control; detached renders a message below custom or non-bordered controls; tooltip leaves the visible affordance to the wrapped input and announces its message without a FieldStatus box.',
       default: "'attached'",
     },
     {
       name: 'width',
       type: 'SizeValue',
-      description: 'Width of the field (number = pixels, string used as-is, e.g. "100%"). Sizes the whole field (label, control, and status) so they stay aligned. Prefer this over setting width via xstyle/className/style, which only size the inner control box.',
+      description: 'Width of the field (number = pixels, string used as-is, e.g. "100%"). Sizes the whole field (label, control, and status) so they stay aligned. Prefer this over setting width via xstyle/className/style, which only size the inner control box. Without a width, a row can shrink the whole field below the natural width of its control, so filter bars shrink instead of overflowing.',
     },
     {
       name: 'ref',
@@ -170,20 +171,84 @@ export const docs = {
       { guidance: true, description: 'Always provide a label for accessibility, even if visually hidden with isLabelHidden.' },
       { guidance: true, description: 'Use inputID and descriptionID to connect the label and description to the inner control with htmlFor and aria-describedby.' },
       { guidance: false, description: 'Nest Field around styled inputs such as TextInput, Typeahead, Select, DateInput, or TextArea; those components already render their own Field shell.' },
-      { guidance: false, description: 'Use the attached status variant on non-bordered controls such as sliders, switches, or checkboxes; use detached so the message does not overlap the control.' },
+      { guidance: true, description: 'Use attached status only when the wrapped control is opaque, bordered, and fixed-height; use detached for custom, tall, translucent, or non-bordered controls.' },
       { guidance: false, description: 'Set both isOptional and isRequired on the same field.' },
       { guidance: false, description: 'Hide the label without providing an alternative way for the user to understand the field purpose.' },
     ],
     anatomy: [
+      {name: 'Container', required: true, description: 'Root field box that owns layout, width, and local stacking for the label, control, and status.'},
       {name: 'Label', required: true, description: 'Text identifying the field. Always rendered for accessibility, optionally hidden visually.'},
-      {name: 'Description', required: false, description: 'Helper text between the label and input explaining what to enter.'},
+      {name: 'Ordinary description', required: false, description: 'Helper text under the label in the ordinary field layout.'},
+      {name: 'Horizontal-label description', required: false, description: 'Helper text in the control column when FormLayout owns horizontal labels.'},
       {name: 'Control slot', required: true, description: 'A custom, native, or third-party control that does not already render a field shell.'},
       {name: 'Status message', required: false, description: 'Inline validation feedback showing error, warning, or success with a message.'},
+      {name: 'Input status icon', required: false, description: 'Shared status affordance used by Field-composed input controls.'},
+      {name: 'Input clear button', required: false, description: 'Shared clear action used by Field-composed input controls.'},
+      {name: 'Input clear icon', required: false, description: 'Glyph inside the shared input clear action.'},
       {name: 'Optional/Required indicator', required: false, description: 'Badge next to the label showing whether the field is optional or required.'},
-      {name: 'Label tooltip', required: false, description: 'Info icon at the end of the label with a tooltip explaining the field.'},
+      {name: 'Label tooltip trigger', required: false, description: 'Info icon beside the label that opens explanatory content.'},
+      {name: 'Label tooltip surface', required: false, description: 'Layer-hosted explanatory content for the label tooltip.'},
     ],
   },
   examples: [
+    {
+      label: 'Filter bar',
+      code: `
+import {useState} from 'react';
+import {HStack} from '@astryxdesign/core/HStack';
+import {Icon} from '@astryxdesign/core/Icon';
+import {Selector} from '@astryxdesign/core/Selector';
+import {StackItem} from '@astryxdesign/core/Stack';
+import {TextInput} from '@astryxdesign/core/TextInput';
+
+// Every Field-based input (TextInput, Selector, DateInput, ...) can be shrunk
+// by its row, so a filter bar never pushes the page sideways. Let the row wrap
+// so that on a phone the search box keeps a full line and the selectors move
+// below it; on wider screens everything stays on one line, with the search box
+// taking the free space.
+function OrdersFilterBar() {
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('Awaiting fulfillment');
+  const [region, setRegion] = useState('All regions');
+  const [sort, setSort] = useState('Newest first');
+  return (
+    <HStack gap={2} wrap="wrap" vAlign="center">
+      <StackItem size="fill">
+        <TextInput
+          label="Search orders"
+          isLabelHidden
+          placeholder="Search by order or customer"
+          startIcon={<Icon icon="search" />}
+          value={query}
+          onChange={setQuery}
+        />
+      </StackItem>
+      <Selector
+        label="Status"
+        isLabelHidden
+        options={['All statuses', 'Awaiting fulfillment', 'Shipped', 'Delivered', 'Returned']}
+        value={status}
+        onChange={setStatus}
+      />
+      <Selector
+        label="Region"
+        isLabelHidden
+        options={['All regions', 'North America', 'Europe', 'Asia Pacific']}
+        value={region}
+        onChange={setRegion}
+      />
+      <Selector
+        label="Sort"
+        isLabelHidden
+        options={['Newest first', 'Oldest first', 'Highest total']}
+        value={sort}
+        onChange={setSort}
+      />
+    </HStack>
+  );
+}
+`,
+    },
     {
       label: 'Wrap a custom control',
       code: `
@@ -221,7 +286,7 @@ export const docsZh = {
       { guidance: true, description: 'Always provide a label for accessibility, even if visually hidden with isLabelHidden.' },
       { guidance: true, description: 'Use inputID and descriptionID to connect the label and description to the inner control with htmlFor and aria-describedby.' },
       { guidance: false, description: 'Nest Field around styled inputs such as TextInput, Typeahead, Select, DateInput, or TextArea; those components already render their own Field shell.' },
-      { guidance: false, description: 'Use the attached status variant on non-bordered controls such as sliders, switches, or checkboxes; use detached so the message does not overlap the control.' },
+      { guidance: true, description: 'Use attached status only when the wrapped control is opaque, bordered, and fixed-height; use detached for custom, tall, translucent, or non-bordered controls.' },
       { guidance: false, description: 'Set both isOptional and isRequired on the same field.' },
       { guidance: false, description: 'Hide the label without providing an alternative way for the user to understand the field purpose.' },
     ],
@@ -239,7 +304,7 @@ export const docsDense = {
       { guidance: true, description: 'Always provide a label; visually hide it only when context is clear.' },
       { guidance: true, description: 'Wire inputID/descriptionID to htmlFor and aria-describedby on the inner control.' },
       { guidance: false, description: 'Nest Field around styled inputs; it double-renders labels and status UI.' },
-      { guidance: false, description: 'Use attached status on sliders/switches/checkboxes; use detached so messages do not overlap.' },
+      { guidance: true, description: 'Use attached status only for opaque, bordered, fixed-height controls; use detached for custom, tall, translucent, or non-bordered controls.' },
       { guidance: false, description: 'Set both isOptional and isRequired on the same field.' },
       { guidance: false, description: 'Hide the label without another way to understand field purpose.' },
     ],

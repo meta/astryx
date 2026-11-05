@@ -25,10 +25,11 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
-import {useState} from 'react';
+import {Profiler, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {readFileSync} from 'node:fs';
 import {render, screen, fireEvent, within} from '@testing-library/react';
+import {InternationalizationProvider} from '../i18n';
 import {DateTimeInput as CoreDateTimeInput} from './DateTimeInput';
 import type {DateTimeInputProps, ISODateTimeString} from './DateTimeInput';
 
@@ -209,6 +210,65 @@ describe('DateTimeInput touch surface', () => {
         'true',
       );
     });
+  });
+
+  it.each([
+    ['en-US', ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']],
+    ['pt-PT', ['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sáb.']],
+    ['id-ID', ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']],
+  ])(
+    'labels the date sheet columns in %s with the Calendar header names',
+    (locale, names) => {
+      withMonthLayout(() => {
+        render(
+          <InternationalizationProvider locale={locale}>
+            <DateTimeInput label="Meeting" onChange={() => {}} />
+          </InternationalizationProvider>,
+        );
+        openDateSheet();
+        // The decorative weekday row is the only 7-cell aria-hidden block.
+        const row = [...document.querySelectorAll('[aria-hidden="true"]')].find(
+          el => el.children.length === 7,
+        );
+        expect(row).toBeDefined();
+        expect([...row!.children].map(c => c.textContent?.trim())).toEqual(
+          names,
+        );
+      });
+    },
+  );
+
+  it('keeps seven aligned date sheet columns when repeated narrow names rotate', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const readRow = () =>
+      [
+        ...([...document.querySelectorAll('[aria-hidden="true"]')].find(
+          el => el.children.length === 7,
+        )?.children ?? []),
+      ].map(c => c.textContent?.trim());
+    try {
+      const ui = (weekStartsOn: 0 | 1) => (
+        <InternationalizationProvider locale="sw-KE">
+          <DateTimeInput
+            label="Meeting"
+            onChange={() => {}}
+            weekStartsOn={weekStartsOn}
+          />
+        </InternationalizationProvider>
+      );
+      withMonthLayout(() => {
+        const {rerender} = render(ui(0));
+        openDateSheet();
+        expect(readRow()).toEqual(['S', 'M', 'T', 'W', 'T', 'F', 'S']);
+        rerender(ui(1));
+      });
+      expect(readRow()).toEqual(['M', 'T', 'W', 'T', 'F', 'S', 'S']);
+      expect(
+        errors.mock.calls.some(call => String(call[0]).includes('same key')),
+      ).toBe(false);
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   it('uses intrinsic wrapping for the closed touch segments', () => {
@@ -984,5 +1044,88 @@ describe('DateTimeInput touch surface', () => {
     );
     fireEvent.click(field);
     expect(field).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+describe('DateTimeInput touch surface: disabled without a reason', () => {
+  it('stays focusable and inert, and skips a caller onClick (AST-085 FR1, FR2)', () => {
+    const onClick = vi.fn();
+    render(
+      <DateTimeInput
+        label="Meeting"
+        isDisabled
+        onClick={onClick}
+        onChange={() => {}}
+      />,
+    );
+    for (const field of [dateField(), timeField()]) {
+      expect(field).not.toHaveAttribute('disabled');
+      expect(field).toHaveAttribute('aria-disabled', 'true');
+      field.focus();
+      expect(field).toHaveFocus();
+      fireEvent.click(field);
+      fireEvent.keyDown(field, {key: 'Enter'});
+      expect(field).toHaveAttribute('aria-expanded', 'false');
+    }
+    expect(onClick).not.toHaveBeenCalled();
+  });
+});
+
+describe('DateTimeInput touch surface: no stale commit', () => {
+  // Records what each commit painted, so a value that is corrected one render
+  // later (by an effect) shows up as a stale intermediate frame.
+  function paintedFrames(read: () => string) {
+    const frames: string[] = [];
+    const onRender = () => frames.push(read());
+    return {frames, onRender};
+  }
+
+  it('clears the time display in the same commit as an external clear', () => {
+    const {frames, onRender} = paintedFrames(
+      () => (timeField() as HTMLInputElement).value,
+    );
+    const ui = (value: ISODateTimeString | undefined) => (
+      <Profiler id="field" onRender={onRender}>
+        <DateTimeInput label="Meeting" value={value} onChange={() => {}} />
+      </Profiler>
+    );
+    const {rerender} = render(ui('2026-03-15T10:00' as ISODateTimeString));
+    expect(timeField()).toHaveValue('10:00 AM');
+
+    frames.length = 0;
+    rerender(ui(undefined));
+
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames).not.toContain('10:00 AM');
+    expect(timeField()).toHaveValue('');
+  });
+
+  it('shows an in-range month in the same commit that narrows max', () => {
+    withMonthLayout(() => {
+      const visibleMonth = () =>
+        ['March', 'April', 'May', 'June']
+          .map(m => `${m} 2026`)
+          .find(label => screen.queryByText(label) != null) ?? '';
+      const {frames, onRender} = paintedFrames(visibleMonth);
+      const ui = (max: ISODateTimeString) => (
+        <Profiler id="field" onRender={onRender}>
+          <DateTimeInput label="Meeting" max={max} onChange={() => {}} />
+        </Profiler>
+      );
+      const {rerender} = render(ui('2026-12-31T23:59' as ISODateTimeString));
+      openDateSheet();
+      const next = screen.getByRole('button', {name: 'Next month'});
+      fireEvent.click(next);
+      fireEvent.click(next);
+      fireEvent.click(next);
+      expect(screen.getByText('June 2026')).toBeInTheDocument();
+
+      frames.length = 0;
+      rerender(ui('2026-04-30T23:59' as ISODateTimeString));
+
+      expect(frames.length).toBeGreaterThan(0);
+      expect(frames).not.toContain('June 2026');
+      expect(screen.getByText('April 2026')).toBeInTheDocument();
+    });
   });
 });

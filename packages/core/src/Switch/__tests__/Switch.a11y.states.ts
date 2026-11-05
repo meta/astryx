@@ -147,7 +147,7 @@ export const SWITCH_BINDING_STATES: ReadonlyArray<SwitchBindingState> = [
   },
   {
     id: 'disabled',
-    summary: 'a natively disabled switch, out of the tab sequence',
+    summary: 'a disabled switch that keeps its tab stop',
     storyId: 'core-switch--disabled',
     visibleLabel: 'Premium feature',
     props: {
@@ -159,7 +159,7 @@ export const SWITCH_BINDING_STATES: ReadonlyArray<SwitchBindingState> = [
     facts: {
       checked: false,
       operable: false,
-      focusable: false,
+      focusable: true,
       disabled: true,
       described: true,
       required: false,

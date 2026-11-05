@@ -1,0 +1,69 @@
+{
+  "apiVersion": 1,
+  "type": "docs.node",
+  "package": "@astryxdesign/cli",
+  "data": {
+    "id": "astryx:artifact:v1/%40astryxdesign%2Fcli/namespace/cli",
+    "route": "cli",
+    "kind": "namespace",
+    "package": "@astryxdesign/cli",
+    "title": "<text>",
+    "summary": "<text>",
+    "breadcrumb": [],
+    "slots": [
+      {
+        "name": "guides",
+        "title": "<text>",
+        "children": [
+          {
+            "route": "cli/component-lookups",
+            "name": "component-lookups",
+            "package": "@astryxdesign/cli",
+            "kind": "generic",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/host-entry",
+            "name": "host-entry",
+            "package": "@astryxdesign/cli",
+            "kind": "generic",
+            "title": "<text>",
+            "summary": "<text>"
+          }
+        ]
+      },
+      {
+        "name": "reference",
+        "title": "<text>",
+        "children": [
+          {
+            "route": "cli/commands",
+            "name": "commands",
+            "package": "@astryxdesign/cli",
+            "kind": "namespace",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api",
+            "name": "api",
+            "package": "@astryxdesign/cli",
+            "kind": "namespace",
+            "title": "<text>",
+            "summary": "<text>"
+          }
+        ]
+      }
+    ],
+    "content": [
+      {
+        "type": "prose",
+        "text": "<text>"
+      }
+    ],
+    "links": {
+      "up": "<text>"
+    }
+  }
+}

@@ -12,18 +12,20 @@ export const doc = {
   type: 'function',
   kind: 'api',
   name: 'themeTemplate',
+  namespace: 'cli/api',
   displayName: 'themeTemplate()',
   summary: 'Write the annotated theme template into a project.',
   description:
     'Writes theme.template.ts: the annotated reference for the whole theme surface, covering every ' +
     'defineTheme field, the token families, the component override syntax, and how a theme is ' +
     'consumed, with the CLI command that prints the authoritative reference for each section. ' +
-    'Read it, copy what you need into your own theme file, delete it. Where `theme add` starts ' +
-    'you from a theme we ship, this starts you from a blank one. Refuses to overwrite without ' +
+    'Read it, copy what you need into your own theme file, delete it. Use `theme add` to ' +
+    'use an installed built theme, extend that theme for ordinary customization, or use ' +
+    '`theme eject` for a complete source fork. This command starts a new blank theme. Refuses to overwrite without ' +
     '`overwrite`, so it is safe to re-run.',
   importPath: '@astryxdesign/cli/api',
   signature:
-    'themeTemplate(options?: {targetPath?: string, overwrite?: boolean, cwd?: string}): ThemeNewResponse',
+    'themeTemplate(options?: {targetPath?: string, overwrite?: boolean, cwd?: string}): ThemeTemplateResponse',
   keywords: ['theme', 'template', 'starter', 'defineTheme', 'scaffold', 'reference', 'tokens'],
   params: [
     {
@@ -42,6 +44,7 @@ export const doc = {
       name: 'options.cwd',
       type: 'string',
       description: 'Directory the target path resolves against.',
+      default: 'process.cwd()',
     },
   ],
   returns: [
@@ -51,7 +54,10 @@ export const doc = {
         'Receipt: the path (relative to cwd), whether it was written, and the reason it was not. `exists` when a file was already there, which is a success, not a failure.',
     },
   ],
-  throws: [{code: 'ERR_PATH_TRAVERSAL', when: 'the target path escapes cwd'}],
+  throws: [
+    {code: 'ERR_PATH_TRAVERSAL', when: 'the target path escapes cwd'},
+    {code: 'ERR_WRITE_FAILED', when: 'the template file cannot be written'},
+  ],
   examples: [
     {label: 'Write it at the project root', code: 'themeTemplate();'},
     {
@@ -60,5 +66,5 @@ export const doc = {
     },
   ],
   command: 'theme template',
-  related: ['themeAdd', 'themeBuild', 'themeList'],
+  related: ['themeAdd', 'themeEject', 'themeBuild', 'themeListAvailable', 'themeTargets'],
 };

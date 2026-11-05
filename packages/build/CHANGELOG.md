@@ -1,4 +1,147 @@
-# @xds/build
+# @astryxdesign/build
+
+# 0.7.8
+
+---
+
+# 0.7.7
+
+#### New Features
+
+- `withAstryx()` builds Astryx from source under Turbopack instead of refusing to. It points each package's documented entry points at their source (Core, Lab, Charts and Rich Text), compiles that source with the settings the prebuilt stylesheets use, and keeps the app's own Turbopack rules off it. The new PostCSS plugin `@astryxdesign/build/next/postcss` replaces an `@astryx;` rule with each source-built package's prebuilt stylesheet, compiled from that source: the same rules and selectors, in the same order, inside `@layer astryx-base`. To set it up, list `@astryxdesign/build/next/postcss` in the app's PostCSS config and put one `@astryx;` rule in the app's global stylesheet (option `cwd`, the app root, defaults to the working directory). Under Turbopack, the webpack setup's `@astryxdesign/build/postcss` refuses to run beside `withAstryx()`, since its rules never match the classes Turbopack renders. In this source build, an installed Astryx package with a malformed `package.json` fails the build instead of being left out. The webpack setup is unchanged: it builds Core and Lab from source, and Rich Text and Charts keep their prebuilt stylesheets there.
+
+#### Other Changes
+
+- The prebuilt stylesheet build and the Turbopack source build share one module walk, compile and layer block, so a source build prints the prebuilt rules by construction. Every prebuilt stylesheet keeps its bytes.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @vjeux
+
+---
+
+# 0.7.6
+
+#### New Features
+
+- A production build with `astryxStylex` warns when its stylesheet reads a StyleX-generated custom property that nothing declares, naming the variable and the rule that reads it. It checks the class-name prefixes the build uses, `stylexOverrides.classNamePrefix` included, and never reports a custom property an app declares in its own CSS. (#8075)
+
+#### Fixes
+
+- `astryxStylex` resolves `defineConsts` values read from another file. With the `{stylexOptions}` form (the one Storybook uses), a file that read only constants from a `.stylex.ts` module lost that import once StyleX compiled it, so the constants never reached the CSS: a constant used as a media-query key failed the build ("Invalid empty selector") and one used as a value shipped as a custom property nothing declares. In either form, a constant defined on the other side of the layer split, or in an Astryx package (compiled with the library class-name prefix) and read from an app file (compiled with its own), stayed unresolved. (#8075)
+- Published packages no longer include repository test and benchmark files, reducing install size without changing exports. (#9153)
+
+#### Documentation
+
+- The Next.js setup in the README says that its Babel config turns off SWC, which `next/font` needs, so a fresh `create-next-app` layout must drop its `next/font` import before the webpack source build will compile. (#9439)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @parinith-web
+- @vjeux
+
+---
+
+# 0.7.5
+
+#### Documentation
+
+- Package links now point to the project's GitHub home, `meta/astryx`.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.4
+
+---
+
+# 0.7.3
+
+---
+
+# 0.7.2
+
+#### Fixes
+
+- `withAstryx()` builds again under pnpm's default isolated layout. It no longer turns off webpack's symlink resolution, which hid each Astryx package's own dependencies (`Can't resolve 'intl-messageformat'`, `'lucide-react'`). Astryx modules are still matched by their real path, so a workspace-linked package keeps resolving its `source` entries.
+- The PostCSS plugin now scans what each installed Astryx package publishes (its `files` field, or the whole package minus nested `node_modules` when it has none) instead of everything under `node_modules/@astryxdesign`. A package linked from a workspace no longer drags in its own `node_modules`, whose links can cycle back to it and made the build run out of memory, or its unpublished test fixtures. Registry installs scan the same files as before.
+
+#### Performance
+
+- The PostCSS plugin no longer loads the app's root Babel config when it compiles Astryx source. In the documented Next.js setup that config (`next/babel` plus Astryx's StyleX plugin) ran over every installed Astryx module on each build only for the plugin to read StyleX metadata, roughly doubling the CSS pass. The emitted CSS is unchanged, and the app's own files still compile with its config.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @vjeux
+
+---
+
+# 0.7.1
+
+---
+
+# 0.7.0
+
+#### Fixes
+
+- Preserve native `light-dark()` token values in Vite source builds by defaulting Lightning CSS to Astryx's supported browser floor. (#7330)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.6.8
+
+---
+
+# 0.6.7
+
+---
+
+# 0.6.6
+
+---
+
+# 0.6.5
+
+---
+
+# 0.6.4
+
+#### Fixes
+
+- Keep PostCSS and Vite processing inside `@astryxdesign/build`'s declared dependency boundary (#6605)
+  Packed consumers no longer depend on workspace hoisting to find PostCSS helpers or CSS compatibility processors. The package now owns Autoprefixer, Browserslist, and Lightning CSS, and a clean isolated-install test exercises the published tarball's PostCSS helper and Vite output.
+- Make source builds fail on unsupported StyleX declarations and load shared StyleX output from every Vite HTML entry.
+  Nested pseudo-elements and `stylex.keyframes()` now have production-build regression coverage, and the maintained capability registry tracks the installed StyleX version.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.6.3
+
+---
 
 # 0.6.2
 

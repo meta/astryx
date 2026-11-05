@@ -5,6 +5,7 @@ export const doc = {
   type: 'function',
   kind: 'api',
   name: 'integrationAddCodemod',
+  namespace: 'cli/api',
   displayName: 'integrationAddCodemod()',
   summary: 'Add a safe identity codemod at an exact target version.',
   description:

@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The report a human (or the release cron) actually looks at.
+ * @file The visual report a pull-request reviewer actually looks at.
  *
  * @input  a verdict and the three image sets it refers to
  * @output one self-contained index.html
@@ -152,7 +152,7 @@ export function renderReport(verdict, options = {}) {
 </style>
 <h1>Visual gate <span class="status">skipped</span></h1>
 <p><b>Capture deferred.</b> ${escapeHtml(verdict.reason)}</p>
-<p>${counts.total} trusted baseline shot(s) remain covered by the daily release gate.</p>
+<p>${counts.total} planned shot(s) were not compared. This is not passing visual evidence.</p>
 </html>
 `;
   }

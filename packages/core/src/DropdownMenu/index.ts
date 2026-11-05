@@ -22,6 +22,7 @@ export {
   type DropdownMenuProps,
   type DropdownMenuPresentation,
   type DropdownMenuButtonProps,
+  type DropdownMenuTriggerProps,
   type DropdownMenuItemData,
   type DropdownMenuDividerData,
   type DropdownMenuSection,
@@ -38,6 +39,12 @@ export {
   type DropdownMenuDividerProps,
 } from './DropdownMenuDivider';
 
+// Group — the compound peer of the data API's `{type: 'section', title}`.
+export {
+  DropdownMenuGroup,
+  type DropdownMenuGroupProps,
+} from './DropdownMenuGroup';
+
 // Selectable items — checkbox (independent) and radio (single-select group).
 export {
   DropdownMenuCheckboxItem,
@@ -53,10 +60,12 @@ export {
 } from './DropdownMenuRadioItem';
 
 // Submenu — a single menu row that reveals a nested flyout of its own
-// children/items. Data mode via DropdownMenuItemData.items.
+// children/items, or drills in on a phone. Data mode via
+// DropdownMenuItemData.items.
 export {
   DropdownMenuSubMenu,
   type DropdownMenuSubMenuProps,
+  type DropdownMenuSubMenuPresentation,
 } from './DropdownMenuSubMenu';
 
 // Menu-coordination context — public so consumers can build custom menu items

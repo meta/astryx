@@ -9,9 +9,12 @@
  */
 
 import {z} from 'zod';
+import {AuthoredDocGraphFields} from '../_schema.mjs';
 import {formatZodError} from '../../_shared/errors.mjs';
 
-/** @typedef {import('../types').TemplateDoc} TemplateDoc */
+/** @typedef {import('../types.js').TemplateDoc} TemplateDoc */
+/** @typedef {import('./type.js').PageTemplateDoc} PageTemplateDoc */
+/** @typedef {import('./type.js').BlockTemplateDoc} BlockTemplateDoc */
 
 const previewSchema = z
   .object({
@@ -37,16 +40,33 @@ const registryIdentitySchema = z
   .strict();
 
 const baseTemplateFields = {
+  ...AuthoredDocGraphFields,
   name: z.string().min(1, 'name is required'),
   displayName: z.string().min(1).optional(),
-  description: z.string().min(1, 'description is required'),
+  description: z.string().min(1, 'description is required').optional(),
+  keywords: z.array(z.string().min(1)).optional(),
   category: z.string().optional(),
   componentsUsed: z.array(z.string()).optional(),
   preview: previewSchema.optional(),
   isReady: z.boolean().optional(),
+  icons: z
+    .record(
+      z.string().regex(/^[$A-Z_a-z][$\w]*$/u, 'icons keys are imported names'),
+      z
+        .string()
+        .regex(
+          /^[a-z][a-zA-Z0-9]*$/u,
+          'icons values are icon definition names',
+        ),
+    )
+    .optional(),
   scaffold: z.boolean().optional(),
   isHiddenFromOverview: z.boolean().optional(),
   registry: registryIdentitySchema.optional(),
+  replaces: z
+    .string()
+    .min(1, 'replaces must name a Core template id')
+    .optional(),
 };
 
 const pageTemplateSchema = z
@@ -64,6 +84,38 @@ const blockTemplateSchema = z
     isShowcase: z.boolean().optional(),
   })
   .strict();
+
+/**
+ * Templates as they load. Integration templates already published omit
+ * `displayName` and `aspectRatio` and group themselves under their own
+ * `category`, so the loader accepts those (template discovery falls back to an
+ * aspect ratio of 1). The published `TemplateDoc` keeps asking authors for all
+ * three; `IntegrationTemplateDoc`, for an integration package's templates,
+ * takes the package's own `category`.
+ *
+ * @typedef {Omit<PageTemplateDoc, 'displayName' | 'category'>
+ *   & {displayName?: string, category?: string}} LoadedPageTemplateDoc
+ * @typedef {Omit<BlockTemplateDoc, 'displayName' | 'aspectRatio' | 'category'>
+ *   & {displayName?: string, aspectRatio?: number, category?: string}} LoadedBlockTemplateDoc
+ */
+
+/**
+ * @typedef {import('../../_shared/contract.js').Expect<
+ *   import('../../_shared/contract.js').MutuallyAssignable<
+ *     import('../../_shared/contract.js').NamedFields<z.infer<typeof pageTemplateSchema>>,
+ *     import('../../_shared/contract.js').NamedFields<LoadedPageTemplateDoc>
+ *   >
+ * >} _PageTemplateDocDriftLock
+ */
+
+/**
+ * @typedef {import('../../_shared/contract.js').Expect<
+ *   import('../../_shared/contract.js').MutuallyAssignable<
+ *     import('../../_shared/contract.js').NamedFields<z.infer<typeof blockTemplateSchema>>,
+ *     import('../../_shared/contract.js').NamedFields<LoadedBlockTemplateDoc>
+ *   >
+ * >} _BlockTemplateDocDriftLock
+ */
 
 const templateEnvelopeSchema = z
   .discriminatedUnion('type', [pageTemplateSchema, blockTemplateSchema])

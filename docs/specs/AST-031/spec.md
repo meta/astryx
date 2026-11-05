@@ -1,5 +1,5 @@
 ---
-schema_version: 1
+schema_version: 4
 template_version: 1
 kind: system-spec
 id: spec:AST-031
@@ -13,7 +13,7 @@ owners: [josephfarina, cixzhang]
 affects_architecture: [architecture:cli-surface]
 affects_families: []
 affects_contributing: []
-affects_consumer_docs: [cli-integrations]
+affects_consumer_docs: [authoring]
 ---
 
 # Runtime integration feature composition system spec
@@ -181,6 +181,10 @@ fail-closed guard MUST break a test.
   the CLI offers to file via `gh issue create`. This fallback is consent-gated
   (`public` audience). Any other `issuesUrl` scheme produces a `routed_only`
   receipt. The fallback is suppressed entirely when at least one handler exists.
+  `astryx swizzle`'s receipt offers its `gh issue create` line when `gh` is on
+  PATH, whatever its login state. A logged-out `gh` asks for its own login when
+  the line runs. The text receipt shows the command; the JSON receipt keeps the
+  command and the issues URL.
 
 - **FR9 — Project config field.** `astryx.config` gains a `gapReport` field
   accepting a `GapReportHandler`. This is the project-level handler and runs
@@ -200,6 +204,11 @@ fail-closed guard MUST break a test.
   array with one entry per effective handler or fallback. Each delivery records
   `handlerType`, `handler`, `audience`, `status`, `url`, and `message`. The
   response shape is the same in `--json` and human output modes.
+
+- **FR13 — A destination the caller names.** When the caller names a
+  destination with `--to`, that destination replaces the handlers and the FR8
+  fallback for that report. `architecture:cli-surface` INV36 governs the option
+  and who chooses the destination.
 
 #### Platform support
 
@@ -227,18 +236,19 @@ integration API requires migration because the single-writer shape has not shipp
 
 ## Verification
 
-| Contract | Verification                                           | Representative states                                                                         | Mutation or failure expectation                                                                         |
-| -------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| FR1–FR3  | gap-report handler type and receipt contract tests     | valid handler; missing audience; wrong status value; non-object return                        | an invalid handler shape or receipt is accepted silently                                                |
-| FR4      | handler isolation tests                                | handler writes stdout; handler calls process.exit; handler throws; handler exceeds 30 s       | stdout corruption reaches the JSON envelope, or exit/throw stops later handlers                         |
-| FR5      | no-opt-out assertion test                              | project sets `inheritDebug: false` in package.json; gap-report handlers still run             | an opt-out mechanism suppresses a gap-report handler                                                    |
-| FR6      | effective-set ordering and deduplication tests         | project + two integrations; duplicate handle ref; project only; integrations only             | wrong order, duplicate execution, or missing handler                                                    |
-| FR7      | target selection tests                                 | explicit package; unique owner; ambiguous owner requiring `--package`; no component match     | handler count influences target, ambiguity is guessed, or an unknown component fails to default to Core |
-| FR8      | fallback activation and suppression tests              | zero handlers + GitHub issuesUrl; zero handlers + non-GitHub issuesUrl; one handler present   | fallback fires with a handler present, or non-GitHub issuesUrl claims it filed                          |
-| FR9–FR10 | config field and named-export loading tests            | project config with gapReport; integration with named export; both present; neither present   | config field ignored, named export ignored, or old CLI breaks on named export                           |
-| FR11     | mixed-audience consent tests                           | all internal; all public with consent; all public without consent; mixed with partial consent | a public handler runs without consent, or an internal handler is blocked by consent                     |
-| FR12     | aggregate response shape tests                         | all succeed; one fails; one times out; consent_required entries; empty set (fallback)         | missing delivery entry, wrong source attribution, or response shape differs between --json and human    |
-| General  | mutation-sensitive composition tests (structuredClone) | handler mutates event fields; handler adds properties to event                                | mutation leaks to a subsequent handler                                                                  |
+| Contract | Verification                                           | Representative states                                                                                                      | Mutation or failure expectation                                                                         |
+| -------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| FR1–FR3  | gap-report handler type and receipt contract tests     | valid handler; missing audience; wrong status value; non-object return                                                     | an invalid handler shape or receipt is accepted silently                                                |
+| FR4      | handler isolation tests                                | handler writes stdout; handler calls process.exit; handler throws; handler exceeds 30 s                                    | stdout corruption reaches the JSON envelope, or exit/throw stops later handlers                         |
+| FR5      | no-opt-out assertion test                              | project sets `inheritDebug: false` in package.json; gap-report handlers still run                                          | an opt-out mechanism suppresses a gap-report handler                                                    |
+| FR6      | effective-set ordering and deduplication tests         | project + two integrations; duplicate handle ref; project only; integrations only                                          | wrong order, duplicate execution, or missing handler                                                    |
+| FR7      | target selection tests                                 | explicit package; unique owner; ambiguous owner requiring `--package`; no component match                                  | handler count influences target, ambiguity is guessed, or an unknown component fails to default to Core |
+| FR8      | fallback activation and suppression tests              | zero handlers + GitHub issuesUrl; zero handlers + non-GitHub issuesUrl; one handler present                                | fallback fires with a handler present, or non-GitHub issuesUrl claims it filed                          |
+| FR9–FR10 | config field and named-export loading tests            | project config with gapReport; integration with named export; both present; neither present                                | config field ignored, named export ignored, or old CLI breaks on named export                           |
+| FR11     | mixed-audience consent tests                           | all internal; all public with consent; all public without consent; mixed with partial consent                              | a public handler runs without consent, or an internal handler is blocked by consent                     |
+| FR12     | aggregate response shape tests                         | all succeed; one fails; one times out; consent_required entries; empty set (fallback)                                      | missing delivery entry, wrong source attribution, or response shape differs between --json and human    |
+| FR13     | named destination tests                                | `--to` naming an integration with a GitHub issuesUrl, with and without consent; a non-GitHub issuesUrl; an unknown package | a handler runs with `--to`, or an unknown destination sends anything                                    |
+| General  | mutation-sensitive composition tests (structuredClone) | handler mutates event fields; handler adds properties to event                                                             | mutation leaks to a subsequent handler                                                                  |
 
 ---
 

@@ -7,19 +7,7 @@
  * @position Shared width compatibility logic for root menus and submenu flyouts
  */
 
-const INTRINSIC_AND_CSS_WIDE_WIDTHS = new Set([
-  'auto',
-  'contain',
-  'fit-content',
-  'inherit',
-  'initial',
-  'max-content',
-  'min-content',
-  'revert',
-  'revert-layer',
-  'stretch',
-  'unset',
-]);
+import {clampInlineSize, isIntrinsicInlineSize} from '../Layer/clampInlineSize';
 
 export type ResolvedMenuWidth =
   | {property: 'inlineSize'; value: string}
@@ -28,24 +16,15 @@ export type ResolvedMenuWidth =
 /**
  * CSS intrinsic and CSS-wide keywords cannot be arguments to `min()`. Apply
  * those values as the preferred inline size so max-inline-size can still cap
- * the menu. Lengths retain the existing minimum-width growth contract.
+ * the menu. Lengths retain the existing minimum-width growth contract, clamped
+ * to the layer runtime's viewport cap (spec:AST-059 FR7).
  */
 export function resolveMenuWidth(
   menuWidth: number | string,
   maximum: string,
 ): ResolvedMenuWidth {
-  if (typeof menuWidth === 'number') {
-    return {property: 'minWidth', value: `min(${menuWidth}px, ${maximum})`};
+  if (typeof menuWidth === 'string' && isIntrinsicInlineSize(menuWidth)) {
+    return {property: 'inlineSize', value: menuWidth.trim()};
   }
-
-  const width = menuWidth.trim();
-  const normalizedWidth = width.toLowerCase();
-  if (
-    INTRINSIC_AND_CSS_WIDE_WIDTHS.has(normalizedWidth) ||
-    normalizedWidth.startsWith('fit-content(')
-  ) {
-    return {property: 'inlineSize', value: width};
-  }
-
-  return {property: 'minWidth', value: `min(${width}, ${maximum})`};
+  return {property: 'minWidth', value: clampInlineSize(menuWidth, maximum)};
 }

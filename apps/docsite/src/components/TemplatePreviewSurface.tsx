@@ -4,8 +4,8 @@
 
 /**
  * @file TemplatePreviewSurface.tsx
- * @input Uses the shared template component registry and current theme mode.
- * @output Renders one live page template inside a preview-sized viewport.
+ * @input Uses the template slug, shared component registry, and current theme mode.
+ * @output Renders one live page template in a viewport that fills its host.
  * @position Shared preview surface used by TemplatePreviewDialog.
  *
  * The viewport wrapper gives percentage-height templates a definite containing

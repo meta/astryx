@@ -8,8 +8,12 @@
 
 Choose one and link it:
 
-- [ ] Correction already settled by current component, family, design, theme, or objective accessibility authority.
-- [ ] New visual direction settled by an owner-approved current specification.
+- [ ] Existing component/module `DD` row reused or amended.
+- [ ] Durable component-local intent added to the optional `Design decisions` table by a team design owner.
+- [ ] Correction already settled by current family, design, theme, or objective accessibility authority.
+- [ ] New shared or cross-component direction settled in `docs/design/`.
+
+<!-- External contributors are not expected to author or update specifications. Maintainers record missing authority. A human request supplies intent; current authority still requires owner approval of its content. -->
 
 ## Before and after
 

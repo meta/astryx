@@ -220,4 +220,51 @@ function wrapper(useResizable) {
     const output = await apply('rename-resizable-pixel-bounds', input);
     expect(output).toBe(input);
   });
+
+  it('renames bounds when useResizable comes from a namespace import', async () => {
+    const input = `import * as Astryx from '@astryxdesign/core';
+const region = Astryx.useResizable({defaultSize: 240, minSizePx: 120, maxSizePx: 480});`;
+    const output = await apply('rename-resizable-pixel-bounds', input);
+    expect(output).toContain('minSize: 120');
+    expect(output).toContain('maxSize: 480');
+    expect(output).not.toContain('minSizePx');
+    expect(output).not.toContain('maxSizePx');
+  });
+
+  it('leaves a namespace that does not come from Astryx alone', async () => {
+    const input = `import * as Other from 'other-resizable';
+const region = Other.useResizable({minSizePx: 120});`;
+    const output = await apply('rename-resizable-pixel-bounds', input);
+    expect(output).toContain('minSizePx: 120');
+  });
+
+  it('does not rewrite a parameter that shadows the namespace import', async () => {
+    const input = `import * as Astryx from '@astryxdesign/core';
+function build(Astryx) {
+  return Astryx.useResizable({minSizePx: 120});
+}`;
+    const output = await apply('rename-resizable-pixel-bounds', input);
+    expect(output).toContain('minSizePx: 120');
+  });
+
+  it.each([
+    ['as const', '{defaultSize: 240, minSizePx: 120} as const'],
+    ['satisfies', '{defaultSize: 240, minSizePx: 120} satisfies object'],
+  ])('renames a static configuration wrapped in %s', async (_label, config) => {
+    const input = `import {useResizable} from '@astryxdesign/core/Resizable';
+const region = useResizable(${config});`;
+    const output = await apply('rename-resizable-pixel-bounds', input);
+    expect(output).toContain('minSize: 120');
+    expect(output).not.toContain('minSizePx');
+  });
+
+  it('renames wrapped multi-region configurations', async () => {
+    const input = `import {useResizable} from '@astryxdesign/core';
+const regions = useResizable({regions: {
+  nav: {defaultSize: 240, minSizePx: 120} as const,
+} as const});`;
+    const output = await apply('rename-resizable-pixel-bounds', input);
+    expect(output).toContain('minSize: 120');
+    expect(output).not.toContain('minSizePx');
+  });
 });

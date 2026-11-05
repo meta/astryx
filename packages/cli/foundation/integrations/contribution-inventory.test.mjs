@@ -37,30 +37,37 @@ function loaded(overrides = {}) {
 
 function writeTheme(slug, files = [`${slug}Theme.ts`]) {
   const root = path.join(tmpDir, 'themes');
-  fs.mkdirSync(path.join(root, slug), {recursive: true});
-  for (const f of files) {
-    fs.writeFileSync(path.join(root, slug, f), `// ${f}\n`);
+  const themeDir = path.join(root, slug);
+  fs.mkdirSync(themeDir, {recursive: true});
+  for (const file of files) {
+    const target = path.join(themeDir, file);
+    fs.mkdirSync(path.dirname(target), {recursive: true});
+    fs.writeFileSync(target, `// ${file}\n`);
   }
-  const catalogPath = path.join(root, 'manifest.json');
-  let catalog = {version: 1, themes: []};
-  if (fs.existsSync(catalogPath)) {
-    catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf-8'));
-  }
-  catalog.themes.push({
-    slug,
-    displayName: slug,
-    description: `${slug} theme.`,
-    maintained: true,
-    entry: files[0],
-    exportName: `${slug}Theme`,
-    files,
-  });
-  fs.writeFileSync(catalogPath, JSON.stringify(catalog, null, 2) + '\n');
+  fs.writeFileSync(
+    path.join(themeDir, `${slug}Theme.doc.mjs`),
+    `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */\nexport default {type: 'theme', name: '${slug}', displayName: '${slug}', description: '${slug} theme.', maintained: true};\n`,
+  );
   return root;
 }
 
+const UNPUBLISHED = [
+  '.DS_Store',
+  '._oceanTheme.ts',
+  '.gitignore',
+  '.npmignore',
+  '.npmrc',
+  'oceanTheme.ts.orig',
+  'npm-debug.log',
+  'palette/.DS_Store',
+  'palette/npm-debug.log',
+  '.git/HEAD',
+  'CVS/Entries',
+  'node_modules/dep/index.js',
+];
+
 describe('computeRequiredFiles', () => {
-  it('enumerates manifest + theme catalog files', () => {
+  it('enumerates each complete descriptor-owned theme directory', () => {
     const root = writeTheme('ocean', ['oceanTheme.ts', 'tokens.ts']);
     const inv = computeRequiredFiles(loaded({themes: root}));
 
@@ -69,13 +76,46 @@ describe('computeRequiredFiles', () => {
     expect(inv.roots[0].kind).toBe('themes');
     expect(inv.roots[0].files).toEqual(
       expect.arrayContaining([
-        'themes/manifest.json',
+        'themes/ocean/oceanTheme.doc.mjs',
         'themes/ocean/oceanTheme.ts',
         'themes/ocean/tokens.ts',
       ]),
     );
     expect(inv.allFiles).toContain('astryx.integration.mjs');
-    expect(inv.allFiles).toContain('themes/manifest.json');
+    expect(inv.allFiles).toContain('themes/ocean/oceanTheme.doc.mjs');
+    expect(inv.allFiles).not.toContain('themes/manifest.json');
+  });
+
+  it('requires no file npm leaves out, at any depth, and none beside the themes', () => {
+    const root = writeTheme('ocean', ['oceanTheme.ts', 'palette/tokens.ts']);
+    for (const file of [
+      ...UNPUBLISHED.map(name => `ocean/${name}`),
+      'README.md',
+      'npm-debug.log',
+    ]) {
+      fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+      fs.writeFileSync(path.join(root, file), 'x\n');
+    }
+    expect(computeRequiredFiles(loaded({themes: root})).roots[0].files).toEqual(
+      [
+        'themes/ocean/oceanTheme.doc.mjs',
+        'themes/ocean/oceanTheme.ts',
+        'themes/ocean/palette/tokens.ts',
+      ],
+    );
+  });
+
+  it('requires only the folders theme discovery reads', () => {
+    const root = writeTheme('ocean');
+    for (const file of ['shared/palette.ts', '.cache/state.json']) {
+      fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+      fs.writeFileSync(path.join(root, file), '{}\n');
+    }
+    const inv = computeRequiredFiles(loaded({themes: root}));
+    expect(inv.roots[0].files).toEqual([
+      'themes/ocean/oceanTheme.doc.mjs',
+      'themes/ocean/oceanTheme.ts',
+    ]);
   });
 
   it('enumerates paired component metadata and source files', () => {
@@ -139,31 +179,31 @@ describe('computeRequiredFiles', () => {
     const root = path.join(tmpDir, 'templates');
     fs.mkdirSync(path.join(root, 'dashboard'), {recursive: true});
     fs.writeFileSync(
-      path.join(root, 'dashboard', 'dashboard.template.mjs'),
+      path.join(root, 'dashboard', 'dashboard.doc.mjs'),
       '// tmpl\n',
     );
     fs.writeFileSync(path.join(root, 'dashboard', 'dashboard.tsx'), '// src\n');
     const inv = computeRequiredFiles(loaded({templates: root}));
 
     expect(inv.roots[0].files).toContain(
-      'templates/dashboard/dashboard.template.mjs',
+      'templates/dashboard/dashboard.doc.mjs',
     );
     expect(inv.roots[0].files).toContain('templates/dashboard/dashboard.tsx');
   });
 
-  it('enumerates legacy .doc template metadata with paired sources', () => {
+  it('enumerates released .template compatibility metadata with paired sources', () => {
     const root = path.join(tmpDir, 'templates');
     fs.mkdirSync(path.join(root, 'dashboard'), {recursive: true});
     fs.writeFileSync(
-      path.join(root, 'dashboard', 'dashboard.doc.mjs'),
-      '// legacy template\n',
+      path.join(root, 'dashboard', 'dashboard.template.mjs'),
+      '// released compatibility template\n',
     );
     fs.writeFileSync(path.join(root, 'dashboard', 'dashboard.tsx'), '// src\n');
 
     const inv = computeRequiredFiles(loaded({templates: root}));
 
     expect(inv.roots[0].files).toEqual([
-      'templates/dashboard/dashboard.doc.mjs',
+      'templates/dashboard/dashboard.template.mjs',
       'templates/dashboard/dashboard.tsx',
     ]);
   });
@@ -262,6 +302,25 @@ describe('compareIdentities', () => {
     const issues = compareIdentities(local, packed);
     expect(issues).toHaveLength(1);
     expect(issues[0].message).toContain('dash');
+  });
+
+  it('errors when a packed template replaces a different target', () => {
+    const template = {id: 'acme-shell', type: 'page', name: 'Acme shell'};
+    const local = {
+      ...base(),
+      templates: [{...template, replaces: 'shell-side-nav'}],
+    };
+    const packed = {
+      ...base(),
+      templates: [{...template, replaces: 'shell-top-nav'}],
+    };
+
+    expect(compareIdentities(local, packed)).toEqual([
+      expect.objectContaining({
+        code: 'identity_mismatch',
+        message: expect.stringContaining('acme-shell'),
+      }),
+    ]);
   });
 
   it('errors when a codemod is missing from packed', () => {
