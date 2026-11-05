@@ -195,6 +195,13 @@ function updateFramed(hash, label, bytes) {
   hash.update('\0');
 }
 
+function untrackedEntries(appDir) {
+  return untrackedPaths(appDir).map(relativePath => ({
+    path: relativePath,
+    ...untrackedEntry(appDir, relativePath),
+  }));
+}
+
 function digestDiff(patch, untracked) {
   const hash = crypto.createHash('sha256');
   updateFramed(hash, 'format', 'setup-integrity-v1');
@@ -747,6 +754,20 @@ function findingsFor(relativePath, lines, maskedSpans, importantLines) {
 }
 
 /**
+ * The `diffSha256` that `analyzeSetupIntegrity` reports for the working tree,
+ * from only the git reads the digest needs. A caller that only attests a
+ * working tree uses it instead of a full analysis.
+ */
+export function setupDiffSha256(appDir) {
+  const resolvedAppDir = path.resolve(appDir);
+  assertRepositoryRoot(resolvedAppDir);
+  return digestDiff(
+    trackedPatch(resolvedAppDir),
+    untrackedEntries(resolvedAppDir),
+  );
+}
+
+/**
  * Analyze the working tree relative to its committed pre-agent HEAD.
  * This function only invokes read-only Git commands and reads file bytes.
  */
@@ -755,10 +776,7 @@ export function analyzeSetupIntegrity(appDir, attestedDiffSha256) {
   assertRepositoryRoot(resolvedAppDir);
 
   const patch = trackedPatch(resolvedAppDir);
-  const untracked = untrackedPaths(resolvedAppDir).map(relativePath => ({
-    path: relativePath,
-    ...untrackedEntry(resolvedAppDir, relativePath),
-  }));
+  const untracked = untrackedEntries(resolvedAppDir);
   const untrackedByPath = new Map(untracked.map(file => [file.path, file]));
   const tracked = trackedNumstat(resolvedAppDir);
   // Each git command is a process launch, so a file's baseline and its

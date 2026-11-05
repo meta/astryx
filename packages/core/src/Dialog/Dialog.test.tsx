@@ -987,7 +987,7 @@ describe('Dialog', () => {
           focus.mock.calls.filter(
             (_call, index) => focus.mock.contexts[index] === opener,
           ),
-        ).toEqual([[]]);
+        ).toEqual([[{preventScroll: true}]]);
         focus.mockRestore();
       });
 
@@ -1016,7 +1016,7 @@ describe('Dialog', () => {
           focus.mock.calls.filter(
             (_call, index) => focus.mock.contexts[index] === field,
           ),
-        ).toEqual([[]]);
+        ).toEqual([[{preventScroll: true}]]);
         expect(blur.mock.contexts).not.toContain(field);
         focus.mockRestore();
         blur.mockRestore();
@@ -1109,7 +1109,11 @@ describe('Dialog', () => {
       fireEvent.pointerUp(cancel);
       fireEvent.click(cancel);
       expect(invoker).toHaveFocus();
-      expect(focusCallsOn(focus, invoker)).toEqual([[{focusVisible: false}]]);
+      // The return reveals nothing: the opener was on screen when the dialog
+      // opened and the page has not moved since.
+      expect(focusCallsOn(focus, invoker)).toEqual([
+        [{preventScroll: true, focusVisible: false}],
+      ]);
     });
 
     it('keeps plain focus on both moves after keyboard input', () => {
@@ -1126,7 +1130,7 @@ describe('Dialog', () => {
       fireEvent.keyDown(cancel, {key: 'Enter'});
       fireEvent.click(cancel);
       expect(invoker).toHaveFocus();
-      expect(focusCallsOn(focus, invoker)).toEqual([[]]);
+      expect(focusCallsOn(focus, invoker)).toEqual([[{preventScroll: true}]]);
     });
 
     it('clears a ring the browser already drew before refocusing after pointer input', () => {
@@ -1163,7 +1167,9 @@ describe('Dialog', () => {
       fireEvent.click(cancel);
 
       expect(blur).toHaveBeenCalledTimes(1);
-      expect(focus.mock.calls.at(-1)).toEqual([{focusVisible: false}]);
+      expect(focus.mock.calls.at(-1)).toEqual([
+        {preventScroll: true, focusVisible: false},
+      ]);
       expect(blur.mock.invocationCallOrder[0]).toBeLessThan(
         focus.mock.invocationCallOrder.at(-1) ?? 0,
       );

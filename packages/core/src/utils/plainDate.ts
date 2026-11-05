@@ -300,6 +300,52 @@ export function plainDateIsInRange(
   return compare(pd, range[0]) >= 0 && compare(pd, range[1]) <= 0;
 }
 
+export interface NearestAcceptedDateOptions {
+  min?: PlainDate | null;
+  max?: PlainDate | null;
+  /** Rejects a date inside the bounds, such as a date constraint. */
+  isDateDisabled?: (date: PlainDate) => boolean;
+  /** How many days to search on each side of the clamped date. */
+  searchDays?: number;
+}
+
+/**
+ * The date nearest to `target` that a field accepts. It clamps `target` into
+ * [`min`, `max`], then searches outward one day at a time, inside the bounds,
+ * for a date that `isDateDisabled` allows. On a tie the later date wins. When
+ * no date inside the search window is allowed, it returns the clamped date.
+ */
+export function nearestAcceptedDate(
+  target: PlainDate,
+  {min, max, isDateDisabled, searchDays = 366}: NearestAcceptedDateOptions,
+): PlainDate {
+  let clamped = target;
+  if (min != null && compare(clamped, min) < 0) {
+    clamped = min;
+  }
+  if (max != null && compare(clamped, max) > 0) {
+    clamped = max;
+  }
+  if (isDateDisabled == null || !isDateDisabled(clamped)) {
+    return clamped;
+  }
+  const isAccepted = (date: PlainDate) =>
+    (min == null || compare(date, min) >= 0) &&
+    (max == null || compare(date, max) <= 0) &&
+    !isDateDisabled(date);
+  for (let offset = 1; offset <= searchDays; offset += 1) {
+    const later = plainDateAddDays(clamped, offset);
+    if (isAccepted(later)) {
+      return later;
+    }
+    const earlier = plainDateAddDays(clamped, -offset);
+    if (isAccepted(earlier)) {
+      return earlier;
+    }
+  }
+  return clamped;
+}
+
 export function plainDateSetFirstOfMonth(pd: PlainDate): PlainDate {
   return {year: pd.year, month: pd.month, day: 1};
 }

@@ -811,14 +811,15 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   drag and a mouse wheel never do.
 - `component:BottomSheet`: a `form` or `required` sheet rubber-bands past its
   resting place under a finger as under a trackpad (FR3, FR43), with the same
-  stretch for the same travel; a mouse wheel scrolls its content and never
-  moves it. Past its tallest detent, every finger's pull stretches it on FR3's
-  rubber band with no hold, over a reserve deep enough for the whole stretch
-  and the release. A pull on its content does so once the content cannot
-  scroll that way (`component:BottomSheet` FR18). Past its tallest detent, a
-  mouse and a pen keep FR18's resisted stretch of at most 48 px, an exception
-  to FR43's same rubber band (`spec:AST-017` FR59). Implementation gap: a
-  finger drags it one for one below rest.
+  stretch for the same travel; a mouse wheel scrolls its content and never moves
+  it. Past its tallest detent, every finger's pull stretches it on FR3's rubber
+  band with no hold, over a reserve deep enough for the whole stretch and the
+  release, unless the caller sizes or styles it (`component:BottomSheet` FR18).
+  A pull on its content does so once the content cannot scroll that way
+  (`component:BottomSheet` FR18). Past its tallest detent, a mouse and a pen
+  keep FR18's resisted stretch of at most 48 px, an exception to FR43's same
+  rubber band (`spec:AST-017` FR59). Implementation gap: a finger drags it one
+  for one below rest.
 - The shared pager (Carousel's paging presentation, Lightbox's viewer): a
   trackpad swipe follows FR43's pager rule in Lightbox's viewer and in
   Carousel's paging presentation, under every pointer (`component:Lightbox`

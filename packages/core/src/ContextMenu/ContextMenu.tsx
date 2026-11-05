@@ -59,6 +59,7 @@ import {useLayerInternal} from '../Layer/useLayer';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {currentGesture} from '../Layer/gestureCounter';
+import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {MenuBottomSheetActionList} from '../DropdownMenu/MenuBottomSheetActionList';
 import {menuBottomSheetStyles} from '../DropdownMenu/menuBottomSheet.stylex';
 import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
@@ -537,6 +538,7 @@ export function ContextMenu({
         return;
       }
       if (menu && !menu.contains(e.target as Node)) {
+        noteOutsideDismissal(menu.ownerDocument);
         closeMenu();
       }
     };

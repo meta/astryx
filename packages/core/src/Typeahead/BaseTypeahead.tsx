@@ -44,6 +44,7 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   isFocusInsideOwnedLayer,
   isPressInsideOwnedLayer,
+  noteOutsideDismissal,
   useOutsidePress,
 } from '../Layer/outsidePress';
 import {isImeKeyEvent} from '../utils/ime';
@@ -1478,6 +1479,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       if (isFocusInsideOwnedLayer(e.relatedTarget, anchorEl, popover.id)) {
         return;
       }
+      noteOutsideDismissal(e.currentTarget.ownerDocument);
       popover.hide();
     },
     [popover, anchorRef],

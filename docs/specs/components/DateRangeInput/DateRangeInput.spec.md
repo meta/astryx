@@ -13,6 +13,8 @@ review_triggers: [theming]
 verified_by:
   [
     packages/core/src/DateRangeInput/DateRangeInput.test.tsx,
+    packages/core/src/DateRangeInput/DateRangeInput.calendar.test.tsx,
+    packages/core/src/Calendar/Calendar.calendarSystems.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
     packages/core/src/DateRangeInput/__tests__/DateRangeInputReflow.interaction.browser.spec.ts,
     scripts/check-knowledge.mjs,
@@ -22,7 +24,7 @@ families: [family:input-fields, family:overlay-dismissal]
 design_specs: []
 architecture: [architecture:component-theming-surface]
 contributing: []
-system_specs: [spec:AST-020]
+system_specs: [spec:AST-013/FR12, spec:AST-020, spec:AST-111]
 ---
 
 # DateRangeInput component contract
@@ -32,10 +34,16 @@ system_specs: [spec:AST-020]
 DateRangeInput presents one controlled date range through a labeled field surface.
 Its trigger opens a Calendar-backed Popover and may include a list of quick-select
 presets beside that calendar, or above it when the two do not fit side by side.
+The trigger text and the calendar show the application's calendar system, and
+the range stays Gregorian ISO dates.
 
 ## Compatibility and migration
 
 - Released default preserved: `yes`; canonical DateRangeInput behavior is unchanged
+- The `calendar` prop is additive; it defaults to the provider's calendar, else
+  `gregory`, so a field without a provider calendar keeps its Gregorian text. A
+  provider locale with a `-u-ca-` keyword keeps Gregorian dates (`spec:AST-111`
+  DEC-2); set `calendar` to choose one
 - 0.7.0 removes the `date-range-input-clear-icon` alias; the shared clear glyph
   remains available through `input-clear-icon`
 - The preset constraint correction remains unchanged
@@ -68,18 +76,23 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-No public prop or value domain is added. This contract records the existing
-preset-list anatomy and its additive theming surface.
+| Concept  | Closed values or states                 | Meaning                                                            | Availability         | Default                                                               | Owner          | Stability | Invalid-value behavior                                                                                                                    |
+| -------- | --------------------------------------- | ------------------------------------------------------------------ | -------------------- | --------------------------------------------------------------------- | -------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| calendar | a `CalendarSystem` (`spec:AST-111` FR1) | The calendar system the trigger text and the popover Calendar show | Trigger and Calendar | the provider's resolved calendar, else `gregory` (`spec:AST-111` FR2) | `spec:AST-111` | stable    | Resolves to `gregory` and warns once in development; a calendar that needs `Temporal` falls back to `gregory` where `Temporal` is missing |
+
+This contract also records the existing preset-list anatomy and its additive
+theming surface.
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                                                                                                                                                                                                                                                                                                                        | Basis                                                             | Review state               |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------- |
-| FR1 | DateRangeInput MUST present the controlled `value` and emit range changes without maintaining a competing selected range.                                                                                                                                                                                                                                                                                                  | Current source, docs, and focused tests                           | Verified current behavior  |
-| FR2 | When presets are present, each preset remains an independent button in one labeled group; the applied preset reflects current state and a preset whose endpoint violates `min`, `max`, or `dateConstraints`, or whose range violates `minRangeSpan` or `maxRangeSpan`, reflects disabled state.                                                                                                                            | Current source, accessibility comments, and focused tests         | Verified current behavior  |
-| FR3 | The preset group and each preset button expose stable theme targets; selected and disabled are states of the preset-button target rather than separate targets.                                                                                                                                                                                                                                                            | `architecture:component-theming-surface`; #5417 demand            | Approved additive contract |
-| FR4 | Adding theme targets MUST NOT change the Popover, Calendar, button, focus, or selection semantics those elements already own.                                                                                                                                                                                                                                                                                              | Composition boundary and compatibility goal                       | Approved additive contract |
-| FR5 | When the preset group and a one-month calendar do not fit side by side in the layer, the preset group stacks above the calendar, and every month grid and the month navigation stay inside the layer (`spec:AST-020` FR1, WCAG 2.2 SC 1.4.10). Visual order matches DOM order. When they fit, the presets stay beside the calendar. When the content is taller than the layer's viewport cap, it scrolls inside the layer. | `spec:AST-020` FR1; 390 px, 390 × 664 px and 440 px reflow checks | Verified current behavior  |
+| ID  | Candidate invariant                                                                                                                                                                                                                                                                                                                                                                                                                         | Basis                                                                        | Review state               |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------- |
+| FR1 | DateRangeInput MUST present the controlled `value` and emit range changes without maintaining a competing selected range.                                                                                                                                                                                                                                                                                                                   | Current source, docs, and focused tests                                      | Verified current behavior  |
+| FR2 | When presets are present, each preset remains an independent button in one labeled group; the applied preset reflects current state and a preset whose endpoint violates `min`, `max`, or `dateConstraints`, or whose range violates `minRangeSpan` or `maxRangeSpan`, reflects disabled state.                                                                                                                                             | Current source, accessibility comments, and focused tests                    | Verified current behavior  |
+| FR3 | The preset group and each preset button expose stable theme targets; selected and disabled are states of the preset-button target rather than separate targets.                                                                                                                                                                                                                                                                             | `architecture:component-theming-surface`; consumer demand for preset theming | Approved additive contract |
+| FR4 | Adding theme targets MUST NOT change the Popover, Calendar, button, focus, or selection semantics those elements already own.                                                                                                                                                                                                                                                                                                               | Composition boundary and compatibility goal                                  | Approved additive contract |
+| FR5 | When the preset group and a one-month calendar do not fit side by side in the layer, the preset group stacks above the calendar, and every month grid and the month navigation stay inside the layer (`spec:AST-020` FR1, WCAG 2.2 SC 1.4.10). Visual order matches DOM order. When they fit, the presets stay beside the calendar. When the content is taller than the layer's viewport cap, it scrolls inside the layer.                  | `spec:AST-020` FR1; 390 px, 390 × 664 px and 440 px reflow checks            | Verified current behavior  |
+| FR6 | The trigger text, its accessible name, and the popover Calendar show the resolved calendar (`spec:AST-111` FR2, FR17): the trigger writes each end of the range in the calendar, with the year when either end falls outside the current calendar year, and the Calendar lays out calendar months. The field has no typed entry. `value`, `onChange`, `min`, `max`, presets, and span bounds stay Gregorian ISO dates (`spec:AST-111` FR3). | `spec:AST-111` FR3, FR17; current source and calendar tests                  | Verified current behavior  |
 
 ### Allowed variation
 
@@ -92,12 +105,13 @@ preset-list anatomy and its additive theming surface.
 
 ### Representative states
 
-| State             | Required invariant                                                                                                                                    | Allowed variation       |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| No presets        | No preset group or preset-button target renders.                                                                                                      | Calendar configuration  |
-| Presets, no match | Every button carries the preset target with no selected state.                                                                                        | Preset count and labels |
-| Applied preset    | The matching button carries `aria-current="true"` and the target's selected state.                                                                    | Selected range          |
-| Disabled preset   | A preset that violates an endpoint date constraint or a range-span constraint is disabled per `spec:AST-085` and carries the target's disabled state. | Constraint source       |
+| State             | Required invariant                                                                                                                                    | Allowed variation        |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| Calendar          | The trigger text and the Calendar show the resolved calendar; values stay Gregorian ISO.                                                              | Calendar, locale, digits |
+| No presets        | No preset group or preset-button target renders.                                                                                                      | Calendar configuration   |
+| Presets, no match | Every button carries the preset target with no selected state.                                                                                        | Preset count and labels  |
+| Applied preset    | The matching button carries `aria-current="true"` and the target's selected state.                                                                    | Selected range           |
+| Disabled preset   | A preset that violates an endpoint date constraint or a range-span constraint is disabled per `spec:AST-085` and carries the target's disabled state. | Constraint source        |
 
 ### Transformation and precedence order
 
@@ -174,15 +188,40 @@ fill measures 3.88:1 on the popover surface, under 4.5:1.
 - `family:overlay-dismissal` owns the Popover dismissal stack.
 - `architecture:component-theming-surface` owns target admission, state
   reflection, and anatomy mapping.
+- `spec:AST-111` owns calendar selection, Gregorian ISO values, and the
+  `Temporal` boundary; FR6 projects its FR3 and FR17. `component:Calendar` owns
+  the popover grid in the calendar.
+
+### `spec:AST-013` FR12 exception — calendars that need `Temporal`
+
+- **Capability:** trigger text and the popover Calendar in calendars other than
+  `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese`, which need the
+  runtime's `Temporal`.
+- **Reduction:** where `Temporal` is missing, as in Safari on macOS and iOS,
+  the field shows Gregorian dates and warns once in development, naming a
+  polyfill (`spec:AST-111` FR5). An application that loads a `Temporal`
+  polyfill gets the full calendar. When a server and a browser use `chinese` or
+  `dangi` implementations that disagree on a month start, React renders the
+  differing text again on the client (`spec:AST-111` FR19).
+- **Preserved obligations:** `spec:AST-013` FR7 and FR8, and FR9 outside that
+  `chinese` and `dangi` case. The Gregorian field keeps every interaction,
+  label, and announcement, and Buddhist, Minguo, and Japanese text works without
+  `Temporal`.
+- **Evidence:** real Chromium and Firefox with native `Temporal`, and real
+  Chromium, Firefox, and WebKit with `Temporal` removed, with and without a
+  polyfill, showing the Persian trigger text.
+- **Owner:** `nynexman4464`.
+- **Review condition:** Safari ships `Temporal`.
 
 ## Verification map
 
-| Contract            | Verification                                                                      | Representative states                                                  | Mutation or failure expectation                                                                                  | Audit section                  |
-| ------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| FR1, FR2, AR1–AR3   | `DateRangeInput.test.tsx`; disabled-preset focusability (AR3) pending conformance | no match, applied preset, endpoint-invalid preset, span-invalid preset | Semantics or state attributes disappear                                                                          | `audit:DateRangeInput/presets` |
-| FR3, FR4            | `DateRangeInput.test.tsx`, `themingTargets.test.ts`, generated probe theme        | group target, selected button, disabled button                         | Target class/state is missing, undocumented, or placed on the wrong element                                      | `audit:DateRangeInput/theming` |
-| FR5                 | `DateRangeInputReflow.interaction.browser.spec.ts`                                | 390 px page with presets and two months; desktop page                  | The calendar or its navigation crosses the layer edge, or the presets leave the calendar's side at desktop width | `audit:DateRangeInput/reflow`  |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                                     | all documented anatomy                                                 | Target ownership or anatomy names drift                                                                          | `audit:DateRangeInput/theming` |
+| Contract            | Verification                                                                                                                                                                                                                                                                                                                                                                                                                             | Representative states                                                  | Mutation or failure expectation                                                                                  | Audit section                   |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| FR1, FR2, AR1–AR3   | `DateRangeInput.test.tsx`; disabled-preset focusability (AR3) pending conformance                                                                                                                                                                                                                                                                                                                                                        | no match, applied preset, endpoint-invalid preset, span-invalid preset | Semantics or state attributes disappear                                                                          | `audit:DateRangeInput/presets`  |
+| FR3, FR4            | `DateRangeInput.test.tsx`, `themingTargets.test.ts`, generated probe theme                                                                                                                                                                                                                                                                                                                                                               | group target, selected button, disabled button                         | Target class/state is missing, undocumented, or placed on the wrong element                                      | `audit:DateRangeInput/theming`  |
+| FR5                 | `DateRangeInputReflow.interaction.browser.spec.ts`                                                                                                                                                                                                                                                                                                                                                                                       | 390 px page with presets and two months; desktop page                  | The calendar or its navigation crosses the layer edge, or the presets leave the calendar's side at desktop width | `audit:DateRangeInput/reflow`   |
+| FR6                 | `DateRangeInput.calendar.test.tsx` ("writes the trigger text and its accessible name in the Persian calendar", "shows the year when the range leaves the current calendar year", "opens a Persian popover calendar and reports Gregorian ISO dates", and the cases without `Temporal`); `Calendar.calendarSystems.test.tsx` "DateRangeInput opens its popover calendar in the calendar"; real Chromium, Firefox, and WebKit trigger text | Persian, Buddhist, a range across a calendar year, no `Temporal`       | Trigger text or Calendar in another calendar, or a non-ISO value, fails                                          | `audit:DateRangeInput/behavior` |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                                                                                                                                                                                                                                                                                                            | all documented anatomy                                                 | Target ownership or anatomy names drift                                                                          | `audit:DateRangeInput/theming`  |
 
 ## Decision log
 

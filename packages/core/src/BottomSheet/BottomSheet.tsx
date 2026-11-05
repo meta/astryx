@@ -82,7 +82,7 @@ import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useModalOutlet} from '../Layer/modalOutlet';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {useFocusRegionContainment} from '../hooks/useFocusTrap';
-import {focusForLastInput} from '../utils/focusReturn';
+import {returnFocusForLastInput} from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
   BottomSheetPanel,
@@ -725,7 +725,7 @@ function StandaloneBottomSheet({
       ) {
         revealed.focus();
       } else if (returnTarget != null) {
-        focusForLastInput(returnTarget);
+        returnFocusForLastInput(returnTarget);
       }
       triggerRef.current = null;
     },

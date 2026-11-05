@@ -267,6 +267,7 @@ function now(): number {
 interface Watch {
   readonly element: Element;
   readonly minSize: number;
+  readonly ownsDescendantTouches: boolean;
   readonly onInsets: (insets: HitInsets) => void;
   isVisible: boolean;
   last: HitInsets;
@@ -287,6 +288,8 @@ const observedSizes = new WeakMap<Element, string>();
 const scopeTimers = new Map<Element, ReturnType<typeof setTimeout>>();
 let frame: number | null = null;
 let view: Window | null = null;
+/** The document the shared press listener is on, while it is on one. */
+let pressDocument: Document | null = null;
 let pointer: MediaQueryList | null = null;
 let visibility: IntersectionObserver | null = null;
 let resize: ResizeObserver | null = null;
@@ -599,7 +602,16 @@ function checkPress(element: Element, event: PointerEvent): void {
     const own = distanceTo(target, x, y);
     isNearerNeighbour ||= neighbours.some(rect => distanceTo(rect, x, y) < own);
   }
-  if (isNearerNeighbour) {
+  // A watch can own its descendants' touches. Then a press that the browser
+  // hit-tests onto a descendant lands on content the element paints, even
+  // past its own box. A swipe panel's entry beside a moved row is such
+  // content. That touch is the element's.
+  const isOnOwnContent =
+    [...entry.watches].some(watch => watch.ownsDescendantTouches) &&
+    press.target instanceof Node &&
+    press.target !== element &&
+    element.contains(press.target);
+  if (isNearerNeighbour && !isOnOwnContent) {
     const swallow = (click: Event) => {
       disarm();
       // A keyboard or assistive-technology activation (detail 0) is never
@@ -687,7 +699,8 @@ function startObserving(): void {
     return;
   }
   view.addEventListener('resize', scheduleAll);
-  view.document.addEventListener('pointerdown', onPress, PASSIVE_CAPTURE);
+  pressDocument = view.document;
+  pressDocument.addEventListener('pointerdown', onPress, PASSIVE_CAPTURE);
   if (typeof IntersectionObserver === 'function') {
     visibility = new IntersectionObserver(entries => {
       for (const entry of entries) {
@@ -743,7 +756,10 @@ function stopObserving(): void {
     entry.release = null;
   }
   view?.removeEventListener('resize', scheduleAll);
-  view?.document.removeEventListener('pointerdown', onPress, PASSIVE_CAPTURE);
+  // The listener leaves the document it went on. A window can close first, as
+  // a removed iframe's, and then it has no document to read.
+  pressDocument?.removeEventListener('pointerdown', onPress, PASSIVE_CAPTURE);
+  pressDocument = null;
   visibility?.disconnect();
   resize?.disconnect();
   visibility = null;
@@ -777,6 +793,13 @@ function onPointerChange(): void {
 export interface WatchHitAreaOptions {
   /** The size to grow toward, px. @default 44 */
   readonly minSize?: number;
+  /**
+   * A touch that the browser hit-tests onto a descendant is the element's,
+   * however near a neighbour is. Set it for a host whose content can paint
+   * past its box, such as a list row with a swipe panel. A control whose
+   * grown input is its descendant leaves it off. @default false
+   */
+  readonly ownsDescendantTouches?: boolean;
 }
 
 /**
@@ -808,7 +831,10 @@ export function resetHitAreaForTests(): void {
 export function watchHitArea(
   element: Element,
   onInsets: (insets: HitInsets) => void,
-  {minSize = MIN_TOUCH_TARGET}: WatchHitAreaOptions = {},
+  {
+    minSize = MIN_TOUCH_TARGET,
+    ownsDescendantTouches = false,
+  }: WatchHitAreaOptions = {},
 ): () => void {
   const owner = element.ownerDocument.defaultView;
   if (owner == null) {
@@ -828,6 +854,7 @@ export function watchHitArea(
   const watch: Watch = {
     element,
     minSize,
+    ownsDescendantTouches,
     onInsets,
     isVisible: isCoarse && visibility == null,
     last: NO_HIT_INSETS,
