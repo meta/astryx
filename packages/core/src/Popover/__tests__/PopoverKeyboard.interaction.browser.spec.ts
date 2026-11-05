@@ -10,8 +10,8 @@
  *   keyboard has arrived. It ends 10 px above the keyboard, with its content
  *   scrollable and its last control reachable. It takes its full height back
  *   as the keyboard starts down. One opened while the keyboard is already up
- *   opens clear of it. A popover clear of the keyboard is left alone. A
- *   storyboard shows both states.
+ *   is clear of it from the first frame that shows it. A popover clear of the
+ *   keyboard is left alone. A storyboard shows both states.
  * @position Browser proofs for Layer/useLayerKeyboardClearance.ts.
  *   Headless browsers have no software keyboard. So the page's
  *   `visualViewport` is replaced by one the test shrinks the way Mobile
@@ -339,6 +339,103 @@ test('opened while the keyboard is already up, it opens clear of the keyboard', 
     Math.abs(opened.bottom - (keyboardTop - LAYER_KEYBOARD_CLEARANCE_PX)),
   ).toBeLessThanOrEqual(1);
   expect(opened.scrollHeight).toBeGreaterThan(opened.clientHeight);
+});
+
+/** What the page read of the first frame that shows the layer. */
+interface FirstFrame {
+  /** As the frame begins: the layer's layout bottom, without its entrance. */
+  bottom: number;
+  /** As the frame begins: the cap the layer declares. */
+  cap: string;
+  /** After the frame's layout, before it paints: the content overflows. */
+  overflows: boolean;
+  /** After the frame's layout, before it paints: the surface's overflow. */
+  overflowY: string;
+}
+
+/**
+ * Raises the stand-in keyboard from a field on the page, then taps Add note
+ * and reads the first frame that shows the popover.
+ */
+async function firstFrameOpenedWithKeyboardUp(page: Page): Promise<FirstFrame> {
+  await installKeyboard(page);
+  await openStory(page, storybook(), 'core-popover--keyboard-avoidance');
+  const driver = await touchDriver(page);
+  await page.getByRole('textbox', {name: 'Search notes'}).focus();
+  await keyboard(page, COVER);
+  await page.waitForTimeout(timing.keyboardNotificationMs + 100);
+  // The page's own frame loop, started before the tap. Its callback runs
+  // ahead of any frame callback the open schedules, so it reads each frame
+  // as the frame begins. In the first frame that shows the layer, a
+  // ResizeObserver started then reads the surface after that frame's layout.
+  await page.evaluate(() => {
+    const win = window as unknown as {__firstFrame?: FirstFrame};
+    const read = () => {
+      const layer = document.querySelector<HTMLElement>(
+        '[popover]:has([role="dialog"])',
+      );
+      const surface = layer?.querySelector<HTMLElement>('[role="dialog"]');
+      if (layer?.matches(':popover-open') !== true || surface == null) {
+        requestAnimationFrame(read);
+        return;
+      }
+      const bottom = layer.offsetTop + layer.offsetHeight;
+      const cap = getComputedStyle(layer)
+        .getPropertyValue('--astryx-layer-keyboard-max-block-size')
+        .trim();
+      const observer = new ResizeObserver(() => {
+        observer.disconnect();
+        win.__firstFrame = {
+          bottom,
+          cap,
+          overflows: surface.scrollHeight > surface.clientHeight + 1,
+          overflowY: getComputedStyle(surface).overflowY,
+        };
+      });
+      observer.observe(surface);
+    };
+    requestAnimationFrame(read);
+  });
+  const trigger = page.getByRole('button', {name: 'Add note'});
+  const box = await trigger.boundingBox();
+  if (box == null) {
+    throw new Error('no trigger named Add note');
+  }
+  await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  const firstFrame = async () =>
+    page.evaluate(
+      () =>
+        (window as unknown as {__firstFrame?: FirstFrame}).__firstFrame ?? null,
+    );
+  await expect.poll(firstFrame).not.toBeNull();
+  const first = await firstFrame();
+  if (first == null) {
+    throw new Error('no frame showed the popover');
+  }
+  return first;
+}
+
+test('opened while the keyboard is already up, it is clear of the keyboard in the first frame that shows it', async ({
+  page,
+}) => {
+  const first = await firstFrameOpenedWithKeyboardUp(page);
+  const innerHeight = await page.evaluate(() => window.innerHeight);
+  const keyboardTop = innerHeight - COVER;
+  expect(first.bottom).toBeLessThanOrEqual(
+    keyboardTop - LAYER_KEYBOARD_CLEARANCE_PX + 1,
+  );
+  expect(first.cap).toMatch(/px$/);
+});
+
+test('opened while the keyboard is already up, its content stays inside its box in the first frame that paints it', async ({
+  page,
+}) => {
+  const first = await firstFrameOpenedWithKeyboardUp(page);
+  // The capped box is shorter than its content.
+  expect(first.overflows).toBe(true);
+  // So the surface already clips and scrolls its content in that frame.
+  expect(first.overflowY).not.toBe('visible');
 });
 
 test('a popover clear of the keyboard is left as it is', async ({page}) => {

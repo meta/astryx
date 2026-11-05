@@ -66,11 +66,15 @@ const styles = stylex.create({
   // The software keyboard's block-size cap, on the layer's own element. Every
   // layer sets it, an uncapped one to a limit no viewport cap reaches. So a
   // layer nested in a capped one does not inherit the outer cap. The surfaces
-  // inside a layer read it through `layerViewportInset.maxBlockSize`.
-  // SYNC: the property is LAYER_KEYBOARD_CAP_PROPERTY
-  // (useLayerKeyboardClearance.ts).
-  keyboardCap: (cap: string) => ({
+  // inside a layer read it through `layerViewportInset.maxBlockSize`. The
+  // content of a capped layer overflows. So the cap also turns its surface
+  // into a scroll container, in the same commit, through the overflow
+  // property. The content never paints past the shorter box.
+  // SYNC: the properties are LAYER_KEYBOARD_CAP_PROPERTY and
+  // LAYER_KEYBOARD_OVERFLOW_PROPERTY (useLayerKeyboardClearance.ts).
+  keyboardCap: (cap: string, overflow: 'auto' | 'visible') => ({
     '--astryx-layer-keyboard-max-block-size': cap,
+    '--astryx-layer-keyboard-overflow': overflow,
   }),
   // Base reset for all layers
   base: {
@@ -1855,7 +1859,10 @@ function useLayerImplementation(
         layerStructureReset.reset,
         styles.base,
         overlayPaddingReset.reset,
-        styles.keyboardCap(keyboardCap == null ? '100vh' : `${keyboardCap}px`),
+        styles.keyboardCap(
+          keyboardCap == null ? '100vh' : `${keyboardCap}px`,
+          keyboardCap == null ? 'visible' : 'auto',
+        ),
         viewportStyles,
         offsetStyle,
         xstyle,
@@ -1946,7 +1953,7 @@ function useLayerImplementation(
         overlayPaddingReset.reset,
         // A fixed layer is never capped; it still sets its own limit so it is
         // not clamped by a capped layer it sits in.
-        styles.keyboardCap('100vh'),
+        styles.keyboardCap('100vh', 'visible'),
         styles.fixed,
         xstyle,
       );

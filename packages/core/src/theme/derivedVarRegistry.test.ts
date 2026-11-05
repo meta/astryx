@@ -130,6 +130,9 @@ const STRUCTURAL_VARS = new Set([
   // (Layer/useLayerKeyboardClearance.ts). Runtime geometry, never authored by
   // a theme.
   '--astryx-layer-keyboard-max-block-size',
+  // Written beside it: `auto` while the keyboard caps the layer, so the
+  // surface scrolls from that commit. Runtime state, never authored by a theme.
+  '--astryx-layer-keyboard-overflow',
 ]);
 
 /**

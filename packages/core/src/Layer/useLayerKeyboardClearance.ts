@@ -8,7 +8,8 @@
  *   module: its one height, and its layout guide for timing.
  * @output Exports `useLayerKeyboardClearance` and its result type,
  *   `keyboardClearanceCap`, `LAYER_ANCHORED_ATTRIBUTE`,
- *   `LAYER_KEYBOARD_CAP_PROPERTY` and `LAYER_KEYBOARD_CLEARANCE_PX`
+ *   `LAYER_KEYBOARD_CAP_PROPERTY`, `LAYER_KEYBOARD_OVERFLOW_PROPERTY` and
+ *   `LAYER_KEYBOARD_CLEARANCE_PX`
  * @position Layer runtime, through the layer's touch module: the software
  *   keyboard's part of the viewport caps
  *
@@ -52,6 +53,15 @@ export {
  */
 export const LAYER_KEYBOARD_CAP_PROPERTY =
   '--astryx-layer-keyboard-max-block-size';
+
+/**
+ * The custom property each layer's style sets beside the cap. It holds `auto`
+ * while the keyboard caps the layer, and `visible` otherwise. A surface whose
+ * own overflow measure makes it a scroll container reads it as its overflow.
+ * So it scrolls from the commit that caps it.
+ */
+export const LAYER_KEYBOARD_OVERFLOW_PROPERTY =
+  '--astryx-layer-keyboard-overflow';
 
 /**
  * Scrolls the nearest scroll container between `target` and `layer` the
@@ -302,22 +312,22 @@ export function useLayerKeyboardClearance(
       }
       avoid(transition.to);
     });
-    // Opened while a keyboard is up: capped in the frame that first paints
-    // the layer, before its paint. A read in this commit would see the layer
-    // unplaced: Chromium places a just-shown anchored layer in that frame.
-    // With no keyboard up nothing is scheduled.
-    const opening =
-      getKeyboardHeight(win) > 0
-        ? win.requestAnimationFrame(() => {
-            if (!isDisposed) {
-              avoid(getKeyboardHeight(win));
-            }
-          })
-        : null;
+    // Opened while a keyboard is up: capped in the task that opens it. So no
+    // frame callback reads the layer uncapped, and no frame paints it so. The
+    // runtime has shown the layer before this commit. A read here places it,
+    // as the fallback order's read in the same task does. `flushSync` cannot
+    // run inside a commit, so the cap runs in a microtask right after it.
+    if (getKeyboardHeight(win) > 0) {
+      win.queueMicrotask(() => {
+        if (!isDisposed) {
+          avoid(getKeyboardHeight(win));
+        }
+      });
+    }
     // A layer element the runtime swaps in while the layer is open. The press
     // tracking moves to it in the commit that brings it. Its own box is read
-    // before it paints. Like the read at the open, the read waits for the
-    // frame that places the element. Like a keyboard change, it waits for a
+    // in the next frame, before that frame paints: the runtime shows the new
+    // element only after this call. Like a keyboard change, it waits for a
     // press in the layer to make its click. A rising keyboard's arrival reads
     // it instead.
     let swapped: number | null = null;
@@ -340,9 +350,6 @@ export function useLayerKeyboardClearance(
     return () => {
       isDisposed = true;
       resyncRef.current = null;
-      if (opening != null) {
-        win.cancelAnimationFrame(opening);
-      }
       if (swapped != null) {
         win.cancelAnimationFrame(swapped);
       }

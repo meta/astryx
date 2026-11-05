@@ -480,7 +480,7 @@ describe('useLayerKeyboardClearance', () => {
     expect(scroller.scrollTop).toBe(444 - 367);
   });
 
-  it('caps a layer opened while a keyboard is up in the frame before it paints, and takes the cap off when it closes', () => {
+  it('caps a layer opened while a keyboard is up in the task that opens it, before any frame, and takes the cap off when it closes', async () => {
     guide.inset = COVER;
     const frames: FrameRequestCallback[] = [];
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation(callback => {
@@ -488,13 +488,11 @@ describe('useLayerKeyboardClearance', () => {
       return frames.length;
     });
     const {container, rerender} = render(<Harness />);
-    // The commit sees the layer unplaced; the next frame places it.
-    expect(capOf(container)).toBe('');
-    act(() => {
-      for (const frame of frames.splice(0)) {
-        frame(0);
-      }
+    // The microtask right after the open's commit caps it. No frame runs.
+    await act(async () => {
+      await Promise.resolve();
     });
+    expect(frames).toHaveLength(0);
     expect(capOf(container)).toBe(CAPPED);
     rerender(<Harness isOpen={false} />);
     expect(capOf(container)).toBe('');
