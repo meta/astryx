@@ -366,6 +366,21 @@ describe('one shared motion (spec:AST-105 FR4)', () => {
     expect(scoped?.options.duration).toBe(shared?.options.duration);
   });
 
+  it("plays the shared spring at the tempo of the area's theme (spec:AST-108 FR3)", async () => {
+    await changeOnce();
+    const atOne = played.find(p => (p.element as HTMLElement).id === 'a');
+    played = [];
+    document.body.innerHTML = '';
+    // The private property a theme that sets `tempo` writes.
+    await changeOnce('--_astryx-motion-tempo: 1.5');
+    const follower = played.find(p => (p.element as HTMLElement).id === 'a');
+    const own = played.find(p => (p.element as HTMLElement).id === 'changed');
+    const ratio =
+      Number(follower?.options.duration) / Number(atOne?.options.duration);
+    expect(Math.abs(ratio - 1.5)).toBeLessThan(0.01);
+    expect(own?.options.duration).toBe(follower?.options.duration);
+  });
+
   it('cross-fades with no travel under Reduce Motion on a coarse pointer', async () => {
     media['(prefers-reduced-motion: reduce)'] = true;
     media['(pointer: coarse)'] = true;

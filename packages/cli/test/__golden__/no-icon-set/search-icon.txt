@@ -1,4 +1,4 @@
-Results for "icon" (20 of 228)
+Results for "icon" (20 of 230)
 name:        Icon
 domain:      component
 package:     @astryxdesign/core
@@ -46,6 +46,12 @@ domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs icons icon-variants
 parent:      pnpm exec astryx docs icons --index
+name:        icons
+section:     component-icon-slots
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs icons component-icon-slots
+parent:      pnpm exec astryx docs icons --index
 name:        BaseTypeaheadCustomSearch
 domain:      template
 package:     @astryxdesign/core
@@ -86,7 +92,3 @@ name:        ChatComposerDrawerShowcase
 domain:      template
 package:     @astryxdesign/core
 command:     pnpm exec astryx template ChatComposerDrawerShowcase --type block
-name:        ChatComposerDrawerWithProgress
-domain:      template
-package:     @astryxdesign/core
-command:     pnpm exec astryx template ChatComposerDrawerWithProgress --type block

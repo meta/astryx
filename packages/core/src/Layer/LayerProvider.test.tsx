@@ -11,6 +11,8 @@
 import {describe, expect, it} from 'vitest';
 import {fireEvent, render} from '@testing-library/react';
 import {LayerProvider} from './LayerProvider';
+// The toast viewport these cases read registers itself as its module loads.
+import '../Toast/ToastViewport';
 import {useLayer} from './useLayer';
 import {layerInsetProperties} from './layerInset';
 
