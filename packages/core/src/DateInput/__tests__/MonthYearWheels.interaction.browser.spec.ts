@@ -23,13 +23,49 @@ import {
   drag,
   openStory,
   touchDriver,
-  waitForRest,
   withStorybook,
   type TouchDriver,
 } from '@astryxdesign/interaction-harness';
 import {WHEEL_ROW_HEIGHT} from '../wheelOptions';
 
 const storybook = withStorybook(test);
+
+/**
+ * Resolves once `locator`'s element shows `property` at `value` and no
+ * animation inside it is left unfinished. The page checks the value once a
+ * frame, then awaits each animation's own `finished` promise. It sets no
+ * deadline of its own, so a starved runner only makes it later.
+ */
+async function settlesAt(locator: Locator, property: string, value: string) {
+  await locator.evaluate(
+    async (element, [name, expected]) => {
+      await new Promise<void>(resolve => {
+        const check = () => {
+          if (getComputedStyle(element).getPropertyValue(name) === expected) {
+            resolve();
+          } else {
+            requestAnimationFrame(check);
+          }
+        };
+        check();
+      });
+      for (;;) {
+        const unfinished = element
+          .getAnimations({subtree: true})
+          .filter(animation => animation.playState !== 'finished');
+        if (unfinished.length === 0) {
+          return;
+        }
+        await Promise.all(
+          unfinished.map(async animation =>
+            animation.finished.catch(() => undefined),
+          ),
+        );
+      }
+    },
+    [property, value] as const,
+  );
+}
 
 async function openWheels(page: Page) {
   await openStory(
@@ -50,11 +86,16 @@ async function openWheels(page: Page) {
     .getByRole('dialog')
     .locator('.astryx-bottom-sheet')
     .first();
-  await waitForRest(sheet);
+  // The sheet rises to its open position, where its transform is the identity.
+  await settlesAt(sheet, 'transform', 'matrix(1, 0, 0, 1, 0, 0)');
   await tapCenter(page.locator('[data-title="month-year"]'));
   const months = page.getByRole('listbox', {name: 'Month'});
   await expect(months).toBeVisible();
-  await waitForRest(page.locator('[data-panel="wheels"]').first());
+  await settlesAt(
+    page.locator('[data-panel="wheels"]').first(),
+    'opacity',
+    '1',
+  );
   return {driver, months, field: page.locator('input').first()};
 }
 
