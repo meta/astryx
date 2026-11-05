@@ -47,8 +47,9 @@ import {
 } from '../../foundation/discovery/docs-discovery.mjs';
 import {
   applyTemplateReplacements,
-  discoverCoreTemplates,
+  coreTemplateName,
   discoverIntegrationTemplatesForOne,
+  listCoreTemplateFiles,
 } from '../../foundation/discovery/template-adapter.mjs';
 import {expandedTemplateConflictSchemaActive} from '../../foundation/discovery/template-conflict-release.mjs';
 import {
@@ -179,10 +180,29 @@ async function templateConflicts(pkg, options) {
     };
   }
 
-  const [{templates, errors}, coreTemplates] = await Promise.all([
-    discoverIntegrationTemplatesForOne(resolved.integration),
-    discoverCoreTemplates(),
-  ]);
+  const {templates, errors} = await discoverIntegrationTemplatesForOne(
+    resolved.integration,
+  );
+  // Every Core id and kind comes from Core's files. This check reads a Core
+  // template's name only where an integration template names its id. That
+  // is its own id or the one it replaces, so only those docs are read.
+  const named = new Set(
+    templates.flatMap(template =>
+      template.replaces == null
+        ? [template.dirName]
+        : [template.dirName, template.replaces],
+    ),
+  );
+  /** @type {import('../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate[]} */
+  const coreTemplates = await Promise.all(
+    listCoreTemplateFiles().map(async file => ({
+      ...file,
+      name: named.has(file.dirName)
+        ? await coreTemplateName(file)
+        : file.dirName,
+      description: '',
+    })),
+  );
   addErrors(issues, errors, 'invalid_template');
 
   const expandedConflictSchema = expandedTemplateConflictSchemaActive();

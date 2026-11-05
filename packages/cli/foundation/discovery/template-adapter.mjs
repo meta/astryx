@@ -1158,54 +1158,113 @@ export function findPageDocFile(dirPath) {
   return null;
 }
 
-async function discoverPages() {
-  if (!fs.existsSync(PAGES_DIR)) return [];
-  const dirs = fs
-    .readdirSync(PAGES_DIR, {withFileTypes: true})
-    .filter(e => e.isDirectory());
+/**
+ * A Core template as its files place it, before its doc is read. It holds its
+ * kind, id, doc and source paths, and for a block the folder it sits in.
+ * @typedef {object} CoreTemplateFile
+ * @property {'page' | 'block'} type
+ * @property {string} dirName
+ * @property {string} docPath
+ * @property {string} filePath
+ * @property {string} [category]
+ */
 
+/**
+ * Core's page templates as their folders list them, reading no doc.
+ * @returns {CoreTemplateFile[]}
+ */
+function corePageFiles() {
+  if (!fs.existsSync(PAGES_DIR)) return [];
+  return fs
+    .readdirSync(PAGES_DIR, {withFileTypes: true})
+    .filter(e => e.isDirectory())
+    .map(dir => {
+      const dirPath = path.join(PAGES_DIR, dir.name);
+      return {
+        type: /** @type {const} */ ('page'),
+        dirName: dir.name,
+        docPath:
+          findPageDocFile(dirPath) ?? path.join(dirPath, 'template.doc.mjs'),
+        filePath: path.join(dirPath, 'page.tsx'),
+      };
+    });
+}
+
+/**
+ * Core's block templates as their files list them, reading no doc: each doc
+ * that sits beside its `.tsx` source.
+ * @returns {CoreTemplateFile[]}
+ */
+function coreBlockFiles() {
+  /** @type {CoreTemplateFile[]} */
+  const files = [];
+  for (const docPath of findDocFiles(BLOCKS_DIR, TEMPLATE_SUFFIX_RE)) {
+    const suffix = matchedTemplateSuffix(docPath);
+    if (!suffix) continue;
+    const basename = path.basename(docPath, suffix);
+    const tsxPath = path.join(path.dirname(docPath), basename + '.tsx');
+    if (!fs.existsSync(tsxPath)) continue;
+    files.push({
+      type: 'block',
+      dirName: basename,
+      docPath,
+      filePath: tsxPath,
+      category: toPosixPath(path.relative(BLOCKS_DIR, path.dirname(docPath))),
+    });
+  }
+  return files;
+}
+
+/**
+ * Core's templates, pages then blocks, as their files list them, reading no
+ * doc. Discovery reads each one's doc from this same list.
+ * @returns {CoreTemplateFile[]}
+ */
+export function listCoreTemplateFiles() {
+  return [...corePageFiles(), ...coreBlockFiles()];
+}
+
+/**
+ * A Core template's name, as discovery reads it: its doc's, else its id.
+ * @param {CoreTemplateFile} file
+ * @returns {Promise<string>}
+ */
+export async function coreTemplateName(file) {
+  const doc = await loadDocModule(file.docPath);
+  return doc?.name || file.dirName;
+}
+
+async function discoverPages() {
   /** @type {DiscoveredTemplate[]} */
   const templates = [];
-  for (const dir of dirs) {
-    const dirPath = path.join(PAGES_DIR, dir.name);
-    const docPath =
-      findPageDocFile(dirPath) ?? path.join(dirPath, 'template.doc.mjs');
-    const doc = await loadDocModule(docPath);
+  for (const file of corePageFiles()) {
+    const doc = await loadDocModule(file.docPath);
     templates.push({
       type: 'page',
-      dirName: dir.name,
-      name: doc?.name || dir.name,
+      dirName: file.dirName,
+      name: doc?.name || file.dirName,
       description: doc?.description || '',
       category: doc?.category || '',
       keywords: doc?.keywords ?? [],
       isReady: doc?.isReady ?? true,
       scaffold: doc?.scaffold ?? false,
       ...(doc?.icons ? {icons: doc.icons} : {}),
-      filePath: path.join(dirPath, 'page.tsx'),
-      docPath,
+      filePath: file.filePath,
+      docPath: file.docPath,
     });
   }
   return templates;
 }
 
 async function discoverBlocks() {
-  const docFiles = findDocFiles(BLOCKS_DIR, TEMPLATE_SUFFIX_RE);
   /** @type {DiscoveredTemplate[]} */
   const blocks = [];
-  for (const docPath of docFiles) {
-    const suffix = matchedTemplateSuffix(docPath);
-    if (!suffix) continue;
-    const basename = path.basename(docPath, suffix);
-    const tsxPath = path.join(path.dirname(docPath), basename + '.tsx');
-    if (!fs.existsSync(tsxPath)) continue;
-    const doc = await loadDocModule(docPath);
-    const relPath = toPosixPath(
-      path.relative(BLOCKS_DIR, path.dirname(docPath)),
-    );
+  for (const file of coreBlockFiles()) {
+    const doc = await loadDocModule(file.docPath);
     blocks.push({
       type: 'block',
-      dirName: basename,
-      name: doc?.name || basename,
+      dirName: file.dirName,
+      name: doc?.name || file.dirName,
       description: doc?.description || '',
       keywords: doc?.keywords ?? [],
       isReady: doc?.isReady ?? true,
@@ -1216,9 +1275,9 @@ async function discoverBlocks() {
       ...(typeof doc?.exampleFor === 'string'
         ? {exampleFor: doc.exampleFor}
         : {}),
-      filePath: tsxPath,
-      docPath,
-      category: relPath,
+      filePath: file.filePath,
+      docPath: file.docPath,
+      category: file.category,
     });
   }
   return blocks;
