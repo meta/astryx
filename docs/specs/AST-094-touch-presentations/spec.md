@@ -28,6 +28,8 @@ affects_consumer_docs: []
 ```json
 {
   "paths": [
+    "packages/core/src/Layer/holdEntranceInput.ts",
+    "packages/core/src/Layer/inputHold.ts",
     "packages/core/src/motion/uikit/segmented.ts",
     "packages/core/src/motion/uikit/slider.ts"
   ]
@@ -227,6 +229,10 @@ a measured, sourced difference exists.
   and MUST keep advancing at display rate through a main-thread block. It MUST
   NOT animate layout properties, and MUST NOT step a frame from script when the
   compositor can run the curve.
+  A press shows at once. Every press release that fades does so on the
+  theme's exit motion tokens (`--duration-exit`, `--ease-exit`), on every
+  device and pointer, by the owner's decision (2026-11-03); under Reduce
+  Motion, `design:reduced-motion` DR2 applies.
 - **FR6 — Motion is interruptible.** A finger MUST be able to catch any
   animation mid-flight at the value on screen. That value and its velocity
   MUST come from the curve, not from a layout read. A new target MUST keep the
@@ -352,7 +358,10 @@ a measured, sourced difference exists.
   the area sits at its edge and the drag moves toward that edge, the
   surrounding surface (a sheet) takes the drag; otherwise the area keeps it for
   the whole gesture and rubber-bands at its edge. The drag MUST NOT change
-  hands midway, in either direction. This amends `spec:AST-025` FR14 (scroll
+  hands midway, in either direction, with one exception (DEC-28). At a
+  sheet's tallest detent, a pull that carries its content past its end
+  continues as the sheet's stretch, and a reversal hands it back to the
+  content (`component:BottomSheet` FR18). This amends `spec:AST-025` FR14 (scroll
   chaining by default) for touch presentations on every touch platform.
 - **FR15 — Recognizers arbitrate like UIKit's.** Recognizers that see the
   same touch sequence MUST be exclusive by default: the first to recognize
@@ -660,8 +669,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   that grows only with its text, such as a Button whose label follows the
   16 px reading base:
   the 16 px mobile reading base (`design:mobile-typography` DR1, DR3) and the
-  16 px text-entry floor (`family:input-fields` FR9) are unaffected. Under a
-  coarse pointer, touch targets meet 44 px through an invisible hit area. A
+  16 px text-entry floor (`family:input-fields` FR9) are unaffected.
+  Under a coarse pointer, the touch target grows toward 44 × 44 px, up to halfway to a neighboring target, and is never smaller than the control's own box (owner decision, 2026-11-04; `spec:AST-094` FR42).
+  It grows through an invisible hit area. A
   hit-area expansion never overlaps a neighboring interactive element's own
   target: where neighbors are closer than 44 px, the expansion is clamped to
   half the gap, or skipped, so each element stays reachable; an expansion a
@@ -696,7 +706,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   of a shrinking run, once the run has lost a fifth of its size; momentum after
   the lift never moves a surface or continues a gesture; and during momentum a
   reversal, a delta that rises against the decay, or a 50 ms gap starts a new
-  gesture without a pointer move. While the splitter has not yet decided
+  gesture without a pointer move; a late, coalesced wheel event that continues
+  the glide's deceleration belongs to the same flick. While the splitter has
+  not yet decided
   between a lift and fingers still moving, the surface keeps moving at the
   fingers' last speed, never farther than that speed carries it over the held
   deltas; a lift then continues without a stop, and fingers that keep moving
@@ -800,7 +812,13 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
 - `component:BottomSheet`: a `form` or `required` sheet rubber-bands past its
   resting place under a finger as under a trackpad (FR3, FR43), with the same
   stretch for the same travel; a mouse wheel scrolls its content and never
-  moves it. Implementation gap: a finger drags it one for one below rest.
+  moves it. Past its tallest detent, every finger's pull stretches it on FR3's
+  rubber band with no hold, over a reserve deep enough for the whole stretch
+  and the release. A pull on its content does so once the content cannot
+  scroll that way (`component:BottomSheet` FR18). Past its tallest detent, a
+  mouse and a pen keep FR18's resisted stretch of at most 48 px, an exception
+  to FR43's same rubber band (`spec:AST-017` FR59). Implementation gap: a
+  finger drags it one for one below rest.
 - The shared pager (Carousel's paging presentation, Lightbox's viewer): a
   trackpad swipe follows FR43's pager rule in Lightbox's viewer and in
   Carousel's paging presentation, under every pointer (`component:Lightbox`
@@ -827,7 +845,13 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   let a scrim or overlay tap close at any time (`spec:AST-003` FR10 and
   `architecture:layer-runtime` INV14 leave dismissal to the component). Toast and a non-modal sheet (`component:BottomSheetSwitcher` FR5 and its
   Non-modal state) do not hold the page: the page behind them stays live, and
-  only the sheet itself holds a tap or a drag while it enters.
+  only the sheet itself holds a tap or a drag while it enters. Dialog, Drawer
+  and MobileNav hold an entrance only under a coarse primary pointer: where
+  the primary pointer is fine and the screen also takes touch (a touchscreen
+  laptop), a finger's tap or drag during the entrance is not held. After a
+  finger, the first press of a mouse that has not moved since lands on the
+  entering presentation's shield and does nothing, where FR35 keeps today's
+  behavior for a mouse (DEC-16); a move of the mouse lowers the shield first.
 - BottomSheet, Toast, Lightbox, NavigationStack and keyboard dismissal: a
   drag that commits follows FR36–FR40.
 - `spec:AST-100` owns release velocity, which FR17 reads.
@@ -1291,6 +1315,18 @@ Safari claims keep real-device evidence. The owner decided this on
 checks there.
 
 Rejected: a physical Android phone as a gate or as a follow-up check.
+
+### DEC-28 — Sheet stretch at the tallest detent
+
+**Reference:** `spec:AST-094/DEC-28`
+**Decider:** the owner, `2026-11-03`
+
+Decided by the owner in a feel check on a phone: at a sheet's tallest detent,
+a pull that carries its content past its end continues as the sheet's
+stretch, and a reversal hands it back (FR14's one exception).
+
+Rejected: keeping the whole gesture with the content (the strict nested-scroll
+rule).
 
 ## Open questions
 

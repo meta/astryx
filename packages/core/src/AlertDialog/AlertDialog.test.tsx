@@ -31,6 +31,7 @@ import {getGestureHost} from '../gestures/GestureHost';
 import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
 import {AlertDialog} from './AlertDialog';
 import {useImperativeAlertDialog} from './useImperativeAlertDialog';
+import {getFocusableElements} from '../hooks/useFocusTrap';
 
 // The gesture host reads `(pointer: coarse)` once per document and keeps that
 // query for the document's life: it gets this live one (see beforeAll), whose
@@ -821,5 +822,39 @@ describe('useImperativeAlertDialog', () => {
     await user.click(screen.getByRole('button', {name: 'Open'}));
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
     expect(screen.getByTestId('is-open')).toHaveTextContent('true');
+  });
+});
+
+// Tab from the last tabbable control wraps to the first and Shift+Tab from the
+// first wraps to the last, so focus never leaves the modal for the browser's
+// own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+describe('AlertDialog focus region (Dialog DEC-2)', () => {
+  it('wraps Tab and Shift+Tab inside the open modal', () => {
+    render(
+      <AlertDialog
+        isOpen
+        onOpenChange={() => {}}
+        title="Delete item?"
+        description="This action cannot be undone."
+        actionLabel="Delete"
+        onAction={() => {}}
+      />,
+    );
+    expectTabWrapsInside(screen.getByRole('alertdialog'));
   });
 });

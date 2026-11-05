@@ -24,6 +24,8 @@ import {
   useTransition,
   type ChangeEvent,
   type FocusEvent,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -55,6 +57,8 @@ import {useIndicator} from '../Indicator/useIndicator';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {watchHitArea, writeHitInsets} from '../utils/hitArea';
+import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -82,6 +86,10 @@ const styles = stylex.create({
   },
   containerLabelHidden: {
     gap: 0,
+  },
+  // Under a coarse pointer the row contains its hit band.
+  hitAreaHost: {
+    position: {default: null, '@media (pointer: coarse)': 'relative'},
   },
   // An indicator in another package may not name this row's private press
   // attribute. So the row hands its touch press image down to an indicator
@@ -407,6 +415,63 @@ export function CheckboxInput({
   useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), indicatorRef);
   const {focusProps} = useIndicatorFocusRing(indicatorRef);
 
+  // Under a coarse pointer a labelled checkbox's row grows toward 44 px
+  // through an invisible band, and nothing changes size. A label-hidden
+  // checkbox is a marker in another component's row, which keeps its target.
+  const hasHitArea = !isLabelHidden && !isDisabled && !isReadOnly;
+  const inputRef = useRef<HTMLInputElement>(null);
+  // The watch lives as long as the row is attached: the ref's cleanup stops
+  // it, and a replaced row starts its own.
+  const watchRowHitArea = useCallback(
+    (row: HTMLDivElement | null) => {
+      if (row == null || !hasHitArea) {
+        return;
+      }
+      return watchHitArea(row, insets => writeHitInsets(row, insets));
+    },
+    [hasHitArea],
+  );
+  // The disabled-message tooltip listens for hover and focus on the whole
+  // row, a larger trigger. It anchors on the checkbox itself (below), so it
+  // shows next to the control. Its handlers check isEnabled, so the row
+  // always attaches them.
+  const rowRef = useMergedRefs(
+    disabledMessageTooltip.interactionRef,
+    watchRowHitArea,
+  );
+  // Where a press on the row itself began. A browser can move a tap's click
+  // onto the row's edge, so the band is judged from the press.
+  const pressPointRef = useRef<{x: number; y: number} | null>(null);
+  const handleRowPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    pressPointRef.current =
+      event.target === event.currentTarget
+        ? {x: event.clientX, y: event.clientY}
+        : null;
+  };
+  // A press that began on the band, outside the row's box, toggles the
+  // checkbox, as a tap on the box does. A click from code has no press count
+  // (`detail` is 0), so it never toggles from here.
+  const handleRowClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const press = pressPointRef.current;
+    pressPointRef.current = null;
+    if (
+      press == null ||
+      event.detail === 0 ||
+      event.target !== event.currentTarget
+    ) {
+      return;
+    }
+    const box = event.currentTarget.getBoundingClientRect();
+    const isOnBand =
+      press.x < box.left ||
+      press.x > box.right ||
+      press.y < box.top ||
+      press.y > box.bottom;
+    if (isOnBand) {
+      inputRef.current?.click();
+    }
+  };
+
   const isIndeterminate = optimisticValue === 'indeterminate';
   const isChecked = optimisticValue === true;
 
@@ -455,19 +520,15 @@ export function CheckboxInput({
         style,
       )}>
       <div
-        ref={el => {
-          // Interaction (hover/focus) listeners for the disabled-message
-          // tooltip attach to the whole row for a larger trigger target;
-          // positioning anchors on the checkbox itself (below) so the tooltip
-          // appears next to the control, not the far edge of the row.
-          // Handlers are gated internally by isEnabled, so attaching
-          // unconditionally is safe.
-          disabledMessageTooltip.interactionRef(el);
-        }}
+        ref={rowRef}
+        onPointerDown={hasHitArea ? handleRowPointerDown : undefined}
+        onClick={hasHitArea ? handleRowClick : undefined}
         {...(isDisabled ? undefined : pressable)}
         {...stylex.props(
           styles.container,
           isLabelHidden && styles.containerLabelHidden,
+          hasHitArea && styles.hitAreaHost,
+          hasHitArea && touchHitAreaStyles.layer,
           // Hover and focus reach the checkbox visual through this ancestor
           // marker rather than props, so the whole row drives it.
           !isDisabled && indicatorScope,
@@ -490,6 +551,7 @@ export function CheckboxInput({
               ref,
               indeterminateRef,
               disabledMessageTooltip.positionRef,
+              inputRef,
             )}
             id={id}
             type="checkbox"

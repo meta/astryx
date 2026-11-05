@@ -16,6 +16,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 const require = createRequire(import.meta.url);
 const {
   bundleImport,
+  bundleImportsByEntry,
   classNamesIn,
   measureComponentImport,
   packageStylesheetPath,
@@ -72,6 +73,29 @@ describe('component import size', () => {
       'xhelp22',
       'xsheet7',
     ]);
+  });
+
+  it('bundles several imports in one build, each with at least what its own build loads eagerly', () => {
+    const root = tree({
+      'dist/Card/index.js':
+        "import {forCard} from '../shared/helper.js';\nexport const Card = () => 'xcard1 ' + forCard();\n",
+      'dist/Menu/index.js':
+        "import {forMenu} from '../shared/helper.js';\nexport const Menu = () => 'xmenu1 ' + forMenu() + import('./Touch.js');\n",
+      'dist/Menu/Touch.js': "export const touch = 'LAZY_TOUCH_CODE';\n",
+      'dist/shared/helper.js':
+        "export const forCard = () => 'xhelp22';\nexport const forMenu = () => 'xhelp33';\n",
+    });
+    const card = path.join(root, 'dist/Card/index.js');
+    const menu = path.join(root, 'dist/Menu/index.js');
+    const texts = bundleImportsByEntry([card, menu]);
+    for (const entry of [card, menu]) {
+      const shared = classNamesIn(texts.get(entry));
+      for (const name of classNamesIn(bundleImport(entry))) {
+        expect(shared.has(name), name).toBe(true);
+      }
+    }
+    expect(texts.get(card)).not.toContain('xmenu1');
+    expect(texts.get(menu)).not.toContain('LAZY_TOUCH_CODE');
   });
 
   it('keeps only the rules whose selectors name a referenced class, with their at-rules', () => {

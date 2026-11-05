@@ -64,6 +64,16 @@ committed: a pull request links or attaches it.
 | `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event), `castStoryboard` (real screencast frames): PNG contact sheet + JSON trace.                                                                                           |
 | `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                                                                    |
 | `story.ts`      | `phone`, `withStorybook`, `openStory`, `frames`, and the timer gate (`installTimerGate`, `freezeTimers`, `thawTimers`).                                                                                                                                                      |
+| `pointer.ts`    | `newFinePointerPage(browser)`: a page under a mouse that really reads `(pointer: fine)`. `assertFinePointer` / `assertCoarsePointer`: fail before a case's checks when the page reads the other pointer.                                                                     |
+
+## A fine pointer
+
+Every interaction project is the touch phone, and a context a test makes with
+`browser.newContext()` inherits it: it reads `(pointer: coarse)` unless it
+passes `hasTouch: false`. A case that shows touch work costs nothing under a
+mouse opens its page with `newFinePointerPage(browser)`, which turns touch and
+mobile off and checks the pointer first. A case that builds its own context
+calls `assertFinePointer(page)` before its checks.
 
 ## The proofs
 
@@ -192,8 +202,11 @@ before the block until its first presented change inside it: WebKit presents
 a just-started compositor animation late (a sheet's release held on screen for
 130 to 300 ms while its timeline ran), and its cast reaches Node about 0.7 s
 late on a loaded runner, too late to wait on before blocking. Only a hold that
-starts before the block, on two frames at least, is excused, and every frame
-after its first change is judged, so a freeze later in the block still fails.
+starts before the block, on two frames at least, at the position the page last
+set before the block is excused. Pass that position as `setBeforeBlock`, such
+as the drag's last position at the release. An animation frozen at the block's
+start holds a position of its own, and is judged as a stall. Every frame after
+its first change is judged, so a freeze later in the block still fails.
 Any other element already moving is judged from the block's start. WebKit's
 casts are 2 px quantized: their JPEG frames hold the
 marker's color in 2 by 2 pixel chroma blocks (4:2:0, which the frame header
@@ -283,8 +296,33 @@ after are the stall check's. WebKit has no such trace:
 **No Layout / Paint.** `traceRendering` records a Chromium trace around the
 interaction; `countBetween` counts the steady middle of an animation (its
 first and last frames may commit). A transform/opacity animation does no
-Layout or Paint there; a layout-property animation does one per frame. Its
-`longTasks` are the page's own: only a task the harness marked as its own read
+Layout or Paint there; a layout-property animation does one per frame. The
+harness's own animation recorder stands down while the trace runs, since its
+frame loop would make every frame a main-thread one, restyling each running
+animation's target and laying out an anchored one: it reads only the element a
+CSS animation or transition event names, once, when that animation starts, and
+catches up afterwards. The frame it requested before the trace runs before the
+start mark, so the whole window counts none of its work. A `waitForRest`
+awaited inside the traced body stands
+down too: it waits on timers for the scheduled ends of the element's curves
+(looking `frames` times a frame apart before settling on none, so an
+animation the action starts a frame or two later is waited for) and polls no
+style until the trace ends (in the anchored fixture's steady middle,
+24 Layouts before, 0 now). Its one read of the element's animations, as it is
+called, restyles the element (2 Layouts and 2 style recalculations in the
+anchored fixture when called 200 ms into its animation), so await it right
+after the action that starts the motion, before the window a proof counts. So do `waitForAnimation` and a watch's
+`started()`: they take the element's animations from the recorder's log,
+judge a started one by its own times, and reach the element through a handle,
+since each `locator.evaluate` makes a main-thread frame (there too, 24
+Layouts before, 0 now). That holds for script animations and CSS
+transitions. On a CSS `@keyframes` animation (and, unwatched, a cancelled CSS
+transition), `waitForAnimation` and `started()` read the animation's timing,
+which flushes its style and adds Layouts to the trace: wait on one with
+`waitForRest`, or after the trace. Taking a watch (`watchAnimations`) inside
+a trace reads the watched element's animations, which restyles it (and lays
+out an anchored one), so a proof takes its traced watch before the window it
+counts. The trace's `longTasks` are the page's own: only a task the harness marked as its own read
 (`waitForAnimation` describing keyframes, `blockMainThread` without `during`)
 is in `devtoolsTasks` instead, and only when no page script ran inside it. A
 test's own `page.evaluate` stays a long task, whether it calls page code
@@ -381,7 +419,7 @@ time: it fast-forwards whenever the page is idle.
 |                                                        | Chromium 149                                                                                                           | WebKit 26.5 (Linux build)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Trusted touch + pointer events, multi-touch            | yes                                                                                                                    | yes (a `touchstart` lists only the fingers that landed in it; pointer events exact)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Page sees the scripted timestamps                      | yes, exactly                                                                                                           | no: real dispatch time; pacing keeps velocities within ~1 ms on an idle runner, but a CPU-starved one sends some steps late, then back to back; `pacing: 'spacing'` keeps the script's spacing after a stall instead, and fails a play whose page read a resting finger where the script moves, a throw where the script rests, or fewer than two moves, or, given `releaseTolerance`, a release that strays further than that from the script's (each read as Core's velocity tracker reads it): `TouchPageStallError` when the page's own touch or pointer listeners held an event back, `TouchPacingError` otherwise; the lift's `release` names what the page read |
+| Page sees the scripted timestamps                      | yes, exactly                                                                                                           | no: real dispatch time; pacing keeps velocities within ~1 ms on an idle runner; after a stall each step waits its gap, less 2 ms, after WebKit answered the one before (unless a `'schedule'` play has `onEvent`); `pacing: 'spacing'` fails a play whose page read a resting finger where the script moves, a throw where the script rests, or fewer than two moves, or, given `releaseTolerance`, a release straying further from the script's (each read as Core's velocity tracker reads it): `TouchPageStallError` when the page's own touch or pointer listeners held an event back, `TouchPacingError` otherwise; the lift's `release` names what the page read |
 | Sub-pixel touch positions                              | yes                                                                                                                    | no: integer CSS px                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Native scroll, fling, pinch-zoom from injected touches | yes                                                                                                                    | no                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Lifting one finger while others stay down              | yes                                                                                                                    | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |

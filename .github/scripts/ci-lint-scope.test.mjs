@@ -18,8 +18,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import {afterAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import yaml from 'yaml';
+
+import {
+  createRepository,
+  importCommits,
+} from '../../scripts/lib/git-fixture.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const lint = yaml.parse(
@@ -58,54 +63,83 @@ function write(dir, file, text) {
   fs.writeFileSync(path.join(dir, file), text);
 }
 
+// The base repository: the trusted classifier on main, and main moving on
+// after the pull requests below branch. Each pull request adds its own commit
+// and the merge commit GitHub builds for it. fast-import writes them, so a
+// pull request costs one git launch, not one per step.
+let origin = '';
+let base = '';
+let mainTip = '';
+let pullRequests = 0;
+beforeAll(() => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-scope-'));
+  scratch.push(dir);
+  origin = path.join(dir, 'origin.git');
+  const classifier = Object.fromEntries(
+    CLASSIFIER_FILES.map(file => [
+      file,
+      fs.readFileSync(path.join(root, file), 'utf8'),
+    ]),
+  );
+  const hashes = createRepository(
+    origin,
+    [
+      {
+        ref: 'refs/heads/main',
+        name: 'base',
+        message: 'base',
+        files: {
+          ...classifier,
+          'docs/specs/AST-999-example/spec.md': '# Example\n',
+          'packages/core/src/Example/Example.tsx': 'export {};\n',
+        },
+      },
+      ...[0, 1, 2].map(i => ({
+        ref: 'refs/heads/main',
+        name: `main ${i}`,
+        message: `main ${i}`,
+        files: {'README.md': `${i}\n`},
+      })),
+    ],
+    {bare: true},
+  );
+  base = hashes.base;
+  mainTip = hashes['main 2'];
+});
+
 /**
- * A repository with the trusted classifier on main, a pull request that
- * changes `prFiles`, and main moving on after it branched. Returns the scope
- * outputs the lint step writes when checked out the way lint.yml checks out.
+ * A pull request that changes `prFiles`, branched from main's base before main
+ * moved on. Returns the scope outputs the lint step writes when checked out
+ * the way lint.yml checks out.
  */
 function classifyPullRequest(prFiles) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lint-scope-'));
   scratch.push(dir);
-  const work = path.join(dir, 'work');
-  fs.mkdirSync(work);
-  git(work, 'init', '-q', '-b', 'main');
-  for (const file of CLASSIFIER_FILES) {
-    write(work, file, fs.readFileSync(path.join(root, file), 'utf8'));
-  }
-  write(work, 'docs/specs/AST-999-example/spec.md', '# Example\n');
-  write(work, 'packages/core/src/Example/Example.tsx', 'export {};\n');
-  git(work, 'add', '-A');
-  git(work, 'commit', '-q', '-m', 'base');
-  git(work, 'checkout', '-q', '-b', 'pr');
-  for (const [file, text] of Object.entries(prFiles)) write(work, file, text);
-  git(work, 'add', '-A');
-  git(work, 'commit', '-q', '-m', 'the pull request');
-  git(work, 'checkout', '-q', 'main');
-  for (let i = 0; i < 3; i++) {
-    write(work, 'README.md', `${i}\n`);
-    git(work, 'add', '-A');
-    git(work, 'commit', '-q', '-m', `main ${i}`);
-  }
-  git(work, 'merge', '-q', '--no-ff', '--no-edit', 'pr');
-  const merge = git(work, 'rev-parse', 'HEAD');
-  git(work, 'reset', '-q', '--hard', 'HEAD^1');
-  const origin = path.join(dir, 'origin.git');
-  git(dir, 'clone', '-q', '--bare', work, origin);
-  git(origin, 'update-ref', 'refs/pull/1/merge', merge);
+  pullRequests += 1;
+  const merge = `refs/pull/${pullRequests}/merge`;
+  importCommits(origin, [
+    {
+      ref: `refs/heads/pr-${pullRequests}`,
+      name: 'pr',
+      parent: base,
+      message: 'the pull request',
+      files: prFiles,
+    },
+    {
+      ref: merge,
+      parent: mainTip,
+      merges: ['pr'],
+      message: 'Merge the pull request',
+      files: prFiles,
+    },
+  ]);
 
   const workspace = path.join(dir, 'ws');
   fs.mkdirSync(workspace);
   git(workspace, 'init', '-q');
   git(workspace, 'remote', 'add', 'origin', `file://${origin}`);
   const depth = checkout.with?.['fetch-depth'] ?? 1;
-  git(
-    workspace,
-    'fetch',
-    '-q',
-    `--depth=${depth}`,
-    'origin',
-    'refs/pull/1/merge',
-  );
+  git(workspace, 'fetch', '-q', `--depth=${depth}`, 'origin', merge);
   git(workspace, 'checkout', '-q', '--detach', 'FETCH_HEAD');
   const output = path.join(dir, 'output');
   fs.writeFileSync(output, '');

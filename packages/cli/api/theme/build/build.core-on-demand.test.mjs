@@ -8,7 +8,8 @@
  * not ask for either, or `astryx --version` pays for them whenever a Core is
  * installed. A resolve hook in a real subprocess records every request for
  * Core or React and the module that made it, whether or not the request
- * resolves.
+ * resolves. It also records whether Core's root entry ran: a build loads the
+ * root only for a theme that imports it.
  */
 
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
@@ -21,6 +22,9 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 const BIN = fileURLToPath(
   new URL('../../../clients/cli/bin/astryx.mjs', import.meta.url),
 );
+
+/** The key the hook records when Core's root entry runs. */
+const ROOT_RAN = '(root entry ran)';
 
 /** @type {string} */
 let dir;
@@ -38,14 +42,20 @@ beforeAll(() => {
     [
       "import {appendFileSync} from 'node:fs';",
       `const LOG = ${JSON.stringify(log)};`,
+      `const ROOT = ${JSON.stringify(import.meta.resolve('@astryxdesign/core'))};`,
       'const WATCHED = /^(?:@astryxdesign\\/core|react|react-dom)(?:\\/|$)/;',
       'export async function resolve(specifier, context, nextResolve) {',
       '  if (WATCHED.test(specifier)) {',
       '    const parent = context.parentURL ?? null;',
       "    appendFileSync(LOG, JSON.stringify({specifier, parent}) + '\\n');",
       '  }',
+      "  // An import that Core's root entry makes means the root ran.",
+      '  if (context.parentURL === ROOT) {',
+      "    appendFileSync(LOG, JSON.stringify({specifier: ROOT_RAN, parent: ROOT}) + '\\n');",
+      '  }',
       '  return nextResolve(specifier, context);',
       '}',
+      `const ROOT_RAN = ${JSON.stringify(ROOT_RAN)};`,
       '',
     ].join('\n'),
   );
@@ -59,6 +69,20 @@ beforeAll(() => {
   fs.writeFileSync(
     path.join(dir, 'ocean.mjs'),
     "export default {name: 'ocean', tokens: {'--color-bg': '#0a0a0a'}};\n",
+  );
+  // A theme that imports a component from the root, which only the root
+  // exports.
+  fs.writeFileSync(
+    path.join(dir, 'reef.ts'),
+    [
+      "import {defineTheme} from '@astryxdesign/core/theme';",
+      "import {Button} from '@astryxdesign/core';",
+      'export const reefTheme = defineTheme({',
+      "  name: 'reef',",
+      "  tokens: {'--color-bg': typeof Button === 'function' ? '#0a0a0a' : 'MISSING'},",
+      '});',
+      '',
+    ].join('\n'),
   );
 });
 
@@ -108,6 +132,28 @@ describe('theme build imports Core on demand', () => {
     ]);
     expect(requested['@astryxdesign/core/theme']).toMatch(
       /\/api\/theme\/build\/build\.mjs$/,
+    );
+  });
+
+  it('a theme that imports only the theme entry never runs the root', () => {
+    const {requested} = run([
+      'theme',
+      'build',
+      'ocean.mjs',
+      '--check',
+      '--json',
+    ]);
+    expect(requested['@astryxdesign/core/theme']).toBeDefined();
+    expect(requested).not.toHaveProperty('@astryxdesign/core');
+    expect(requested).not.toHaveProperty(ROOT_RAN);
+  });
+
+  it("a theme that imports the root gets the root's own exports", () => {
+    const {status, requested} = run(['theme', 'build', 'reef.ts']);
+    expect(status).toBe(0);
+    expect(requested).toHaveProperty(ROOT_RAN);
+    expect(fs.readFileSync(path.join(dir, 'reef.css'), 'utf-8')).toContain(
+      '--color-bg: #0a0a0a',
     );
   });
 });

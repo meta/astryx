@@ -53,7 +53,8 @@ export const docs = {
     {
       name: 'label',
       type: 'string',
-      description: 'Accessible label for the landmark element.',
+      description:
+        'Accessible label for the landmark element. While the region scrolls, it also names the scrolling region, which otherwise takes a translated "Content".',
     },
     {
       name: 'role',
@@ -106,7 +107,8 @@ export const docsZh = {
     {
       name: 'label',
       type: 'string',
-      description: '地标元素的无障碍标签。',
+      description:
+        '地标元素的无障碍标签。区域滚动时，它也为滚动区域命名；未提供时使用已翻译的“Content”（内容）。',
     },
     {
       name: 'role',
@@ -139,7 +141,8 @@ export const docsDense = {
     padding:
       'Internal padding on spacing scale. Overrides layout container default.',
     isScrollable: 'Enable scrollable overflow.',
-    label: 'Accessible label for landmark element.',
+    label:
+      'Accessible label for landmark element; also names the region while it scrolls (default "Content").',
     role: 'ARIA landmark role.',
     width:
       'Panel width. Numbers = pixels, strings as-is. Ignored when resizable provided; hook controls width.',

@@ -16,6 +16,7 @@ import path from 'node:path';
 
 const CLI_ROOT = path.resolve(import.meta.dirname, '..');
 const require = createRequire(path.join(CLI_ROOT, 'package.json'));
+const CLI_PACKAGE = require('./package.json').name;
 /** The roots makeLinkedFixture made and has not removed. */
 const made = new Set();
 
@@ -61,6 +62,7 @@ export function removeLinkedFixture(dir) {
 
 /** @param {string} name */
 function packageDir(name) {
+  if (name === CLI_PACKAGE) return CLI_ROOT;
   const own = path.join(CLI_ROOT, 'node_modules', name);
   if (fs.existsSync(own)) return own;
   return path.dirname(require.resolve(`${name}/package.json`));

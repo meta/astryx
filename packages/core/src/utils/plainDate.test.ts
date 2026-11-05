@@ -32,10 +32,12 @@ import {
   plainDateWeekdayNames,
   plainDateFormatDayNumber,
   formatSharedDate,
+  SHARED_DATE_FORMAT_OPTIONS,
   DATE_FORMAT_LONG,
   DATE_FORMAT_WITH_WEEKDAY,
   DATE_FORMAT_MONTH_YEAR,
   plainDateWeekFieldName,
+  plainDateFormatToParts,
 } from './plainDate';
 import type {ISODateString} from './dateTypes';
 
@@ -783,6 +785,20 @@ describe('plainDateFormatStandaloneMonthYear', () => {
   });
 });
 
+describe('plainDateFormatToParts', () => {
+  it.each([
+    [{dateStyle: 'full'}],
+    [{timeZone: 'Asia/Tokyo', dateStyle: 'long'}],
+    [{hour: 'numeric', day: 'numeric'}],
+  ] as const)('joins to the plainDateFormat text for %o', options => {
+    const pd = plainDateFromISO('2026-11-03');
+    const parts = plainDateFormatToParts(pd, options, 'fa-IR');
+    expect(parts.map(part => part.value).join('')).toBe(
+      plainDateFormat(pd, options, 'fa-IR'),
+    );
+  });
+});
+
 describe('plainDateFormat', () => {
   it('keeps one formatter per locale and options, whatever order the options are in', () => {
     // A month of day labels, as a calendar renders them, reuses one formatter.
@@ -947,6 +963,47 @@ describe('formatSharedDate', () => {
     expect(formatSharedDate(pd, 'system_date')).toBe('2026-01-25');
   });
 
+  describe.each([
+    {calendar: 'persian', locale: 'en', year: '1405'},
+    {calendar: 'persian', locale: 'fa', year: '۱۴۰۵'},
+    {calendar: 'hebrew', locale: 'en', year: '5787'},
+    {calendar: 'hebrew', locale: 'he', year: '5787'},
+    {calendar: 'buddhist', locale: 'en', year: '2569'},
+    {calendar: 'buddhist', locale: 'th', year: '2569'},
+  ] as const)('in $calendar under $locale', ({calendar, locale, year}) => {
+    const day: PlainDate = {year: 2026, month: 10, day: 30};
+
+    it.each(['date', 'date_long', 'date_weekday'] as const)(
+      'writes %s in the calendar',
+      format => {
+        const value = formatSharedDate(day, format, locale, calendar);
+        expect(value).toBe(
+          plainDateFormat(
+            day,
+            {...SHARED_DATE_FORMAT_OPTIONS[format], calendar},
+            locale,
+          ),
+        );
+        expect(value).toContain(year);
+        expect(value).not.toContain('2026');
+      },
+    );
+
+    it('keeps system_date Gregorian ISO', () => {
+      expect(formatSharedDate(day, 'system_date', locale, calendar)).toBe(
+        '2026-10-30',
+      );
+    });
+  });
+
+  it('defaults to the Gregorian calendar', () => {
+    const day: PlainDate = {year: 2026, month: 10, day: 30};
+    expect(formatSharedDate(day, 'date_long', 'fa')).toBe(
+      formatSharedDate(day, 'date_long', 'fa', 'gregory'),
+    );
+    expect(formatSharedDate(day, 'date_long', 'en')).toBe('October 30, 2026');
+  });
+
   it('follows the passed locale rather than the host locale (#5074)', () => {
     expect(formatSharedDate(pd, 'date_long', 'es-ES')).toBe(
       '25 de enero de 2026',
@@ -983,6 +1040,12 @@ describe('plainDateFormatDayNumber', () => {
 
   it('adds no grouping separator', () => {
     expect(plainDateFormatDayNumber(1234, 'en')).toBe('1234');
+  });
+
+  it('writes the digits of a given numbering system', () => {
+    expect(plainDateFormatDayNumber(8, 'fa-IR', 'latn')).toBe('8');
+    expect(plainDateFormatDayNumber(8, 'en', 'arabext')).toBe('۸');
+    expect(plainDateFormatDayNumber(8, 'fa-IR')).toBe('۸');
   });
 });
 
