@@ -76,7 +76,8 @@ const revealed = {opacity: `var(${REFRESH_REVEAL_VAR}, 0)`};
  * What an app writes: its own scroll container, the content the hook pulls,
  * and its own indicator, here Core's Spinner. The indicator band sits at the
  * bottom of an overflow-hidden box on the content's top edge, after the
- * content.
+ * content. The list holds nothing focusable, so the container is a named tab
+ * stop that a keyboard can scroll.
  */
 function PullToRefresh({
   onRefresh,
@@ -106,6 +107,9 @@ function PullToRefresh({
     <div
       data-refresh-scroller=""
       data-refresh-count={count}
+      role="region"
+      aria-label="Inbox"
+      tabIndex={0}
       style={{height: '100%', overflowY: 'auto'}}>
       <div
         ref={control.contentRef}
