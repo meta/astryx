@@ -18,6 +18,9 @@ import {Button} from '../Button';
 import {registerIcons, resetIcons} from '../Icon';
 import {TestIcon} from '../__tests__/TestIcon';
 import {declaredValue} from '../__tests__/stylexDeclarations';
+import {defineTheme} from '../theme/defineTheme';
+import {Theme} from '../theme/Theme';
+import {resetThemes} from '../theme/themeRegistry';
 
 describe('ChatSendButton', () => {
   afterEach(() => {
@@ -201,6 +204,77 @@ describe('ChatSendButton', () => {
       render(<ChatSendButton sendIcon={<TestIcon data-testid="my-send" />} />);
       expect(screen.getByTestId('my-send')).toBeInTheDocument();
       expect(screen.queryByTestId('registry-arrow-up')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('send icon slot (spec:AST-032 FR2, FR3)', () => {
+    // Label each shared icon's artwork, so a test reads which name rendered.
+    const icons = {
+      arrowUp: <span data-icon="arrowUp" />,
+      clock: <span data-icon="clock" />,
+    };
+
+    afterEach(() => {
+      resetThemes();
+    });
+
+    function glyph(): string | null | undefined {
+      return screen
+        .getByRole('button', {name: 'Send'})
+        .querySelector('[data-icon]')
+        ?.getAttribute('data-icon');
+    }
+
+    it('draws arrowUp when the theme maps nothing', () => {
+      render(
+        <Theme theme={defineTheme({name: 'send-slot-none', icons})}>
+          <ChatSendButton />
+        </Theme>,
+      );
+      expect(glyph()).toBe('arrowUp');
+    });
+
+    it('draws the shared name the theme maps the send slot to', () => {
+      render(
+        <Theme
+          theme={defineTheme({
+            name: 'send-slot-name',
+            icons,
+            componentIcons: {'chat-send-button-send': 'clock'},
+          })}>
+          <ChatSendButton />
+        </Theme>,
+      );
+      expect(glyph()).toBe('clock');
+    });
+
+    it('hides only the glyph for null; the button keeps its name', () => {
+      render(
+        <Theme
+          theme={defineTheme({
+            name: 'send-slot-null',
+            icons,
+            componentIcons: {'chat-send-button-send': null},
+          })}>
+          <ChatSendButton />
+        </Theme>,
+      );
+      expect(screen.getByRole('button', {name: 'Send'})).toBeInTheDocument();
+      expect(glyph()).toBeUndefined();
+    });
+
+    it('lets an explicit sendIcon win over the theme mapping', () => {
+      render(
+        <Theme
+          theme={defineTheme({
+            name: 'send-slot-explicit',
+            icons,
+            componentIcons: {'chat-send-button-send': 'clock'},
+          })}>
+          <ChatSendButton sendIcon={<span data-icon="mine" />} />
+        </Theme>,
+      );
+      expect(glyph()).toBe('mine');
     });
   });
 
