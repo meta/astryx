@@ -201,6 +201,9 @@ async function observe(page: Page) {
       storybookError:
         document.querySelector('.sb-show-errordisplay') != null ||
         document.body.classList.contains('sb-show-errordisplay'),
+      documentDirection: getComputedStyle(
+        document.querySelector('#storybook-root') ?? document.body,
+      ).direction,
       documentOverflow: round(
         document.documentElement.scrollWidth - innerWidth,
       ),
@@ -248,6 +251,8 @@ async function observe(page: Page) {
             : false,
           labelNaturalLines,
           direction: style.direction,
+          // A story may set its own direction on a case wrapper.
+          expectedDirection: row.closest('[dir]')?.getAttribute('dir') ?? 'ltr',
           box: box(row.getBoundingClientRect()),
           data: {
             density: row.getAttribute('data-density'),
@@ -386,6 +391,10 @@ for (const item of cases) {
     check(geometryStable, 'geometry changed between samples');
     check(observed.rows.length > 0, 'no rows');
     check(
+      observed.documentDirection === item.direction,
+      `document direction ${observed.documentDirection}`,
+    );
+    check(
       observed.documentOverflow <= 0,
       `document scrolls sideways by ${observed.documentOverflow}px`,
     );
@@ -393,7 +402,10 @@ for (const item of cases) {
     const density = DENSITY[item.story];
     observed.rows.forEach((row, index) => {
       const where = `row ${index} (${row.text})`;
-      check(row.direction === item.direction, `${where} ${row.direction}`);
+      check(
+        row.direction === row.expectedDirection,
+        `${where} ${row.direction}, expected ${row.expectedDirection}`,
+      );
       if (density != null) {
         check(
           row.data.density === density,
