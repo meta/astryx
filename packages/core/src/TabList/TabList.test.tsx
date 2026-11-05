@@ -1708,6 +1708,61 @@ describe('pressed state', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('does not run a disabled tab’s caller handlers other than focus and blur', () => {
+    const onKeyDown = vi.fn();
+    const onPointerDown = vi.fn();
+    const onMouseDown = vi.fn();
+    const onFocus = vi.fn();
+    const onBlur = vi.fn();
+    render(
+      <TabList value="home" onChange={() => {}}>
+        <Tab value="home" label="Home" />
+        <Tab
+          value="settings"
+          label="Settings"
+          aria-disabled="true"
+          onKeyDown={onKeyDown}
+          onPointerDown={onPointerDown}
+          onMouseDown={onMouseDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
+        />
+      </TabList>,
+    );
+    const tab = screen.getByRole('button', {name: 'Settings'});
+    fireEvent.pointerDown(tab);
+    fireEvent.mouseDown(tab);
+    fireEvent.keyDown(tab, {key: 'x'});
+    expect(onPointerDown).not.toHaveBeenCalled();
+    expect(onMouseDown).not.toHaveBeenCalled();
+    expect(onKeyDown).not.toHaveBeenCalled();
+    fireEvent.focus(tab);
+    fireEvent.blur(tab);
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    expect(onBlur).toHaveBeenCalledTimes(1);
+  });
+
+  it('still runs an enabled tab’s caller handlers', () => {
+    const onKeyDown = vi.fn();
+    const onPointerDown = vi.fn();
+    render(
+      <TabList value="home" onChange={() => {}}>
+        <Tab value="home" label="Home" />
+        <Tab
+          value="settings"
+          label="Settings"
+          onKeyDown={onKeyDown}
+          onPointerDown={onPointerDown}
+        />
+      </TabList>,
+    );
+    const tab = screen.getByRole('button', {name: 'Settings'});
+    fireEvent.pointerDown(tab);
+    fireEvent.keyDown(tab, {key: 'x'});
+    expect(onPointerDown).toHaveBeenCalledTimes(1);
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
   it('removes navigation from a disabled link tab', () => {
     const onChange = vi.fn();
     const {container} = render(
