@@ -42,7 +42,7 @@ system_specs: [spec:AST-020]
 | Behavior                | The parent menu owns roving focus and keyboard activation; the row owns click order, disabled suppression, close-on-select, destination handoff, hover focus, and its visible content composition. |
 | End-user impact         | Actions and destinations preserve keyboard, pointer, and browser link behavior while unavailable rows remain inert and destructive actions remain identifiable.                                    |
 | Builder impact          | Destinations use `href`; supporting content stays non-interactive; `hasCloseOnSelect=false` is reserved for in-place result feedback.                                                              |
-| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"` (FR7).                                                                                                                                          |
+| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"` (FR7).                                                                                                               |
 | Review checks           | Reject nested controls, disabled activation, lost destination safety, broken modified-click behavior, dropped root inputs, a second keyboard owner, or state/target reflection moved off the row.  |
 | Governing rules         | `family:navigation-destinations/FR1–FR5`; `architecture:public-component-api/INV5–INV9`; `architecture:component-theming-surface/INV3–INV6`; `spec:AST-020/FR1,FR2,FR6,FR15`.                      |
 

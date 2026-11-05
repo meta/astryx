@@ -46,7 +46,7 @@ system_specs: [spec:AST-020, spec:AST-086]
 | Behavior                | The row reveals its children as a flyout beside it or as a drilled-in view led by a Back row; with a header or footer that surface is a modal dialog named by the row.                                         |
 | End-user impact         | Pointer, keyboard, and touch users reach nested commands from one row; assistive technology hears the row's popup kind and expanded state, and Escape or the close arrow returns to the row.                   |
 | Builder impact          | Place the row inside a DropdownMenu or ContextMenu and give it a label and rows; data-driven menus get it from a nested `items` array.                                                                         |
-| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"` (FR7).                                                                                                                                                      |
+| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"` (FR7).                                                                                                                           |
 | Review checks           | Reject a second keyboard owner, a lost popup state, a flyout that does not flip under RTL, a disabled row that opens, dropped caller inputs, or an open callback that misses a transition.                     |
 | Governing rules         | `spec:AST-020` FR15; `architecture:public-component-api/INV5–INV8`; `architecture:react-component-runtime/INV2`; `architecture:layer-runtime`; `spec:AST-020/FR1,FR2`; `spec:AST-086/FR8`.                     |
 

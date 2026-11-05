@@ -38,7 +38,7 @@ system_specs: [spec:AST-020]
 | Behavior                | The row is one `menuitemcheckbox` whose `aria-checked` is its `value`; an enabled activation reports `!value` and keeps the menu open unless asked to close; a disabled row is inert.                                  |
 | End-user impact         | People toggle options without the menu closing on each change, and screen-reader users hear one checkbox per row.                                                                                                      |
 | Builder impact          | Builders own the value; the row composes their click and pointer-move handlers with its own activation and hover focus.                                                                                                |
-| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"` (FR3). Enter keeping the menu open is listed under Current-state impact (OQ1).                                                                                      |
+| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"` (FR3). Enter keeping the menu open is listed under Current-state impact (OQ1).                                                           |
 | Review checks           | Reject a nested announced checkbox, a row that closes by default, a dropped caller handler, or an activation while disabled.                                                                                           |
 | Governing rules         | `spec:AST-020` FR15; `architecture:public-component-api` INV5–INV8; `architecture:interaction-modality`.                                                                                                               |
 
