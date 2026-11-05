@@ -168,7 +168,6 @@ menuPressGesture menuPressGesture hooks/useAnimatedLayout.doc.mjs hooks/menuPres
 menuPressMarker menuPressMarker hooks/useAnimatedLayout.doc.mjs hooks/menuPressMarker.ts
 menuPressOnItems menuPressOnItems hooks/useAnimatedLayout.doc.mjs hooks/menuPressOnItems.ts
 menuRegionStops menuRegionStops DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/menuRegionStops.ts
-menuRegionsContext menuRegionsContext DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/menuRegionsContext.ts
 menuWidth menuWidth DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/menuWidth.ts
 mergeComponents mergeComponents theme/MediaTheme.doc.mjs theme/mergeComponents.ts
 modalAnnounce modalAnnounce hooks/useAnimatedLayout.doc.mjs hooks/modalAnnounce.ts
