@@ -75,6 +75,31 @@ describe('Banner', () => {
     expect(alert).not.toHaveTextContent('Supporting details');
   });
 
+  it("moves an urgent alert's ARIA attributes onto the message with the role", () => {
+    const {container} = render(
+      <Banner
+        status="error"
+        title="Upload failed"
+        role="alert"
+        aria-label="Upload error"
+      />,
+    );
+    expect(screen.getByRole('alert', {name: 'Upload error'})).toHaveTextContent(
+      'Upload failed',
+    );
+    expect(container.firstElementChild).not.toHaveAttribute('aria-label');
+  });
+
+  it('keeps ARIA attributes on the frame without an urgent alert', () => {
+    const {container} = render(
+      <Banner status="info" title="Saved" aria-label="Save status" />,
+    );
+    expect(container.firstElementChild).toHaveAttribute(
+      'aria-label',
+      'Save status',
+    );
+  });
+
   it('reads an urgent title without a description as the title alone', () => {
     render(<Banner status="error" title="Upload failed" role="alert" />);
     expect(screen.getByRole('alert').textContent).toBe('Upload failed');

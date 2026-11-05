@@ -642,6 +642,16 @@ export function Banner({
   // An urgent alert covers the authored message only, so controls, their
   // tooltips and the content area stay out of what is announced.
   const isUrgentAlert = role === 'alert';
+  // The alert's name and other ARIA states belong to the alert element.
+  const alertAriaProps: Record<string, unknown> = {};
+  const frameProps: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(rest)) {
+    if (isUrgentAlert && key.startsWith('aria-')) {
+      alertAriaProps[key] = value;
+    } else {
+      frameProps[key] = value;
+    }
+  }
 
   return (
     <div
@@ -663,7 +673,7 @@ export function Banner({
         style,
       )}
       role={isUrgentAlert ? undefined : role}
-      {...rest}>
+      {...frameProps}>
       {/* Header: colored status background — primary theme target ('banner') */}
       <div
         {...mergeProps(
@@ -708,6 +718,7 @@ export function Banner({
         </div>
         <div
           role={isUrgentAlert ? 'alert' : undefined}
+          {...alertAriaProps}
           {...stylex.props(
             styles.headerContent,
             isRenderable(endContent) && styles.headerContentWithEndContent,
@@ -720,9 +731,9 @@ export function Banner({
             {title}
           </div>
           {/* A flex container renders no whitespace-only text, so this space
-              only separates the title and the description in the text that
-              assistive technology reads. */}
-          {isRenderable(description) && ' '}
+              only separates the title and the description in the alert's
+              text. */}
+          {isUrgentAlert && isRenderable(description) && ' '}
           {isRenderable(description) && (
             <div
               {...mergeProps(
