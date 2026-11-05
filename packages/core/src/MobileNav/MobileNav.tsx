@@ -774,7 +774,12 @@ export function MobileNav({
               {/* Scrollable content, the drawer's navigation landmark: a
                   modal dialog is not a landmark. */}
               <nav
-                aria-label={navigationLabel}
+                // The landmark takes the dialog's name, the caller's
+                // aria-labelledby included.
+                aria-labelledby={rest['aria-labelledby']}
+                aria-label={
+                  rest['aria-labelledby'] == null ? navigationLabel : undefined
+                }
                 {...stylex.props(styles.content)}>
                 {children}
               </nav>

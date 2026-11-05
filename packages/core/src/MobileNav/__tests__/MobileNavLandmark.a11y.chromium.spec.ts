@@ -108,6 +108,24 @@ test.describe('MobileNav navigation landmark (Chromium)', () => {
     expect(landmarks[0].links).toBeGreaterThan(0);
   });
 
+  test("SideNav's drawer mode in an AppShell on a phone exposes one navigation landmark named like the dialog", async ({
+    page,
+  }) => {
+    await page.setViewportSize({width: 390, height: 844});
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-appshell--side-nav-only&viewMode=story`,
+    );
+    await page
+      .getByRole('button', {name: /navigation|menu/i})
+      .first()
+      .click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    const {dialogName, landmarks} = await drawerLandmarks(page);
+    expect(landmarks).toHaveLength(1);
+    expect(landmarks[0].name).toBe(dialogName);
+    expect(landmarks[0].links).toBeGreaterThan(0);
+  });
+
   test("a TopNav's drawer content on a phone sits inside one navigation landmark named like the dialog", async ({
     page,
   }) => {

@@ -274,6 +274,24 @@ describe('MobileNav', () => {
     ).toBeInTheDocument();
   });
 
+  it("names the landmark by the caller's aria-labelledby, as the dialog is", () => {
+    render(
+      <>
+        <h2 id="drawer-title">Workspace</h2>
+        <MobileNav
+          isOpen={true}
+          onOpenChange={() => {}}
+          aria-labelledby="drawer-title">
+          <a href="/home">Home</a>
+        </MobileNav>
+      </>,
+    );
+    const dialog = screen.getByRole('dialog', {name: 'Workspace'});
+    expect(
+      within(dialog).getByRole('navigation', {name: 'Workspace'}),
+    ).toBeInTheDocument();
+  });
+
   it('opens dialog via showModal when isOpen becomes true', () => {
     const {rerender} = render(
       <MobileNav
