@@ -36,6 +36,7 @@ import {CheckboxListContext} from './CheckboxListContext';
 import {ItemDescriptionContext} from '../Item/ItemDescriptionContext';
 import {joinAriaIDs} from '../utils/inputAria';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {themeDataAttributes} from '../utils/themeProps';
 import type {ItemAlign} from '../Item';
 import {
   registerEnglishFallback,
@@ -352,9 +353,16 @@ export function CheckboxListItem({
     }
   };
 
+  // A checked row paints the checked-row fill. The same rows reflect a
+  // selected state on the row's `item` and `list-item` targets, so a theme can
+  // restyle checked rows and the text on that fill.
+  const isCheckedRow =
+    resolvedChecked === true && !effectiveDisabled && !effectiveReadOnly;
+
   return (
     <ListItem
       {...restProps}
+      {...themeDataAttributes({selected: isCheckedRow ? 'selected' : null})}
       ref={ref}
       label={namesFromVisibleLabel ? <span id={labelID}>{label}</span> : label}
       description={description}
@@ -376,10 +384,7 @@ export function CheckboxListItem({
           // at that strength. So the row brings the release back, and the box
           // fades with the row.
           rowOwnsPress && interactionOverlayStyles.pressedAlpha,
-          resolvedChecked === true &&
-            !effectiveDisabled &&
-            !effectiveReadOnly &&
-            styles.selected,
+          isCheckedRow && styles.selected,
           xstyle,
         ] as StyleXStyles
       }
