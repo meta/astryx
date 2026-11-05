@@ -595,9 +595,8 @@ export const WithMinMax: Story = {
 };
 
 /**
- * The bottom-sheet calendar pages its months like the iOS date picker: one
- * month per swipe, the title following the drag, the arrows on a 0.3 s
- * curve.
+ * The bottom-sheet calendar pages its months like the iOS date picker. One
+ * month moves per swipe, and the title follows the drag.
  */
 export const BottomSheetCalendar: Story = {
   render: args => {

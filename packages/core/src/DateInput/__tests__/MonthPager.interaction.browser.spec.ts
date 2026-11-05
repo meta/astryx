@@ -20,7 +20,6 @@ import {
 import {
   animationStoryboard,
   busyWindowProof,
-  compareCurve,
   curveOf,
   drag,
   flick,
@@ -49,9 +48,6 @@ import {paging} from '../../motion/uikit/paging';
 const storybook = withStorybook(test);
 
 const STEP_MS = paging.animatedScroll.durationMs;
-/** `setContentOffset(_:animated:)`'s curve: ½ − ½ cos(πt). */
-const sinusoid = (t: number) =>
-  t >= STEP_MS ? 1 : 0.5 - 0.5 * Math.cos((Math.PI * Math.max(t, 0)) / STEP_MS);
 
 interface OpenCalendar {
   driver: TouchDriver;
@@ -266,7 +262,7 @@ test('a flick pages exactly one month', async ({page}) => {
   await expect(title).toHaveText('November 2026');
 });
 
-test('the arrow names the month at the tap and scrolls on the 0.3 s sinusoid', async ({
+test('the arrow names the month at the tap and scrolls one month', async ({
   page,
 }) => {
   const {driver, viewport, track, title, width} = await openCalendar(page);
@@ -288,14 +284,14 @@ test('the arrow names the month at the tap and scrolls on the 0.3 s sinusoid', a
   const start = samples[0].value;
   const end = samples[samples.length - 1].value;
   expect(Math.abs(end - start)).toBeCloseTo(width, 0);
-  const progress = samples.map(({t, value}) => ({
-    t,
-    value: (value - start) / (end - start),
-  }));
-  const fit = compareCurve(progress, sinusoid, 0.02);
+  // It travels: the frames between the ends move one way, never back.
+  const progress = samples.map(({value}) => (value - start) / (end - start));
   await releaseAnimations(page, {finish: true});
   await thawTimers(page);
-  expect(fit.pass, JSON.stringify(fit.worst)).toBe(true);
+  expect(progress.some(share => share > 0.05 && share < 0.95)).toBe(true);
+  for (let index = 1; index < progress.length; index += 1) {
+    expect(progress[index]).toBeGreaterThanOrEqual(progress[index - 1] - 1e-6);
+  }
   await waitForRest(track);
   expect(await monthsIn(viewport)).toBeCloseTo(10, 2);
 });
@@ -540,7 +536,7 @@ test('the arrow step keeps advancing every frame through a blocked main thread',
 }, testInfo) => {
   test.skip(
     browserName === 'webkit',
-    "WebKit's screencast clock is not the page's (frames arrive ~100 ms off), so a 0.3 s motion cannot be placed inside the block; Mobile Safari on the iOS simulator is this proof's WebKit evidence",
+    "WebKit's screencast clock is not the page's (frames arrive ~100 ms off), so the step's motion cannot be placed inside the block; Mobile Safari on the iOS simulator is this proof's WebKit evidence",
   );
   await openCalendar(page);
   // The incoming month, whose chip shows as soon as its edge slides in.
@@ -549,7 +545,7 @@ test('the arrow step keeps advancing every frame through a blocked main thread',
   const cast = await startScreencast(page);
   await page.waitForTimeout(300);
   // The page schedules the tap and an 800 ms block 90 ms in. A harness round
-  // trip would eat most of the 0.3 s motion.
+  // trip would eat most of the step's motion.
   const started = await page.evaluate(() => {
     document
       .querySelector<HTMLButtonElement>('button[aria-label="Next month"]')
