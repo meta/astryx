@@ -1884,11 +1884,7 @@ export function getBottomSheetBeneath(
 // what it just focused. For an autofocused field that reveal is the mobile
 // keyboard's, and it moves the document under a fixed sheet. useMobileKeyboard
 // brings the field into view within the sheet instead.
-/**
- * Focus the first `data-autofocus` descendant that can take focus: inside this
- * sheet's own dialog (not a sheet nested in its content), not inert, rendered,
- * and focused once asked. Returns whether one took focus.
- */
+/** A field in a sheet nested in this content belongs to that sheet. */
 function focusFirstEligibleAutofocus(panel: HTMLElement): boolean {
   const dialog = panel.closest('dialog');
   for (const candidate of panel.querySelectorAll<HTMLElement>(
@@ -1942,12 +1938,10 @@ export function focusSheetPanel(
   // Focus already inside this sheet's own content stays put. Focus inside a
   // sheet rendered within this content (a closing nested sheet) does not
   // count: that sheet's dialog is leaving, and this one is being revealed.
-  // On an open the native focusing steps have just run, and whatever they
-  // focused inside the sheet (the panel in Chromium, the first control in
-  // Firefox) is theirs, not the person's: an eligible `data-autofocus`
-  // descendant still wins over it. On a replace they may have put focus on
-  // the entering panel, which is not a placement either; focus on a control
-  // inside it (the person's, or the field this placement chose) stays put.
+  // On an open, the native focusing steps have just run. What they focused
+  // is not the person's choice. An eligible `data-autofocus` field takes
+  // focus over it. On a replace, focus the steps left on the entering panel
+  // is not a placement either, but focus on a control inside it stays put.
   const activeElement = panel.ownerDocument.activeElement;
   const isInsidePanel =
     activeElement != null &&

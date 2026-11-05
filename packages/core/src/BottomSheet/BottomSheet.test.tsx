@@ -18,7 +18,7 @@ import {
   afterEach,
   onTestFinished,
 } from 'vitest';
-import {act, render, screen, fireEvent} from '@testing-library/react';
+import {act, cleanup, render, screen, fireEvent} from '@testing-library/react';
 import {Profiler, createRef, useState, type ReactNode} from 'react';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
@@ -4129,6 +4129,103 @@ describe('BottomSheet', () => {
       expect(document.activeElement).toBe(
         screen.getByRole('textbox', {name: 'Search'}),
       );
+    });
+  });
+
+  describe('data-autofocus eligibility on open (AR4)', () => {
+    function openWith(content: ReactNode, hasScrim = true) {
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Filters"
+          hasScrim={hasScrim}>
+          {content}
+        </BottomSheet>,
+      );
+    }
+    const own = () => screen.getByRole('textbox', {name: 'Own'});
+
+    it('focuses the field over a control placed before it, modal or not', () => {
+      for (const hasScrim of [true, false]) {
+        openWith(
+          <>
+            <button type="button">First action</button>
+            <input data-autofocus aria-label="Own" />
+          </>,
+          hasScrim,
+        );
+        expect(document.activeElement).toBe(own());
+        cleanup();
+      }
+    });
+
+    it('skips a field that belongs to a sheet nested in the content', () => {
+      openWith(
+        <>
+          <dialog>
+            <input data-autofocus aria-label="Nested" />
+          </dialog>
+          <input data-autofocus aria-label="Own" />
+        </>,
+      );
+      expect(document.activeElement).toBe(own());
+    });
+
+    it('skips an inert field', () => {
+      openWith(
+        <>
+          <div inert>
+            <input data-autofocus aria-label="Inert" />
+          </div>
+          <input data-autofocus aria-label="Own" />
+        </>,
+      );
+      expect(document.activeElement).toBe(own());
+    });
+
+    it('skips a field that is not rendered', () => {
+      // jsdom has no layout, so the visibility check reads `hidden` here.
+      const original = Object.getOwnPropertyDescriptor(
+        HTMLElement.prototype,
+        'checkVisibility',
+      );
+      Object.defineProperty(HTMLElement.prototype, 'checkVisibility', {
+        configurable: true,
+        value(this: HTMLElement) {
+          return this.closest('[hidden]') == null;
+        },
+      });
+      try {
+        openWith(
+          <>
+            <input data-autofocus aria-label="Hidden" hidden />
+            <input data-autofocus aria-label="Own" />
+          </>,
+        );
+        expect(document.activeElement).toBe(own());
+      } finally {
+        if (original) {
+          Object.defineProperty(
+            HTMLElement.prototype,
+            'checkVisibility',
+            original,
+          );
+        } else {
+          delete (HTMLElement.prototype as {checkVisibility?: unknown})
+            .checkVisibility;
+        }
+      }
+    });
+
+    it('moves on from a candidate that refuses focus', () => {
+      openWith(
+        <>
+          <div data-autofocus>Not focusable</div>
+          <input data-autofocus aria-label="Own" />
+        </>,
+      );
+      expect(document.activeElement).toBe(own());
     });
   });
 
