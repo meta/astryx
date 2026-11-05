@@ -366,12 +366,12 @@ those contracts.
   Chromium at 4x CPU throttle as the median of three runs: mounting 100
   instances, and changing all 100 at once (check all), each stay under 300 ms
   of main-thread work with no task over 100 ms. Such a control runs no layer,
-  tooltip, or transition work for a feature that instance does not use (DEC-2).
+  tooltip, or transition work for a feature that instance does not use (DEC-1).
 - **INV18 — Long lists render rows near the viewport.** List, ChatMessageList,
   and Grid rows outside the viewport skip rendering through
   `content-visibility: auto` with an intrinsic size, so a long list stays
   cheap. Rows stay in the DOM, so find-in-page, the accessibility tree, and
-  anchor links still reach them (DEC-3).
+  anchor links still reach them (DEC-2).
 
 ## Authoring guidance
 
@@ -504,7 +504,7 @@ contracts.
 Component, family, API, accessibility, layer, interaction, and style records
 remain authoritative for the other user-facing outcomes delegated above.
 
-### DEC-2 — One runtime budget for repeated controls
+### DEC-1 — One runtime budget for repeated controls
 
 **Decider:** pending
 
@@ -515,7 +515,7 @@ now meet one measured budget, and they skip work for features they do not use.
 Rejected: a dense variant of each control, which adds API to fix a cost the
 default should not have. Rejected: no budget, which lets each regression ship.
 
-### DEC-3 — Long lists skip offscreen rows natively
+### DEC-2 — Long lists skip offscreen rows natively
 
 **Decider:** pending
 
