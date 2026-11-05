@@ -523,10 +523,9 @@ layers use Layer rendering without joining Escape/platform dismissal.
   that reads it scrolls from the frame the cap lands, and its content never
   paints past the capped box. A layer the keyboard does not reach, a layer
   placed above its trigger, and a layer in custom or fixed mode stay as they
-  are. A layer that reads the keyboard inset and was placed while the keyboard
-  report lingers keeps its top until it closes: when the cap lifts it grows
-  downward in place; when the keyboard rises it moves up above it and then
-  holds.
+  are. A layer that reads the keyboard inset and was placed while a keyboard is
+  reported keeps its top until it closes: when the cap lifts it grows downward
+  in place; when the keyboard rises it moves up above it and then holds.
 - **INV12 — The first frame is the settled frame.** No input to a layer's
   viewport geometry is measured after paint and then applied, with two
   exceptions. The runtime observes anchor visibility for every layer, and,
