@@ -61,13 +61,13 @@ import {WHEEL_ROW_HEIGHT} from './wheelOptions';
 import {SWIPE_DISTANCE} from './useOwnScrollGesture';
 import {DRAG_SLOP} from './usePointerDragScroll';
 import {SCROLL_QUIET_MS} from './useScrollSettle';
-import {useCalendarDays} from '../Calendar';
-import type * as CalendarModule from '../Calendar';
+import {useCalendarDays} from '../Calendar/hooks/useCalendarDays';
+import type * as CalendarDaysModule from '../Calendar/hooks/useCalendarDays';
 
 // A pass-through spy: each call is one month pane rendering, which the
-// month/year toggle test counts.
-vi.mock('../Calendar', async importOriginal => {
-  const actual = await importOriginal<typeof CalendarModule>();
+// month/year toggle test counts. It wraps the module `MonthPane` imports.
+vi.mock('../Calendar/hooks/useCalendarDays', async importOriginal => {
+  const actual = await importOriginal<typeof CalendarDaysModule>();
   return {...actual, useCalendarDays: vi.fn(actual.useCalendarDays)};
 });
 
@@ -3213,6 +3213,8 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     // The toggle re-renders the sheet, but nothing the calendar shows changes.
     // So no month pane may re-render: each formats 42 day labels.
     renderAndOpen();
+    // Opening the sheet renders its panes, so the spy sees them.
+    expect(vi.mocked(useCalendarDays)).toHaveBeenCalled();
     vi.mocked(useCalendarDays).mockClear();
     fireEvent.click(document.querySelector('[data-title="month-year"]')!);
     expect(vi.mocked(useCalendarDays)).not.toHaveBeenCalled();
