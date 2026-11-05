@@ -1193,6 +1193,7 @@ export function Selector<T extends SelectorOptionType>(
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
   const searchId = useId();
+  const valueTextId = useId();
   // Measure from the same outer control that usePopover anchors to; using the
   // shorter inner button makes every size's selected row land too low.
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -1979,6 +1980,7 @@ export function Selector<T extends SelectorOptionType>(
     selectedItem && renderValue ? (
       <SelectorRowLayoutContext value={rowLayout}>
         <span
+          id={valueTextId}
           {...stylex.props(
             styles.triggerValue,
             inputGroup && styles.triggerValueInGroup,
@@ -1991,11 +1993,22 @@ export function Selector<T extends SelectorOptionType>(
         {!startIcon &&
           selectedItem?.icon != null &&
           renderIconSlot(selectedItem.icon, {size: 'sm', color: 'secondary'})}
-        <span {...stylex.props(styles.triggerLabel)}>
+        <span id={valueTextId} {...stylex.props(styles.triggerLabel)}>
           {selectedItem?.label ?? placeholder}
         </span>
       </>
     );
+
+  // The searchable trigger is a button, and a button reads no value. So its
+  // name carries the value text after the label, as a select-only button
+  // does. Standalone, the field label then needs an id to be referenced.
+  const triggerNameLabelId =
+    triggerLabelledBy ?? (inputGroup ? undefined : fieldLabelId);
+  const isValueInTriggerName =
+    hasSearch &&
+    !isEffectivelyReadOnly &&
+    triggerNameLabelId != null &&
+    (selectedItem != null || placeholder != null);
 
   const panelContent = hasSearch ? (
     <div {...stylex.props(styles.searchPanel)}>
@@ -2100,7 +2113,9 @@ export function Selector<T extends SelectorOptionType>(
     'aria-describedby':
       [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
       undefined,
-    'aria-labelledby': triggerLabelledBy,
+    'aria-labelledby': isValueInTriggerName
+      ? joinAriaIDs(triggerNameLabelId, valueTextId)
+      : triggerLabelledBy,
     'aria-required': isEffectivelyRequired ? 'true' : undefined,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
@@ -2316,7 +2331,11 @@ export function Selector<T extends SelectorOptionType>(
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={triggerId}
-      labelID={ariaLabelledByProp != null ? fieldLabelId : undefined}
+      labelID={
+        ariaLabelledByProp != null || isValueInTriggerName
+          ? fieldLabelId
+          : undefined
+      }
       descriptionID={description ? descriptionId : undefined}
       isOptional={isOptional}
       isRequired={isRequired}
