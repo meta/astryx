@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-
 /**
  * @description Runs accessibility audits on component stories using axe-core
  * @input --storybook-dir <path> --output <file> [--components <comma-separated>]
  *   [--stories <comma-separated-story-ids>] [--port <number, 0 = any free>]
  *   [--changed-story-files <file>] (the stories of these changed story files
- *   that no component owns, instead of --components or --stories)
+ *   that no other audit covers, instead of --components or --stories)
+ *   [--covered-components <list>] (with --changed-story-files: the component
+ *   filters the touched audit already runs, whose stories are left out)
  *   [--ready-selector <css-selector>] [--concurrency <pages, default 1>]
  *   [--shard <i>/<n> --shard-output <file>] (scan every n-th story, write it)
  *   [--merge-shards <dir>] (read a complete shard set instead of scanning)
@@ -24,8 +25,8 @@
  *   package-qualified ownership with the RTL audit.
  */
 
-const { chromium } = require('playwright');
-const { AxeBuilder } = require('@axe-core/playwright');
+const {chromium} = require('playwright');
+const {AxeBuilder} = require('@axe-core/playwright');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
@@ -55,14 +56,14 @@ const {
   legacyBaselineStoryKeys,
   ownerForA11yStory,
 } = require('./lib/a11y-story-identity');
-const {changedUnownedStoryIds} = require('./lib/a11y-changed-stories');
+const {changedUncoveredStoryIds} = require('./lib/a11y-changed-stories');
 
 const args = process.argv.slice(2);
-const getArg = (name) => {
+const getArg = name => {
   const idx = args.indexOf(`--${name}`);
   return idx !== -1 ? args[idx + 1] : null;
 };
-const hasFlag = (name) => args.includes(`--${name}`);
+const hasFlag = name => args.includes(`--${name}`);
 
 const storybookDir = getArg('storybook-dir') || 'apps/storybook/dist';
 const outputFile = getArg('output') || 'a11y-report.json';
@@ -75,8 +76,19 @@ const components = (componentsArg || '').split(',').filter(Boolean);
 const storiesArg = getArg('stories');
 const requestedStories = (storiesArg || '').split(',').filter(Boolean);
 const changedStoryFilesArg = getArg('changed-story-files');
-if (changedStoryFilesArg !== null && (storiesArg !== null || componentsArg !== null)) {
-  throw new Error('--changed-story-files selects its own stories; pass it without --stories or --components');
+if (
+  changedStoryFilesArg !== null &&
+  (storiesArg !== null || componentsArg !== null)
+) {
+  throw new Error(
+    '--changed-story-files selects its own stories; pass it without --stories or --components',
+  );
+}
+const coveredComponents = (getArg('covered-components') || '')
+  .split(',')
+  .filter(Boolean);
+if (coveredComponents.length > 0 && changedStoryFilesArg === null) {
+  throw new Error('--covered-components only narrows --changed-story-files');
 }
 // --components present but EMPTY means the caller derived an explicit empty
 // audit set (pr-a11y on a PR whose core/src changes map to no component —
@@ -129,11 +141,11 @@ const FREEZE_CSS = `
 
 // Rules to disable — these are Storybook-context false positives, not component issues
 const DISABLED_RULES = [
-  'html-has-lang',        // Storybook controls <html>, not the component
-  'document-title',       // iframe has no <title>, irrelevant for components
-  'landmark-one-main',    // component stories are fragments, not full pages
+  'html-has-lang', // Storybook controls <html>, not the component
+  'document-title', // iframe has no <title>, irrelevant for components
+  'landmark-one-main', // component stories are fragments, not full pages
   'page-has-heading-one', // same — not a full page
-  'region',               // content doesn't need to be in landmarks in story isolation
+  'region', // content doesn't need to be in landmarks in story isolation
 ];
 
 // Wait until the story stops moving before scanning it. A story can paint
@@ -168,7 +180,7 @@ async function settleLayout(page) {
 
 // Simple static file server
 function createServer(dir, port) {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const server = http.createServer((req, res) => {
       let filePath = path.join(dir, req.url === '/' ? 'index.html' : req.url);
       filePath = filePath.split('?')[0];
@@ -197,7 +209,7 @@ function createServer(dir, port) {
           res.end('Not found');
           return;
         }
-        res.writeHead(200, { 'Content-Type': contentTypes[ext] || 'text/plain' });
+        res.writeHead(200, {'Content-Type': contentTypes[ext] || 'text/plain'});
         res.end(data);
       });
     });
@@ -246,9 +258,7 @@ async function routedStoryIds(stories, componentFilters) {
     componentRoutesForFilters,
     storyIdsForComponentFilters,
     unresolvedComponentFilters,
-  } = await import(
-    '../../apps/storybook/rtl-audit/rtl-audit-coverage.mjs'
-  );
+  } = await import('../../apps/storybook/rtl-audit/rtl-audit-coverage.mjs');
   const publicComponentsByPackage = Object.fromEntries(
     COMPONENT_PACKAGES.map(pkg => [
       pkg.name,
@@ -301,13 +311,15 @@ async function runAccessibilityAudit() {
     console.log('No components to audit (--components is empty) — skipping.');
     const report = {
       components: {},
-      summary: { componentsAudited: 0, totalViolations: 0 },
+      summary: {componentsAudited: 0, totalViolations: 0},
     };
     fs.writeFileSync(outputFile, JSON.stringify(report, null, 2));
     return report;
   }
 
-  console.log(`Components to audit: ${components.length > 0 ? components.join(', ') : 'all affected'}`);
+  console.log(
+    `Components to audit: ${components.length > 0 ? components.join(', ') : 'all affected'}`,
+  );
 
   const storybookPath = path.resolve(process.cwd(), storybookDir);
 
@@ -340,17 +352,28 @@ async function runAccessibilityAudit() {
     const changedFiles = fs.existsSync(changedStoryFilesArg)
       ? fs.readFileSync(changedStoryFilesArg, 'utf8').split('\n')
       : [];
-    selectedStories = changedUnownedStoryIds(stories, routed.allRoutes, changedFiles);
+    // The touched components' audit already runs their stories.
+    const coveredIds =
+      coveredComponents.length > 0
+        ? (await routedStoryIds(stories, coveredComponents)).storyIds
+        : [];
+    selectedStories = changedUncoveredStoryIds(
+      stories,
+      changedFiles,
+      coveredIds,
+    );
     if (selectedStories.length === 0) {
-      console.log('No changed story without a component owner — skipping.');
+      console.log('No changed story outside the touched audit — skipping.');
       const report = {
         components: {},
-        summary: { componentsAudited: 0, totalViolations: 0 },
+        summary: {componentsAudited: 0, totalViolations: 0},
       };
       fs.writeFileSync(outputFile, JSON.stringify(report, null, 2));
       return report;
     }
-    console.log(`Changed stories no component owns: ${selectedStories.join(', ')}`);
+    console.log(
+      `Changed stories no other audit covers: ${selectedStories.join(', ')}`,
+    );
   }
   const routedIds = new Set(routed.storyIds);
   const requestedStoryIds = new Set(selectedStories ?? []);
@@ -408,7 +431,7 @@ async function runAccessibilityAudit() {
   try {
     const context = scanning
       ? await browser.newContext({
-          viewport: { width: 1280, height: 720 },
+          viewport: {width: 1280, height: 720},
           reducedMotion: 'reduce',
         })
       : null;
@@ -484,11 +507,11 @@ async function runAccessibilityAudit() {
         await settleLayout(page);
 
         // Run axe-core accessibility analysis
-        const results = await new AxeBuilder({ page })
+        const results = await new AxeBuilder({page})
           .disableRules(DISABLED_RULES)
           .analyze();
         console.log(
-          `✓ Audited: ${component} / ${story.name} - ${results.violations.length} issues`
+          `✓ Audited: ${component} / ${story.name} - ${results.violations.length} issues`,
         );
         return results.violations;
       } catch (e) {
@@ -530,7 +553,10 @@ async function runAccessibilityAudit() {
           while (!failed && next < items.length) {
             const {component, story} = items[next++];
             try {
-              violationsByStory.set(story.id, await scanStory(component, story));
+              violationsByStory.set(
+                story.id,
+                await scanStory(component, story),
+              );
             } catch (e) {
               failed = true;
               throw e;
@@ -597,10 +623,10 @@ async function runAccessibilityAudit() {
           // Keep first 3 nodes for display (cap to avoid bloat)
           if (agg.nodes.length < 3) {
             agg.nodes.push(
-              ...violation.nodes.slice(0, 3 - agg.nodes.length).map((n) => ({
+              ...violation.nodes.slice(0, 3 - agg.nodes.length).map(n => ({
                 html: n.html.substring(0, 200),
                 target: n.target,
-              }))
+              })),
             );
           }
         }
@@ -649,10 +675,7 @@ async function runAccessibilityAudit() {
   for (const auditedStory of auditedStories) {
     for (const legacyStory of legacyBaselineStoryKeys(auditedStory.storyId)) {
       legacyBaselineAliases[legacyStory] ??= [];
-      const canonicalStory = storyKey(
-        auditedStory.owner,
-        auditedStory.storyId,
-      );
+      const canonicalStory = storyKey(auditedStory.owner, auditedStory.storyId);
       if (!legacyBaselineAliases[legacyStory].includes(canonicalStory)) {
         legacyBaselineAliases[legacyStory].push(canonicalStory);
       }
@@ -688,7 +711,7 @@ async function runAccessibilityAudit() {
 function loadBaselineFile(filePath) {
   if (!fs.existsSync(filePath)) {
     console.warn(`Baseline file not found at ${filePath} — treating as empty`);
-    return { version: 1, entries: [] };
+    return {version: 1, entries: []};
   }
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
@@ -706,7 +729,7 @@ function applyBaselineGate(report) {
       : null;
     fs.writeFileSync(
       baselineFile,
-      JSON.stringify(buildBaseline(report, { existing }), null, 2) + '\n'
+      JSON.stringify(buildBaseline(report, {existing}), null, 2) + '\n',
     );
     console.log(`Baseline written to ${baselineFile}`);
     return 0;
@@ -714,15 +737,17 @@ function applyBaselineGate(report) {
 
   const baseline = loadBaselineFile(baselineFile);
   const diff = diffAgainstBaseline(report, baseline);
-  console.log(formatDiffSummary(diff, { baselinePath: baselineFile }));
-  const resolvedWarning = formatResolvedWarning(diff, { baselinePath: baselineFile });
+  console.log(formatDiffSummary(diff, {baselinePath: baselineFile}));
+  const resolvedWarning = formatResolvedWarning(diff, {
+    baselinePath: baselineFile,
+  });
   if (resolvedWarning && process.env.GITHUB_ACTIONS === 'true') {
     console.log(resolvedWarning);
   }
 
   if (diff.newViolations.length > 0 && failOnNew) {
     console.error(
-      `\nFailing: ${diff.newViolations.length} accessibility violation(s) not in baseline.`
+      `\nFailing: ${diff.newViolations.length} accessibility violation(s) not in baseline.`,
     );
     return 1;
   }
@@ -730,13 +755,13 @@ function applyBaselineGate(report) {
 }
 
 runAccessibilityAudit()
-  .then((report) => {
+  .then(report => {
     // A shard writes per-story results only; the merge run gates.
     if (report === null) return;
     const code = applyBaselineGate(report);
     if (code !== 0) process.exitCode = code;
   })
-  .catch((e) => {
+  .catch(e => {
     console.error('Accessibility audit failed:', e);
     process.exit(1);
   });

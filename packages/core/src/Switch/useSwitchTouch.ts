@@ -23,7 +23,7 @@ import type {GestureTouch} from '../gestures/types';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
-  createMotionAnimator,
+  createMotionEngine,
   type Animator,
   type MotionCurve,
 } from '../motion/animator';
@@ -283,15 +283,15 @@ export class SwitchTouchController {
       return;
     }
     registerSwitchTable();
-    this.thumb = createMotionAnimator(elements.thumb);
+    this.thumb = createMotionEngine(elements.thumb);
     // The layer rests clear (its class's opacity 0) while the visuals show
     // the value; from here its opacity is the animator's.
-    this.fade = createMotionAnimator(elements.track, {
+    this.fade = createMotionEngine(elements.track, {
       pseudoElement: '::after',
       initial: {opacity: 0},
     });
     this.fade.set({opacity: 0});
-    this.shadow = createMotionAnimator(elements.thumb, {
+    this.shadow = createMotionEngine(elements.thumb, {
       pseudoElement: '::after',
       initial: {opacity: 0},
     });
