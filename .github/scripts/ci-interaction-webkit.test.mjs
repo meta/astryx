@@ -346,6 +346,10 @@ describe('WebKit interaction proof routing', () => {
       // The gesture host asks the Layer module's input hold about each touch,
       // so the gesture specs' fixture bundles it.
       'packages/core/src/Layer/inputHold.ts',
+      // The input hold is moving to read the modal outlet's host checks, which
+      // brings the outlet into the gesture fixtures and the pager bundle; the
+      // scope covers it before that import lands.
+      'packages/core/src/Layer/modalOutlet.ts',
       'packages/core/src/hooks/useMenuPress.ts',
       'packages/core/src/hooks/menuPressGesture.ts',
       'packages/core/src/hooks/useLongPress.ts',
