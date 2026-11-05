@@ -77,6 +77,7 @@ import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
 import {returnFocusForLastInput} from '../utils/focusReturn';
+import {PressGroupContext} from '../hooks/pressGroupContext';
 import {useMenuOverflow} from './useMenuOverflow';
 import {moveRegionsTab} from './menuRegionStops';
 import {useDevWarning} from '../hooks/useDevWarning';
@@ -1830,19 +1831,25 @@ export function DropdownMenu(props: DropdownMenuProps) {
     props.items !== undefined
   ) {
     return (
-      <DropdownMenuBottomSheet
-        {...(sharedProps as DropdownMenuDataProps)}
-        presentation="bottom-sheet"
-      />
+      <PressGroupContext value={null}>
+        <DropdownMenuBottomSheet
+          {...(sharedProps as DropdownMenuDataProps)}
+          presentation="bottom-sheet"
+        />
+      </PressGroupContext>
     );
   }
 
+  // In a group that tracks presses, the trigger keeps its own press and
+  // opening, whatever its `aria-haspopup`.
   return (
-    <DropdownMenuPopover
-      {...sharedProps}
-      presentation="popover"
-      pressTouchModel={props.presentation === 'popover' ? 'pointer' : 'uikit'}
-    />
+    <PressGroupContext value={null}>
+      <DropdownMenuPopover
+        {...sharedProps}
+        presentation="popover"
+        pressTouchModel={props.presentation === 'popover' ? 'pointer' : 'uikit'}
+      />
+    </PressGroupContext>
   );
 }
 

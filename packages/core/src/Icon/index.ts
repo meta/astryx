@@ -70,6 +70,8 @@ export interface ComponentIconSlotMap {
   'table-sort-indicator': {
     readonly direction: 'ascending' | 'descending' | 'none';
   };
+  /** A Table row's expansion toggle (`useTableRowExpansion`), by whether the row is expanded. */
+  'table-row-expand': {readonly expanded: boolean};
 }
 
 /** A slot name from the augmentable {@link ComponentIconSlotMap}. */
