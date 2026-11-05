@@ -63,7 +63,7 @@ export const CHECKS = {
   g: 'Records: a changed record needs a spec owner to approve its spec content',
   h: `Size: at most ${SIZE_LIMIT.toLocaleString('en-US')} authored lines, unless the description declares a behavior-module pull request or a batch row`,
   i: 'Shared owners: a concern Core owns in a shared module is called through that module',
-  j: 'Effects: a new Effect names the system it syncs and does more than copy into a ref; no DOM node in state',
+  j: "Effects: interaction logic lives in callbacks, and no Effect reacts to interaction state. A new Effect names the system it syncs. The one exception is a one-line layout or insertion Effect that keeps a ref at the latest committed prop or callback for those callbacks, with a note that names what it syncs; it holds no logic (`useEffectEvent` replaces it once Core's React floor reaches 19.2). No Effect only copies props or state into other state, no ref is written during render except lazy initialization, and no DOM node is in state",
   k: 'Release notes and records: a Changeset names each package that ships a change, its category fits, and no gap row stays for a claim the change builds',
   l: 'Mergeable: the change merges into the base without conflicts',
 };
