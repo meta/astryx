@@ -36,6 +36,9 @@ import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
 import {layerStructureReset} from './layerStructureReset.stylex';
 import {layerViewportInset} from './layerViewportInset.stylex';
+import {useLayerKeyboardClearance} from './LayerTouch';
+import {LAYER_ANCHORED_ATTRIBUTE} from './layerKeyboardClearance';
+import {settledBox} from './settledBox';
 import {layerInsetProperties} from './layerInset';
 import {
   LAYER_CLEARANCE_PROPERTY,
@@ -56,11 +59,23 @@ import {
 } from './popoverOperations';
 import {preserveAnimations} from './preserveAnimations';
 import {useLayerContext} from './LayerContext';
-import {settledBox} from './settledBox';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 
 const styles = stylex.create({
+  // The software keyboard's block-size cap, on the layer's own element. Every
+  // layer sets it, an uncapped one to a limit no viewport cap reaches. So a
+  // layer nested in a capped one does not inherit the outer cap. The surfaces
+  // inside a layer read it through `layerViewportInset.maxBlockSize`. The cap
+  // also writes the overflow a capped surface takes. Popover's surface reads
+  // it, so it scrolls from the commit that caps it. Both are private runtime
+  // state, never set by an app or a theme.
+  // SYNC: the properties are LAYER_KEYBOARD_CAP_PROPERTY and
+  // LAYER_KEYBOARD_OVERFLOW_PROPERTY (useLayerKeyboardClearance.ts).
+  keyboardCap: (cap: string, overflow: 'auto' | 'visible') => ({
+    '--_layer-keyboard-max-block-size': cap,
+    '--_layer-keyboard-overflow': overflow,
+  }),
   // Base reset for all layers
   base: {
     marginBlockStart: 0,
@@ -1599,6 +1614,13 @@ function useLayerImplementation(
     [handleBeforeToggle],
   );
 
+  // An anchored layer that would run under the software keyboard keeps its
+  // block-start edge and ends clear of the keyboard.
+  const {cap: keyboardCap, followLayerElement} = useLayerKeyboardClearance(
+    isOpen && mode === 'context',
+    popoverRef,
+  );
+
   const popoverRefCallback = useCallback(
     (el: HTMLElement | null) => {
       popoverRef.current = el;
@@ -1615,7 +1637,9 @@ function useLayerImplementation(
         // Changing a portal target remounts the popover. Preserve the logical
         // open state without firing onShow again for the replacement element.
         // A show the browser refused during one of its own hides replays once
-        // that hide has ended, for the element still mounted then.
+        // that hide has ended, for the element still mounted then. The
+        // keyboard cap follows the replacement element too.
+        followLayerElement();
         if (showPopoverElement(el)) {
           if (keepsAnchorClear) {
             keepAnchorClear(el, triggerRef.current);
@@ -1643,6 +1667,7 @@ function useLayerImplementation(
       showPopoverElement,
       isCurrentContextPopover,
       keepsAnchorClear,
+      followLayerElement,
     ],
   );
 
@@ -1834,6 +1859,10 @@ function useLayerImplementation(
         layerStructureReset.reset,
         styles.base,
         overlayPaddingReset.reset,
+        styles.keyboardCap(
+          keyboardCap == null ? '100vh' : `${keyboardCap}px`,
+          keyboardCap == null ? 'visible' : 'auto',
+        ),
         viewportStyles,
         offsetStyle,
         xstyle,
@@ -1850,6 +1879,12 @@ function useLayerImplementation(
         <Container
           ref={popoverRefCallback}
           id={id}
+          // Anchor positioning, as this commit renders it: the software
+          // keyboard caps only an anchored layer, and reads this at
+          // measurement.
+          {...(positioning === 'anchor'
+            ? {[LAYER_ANCHORED_ATTRIBUTE]: ''}
+            : {})}
           role={role}
           aria-label={ariaLabel}
           popover={lightDismiss ? 'auto' : 'manual'}
@@ -1886,6 +1921,7 @@ function useLayerImplementation(
       id,
       isAnchorInView,
       keepsAnchorClear,
+      keyboardCap,
       lightDismiss,
       mountStore,
       popoverRefCallback,
@@ -1915,6 +1951,9 @@ function useLayerImplementation(
         layerStructureReset.reset,
         styles.base,
         overlayPaddingReset.reset,
+        // A fixed layer is never capped; it still sets its own limit so it is
+        // not clamped by a capped layer it sits in.
+        styles.keyboardCap('100vh', 'visible'),
         styles.fixed,
         xstyle,
       );
