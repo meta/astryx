@@ -1973,7 +1973,6 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     // A frozen require(esm) namespace cannot be patched, so retain that gap and
     // let the selected lineage decide whether it matters.
     const commonJsPatch = interception.patchCommonJs(filePath);
-    degraded.commonJs = !commonJsPatch.covered;
     try {
       try {
         mod = jiti(filePath);
@@ -1995,6 +1994,8 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
         });
       }
     } finally {
+      // Read after the load: the root is wrapped when the load requires it.
+      degraded.commonJs = !commonJsPatch.covered;
       commonJsPatch.undo();
     }
   } else {
