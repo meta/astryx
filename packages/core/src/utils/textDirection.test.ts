@@ -36,6 +36,9 @@ describe('textDirectionProps', () => {
       '\u0780\u0781',
       '\u07ca\u07cb',
       '\ufb50',
+      // Samaritan and Adlam (a supplementary-plane script).
+      '\u0800\u0801',
+      '\u{1E900}\u{1E923}\u{1E924}!',
     ]) {
       expect(textDirectionProps(text), text).toEqual({});
     }

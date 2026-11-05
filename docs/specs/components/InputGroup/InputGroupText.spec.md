@@ -76,16 +76,16 @@ No new public concept. Content is caller text or an icon.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                                              | Basis                                                    |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
-| FR1 | InputGroupText renders one non-interactive element with no role, holding `children`. `ref`, `className`, `style`, `xstyle`, and other DOM props reach it.                                                                                              | Current source and tests                                 |
-| FR2 | The cell centers its content vertically with small inline padding, uses body text in the secondary text color on the muted background, never wraps, and never shrinks.                                                                                 | Current source                                           |
-| FR3 | The cell draws an emphasized one-border-width border. Every cell after the first overlaps its leading neighbour by one border width. Only the first child's leading corners and the last child's trailing corners are rounded with the element radius. | Current source                                           |
-| FR4 | The cell carries `astryx-input-group-text`.                                                                                                                                                                                                            | `architecture:component-theming-surface`; current source |
+| ID  | Invariant                                                                                                                                                                                                                                                                                  | Basis                                                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| FR1 | InputGroupText renders one non-interactive element with no role, holding `children`; plain text with no right-to-left letter sits in an inner `span` with `dir="ltr"` (`design:bidirectionality` DR2). `ref`, `className`, `style`, `xstyle`, and other DOM props reach the outer element. | Current source and tests                                 |
+| FR2 | The cell centers its content vertically with small inline padding, uses body text in the secondary text color on the muted background, never wraps, and never shrinks.                                                                                                                     | Current source                                           |
+| FR3 | The cell draws an emphasized one-border-width border. Every cell after the first overlaps its leading neighbour by one border width. Only the first child's leading corners and the last child's trailing corners are rounded with the element radius.                                     | Current source                                           |
+| FR4 | The cell carries `astryx-input-group-text`.                                                                                                                                                                                                                                                | `architecture:component-theming-surface`; current source |
 
 ### Allowed variation
 
-- **AV1 — Content.** Any text or icon; the cell does not inspect it.
+- **AV1 — Content.** Any text or icon. The cell reads plain text only to choose its direction (FR1); rich content is isolated, and the caller marks its direction.
 - **AV2 — Theme paint.** Themes may restyle the cell through
   `input-group-text`.
 

@@ -14,11 +14,12 @@
 import type {ReactNode} from 'react';
 
 /**
- * A right-to-left letter: Hebrew, Arabic (with its supplements and
- * presentation forms), Syriac, Thaana and NKo.
+ * A character from a right-to-left block: Hebrew, Arabic (with its
+ * supplements and presentation forms), Syriac, Thaana, NKo, Samaritan and
+ * Mandaic, and the supplementary right-to-left blocks such as Adlam.
  */
 const RIGHT_TO_LEFT_LETTER =
-  /[\u0590-\u05FF\u0600-\u06FF\u0700-\u074F\u0750-\u077F\u0780-\u07BF\u07C0-\u07FF\u0860-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
+  /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
 
 /**
  * Under a right-to-left page, weak and neutral characters in left-to-right
