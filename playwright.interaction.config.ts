@@ -3,11 +3,11 @@
 /**
  * @file playwright.interaction.config.ts
  * @input Uses @playwright/test
- * @output Touch interaction proofs on a phone-sized touch screen, in Chromium
- *   and WebKit.
- * @position Run with `pnpm test:interaction`. Separate from `pnpm test` (no
- *   browser needed there) and from playwright.config.ts (accessibility
- *   contracts on desktop profiles).
+ * @output Touch interaction and animation proofs on a phone-sized touch
+ *   screen, in Chromium and WebKit.
+ * @position Run with `pnpm test:interaction`; filmstrips only with
+ *   `pnpm storyboards`. Separate from `pnpm test` (no browser needed there) and
+ *   from playwright.config.ts (accessibility contracts on desktop profiles).
  *
  * Specs are named `*.interaction.browser.spec.ts` and read stories from a
  * built Storybook, like the accessibility specs:
@@ -15,10 +15,18 @@
  *   pnpm storybook:build
  *   pnpm exec playwright install chromium webkit
  *   pnpm test:interaction --project chromium
- *   pnpm test:interaction harness.interaction.browser.spec.ts
+ *   pnpm test:interaction BottomSheetDetent.interaction.browser.spec.ts
+ *
+ * Specs import `test` from `@astryxdesign/a11y-spec/playwright`, the base test
+ * shared with playwright.config.ts: no context reaches a remote host. The
+ * gesture fixtures and Storybook servers listen on the loopback host, which
+ * passes.
  *
  * A spec that needs Chromium-only evidence (CDP tracing, scripted touch
  * timestamps) skips itself in WebKit with the reason; see the harness README.
+ * Where WebKit cannot launch on the host (missing system libraries on some
+ * Linux distributions), internal/interaction-harness/scripts/webkit-container.mjs
+ * runs the WebKit project inside the official Playwright image.
  *
  * SYNC: Keep the phone profile here equal to `phone` in
  *   internal/interaction-harness/src/story.ts.
@@ -56,6 +64,8 @@ export default defineConfig({
   testMatch: [
     'internal/interaction-harness/src/**/*.interaction.browser.spec.ts',
     'packages/*/src/**/*.interaction.browser.spec.ts',
+    // The gesture system's own proofs (esbuild fixtures, no Storybook).
+    'packages/core/src/gestures/__tests__/browser/*.browser.spec.ts',
   ],
   // Playwright wipes its output directory per run; evidence (storyboards,
   // curve traces) goes to test-results/interaction-evidence instead.

@@ -4,7 +4,8 @@
 
 /**
  * @file Icon.tsx
- * @input Uses ReactSVGProps, icon components or semantic icon names
+ * @input Uses ReactSVGProps, icon components or semantic icon names, and an
+ *   optional IconVariant request
  * @output Exports Icon component, IconProps, IconColor, IconSize, IconType types
  * @position Core implementation; consumed by index.ts, tested by Icon.test.tsx
  *
@@ -13,6 +14,13 @@
  *   directly with and spread SVG props.
  * - String mode: Pass a semantic name (e.g. 'close', 'chevronDown') — resolved from the
  *   theme's icon registry (or built-in fallback SVGs) and wrapped in a styled span.
+ *   A function registry entry receives `{size, variant}`: the size resolved by
+ *   ORD1 and the requested variant when the entry can receive it.
+ *
+ * Both modes size the glyph from the `icon` target's private size vars
+ * (`iconSizeStyles` in IconSize.stylex.ts, `registrySizeStyles` below), so a
+ * theme's `width` and `height` on that target's size selector set the size's
+ * glyph dimension, including the font size 1em-based registry artwork follows.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Icon/Icon.doc.mjs (props table, features, implementation notes)
@@ -22,21 +30,19 @@
  * - /packages/cli/assets/templates/blocks/components/Icon/ (showcase blocks)
  */
 
-import React, {type ComponentType, type SVGProps} from 'react';
+import React, {useCallback, type ComponentType, type SVGProps} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import {useThemeName} from '../theme/useTheme';
-import {getIcon} from './globalIconRegistry';
+import {resolveIcon} from './globalIconRegistry';
 import type {IconName, NamespacedIconName} from './globalIconRegistry';
-import {mergeProps} from '../utils';
+import type {IconVariant} from './index';
+import {mergeProps} from '../utils/mergeProps';
+import {mergeRefs} from '../utils/mergeRefs';
 import {themeProps} from '../utils/themeProps';
 import {useIconSize} from './IconDefaultSizeContext';
-import {
-  iconBoxSizeStyles,
-  iconSizeStyles,
-  type IconSize,
-} from './IconSize.stylex';
+import {iconSizeStyles, type IconSize} from './IconSize.stylex';
 
 export type {IconSize} from './IconSize.stylex';
 
@@ -57,6 +63,36 @@ const styles = stylex.create({
   },
 });
 
+/**
+ * Size styles for string-based registry icons: the glyph dimensions
+ * `iconSizeStyles` reads from the `icon` target's private vars, plus a
+ * `fontSize`, because registry artwork is 1em-based. `fontSize` is the smaller
+ * side, which fits square artwork into a non-square box the way an SVG viewBox
+ * does.
+ */
+const registrySizeStyles = stylex.create({
+  xsm: {
+    width: 'var(--_icon-width, 0.75rem)',
+    height: 'var(--_icon-height, 0.75rem)',
+    fontSize: 'min(var(--_icon-width, 0.75rem), var(--_icon-height, 0.75rem))',
+  },
+  sm: {
+    width: 'var(--_icon-width, 1rem)',
+    height: 'var(--_icon-height, 1rem)',
+    fontSize: 'min(var(--_icon-width, 1rem), var(--_icon-height, 1rem))',
+  },
+  md: {
+    width: 'var(--_icon-width, 1.25rem)',
+    height: 'var(--_icon-height, 1.25rem)',
+    fontSize: 'min(var(--_icon-width, 1.25rem), var(--_icon-height, 1.25rem))',
+  },
+  lg: {
+    width: 'var(--_icon-width, 1.5rem)',
+    height: 'var(--_icon-height, 1.5rem)',
+    fontSize: 'min(var(--_icon-width, 1.5rem), var(--_icon-height, 1.5rem))',
+  },
+});
+
 const colorStyles = stylex.create({
   primary: {
     color: colorVars['--color-icon-primary'],
@@ -73,14 +109,17 @@ const colorStyles = stylex.create({
   accent: {
     color: colorVars['--color-accent'],
   },
+  info: {
+    color: colorVars['--color-icon-info'],
+  },
   success: {
-    color: colorVars['--color-success'],
+    color: colorVars['--color-icon-success'],
   },
   error: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-icon-error'],
   },
   warning: {
-    color: colorVars['--color-warning'],
+    color: colorVars['--color-icon-warning'],
   },
   inherit: {
     color: 'inherit',
@@ -138,7 +177,11 @@ export interface IconProps extends Omit<
   SVGProps<SVGSVGElement>,
   'ref' | 'color'
 > {
-  /** Ref forwarded to the root element */
+  /**
+   * Ref to the rendered SVG element. For a semantic or namespaced name it is
+   * the `<svg>` inside Icon's wrapper, or `null` when the resolved glyph has
+   * no `<svg>`.
+   */
   ref?: React.Ref<SVGSVGElement>;
   /**
    * Icon to render. Can be:
@@ -160,10 +203,30 @@ export interface IconProps extends Omit<
    * - 'md': 1.25rem (20px at a 16px root)
    * - 'lg': 1.5rem (24px at a 16px root)
    *
+   * A theme sets a size's glyph dimension with `width` and `height`, in `px`
+   * or `rem`, on `components.icon['size:sm']` (and the other sizes).
+   *
    * An explicit value wins. When omitted, Icon uses the nearest default supplied
    * by an owning Astryx component for its icon slot, then falls back to 'md'.
    */
   size?: IconSize;
+  /**
+   * Requests the active theme's alternate artwork for a semantic icon name,
+   * such as `'filled'`. Names come from the augmentable `IconVariantMap`.
+   *
+   * The theme's icon entry receives the variant only when the active theme
+   * lists it in `iconVariants` and, for an entry a theme supplied, the theme
+   * that defined the entry lists it too. Otherwise the entry receives
+   * `undefined` and draws its normal artwork. An icon component passed
+   * directly renders as given and never receives `variant`, and `variant` is
+   * never written to the DOM or reflected on the `icon` theming target.
+   *
+   * @example
+   * ```
+   * <Icon icon="info" variant="filled" />
+   * ```
+   */
+  variant?: IconVariant;
   /**
    * Accessible name for the icon. Set this only when the icon is MEANINGFUL on
    * its own — a standalone status glyph or an icon-only indicator with no
@@ -209,22 +272,26 @@ export interface IconProps extends Omit<
   xstyle?: StyleXStyles;
 }
 
+type IconA11yProps =
+  | {role: 'img'; 'aria-label': string; 'aria-hidden': undefined}
+  | {'aria-hidden': 'true'};
+
 /**
  * Derives the ARIA attributes for an icon from its `label` prop.
  *
  * - Non-empty `label` → meaningful image: `role="img"` + `aria-label`, and no
  *   `aria-hidden` (an `aria-hidden` element is removed from the accessibility
- *   tree, so its accessible name would be ignored).
+ *   tree, so its accessible name would be ignored). Icon passes
+ *   `aria-hidden: undefined`. Many icon components, such as Heroicons, write
+ *   `aria-hidden="true"` unless a prop replaces it.
  * - Omitted or empty `label` → decorative default: `aria-hidden="true"`.
  *
  * The result is spread BEFORE `{...props}` in both render modes so an explicit
  * `aria-hidden` / `role` / `aria-label` from the consumer always wins.
  */
-function getIconA11yProps(
-  label: string | undefined,
-): {role: 'img'; 'aria-label': string} | {'aria-hidden': 'true'} {
+function getIconA11yProps(label: string | undefined): IconA11yProps {
   return label != null && label !== ''
-    ? {role: 'img', 'aria-label': label}
+    ? {role: 'img', 'aria-label': label, 'aria-hidden': undefined}
     : {'aria-hidden': 'true'};
 }
 
@@ -244,6 +311,7 @@ export function Icon({
   icon,
   color = 'inherit',
   size: sizeProp,
+  variant,
   label,
   ref,
   className,
@@ -263,16 +331,19 @@ export function Icon({
         name={icon}
         color={color}
         size={size}
+        variant={variant}
         a11yProps={a11yProps}
         className={className}
         style={style}
         xstyle={xstyle}
+        svgRef={ref}
         spanProps={props}
       />
     );
   }
 
-  // Component mode: render SVG component directly with ref forwarding
+  // Component mode: render SVG component directly with ref forwarding. A
+  // supplied component never receives `variant`; it was destructured above.
   const IconComponent = icon;
   return (
     <IconComponent
@@ -312,30 +383,45 @@ Icon.displayName = 'Icon';
  * Internal component that resolves a semantic icon name from the registry
  * and renders it in a styled span with proper sizing.
  *
- * Extracted as a separate component so getIcon is only called
- * when the icon prop is a string.
+ * Extracted as a separate component so the registry is only read when the
+ * icon prop is a string. A function entry receives the resolved size and the
+ * requested variant when the entry can receive it.
  */
 function IconFromRegistry({
   name,
   color,
   size,
+  variant,
   a11yProps,
   className,
   style,
   xstyle,
+  svgRef,
   spanProps,
 }: {
   name: IconName | NamespacedIconName;
   color: IconColor;
   size: IconSize;
-  a11yProps: {role: 'img'; 'aria-label': string} | {'aria-hidden': 'true'};
+  variant: IconVariant | undefined;
+  a11yProps: IconA11yProps;
   className?: string;
   style?: React.CSSProperties;
   xstyle?: StyleXStyles;
+  svgRef?: React.Ref<SVGSVGElement>;
   spanProps?: Omit<SVGProps<SVGSVGElement>, 'ref' | 'color'>;
 }) {
   const themeName = useThemeName();
-  const resolvedIcon = getIcon(name, themeName);
+  const resolvedIcon = resolveIcon(name, themeName, {size, variant});
+  // The glyph can change while the span stays. Attach the ref again when it
+  // does.
+  const attachSvgRef = useCallback(
+    (span: HTMLSpanElement | null) =>
+      svgRef == null
+        ? undefined
+        : mergeRefs(svgRef)(span?.querySelector('svg') ?? null),
+    // eslint-disable-next-line @eslint-react/exhaustive-deps -- resolveIcon's inputs: a new glyph gets a new attach, and a function entry's new element each render does not.
+    [svgRef, name, themeName, size, variant],
+  );
 
   if (resolvedIcon == null) {
     return null;
@@ -351,6 +437,7 @@ function IconFromRegistry({
 
   return (
     <span
+      ref={svgRef == null ? undefined : attachSvgRef}
       // Derived a11y — decorative (aria-hidden) by default, or a meaningful
       // image (role="img" + aria-label) when `label` is set. Placed BEFORE the
       // prop spread so consumers can still override it with explicit
@@ -362,7 +449,7 @@ function IconFromRegistry({
         stylex.props(
           styles.span,
           colorStyles[color],
-          iconBoxSizeStyles[size],
+          registrySizeStyles[size],
           xstyle,
         ),
         className ?? undefined,

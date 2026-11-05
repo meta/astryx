@@ -12,10 +12,13 @@
 import {describe, expect, it} from 'vitest';
 import {PRESS_GESTURE_MEMORY_MS} from '../../utils/pressFeedback';
 import {PRESS_SLOP_PX} from '../../utils/pressGesture';
+import {press} from './timing';
 import {
   HAPTIC_FEEDBACK_KINDS,
   HAPTIC_VIBRATION_PATTERNS,
   UIKIT_GESTURES,
+  UIKIT_PRESS,
+  UIKIT_ROTATION,
   type GestureConstant,
 } from './gestures';
 
@@ -54,6 +57,7 @@ describe('UIKIT_GESTURES', () => {
     expect(UIKIT_GESTURES.pinch.hysteresis.value).toBe(8);
     expect(UIKIT_GESTURES.control.trackingExpansion.value).toBe(70);
     expect(UIKIT_GESTURES.velocity.currentWeight.value).toBe(0.2);
+    expect(UIKIT_GESTURES.velocity.scrollReleaseWeight.value).toBe(0.25);
   });
 
   it('holds the press entries to the press model, one value per use', () => {
@@ -62,6 +66,13 @@ describe('UIKIT_GESTURES', () => {
     expect(UIKIT_GESTURES.press.slop.value).toBe(PRESS_SLOP_PX);
     expect(UIKIT_GESTURES.press.momentumMemory.value).toBe(
       PRESS_GESTURE_MEMORY_MS,
+    );
+    // Written as numbers in the table so each group bundles alone.
+    expect(UIKIT_PRESS.quickTapFlash.value).toBe(press.flashMs);
+    expect(UIKIT_PRESS.scrollBrake.value).toBe(press.scrollBrakeMs);
+    expect(UIKIT_ROTATION.hysteresis.value).toBeCloseTo(
+      (5 * Math.PI) / 180,
+      15,
     );
   });
 

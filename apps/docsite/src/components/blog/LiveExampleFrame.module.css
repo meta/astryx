@@ -1,0 +1,19 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. */
+
+/* A live example's frame in a blog post: a bordered stage at a fixed height,
+   so the post never reflows when the example compiles or fails. */
+.frame {
+  margin: var(--spacing-6) 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-container, 12px);
+  overflow: hidden;
+  background: var(--color-background-surface);
+}
+
+.iframe {
+  display: block;
+  width: 100%;
+  height: 360px;
+  border: 0;
+  background: transparent;
+}

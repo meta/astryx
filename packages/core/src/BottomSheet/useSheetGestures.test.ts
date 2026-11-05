@@ -11,12 +11,17 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, renderHook} from '@testing-library/react';
+import {rubberBand} from '../motion/rubberBand';
 import {
+  isInsideNestedLayer,
   useSheetGestures,
   type UseSheetGesturesOptions,
 } from './useSheetGestures';
 
 const SHEET_HEIGHT = 400;
+// A touch device's reserve below the screen, deeper than the whole band over
+// the sheet's visible 240 px.
+const TOUCH_RESERVE = 160;
 
 // A fake pointer event object good enough for the handlers, which only read
 // pointerId, clientY, timeStamp, preventDefault, and currentTarget's capture +
@@ -28,11 +33,13 @@ function pointerEvent(
   pointerId = 1,
   button = 0,
   isPrimary = true,
+  pointerType?: string,
 ) {
   return {
     pointerId,
     button,
     isPrimary,
+    pointerType,
     clientY,
     timeStamp,
     currentTarget: target,
@@ -105,6 +112,55 @@ function up(hook: Hook, y: number, t: number, target: HTMLElement) {
     hook.result.current.handleProps.onPointerUp(pointerEvent(y, t, target)),
   );
 }
+
+// A handle pull of `pull` px up from y 400, held still, then lifted, by a
+// pointer of `pointerType`. Returns the stretch at the hold.
+function handlePull(
+  hook: Hook,
+  target: HTMLElement,
+  pull: number,
+  t0: number,
+  pointerType: string,
+): number {
+  const event = (y: number, t: number) =>
+    pointerEvent(y, t, target, 1, 0, true, pointerType);
+  act(() => hook.result.current.sheetRef(target));
+  act(() => hook.result.current.handleProps.onPointerDown(event(400, t0)));
+  act(() =>
+    hook.result.current.handleProps.onPointerMove(
+      event(400 - pull / 2, t0 + 200),
+    ),
+  );
+  act(() =>
+    hook.result.current.handleProps.onPointerMove(event(400 - pull, t0 + 400)),
+  );
+  const stretch = -liveOffset(hook);
+  act(() =>
+    hook.result.current.handleProps.onPointerUp(event(400 - pull, t0 + 900)),
+  );
+  return stretch;
+}
+
+describe('isInsideNestedLayer', () => {
+  it("is true for a target inside a <dialog> rendered within the body, and false for the body's own content", () => {
+    const body = document.createElement('div');
+    const own = document.createElement('button');
+    body.append(own);
+    const nested = document.createElement('dialog');
+    const nestedHandle = document.createElement('div');
+    nested.append(nestedHandle);
+    body.append(nested);
+    expect(isInsideNestedLayer(own, body)).toBe(false);
+    expect(isInsideNestedLayer(body, body)).toBe(false);
+    expect(isInsideNestedLayer(nestedHandle, body)).toBe(true);
+    expect(isInsideNestedLayer(nested, body)).toBe(true);
+    // A dialog above the body (the sheet's own) does not count.
+    const ownDialog = document.createElement('dialog');
+    ownDialog.append(body);
+    expect(isInsideNestedLayer(own, body)).toBe(false);
+    expect(isInsideNestedLayer(null, body)).toBe(false);
+  });
+});
 
 describe('useSheetGestures', () => {
   it('dismisses on a fast downward flick (swipe-to-close)', () => {
@@ -703,6 +759,49 @@ describe('useSheetGestures', () => {
     expect(off).toBeGreaterThan(-80); // resisted, so smaller in magnitude
   });
 
+  it('stretches a finger pulling up past the top on the rubber band, the same on every pull, with no cap', () => {
+    const {hook} = setup({
+      snapHeights: () => [200],
+      offscreenBlockEndInset: TOUCH_RESERVE,
+    });
+    const t = makeTarget();
+    const stretches = [0, 1, 2].map(i =>
+      handlePull(hook, t, 300, i * 2000, 'touch'),
+    );
+    // The band runs over the sheet's visible height: 400 px less its reserve
+    // below the screen.
+    const expected = rubberBand(300, SHEET_HEIGHT - TOUCH_RESERVE);
+    expect(expected).toBeGreaterThan(48);
+    for (const stretch of stretches) {
+      expect(stretch).toBeCloseTo(expected, 6);
+    }
+    expect(hook.result.current.settledOffset).toBe(0);
+  });
+
+  it('never stretches a finger past the reserve below the screen', () => {
+    // A touch device's reserve covers the whole band. Where the reserve is
+    // short, the stretch stops at it, so the page never shows.
+    const {hook} = setup({
+      snapHeights: () => [200],
+      offscreenBlockEndInset: 20,
+    });
+    const t = makeTarget();
+    expect(rubberBand(1000, 380)).toBeGreaterThan(20);
+    expect(handlePull(hook, t, 1000, 0, 'touch')).toBe(20);
+  });
+
+  it('keeps a mouse or a pen pulling up past the top on its own stretch, capped at 48 px', () => {
+    const {hook} = setup({
+      snapHeights: () => [200],
+      offscreenBlockEndInset: 48,
+    });
+    const t = makeTarget();
+    expect(handlePull(hook, t, 80, 0, 'mouse')).toBeCloseTo(28, 6);
+    expect(handlePull(hook, t, 300, 2000, 'mouse')).toBe(48);
+    expect(handlePull(hook, t, 80, 4000, 'pen')).toBeCloseTo(28, 6);
+    expect(handlePull(hook, t, 300, 6000, 'pen')).toBe(48);
+  });
+
   it('dismisses a single-height sheet on a slow drag past the floor', () => {
     const {hook, onDismiss} = setup(); // no snapHeights
     const t = makeTarget();
@@ -818,17 +917,23 @@ describe('useSheetGestures', () => {
       document.body.appendChild(sheet);
       return el;
     }
-    function touch(el: HTMLElement, type: string, y: number, id = 1) {
+    function touch(
+      el: HTMLElement,
+      type: string,
+      y: number,
+      id = 1,
+      touchType = 'direct',
+    ) {
       const ev = new Event(type, {bubbles: true, cancelable: true});
       // jsdom lacks TouchEvent; attach the fields the handler reads.
       Object.defineProperty(ev, 'changedTouches', {
-        value: [{identifier: id, clientY: y}],
+        value: [{identifier: id, clientY: y, touchType}],
       });
       Object.defineProperty(ev, 'touches', {
         value:
           type === 'touchend' || type === 'touchcancel'
             ? []
-            : [{identifier: id, clientY: y}],
+            : [{identifier: id, clientY: y, touchType}],
       });
       Object.defineProperty(ev, 'currentTarget', {value: el});
       el.dispatchEvent(ev);
@@ -877,11 +982,11 @@ describe('useSheetGestures', () => {
       expect(liveOffset(hook)).toBe(150);
     });
 
-    it('leaves a bottom pull-up with the scroller at the tallest detent', () => {
-      // Regression: the sheet is already fully expanded, so an upward pull has
-      // nowhere to expand to. Promoting it produced a rubber-band the release
-      // threw straight back, and stole the gesture from the scroller.
-      const {hook} = setup({snapHeights: () => [200]});
+    it('stretches the sheet with a pull up past a list already at its end, at the tallest detent, without claiming the touch', () => {
+      const {hook} = setup({
+        snapHeights: () => [200],
+        offscreenBlockEndInset: TOUCH_RESERVE,
+      });
       const el = makeScroller({
         scrollTop: 600,
         clientHeight: 200,
@@ -891,12 +996,22 @@ describe('useSheetGestures', () => {
       act(() => hook.result.current.bodyProps.ref(el));
       expect(hook.result.current.settledOffset).toBe(0);
 
+      let first: Event | undefined;
+      let past: Event | undefined;
       act(() => {
         touch(el, 'touchstart', 300);
-        touch(el, 'touchmove', 250); // pull up
+        first = touch(el, 'touchmove', 250); // the pull starts at the end
+        past = touch(el, 'touchmove', 150);
       });
-      expect(hook.result.current.isDragging).toBe(false);
-      expect(hook.result.current.dragOffset).toBe(0);
+      // The rest of the pull past the end stretches the sheet. The list keeps
+      // its touch, so a reversal can scroll it back.
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(-liveOffset(hook)).toBeCloseTo(
+        rubberBand(100, SHEET_HEIGHT - TOUCH_RESERVE),
+        6,
+      );
+      expect(first?.defaultPrevented).toBe(false);
+      expect(past?.defaultPrevented).toBe(false);
     });
 
     it('does not preventDefault a bottom pull-up at the tallest detent', () => {
@@ -922,6 +1037,72 @@ describe('useSheetGestures', () => {
       expect(pullUp?.defaultPrevented).toBe(false);
       expect(reverseDown?.defaultPrevented).toBe(false);
       expect(hook.result.current.isDragging).toBe(false);
+    });
+
+    it('stretches the sheet on every pull up at the tallest detent when its content fits', () => {
+      const {hook} = setup({
+        snapHeights: () => [200],
+        offscreenBlockEndInset: TOUCH_RESERVE,
+      });
+      // Nothing to scroll: the content fits its box.
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 200,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      expect(hook.result.current.settledOffset).toBe(0);
+      for (let i = 0; i < 3; i += 1) {
+        let pull: Event | undefined;
+        act(() => {
+          touch(el, 'touchstart', 300);
+          touch(el, 'touchmove', 250);
+          pull = touch(el, 'touchmove', 150);
+        });
+        // The content has no scroll to give the pull, so the sheet takes it.
+        expect(pull?.defaultPrevented).toBe(true);
+        // 150 px past the top, on the rubber band over the visible height.
+        expect(-liveOffset(hook)).toBeCloseTo(
+          rubberBand(150, SHEET_HEIGHT - TOUCH_RESERVE),
+          6,
+        );
+        act(() => {
+          touch(el, 'touchend', 150);
+        });
+        expect(hook.result.current.isDragging).toBe(false);
+        expect(hook.result.current.settledOffset).toBe(0);
+      }
+    });
+
+    it("keeps a stylus pulling up on the body at the tallest detent on a pen's stretch, capped at 48 px", () => {
+      const {hook} = setup({
+        snapHeights: () => [200],
+        offscreenBlockEndInset: TOUCH_RESERVE,
+      });
+      const el = makeScroller({
+        scrollTop: 0,
+        clientHeight: 200,
+        scrollHeight: 200,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+      // An Apple Pencil raises touch events marked `stylus`.
+      act(() => {
+        touch(el, 'touchstart', 300, 1, 'stylus');
+        touch(el, 'touchmove', 260, 1, 'stylus');
+        touch(el, 'touchmove', 220, 1, 'stylus');
+      });
+      expect(-liveOffset(hook)).toBeCloseTo(28, 6);
+      act(() => {
+        touch(el, 'touchmove', 0, 1, 'stylus');
+      });
+      expect(-liveOffset(hook)).toBe(48);
+      act(() => {
+        touch(el, 'touchend', 0, 1, 'stylus');
+      });
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(hook.result.current.settledOffset).toBe(0);
     });
 
     it('finishes the active drag when another ended touch is listed first', () => {
@@ -1213,6 +1394,36 @@ describe('useSheetGestures', () => {
       expect(hook.result.current.isDragging).toBe(true);
     });
 
+    it('leaves a touch that starts inside a nested <dialog> to that layer', () => {
+      // A sheet opened from this sheet's content renders its <dialog> inside
+      // the body, so its touches bubble here. The same pull-down from the
+      // body's own content promotes (see above); from the nested layer it
+      // must not.
+      const {hook} = setup({snapHeights: () => [200]});
+      const {body} = makeNested({
+        bodyScrollTop: 0,
+        innerScrollTop: 0,
+        innerScrollHeight: 200,
+      });
+      const nested = document.createElement('dialog');
+      const nestedHandle = document.createElement('div');
+      nested.appendChild(nestedHandle);
+      body.appendChild(nested);
+      act(() => hook.result.current.sheetRef(body));
+      act(() => hook.result.current.bodyProps.ref(body));
+      let start: Event | undefined;
+      let pull: Event | undefined;
+      act(() => {
+        start = touchOn(nestedHandle, body, 'touchstart', 100);
+        pull = touchOn(nestedHandle, body, 'touchmove', 160);
+      });
+      expect(start?.defaultPrevented).toBe(false);
+      expect(pull?.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(liveOffset(hook)).toBe(0);
+      expect(body.style.transform).toBe('');
+    });
+
     it('leaves a pull-up to a nested scroller with content below', () => {
       const {hook} = setup({snapHeights: () => [200]});
       const {body, tile} = makeNested({bodyScrollTop: 0, innerScrollTop: 100});
@@ -1434,10 +1645,13 @@ describe('useSheetGestures', () => {
       expect(hook.result.current.settledOffset).toBe(200);
     });
 
-    it('leaves the mid-gesture pull to the content at the tallest detent', () => {
-      // Same #5161 rule as the touchstart-armed edge: with no taller detent
-      // there is nothing to expand into, so the scroller keeps the gesture.
-      const {hook} = setup({snapHeights: () => [200]});
+    it("stretches the sheet with the rest of a pull past a long list's end at the tallest detent", () => {
+      // The list scrolls to its end first. The rest of the pull stretches the
+      // sheet, and the list keeps its touch.
+      const {hook} = setup({
+        snapHeights: () => [200],
+        offscreenBlockEndInset: TOUCH_RESERVE,
+      });
       const el = makeScroller({
         scrollTop: 300,
         clientHeight: 200,
@@ -1454,9 +1668,63 @@ describe('useSheetGestures', () => {
         touch(el, 'touchmove', 200);
         past = touch(el, 'touchmove', 100);
       });
-      expect(hook.result.current.isDragging).toBe(false);
-      expect(hook.result.current.dragOffset).toBe(0);
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(-liveOffset(hook)).toBeCloseTo(
+        rubberBand(100, SHEET_HEIGHT - TOUCH_RESERVE),
+        6,
+      );
       expect(past?.defaultPrevented).toBe(false);
+    });
+
+    it('holds a list still at its end while the sheet takes the rest of the pull, and lets it go on lift', () => {
+      // iOS rubber-bands a scroller past its end, even under `contain`. The
+      // list and the sheet must not both move.
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = makeScroller({
+        scrollTop: 300,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      act(() => hook.result.current.sheetRef(el));
+      act(() => hook.result.current.bodyProps.ref(el));
+
+      act(() => {
+        touch(el, 'touchstart', 500);
+        touch(el, 'touchmove', 400); // still scrolling
+      });
+      expect(el.style.overscrollBehaviorY).toBe('');
+
+      act(() => {
+        el.scrollTop = 600;
+        touch(el, 'touchmove', 200); // the content ended here
+        touch(el, 'touchmove', 100);
+      });
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(el.style.overscrollBehaviorY).toBe('none');
+
+      act(() => {
+        touch(el, 'touchend', 100);
+      });
+      expect(el.style.overscrollBehaviorY).toBe('');
+    });
+
+    it('lets the list go when the finger comes back to the content end', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const el = midDetentScroller(hook, 300);
+      act(() => {
+        touch(el, 'touchstart', 500);
+        el.scrollTop = 600;
+        touch(el, 'touchmove', 200); // the content ended here
+        touch(el, 'touchmove', 150);
+      });
+      expect(el.style.overscrollBehaviorY).toBe('none');
+
+      act(() => {
+        touch(el, 'touchmove', 210); // back below the anchor
+      });
+      // The list scrolls again from here, with its own bounce.
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(el.style.overscrollBehaviorY).toBe('');
     });
 
     it('does not hand off while the content can still scroll', () => {

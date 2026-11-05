@@ -32,7 +32,7 @@ import {
   durationVars,
   easeVars,
 } from '../theme/tokens.stylex';
-import {isRenderable, mergeProps} from '../utils';
+import {isRenderable, mergeProps, rtlStyles} from '../utils';
 import {useClipboard} from '../hooks/useClipboard';
 import {useScrollableArea} from '../hooks/useScrollableArea';
 import {Icon} from '../Icon';
@@ -45,13 +45,26 @@ import {
   flatTokensToLines,
   SYNC_TOKENIZE_THRESHOLD,
 } from './tokenizer';
-import type {SyntaxToken, TokenLine} from './tokenizer';
+import type {CodeLanguageInput, SyntaxToken, TokenLine} from './tokenizer';
+import type {CodeLanguage} from './grammar';
+import {
+  isCustomCodeLanguage,
+  languageKey,
+  languageLabel as languageWord,
+  sameCodeLanguage,
+} from './grammar';
 import {ensureHighlightStyles} from './highlightStyles';
 import {applyHighlightRangesChunked} from './highlightRanges';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
 import {SyntaxTheme, type SyntaxThemeDefinition} from '../theme/syntax';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/CodeBlock/CodeBlock.generated';
+
+registerEnglishFallback(english);
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -443,6 +456,7 @@ const LINE_CHUNK_THRESHOLD = 100;
 const CodeChunk = React.memo(function CodeChunk({
   lines,
   startIndex,
+  startLineNumber,
   highlightSet,
   diffKinds,
   renderLineContent,
@@ -450,6 +464,7 @@ const CodeChunk = React.memo(function CodeChunk({
 }: {
   lines: string[];
   startIndex: number;
+  startLineNumber: number;
   highlightSet: Set<number> | null;
   diffKinds: ReadonlyArray<DiffLineKind> | null;
   renderLineContent: (line: string, lineIndex: number) => React.ReactNode;
@@ -459,11 +474,12 @@ const CodeChunk = React.memo(function CodeChunk({
     <>
       {lines.map((line, j) => {
         const i = startIndex + j;
+        const lineNumber = startLineNumber + i;
         const diffKind = diffKinds?.[i];
         return (
           <div
             key={i}
-            data-line={i + 1}
+            data-line={lineNumber}
             data-diff={diffKind === 'context' ? undefined : diffKind}
             {...stylex.props(
               styles.line,
@@ -475,7 +491,8 @@ const CodeChunk = React.memo(function CodeChunk({
               diffKind === 'header' && styles.lineDiffHeader,
               // Last on purpose: a highlight replaces a diff tint rather than
               // stacking on it, so tokens keep their single-paint contrast.
-              (highlightSet?.has(i + 1) ?? false) && styles.lineHighlighted,
+              (highlightSet?.has(lineNumber) ?? false) &&
+                styles.lineHighlighted,
             )}>
             {renderLineContent(line, i)}
           </div>
@@ -491,6 +508,7 @@ function renderLines(
   diffKinds: ReadonlyArray<DiffLineKind> | null,
   renderLineContent: (line: string, lineIndex: number) => React.ReactNode,
   lineNumbers: boolean,
+  startLineNumber: number,
   chunkSize: number = LINE_CHUNK_SIZE,
 ): React.ReactNode {
   chunkSize = Math.max(1, Math.floor(chunkSize));
@@ -500,6 +518,7 @@ function renderLines(
       <CodeChunk
         lines={lines}
         startIndex={0}
+        startLineNumber={startLineNumber}
         highlightSet={highlightSet}
         diffKinds={diffKinds}
         renderLineContent={renderLineContent}
@@ -523,6 +542,7 @@ function renderLines(
         <CodeChunk
           lines={chunkLines}
           startIndex={start}
+          startLineNumber={startLineNumber}
           highlightSet={highlightSet}
           diffKinds={diffKinds}
           renderLineContent={renderLineContent}
@@ -541,10 +561,27 @@ function renderLines(
 export interface CodeBlockProps extends BaseProps<HTMLPreElement> {
   ref?: React.Ref<HTMLPreElement>;
   code: string;
-  language?: string;
+  /**
+   * The code's language: a built-in identifier such as `'rust'`, or a
+   * language value — a module imported on its own, such as `graphql` from
+   * `@astryxdesign/core/CodeBlock/languages/graphql`, or one made with
+   * `createCodeLanguage`. A string selects only a built-in grammar; the label
+   * shows the string, or the value's `name`.
+   * @default 'plaintext'
+   */
+  language?: string | CodeLanguage;
   title?: string;
   hasLanguageLabel?: boolean;
   hasLineNumbers?: boolean;
+  /**
+   * First line's number in the source file. The gutter shows file
+   * coordinates (`startLineNumber + index`) instead of starting at 1, so a
+   * code excerpt reads with its real line numbers. `highlightLines` uses the
+   * same file coordinates. Values below 1 clamp to 1.
+   * @default 1
+   */
+  startLineNumber?: number;
+  /** 1-indexed line numbers to highlight, in the same file coordinates as the gutter (see `startLineNumber`). Out-of-range entries render no highlight. */
   highlightLines?: number[];
   /**
    * Render the code as a unified diff over `language`: lines starting with
@@ -562,7 +599,7 @@ export interface CodeBlockProps extends BaseProps<HTMLPreElement> {
    * has one, otherwise beside the code in the top inline-end corner, never
    * over it. It never creates a header, and activating it never collapses the
    * block. You own each control's label, state, and action; ghost `sm`
-   * IconButtons match Copy.
+   * IconButtons match Copy's size and variant.
    */
   endContent?: React.ReactNode;
   isWrapped?: boolean;
@@ -588,6 +625,12 @@ export interface CodeBlockProps extends BaseProps<HTMLPreElement> {
    * @default 'card'
    */
   container?: 'card' | 'section';
+  /**
+   * @deprecated Pass a custom language as `language` instead:
+   * `language={createCodeLanguage({name, identifiers, tokenize})}` takes this
+   * same function as `tokenize`. Still works exactly as released and wins
+   * over `language`'s grammar; `astryx upgrade` rewrites static uses.
+   */
   tokenizer?: (
     code: string,
     language: string,
@@ -633,27 +676,49 @@ function isSafari(): boolean {
  */
 function useTokenLines(
   code: string,
-  language: string,
+  languageProp: CodeLanguageInput,
   customTokenizer?: CodeBlockProps['tokenizer'],
 ): TokenLine[] {
+  // Keep one language while it paints the same, so an inline
+  // `createCodeLanguage({...})` — the form the `tokenizer` codemod writes —
+  // tokenizes once, as `tokenizer` did (adjusting state during render).
+  const [language, setLanguage] = useState(languageProp);
+  if (!sameCodeLanguage(language, languageProp)) {
+    setLanguage(languageProp);
+  }
   const [asyncTokenResult, setAsyncTokenResult] = useState<{
     code: string;
-    language: string;
+    language: CodeLanguageInput;
     tokens: TokenLine[];
   } | null>(null);
 
   const syncTokens = useMemo(() => {
     if (customTokenizer) {
-      return flatTokensToLines(customTokenizer(code, language), code);
+      return flatTokensToLines(
+        customTokenizer(code, languageWord(language)),
+        code,
+      );
     }
-    if (code.length >= SYNC_TOKENIZE_THRESHOLD) {
+    // A custom language paints synchronously at any length, as `tokenizer`
+    // does, so the codemod's rewrite keeps the same first paint (FR13).
+    if (
+      code.length >= SYNC_TOKENIZE_THRESHOLD &&
+      !isCustomCodeLanguage(language)
+    ) {
       return null;
     }
     return tokenize(code, language);
   }, [code, language, customTokenizer]);
 
+  // Synchronizes long code with a scheduler-yielding tokenize task: it starts
+  // when the code, language, or tokenizer changes, and the
+  // cleanup aborts the previous one.
   useEffect(() => {
-    if (code.length < SYNC_TOKENIZE_THRESHOLD || customTokenizer) {
+    if (
+      code.length < SYNC_TOKENIZE_THRESHOLD ||
+      customTokenizer ||
+      isCustomCodeLanguage(language)
+    ) {
       return;
     }
 
@@ -743,6 +808,7 @@ function SpanCodeContent({
   sizeStyle,
   hasLineNumbers,
   maxDigits,
+  startLineNumber,
 }: {
   lines: string[];
   tokenLines: TokenLine[];
@@ -753,7 +819,10 @@ function SpanCodeContent({
   sizeStyle: stylex.StyleXStyles;
   hasLineNumbers: boolean;
   maxDigits: number;
+  startLineNumber: number;
 }) {
+  // Syncs the document's ::highlight() stylesheet. The rules go in one time,
+  // before layout reads.
   useInsertionEffect(() => {
     ensureHighlightStyles();
   }, []);
@@ -812,6 +881,7 @@ function SpanCodeContent({
         diffKinds,
         renderLineContent,
         hasLineNumbers,
+        startLineNumber,
       )}
     </code>
   );
@@ -830,6 +900,7 @@ function RangeCodeContent({
   sizeStyle,
   hasLineNumbers,
   maxDigits,
+  startLineNumber,
 }: {
   lines: string[];
   tokenLines: TokenLine[];
@@ -839,6 +910,7 @@ function RangeCodeContent({
   sizeStyle: stylex.StyleXStyles;
   hasLineNumbers: boolean;
   maxDigits: number;
+  startLineNumber: number;
 }) {
   const codeRef = useRef<HTMLElement>(null);
 
@@ -853,6 +925,8 @@ function RangeCodeContent({
     }
   }, []);
 
+  // Syncs the CSS.highlights registry with the token ranges. It applies them in
+  // chunks.
   useEffect(() => {
     if (!hasHighlightAPI()) {
       return;
@@ -890,6 +964,7 @@ function RangeCodeContent({
         diffKinds,
         renderLineContent,
         hasLineNumbers,
+        startLineNumber,
       )}
     </code>
   );
@@ -914,6 +989,7 @@ export function CodeBlock({
   title,
   hasLanguageLabel = true,
   hasLineNumbers = false,
+  startLineNumber = 1,
   highlightLines,
   isDiff = false,
   hasCopyButton = true,
@@ -935,7 +1011,7 @@ export function CodeBlock({
   ref,
   ...props
 }: CodeBlockProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // Owns the clipboard write, the transient copied flag, its reset timer, and
   // the polite copy announcement (a swapped aria-label alone is not reliably
   // announced) — shared with Timestamp via the same hook.
@@ -970,6 +1046,12 @@ export function CodeBlock({
     customTokenizer,
   );
   const diffKinds = diff?.kinds ?? null;
+  // File coordinates for the gutter and highlights. Values below 1 clamp to
+  // 1 so the gutter never shows a 0 or negative line number.
+  const effectiveStartLineNumber =
+    Number.isFinite(startLineNumber) && startLineNumber > 1
+      ? Math.floor(startLineNumber)
+      : 1;
   const highlightSet = useMemo(
     () => (highlightLines ? new Set(highlightLines) : null),
     [highlightLines],
@@ -983,19 +1065,25 @@ export function CodeBlock({
   }, [code, copy, onCopy]);
 
   const sizeStyle = size === 'sm' ? styles.sizeSm : styles.sizeMd;
-  // Digits in the largest line number — sizes the gutter column width.
-  const maxLineDigits = String(lines.length).length;
+  // Digits in the largest visible line number — sizes the gutter column width.
+  const maxLineDigits = String(
+    effectiveStartLineNumber + lines.length - 1,
+  ).length;
   // With the diff layer on, the label and viewport name say so: `diff` over
   // plaintext, `tsx diff` over a language — so a diff keeps its header,
   // collapse control, and a name that still matches a `diff` fence.
+  // A language value labels with its `name` and reflects its first
+  // identifier as `data-language`, so theme selectors keep matching (FR13).
+  const languageName = languageWord(language);
+  const languageAttr = languageKey(language);
   const languageLabel = !hasLanguageLabel
     ? null
     : isDiff
-      ? language === 'plaintext'
+      ? languageName === 'plaintext'
         ? 'diff'
-        : `${language} diff`
-      : language !== 'plaintext'
-        ? language
+        : `${languageName} diff`
+      : languageName !== 'plaintext'
+        ? languageName
         : null;
   const showHeader = title != null || languageLabel != null;
 
@@ -1071,7 +1159,11 @@ export function CodeBlock({
   const headerEl = showHeader ? (
     <div
       {...mergeProps(
-        themeProps('code-block-header', {size, language, container}),
+        themeProps('code-block-header', {
+          size,
+          language: languageAttr,
+          container,
+        }),
         stylex.props(
           styles.headerRow,
           hasLineNumbers ? styles.headerWithDivider : styles.headerCompact,
@@ -1104,11 +1196,15 @@ export function CodeBlock({
         )}>
         <span
           {...mergeProps(
-            themeProps('code-block-title', {size, language}),
+            themeProps('code-block-title', {size, language: languageAttr}),
             stylex.props(styles.headerTitle),
           )}>
           {canCollapse && (
-            <span {...stylex.props(styles.collapseChevron)}>
+            // The collapsed chevron points toward the inline end, so it mirrors
+            // in RTL (design:bidirectionality DR4). The mirror sits on this box
+            // so the glyph's own rotation still eases: rotated down when
+            // expanded, a mirrored glyph still points down.
+            <span {...stylex.props(styles.collapseChevron, rtlStyles.mirror)}>
               <Icon
                 icon="chevronRight"
                 size="xsm"
@@ -1158,6 +1254,7 @@ export function CodeBlock({
             sizeStyle={sizeStyle}
             hasLineNumbers={hasLineNumbers}
             maxDigits={maxLineDigits}
+            startLineNumber={effectiveStartLineNumber}
           />
         ) : (
           <RangeCodeContent
@@ -1169,6 +1266,7 @@ export function CodeBlock({
             sizeStyle={sizeStyle}
             hasLineNumbers={hasLineNumbers}
             maxDigits={maxLineDigits}
+            startLineNumber={effectiveStartLineNumber}
           />
         )}
       </div>
@@ -1179,7 +1277,7 @@ export function CodeBlock({
     <pre
       ref={ref}
       {...mergeProps(
-        themeProps('code-block', {size, language, container}),
+        themeProps('code-block', {size, language: languageAttr, container}),
         stylex.props(
           styles.root,
           hasControls && !showHeader && styles.rootCorner,

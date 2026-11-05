@@ -126,9 +126,10 @@ import AppKit
   #expect(Icon.color(for: .tertiary, in: tokens) == tokens.color.iconSecondary)
   #expect(Icon.color(for: .disabled, in: tokens) == tokens.color.iconDisabled)
   #expect(Icon.color(for: .accent, in: tokens) == tokens.color.accent)
-  #expect(Icon.color(for: .success, in: tokens) == tokens.color.success)
-  #expect(Icon.color(for: .error, in: tokens) == tokens.color.error)
-  #expect(Icon.color(for: .warning, in: tokens) == tokens.color.warning)
+  #expect(Icon.color(for: .info, in: tokens) == tokens.color.iconInfo)
+  #expect(Icon.color(for: .success, in: tokens) == tokens.color.iconSuccess)
+  #expect(Icon.color(for: .error, in: tokens) == tokens.color.iconError)
+  #expect(Icon.color(for: .warning, in: tokens) == tokens.color.iconWarning)
   #expect(Icon.color(for: .inherit, in: tokens) == nil)
 }
 

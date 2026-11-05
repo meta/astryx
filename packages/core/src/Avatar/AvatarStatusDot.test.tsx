@@ -198,6 +198,28 @@ describe('AvatarStatusDot', () => {
       }
     });
 
+    it('uses each filled status plate matching on-fill ink role', () => {
+      const probe = stylex.create({
+        successInk: {color: colorVars['--color-on-success']},
+        errorInk: {color: colorVars['--color-on-error']},
+      });
+      const cases = [
+        ['success', probe.successInk],
+        ['error', probe.errorInk],
+      ] as const;
+
+      for (const [variant, ink] of cases) {
+        const inkClasses = (stylex.props(ink).className ?? '')
+          .split(' ')
+          .filter(cls => !cls.includes('__'));
+        expect(inkClasses.length).toBeGreaterThan(0);
+        const dot = renderDot({variant}, 48);
+        for (const cls of inkClasses) {
+          expect(dot.className).toContain(cls);
+        }
+      }
+    });
+
     it('lets a user icon inherit the dot ink instead of hard-coding surface', () => {
       // Surface ink on the surface-filled ring variant would be invisible.
       const probe = stylex.create({

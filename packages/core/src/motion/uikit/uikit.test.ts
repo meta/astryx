@@ -15,15 +15,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {
-  PRESS_FADE_MS,
   PRESS_FLASH_MS,
   PRESS_ONSET_MS,
   PRESS_SCROLL_BRAKE_MS,
 } from '../../utils/pressGesture';
+import * as uikit from '.';
 import {scroll, springs, timing} from '.';
+import {CLICK_GUARD_WINDOW_MS} from '../../utils/clickGuard';
+import {UIKIT_GESTURES} from './gestures';
 
-// Modules in this folder that hold no table of their own (none yet).
-const NON_TABLE_FILES: string[] = [];
+// Modules in this folder that hold no table of their own: longPress.ts holds
+// only the long-press numbers, whose sources gestures.ts's entries carry.
+const NON_TABLE_FILES: string[] = ['longPress.ts'];
 // Every domain file carries its sources as JSDoc tags: a new one is enforced
 // the moment it lands.
 const TABLE_FILES = fs
@@ -59,16 +62,67 @@ interface Leaf {
 function leavesOf(file: string): Leaf[] {
   const text = fs.readFileSync(path.resolve(__dirname, file), 'utf8');
   const lines = text.split('\n');
-  // Every exported table object: a domain may export a group of its own
-  // (the press clocks) so a reader takes that group alone.
-  const starts = lines.flatMap((line, index) =>
-    /^export const \w+ = \{$/.test(line) ? [index] : [],
-  );
+  // Every exported object: a row when its own JSDoc carries the source (one
+  // spring, exported so a reader takes it alone), otherwise a table or a
+  // group of its own (the press clocks) whose leaves carry the sources.
+  const starts: number[] = [];
+  const rows: Leaf[] = [];
+  // The groups and rows this file exports itself: a leaf that only names one
+  // of them is checked where it is declared.
+  const exported = new Set<string>();
+  lines.forEach((line, index) => {
+    const match = /^export const (\w+) = \{/.exec(line);
+    if (match == null) {
+      return;
+    }
+    exported.add(match[1]);
+    const doc = docAbove(lines, index);
+    // A one-line export is a row whether or not it is sourced, so an
+    // unsourced one fails the source check below instead of being skipped.
+    if (/^@source /m.test(doc) || !line.endsWith('{')) {
+      rows.push({file, key: match[1], doc});
+    } else {
+      starts.push(index);
+    }
+  });
+  // Values bound from one of those groups (`const {curve: move} = group;`)
+  // are checked where the group declares them too.
+  const bindings = /^const \{([^}]+)\} =\s*(?:\n\s*)?(\w+);/gm;
+  for (const [, names, group] of text.matchAll(bindings)) {
+    if (exported.has(group)) {
+      for (const name of names.split(',')) {
+        exported.add(name.split(':').pop()!.trim());
+      }
+    }
+  }
   expect(starts.length).toBeGreaterThan(0);
-  return starts.flatMap(start => leavesFrom(file, lines, start));
+  return [
+    ...starts.flatMap(start => leavesFrom(file, lines, start, exported)),
+    ...rows,
+  ];
 }
 
-function leavesFrom(file: string, lines: string[], start: number): Leaf[] {
+/** The JSDoc block right above line `index`, without its comment markers. */
+function docAbove(lines: string[], index: number): string {
+  if (!lines[index - 1]?.trim().endsWith('*/')) {
+    return '';
+  }
+  let first = index - 1;
+  while (first > 0 && !lines[first].trim().startsWith('/**')) {
+    first--;
+  }
+  return lines
+    .slice(first, index)
+    .map(text => text.trim().replace(/^\/?\*+\/?\s?/, '') + '\n')
+    .join('');
+}
+
+function leavesFrom(
+  file: string,
+  lines: string[],
+  start: number,
+  exported: ReadonlySet<string>,
+): Leaf[] {
   const leaves: Leaf[] = [];
   let doc = '';
   let inDoc = false;
@@ -103,9 +157,10 @@ function leavesFrom(file: string, lines: string[], start: number): Leaf[] {
     if (trimmed.startsWith('} as const')) {
       break;
     }
-    // A group exported on its own and read back by name (`press,`): its
-    // leaves are checked where it is declared.
-    if (/^\w+,$/.test(trimmed)) {
+    // A group exported on its own and read back by name (`press,` or
+    // `tap: UIKIT_TAP,`): its leaves are checked where it is declared.
+    const reference = /^(?:\w+: )?(\w+),$/.exec(trimmed);
+    if (reference != null && exported.has(reference[1])) {
       doc = '';
       continue;
     }
@@ -222,6 +277,24 @@ function expectSourced(key: string, doc: string) {
 }
 
 describe('UIKit constants table: values', () => {
+  it('carries no stray-click guess: the click guard owns its window (M-G17)', () => {
+    // CLICK_GUARD_WINDOW_MS (utils/clickGuard.ts) bounds the stray click; the
+    // table's 1000 ms guess had no reader left once the guard replaced the
+    // host's swallower.
+    expect(Object.keys(UIKIT_GESTURES)).not.toContain('click');
+    expect(
+      Object.values(UIKIT_GESTURES).some(group => 'strayClickWindow' in group),
+    ).toBe(false);
+  });
+
+  it("keeps UIKIT_CLICK in the barrel for importers written before the click guard, with the guard's window", () => {
+    // internal/motion.ts and its importers read it from the barrel.
+    expect(uikit.UIKIT_CLICK.strayClickWindow.value).toBe(
+      CLICK_GUARD_WINDOW_MS,
+    );
+    expect(Object.values(UIKIT_GESTURES)).not.toContain(uikit.UIKIT_CLICK);
+  });
+
   it('names each platform preset for its use, not its source', () => {
     // spec AST-094 FR4: a role is named for its use; the source stays in the
     // JSDoc (SwiftUI .smooth, UISpringTimingParameters(), Core Animation's
@@ -259,6 +332,31 @@ describe('UIKit constants table: values', () => {
     expect(timing).not.toHaveProperty('implicitAnimationMs');
   });
 
+  it('rows measured on one spring stay equal', () => {
+    // Each row is its own literal so a bundle keeps only the rows it
+    // imports (springRows.test.ts); these were measured to share a spring.
+    for (const group of [
+      // UIKit's default spring.
+      ['viewChange', 'sheetPresent', 'sheetDismiss', 'banner'],
+      ['navigationPush', 'navigationPop'],
+      // The presentation's pace at 80 % damping.
+      ['sheetReleaseFast', 'sheetDismissSwipe'],
+      // UIKit's legacy 0.404 s spring, critically damped.
+      [
+        'alertPresent',
+        'alertDismiss',
+        'actionSheetPresent',
+        'actionSheetDismiss',
+      ],
+      ['menuOpen', 'contextMenuLift'],
+      ['menuClose', 'contextMenuDismiss'],
+    ] as const) {
+      for (const name of group.slice(1)) {
+        expect(springs[name], name).toEqual(springs[group[0]]);
+      }
+    }
+  });
+
   it('UIKit\u2019s default spring has the documented damping ratio 4.56 before clamping', () => {
     const {mass, stiffness, damping} = springs.viewChange;
     expect(damping / (2 * Math.sqrt(stiffness * mass))).toBeCloseTo(4.56, 2);
@@ -274,7 +372,6 @@ describe('UIKit constants table: values', () => {
   it('press clocks agree with the touch press model they were measured for', () => {
     expect(scroll.delaysContentTouchesMs).toBe(PRESS_ONSET_MS);
     expect(timing.press.flashMs).toBe(PRESS_FLASH_MS);
-    expect(timing.press.highlightOutMs).toBe(PRESS_FADE_MS);
     expect(timing.press.scrollBrakeMs).toBe(PRESS_SCROLL_BRAKE_MS);
   });
 

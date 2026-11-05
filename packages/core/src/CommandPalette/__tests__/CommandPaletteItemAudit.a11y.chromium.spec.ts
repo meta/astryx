@@ -20,7 +20,8 @@ import {
   type CDPSession,
   type Locator,
   type Page,
-} from '@playwright/test';
+} from '@astryxdesign/a11y-spec/playwright';
+import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -28,7 +29,9 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const OUTPUT = path.resolve('command-palette-item-audit-evidence');
+const EVIDENCE = path.resolve('command-palette-item-audit-evidence');
+// This copy's evidence folder, set in beforeAll (one per --repeat-each copy).
+let OUTPUT = EVIDENCE;
 const WIDE = {width: 1024, height: 768};
 const NARROW = {width: 320, height: 720};
 
@@ -202,8 +205,7 @@ async function highlightFromKeyboard(
 }
 
 test.beforeAll(async () => {
-  fs.rmSync(OUTPUT, {recursive: true, force: true});
-  fs.mkdirSync(OUTPUT, {recursive: true});
+  OUTPUT = resetAuditEvidence(EVIDENCE, test.info());
   checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();

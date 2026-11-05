@@ -238,7 +238,7 @@ export const doc = {
     {
       value: 'search',
       description:
-        'The echoed query, `matchCount` (total matches, before `limit`), and results, a ranked SearchResultEntry[] bounded by `limit`: each {domain, name, package, score, reason, description, command} (package is the npm package that owns the result), plus import (components, hooks), title, parent (the command that opens the level above), and, for a hit on one section, section (docs), or displayName and kind (templates). When a search with no `type` could not obtain @astryxdesign/core, `meta.partial` is {skipped, reason}: the domains it skipped (component, hook, template) and why.',
+        'The echoed query, `matchCount` (total matches, before `limit`), and results, a ranked SearchResultEntry[] bounded by `limit`: each {domain, name, package, score, reason, description, command} (package is the npm package that owns the result), plus import (components, hooks), title, parent (the command that opens the level above), and, for a hit on one section, section (docs), or displayName and kind (templates). The result for a deprecated component also carries deprecated {replacement, description}: the name of the component to use instead and the modernization route, from its doc. When a search with no `type` could not obtain @astryxdesign/core, `meta.partial` is {skipped, reason}: the domains it skipped (component, hook, template) and why.',
     },
 
     // build
@@ -262,7 +262,7 @@ export const doc = {
     {
       value: 'swizzle.copy',
       description:
-        "An eject receipt: component name, owning package, output directory, files-copied count, the written file names, whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling. The envelope's package names the same owning package.",
+        "An eject receipt: component name, owning package, output directory, files-copied count, the copied file names (relative to the component folder; owner modules copied beside it start with ../), whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling. The envelope's package names the same owning package.",
     },
 
     // gap reports
@@ -286,7 +286,7 @@ export const doc = {
     {
       value: 'template.show',
       description:
-        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and demoMediaReplaced (how many Astryx demo media references were replaced with placeholders for you to swap for your own media).",
+        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and demoMediaReplaced (how many Astryx demo media references were replaced with placeholders for you to swap for your own media), and demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder for your own content).",
     },
     {
       value: 'template.skeleton',
@@ -296,7 +296,7 @@ export const doc = {
     {
       value: 'template.copy',
       description:
-        "A scaffold receipt: template id, output directory, written file name, file count, demoMediaReplaced (how many Astryx demo media references were replaced with placeholders), notes (setup notes naming what the template needs that the project lacks — missing packages, missing StyleX compiler; empty when satisfied), missingPackages (external package names the template imports that are not in the project), and installCommand (a ready-to-run install command with the detected package manager and workspace version ranges; null when nothing is missing, or when several lockfiles leave the package manager undetermined). The envelope's package names the npm package that owns the template.",
+        "A scaffold receipt: template id, output directory, written file name, file count, demoMediaReplaced (how many Astryx demo media references were replaced with placeholders), demoContentReplaced (how many Astryx docs-only demo content elements were replaced with a Text placeholder), notes (setup notes naming what the template needs that the project lacks — missing packages, missing StyleX compiler; empty when satisfied), missingPackages (external package names the template imports that are not in the project), and installCommand (a ready-to-run install command with the detected package manager and workspace version ranges; null when nothing is missing, or when several lockfiles leave the package manager undetermined). The envelope's package names the npm package that owns the template.",
     },
 
     {
