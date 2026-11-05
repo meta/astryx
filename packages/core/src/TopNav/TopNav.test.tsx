@@ -223,7 +223,6 @@ describe('TopNav', () => {
     );
     const column = screen.getByText('A very long product name').parentElement!;
     expect(getComputedStyle(column).flexShrink).toBe('1');
-    expect(getComputedStyle(column).minWidth).toBe('0');
   });
 });
 

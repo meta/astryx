@@ -58,8 +58,13 @@ registerEnglishFallback(english);
 // =============================================================================
 
 const styles = stylex.create({
+  // A grid, not a flex row, so the root's narrowest size is the logo and the
+  // controls beside the text: the text column (minWidth 0) adds nothing to it.
+  // A crowded bar truncates the text first and never shrinks the logo.
   root: {
-    display: 'flex',
+    display: 'grid',
+    gridAutoFlow: 'column',
+    justifyContent: 'start',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
     minHeight: spacingVars['--spacing-8'],
