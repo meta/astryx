@@ -921,7 +921,9 @@ export function busyWindowProof(
     // when it and the block's first frame are both within the bound.
     let before: (typeof valued)[number] | undefined;
     for (const f of valued) {
-      if (f.t >= window.from) break;
+      if (f.t >= window.from) {
+        break;
+      }
       before = f;
     }
     const firstInBlock = valued.find(f => f.t >= window.from);
