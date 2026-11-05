@@ -35,24 +35,25 @@ async function openStory(page: Page, id: string): Promise<void> {
 }
 
 /** Boxes of the heading's logo, its text, and the first nav item after it. */
-function measure(page: Page) {
+async function measure(page: Page) {
   return page.evaluate(() => {
-    const heading = document.querySelector<HTMLElement>('.top-nav-heading')!;
-    const logo = heading.querySelector('svg, img')!.getBoundingClientRect();
-    const text = [...heading.querySelectorAll<HTMLElement>('*')].find(
+    const heading = document.querySelector<HTMLElement>('.top-nav-heading');
+    const logo = heading?.querySelector('svg, img');
+    const text = [...(heading?.querySelectorAll<HTMLElement>('*') ?? [])].find(
       el =>
         el.childNodes.length === 1 &&
         el.childNodes[0].nodeType === Node.TEXT_NODE &&
         (el.textContent ?? '').trim() !== '',
-    )!;
-    const startRegion = heading.closest('nav')!.firstElementChild!;
-    const firstItem = startRegion.children[1]?.getBoundingClientRect() ?? null;
+    );
+    const firstItem = heading?.closest('nav')?.firstElementChild?.children[1];
+    if (logo == null || text == null || firstItem == null) {
+      throw new Error('the story has no logo, heading text, or nav item');
+    }
     return {
-      logoWidth: logo.width,
-      logoRight: logo.right,
+      logoWidth: logo.getBoundingClientRect().width,
+      logoRight: logo.getBoundingClientRect().right,
       textWidth: text.getBoundingClientRect().width,
-      textTruncated: text.scrollWidth > text.clientWidth,
-      firstItemLeft: firstItem?.left ?? null,
+      firstItemLeft: firstItem.getBoundingClientRect().left,
     };
   });
 }
@@ -65,8 +66,7 @@ for (const width of [700, 600]) {
     await openStory(page, 'core-topnav--full-example');
     const box = await measure(page);
     expect(box.logoWidth).toBeGreaterThan(0);
-    expect(box.firstItemLeft).not.toBeNull();
-    expect(box.logoRight).toBeLessThanOrEqual(box.firstItemLeft!);
+    expect(box.logoRight).toBeLessThanOrEqual(box.firstItemLeft);
     expect(box.textWidth).toBeLessThan(181);
   });
 }
@@ -77,17 +77,20 @@ test('a long heading truncates inside its column instead of running under the en
   await page.setViewportSize({width: 420, height: 200});
   await openStory(page, 'core-topnav--title-only');
   const result = await page.evaluate(() => {
-    const heading = document.querySelector<HTMLElement>('.top-nav-heading')!;
-    const text = [...heading.querySelectorAll<HTMLElement>('*')].find(
+    const heading = document.querySelector<HTMLElement>('.top-nav-heading');
+    const text = [...(heading?.querySelectorAll<HTMLElement>('*') ?? [])].find(
       el =>
         el.childNodes.length === 1 &&
         el.childNodes[0].nodeType === Node.TEXT_NODE &&
         el.textContent === 'Simple App',
-    )!;
-    text.textContent = 'Northwind Traders International Holdings Workspace';
+    );
     const signIn = [...document.querySelectorAll('button')].find(button =>
       /Sign in/.test(button.textContent ?? ''),
-    )!;
+    );
+    if (heading == null || text == null || signIn == null) {
+      throw new Error('the story has no heading text or Sign in button');
+    }
+    text.textContent = 'Northwind Traders International Holdings Workspace';
     return {
       headingRight: heading.getBoundingClientRect().right,
       endLeft: signIn.getBoundingClientRect().left,
