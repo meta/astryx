@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "icon set",
-    "matchCount": 379,
+    "matchCount": 383,
     "results": [
       {
         "domain": "doc",
@@ -114,6 +114,17 @@
         "description": "<text>",
         "import": "@astryxdesign/core/InfoTip",
         "command": "astryx component InfoTip",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "useIcon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Icon",
+        "command": "astryx hook useIcon",
         "mentions": []
       },
       {
@@ -232,18 +243,6 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template CenterHorizontal --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "CenterInsideACard",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template CenterInsideACard --type block",
         "mentions": []
       }
     ]

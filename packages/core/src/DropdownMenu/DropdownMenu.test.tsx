@@ -4688,9 +4688,12 @@ describe('DropdownMenu trigger refs across renders', () => {
     }
     const {rerender} = render(<Menu count={0} />);
     const trigger = screen.getByRole('button', {name: /^Menu/});
+    // Neither the closed menu nor the closed tooltip makes it an anchor.
+    expect(anchorNames(trigger)).toBe('');
+    // The open menu's anchor, on the trigger that also carries the tooltip.
+    fireEvent.click(trigger);
     const before = anchorNames(trigger);
-    // The menu's anchor and the tooltip's, on one element.
-    expect(before.split(',')).toHaveLength(2);
+    expect(before.split(',')).toHaveLength(1);
 
     const stopWatching = watchStyleWrites(trigger);
     rerender(<Menu count={1} />);
@@ -4716,8 +4719,10 @@ describe('DropdownMenu trigger refs across renders', () => {
     }
     const {rerender} = render(<Menu count={0} />);
     const trigger = screen.getByRole('button', {name: 'Actions'});
+    expect(anchorNames(trigger)).toBe('');
+    fireEvent.click(trigger);
     const before = anchorNames(trigger);
-    expect(before.split(',')).toHaveLength(2);
+    expect(before.split(',')).toHaveLength(1);
 
     const stopWatching = watchStyleWrites(trigger);
     rerender(<Menu count={1} />);

@@ -57,9 +57,9 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
   });
 
   it('reports success with a Lab-only notice on every required context', () => {
-    // docsite-test and test read their own scope; build reads it from the
-    // Storybook build, which runs on a Lab-only change.
-    for (const name of ['docsite-test', 'test']) {
+    // test reads its own scope; build reads it from the Storybook build and
+    // docsite-test from the docsite build, which both run on a Lab-only change.
+    for (const name of ['test']) {
       const notice = step(name, NOTICE);
       expect(notice?.if, name).toBe(LAB_TRUE);
       expect(notice.run, name).toContain(
@@ -69,6 +69,12 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     }
     expect(step('build', NOTICE).if).toBe(
       "needs.build-storybook.outputs.lab_only == 'true'",
+    );
+    expect(step('docsite-test', NOTICE).if).toBe(
+      "needs.docsite-build.outputs.lab_only == 'true'",
+    );
+    expect(ci.jobs['docsite-build'].outputs.lab_only).toBe(
+      '${{ steps.scope.outputs.lab_only }}',
     );
     expect(ci.jobs['build-storybook'].outputs.lab_only).toBe(
       '${{ steps.scope.outputs.lab_only }}',
@@ -80,12 +86,15 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
   });
 
   it('keeps every owner the required joins wait on green while skipping its work', () => {
-    for (const name of ['docsite-test', 'test-build', 'typecheck']) {
+    for (const name of ['docsite-build', 'test-build', 'typecheck']) {
       expect(step(name, NOTICE)?.if, name).toBe(LAB_TRUE);
       expect(String(ci.jobs[name].if), name).not.toContain('lab_only');
       for (const work of workAfterScope(name)) {
         if (work.name === 'Validate spec records') continue;
         if (work.name === 'Skip docsite work for Node tooling') continue;
+        // Decides from the scope, Lab-only included, and does no work.
+        if (work.name === 'Decide whether the browser contracts apply')
+          continue;
         if (/^Skip /.test(work.name ?? '')) continue;
         // A step gated on an earlier work step's outcome follows that step.
         if (
