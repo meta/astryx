@@ -201,9 +201,11 @@ async function observe(page: Page) {
       storybookError:
         document.querySelector('.sb-show-errordisplay') != null ||
         document.body.classList.contains('sb-show-errordisplay'),
-      documentDirection: getComputedStyle(
-        document.querySelector('#storybook-root') ?? document.body,
-      ).direction,
+      // The preview sets the story direction on a wrapper inside the root.
+      documentDirection: (() => {
+        const frame = document.querySelector('#storybook-root [dir]');
+        return frame ? getComputedStyle(frame).direction : null;
+      })(),
       documentOverflow: round(
         document.documentElement.scrollWidth - innerWidth,
       ),
