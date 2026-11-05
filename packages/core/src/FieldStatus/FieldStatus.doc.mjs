@@ -82,7 +82,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "A field's status is announced when its message or type changes, not again when a repeated submit fails with the same errors. On a failed submit, announce it from the form with useAnnounce, for example announce(`${errors.length} errors. ${errors[0]}`, 'assertive'), and move focus to the first invalid field.",
+          "A field's status is announced when it first appears and when its message or type changes, not again when a repeated submit fails with the same errors. On such a repeated submit, with the errors unchanged, announce it once from the form with useAnnounce, for example announce(`${errors.length} errors. ${errors[0]}`, 'assertive'), and move focus to the first invalid field. On a first failed submit the fields announce their own errors, so the form adds no announcement.",
       },
     ],
     anatomy,
@@ -113,7 +113,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Status announces on message/type change only. On a failed submit, the form announces once via useAnnounce (error count + first error) and focuses the first invalid field.',
+          'Status announces when it appears and on message/type change only. On a repeated submit with unchanged errors, the form announces once via useAnnounce (error count + first error) and focuses the first invalid field.',
       },
     ],
     anatomy,
