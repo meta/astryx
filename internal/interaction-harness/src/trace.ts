@@ -22,6 +22,7 @@
  */
 
 import type {CDPSession, Page} from '@playwright/test';
+import {frames} from './story';
 
 /**
  * The mark a harness function puts on its own page-side work
@@ -126,7 +127,15 @@ export interface TraceEvent {
 /**
  * Traces the page while `body` runs and counts the rendering work its main
  * thread did between a start mark (placed just before `body`) and an end mark
- * (just after).
+ * (just after). The harness's animation recorder, `waitForRest`,
+ * `waitForAnimation` and a watch's `started()` stand down meanwhile, so a body
+ * may wait with any of them and add no frame of its own, with one gap: on a
+ * CSS `@keyframes` animation (and, for an unwatched `waitForAnimation`, a
+ * cancelled CSS transition) the wait reads its timing, which flushes that
+ * animation's style, so wait on such an animation with `waitForRest`, or
+ * after the trace. Taking a watch, or calling `waitForRest` while an
+ * animation already runs on the element, reads its animations once, which
+ * restyles it: do either before the window a proof counts.
  */
 export async function traceRendering(
   page: Page,
@@ -158,9 +167,39 @@ export async function traceRendering(
       n => performance.timeOrigin + performance.mark(n).startTime,
       name,
     );
-  const fromEpoch = await mark(`${tag}:start`);
-  await body();
-  const toEpoch = await mark(`${tag}:end`);
+  // The harness's animation recorder (curves.ts) runs a callback every frame,
+  // which makes each frame a main-thread one where Blink restyles every running
+  // animation's target (and lays out an anchored one), and it reads the page's
+  // animations, which flushes style: exactly what this counts. It stands down
+  // while this flag is set, a recorder the body itself starts included, and
+  // resumes once the trace ends.
+  const standDown = (on: boolean) =>
+    page.evaluate(value => {
+      const w = window as unknown as {
+        __harnessRenderingTrace?: boolean;
+        __harnessAnimations?: {resume?: () => void};
+      };
+      w.__harnessRenderingTrace = value;
+      if (!value) {
+        w.__harnessAnimations?.resume?.();
+      }
+    }, on);
+  await standDown(true);
+  // The frame the recorder requested before it stood down runs now, before the
+  // start mark. A frame callback makes its frame a main-thread one, in which an
+  // anchored layer that animates lays out.
+  await frames(page, 1);
+  let fromEpoch: number;
+  let toEpoch: number;
+  try {
+    fromEpoch = await mark(`${tag}:start`);
+    await body();
+    toEpoch = await mark(`${tag}:end`);
+  } finally {
+    // Its catch-up read lands after the end mark, outside the counted window.
+    // A failure here would hide the body's own error, which is the one to see.
+    await standDown(false).catch(() => {});
+  }
   await cdp.send('Tracing.end');
   await complete;
   await cdp.detach().catch(() => {});

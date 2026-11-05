@@ -3,9 +3,10 @@
 /**
  * @file vitest.config.ts
  * @input Uses vitest/config, @vitejs/plugin-react
- * @output Vitest configuration with jsdom, coverage, test setup, the two
- *   test projects (`ui`, `node`), and the sequencer that splits `--shard` legs
- * @position Root test config and the actual test entry point. The two projects
+ * @output Vitest configuration with jsdom, coverage, test setup, the three
+ *   test projects (`ui`, `perf`, `node`), and the sequencer that splits
+ *   `--shard` legs
+ * @position Root test config and the actual test entry point. The projects
  *   under `test.projects` decide which files run where via their per-project
  *   include lists. The root-level `test` options (globals, environment,
  *   coverage, setupFiles, pool sizing) are inherited by projects that set
@@ -26,6 +27,11 @@ import DurationShardSequencer from './scripts/vitest-shard-sequencer.mjs';
 
 const rootDir = path.resolve(__dirname, '.');
 const coreSrc = path.resolve(__dirname, 'packages/core/src');
+// Times the Markdown helper pipeline against the empty one on the CPU clock.
+// CPU time still includes cache and memory-bandwidth contention from other
+// work, so this file runs alone in the `perf` project.
+const helperOverheadBenchmark =
+  'packages/core/src/Markdown/Markdown.fr23.perf.test.ts';
 
 export default defineConfig({
   plugins: [
@@ -101,6 +107,8 @@ export default defineConfig({
     //              + packages/vega — need jsdom, the StyleX babel
     //              transform, and the jest-dom setup; inherit all of that from
     //              the root config via `extends: true`.
+    //   - `perf` = the helper-overhead benchmark, which `ui` excludes. It
+    //              inherits the root config too, and runs in a later group.
     //   - `node` = everything else (CLI, build tooling, scripts, internal
     //              utils, and app-level suites that need no DOM) — no DOM, no
     //              StyleX/babel transform, no jest-dom
@@ -133,6 +141,19 @@ export default defineConfig({
             'packages/richtext/src/**/*.test.{ts,tsx,mjs}',
             'packages/vega/src/**/*.test.{ts,tsx,mjs}',
           ],
+          exclude: [...configDefaults.exclude, helperOverheadBenchmark],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: 'perf',
+          // Groups run in order, so this one starts only after the other
+          // projects' files finish.
+          sequence: {groupOrder: 1},
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
+          include: [helperOverheadBenchmark],
         },
       },
       {

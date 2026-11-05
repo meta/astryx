@@ -74,7 +74,7 @@ import {useDropdownMenuPress} from '../hooks/useMenuPress';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
-import {focusForLastInput} from '../utils/focusReturn';
+import {returnFocusForLastInput} from '../utils/focusReturn';
 import {useMenuOverflow} from './useMenuOverflow';
 import {MenuRegionsContext} from './menuRegionsContext';
 import {moveRegionsTab} from './menuRegionStops';
@@ -463,7 +463,7 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
    * Omitted, the menu is the anchored popover. Under a finger, on every
    * device, the finger that opened it picks as UIMenu's does, once it has
    * moved. `'popover'` pins the anchored popover with the pointer behavior on
-   * every device (the opening press follows the settle rule, as before).
+   * every device (the opening press follows the settle rule).
    */
   presentation?: DropdownMenuPresentation;
   items: DropdownMenuOption[];
@@ -473,7 +473,7 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
 interface DropdownMenuCompoundProps extends DropdownMenuBaseProps {
   /**
    * `'popover'` pins the pointer behavior on every device (the opening press
-   * follows the settle rule, as before). Omitted, on every device, the finger
+   * follows the settle rule). Omitted, on every device, the finger
    * that opened the menu picks as UIMenu's does, once it has moved.
    */
   presentation?: 'popover';
@@ -1033,7 +1033,7 @@ function DropdownMenuPopover({
     // reaches only the design system's own Button; the browser's focus option
     // also reaches a control the caller renders, which the browser would
     // otherwise ring (Chromium after a mouse pick, WebKit after a touch).
-    focusForLastInput(trigger, {preventScroll: true});
+    returnFocusForLastInput(trigger);
   }, [hideOpenFlyouts, isControlled, onOpenChange, prepareFocusReturn]);
 
   // Defer item focus until the layer has committed open, so focus restore

@@ -3,7 +3,7 @@
 /**
  * @file pressFeedback.ts
  * @input The press state machine (pressGesture.ts), the menu-press and
- *   press-group markers and the document's pointer, keyboard, scroll and
+ *   press-group markers, the scroll-view test (scrollView.ts) and the document's pointer, keyboard, scroll and
  *   visibility events
  * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps,
  *   pressFadeMs, installPressFeedback and cancelPress
@@ -23,9 +23,13 @@
 // Where the primary pointer is fine, the controller ignores the mouse and the
 // keyboard, and CSS `:active` keeps their press. Under a coarse primary
 // pointer the CSS drops `:active`, so the controller paints every press. A
-// finger's press paints after the delay. A mouse, trackpad or Space press
-// paints at once. The controller reads the same query as the stylesheet, so
-// they agree.
+// mouse, trackpad or Space press paints at once. The controller reads the
+// same query as the stylesheet, so they agree.
+//
+// A finger waits only inside a scroller. Outside one, a surface highlights in
+// the frame the finger lands, as a UIControl does. Inside one, it waits the
+// content-touch delay, because the touch can become a scroll. Rows follow the
+// same rule.
 //
 // A surface's hold does nothing, so it keeps the browser's long-press text
 // selection (AST-094). Only an element whose hold does something suppresses
@@ -43,7 +47,10 @@ import {
   pressGestureStep,
 } from './pressGesture';
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {parseMotionRoleValue} from '../motion/roles';
 import {subscribeInput} from './inputStream';
+import {isInsideScrollView} from './scrollView';
 import {TOUCH_QUERY} from './touchPresentation';
 import {holdsPressThroughDrag} from '../privateAttributes/pressHoldsDrag.stylex';
 import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
@@ -151,19 +158,24 @@ const TIMER_MS: Record<NonNullable<PressStep['timer']>, number> = {
 
 /**
  * The release fade's clock on `element`, read once, at the release, from the
- * property its stylesheet reads: the theme's `--_astryx-motion-tempo`. Under
- * Reduce Motion a tempo may shorten the fade, never lengthen it past 200 ms.
+ * token its stylesheet reads: the theme's `--duration-exit`. Without a
+ * readable value it is the token's default. Under Reduce Motion it is no
+ * longer than the Reduce Motion fade, as in the stylesheet.
  */
 export function pressFadeMs(element: Element): number {
-  const style = getComputedStyle(element);
-  const value = style.getPropertyValue('--_astryx-motion-tempo').trim();
-  const read = value === '' ? Number.NaN : Number(value);
-  const tempo = Number.isFinite(read) && read > 0 ? read : 1;
-  const scaled = PRESS_FADE_MS * tempo;
+  const exit =
+    parseMotionRoleValue(
+      'duration',
+      getComputedStyle(element).getPropertyValue('--duration-exit'),
+    ) ?? PRESS_FADE_MS;
   const reduced =
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  return reduced ? Math.min(scaled, PRESS_FADE_MS) : scaled;
+  const bound = parseMotionRoleValue(
+    'duration',
+    reducedMotionFadeConsts.duration,
+  );
+  return reduced && bound != null ? Math.min(exit, bound) : exit;
 }
 
 /**
@@ -247,7 +259,11 @@ function paintElement(element: HTMLElement, paint: PressPaint): void {
     element.removeAttribute(PRESSED_ATTRIBUTE);
     return;
   }
-  element.setAttribute(PRESSED_ATTRIBUTE, paint);
+  // A step that keeps the paint writes nothing, so the element sees one
+  // change per paint.
+  if (element.getAttribute(PRESSED_ATTRIBUTE) !== paint) {
+    element.setAttribute(PRESSED_ATTRIBUTE, paint);
+  }
 }
 
 function clearTimer(slot: Slot): void {
@@ -536,6 +552,7 @@ function onPointerDown(event: PointerEvent): void {
       kind: 'down',
       x: event.clientX,
       y: event.clientY,
+      delayed: isInsideScrollView(element),
     }),
   );
 }

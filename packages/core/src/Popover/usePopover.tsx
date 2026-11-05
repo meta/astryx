@@ -298,6 +298,7 @@ export interface UsePopoverReturn {
   /**
    * The CSS anchor name to use for positioning.
    * Use when you need to set anchorName manually (e.g., display:contents wrapper).
+   * Set it only while the layer is shown or its exit animation runs.
    */
   anchorId: string;
 

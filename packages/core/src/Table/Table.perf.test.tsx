@@ -46,6 +46,16 @@ const testColumns: TableColumn<TestRow>[] = [
 
 const ciBudgetMultiplier = process.env.CI === 'true' ? 1.5 : 1;
 
+/**
+ * Milliseconds of CPU that this thread has used since `started`. The render
+ * budgets below are this thread's CPU time, not elapsed time. Other work on a
+ * busy machine stretches elapsed time, but not the CPU that the render uses.
+ */
+function cpuMsSince(started: NodeJS.CpuUsage): number {
+  const used = process.threadCpuUsage(started);
+  return (used.user + used.system) / 1000;
+}
+
 // =============================================================================
 // Test: Table doesn't re-render when unrelated state changes
 // =============================================================================
@@ -443,12 +453,10 @@ describe('Table render performance', () => {
     it('should render 100 rows within performance budget', () => {
       const data = createTestData(100);
 
-      const startTime = performance.now();
+      const started = process.threadCpuUsage();
       render(<Table data={data} columns={testColumns} idKey="id" />);
-      const endTime = performance.now();
-
-      const renderTime = endTime - startTime;
-      console.log(`100 rows initial render: ${renderTime.toFixed(2)}ms`);
+      const renderTime = cpuMsSince(started);
+      console.log(`100 rows initial render: ${renderTime.toFixed(2)}ms CPU`);
 
       // Should render within 200ms (generous budget for CI variance)
       expect(renderTime).toBeLessThan(200);
@@ -457,12 +465,10 @@ describe('Table render performance', () => {
     it('should render 500 rows within performance budget', () => {
       const data = createTestData(500);
 
-      const startTime = performance.now();
+      const started = process.threadCpuUsage();
       render(<Table data={data} columns={testColumns} idKey="id" />);
-      const endTime = performance.now();
-
-      const renderTime = endTime - startTime;
-      console.log(`500 rows initial render: ${renderTime.toFixed(2)}ms`);
+      const renderTime = cpuMsSince(started);
+      console.log(`500 rows initial render: ${renderTime.toFixed(2)}ms CPU`);
 
       // CI runners vary more than local machines, so keep the local budget
       // strict while allowing headroom for shared-runner noise.
@@ -500,18 +506,18 @@ describe('Table render performance', () => {
         );
       }
 
-      const renderStart = performance.now();
+      const renderStart = process.threadCpuUsage();
       render(<TestComponent />);
-      const renderTime = performance.now() - renderStart;
+      const renderTime = cpuMsSince(renderStart);
 
       expect(getStatus).toHaveBeenCalledTimes(6);
       expect(renderTime).toBeLessThan(1500 * ciBudgetMultiplier);
 
-      const updateStart = performance.now();
+      const updateStart = process.threadCpuUsage();
       await act(async () => {
         screen.getByRole('button', {name: 'No-op update'}).click();
       });
-      const updateTime = performance.now() - updateStart;
+      const updateTime = cpuMsSince(updateStart);
 
       expect(getStatus).toHaveBeenCalledTimes(6);
       expect(updateTime).toBeLessThan(1000 * ciBudgetMultiplier);
@@ -576,6 +582,10 @@ describe('Table render performance', () => {
 describe('re-sort', () => {
   const sortedRows = createTestData(1000);
   const reversedRows = [...sortedRows].reverse();
+  // By default, a role query reads each row's computed style to check that
+  // the row is not hidden. Over 1,000 rows in jsdom that costs seconds. These
+  // cases assert which rows come first, so they skip that check.
+  const rows = () => screen.getAllByRole('row', {hidden: true});
 
   function renderSortable(
     renderCell: (row: TestRow) => string,
@@ -612,7 +622,7 @@ describe('re-sort', () => {
     resort();
 
     expect(renderCell).not.toHaveBeenCalled();
-    expect(screen.getAllByRole('row')[1]).toHaveTextContent('Item 999');
+    expect(rows()[1]).toHaveTextContent('Item 999');
   });
 
   it('re-renders the rows when a plugin reads the row index', () => {
@@ -629,7 +639,7 @@ describe('re-sort', () => {
     resort();
 
     expect(renderCell).toHaveBeenCalledTimes(1000);
-    const [, first, second] = screen.getAllByRole('row');
+    const [, first, second] = rows();
     expect(first).toHaveTextContent('Item 999');
     expect(first).toHaveAttribute('data-odd', 'false');
     expect(second).toHaveAttribute('data-odd', 'true');

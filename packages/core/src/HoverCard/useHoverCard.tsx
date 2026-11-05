@@ -177,7 +177,8 @@ export interface HoverCardReturn {
 
   /**
    * Ref for the positioning anchor element.
-   * Injects anchorName style for CSS anchor positioning.
+   * While the layer is shown, and until its exit animation ends, the trigger
+   * carries the layer's CSS anchor name.
    */
   positionRef: RefCallback<HTMLElement>;
 
@@ -191,6 +192,7 @@ export interface HoverCardReturn {
   /**
    * The CSS anchor name to use for positioning.
    * Use this when you need to set anchorName manually (e.g., display:contents wrapper).
+   * Set it only while the layer is shown or its exit animation runs.
    */
   anchorId: string;
 

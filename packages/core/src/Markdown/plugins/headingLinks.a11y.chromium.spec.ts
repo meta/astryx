@@ -20,6 +20,7 @@ import {
   type Locator,
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
+import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -27,7 +28,9 @@ import {
 } from '@astryxdesign/a11y-spec/storybook';
 
 const STORY = 'core-markdown--heading-links';
-const OUTPUT = path.resolve('test-results/markdown-heading-links');
+const EVIDENCE = path.resolve('test-results/markdown-heading-links');
+// This copy's evidence folder, set in beforeAll (one per --repeat-each copy).
+let OUTPUT = EVIDENCE;
 const GEOMETRY_TOLERANCE_PX = 1;
 let storybook: StaticServer;
 const evidence: Record<string, unknown> = {};
@@ -56,8 +59,7 @@ interface HeadingGeometry {
 }
 
 test.beforeAll(async () => {
-  fs.rmSync(OUTPUT, {recursive: true, force: true});
-  fs.mkdirSync(OUTPUT, {recursive: true});
+  OUTPUT = resetAuditEvidence(EVIDENCE, test.info());
   evidence.headSha = process.env.ASTRYX_HEAD_SHA ?? null;
   storybook = await serveStorybook(
     process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR,

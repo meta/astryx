@@ -12,6 +12,7 @@
 import {describe, it, expect, vi, afterEach} from 'vitest';
 import {Profiler} from 'react';
 import {render, screen} from '@testing-library/react';
+import {SPINNER_ARC_FRACTION} from './spinnerRotor';
 import {Spinner} from './Spinner';
 import {InternationalizationProvider} from '../i18n';
 import {defineTheme} from '../theme/defineTheme';
@@ -392,6 +393,15 @@ describe('Spinner ring', () => {
     render(<Spinner data-testid="spinner" />);
     expect(ring()).not.toBeNull();
     expect(raf).not.toHaveBeenCalled();
+  });
+
+  it('draws the arc at the shared rotor fraction', () => {
+    render(<Spinner size="xl" data-testid="spinner" />);
+    const arc = rotor().querySelector('circle');
+    const circumference = Math.PI * 28;
+    expect(arc?.getAttribute('stroke-dasharray')).toBe(
+      `${circumference * SPINNER_ARC_FRACTION} ${circumference * (1 - SPINNER_ARC_FRACTION)}`,
+    );
   });
 
   // The ring turns on the compositor: only the rotor moves, and only by

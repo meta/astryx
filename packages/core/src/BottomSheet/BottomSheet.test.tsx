@@ -24,6 +24,7 @@ import {BottomSheet} from './BottomSheet';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
 import {resetBottomSheetStackForTests} from './bottomSheetStack';
 import {BottomSheetSwitcher} from './BottomSheetSwitcher';
+import {getFocusableElements} from '../hooks/useFocusTrap';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
 import {__resetRevealsAtReportForTest} from '../keyboard/useMobileKeyboard';
@@ -4017,7 +4018,11 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(opener).toHaveFocus();
-        expect(focus.mock.calls).toEqual([[{focusVisible: false}]]);
+        // The return reveals nothing: the opener was on screen when the sheet
+        // opened and the page has not moved since.
+        expect(focus.mock.calls).toEqual([
+          [{preventScroll: true, focusVisible: false}],
+        ]);
       });
 
       it('leaves the ring to the browser after a keyboard close', () => {
@@ -4026,7 +4031,7 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(opener).toHaveFocus();
-        expect(focus.mock.calls).toEqual([[]]);
+        expect(focus.mock.calls).toEqual([[{preventScroll: true}]]);
       });
 
       it('clears a ring the native close already drew before refocusing', () => {
@@ -4054,7 +4059,9 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(blur).toHaveBeenCalledTimes(1);
-        expect(focus.mock.calls.at(-1)).toEqual([{focusVisible: false}]);
+        expect(focus.mock.calls.at(-1)).toEqual([
+          {preventScroll: true, focusVisible: false},
+        ]);
         expect(blur.mock.invocationCallOrder[0]).toBeLessThan(
           focus.mock.invocationCallOrder.at(-1) ?? 0,
         );
@@ -4092,7 +4099,9 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(target).toHaveFocus();
-        expect(focus.mock.calls).toEqual([[{focusVisible: false}]]);
+        expect(focus.mock.calls).toEqual([
+          [{preventScroll: true, focusVisible: false}],
+        ]);
       });
     });
   });
@@ -4363,5 +4372,50 @@ describe('BottomSheet', () => {
         ),
       ).toBe('var(--spacing-2)');
     });
+  });
+});
+
+// Tab from the last tabbable control wraps to the first and Shift+Tab from the
+// first wraps to the last, so focus never leaves the modal for the browser's
+// own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+describe('BottomSheet focus region (Dialog DEC-2)', () => {
+  it('wraps Tab and Shift+Tab inside an open modal sheet', () => {
+    render(
+      <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+        <button type="button">First</button>
+        <button type="button">Last</button>
+      </BottomSheet>,
+    );
+    expectTabWrapsInside(screen.getByRole('dialog'));
+  });
+
+  it('leaves Tab alone in a non-modal sheet', () => {
+    render(
+      <BottomSheet
+        isOpen
+        hasScrim={false}
+        onOpenChange={() => {}}
+        label="Filters">
+        <button type="button">Only</button>
+      </BottomSheet>,
+    );
+    const only = screen.getByRole('button', {name: 'Only'});
+    only.focus();
+    expect(fireEvent.keyDown(only, {key: 'Tab'})).toBe(true);
   });
 });
