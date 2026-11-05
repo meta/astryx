@@ -2883,7 +2883,7 @@ hook useChatLayoutContext: () => ChatLayoutContextValue | null
 hook useChatNewMessages: ({…}: UseChatNewMessagesOptions) => UseChatNewMessagesReturn
 hook useChatPasteAsToken: ({…}: UseChatPasteAsTokenOptions) => UseChatPasteAsTokenReturn
 hook useChatStreamScroll: ({…}: UseChatStreamScrollOptions) => UseChatStreamScrollReturn
-hook useClickableContainer: ({…}: UseClickableContainerOptions) => ClickableContainerResult
+hook useClickableContainer: (options: UseClickableContainerOptions) => ClickableContainerResult
 hook useClipboard: (options?: UseClipboardOptions) => UseClipboardReturn
 hook useCollapsible: (options: UseCollapsibleOptions) => UseCollapsibleReturn
 hook useCollator: (options?: Intl.CollatorOptions) => Intl.Collator
@@ -3284,7 +3284,7 @@ const colorDefaults: object
   --color-border-yellow: 'light-dark(#C58600, #B47700)'
   --color-icon-yellow: 'light-dark(#FBC02D, #FFEE58)'
   --color-text-yellow: 'light-dark(#753F07, #FBCE03)'
-const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #0171E3)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #a042f923
+const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #0171E3)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #9de1262f
 const dataTokenDefaults: object
   --color-data-categorical-blue: 'light-dark(#0171E3, #0171E3)'
   --color-data-categorical-orange: 'light-dark(#EB6E00, #EB6E00)'
@@ -3380,7 +3380,7 @@ const inputStatusBorderStyles: Readonly<{ readonly warning: Readonly<{ readonly 
 const inputStatusFocusStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)"> }>; readonly error: Readonly … #a9ac1cbc
 const inputStatusFocusWithinStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)" | "Highlight"> }>; readonly e … #739ff723
 const inputStatusHoverShadowStyles: Readonly<{ readonly warning: Readonly<{ readonly boxShadow: stylex.StyleXClassNameFor<"boxShadow", "none" | { readonly '@media (hover: hover)': stylex.StyleXVar … #de6f47e5
-const inputWrapperStyles: Readonly<{ readonly base: Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly position: stylex.StyleXClassNameFor<"pos … #90a96087
+const inputWrapperStyles: Readonly<{ readonly base: Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly position: stylex.StyleXClassNameFor<"pos … #ba795170
 const interactionOverlayStyles: Readonly<{ readonly backgroundColor: Readonly<{ readonly backgroundColor: stylex.StyleXClassNameFor<"backgroundColor", "light-dark(#0536590C, #FFFFFF0C)" | "lig … #3522ad34
 const overlayPaddingReset: Readonly<{ readonly reset: Readonly<{ readonly '--container-padding-inline-start': stylex.StyleXClassNameFor<"--container-padding-inline-start", "0px">; readonl … #15cd7287
 const radiusDefaults: object
@@ -3973,6 +3973,17 @@ interface ComplexSelectorStatus
   message?: string
   type: 'warning' | 'error' | 'success'
 type ComplexSelectorVariant = 'input' | 'secondary' | 'ghost'
+type ComponentIconMap<Variant extends string = IconVariant> = { [Slot in ComponentIconSlotName]?: ComponentIconSlotMap[Slot] extends true ? IconName | null | ComponentIconRequest<Variant> : ComponentIconValue<ComponentIconSlotMap[Slot], Variant> }
+type ComponentIconRequest<Variant extends string = IconVariant> = Readonly<{ icon?: IconName | null; variant?: Variant; size?: IconSize }>
+interface ComponentIconSlotMap
+  chat-send-button-send: true
+  code-block-copy: { readonly copied: boolean }
+  table-row-expand: { readonly expanded: boolean }
+  table-sort-indicator: { readonly direction: 'ascending' | 'descending' | 'none' }
+  timestamp-copy: { readonly copied: boolean }
+type ComponentIconSlotName = keyof ComponentIconSlotMap & string
+type ComponentIconStaticMap = Partial<Record<ComponentIconSlotName, IconName | null | ComponentIconRequest<string>>>
+type ComponentIconValue<State, Variant extends string = IconVariant> = IconName | null | ComponentIconRequest<Variant> | ((state: Readonly<State>) => ComponentIconRequest<Variant> | null | undefined)
 type ComponentStyleMap = Record<string, Record<string, StyleOverrides>>
 type ContainerComponent = keyof typeof themeDefaultStyles
 interface ContainerOptions
@@ -4161,6 +4172,7 @@ type DayOfWeekName = 'sun' | 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat'
 interface DefineThemeInput<IconVariants extends ReadonlyArray<string> | undefined = ReadonlyArray<string> | undefined, Base extends DefinedTheme | undefined = DefinedTheme | undefined>
   adaptations?: ThemeAdaptations
   color?: ColorScaleConfig
+  componentIcons?: ComponentIconMap<ThemeIconEntryVariant<IconVariants, Base>>
   components?: ComponentStyleMap
   extends?: Base
   iconVariants?: IconVariants
@@ -4180,6 +4192,7 @@ interface DefinedTheme
   __adaptations?: NormalizedThemeAdaptations @internal
   __axes?: ThemeGenerativeAxes @internal
   __built?: true
+  __componentIcons?: Partial<Record<string, StoredComponentIconValue>> @internal
   __iconEntryVariants?: Record<string, ReadonlyArray<string> | undefined> @internal
   __icons?: ThemeIconEntries<never> @internal
   __inputTokens?: Partial<Record<string, TokenValue>> @internal
@@ -4187,6 +4200,7 @@ interface DefinedTheme
   __localTokenOwners?: Record<string, string> @internal
   __onDark?: ResolvedOnMedia @internal
   __onLight?: ResolvedOnMedia @internal
+  componentIcons?: ComponentIconStaticMap
   components?: ComponentStyleMap
   iconVariants?: ReadonlyArray<string>
   icons?: ThemeIconOverrides
@@ -5823,7 +5837,7 @@ interface UseCalendarNavigationReturn
   monthYearLabel: string
   navigateMonth: (delta: number, focusedDate?: ISODateString, offset?: number) => void
   pendingFocus: ISODateString | null
-  visibleCalendarMonths: Array<{ year: number; month: number }>
+  visibleCalendarMonths: { year: number; month: number }[]
   visibleMonths: PlainDate[]
 interface UseChatComposerTokensOptions
   editableRef: React.RefObject<HTMLDivElement | null>
@@ -7140,6 +7154,12 @@ useHoverCard (.)
 ### Also exported from an earlier entry point
 
 ```text
+ComponentIconMap (.)
+ComponentIconRequest (.)
+ComponentIconSlotMap (.)
+ComponentIconSlotName (.)
+ComponentIconStaticMap (.)
+ComponentIconValue (.)
 ExtendedIconName (.)
 Icon (.)
 IconColor (.)
@@ -10342,7 +10362,7 @@ target input-clear-icon (Field)
 target input-group (InputGroup) props [size, status]
 target input-group-text (InputGroup)
 target input-status-icon (Field) props [size, status]
-target item (Item) props [align, density]
+target item (Item) props [align, density] states [disabled, highlighted, selected]
 target item-swipe-action (Item) props [variant]
 target item-swipe-panel (Item) props [side]
 target kbd (Kbd)
@@ -10517,14 +10537,14 @@ attr data-columns (theme reflection on 2 targets)
 attr data-container (theme reflection on 5 targets)
 attr data-density (theme reflection on 25 targets)
 attr data-direction (theme reflection on 3 targets)
-attr data-disabled (theme reflection on 30 targets)
+attr data-disabled (theme reflection on 31 targets)
 attr data-divided (theme reflection on 1 target)
 attr data-edge-fade (theme reflection on 1 target)
 attr data-elevation (theme reflection on 5 targets)
 attr data-format (theme reflection on 1 target)
 attr data-gap (theme reflection on 3 targets)
 attr data-height (theme reflection on 1 target)
-attr data-highlighted (theme reflection on 1 target)
+attr data-highlighted (theme reflection on 2 targets)
 attr data-in-range (theme reflection on 1 target)
 attr data-indicator-position (theme reflection on 1 target)
 attr data-is-pressed (theme reflection on 1 target)
@@ -10547,7 +10567,7 @@ attr data-presentation (theme reflection on 1 target)
 attr data-progress (theme reflection on 4 targets)
 attr data-readonly (theme reflection on 5 targets)
 attr data-select-all (theme reflection on 1 target)
-attr data-selected (theme reflection on 14 targets)
+attr data-selected (theme reflection on 15 targets)
 attr data-sender (theme reflection on 2 targets)
 attr data-shade (theme reflection on 1 target)
 attr data-shape (theme reflection on 5 targets)
