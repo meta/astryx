@@ -14,11 +14,20 @@
  * `followFocus`, so focus leaves the outgoing panel in the toggle's commit.
  */
 
-import {useCallback, useRef, useState, type RefObject} from 'react';
+import {useCallback, useEffect, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** A grid's one tab stop: in the calendar, the day of the shown month. */
+const TAB_STOP = '[tabindex="0"]';
+
+/**
+ * Frames the hand-off tries for before it gives up: about half a second,
+ * longer than the toggle's 0.25 s fade.
+ */
+const FOCUS_FRAMES = 30;
 
 /**
  * The properties that carry a panel's exit. The layer on top fades its
@@ -135,7 +144,10 @@ export function useFadeInert(
     };
   }, [isFading, isWheelOpen, calendarRef, wheelsRef]);
 
-  const pendingFocusRef = useRef<HTMLElement | null>(null);
+  // The incoming panel, and the element that held focus at the hand-off.
+  const pendingFocusRef = useRef<{incoming: HTMLElement; from: Element} | null>(
+    null,
+  );
   /**
    * The toggle's event handler calls this before it changes the state, with
    * the state it sets. Focus inside the outgoing panel then moves to the
@@ -154,24 +166,47 @@ export function useFadeInert(
       ) {
         return;
       }
-      pendingFocusRef.current = incoming;
+      pendingFocusRef.current = {incoming, from: active};
       // The incoming panel goes live with the toggle: focus cannot land in an
       // inert one.
       setFade(fade => ({...fade, focusedFor: next}));
     },
     [calendarRef, wheelsRef],
   );
+  const focusFrameRef = useRef(0);
   // Synchronizes with the document's focus: the incoming panel takes it once
-  // it is live.
+  // it is live and can take focus. A panel that a `visibility` transition
+  // shows takes focus only once that transition starts, so it retries.
   useIsomorphicLayoutEffect(() => {
-    const incoming = pendingFocusRef.current;
-    if (incoming == null || incoming.inert) {
+    const pending = pendingFocusRef.current;
+    if (pending == null || pending.incoming.inert) {
       return;
     }
     pendingFocusRef.current = null;
-    const target = incoming.querySelector<HTMLElement>(FOCUSABLE) ?? incoming;
-    target.focus({preventScroll: true});
+    const {incoming, from} = pending;
+    const target =
+      incoming.querySelector<HTMLElement>(TAB_STOP) ??
+      incoming.querySelector<HTMLElement>(FOCUSABLE) ??
+      incoming;
+    cancelAnimationFrame(focusFrameRef.current);
+    let frames = 0;
+    const tryFocus = () => {
+      const document = target.ownerDocument;
+      target.focus({preventScroll: true});
+      frames += 1;
+      // It retries only while focus is still where the hand-off found it, or
+      // has fallen to the page. A tap or Tab elsewhere ends the hand-off.
+      const active = document.activeElement;
+      const isWaiting =
+        active == null || active === document.body || active === from;
+      if (isWaiting && target.isConnected && frames < FOCUS_FRAMES) {
+        focusFrameRef.current = requestAnimationFrame(tryFocus);
+      }
+    };
+    tryFocus();
   });
+  // Synchronizes with the frame clock: a pending retry ends with the hook.
+  useEffect(() => () => cancelAnimationFrame(focusFrameRef.current), []);
 
   if (!isDeferred) {
     return {

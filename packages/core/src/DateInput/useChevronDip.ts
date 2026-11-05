@@ -3,82 +3,87 @@
 
 /**
  * @file useChevronDip.ts
- * @input Whether the month/year wheels show, and the Reduced Motion policy
+ * @input The title button, and the Reduced Motion policy
  *   (motion/reducedMotion.ts)
- * @output Exports `useChevronDip`: a callback ref for the title button whose
- *   chevron dips to transparent and back under reduced motion on a touch
- *   screen
+ * @output Exports `useChevronDip`: a callback ref for the title button, and
+ *   `dip`, which the toggle's handler calls before it changes the state
  * @position Internal hook of TouchDateField.tsx and TouchDateTimeField.tsx
  *
- * Under reduced motion the chevron must not turn. On a touch screen it dips
- * instead, and its styles apply the turn at the dip's middle.
+ * Under reduced motion on a touch screen the chevron does not turn. It dips
+ * instead (playReducedMotionDip), and the turn lands at the dip's middle.
  *
  * SYNC: When modified, update MonthYearToggle.interaction.browser.spec.ts.
  */
 
-import {useEffect, useRef} from 'react';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {reducedMotionFade} from '../motion/reducedMotion';
-import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {useCallback, useEffect, useRef} from 'react';
+import {
+  playReducedMotionDip,
+  reducedMotionFade,
+  type ReducedMotionDip,
+} from '../motion/reducedMotion';
+
+/** The title chevron's Reduced Motion dip. */
+export interface ChevronDip {
+  /** A callback ref for the title button. */
+  ref: (element: Element | null) => void;
+  /**
+   * The toggle's handler calls this before it changes the state. Under
+   * reduced motion on a touch screen, the chevron dips, and its turn lands at
+   * the dip's middle. Otherwise it does nothing.
+   */
+  dip: () => void;
+}
 
 /**
- * A callback ref for the title button. Under reduced motion on a touch screen,
- * its chevron dips to transparent and back each time `state` changes. The ref
- * sits on the button because a registry Icon does not forward one.
+ * The title chevron's Reduced Motion dip. The ref sits on the button because
+ * a registry Icon does not forward one, and the dip finds the icon inside it.
  *
  * @example
  * ```
- * const dipRef = useChevronDip(isWheelOpen);
- * return <button ref={dipRef}><Icon icon="chevronDown" /></button>;
+ * const chevron = useChevronDip();
+ * const toggle = () => {
+ *   chevron.dip();
+ *   setIsWheelOpen(!isWheelOpen);
+ * };
  * ```
  */
-export function useChevronDip(
-  state: boolean,
-): (element: Element | null) => void {
+export function useChevronDip(): ChevronDip {
   const elementRef = useRef<Element | null>(null);
-  const stateRef = useRef(state);
-  const dipRef = useRef<Animation | null>(null);
-  // Synchronizes the chevron's Web Animation with `state`: each change dips
-  // it once.
-  useIsomorphicLayoutEffect(() => {
-    if (stateRef.current === state) {
-      return;
-    }
-    stateRef.current = state;
-    const element = elementRef.current?.querySelector('.astryx-icon') ?? null;
-    const fade = reducedMotionFade(element);
+  const dipRef = useRef<ReducedMotionDip | null>(null);
+  const dip = useCallback(() => {
+    const icon =
+      elementRef.current?.querySelector<HTMLElement>('.astryx-icon') ?? null;
+    const fade = reducedMotionFade(icon);
     if (
-      element == null ||
+      icon == null ||
       fade == null ||
       fade.duration === 0 ||
-      typeof element.animate !== 'function'
+      typeof icon.animate !== 'function'
     ) {
       return;
     }
-    // A second change within the dip restarts it from the glyph's presented
-    // opacity, read before the running dip is cancelled. Only this case reads
-    // style. The fixed curve keeps the dip's middle on the turn's fixed
-    // delay (half the policy's duration) even when a theme retunes
-    // `timing.curves.move`.
-    const running = dipRef.current;
-    const from =
-      running != null && running.playState === 'running'
-        ? Number(getComputedStyle(element).opacity)
-        : 1;
-    running?.cancel();
-    dipRef.current = element.animate(
-      [{opacity: from}, {opacity: 0}, {opacity: 1}],
-      {duration: fade.duration, easing: reducedMotionFadeConsts.easing},
+    const style = getComputedStyle(icon);
+    // A second change within a dip restarts it from the glyph's presented
+    // opacity.
+    const from = dipRef.current == null ? 1 : Number(style.opacity);
+    // The chevron keeps the turn it shows until the dip's middle: an inline
+    // transform holds it over the styles of the new state.
+    const shown = style.transform;
+    dipRef.current?.cancel();
+    icon.style.transform = shown;
+    dipRef.current = playReducedMotionDip(
+      icon,
+      fade,
+      () => {
+        icon.style.transform = '';
+      },
+      from,
     );
-  }, [state]);
+  }, []);
   // Synchronizes with the dip's animation: it does not outlive the title.
-  useEffect(
-    () => () => {
-      dipRef.current?.cancel();
-    },
-    [],
-  );
-  return element => {
+  useEffect(() => () => dipRef.current?.cancel(), []);
+  const ref = useCallback((element: Element | null) => {
     elementRef.current = element;
-  };
+  }, []);
+  return {ref, dip};
 }

@@ -183,8 +183,6 @@ const SWAP_DURATION = durationVars['--duration-fast'];
 const TOGGLE_DURATION = monthYearToggleMotion.duration;
 const TOGGLE_CURVE = monthYearToggleMotion.curve;
 const CHEVRON_TURN = monthYearToggleMotion.chevronTurn;
-/** Under reduced motion the chevron's turn applies at its dip's middle. */
-const RM_DIP_HALF = `calc(${reducedMotionFadeConsts.duration} / 2)`;
 
 const sizeStyles = stylex.create({
   sm: {
@@ -453,16 +451,11 @@ const styles = stylex.create({
       default: SWAP_DURATION,
       '@media (pointer: coarse)': TOGGLE_DURATION,
       // Under Reduced Motion the chevron does not turn. On a touch screen the
-      // turn applies at the middle of its opacity dip (useChevronDip), and
-      // with a mouse at once.
+      // turn lands at the middle of its opacity dip (useChevronDip), and with
+      // a mouse at once.
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',
       '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
         '0s',
-    },
-    transitionDelay: {
-      default: '0s',
-      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
-        RM_DIP_HALF,
     },
     transitionTimingFunction: {
       default: easeVars['--ease-standard'],
@@ -835,11 +828,14 @@ export function TouchDateField({
   // Once the sheet settles, the hidden wheels are laid out at opacity 0, so
   // the toggle itself only changes opacity.
   const isWheelsWarm = useWheelsWarmUp(isSheetOpen && isTouch);
-  const chevronDipRef = useChevronDip(isWheelOpen);
+  const {ref: chevronRef, dip: dipChevron} = useChevronDip();
   const scrollerHandleRef = useRef<MonthScrollerHandle | null>(null);
   const previousArrowRef = useRef<HTMLButtonElement | null>(null);
   const nextArrowRef = useRef<HTMLButtonElement | null>(null);
   const monthYearButtonRef = useRef<HTMLButtonElement | null>(null);
+  // The title button takes two refs: the chevron's dip reads it, and the
+  // month arrows hand focus to it when both hide.
+  const titleButtonRef = useMergedRefs(monthYearButtonRef, chevronRef);
   // Pending focus handoff from the clear button; see handleClear.
   const clearFocusTimerRef = useRef<number | null>(null);
   // Releases the focus timer on unmount.
@@ -1243,8 +1239,9 @@ export function TouchDateField({
   const closeSheet = useCallback(() => setIsSheetOpen(false), []);
   const closeWheels = useCallback(() => {
     followFocus(false);
+    dipChevron();
     setIsWheelOpen(false);
-  }, [followFocus]);
+  }, [followFocus, dipChevron]);
   const monthArrowButtons = useMemo(
     () => (
       <>
@@ -1359,10 +1356,11 @@ export function TouchDateField({
     <div {...stylex.props(styles.surface)}>
       <div {...stylex.props(styles.header)}>
         <button
-          ref={monthYearButtonRef}
+          ref={titleButtonRef}
           type="button"
           onClick={() => {
             followFocus(!isWheelOpen);
+            dipChevron();
             setIsWheelOpen(!isWheelOpen);
           }}
           aria-expanded={isWheelOpen}
@@ -1378,7 +1376,6 @@ export function TouchDateField({
           // restyle the header button. Adding a target later is additive;
           // withdrawing one is not.
           data-title="month-year"
-          ref={chevronDipRef}
           {...pressable}
           {...stylex.props(
             styles.title,

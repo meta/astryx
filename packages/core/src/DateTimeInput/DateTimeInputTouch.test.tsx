@@ -942,7 +942,7 @@ describe('DateTimeInput touch surface', () => {
     expect(actions()).toEqual([false, false, false]);
   });
 
-  it('Done hands focus from the wheels to the calendar in the toggle\u2019s commit', () => {
+  it('Done hands focus from the wheels to the calendar in the toggle’s commit', () => {
     // One Done press with focus on Done or on the title first: its commits,
     // and where focus ends.
     const pressDone = (isFocusOnDone: boolean) => {
@@ -986,6 +986,8 @@ describe('DateTimeInput touch surface', () => {
       const result = {
         commits,
         isInCalendar: surface('calendar').contains(document.activeElement),
+        focusedDate: (document.activeElement as HTMLElement | null)?.dataset
+          .date,
       };
       cleanup();
       return result;
@@ -993,6 +995,8 @@ describe('DateTimeInput touch surface', () => {
     const fromDone = pressDone(true);
     const fromTitle = pressDone(false);
     expect(fromDone.isInCalendar).toBe(true);
+    // The shown month's tab stop, not the first day mounted three months back.
+    expect(fromDone.focusedDate).toBe('2026-03-15');
     expect(fromTitle.isInCalendar).toBe(false);
     // The hand-off rides the toggle's own commit and costs none of its own.
     expect(fromDone.commits).toBe(fromTitle.commits);
