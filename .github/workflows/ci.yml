@@ -3882,7 +3882,7 @@ jobs:
             echo "No component changed; no component audit."
           fi
           if [ "$STORIES" = true ]; then
-            echo "Changed stories no component owns are audited below."
+            echo "Changed stories no other audit covers are audited below."
           fi
 
       - name: Setup Node and pnpm
@@ -3919,21 +3919,28 @@ jobs:
             --concurrency 4 \
             --components "$COMPONENTS"
 
-      # A story the change adds or changes that no component owns (an `a11y/`
-      # page, say) is in no touched component's audit, so it is audited on its
-      # own: new violations against the head's baseline fail the job
-      # (spec:AST-030 FR12).
-      - name: Accessibility audit for changed stories no component owns
+      # A story the change adds or changes that no other audit covers (one an
+      # untouched component owns, or an `a11y/` page no component owns) is
+      # audited on its own: new violations against the head's baseline fail
+      # the job (spec:AST-030 FR12). The touched components' audit already
+      # runs their own stories, so those are left out.
+      - name: Accessibility audit for changed stories no other audit covers
         id: story-a11y
         if: always() && steps.playwright.outcome == 'success' && steps.touched.outputs.changed_stories == 'true'
         env:
           FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          TOUCHED_AUDIT: ${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners != '' }}
         run: |
+          COVERED=''
+          if [ "$TOUCHED_AUDIT" = true ]; then
+            COVERED=$(node .github/scripts/a11y-pr-scope.mjs analysis.json)
+          fi
           node .github/scripts/accessibility-audit.js \
             --storybook-dir apps/storybook/dist \
             --output a11y-stories-report.json \
             --concurrency 4 \
             --changed-story-files "$FILES_PATH" \
+            --covered-components "$COVERED" \
             --baseline .head-baseline/.github/a11y-baseline.json \
             --fail-on-new
 

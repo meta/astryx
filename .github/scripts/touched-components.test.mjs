@@ -590,7 +590,7 @@ describe('pr-touched-components routing', () => {
       'Download Storybook artifact',
       'Install Playwright',
     ]) {
-      // A changed story no component owns needs the same setup (FR12).
+      // A changed story no other audit covers needs the same setup (FR12).
       expect(step(name).if).toBe(
         "(steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')",
       );
@@ -645,7 +645,7 @@ describe('pr-touched-components routing', () => {
       step('Skip when no component changed or the change is wide').if,
     ).toBe("steps.touched.outputs.has_components != 'true'");
     // Every later step runs for touched components only, or for a changed
-    // story no component owns (FR12).
+    // story no other audit covers (FR12).
     const skipIndex = job.steps.findIndex(
       candidate =>
         candidate.name ===
@@ -838,11 +838,11 @@ describe('pr-component-a11y-contracts routing', () => {
   });
 });
 
-// A story the change adds or changes that no component owns is audited on
-// its own (spec:AST-030 FR12), new violations only.
-describe('the audit of changed stories no component owns', () => {
+// A story the change adds or changes that no other audit covers is audited
+// on its own (spec:AST-030 FR12), new violations only.
+describe('the audit of changed stories no other audit covers', () => {
   const audit = step(
-    'Accessibility audit for changed stories no component owns',
+    'Accessibility audit for changed stories no other audit covers',
   );
   const either =
     "(steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')";
@@ -866,8 +866,21 @@ describe('the audit of changed stories no component owns', () => {
   it("audits only those stories, against the head's baseline, failing on a new violation", () => {
     expect(audit.env).toEqual({
       FILES_PATH: '${{ steps.scope.outputs.changed_files_path }}',
+      TOUCHED_AUDIT:
+        "${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners != '' }}",
     });
     expect(audit.run).toContain('--changed-story-files "$FILES_PATH"');
+    // The touched components' audit already runs their stories: the same
+    // filters it uses are left out here.
+    expect(audit.run).toContain(
+      'COVERED=$(node .github/scripts/a11y-pr-scope.mjs analysis.json)',
+    );
+    expect(audit.run).toContain('--covered-components "$COVERED"');
+    expect(
+      step('Accessibility audit for the touched components').run,
+    ).toContain(
+      'COMPONENTS=$(node .github/scripts/a11y-pr-scope.mjs analysis.json)',
+    );
     expect(audit.run).toContain(
       '--baseline .head-baseline/.github/a11y-baseline.json',
     );
