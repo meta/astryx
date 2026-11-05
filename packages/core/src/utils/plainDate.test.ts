@@ -7,6 +7,7 @@ import {
   plainDateFromISO,
   plainDateToISO,
   plainDateToDate,
+  dateTimeFormatFor,
   plainDateFromDate,
   plainDateToday,
   getDaysInMonth,
@@ -27,10 +28,15 @@ import {
   plainDateSetEndOfWeekExclusive,
   plainDateGetWeekNumber,
   plainDateFormat,
+  plainDateFormatStandaloneMonthYear,
+  plainDateWeekdayNames,
+  plainDateFormatDayNumber,
   formatSharedDate,
+  DATE_FORMAT_LONG,
   DATE_FORMAT_WITH_WEEKDAY,
   DATE_FORMAT_MONTH_YEAR,
   plainDateWeekFieldName,
+  plainDateFormatToParts,
 } from './plainDate';
 import type {ISODateString} from './dateTypes';
 
@@ -753,7 +759,134 @@ describe('plainDateGetWeekNumber', () => {
   });
 });
 
+describe('plainDateFormatStandaloneMonthYear', () => {
+  const october = {year: 2026, month: 10, day: 1};
+
+  it.each([
+    ['es-ES', 'Octubre de 2026'],
+    ['fr-FR', 'Octobre 2026'],
+    ['it-IT', 'Ottobre 2026'],
+    ['nl-NL', 'Oktober 2026'],
+    ['pl-PL', 'Październik 2026'],
+    ['ru-RU', 'Октябрь 2026 г.'],
+    ['uk-UA', 'Жовтень 2026 р.'],
+    ['es-MX', 'Octubre de 2026'],
+  ])('capitalizes the stand-alone month in %s', (locale, label) => {
+    expect(plainDateFormatStandaloneMonthYear(october, locale)).toBe(label);
+  });
+
+  it.each([
+    ['vi-VN', 'tháng 10 năm 2026'],
+    ['en-US', 'October 2026'],
+    ['pt-BR', 'outubro de 2026'],
+  ])('keeps the Intl label in %s', (locale, label) => {
+    expect(plainDateFormatStandaloneMonthYear(october, locale)).toBe(label);
+  });
+});
+
+describe('plainDateFormatToParts', () => {
+  it.each([
+    [{dateStyle: 'full'}],
+    [{timeZone: 'Asia/Tokyo', dateStyle: 'long'}],
+    [{hour: 'numeric', day: 'numeric'}],
+  ] as const)('joins to the plainDateFormat text for %o', options => {
+    const pd = plainDateFromISO('2026-11-03');
+    const parts = plainDateFormatToParts(pd, options, 'fa-IR');
+    expect(parts.map(part => part.value).join('')).toBe(
+      plainDateFormat(pd, options, 'fa-IR'),
+    );
+  });
+});
+
 describe('plainDateFormat', () => {
+  it('keeps one formatter per locale and options, whatever order the options are in', () => {
+    // A month of day labels, as a calendar renders them, reuses one formatter.
+    const first = dateTimeFormatFor('en-NZ', DATE_FORMAT_WITH_WEEKDAY);
+    expect(dateTimeFormatFor('en-NZ', DATE_FORMAT_WITH_WEEKDAY)).toBe(first);
+    expect(
+      dateTimeFormatFor('en-NZ', {
+        year: 'numeric',
+        day: 'numeric',
+        month: 'long',
+        weekday: 'long',
+      }),
+    ).toBe(first);
+    // Other options, or another locale, get their own.
+    expect(dateTimeFormatFor('en-NZ', DATE_FORMAT_MONTH_YEAR)).not.toBe(first);
+    expect(dateTimeFormatFor('en-ZA', DATE_FORMAT_WITH_WEEKDAY)).not.toBe(
+      first,
+    );
+  });
+
+  it('formats the same date after the host zone moves', () => {
+    // The page stays open while the device travels east: a formatter cached
+    // in the first zone must not move the date.
+    const zone = process.env.TZ;
+    try {
+      process.env.TZ = 'America/Los_Angeles';
+      expect(
+        plainDateFormat(
+          {year: 2026, month: 2, day: 1},
+          DATE_FORMAT_MONTH_YEAR,
+          'en-IE',
+        ),
+      ).toBe('February 2026');
+      process.env.TZ = 'America/New_York';
+      expect(
+        plainDateFormat(
+          {year: 2026, month: 2, day: 1},
+          DATE_FORMAT_MONTH_YEAR,
+          'en-IE',
+        ),
+      ).toBe('February 2026');
+      process.env.TZ = 'Pacific/Kiritimati';
+      expect(
+        plainDateFormat(
+          {year: 2026, month: 2, day: 1},
+          DATE_FORMAT_WITH_WEEKDAY,
+          'en-IE',
+        ),
+      ).toBe('Sunday 1 February 2026');
+    } finally {
+      if (zone === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = zone;
+      }
+    }
+  });
+
+  it('prints a zone name or a time of day in the host zone, as before', () => {
+    // A PlainDate has neither: such fields read local midnight in the zone
+    // current at the call, not the UTC the date-only path formats in.
+    const zone = process.env.TZ;
+    try {
+      process.env.TZ = 'America/Los_Angeles';
+      const withZone = plainDateFormat(
+        {year: 2026, month: 1, day: 25},
+        {...DATE_FORMAT_LONG, timeZoneName: 'short'},
+        'en-US',
+      );
+      expect(withZone).toContain('January 25, 2026');
+      expect(withZone).toContain('PST');
+      expect(withZone).not.toContain('UTC');
+      process.env.TZ = 'America/New_York';
+      expect(
+        plainDateFormat(
+          {year: 2026, month: 1, day: 25},
+          {...DATE_FORMAT_LONG, timeZoneName: 'short'},
+          'en-US',
+        ),
+      ).toContain('EST');
+    } finally {
+      if (zone === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = zone;
+      }
+    }
+  });
+
   it('returns a human-readable date string with weekday', () => {
     const result = plainDateFormat(
       {year: 2026, month: 1, day: 25},
@@ -844,5 +977,71 @@ describe('plainDateWeekFieldName', () => {
 
   it('never returns an empty name', () => {
     expect(plainDateWeekFieldName('zxx').length).toBeGreaterThan(0);
+  });
+});
+
+describe('plainDateFormatDayNumber', () => {
+  it.each([
+    ['en', 15, '15'],
+    ['fa-IR', 15, '۱۵'],
+    ['ar-EG', 15, '١٥'],
+    ['en-u-nu-arab', 31, '٣١'],
+  ])('writes the number in the digits of %s', (locale, value, expected) => {
+    expect(plainDateFormatDayNumber(value, locale)).toBe(expected);
+  });
+
+  it('keeps the Gregorian number in a locale whose default calendar differs', () => {
+    // fa-IR formats dates in the Persian calendar by default; a day number
+    // must still be the Gregorian day it was given.
+    expect(plainDateFormatDayNumber(1, 'fa-IR')).toBe('۱');
+  });
+
+  it('adds no grouping separator', () => {
+    expect(plainDateFormatDayNumber(1234, 'en')).toBe('1234');
+  });
+
+  it('writes the digits of a given numbering system', () => {
+    expect(plainDateFormatDayNumber(8, 'fa-IR', 'latn')).toBe('8');
+    expect(plainDateFormatDayNumber(8, 'en', 'arabext')).toBe('۸');
+    expect(plainDateFormatDayNumber(8, 'fa-IR')).toBe('۸');
+  });
+});
+
+describe('plainDateWeekdayNames', () => {
+  it('formats the abbreviated weekday names Sunday first', () => {
+    expect(plainDateWeekdayNames('en')).toEqual([
+      'Sun',
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+    ]);
+    expect(plainDateWeekdayNames('id-ID')).toEqual([
+      'Min',
+      'Sen',
+      'Sel',
+      'Rab',
+      'Kam',
+      'Jum',
+      'Sab',
+    ]);
+  });
+
+  it('formats the narrow width on request', () => {
+    expect(plainDateWeekdayNames('en', 'narrow')).toEqual([
+      'S',
+      'M',
+      'T',
+      'W',
+      'T',
+      'F',
+      'S',
+    ]);
+  });
+
+  it('returns null for a language the platform has no data for', () => {
+    expect(plainDateWeekdayNames('xx-ZZ')).toBeNull();
   });
 });

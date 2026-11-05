@@ -14,6 +14,11 @@ import type {OperatorValue, FilterValue, EnumItem} from './types';
 import type {InternalConfig} from './useInternalConfig';
 import type {Locale, TranslatorFn} from '../i18n';
 import {truncateCharacters} from '../utils/characters';
+import {registerEnglishFallback} from '../i18n/englishFallback';
+import english from '../i18n/generated-english/PowerSearch/formatFilterValue.generated';
+import {resolveDateZone} from './powerSearchDateZone';
+
+registerEnglishFallback(english);
 
 function truncate(str: string, maxLength: number): string {
   return truncateCharacters(str, maxLength);
@@ -28,44 +33,59 @@ function formatEnumLabel(
 }
 
 function formatNumber(value: number, locale: Locale, units?: string): string {
-  const formatted = new Intl.NumberFormat(locale).format(value);
+  const formatted = formatSharedNumber(value, locale);
   return units ? `${formatted} ${units}` : formatted;
 }
 
-export function formatDateAbsolute(
-  unixSeconds: number,
+/**
+ * A number in the provider locale's digits, decimal mark, and — unless the
+ * options say otherwise — grouping. The shared number helper for
+ * PowerSearch's own readings of a value — this module owns the raw `Intl`
+ * access.
+ */
+export function formatSharedNumber(
+  value: number,
   locale: Locale,
-  timezoneID?: string,
+  options?: Pick<
+    Intl.NumberFormatOptions,
+    'useGrouping' | 'maximumFractionDigits'
+  >,
 ): string {
-  const options: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    ...(timezoneID ? {timeZone: timezoneID} : {}),
-    calendar: 'gregory',
-  };
-  return new Intl.DateTimeFormat(locale, options).format(unixSeconds * 1000);
+  return new Intl.NumberFormat(locale, options).format(value);
 }
 
 /**
- * Compact date-only rendering (no time-of-day) for the token pill's inline
- * value display, which has less room than the editor's full summary. Kept
- * separate from {@link formatDateAbsolute} rather than reusing it with
- * different options threaded through a param, since the two callers want
- * genuinely different shapes, not a parameterization of the same one.
+ * The one reading of a calendar-day `date_absolute` value: its day in the
+ * zone `resolveDateZone` names. The token text and the accessible label share
+ * it; the editors read the same zone through `resolveDateZone`, so a value
+ * never reads as two days in one field. A value whose operator sets
+ * `isDateOnly: false` is an instant: its date and time in `timezoneID`,
+ * else the viewer's zone, the time its editor reads and writes.
  */
-export function formatDateAbsoluteCompact(
+export function formatDateAbsolute(
   unixSeconds: number,
   locale: Locale,
+  timezoneID: string | undefined,
+  isDateOnly = true,
 ): string {
-  return new Intl.DateTimeFormat(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    calendar: 'gregory',
-  }).format(unixSeconds * 1000);
+  const options: Intl.DateTimeFormatOptions = isDateOnly
+    ? {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        timeZone: resolveDateZone(timezoneID, true),
+        calendar: 'gregory',
+      }
+    : {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: resolveDateZone(timezoneID, false),
+        calendar: 'gregory',
+      };
+  return new Intl.DateTimeFormat(locale, options).format(unixSeconds * 1000);
 }
 
 function formatRelativeDate(value: string): string {
@@ -184,7 +204,13 @@ export function formatFilterValue(
 
     case 'date_absolute':
       return truncate(
-        formatDateAbsolute(filterValue.unixSeconds, locale, timezoneID),
+        formatDateAbsolute(
+          filterValue.unixSeconds,
+          locale,
+          timezoneID,
+          operatorValue.type !== 'date_absolute' ||
+            operatorValue.isDateOnly !== false,
+        ),
         maxLength,
       );
 

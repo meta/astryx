@@ -30,10 +30,16 @@ import {DropdownMenuGroup} from './DropdownMenuGroup';
 import {warmMenuBottomSheet} from './__tests__/warmMenuBottomSheet';
 import {DropdownMenuSubMenu} from './DropdownMenuSubMenu';
 import {Divider} from '../Divider';
+import {Tooltip} from '../Tooltip/Tooltip';
 import {rtlStyles} from '../utils';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {spacingVars} from '../theme/tokens.stylex';
+import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {MENU_PRESS_LONG_PRESS_MS} from '../hooks/useMenuPress';
+import {MENU_PRESS_SETTLE_MS} from '../hooks/menuPressGesture';
+import {TOUCH_QUERY} from '../utils/touchPresentation';
+import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 
 // Mock showPopover and hidePopover methods since they're not implemented in jsdom
 beforeEach(() => {
@@ -126,6 +132,123 @@ describe('DropdownMenu', () => {
     ).not.toBeInTheDocument();
   });
 
+  it("forwards the button's ref object to the popover trigger", () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions', ref}}
+        items={[{label: 'Edit project', onClick: vi.fn()}]}
+      />,
+    );
+    expect(ref.current).toBe(
+      screen.getByRole('button', {name: /Project actions/}),
+    );
+  });
+
+  it("forwards the button's ref object to the bottom-sheet trigger", () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions', ref}}
+        presentation="bottom-sheet"
+        items={[{label: 'Edit project', onClick: vi.fn()}]}
+      />,
+    );
+    expect(ref.current).toBe(
+      screen.getByRole('button', {name: /Project actions/}),
+    );
+  });
+
+  it("forwards the button's callback ref to the bottom-sheet trigger", () => {
+    const ref = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions', ref}}
+        presentation="bottom-sheet"
+        items={[{label: 'Edit project', onClick: vi.fn()}]}
+      />,
+    );
+    expect(ref).toHaveBeenCalledWith(
+      screen.getByRole('button', {name: /Project actions/}),
+    );
+  });
+
+  describe('bottom sheet opened from a custom trigger', () => {
+    it("names the sheet and its heading after the caller's aria-label", async () => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          aria-label="Create"
+          presentation="bottom-sheet"
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              Add
+            </button>
+          )}
+          items={[{label: 'Contact'}, {label: 'Invoice'}]}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', {name: 'Add'}));
+
+      expect(screen.getByRole('dialog', {name: 'Create'})).toBeInTheDocument();
+      expect(screen.getByRole('heading', {name: 'Create'})).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', {name: 'Menu'})).toBeNull();
+    });
+
+    it("falls back to the trigger's own name without an aria-label", async () => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          presentation="bottom-sheet"
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              Create
+            </button>
+          )}
+          items={[{label: 'Contact'}, {label: 'Invoice'}]}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', {name: 'Create'}));
+
+      expect(screen.getByRole('dialog', {name: 'Create'})).toBeInTheDocument();
+      expect(screen.getByRole('heading', {name: 'Create'})).toBeInTheDocument();
+    });
+
+    it('names an open controlled sheet from the trigger on its first render', () => {
+      render(
+        <DropdownMenu
+          isMenuOpen
+          presentation="bottom-sheet"
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              Create
+            </button>
+          )}
+          items={[{label: 'Contact'}]}
+        />,
+      );
+
+      expect(screen.getByRole('dialog', {name: 'Create'})).toBeInTheDocument();
+    });
+
+    it('keeps the default title when the trigger has no name to read', async () => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          presentation="bottom-sheet"
+          renderTrigger={props => <button type="button" {...props} />}
+          items={[{label: 'Contact'}]}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', {name: ''}));
+
+      expect(screen.getByRole('dialog', {name: 'Menu'})).toBeInTheDocument();
+    });
+  });
+
   it('renders data-driven actions in a bottom sheet when requested', async () => {
     const user = userEvent.setup();
     const onEdit = vi.fn();
@@ -175,16 +298,48 @@ describe('DropdownMenu', () => {
 
     const heading = screen.getByRole('heading', {name: 'Project actions'});
     expect(heading).toHaveStyle({marginInlineStart: 'var(--spacing-3)'});
-    expect(heading.closest('.astryx-section')).toHaveStyle({
-      paddingInlineStart: 'var(--spacing-1)',
-      paddingInlineEnd: 'var(--spacing-1)',
+    // The menu's content element takes the sheet's content padding itself,
+    // with no wrapper: 16px above the first row, 4px at the sides.
+    const content = heading.closest('.astryx-dropdown-menu');
+    expect(content?.parentElement?.closest('.astryx-section')).toBeNull();
+    expect(content).toHaveStyle({
+      paddingTop: 'var(--spacing-4)',
+      paddingInline: 'var(--spacing-1)',
     });
+    // The root heading stands alone, with no row wrapper.
+    expect(heading.parentElement).toBe(content);
     expect(
       screen.getByRole('button', {name: 'Edit project'}).closest('li'),
     ).toHaveStyle({
       paddingInline: 'var(--_item-inset-inline)',
       '--_item-inset-inline': 'var(--spacing-3)',
     });
+  });
+
+  it('renders nothing of the sheet at rest and keeps it through its exit', async () => {
+    await warmMenuBottomSheet();
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions'}}
+        presentation="bottom-sheet"
+        items={[{label: 'Edit project'}]}
+      />,
+    );
+    expect(document.querySelector('dialog')).toBeNull();
+
+    await user.click(screen.getByRole('button', {name: /Project actions/}));
+    const dialog = document.querySelector('dialog');
+    expect(dialog).not.toBeNull();
+
+    await user.keyboard('{Escape}');
+    // Closed, the sheet stays until its dialog has closed (its exit).
+    expect(document.querySelector('dialog')).toBe(dialog);
+    act(() => {
+      dialog?.removeAttribute('open');
+      dialog?.dispatchEvent(new Event('close'));
+    });
+    expect(document.querySelector('dialog')).toBeNull();
   });
 
   it('keeps bottom-sheet section groups inside semantic list items', async () => {
@@ -341,7 +496,7 @@ describe('DropdownMenu', () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockImplementation((query: string) => ({
-        matches: query === '(max-width: 768px) and (pointer: coarse)',
+        matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
         media: query,
         onchange: null,
         addEventListener: vi.fn(),
@@ -859,6 +1014,38 @@ describe('DropdownMenu', () => {
     fireEvent.keyDown(menu, {key: 'd'});
     expect(
       screen.getByRole('menuitem', {name: 'Delete', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('typeahead reaches an accented item with a plain letter (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'Share'}}
+        items={[{label: 'Copy'}, {label: 'Ánh'}, {label: 'Łódź'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /Share/}));
+    const menu = screen.getByRole('menu', {hidden: true});
+    fireEvent.keyDown(menu, {key: 'l'});
+    expect(
+      screen.getByRole('menuitem', {name: 'Łódź', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('typeahead puts the exact item first for a typed mark (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'People'}}
+        items={[{label: 'Anh'}, {label: 'Dung'}, {label: 'Đào'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /People/}));
+    const menu = screen.getByRole('menu', {hidden: true});
+    fireEvent.keyDown(menu, {key: 'đ'});
+    expect(
+      screen.getByRole('menuitem', {name: 'Đào', hidden: true}),
     ).toHaveFocus();
   });
 
@@ -1566,6 +1753,41 @@ describe('DropdownMenuItem host attributes', () => {
 });
 
 describe('DropdownMenuGroup (compound mode)', () => {
+  it('renders a heading only for a title that renders something', () => {
+    const titles = ['', false, true, null, 0] as const;
+    render(
+      <>
+        <DropdownMenuGroup title="" data-testid="g0">
+          <DropdownMenuItem label="Row 0" onClick={() => {}} />
+        </DropdownMenuGroup>
+        <DropdownMenuGroup title={false} data-testid="g1">
+          <DropdownMenuItem label="Row 1" onClick={() => {}} />
+        </DropdownMenuGroup>
+        <DropdownMenuGroup title={true} data-testid="g2">
+          <DropdownMenuItem label="Row 2" onClick={() => {}} />
+        </DropdownMenuGroup>
+        <DropdownMenuGroup title={null} data-testid="g3">
+          <DropdownMenuItem label="Row 3" onClick={() => {}} />
+        </DropdownMenuGroup>
+        <DropdownMenuGroup title={0} data-testid="g4">
+          <DropdownMenuItem label="Row 4" onClick={() => {}} />
+        </DropdownMenuGroup>
+      </>,
+    );
+    // '', false, true and null render nothing, so no empty heading names the
+    // group.
+    for (const index of [0, 1, 2, 3]) {
+      expect(
+        screen.getByTestId(`g${index}`),
+        String(titles[index]),
+      ).not.toHaveAttribute('aria-labelledby');
+    }
+    // 0 renders "0" and names the group.
+    expect(screen.getByRole('group', {name: '0'})).toBe(
+      screen.getByTestId('g4'),
+    );
+  });
+
   it('a focusable node in the heading is not reachable by the arrow keys', async () => {
     // The public ReactNode type permits a focusable descendant, but the menu's
     // roving focus model cannot reach it. Pin that shipped gap while the public
@@ -1744,6 +1966,49 @@ describe('DropdownMenuGroup (compound mode)', () => {
     );
     expect(ref).toHaveBeenCalledWith(
       screen.getByRole('group', {name: 'T', hidden: true}),
+    );
+  });
+
+  it('forwards host attributes to the group while keeping its role and heading name', () => {
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuGroup
+          title="Version history"
+          id="history-group"
+          data-testid="history"
+          data-analytics-id="menu-history"
+          aria-describedby="history-hint"
+          aria-labelledby="elsewhere"
+          // @ts-expect-error role is component-owned
+          role="presentation">
+          <DropdownMenuItem label="Restore" onClick={() => {}} />
+        </DropdownMenuGroup>
+      </DropdownMenu>,
+    );
+    const group = screen.getByTestId('history');
+    expect(group).toHaveAttribute('data-analytics-id', 'menu-history');
+    expect(group).toHaveAttribute('id', 'history-group');
+    expect(group).toHaveAttribute('aria-describedby', 'history-hint');
+    expect(group).toHaveAttribute('role', 'group');
+    // The visible title keeps naming the group.
+    expect(
+      screen.getByRole('group', {name: 'Version history', hidden: true}),
+    ).toBe(group);
+  });
+
+  it('an untitled group takes a caller-supplied accessible name', () => {
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <span id="recent-label">Recent</span>
+        <DropdownMenuGroup aria-labelledby="recent-label" data-testid="recent">
+          <DropdownMenuItem label="Only" onClick={() => {}} />
+        </DropdownMenuGroup>
+      </DropdownMenu>,
+    );
+    const group = screen.getByTestId('recent');
+    expect(group).toHaveAttribute('aria-labelledby', 'recent-label');
+    expect(screen.getByRole('group', {name: 'Recent', hidden: true})).toBe(
+      group,
     );
   });
 });
@@ -2262,11 +2527,37 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
     // focus-driven highlight follows the pointer instead of leaving two.
     // Focus must be scroll-free: scrolling the focused item into view moves
     // the next item under the stationary pointer, which re-highlights and
-    // scrolls again — a runaway auto-scroll loop.
+    // scrolls again — a runaway auto-scroll loop. And it is the mouse's focus,
+    // so it asks the browser not to match :focus-visible.
     const focusSpy = vi.spyOn(del, 'focus');
     fireEvent.pointerMove(del, {pointerType: 'mouse'});
     expect(del).toHaveFocus();
     expect(edit).not.toHaveFocus();
+    expect(focusSpy).toHaveBeenCalledWith({
+      preventScroll: true,
+      focusVisible: false,
+    });
+  });
+
+  it('after a keyboard open, focus that follows the mouse keeps the keyboard indicator (the last input)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Edit" onClick={() => {}} />
+        <DropdownMenuItem label="Delete" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+    screen.getByRole('button', {name: /Actions/}).focus();
+    await user.keyboard('{ArrowDown}');
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    await waitFor(() => expect(edit).toHaveFocus());
+
+    // No pointer press since the key: the browser keeps deciding the
+    // indicator, as for any focus the keyboard moved.
+    const del = screen.getByRole('menuitem', {name: 'Delete', hidden: true});
+    const focusSpy = vi.spyOn(del, 'focus');
+    fireEvent.pointerMove(del, {pointerType: 'mouse'});
+    expect(del).toHaveFocus();
     expect(focusSpy).toHaveBeenCalledWith({preventScroll: true});
   });
 
@@ -2662,6 +2953,24 @@ describe('DropdownMenu press model', () => {
   const item = (name: string) =>
     screen.getByRole('menuitem', {name, hidden: true});
 
+  // A phone or tablet's primary pointer.
+  function stubCoarsePointer() {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query === TOUCH_QUERY,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    expect(window.matchMedia(TOUCH_QUERY).matches).toBe(true);
+  }
+
   it('a finger that lands on one row and lifts on another acts on the second, once', async () => {
     const onPick = vi.fn();
     const user = userEvent.setup();
@@ -2812,24 +3121,126 @@ describe('DropdownMenu press model', () => {
     expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
   });
 
-  it('a held touch on the trigger opens with the finger down and a slide picks', () => {
+  it('a held touch on the trigger opens with the finger down, and a slide past the handoff picks (spec:AST-094 FR29, FR43)', () => {
     vi.useFakeTimers();
     try {
       const onPick = vi.fn();
       const trigger = renderMenu(onPick);
-      fireEvent.pointerDown(trigger, touch);
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
       act(() => {
         vi.advanceTimersByTime(500);
       });
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
-      fireEvent.pointerMove(item('Delete'), touch);
+      // The handoff counts from the first position the open menu sees.
+      fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 3});
+      const past = {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      };
+      fireEvent.pointerMove(item('Delete'), past);
       expect(item('Delete')).toHaveFocus();
-      fireEvent.pointerUp(item('Delete'), touch);
+      fireEvent.pointerUp(item('Delete'), past);
       expect(onPick).toHaveBeenCalledWith('Delete');
       // The click the browser aims at the trigger for this gesture is spent.
       fireEvent.click(trigger, {detail: 1});
       expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('under a coarse pointer the finger that opened the menu picks only once it travels the handoff (spec:AST-094 FR29)', () => {
+    stubCoarsePointer();
+    vi.useFakeTimers();
+    try {
+      const onPick = vi.fn();
+      const trigger = renderMenu(onPick);
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      // A still lift picks nothing, however long the finger rested.
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_SETTLE_MS);
+      });
+      fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 3});
+      expect(item('Delete')).not.toHaveFocus();
+      // UIMenu's handoff: the finger picks once it travels from the first
+      // sample the menu saw.
+      fireEvent.pointerMove(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      });
+      expect(item('Delete')).toHaveFocus();
+      fireEvent.pointerUp(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      });
+      expect(onPick).toHaveBeenCalledWith('Delete');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('on a fine primary pointer too, the finger that opened the menu picks only once it travels the handoff, as on a phone (spec:AST-094 FR29, FR43)', () => {
+    vi.useFakeTimers();
+    try {
+      const onPick = vi.fn();
+      const trigger = renderMenu(onPick);
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_SETTLE_MS);
+      });
+      fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 3});
+      expect(item('Delete')).not.toHaveFocus();
+      fireEvent.pointerMove(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      });
+      expect(item('Delete')).toHaveFocus();
+      fireEvent.pointerUp(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      });
+      expect(onPick).toHaveBeenCalledWith('Delete');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('presentation="popover" pins the settle rule under a finger: once the opening press has settled, a still lift picks the row under it', () => {
+    // spec:AST-094 FR25: a moved touch default comes back through
+    // `presentation`, never through a public threshold.
+    stubCoarsePointer();
+    vi.useFakeTimers();
+    try {
+      const onPick = vi.fn<(label: string) => void>();
+      render(
+        <DropdownMenu button={{label: 'Pinned'}} presentation="popover">
+          <DropdownMenuItem label="Edit" onClick={() => onPick('Edit')} />
+          <DropdownMenuItem label="Delete" onClick={() => onPick('Delete')} />
+        </DropdownMenu>,
+      );
+      const trigger = screen.getByRole('button', {name: /Pinned/});
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS + MENU_PRESS_SETTLE_MS);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 2});
+      fireEvent.pointerUp(item('Delete'), {...touch, clientX: 0, clientY: 2});
+      expect(onPick).toHaveBeenCalledWith('Delete');
     } finally {
       vi.useRealTimers();
     }
@@ -4234,5 +4645,126 @@ describe('DropdownMenu header and footer', () => {
     expect(
       bug.compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+});
+
+describe('DropdownMenu trigger refs across renders', () => {
+  // A ref that is a new function on every render makes React call it again on
+  // every commit (with null, then the element). Each call moved the menu's
+  // anchor off the trigger and back, rewriting the trigger's style and
+  // reordering its anchor names whenever a tooltip anchors there too.
+  function watchStyleWrites(element: HTMLElement) {
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver(found => records.push(...found));
+    observer.observe(element, {attributes: true, attributeFilter: ['style']});
+    return () => {
+      records.push(...observer.takeRecords());
+      observer.disconnect();
+      return records.length;
+    };
+  }
+
+  const anchorNames = (element: HTMLElement) =>
+    element.style.getPropertyValue('anchor-name');
+
+  it('hands renderTrigger the same ref on every render, so a render leaves the trigger and its tooltip anchor alone', () => {
+    const refs: DropdownMenuTriggerProps['ref'][] = [];
+    function Menu({count}: {count: number}) {
+      return (
+        <DropdownMenu
+          renderTrigger={props => {
+            refs.push(props.ref);
+            return (
+              <Tooltip content="More actions">
+                <button type="button" {...props}>
+                  Menu {count}
+                </button>
+              </Tooltip>
+            );
+          }}>
+          <DropdownMenuItem label="Profile" onClick={() => {}} />
+        </DropdownMenu>
+      );
+    }
+    const {rerender} = render(<Menu count={0} />);
+    const trigger = screen.getByRole('button', {name: /^Menu/});
+    // Neither the closed menu nor the closed tooltip makes it an anchor.
+    expect(anchorNames(trigger)).toBe('');
+    // The open menu's anchor, on the trigger that also carries the tooltip.
+    fireEvent.click(trigger);
+    const before = anchorNames(trigger);
+    expect(before.split(',')).toHaveLength(1);
+
+    const stopWatching = watchStyleWrites(trigger);
+    rerender(<Menu count={1} />);
+
+    expect(stopWatching()).toBe(0);
+    expect(anchorNames(trigger)).toBe(before);
+    expect(refs.length).toBeGreaterThan(1);
+    expect(refs.at(-1)).toBe(refs[0]);
+  });
+
+  it('leaves the default trigger and its tooltip anchor alone on a render', () => {
+    function Menu({count}: {count: number}) {
+      return (
+        <>
+          <output>{count}</output>
+          <DropdownMenu
+            button={{label: 'Actions', tooltip: 'More actions'}}
+            onOpenChange={() => {}}>
+            <DropdownMenuItem label="Profile" onClick={() => {}} />
+          </DropdownMenu>
+        </>
+      );
+    }
+    const {rerender} = render(<Menu count={0} />);
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+    expect(anchorNames(trigger)).toBe('');
+    fireEvent.click(trigger);
+    const before = anchorNames(trigger);
+    expect(before.split(',')).toHaveLength(1);
+
+    const stopWatching = watchStyleWrites(trigger);
+    rerender(<Menu count={1} />);
+
+    expect(stopWatching()).toBe(0);
+    expect(anchorNames(trigger)).toBe(before);
+  });
+
+  it('still hands the default trigger to a ref the caller passes', () => {
+    const buttonRef = createRef<HTMLButtonElement>();
+    render(
+      <DropdownMenu button={{label: 'Actions', ref: buttonRef}}>
+        <DropdownMenuItem label="Profile" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+    expect(buttonRef.current).toBe(
+      screen.getByRole('button', {name: 'Actions'}),
+    );
+  });
+
+  it('hands the bottom-sheet trigger the same ref on every render', () => {
+    const refs: DropdownMenuTriggerProps['ref'][] = [];
+    function Menu({count}: {count: number}) {
+      return (
+        <DropdownMenu
+          presentation="bottom-sheet"
+          items={[{label: 'Profile'}]}
+          renderTrigger={props => {
+            refs.push(props.ref);
+            return (
+              <button type="button" {...props}>
+                Menu {count}
+              </button>
+            );
+          }}
+        />
+      );
+    }
+    const {rerender} = render(<Menu count={0} />);
+    rerender(<Menu count={1} />);
+
+    expect(refs.length).toBeGreaterThan(1);
+    expect(refs.at(-1)).toBe(refs[0]);
   });
 });

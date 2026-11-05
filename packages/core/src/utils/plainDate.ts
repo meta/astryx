@@ -9,6 +9,8 @@
 
 import type {ISODateString, PlainDate} from './dateTypes';
 import type {Locale} from '../i18n/types';
+import {firstCharacter} from './characters';
+import {standaloneMonthCapitalLanguages} from './standaloneMonthCapitals.generated';
 
 export type {PlainDate} from './dateTypes';
 
@@ -171,6 +173,38 @@ export function getTimeZoneParts(
   };
 }
 
+/** The wall-clock fields of an instant: in a zone, or in the viewer's. */
+export interface WallClock {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+/**
+ * Wall-clock fields for an instant, in the named zone or in the viewer's
+ * zone (`undefined`, `null` or ""). The zone-less branch reads plain `Date`
+ * getters, so the default rendering needs no `Intl` zone data. The explicit
+ * return type keeps both branches on one shape.
+ */
+export function getWallClock(
+  date: Date,
+  timeZone: string | null | undefined,
+): WallClock {
+  return !timeZone
+    ? {
+        year: date.getFullYear(),
+        month: date.getMonth() + 1,
+        day: date.getDate(),
+        hour: date.getHours(),
+        minute: date.getMinutes(),
+        second: date.getSeconds(),
+      }
+    : getTimeZoneParts(date.getTime(), timeZone);
+}
+
 function getTimezoneOffsetMS(timezoneID: string, instant: number): number {
   const parts = getTimeZoneParts(instant, timezoneID);
   return (
@@ -200,7 +234,7 @@ export function plainDateToInstant(
   // this wall time skipped or repeated.
   const offsetBefore = getTimezoneOffsetMS(timezoneID, wallTime - DAY_MS);
   const offsetAfter = getTimezoneOffsetMS(timezoneID, wallTime + DAY_MS);
-  // AST-067 (Temporal's "compatible" disambiguation): a wall time that happens
+  // Temporal's "compatible" disambiguation (AST-067): a wall time that happens
   // twice resolves to its earlier occurrence, and one that never happens is
   // read in the offset before the transition, which moves it forward by the
   // length of the gap.
@@ -329,15 +363,69 @@ export const DATE_FORMAT_MONTH_YEAR: Intl.DateTimeFormatOptions = {
   month: 'long',
 };
 
+/**
+ * The month and year as a label that stands alone, such as a calendar heading
+ * or a month grid's name. `Intl` formats the month for running text; where
+ * CLDR titlecases a stand-alone month name (its `contextTransforms`), the
+ * label starts with a capital, as Calendar's weekday headers use CLDR's
+ * stand-alone forms (`component:Calendar` FR1). Internal: not re-exported from
+ * `utils/index.ts`.
+ */
+export function plainDateFormatStandaloneMonthYear(
+  pd: PlainDate,
+  locale: Locale,
+  calendar: Intl.DateTimeFormatOptions['calendar'] = 'gregory',
+): string {
+  const label = plainDateFormat(
+    pd,
+    {...DATE_FORMAT_MONTH_YEAR, calendar},
+    locale,
+  );
+  let language: string;
+  try {
+    language = new Intl.Locale(locale).language;
+  } catch {
+    return label;
+  }
+  if (!standaloneMonthCapitalLanguages.has(language)) {
+    return label;
+  }
+  const first = firstCharacter(label);
+  return first.toLocaleUpperCase(locale) + label.slice(first.length);
+}
+
 // e.g. "Sun" (locale-dependent) — the weekday on its own, abbreviated.
 //
-// This is CLDR's `abbreviated` width, which `Intl` reaches natively. Note
-// that Calendar's 2-letter header ("Su") is CLDR's *short* width, a
-// different thing that `Intl` cannot express at all — which is why that one
-// needs the generated lookup table beside it and this one does not.
+// This is CLDR's `abbreviated` width. Weekday headers prefer a generated
+// table, because `Intl` has no short width.
 export const DATE_FORMAT_WEEKDAY_ONLY: Intl.DateTimeFormatOptions = {
   weekday: 'short',
 };
+
+/**
+ * The platform's weekday names for a locale, Sunday first, in `Intl`'s
+ * `short` width (CLDR's abbreviated) or its `narrow` width. Returns `null`
+ * when the platform has no data for the locale's language, so a caller uses
+ * its own fallback instead of the host's default locale.
+ */
+export function plainDateWeekdayNames(
+  locale: Locale,
+  width: 'short' | 'narrow' = 'short',
+): string[] | null {
+  const options: Intl.DateTimeFormatOptions = {weekday: width};
+  // A language the platform lacks resolves to the host's default locale.
+  const resolved = dateTimeFormatFor(locale, {
+    ...options,
+    calendar: 'gregory',
+  }).resolvedOptions().locale;
+  if (new Intl.Locale(resolved).language !== new Intl.Locale(locale).language) {
+    return null;
+  }
+  // January 4, 1970 was a Sunday.
+  return Array.from({length: 7}, (_, day) =>
+    plainDateFormat({year: 1970, month: 1, day: 4 + day}, options, locale),
+  );
+}
 
 // e.g. "January" (locale-dependent) — the month on its own, for a control
 // that shows a list of months and carries the year separately.
@@ -374,10 +462,88 @@ export function plainDateFormat(
   options: Intl.DateTimeFormatOptions,
   locale: Locale = 'en',
 ): string {
-  return new Intl.DateTimeFormat(locale, {
-    ...options,
-    calendar: options.calendar ?? 'gregory',
-  }).format(plainDateToDate(pd));
+  const [format, date] = plainDateFormatInput(pd, options, locale);
+  return format.format(date);
+}
+
+/**
+ * The parts of `plainDateFormat`'s output, from the same formatter and date.
+ * Internal: not re-exported from `utils/index.ts`.
+ */
+export function plainDateFormatToParts(
+  pd: PlainDate,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+): Intl.DateTimeFormatPart[] {
+  const [format, date] = plainDateFormatInput(pd, options, locale);
+  return format.formatToParts(date);
+}
+
+function plainDateFormatInput(
+  pd: PlainDate,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+): [Intl.DateTimeFormat, Date | number] {
+  const calendar = options.calendar ?? 'gregory';
+  if (options.timeZone != null) {
+    return [
+      dateTimeFormatFor(locale, {...options, calendar}),
+      plainDateToDate(pd),
+    ];
+  }
+  if (TIME_OF_DAY_FIELDS.some(field => options[field] != null)) {
+    // A zone name or a time of day reads local midnight in the zone current
+    // at the call. A cached formatter would keep the zone it was built in,
+    // so this one is built for the call.
+    return [
+      new Intl.DateTimeFormat(locale, {...options, calendar}),
+      plainDateToDate(pd),
+    ];
+  }
+  // Date fields alone: UTC midnight formatted in UTC, so neither the cached
+  // formatter nor the date depends on the host's zone, which can change while
+  // a page is open.
+  return [
+    dateTimeFormatFor(locale, {...options, calendar, timeZone: 'UTC'}),
+    utcTime(pd.year, pd.month - 1, pd.day),
+  ];
+}
+
+/** Options that print a time of day or a zone, which a PlainDate lacks. */
+const TIME_OF_DAY_FIELDS = [
+  'timeZoneName',
+  'hour',
+  'minute',
+  'second',
+  'fractionalSecondDigits',
+  'dayPeriod',
+  'timeStyle',
+] as const satisfies ReadonlyArray<keyof Intl.DateTimeFormatOptions>;
+
+/**
+ * One `Intl.DateTimeFormat` per locale and options, built on first use.
+ * Building a formatter costs far more than formatting with it, and a calendar
+ * formats each of a month's 42 day labels with the same options on every
+ * render. The options are keyed in a fixed order, so the same options written
+ * in another order share a formatter.
+ */
+const dateTimeFormats = new Map<string, Intl.DateTimeFormat>();
+
+/** @internal plainDateFormat's formatter cache; not part of the public API. */
+export function dateTimeFormatFor(
+  locale: Locale,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = JSON.stringify([
+    locale,
+    Object.entries(options).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  ]);
+  let format = dateTimeFormats.get(key);
+  if (format == null) {
+    format = new Intl.DateTimeFormat(locale, options);
+    dateTimeFormats.set(key, format);
+  }
+  return format;
 }
 
 /**
@@ -403,6 +569,33 @@ export function plainDateWeekFieldName(locale: Locale = 'en'): string {
     // Fall through to the English CLDR value.
   }
   return 'week';
+}
+
+const dayNumberFormats = new Map<string, Intl.NumberFormat>();
+
+/**
+ * A day of the month or a week number in the locale's own digits: `15` in
+ * English, `۱۵` in Persian, `١٥` in Egyptian Arabic. A `numberingSystem`
+ * replaces the locale's digits. Only the digits change. The number stays the
+ * value that it is given, so no calendar applies, and no grouping separator or
+ * unit word is added.
+ * Internal: not re-exported from `utils/index.ts`.
+ */
+export function plainDateFormatDayNumber(
+  value: number,
+  locale: Locale,
+  numberingSystem?: string,
+): string {
+  const key = `${locale}|${numberingSystem ?? ''}`;
+  let format = dayNumberFormats.get(key);
+  if (format == null) {
+    format = new Intl.NumberFormat(locale, {
+      useGrouping: false,
+      numberingSystem,
+    });
+    dayNumberFormats.set(key, format);
+  }
+  return format.format(value);
 }
 
 // =============================================================================

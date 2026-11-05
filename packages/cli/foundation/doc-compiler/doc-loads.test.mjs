@@ -65,13 +65,13 @@ const RUNNERS = {
     sites: ['importThemeArtifact'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, through jiti; eval for legacy theme object literals; the project's installed Core",
+    runs: "theme source modules, through jiti; the project's installed Core, and a Core's root entry once a theme imports it",
     sites: [
       '.evalModule() ×2',
       '.import()',
       'createJiti ×5',
-      'eval ×2',
-      'import(<computed>) ×3',
+      'import(<computed>) ×2',
+      'require(<computed>)',
     ],
   },
   'api/theme/build/core-interception.mjs': {
@@ -218,10 +218,7 @@ const RUNNERS = {
   },
   'clients/cli/commands/hook.mjs': {
     runs: SELF_DOCS,
-    sites: [
-      'import ../../../api/hook/hook.doc.mjs',
-      'import ./hook.doc.mjs',
-    ],
+    sites: ['import ../../../api/hook/hook.doc.mjs', 'import ./hook.doc.mjs'],
   },
   'clients/cli/commands/init.mjs': {
     runs: SELF_DOCS,
@@ -340,6 +337,10 @@ const RUNNERS = {
     runs: '@babel/parser, to find the fixture references and page-local bindings in template source; and a template doc that does not validate, to read the replacement it declares',
     sites: ['importDocModule', 'require(@babel/parser)'],
   },
+  'foundation/discovery/template-source-tree.mjs': {
+    runs: '@babel/parser and @babel/core (CommonJS), each on first use, to read template source and resolve its bindings for demo-content replacement and icon mapping',
+    sites: ['require(@babel/core)', 'require(@babel/parser)'],
+  },
   'foundation/discovery/theme-discovery.mjs': {
     runs: '@babel/parser and jscodeshift (CommonJS), each on first use, so listing bundled themes never loads jscodeshift',
     sites: ['require(@babel/parser)', 'require(jscodeshift)'],
@@ -382,6 +383,10 @@ const RUNNERS = {
   'foundation/fs/paths.mjs': {
     runs: "Yarn's pnpapi, under Plug'n'Play, to find an installed package",
     sites: ['require(pnpapi)'],
+  },
+  'foundation/integrations/contribution-fixes.mjs': {
+    runs: 'jscodeshift (CommonJS) on first use, so loading the project never loads it',
+    sites: ['require(jscodeshift)'],
   },
   'foundation/integrations/integrations.mjs': {
     runs: "each installed integration's manifest",

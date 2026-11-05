@@ -15,6 +15,7 @@ export const button: NativeAdditions = {
   baseTarget: 'root',
   callbacks: ['onClick'],
   sameMeaning: {onClick: 'a press, as in Compose'},
+  projections: {width: {content: 'auto', fill: '100%'}},
   webOnly: {
     type: 'HTML form submission type',
     name: 'HTML form field name',

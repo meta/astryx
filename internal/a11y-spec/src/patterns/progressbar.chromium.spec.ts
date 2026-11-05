@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/progressbar\.|packages/core/src/ProgressBar/|packages/lab/src/CircularProgress/|apps/storybook/stories/ProgressbarA11y)
 
 /**
  * @file progressbar.chromium.spec.ts
@@ -7,7 +8,7 @@
  * @position Contract self-test, Chromium lane
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {expect, test, type CDPSession, type Page} from '../playwright';
 import {describeExpectation, requiredLayers} from '../contract';
 import {checkAccessibilitySpec, type ExpectationResult} from '../check';
 import {

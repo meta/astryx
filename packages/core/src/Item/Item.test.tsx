@@ -3,13 +3,13 @@
 /**
  * @file Item.test.tsx
  * @input Uses vitest, @testing-library/react, Item component
- * @output Unit tests for Item
+ * @output Unit tests for Item, including flat marker DOM and numbered-row scope
  * @position Testing; validates Item component implementation
  *
  * SYNC: When Item component changes, update tests to match new behavior
  */
 
-import {use, useRef} from 'react';
+import {use, useRef, type ReactNode} from 'react';
 import {
   afterEach,
   beforeAll,
@@ -19,18 +19,14 @@ import {
   expect,
   vi,
 } from 'vitest';
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+import {act, cleanup, fireEvent, render, screen} from '@testing-library/react';
 import {rulesDeclaredFor} from '../__tests__/pressState';
+import {swipeLayerLoaded} from './__tests__/swipeLayerLoaded';
 import userEvent from '@testing-library/user-event';
+import {LinkProvider} from '../Link/LinkProvider';
 import {Item} from './Item';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
+import {List, ListItem} from '../List';
 
 /**
  * Item in delegation mode: `interactiveRef` points at a nested control that
@@ -382,6 +378,65 @@ describe('Item', () => {
     expect(screen.getByTestId('item')).toHaveAttribute('aria-disabled', 'true');
   });
 
+  it("gives a disabled row's link no destination (spec:AST-085 FR2)", () => {
+    function RouterLink({ref, ...props}: React.ComponentPropsWithRef<'a'>) {
+      return <a ref={ref} data-router-link {...props} />;
+    }
+    render(
+      <LinkProvider component={RouterLink}>
+        <Item
+          label="Billing"
+          href="/billing"
+          target="_blank"
+          rel="noopener"
+          isDisabled
+        />
+        <Item label="Profile" href="/profile" />
+      </LinkProvider>,
+    );
+    // No href, target or rel, so a screen reader's click, Enter or a link
+    // menu cannot navigate; it keeps the link role and skips the router link.
+    const disabled = screen.getByRole('link', {name: 'Billing'});
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    for (const attribute of ['href', 'target', 'rel', 'data-router-link']) {
+      expect(disabled).not.toHaveAttribute(attribute);
+    }
+    const enabled = screen.getByRole('link', {name: 'Profile'});
+    expect(enabled).toHaveAttribute('href', '/profile');
+    expect(enabled).toHaveAttribute('data-router-link');
+    expect(enabled).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('keeps focus on a focused link row that becomes disabled (spec:AST-085 FR4)', () => {
+    const {rerender} = render(<Item label="Billing" href="/billing" />);
+    screen.getByRole('link', {name: 'Billing'}).focus();
+    rerender(<Item label="Billing" href="/billing" isDisabled />);
+    // The disabled row renders a plain anchor in place of the link component;
+    // focus moves to it instead of falling to the page.
+    const disabled = screen.getByRole('link', {name: 'Billing'});
+    expect(disabled).not.toHaveAttribute('href');
+    expect(disabled).toHaveFocus();
+    rerender(<Item label="Billing" href="/billing" />);
+    expect(screen.getByRole('link', {name: 'Billing'})).toHaveFocus();
+  });
+
+  it('does not pull focus back to a row that changes while focus is elsewhere', () => {
+    const {rerender} = render(
+      <>
+        <Item label="Billing" href="/billing" />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    screen.getByRole('button', {name: 'Elsewhere'}).focus();
+    rerender(
+      <>
+        <Item label="Billing" href="/billing" isDisabled />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
+  });
+
   it('disables the invisible button when isDisabled', () => {
     const {container} = render(
       <Item label="Disabled" onClick={() => {}} isDisabled />,
@@ -479,6 +534,12 @@ describe('Item', () => {
     expect(root?.querySelector('[data-testid="marker"]')).toBeInTheDocument();
     expect(root?.querySelector('[data-testid="start"]')).toBeInTheDocument();
     expect(root?.querySelector('[data-testid="end"]')).toBeInTheDocument();
+    // A bullet or caller-owned marker needs no extra formatting group: marker,
+    // start, primary and end retain the released flat row structure.
+    expect(root?.children).toHaveLength(4);
+    expect(button?.parentElement).toBe(root);
+    expect(screen.getByTestId('start').parentElement?.parentElement).toBe(root);
+    expect(screen.getByTestId('end').parentElement?.parentElement).toBe(root);
     expect(
       button?.querySelector('[data-testid="marker"]'),
     ).not.toBeInTheDocument();
@@ -592,6 +653,38 @@ describe('Item', () => {
     expect(hasStrut()).toBe(false);
   });
 
+  it('groups only the numbered composing row, not marked Items in its slots', () => {
+    render(
+      <List listStyle="decimal">
+        <ListItem
+          data-testid="numbered-row"
+          label="Numbered"
+          startContent={<span data-testid="numbered-start">S</span>}
+          endContent={
+            <Item
+              data-testid="nested-row"
+              label="Nested item"
+              marker={<span>•</span>}
+              startContent={<span data-testid="nested-start">S</span>}
+              endContent={<span>E</span>}
+            />
+          }
+        />
+      </List>,
+    );
+    const numbered = screen.getByTestId('numbered-row');
+    expect(numbered.children).toHaveLength(2);
+    const group = numbered.children[1];
+    expect(
+      screen.getByTestId('numbered-start').parentElement?.parentElement,
+    ).toBe(group);
+    const nested = screen.getByTestId('nested-row');
+    expect(nested.children).toHaveLength(4);
+    expect(
+      screen.getByTestId('nested-start').parentElement?.parentElement,
+    ).toBe(nested);
+  });
+
   // ===========================================================================
   // Description rendering
   // ===========================================================================
@@ -684,7 +777,7 @@ describe('Item', () => {
 
 describe('swipeActions', () => {
   // The panels and the gesture are loaded lazily (React.lazy + Suspense), so
-  // the first row with swipe actions renders them a tick after it mounts.
+  // the first row with swipe actions renders them once that module is in.
   // Mount one once up front: the resolved module is cached on the lazy
   // component, and every row below renders its panels synchronously.
   beforeAll(async () => {
@@ -695,11 +788,10 @@ describe('swipeActions', () => {
         swipeActions={{leading: [{label: 'Unread', onActivate: () => {}}]}}
       />,
     );
-    await waitFor(() => {
-      expect(
-        screen.getByTestId('warm').querySelector('[data-swipe-panel]'),
-      ).not.toBeNull();
-    });
+    await swipeLayerLoaded();
+    expect(
+      screen.getByTestId('warm').querySelector('[data-swipe-panel]'),
+    ).not.toBeNull();
     cleanup();
   });
 
@@ -721,6 +813,7 @@ describe('swipeActions', () => {
     vi.useRealTimers();
   });
 
+  /** The first finger down: the primary touch pointer. */
   function touch(
     element: Element,
     type: 'pointerDown' | 'pointerMove' | 'pointerUp' | 'pointerCancel',
@@ -731,7 +824,25 @@ describe('swipeActions', () => {
     fireEvent[type](element, {
       clientX: x,
       clientY: y,
+      isPrimary: true,
       pointerId: 7,
+      pointerType: 'touch',
+    });
+  }
+
+  /** A second finger: a touch pointer that is not the primary one. */
+  function secondFinger(
+    element: Element,
+    type: 'pointerDown' | 'pointerMove' | 'pointerUp' | 'pointerCancel',
+    x: number,
+    y = 10,
+  ) {
+    vi.advanceTimersByTime(10);
+    fireEvent[type](element, {
+      clientX: x,
+      clientY: y,
+      isPrimary: false,
+      pointerId: 8,
       pointerType: 'touch',
     });
   }
@@ -958,6 +1069,105 @@ describe('swipeActions', () => {
     });
   });
 
+  describe('a pinch', () => {
+    /** A touchmove listing both fingers; true when the row cancelled it. */
+    const pinchMoveCancelled = (row: Element, x: number) =>
+      !fireEvent.touchMove(row, {
+        cancelable: true,
+        touches: [
+          {clientX: x, clientY: 10},
+          {clientX: 300 - x, clientY: 10},
+        ],
+      });
+
+    it('lets the touch go when a second finger lands on the row before the axis is decided, and cancels nothing', () => {
+      const {row} = renderRow();
+      touch(row, 'pointerDown', 100);
+      secondFinger(row, 'pointerDown', 60);
+      // The fingers spread apart; the first one travels toward the leading
+      // side far past the axis lock.
+      touch(row, 'pointerMove', 130);
+      secondFinger(row, 'pointerMove', 30);
+      touch(row, 'pointerMove', 160);
+      expect(pinchMoveCancelled(row, 160)).toBe(false);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('');
+      // The browser takes the pinch.
+      touch(row, 'pointerCancel', 160);
+      secondFinger(row, 'pointerCancel', 0);
+      settled();
+      expect(travelOf(row)).toBe('');
+    });
+
+    it('lets the touch go when the second finger lands off the row', () => {
+      const {row} = renderRow();
+      touch(row, 'pointerDown', 100);
+      secondFinger(document.body, 'pointerDown', 60, 200);
+      touch(row, 'pointerMove', 130);
+      touch(row, 'pointerMove', 160);
+      expect(pinchMoveCancelled(row, 160)).toBe(false);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('');
+      touch(row, 'pointerCancel', 160);
+    });
+
+    it('never starts a drag from a finger that is not the first one down', () => {
+      const {row} = renderRow();
+      // The first finger is somewhere else on the page; this one lands on
+      // the row and travels sideways.
+      secondFinger(row, 'pointerDown', 100);
+      secondFinger(row, 'pointerMove', 130);
+      secondFinger(row, 'pointerMove', 160);
+      expect(pinchMoveCancelled(row, 160)).toBe(false);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('');
+      secondFinger(row, 'pointerUp', 160);
+    });
+
+    it('keeps a drag the row already owns when a second finger lands', () => {
+      const {row} = renderRow();
+      touch(row, 'pointerDown', 10);
+      touch(row, 'pointerMove', 30);
+      touch(row, 'pointerMove', 45);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('35px');
+      secondFinger(row, 'pointerDown', 200);
+      touch(row, 'pointerMove', 60);
+      expect(pinchMoveCancelled(row, 60)).toBe(true);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('50px');
+      touch(row, 'pointerUp', 60);
+      secondFinger(row, 'pointerUp', 200);
+      settled();
+      expect(travelOf(row)).toBe('72px');
+    });
+
+    it('stops listening to the document once the axis is decided or the touch ends', () => {
+      const add = vi.spyOn(document, 'addEventListener');
+      const remove = vi.spyOn(document, 'removeEventListener');
+      try {
+        const {row} = renderRow();
+        const watching = () =>
+          add.mock.calls.filter(([type]) => type === 'pointerdown').length -
+          remove.mock.calls.filter(([type]) => type === 'pointerdown').length;
+        const before = watching();
+        touch(row, 'pointerDown', 10);
+        expect(watching()).toBe(before + 1);
+        touch(row, 'pointerMove', 40);
+        expect(watching()).toBe(before);
+        touch(row, 'pointerUp', 40);
+        settled();
+        touch(row, 'pointerDown', 10);
+        expect(watching()).toBe(before + 1);
+        touch(row, 'pointerUp', 12);
+        expect(watching()).toBe(before);
+      } finally {
+        add.mockRestore();
+        remove.mockRestore();
+      }
+    });
+  });
+
   it('does not move toward a side without entries', () => {
     const {row} = renderRow({
       leading: [{label: 'Unread', onActivate: vi.fn()}],
@@ -1014,6 +1224,36 @@ describe('swipeActions', () => {
       expect(travelOf(row)).toBe('');
       expect(panel).toHaveAttribute('inert');
       // The row's own primary never fired.
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('keeps a disabled entry focusable but inert on an open row (spec:AST-085 FR1, FR2)', () => {
+      const onActivate = vi.fn();
+      const onClick = vi.fn();
+      const {row} = renderRow({
+        leading: [{label: 'Unread', onActivate, isDisabled: true}],
+        onClick,
+      });
+      touch(row, 'pointerDown', 10);
+      touch(row, 'pointerMove', 30);
+      touch(row, 'pointerMove', 45);
+      touch(row, 'pointerMove', 60);
+      touch(row, 'pointerUp', 60);
+      settled();
+      expect(travelOf(row)).toBe('72px');
+      const button = screen.getByRole('button', {name: 'Unread'});
+      // Exposed through aria-disabled, never the native attribute, so it
+      // keeps its place in the focus order.
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      expect(button).not.toHaveAttribute('disabled');
+      button.focus();
+      expect(button).toHaveFocus();
+      // Inert: the click Enter and Space send runs nothing, leaves the row
+      // open, and does not reach the row's own primary.
+      fireEvent.click(button);
+      settled();
+      expect(onActivate).not.toHaveBeenCalled();
+      expect(travelOf(row)).toBe('72px');
       expect(onClick).not.toHaveBeenCalled();
     });
 
@@ -1294,5 +1534,70 @@ describe('swipeActions', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+// A slot is empty for exactly the values React renders as nothing.
+describe('Item empty slots', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no start or end wrapper for %s', (_name, value) => {
+    const {container: withSlots} = render(
+      <Item
+        label="Item"
+        startContent={value as ReactNode}
+        endContent={value as ReactNode}
+      />,
+    );
+    const {container: without} = render(<Item label="Item" />);
+    expect(withSlots.innerHTML).toBe(without.innerHTML);
+  });
+
+  it.each([
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no description wrapper for %s', (_name, description) => {
+    const {container: withDescription} = render(
+      <Item label="Item" description={description as ReactNode} />,
+    );
+    const {container: without} = render(<Item label="Item" />);
+    expect(withDescription.innerHTML).toBe(without.innerHTML);
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+  ])(
+    'keeps the stacked layout for an inline row whose description is %s',
+    (_name, description) => {
+      const {container: withDescription} = render(
+        <Item
+          label="Item"
+          layout="inline"
+          description={description as ReactNode}
+        />,
+      );
+      const {container: without} = render(
+        <Item label="Item" layout="inline" />,
+      );
+      expect(withDescription.innerHTML).toBe(without.innerHTML);
+    },
+  );
+
+  it('renders no description element for an empty string', () => {
+    render(<Item label="Item" description="" />);
+    const label = screen.getByText('Item');
+    expect(label.parentElement?.children).toHaveLength(1);
+  });
+
+  it('renders 0 in the start, end and description slots, as React does', () => {
+    render(
+      <Item label="Item" startContent={0} endContent={0} description={0} />,
+    );
+    expect(screen.getAllByText('0')).toHaveLength(3);
   });
 });

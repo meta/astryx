@@ -52,6 +52,35 @@ describe('fromComponentDoc', () => {
     expect(contract.webOnly.map(prop => prop.name)).toContain('onPick');
   });
 
+  it('projects a wider web type to its portable values, each one web value', () => {
+    const sized = fromComponentDoc(
+      {
+        name: 'Box',
+        props: [{name: 'width', type: 'SizeValue', description: 'Width.'}],
+      },
+      {
+        name: 'Box',
+        baseTarget: 'root',
+        projections: {width: {content: 'auto', fill: '100%'}},
+      },
+    );
+    expect(sized.core.width).toEqual({
+      type: {kind: 'enum', values: ['content', 'fill']},
+      optional: true,
+      doc: 'Width. Native values: `content` is the web\'s `"auto"`, `fill` is the web\'s `"100%"`.',
+    });
+    expect(sized.webOnly).toEqual([]);
+    const webValues = Object.values(sized.projections?.width ?? {});
+    expect(new Set(webValues).size).toBe(webValues.length);
+    // Without a projection the same prop stays on the web.
+    const plain = fromComponentDoc(
+      {name: 'Box', props: [{name: 'width', type: 'SizeValue'}]},
+      {name: 'Box', baseTarget: 'root'},
+    );
+    expect(plain.core).not.toHaveProperty('width');
+    expect(plain.webOnly.map(prop => prop.name)).toContain('width');
+  });
+
   it('refuses a toolkit name unless the component declares the same meaning', () => {
     const plain = fromComponentDoc(doc, {
       name: 'Toggle',

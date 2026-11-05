@@ -101,11 +101,92 @@ export const brandTheme = defineTheme({
   },
 });`,
         },
+        {
+          type: 'prose',
+          text: "An entry can also be a function of the request, so the theme maps Icon's size to its icon library's own props or artwork. `Icon` calls it with `{size, variant}`, where `size` is the size it renders at (`xsm`, `sm`, `md`, or `lg`: an explicit `size`, else the owning component's default, else `md`). Reads that return one node — `getIcon()`, `useIcon()`, `getIconRegistry()`, and the theme's `icons` field — call it with `{size: 'md'}`. The same entry shape works in `registerIcons()`.",
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'A size-aware icon entry',
+          code: `import {defineTheme} from '@astryxdesign/core/theme';
+import {Info} from 'lucide-react';
+
+export const brandTheme = defineTheme({
+  name: 'brand',
+  icons: {
+    // A heavier stroke keeps the small size legible.
+    info: ({size}) => <Info strokeWidth={size === 'sm' || size === 'xsm' ? 2.5 : 2} />,
+  },
+});`,
+        },
+        {
+          type: 'prose',
+          text: 'Keep the function pure and synchronous: it computes its result from the request only, with no hooks, DOM or SVG measurement, browser globals, network access, mutable module state, or side effects. Its result is final. Returning `null` draws no glyph instead of falling back to a registered or built-in icon, while a `null` or `undefined` node entry still falls back. A child theme that sets an entry for a key replaces the inherited entry for that key.',
+        },
+      ],
+    },
+    {
+      title: 'Icon Variants',
+  category: 'foundations',
+      content: [
+        {
+          type: 'prose',
+          text: "A theme lists the icon variant names it supports once, with `iconVariants` in `defineTheme()`. The list belongs to the whole theme, never to one icon, and Astryx defines no names of its own. Inside `defineTheme`, an entry function receives `variant` typed as the listed names, or `undefined`, so a misspelled name is a type error. An entry that receives `undefined` draws its normal artwork.",
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'Listing variants and mapping them to artwork',
+          code: `import {defineTheme} from '@astryxdesign/core/theme';
+import {InfoFilledIcon, InfoIcon} from './brand-icons';
+
+export const brandTheme = defineTheme({
+  name: 'brand',
+  iconVariants: ['outline', 'filled'],
+  icons: {
+    info: ({size, variant}) =>
+      variant === 'filled' ? <InfoFilledIcon /> : <InfoIcon bold={size === 'sm'} />,
+  },
+});
+
+brandTheme.iconVariants; // ['outline', 'filled']`,
+        },
+        {
+          type: 'prose',
+          text: 'A theme that `extends` another inherits its list unless it sets its own; a list it sets replaces the inherited one instead of merging with it.',
+        },
+        {
+          type: 'prose',
+          text: "Request a variant with `Icon`'s `variant` prop. The entry receives it only when the active theme lists it; an entry the theme inherited also needs the theme that defined it to list it. Otherwise the entry receives `undefined` and draws its normal artwork, so an unlisted variant never breaks rendering. A `registerIcons()` entry receives the variants the active theme lists, and a node entry draws the same node for every variant. An icon component passed directly to `Icon` never receives `variant`, and `variant` is never written to the DOM: it selects artwork, so there is no theming selector for it.",
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'Requesting a variant',
+          code: `<Icon icon="info" variant="filled" />  // brandTheme: the filled artwork
+<Icon icon="info" />                    // the normal artwork`,
+        },
+        {
+          type: 'prose',
+          text: 'An application declares the variant names it uses by augmenting `IconVariantMap` from `@astryxdesign/core/Icon`. `IconVariant` is those names, and an entry passed to `registerIcons()` receives `variant` typed as `IconVariant`. `astryx theme build` writes this augmentation for a built theme\'s list.',
+        },
+        {
+          type: 'code',
+          lang: 'ts',
+          label: 'Declaring the variant names an application uses',
+          code: `declare module '@astryxdesign/core/Icon' {
+  interface IconVariantMap {
+    outline: true;
+    filled: true;
+  }
+}`,
+        },
       ],
     },
     {
       title: 'Component and Library Icons',
-  category: 'foundations',
+      category: 'foundations',
       content: [
         {
           type: 'prose',

@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file BottomSheetPinchZoom.a11y.chromium.spec.ts
@@ -9,7 +10,12 @@
  * @position Chromium proof for the sheet's touch-action and pinch hand-off
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type CDPSession,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

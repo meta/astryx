@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file ItemSwipeActions.a11y.chromium.spec.ts
@@ -15,7 +16,7 @@
  *   device has already disagreed with jsdom once on this gesture.
  */
 
-import {expect, test, type Locator} from '@playwright/test';
+import {expect, test, type Locator} from '@astryxdesign/a11y-spec/playwright';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 import {

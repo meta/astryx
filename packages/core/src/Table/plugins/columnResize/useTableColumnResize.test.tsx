@@ -574,6 +574,43 @@ describe('useTableColumnResize', () => {
       expect(handle).toHaveAttribute('aria-label', 'Resize column Name');
     });
 
+    it("names a node header's handle by the header's visible text (AR1)", () => {
+      function Glyph() {
+        return <svg aria-hidden />;
+      }
+      render(
+        <ResizeTable
+          columns={[
+            {key: 'name', header: <span>Amount (EUR)</span>},
+            {key: 'role', header: <Glyph />},
+            {key: 'id', header: 'ID'},
+          ]}
+        />,
+      );
+      const [amount, role] = getResizeHandles();
+      expect(amount).toHaveAttribute(
+        'aria-label',
+        'Resize column Amount (EUR)',
+      );
+      // A header with no text it renders through children falls back to the key.
+      expect(role).toHaveAttribute('aria-label', 'Resize column role');
+    });
+
+    it("the handle never adds to its column header's name (AR1)", () => {
+      render(<ResizeTable />);
+      const headers = screen.getAllByRole('columnheader');
+      // Named by its text alone: no handle name, no width value.
+      expect(headers[0]).toHaveAccessibleName('Name');
+      for (const header of headers) {
+        expect(header.textContent).not.toBe('');
+        expect(header).not.toHaveAccessibleName(/Resize column|\d{2,}/);
+      }
+      // The label stays inline, so the cell's ellipsis still reaches it.
+      const labelId = headers[0].getAttribute('aria-labelledby')?.split(' ')[0];
+      expect(labelId).toBeDefined();
+      expect(document.getElementById(labelId ?? '')?.tagName).toBe('SPAN');
+    });
+
     it('handle has aria-valuemin', () => {
       render(<ResizeTable minWidth={80} />);
       const handle = getResizeHandles()[0];

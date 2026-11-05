@@ -150,7 +150,8 @@ export const doc = {
     },
     {
       value: 'ERR_CODEMOD_FAILED',
-      description: 'One or more codemods failed during an upgrade run.',
+      description:
+        'A codemod or post-codemod hook failed during an upgrade run; the error carries a `receipt` that lists the files the run already changed.',
     },
     {
       value: 'ERR_CODEMOD_PROTECTED',
@@ -282,7 +283,7 @@ export const doc = {
     {
       value: 'ERR_VERSIONS_UNAVAILABLE',
       description:
-        'Nothing could answer this run, and nothing was written: the project\'s own CLI could not start and nothing else could answer, or the Core a command needs outside a project could not be installed.',
+        "Nothing could answer this run, and nothing was written: the project's own CLI could not start and nothing else could answer, or the Core a command needs outside a project could not be installed.",
     },
     {
       value: 'ERR_PROJECT_REQUIRED',

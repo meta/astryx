@@ -13,6 +13,7 @@
  *   committed under apple/ so a Swift package can pin a commit
  */
 
+import {BUILTIN_ICON_NAMES} from '../icons/defaults.js';
 import {SWIFT_KEYWORDS} from './names.js';
 import type {ComponentContract, PropMap, PropType} from './types.js';
 
@@ -85,6 +86,38 @@ class SwiftWriter {
         return `(${type.args.map((arg, i) => this.type(owner, `${prop}Arg${i}`, arg)).join(', ')}) -> Void`;
       case 'content':
         return '[AstryxNode]';
+      case 'icon':
+        return 'IconName';
+      case 'textOrBoolean': {
+        const name = `${owner}${pascal(prop)}`;
+        this.decls.push(
+          [
+            `/// Words or a switch: \`.on\` is the component's own words, \`.off\` none,`,
+            `/// \`.text\` the given words. On the wire it is the web value, a string or a Bool.`,
+            `public enum ${name}: Equatable, Codable, Sendable, ExpressibleByStringLiteral, ExpressibleByBooleanLiteral {`,
+            '  case on',
+            '  case off',
+            '  case text(String)',
+            '  public init(stringLiteral value: String) { self = .text(value) }',
+            '  public init(booleanLiteral value: Bool) { self = value ? .on : .off }',
+            '  public init(from decoder: any Decoder) throws {',
+            '    let container = try decoder.singleValueContainer()',
+            '    if let value = try? container.decode(Bool.self) { self = value ? .on : .off }',
+            '    else { self = .text(try container.decode(String.self)) }',
+            '  }',
+            '  public func encode(to encoder: any Encoder) throws {',
+            '    var container = encoder.singleValueContainer()',
+            '    switch self {',
+            '    case .on: try container.encode(true)',
+            '    case .off: try container.encode(false)',
+            '    case .text(let value): try container.encode(value)',
+            '    }',
+            '  }',
+            '}',
+          ].join('\n'),
+        );
+        return name;
+      }
       case 'named':
         return type.name;
     }
@@ -367,6 +400,40 @@ const BASE_FILE =
   ].join('\n') +
   '\n';
 
+/**
+ * `IconName`: a shared icon name (AST-082 FR17), string-backed so a
+ * registered `<library>:<name>` name is valid too, with every built-in name
+ * as a static member.
+ */
+function iconNameFile(): string {
+  return (
+    HEADER +
+    [
+      '/// A shared icon name (AST-082 FR17): a built-in name, or a registered',
+      '/// `<library>:<name>` name. A view draws the image the theme or the platform',
+      '/// maps it to.',
+      'public struct IconName: RawRepresentable, ExpressibleByStringLiteral, Hashable, Codable, Sendable {',
+      '  public let rawValue: String',
+      '  public init(rawValue: String) { self.rawValue = rawValue }',
+      '  public init(stringLiteral value: String) { self.rawValue = value }',
+      '  public init(from decoder: any Decoder) throws {',
+      '    self.rawValue = try decoder.singleValueContainer().decode(String.self)',
+      '  }',
+      '  public func encode(to encoder: any Encoder) throws {',
+      '    var container = encoder.singleValueContainer()',
+      '    try container.encode(rawValue)',
+      '  }',
+      '  /// Every built-in name, in the order AST-082 FR17 lists them.',
+      `  public static let builtIn: [IconName] = [${BUILTIN_ICON_NAMES.map(name => `.${ident(name)}`).join(', ')}]`,
+      ...BUILTIN_ICON_NAMES.map(
+        name => `  public static let ${ident(name)}: IconName = "${name}"`,
+      ),
+      '}',
+    ].join('\n') +
+    '\n'
+  );
+}
+
 /** Returns file name to contents, relative to the generated Swift folder. */
 export function generateSwift(
   contracts: readonly ComponentContract[],
@@ -375,6 +442,7 @@ export function generateSwift(
     'AstryxBase.swift': BASE_FILE,
     'AstryxNode.swift': nodeFile(contracts),
     'AstryxWire.swift': WIRE_FILE,
+    'IconName.swift': iconNameFile(),
   };
   for (const contract of contracts) {
     files[`${contract.name}.swift`] = componentFile(contract);

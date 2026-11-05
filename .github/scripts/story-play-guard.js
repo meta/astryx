@@ -153,6 +153,23 @@ const TARGETS = [
       'on a coarse pointer, the compact combobox and full Clear all hit area remain separate in RTL as well',
   },
   {
+    component: 'PowerSearch',
+    story: 'core-powersearch--default-filters-beside-search',
+    guards:
+      'default filter tokens that reach past the field center never cover the search input, and pressing its center focuses it',
+  },
+  {
+    component: 'PowerSearch (RTL)',
+    story: 'core-powersearch--default-filters-beside-search-rtl',
+    guards: 'default filter tokens never cover the search input in RTL as well',
+  },
+  {
+    component: 'PowerSearch',
+    story: 'core-powersearch--token-row-when-resting-styles-win',
+    guards:
+      'whichever single resting declaration of the empty search input outranks its empty-query override, the input stays on the token row and the field grows no blank row',
+  },
+  {
     component: 'Tokenizer',
     story: 'core-tokenizer--caret-placement',
     guards:
@@ -336,6 +353,36 @@ const TARGETS = [
     guards:
       'isFullBleed strip/label geometry incl. clamp far side, and the real ' +
       'LayoutHeader paddingBlockEnd -> TabList isFullBleed dock (#2622)',
+  },
+  {
+    component: 'Typeahead',
+    story: 'core-typeahead--incremental-results',
+    guards:
+      'local matches show at once while busy; server rows only append; the highlighted option and its id stay; Enter selects it (spec:AST-092)',
+  },
+  {
+    component: 'Typeahead',
+    story: 'core-typeahead--incremental-results-above-field',
+    guards:
+      'a popup above the field keeps its shown rows in place on screen while server rows append (spec:AST-092 FR6)',
+  },
+  {
+    component: 'Typeahead',
+    story: 'core-typeahead--incremental-results-scrolled',
+    guards:
+      'a scrolled partial list keeps its scroll offset and shown rows in place while server rows append (spec:AST-092 FR6)',
+  },
+  {
+    component: 'Typeahead',
+    story: 'core-typeahead--incremental-results-below-field-overflow',
+    guards:
+      'a popup below the field stays below and grows only within the room there when the server list outgrows it (spec:AST-092 FR6)',
+  },
+  {
+    component: 'Typeahead',
+    story: 'core-typeahead--incremental-results-resting-pointer',
+    guards:
+      'rows appended under a resting pointer do not take the highlight; Enter selects the highlighted row (spec:AST-092 FR6)',
   },
 ];
 

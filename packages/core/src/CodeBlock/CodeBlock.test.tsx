@@ -15,6 +15,7 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {CodeBlock} from './CodeBlock';
+import {rtlStyles} from '../utils';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {dracula} from '../theme/syntax';
 import {InternationalizationProvider} from '../i18n';
@@ -212,9 +213,14 @@ describe('CodeBlock', () => {
     // Theme seam: a design system can restyle the copy control via this class
     // without turning the button off and re-implementing it.
     expect(copyButton).toHaveClass('astryx-code-block-copy-button');
-    // The button carries a visible "Copy code" hover/focus hint (tooltip),
-    // wired through aria-describedby — a bare <button> could not.
-    expect(copyButton).toHaveAttribute('aria-describedby');
+    // The button carries a visible "Copy code" hover/focus hint (tooltip). It
+    // repeats the name, so it adds no description (Button FR12).
+    expect(
+      screen
+        .getAllByRole('tooltip', {hidden: true})
+        .some(el => el.textContent === 'Copy code'),
+    ).toBe(true);
+    expect(copyButton).not.toHaveAttribute('aria-describedby');
   });
 
   it('keeps the copy button tooltip as "Copy code" after copying', async () => {
@@ -290,6 +296,35 @@ describe('CodeBlock', () => {
     }
   });
 
+  // design:bidirectionality DR4: the collapsed disclosure chevron points
+  // toward the inline end, so it mirrors in RTL. jsdom does not apply the
+  // compiled StyleX CSS, so this pins the structure the mirror relies on: the
+  // chevron renders inside an element carrying the shared rtlStyles.mirror.
+  it('wraps the disclosure chevron in the shared RTL mirror', () => {
+    const {className: mirrorClassName} = stylex.props(rtlStyles.mirror);
+    const mirrorClasses = mirrorClassName?.split(' ') ?? [];
+    expect(mirrorClasses.length).toBeGreaterThan(0);
+    render(
+      <div dir="rtl">
+        <CodeBlock
+          code={LONG_CODE}
+          language="javascript"
+          title="example"
+          isCollapsible
+        />
+      </div>,
+    );
+    const header = screen
+      .getAllByRole('button')
+      .find(el => el.hasAttribute('aria-expanded'));
+    const chevron = header?.querySelector('.astryx-icon');
+    expect(chevron).not.toBeNull();
+    const wrapper = chevron?.parentElement;
+    for (const className of mirrorClasses) {
+      expect(wrapper).toHaveClass(className);
+    }
+  });
+
   it('does NOT collapse the block when the copy button is clicked', () => {
     render(
       <CodeBlock
@@ -312,6 +347,99 @@ describe('CodeBlock', () => {
     // Clicking Copy must not toggle the collapsible header.
     expect(header).toHaveAttribute('aria-expanded', 'true');
     expect(navigator.clipboard.writeText).toHaveBeenCalled();
+  });
+
+  describe('endContent', () => {
+    const run = () => (
+      <button type="button" onClick={onRun}>
+        Run in terminal
+      </button>
+    );
+    let onRun: ReturnType<typeof vi.fn<() => void>>;
+    beforeEach(() => {
+      onRun = vi.fn<() => void>();
+    });
+
+    it('renders caller controls before Copy in the header', () => {
+      render(<CodeBlock code="npm test" language="bash" endContent={run()} />);
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      const copy = screen.getByRole('button', {name: 'Copy code'});
+      expect(action.parentElement).toBe(copy.parentElement);
+      expect(
+        action.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+
+    it('never creates a header: with no title or label the controls sit in the corner', () => {
+      const {container} = render(
+        <CodeBlock
+          code="npm test"
+          language="bash"
+          hasLanguageLabel={false}
+          endContent={run()}
+        />,
+      );
+      expect(container.querySelector('.astryx-code-block-header')).toBeNull();
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      const copy = screen.getByRole('button', {name: 'Copy code'});
+      const cluster = action.parentElement;
+      expect(cluster).toBe(copy.parentElement);
+      expect(cluster?.parentElement).toBe(container.querySelector('pre'));
+      expect(
+        action.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it('keeps its place when Copy is hidden', () => {
+      const {container} = render(
+        <CodeBlock code="npm test" hasCopyButton={false} endContent={run()} />,
+      );
+      expect(screen.queryByRole('button', {name: 'Copy code'})).toBeNull();
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      expect(action.parentElement?.parentElement).toBe(
+        container.querySelector('pre'),
+      );
+    });
+
+    it('sits outside the disclosure and never toggles it, by pointer or keyboard', () => {
+      render(
+        <CodeBlock
+          code={LONG_CODE}
+          language="javascript"
+          title="example"
+          isCollapsible
+          endContent={run()}
+        />,
+      );
+      const header = screen
+        .getAllByRole('button')
+        .find(el => el.hasAttribute('aria-expanded'));
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      expect(header!.contains(action)).toBe(false);
+      fireEvent.click(action);
+      fireEvent.keyDown(action, {key: 'Enter'});
+      fireEvent.keyDown(action, {key: ' '});
+      expect(onRun).toHaveBeenCalledTimes(1);
+      expect(header).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('treats a falsy endContent as absent: no corner column without Copy', () => {
+      const {container} = render(
+        <CodeBlock code="npm test" hasCopyButton={false} endContent={false} />,
+      );
+      const root = container.querySelector('pre');
+      // Only the code viewport: no empty cluster beside it.
+      expect(root?.children).toHaveLength(1);
+      expect(screen.queryAllByRole('button')).toHaveLength(0);
+    });
+
+    it('leaves caller controls unnamed and unstyled by CodeBlock', () => {
+      render(<CodeBlock code="npm test" language="bash" endContent={run()} />);
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      expect(action.getAttribute('class')).toBeNull();
+      expect(action).not.toHaveAttribute('aria-label');
+    });
   });
 
   it('does not nest the copy button inside the collapsible header role="button"', () => {
@@ -561,7 +689,10 @@ describe('CodeBlock', () => {
       expect(screen.getByRole('group')).toHaveAttribute('aria-label', 'Code');
 
       const copyButton = screen.getByRole('button', {name: 'Copy code'});
-      expect(copyButton.parentElement).toBe(container.querySelector('pre'));
+      // Headerless: Copy sits in the corner cluster, a direct child of the root.
+      expect(copyButton.parentElement?.parentElement).toBe(
+        container.querySelector('pre'),
+      );
       await act(async () => {
         fireEvent.click(copyButton);
       });

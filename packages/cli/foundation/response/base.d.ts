@@ -34,6 +34,13 @@ export interface CLIError {
   error: string;
   code: ErrorCode;
   suggestions?: Suggestion[];
+  /**
+   * What the command had already done when it failed, present only on errors
+   * from a command that changes files before it can fail (for example the
+   * `upgrade.run` data of a failed `astryx upgrade`). The error is still an
+   * error: branch on `code`.
+   */
+  receipt?: Record<string, unknown>;
 }
 
 /** Returned by the fallback hook for commands without --json support. */

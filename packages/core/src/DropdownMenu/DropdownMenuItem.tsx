@@ -43,10 +43,13 @@ import {
   spacingVars,
   typographyVars,
   typeScaleVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import {composeEventHandlers, mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useDropdownMenuContext} from './DropdownMenuContext';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
 import {isModifiedClick} from './menuItemRoles';
 import {themeProps} from '../utils/themeProps';
@@ -64,14 +67,16 @@ const menuItemStyles = stylex.create({
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',
-      ':focus': colorVars['--color-overlay-hover'],
+      // menuPressLitRowStyle sets the variable on the row a held finger or pen
+      // lights.
+      ':focus': `var(--_menu-row-focus-paint, ${colorVars['--color-overlay-hover']})`,
       // The pressed look only where hover exists. Under a finger the row a
       // press BEGAN on would otherwise stay painted while the highlight (focus)
-      // moves to the row under the finger — two rows lit.
+      // moves to the row under the finger — two rows lit. A held finger or pen
+      // sets the variable on the menu. Then only the lit row keeps the look.
       '@media (hover: hover)': {
         default: null,
-        ':active:where(:not(:disabled,[aria-disabled="true"]))':
-          colorVars['--color-overlay-pressed'],
+        ':active:where(:not(:disabled,[aria-disabled="true"]))': `var(--_menu-row-active-paint, ${colorVars['--color-overlay-pressed']})`,
       },
     },
     borderWidth: 0,
@@ -81,7 +86,10 @@ const menuItemStyles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     textAlign: 'start',
-    outline: 'none',
+    // Rows show focus with a translucent overlay, which forced colors replace
+    // with the page color. The standard focus ring (focusOutlineStyles), drawn
+    // inside the row by its own width, marks the focused row in every mode.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   disabled: {
     opacity: 0.5,
@@ -90,11 +98,11 @@ const menuItemStyles = stylex.create({
   destructive: {
     // Only recolor the text/icon; the hover / focus background stays the shared
     // neutral overlay from `root` so the hover state matches every other menu
-    // item. The root color covers the label/description via the Item custom
-    // properties (and any bare text). Semantic error tokens keep it theme-aware.
-    color: colorVars['--color-error'],
-    '--_item-label-color': colorVars['--color-error'],
-    '--_item-description-color': colorVars['--color-error'],
+    // item. The semantic status foreground covers the label, description, icon,
+    // and any bare text on a plain surface.
+    color: colorVars['--color-text-error'],
+    '--_item-label-color': colorVars['--color-text-error'],
+    '--_item-description-color': colorVars['--color-text-error'],
   },
 });
 
@@ -296,7 +304,9 @@ export function DropdownMenuItem({
       draggable={href != null ? false : undefined}
       isDisabled={isDisabled}
       xstyle={[
+        focusOutlineStyles.focusVisible,
         menuItemStyles.root,
+        menuPressLitRowStyle,
         itemSizeStyles[menuSize],
         isDestructive && menuItemStyles.destructive,
         isDisabled && menuItemStyles.disabled,

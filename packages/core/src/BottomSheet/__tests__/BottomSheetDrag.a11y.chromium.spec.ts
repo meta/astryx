@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file BottomSheetDrag.a11y.chromium.spec.ts
@@ -8,7 +9,7 @@
  * @position Chromium proof for useSheetGestures' live transform path
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -42,13 +43,39 @@ async function openSheet(page: Page) {
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-bottomsheet--snap-points&viewMode=story`,
   );
+  // The entrance ends when the panel's transform transition ends, which is
+  // the signal the panel itself waits on. Listen before the click, so that
+  // no entrance ends unseen.
+  await page.evaluate(() => {
+    const entrance = window as unknown as {sheetEntered: boolean};
+    entrance.sheetEntered = false;
+    document.addEventListener(
+      'transitionend',
+      event => {
+        if (
+          event.propertyName === 'transform' &&
+          event.target instanceof Element &&
+          event.target.classList.contains('astryx-bottom-sheet')
+        ) {
+          entrance.sheetEntered = true;
+        }
+      },
+      {capture: true},
+    );
+  });
   await page.getByRole('button', {name: 'Open nearby places'}).click();
   const dialog = page.getByRole('dialog', {name: 'Nearby places'});
   await expect(dialog).toBeVisible();
   // The sheet panel carries the component class and the transform.
   const sheet = dialog.locator('.astryx-bottom-sheet').first();
   await expect(sheet).toBeVisible();
-  await page.waitForTimeout(600); // the entrance
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () => (window as unknown as {sheetEntered: boolean}).sheetEntered,
+      ),
+    )
+    .toBe(true);
   return {dialog, sheet};
 }
 
@@ -107,18 +134,50 @@ test('a drag writes the transform per move and renders nothing between', async (
   // ... and the moves cost a handful of commits (the drag beginning, the
   // sheet traveling), not one per move.
   expect(commitsDuring - commitsBefore).toBeLessThanOrEqual(4);
+  // The settle's transition starts from where it is as it begins, whatever
+  // the clock reads when the page gets to it. So record its first keyframe.
+  await sheet.evaluate(element => {
+    const el = element as HTMLElement;
+    const record = window as unknown as {settleFrom: string | null};
+    record.settleFrom = null;
+    el.addEventListener('transitionrun', event => {
+      if (event.target !== el || event.propertyName !== 'transform') {
+        return;
+      }
+      for (const animation of el.getAnimations()) {
+        if (
+          animation instanceof CSSTransition &&
+          animation.transitionProperty === 'transform' &&
+          animation.effect instanceof KeyframeEffect
+        ) {
+          record.settleFrom = String(
+            animation.effect.getKeyframes()[0]?.transform ?? '',
+          );
+        }
+      }
+    });
+  });
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchEnd',
     touchPoints: [],
   });
-  // The release animates back from where the finger left the sheet: the
-  // computed transform is still off rest a frame later, and at rest after the
-  // transition.
-  await page.waitForTimeout(40);
-  const midway = await sheet.evaluate(el => getComputedStyle(el).transform);
-  const midwayTy = /matrix\(1, 0, 0, 1, 0, (-?[\d.]+)\)/.exec(midway);
-  expect(midwayTy, midway).not.toBeNull();
-  expect(Number(midwayTy?.[1])).toBeGreaterThan(5);
+  // The release animates back from where the finger left the sheet, and the
+  // sheet is at rest after the transition.
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () => (window as unknown as {settleFrom: string | null}).settleFrom,
+      ),
+    )
+    .not.toBeNull();
+  const settleFrom = await page.evaluate(
+    () => (window as unknown as {settleFrom: string}).settleFrom,
+  );
+  const fromTy =
+    /matrix\(1, 0, 0, 1, 0, (-?[\d.]+)\)/.exec(settleFrom)?.[1] ??
+    /translateY\((-?[\d.]+)px\)/.exec(settleFrom)?.[1];
+  expect(fromTy, settleFrom).toBeDefined();
+  expect(Number(fromTy)).toBeGreaterThan(5);
   await expect
     .poll(async () => sheet.evaluate(el => getComputedStyle(el).transform), {
       timeout: 2_000,

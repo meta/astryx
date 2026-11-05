@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit ChatSendButton
 
 /**
  * @file ChatSendButton.a11y.chromium.spec.ts
@@ -19,9 +20,10 @@ import {
   type BrowserContext,
   type Locator,
   type Page,
-} from '@playwright/test';
+} from '@astryxdesign/a11y-spec/playwright';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
+import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -29,7 +31,9 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const OUTPUT = path.resolve('test-results/chat-send-button-audit-evidence');
+const EVIDENCE = path.resolve('test-results/chat-send-button-audit-evidence');
+// This copy's evidence folder, set in beforeAll (one per --repeat-each copy).
+let OUTPUT = EVIDENCE;
 const NARROW_STORY = 'core-chatcomposer--disabled-streaming-narrow';
 const SUBJECT = '.astryx-chat-send-button';
 
@@ -1264,8 +1268,7 @@ test.beforeAll(async () => {
   if (process.env.ASTRYX_HEAD_SHA && process.env.ASTRYX_HEAD_SHA !== head) {
     throw new Error('PR head differs from the checked out source');
   }
-  fs.rmSync(OUTPUT, {recursive: true, force: true});
-  fs.mkdirSync(OUTPUT, {recursive: true});
+  OUTPUT = resetAuditEvidence(EVIDENCE, test.info());
   server = await serveStorybook(
     process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR,
   );
