@@ -27,8 +27,8 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 import {
+  armHold,
   freezeTimers,
-  holdAnimations,
   installTimerGate,
   releaseAnimations,
   seekAnimations,
@@ -557,13 +557,12 @@ test.describe('CheckboxList row press', () => {
       await row.press(row.label);
       await untilPressed(page);
       const held = await boxPaint(page, 'SMS');
-      await row.lift(row.label);
+      // Hold the release in the page: it can end before the input call returns.
       await freezeTimers(page);
+      const hold = await armHold(page, page.locator('li[data-astryx-press]'));
+      await row.lift(row.label);
       expect(await rowPress(page)).toBe('fading');
-      const animations = await holdAnimations(
-        page,
-        page.locator('li[data-astryx-press]'),
-      );
+      const animations = await hold.held();
       expect(animations.length, JSON.stringify(animations)).toBeGreaterThan(0);
       const releaseMs = Math.max(...animations.map(a => a.durationMs));
       await seekAnimations(page, releaseMs / 2);
