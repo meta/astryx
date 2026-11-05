@@ -309,6 +309,19 @@ describe('watchOutsidePress, closing on a pan', () => {
     stop();
   });
 
+  it('counts a layer it closes on a pan or a cancel as an outside dismissal, as at a lift', () => {
+    const {outside, stop} = setup();
+    const before = outsideDismissalCount(document);
+    fireEvent.pointerDown(outside, touch(1));
+    fireEvent.pointerMove(outside, touch(1, 0, 30));
+    expect(outsideDismissalCount(document)).toBe(before + 1);
+    fireEvent.pointerUp(outside, touch(1, 0, 30));
+    fireEvent.pointerDown(outside, touch(2));
+    fireEvent.pointerCancel(outside, touch(2));
+    expect(outsideDismissalCount(document)).toBe(before + 2);
+    stop();
+  });
+
   it('counts a press inside the layer as inside, in a closed shadow root too', () => {
     const host = document.createElement('div');
     document.body.append(host);
