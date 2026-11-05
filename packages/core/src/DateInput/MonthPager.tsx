@@ -74,20 +74,6 @@ const DAY_SIZE = dateInputTouchSizes.daySize;
  */
 const OVERSCAN = 3;
 
-/**
- * A horizontal wheel gesture, a trackpad's two-finger swipe or Shift with a
- * mouse wheel, pages one month once it travels this far. A gesture ends
- * after this long without a wheel event, its momentum included.
- *
- * @source GUESS — not UIKit values: UIKit's grid follows a trackpad's scroll
- *   and pages on its release rule, which this step stands in for; 25 px turns
- *   a month on a short deliberate swipe but not on a nudge, and 120 ms
- *   outlasts the gap between a swipe's momentum events
- * @measure M-DP02
- */
-const WHEEL_STEP_PX = 25;
-const WHEEL_QUIET_MS = 120;
-
 const styles = stylex.create({
   viewport: {
     position: 'relative',
@@ -460,62 +446,6 @@ function MonthPagerComponent({
   });
 
   useImperativeHandle(handleRef, () => ({scrollToMonth}), [scrollToMonth]);
-
-  const isWheelRTL = useDirection() === 'rtl';
-  // Synchronizes with the viewport's wheel events: one month per horizontal
-  // wheel gesture (WHEEL_STEP_PX), following the reading direction.
-  useEffect(() => {
-    const viewport = viewportRef.current;
-    if (viewport == null) {
-      return undefined;
-    }
-    let travel = 0;
-    let hasStepped = false;
-    let quiet: number | null = null;
-    const onWheel = (event: WheelEvent) => {
-      const horizontal = event.shiftKey
-        ? event.deltaX || event.deltaY
-        : event.deltaX;
-      const vertical = event.shiftKey ? 0 : event.deltaY;
-      if (horizontal === 0 || Math.abs(horizontal) < Math.abs(vertical)) {
-        return;
-      }
-      if (quiet != null) {
-        window.clearTimeout(quiet);
-      }
-      quiet = window.setTimeout(() => {
-        travel = 0;
-        hasStepped = false;
-        quiet = null;
-      }, WHEEL_QUIET_MS);
-      if (hasStepped) {
-        return;
-      }
-      travel += horizontal;
-      if (Math.abs(travel) < WHEEL_STEP_PX) {
-        return;
-      }
-      hasStepped = true;
-      const forward = travel > 0 !== isWheelRTL;
-      const next = clampIndex(
-        pager.virtualIndex + (forward ? 1 : -1),
-        0,
-        rowCount - 1,
-      );
-      if (next !== pager.virtualIndex) {
-        stopFollowingSettle();
-        report(next);
-        pager.goTo(next, {animated: true});
-      }
-    };
-    viewport.addEventListener('wheel', onWheel, {passive: true});
-    return () => {
-      viewport.removeEventListener('wheel', onWheel);
-      if (quiet != null) {
-        window.clearTimeout(quiet);
-      }
-    };
-  }, [pager, report, rowCount, isWheelRTL, stopFollowingSettle]);
 
   // Inside a bottom sheet, the sheet's touch listener skips the drags UIKit
   // gives the grid and every move before the decision. The pager's pan uses

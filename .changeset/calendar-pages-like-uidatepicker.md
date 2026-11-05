@@ -8,7 +8,7 @@
 - The month title follows the drag and the settle. It changes when the next month is more than half in view.
 - The arrows scroll the month in 0.3 s. A second tap mid-scroll goes on to the month after.
 - In the sheet, a drag is decided once it has moved 10 px either way. It pages the calendar if it has moved 10 px sideways by then, and moves the sheet otherwise.
-- A horizontal trackpad swipe, or Shift with a mouse wheel, pages one month per gesture.
+- A horizontal trackpad swipe moves the calendar with it and pages at the release, like a drag.
 - With Reduce Motion on, the arrows' step and a swipe's settle cross-fade in 200 ms instead of travelling.
 
 With a mouse, the calendar still scrolls natively. With any pointer, PageUp and PageDown now move the keyboard focus by a month, and by a year with Shift.

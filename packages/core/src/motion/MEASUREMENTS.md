@@ -283,10 +283,6 @@ touch sample) followed on Oct 25 2026. A drag is decided on the first sample
 where either axis reaches the pan's hysteresis: the grid's when the horizontal
 travel has.
 
-| ID     | What            | App and gesture                                                                                                                        | Extract                                                                                                                                                  | Method | Feeds                                                       |
-| ------ | --------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
-| M-DP02 | Trackpad paging | `.date` `.inline` on an iPad with a pointer: two-finger horizontal swipes of 10 to 60 pt, slow and fast, and swipes 50 to 300 ms apart | whether the grid follows the swipe and pages on its end, the travel and speed that turn a month, and the gap after which a swipe counts as a new gesture | C      | the wheel step and quiet time in `DateInput/MonthPager.tsx` |
-
 ## Context menu (UIContextMenuInteraction)
 
 Values the context menu reads from its own table, which lands with the
