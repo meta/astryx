@@ -3752,6 +3752,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-link-component-article-cards",
+      "path": "examples/use-link-component/article-cards",
+      "aliases": []
+    },
+    {
       "name": "example-use-list-focus-recent-files",
       "path": "examples/use-list-focus/recent-files",
       "aliases": []
@@ -4029,6 +4034,11 @@
     {
       "name": "hook-use-lightbox",
       "path": "hooks/use-lightbox",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-link-component",
+      "path": "hooks/use-link-component",
       "aliases": []
     },
     {
