@@ -262,7 +262,10 @@ describe('the press reaches the surface the finger landed on', () => {
       throw new Error('the row has no label to press');
     }
     press(label, 'pointerdown', 10, 10, 'pen');
-    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    // The control profile's onset, as a finger's: no paint before it.
+    vi.advanceTimersByTime(PRESS_ONSET_MS - 1);
+    expect(pressedRow()).toBe(-1);
+    vi.advanceTimersByTime(1);
     expect(pressedRow()).toBe(1);
     press(label, 'pointerup', 10, 10, 'pen');
     expect(rows[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
