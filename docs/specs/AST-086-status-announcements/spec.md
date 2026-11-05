@@ -84,7 +84,9 @@ announcement channel.
   MUST NOT carry a live role or `aria-live`.
 - **FR3 — Live roles only on persistent containers.** A component MAY own a
   live role only on an element that stays mounted while its content changes.
-  It MUST NOT mount that element already holding the text to announce.
+  It MUST NOT mount that element already holding the text to announce, except
+  an urgent Banner's `role="alert"` message, delivered at FR5's assertive
+  urgency.
 - **FR4 — A live container owns content added inside it.** Content added inside
   a mounted live container is delivered by that container, at its urgency. An
   element added with that content MUST NOT carry its own live role or announce
