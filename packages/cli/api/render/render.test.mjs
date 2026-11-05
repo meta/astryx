@@ -5,7 +5,9 @@
  * self-contained HTML file and back, each refusal, and the warnings.
  */
 
+import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -1154,4 +1156,72 @@ describe('render(): refusals', () => {
     put('big.tsx', "import big from './big.png';\nexport default () => <img src={big} alt='' />;");
     expect(await codeOf(() => render('big.tsx', {cwd: dir}))).toBe('ERR_RENDER_ASSET_TOO_LARGE');
   }, 30_000);
+});
+
+describe('render(): a page outside a project', () => {
+  /** @type {string} */
+  let away;
+  const BIN = path.join(CLI_DIR, 'clients', 'cli', 'bin', 'astryx.mjs');
+
+  /** @param {string} cwd @param {string[]} args */
+  const runBin = (cwd, args) => {
+    // A test runner's NODE_PATH would reach this repository's packages.
+    const {NODE_PATH: _, ...env} = process.env;
+    const run = spawnSync(process.execPath, [BIN, '--json', ...args], {cwd, env, encoding: 'utf8', timeout: 60_000});
+    return {status: run.status, json: JSON.parse(run.stdout)};
+  };
+
+  beforeAll(() => {
+    away = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-away-')));
+  });
+
+  afterAll(() => {
+    fs.rmSync(away, {recursive: true, force: true});
+  });
+
+  it('takes Astryx, React and StyleX from the copy the CLI runs with', () => {
+    fs.writeFileSync(path.join(away, 'page.tsx'), PAGE);
+    fs.writeFileSync(path.join(away, 'dot.png'), PNG);
+    const run = runBin(away, ['experimental', 'render', 'page.tsx']);
+    expect(run.status).toBe(0);
+    expect(run.json.data.stylesheets).toContain('@astryxdesign/core/astryx.css');
+    expect(run.json.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('no-astryx-styles');
+    const html = fs.readFileSync(path.join(away, 'page.html'), 'utf8');
+    expect(html).toContain('Café ✓ report');
+    expect(html).toContain('astryx-button');
+    const back = runBin(away, ['experimental', 'render', '--reverse', 'page.html']);
+    expect(back.json.data.exact).toBe(true);
+    expect(fs.readFileSync(path.join(away, 'page-restored', 'page.tsx'), 'utf8')).toBe(PAGE);
+  }, 60_000);
+
+  it('loads one React even when the folder holds its own copy', () => {
+    const sub = path.join(away, 'own-react');
+    for (const name of ['react', 'react-dom']) {
+      const target = path.dirname(createRequire(path.join(CLI_DIR, '../core/package.json')).resolve(`${name}/package.json`));
+      fs.mkdirSync(path.join(sub, 'node_modules'), {recursive: true});
+      fs.cpSync(target, path.join(sub, 'node_modules', name), {recursive: true, dereference: true});
+    }
+    fs.writeFileSync(
+      path.join(sub, 'page.jsx'),
+      "import {useState} from 'react';\nimport {TextInput} from '@astryxdesign/core';\nexport default function Page() {\n  const [v] = useState('typed');\n  return <TextInput label=\"Name\" value={v} onChange={() => {}} />;\n}\n",
+    );
+    const run = runBin(sub, ['experimental', 'render', 'page.jsx']);
+    expect(run.status).toBe(0);
+    expect(fs.readFileSync(path.join(sub, 'page.html'), 'utf8')).toContain('typed');
+  }, 60_000);
+
+  it('still names a package the CLI does not carry as not installed', () => {
+    fs.writeFileSync(path.join(away, 'dep.jsx'), "import x from 'not-a-real-package-xyz';\nexport default () => <p>{String(x)}</p>;\n");
+    const run = runBin(away, ['experimental', 'render', 'dep.jsx']);
+    expect(run.json.code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+  }, 60_000);
+
+  it("uses only the project's own packages inside a project", async () => {
+    const {renderPage} = await import('../../foundation/render/render-page.mjs');
+    const page = await renderPage(path.join(dir, 'page.tsx'), {
+      served: {dir: path.join(away, 'no-such-core'), integrations: []},
+    });
+    expect(page.fromSet).toEqual([]);
+    expect(page.stylesheets).toContain('@astryxdesign/core/astryx.css');
+  }, 60_000);
 });

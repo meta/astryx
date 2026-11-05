@@ -18,13 +18,13 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {createRequire} from 'node:module';
 import {Worker} from 'node:worker_threads';
 import postcss from 'postcss';
 import {assetDataUri, isAssetBytes, isAssetPath, RenderAssetError} from './assets.mjs';
 import {classesIn, cutCss, layerOrderOf} from './css-cut.mjs';
 import {sourceBlock} from './source-block.mjs';
 import {embeddedPathProblem} from './embedded-files.mjs';
+import {resolveServed} from './served-packages.mjs';
 
 /** How long one page may take to render before it is stopped. */
 export const RENDER_TIMEOUT_MS = 60_000;
@@ -47,6 +47,7 @@ export {PAGE_EXTENSIONS} from './embedded-files.mjs';
  * @property {number} markupBytes - Bytes of rendered markup.
  * @property {number} images - Local files inlined as data: URIs.
  * @property {RenderWarning[]} warnings
+ * @property {{name: string, dir: string}[]} fromSet - Packages that came from the package set the CLI runs from, not the page's folder.
  */
 
 /** An error carrying a render error code. */
@@ -128,7 +129,7 @@ function importParams(params) {
  * cut.
  * @param {string} file the stylesheet's own path
  * @param {string} css its text
- * @param {{warnings: RenderWarning[], carried: Set<string>, included: Set<string>, packageSheets: string[], seen?: Set<string>}} ctx
+ * @param {{warnings: RenderWarning[], carried: Set<string>, included: Set<string>, packageSheets: string[], served: ServedSet | null, seen?: Set<string>}} ctx
  *   `included`: stylesheet files already in the page (Core's, say), never
  *   inlined twice; `packageSheets`: package stylesheets this pulled in
  * @returns {string}
@@ -170,12 +171,8 @@ function expandImports(file, css, ctx) {
     if (/^\.{1,2}\//.test(url) || fs.existsSync(relative)) {
       target = fs.existsSync(relative) ? relative : null;
     } else {
-      try {
-        target = createRequire(file).resolve(url.replace(/^~/, ''));
-        fromPackage = true;
-      } catch {
-        target = null;
-      }
+      target = resolveServed(url.replace(/^~/, ''), file, ctx.served);
+      fromPackage = target !== null;
     }
     if (!target) {
       ctx.warnings.push({
@@ -221,17 +218,20 @@ function expandImports(file, css, ctx) {
   return root.toString();
 }
 
+/** @typedef {{dir: string, integrations: readonly string[]}} ServedSet */
+
 /**
  * Run the page in a worker, stopping it after `timeoutMs`.
  * @param {string} entry
  * @param {string} root
  * @param {number} timeoutMs
+ * @param {ServedSet | null} served
  * @returns {Promise<any>}
  */
-function runWorker(entry, root, timeoutMs) {
+function runWorker(entry, root, timeoutMs, served) {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('./page-worker.mjs', import.meta.url), {
-      workerData: {entry, root},
+      workerData: {entry, root, served: served ? {dir: served.dir, integrations: [...served.integrations]} : null},
       execArgv: [],
       stdout: true,
       stderr: true,
@@ -361,13 +361,16 @@ const SCHEME_CSS =
 /**
  * Render a page module to one self-contained HTML file.
  * @param {string} entry absolute path of the page module
- * @param {{title?: string, timeoutMs?: number, version?: string}} [options]
+ * @param {{title?: string, timeoutMs?: number, version?: string, served?: ServedSet | null}} [options]
+ *   `served`: the Core of the package set the CLI runs from, for the packages
+ *   the page's folder has no copy of
  * @returns {Promise<RenderedPage>}
  */
 export async function renderPage(entry, options = {}) {
   const dir = path.dirname(entry);
   const root = projectRootOf(dir);
-  const message = await runWorker(entry, root, options.timeoutMs ?? RENDER_TIMEOUT_MS);
+  const served = options.served ?? null;
+  const message = await runWorker(entry, root, options.timeoutMs ?? RENDER_TIMEOUT_MS, served);
   /** @type {RenderWarning[]} */
   const warnings = [];
   if (!message.ok) {
@@ -378,7 +381,6 @@ export async function renderPage(entry, options = {}) {
 
   // Stylesheets: Core's reset and components, plus each official package's
   // own stylesheet the page imports from.
-  const req = createRequire(entry);
   /** @type {string[]} */
   const sheets = [];
   /** @type {string[]} */
@@ -388,7 +390,8 @@ export async function renderPage(entry, options = {}) {
   /** @param {string} spec */
   const addSheet = spec => {
     try {
-      const file = req.resolve(spec);
+      const file = resolveServed(spec, entry, served);
+      if (!file) return false;
       sheets.push(spec);
       sheetText.push(fs.readFileSync(file, 'utf8'));
       sheetFiles.push(file);
@@ -402,8 +405,9 @@ export async function renderPage(entry, options = {}) {
   // Package stylesheets the page imports itself, such as a theme's.
   for (const {spec, from} of /** @type {{spec: string, from: string}[]} */ (message.packageCss ?? [])) {
     if (sheets.includes(spec)) continue;
+    const file = resolveServed(spec, from, served);
     try {
-      const file = createRequire(from).resolve(spec);
+      if (!file) throw new Error('not found');
       sheets.push(spec);
       sheetText.push(fs.readFileSync(file, 'utf8'));
       sheetFiles.push(file);
@@ -423,7 +427,7 @@ export async function renderPage(entry, options = {}) {
     warnings.push({
       code: 'no-astryx-styles',
       message:
-        '@astryxdesign/core is not installed where the page is, so the page has no Astryx styles; install it, or render from inside the project.',
+        '@astryxdesign/core is not installed where the page is, and the CLI runs without one, so the page has no Astryx styles; install it, or render from inside the project.',
     });
   }
 
@@ -468,7 +472,7 @@ export async function renderPage(entry, options = {}) {
     /** A stylesheet's rules cut to the page, with its own imports inlined. @param {string} file @param {string} text */
     const sheet = (file, text) => {
       try {
-        const own = expandImports(file, text, {warnings, carried: carriedCss, included, packageSheets});
+        const own = expandImports(file, text, {warnings, carried: carriedCss, included, packageSheets, served});
         return inlineAssets(cutCss(own, used), 'css', {...ctx, dir: path.dirname(file)});
       } catch (e) {
         if (e instanceof RenderAssetError || e instanceof RenderError) throw e;
@@ -608,5 +612,6 @@ export async function renderPage(entry, options = {}) {
       ...(message.assets ?? []),
     ]).size,
     warnings,
+    fromSet: message.fromSet ?? [],
   };
 }

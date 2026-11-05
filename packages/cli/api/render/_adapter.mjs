@@ -26,6 +26,8 @@ import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
+import {findCarriedCoreDir} from '../../foundation/fs/paths.mjs';
+import {hostedRun, recordResolved} from '../../foundation/runtime/package-root.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
 
@@ -239,6 +241,21 @@ function asAstryxError(e) {
 }
 
 /**
+ * The package set the CLI runs from, for a page whose folder has no Core
+ * (architecture:cli-surface INV30): the Core it carries, by the same rule as
+ * every command that answers from Core outside a project. Inside a project
+ * the page's own packages serve it, so this is null.
+ * @param {string} input absolute path of the page
+ * @returns {{dir: string, integrations: readonly string[]} | null}
+ */
+function servedSet(input) {
+  const dir = path.dirname(input);
+  if (resolvesCore(dir)) return null;
+  const core = findCarriedCoreDir(dir, {fetch: true});
+  return core ? {dir: core, integrations: hostedRun()?.integrations ?? []} : null;
+}
+
+/**
  * Render a page module to one HTML file and write it.
  * @param {{cwd: string, input: string, output: string, title?: string}} args absolute paths
  * @returns {Promise<import('./render.type.mjs').RenderPageResponse['data']>}
@@ -249,9 +266,18 @@ export async function renderToFile({cwd, input, output, title}) {
   /** @type {import('../../foundation/render/render-page.mjs').RenderedPage} */
   let page;
   try {
-    page = await renderPage(input, {title, version: cliVersion()});
+    page = await renderPage(input, {title, version: cliVersion(), served: servedSet(input)});
   } catch (e) {
     throw asAstryxError(e);
+  }
+  for (const {name, dir} of page.fromSet) {
+    let version = null;
+    try {
+      version = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).version;
+    } catch {
+      // A package without a readable version is still named.
+    }
+    recordResolved(name, version, dir, 'package-set');
   }
   refuseProtected([output], cwd);
   // An existing file is replaced only when a render wrote it.

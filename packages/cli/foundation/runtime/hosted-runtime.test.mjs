@@ -76,7 +76,8 @@ process.exitCode = result.status;
       env: {
         ...Object.fromEntries(
           Object.entries(process.env).filter(
-            ([key]) => !/^(?:npm_|CI$|NO_UPDATE_NOTIFIER$)/iu.test(key),
+            ([key]) =>
+              !/^(?:npm_|CI$|NO_UPDATE_NOTIFIER$|NODE_PATH$)/iu.test(key),
           ),
         ),
         HOME: home,
@@ -376,6 +377,43 @@ describe('what a hosted run resolved', () => {
         },
       ]),
     );
+  });
+
+  it('renders a page in an empty folder from the package set: Core, React and StyleX', () => {
+    const cwd = tempDir('empty');
+    fs.writeFileSync(
+      path.join(cwd, 'page.jsx'),
+      `import * as stylex from '@stylexjs/stylex';
+import {Button} from '@astryxdesign/core';
+const styles = stylex.create({box: {padding: 12}});
+export default function Page() {
+  return <div {...stylex.props(styles.box)}><Button label="Hosted" /></div>;
+}
+`,
+    );
+    const run = host({
+      argv: ['--json', 'experimental', 'render', 'page.jsx'],
+      cwd,
+    });
+    expect(run.status).toBe(0);
+    expect(JSON.parse(run.stdout).type).toBe('render.page');
+    expect(
+      fs.readFileSync(path.join(cwd, 'page.html'), 'utf-8'),
+    ).toContain('Hosted');
+    const sources = Object.fromEntries(
+      run.result().packages.map(
+        (/** @type {{name: string, source: string}} */ p) => [p.name, p.source],
+      ),
+    );
+    for (const name of [
+      '@astryxdesign/core',
+      'react',
+      'react-dom',
+      '@stylexjs/stylex',
+    ]) {
+      expect(sources[name]).toBe('package-set');
+    }
+    expect(installedARelease(run.cache)).toBe(false);
   });
 
   it("names a project's own integration as the project's", () => {
