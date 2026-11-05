@@ -83,10 +83,7 @@ describe("resolveMotion at the theme's tempo (spec:AST-108 FR3)", () => {
         6,
       );
       for (const seconds of [0.05, 0.15, 0.3]) {
-        expect(slowed.value(seconds * 1.5)).toBeCloseTo(
-          base.value(seconds),
-          6,
-        );
+        expect(slowed.value(seconds * 1.5)).toBeCloseTo(base.value(seconds), 6);
       }
     }
     expect(reads.every(name => name === TEMPO_PROPERTY)).toBe(true);
