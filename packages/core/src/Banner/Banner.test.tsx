@@ -44,14 +44,40 @@ describe('Banner', () => {
     }
   });
 
-  it('forwards an explicit persistent or alert role', () => {
-    const {rerender} = render(
+  it('forwards an explicit non-alert role to the frame', () => {
+    const {container} = render(
       <Banner status="info" title="Saved" role="status" />,
     );
-    expect(screen.getByRole('status')).toHaveTextContent('Saved');
+    expect(screen.getByRole('status')).toBe(container.firstElementChild);
+  });
 
-    rerender(<Banner status="error" title="Failed" role="alert" />);
-    expect(screen.getByRole('alert')).toHaveTextContent('Failed');
+  it('puts an urgent role="alert" on the message: the title and the description only', () => {
+    const {container} = render(
+      <Banner
+        status="error"
+        title="Upload failed"
+        description="Check your network and try again."
+        role="alert"
+        isDismissable
+        endContent={<button type="button">Retry</button>}
+        collapsible={{defaultIsOpen: true}}>
+        Supporting details
+      </Banner>,
+    );
+    const alert = screen.getByRole('alert');
+    expect(container.firstElementChild).not.toHaveAttribute('role');
+    expect(alert.textContent).toBe(
+      'Upload failed Check your network and try again.',
+    );
+    expect(alert).not.toContainElement(
+      screen.getByRole('button', {name: 'Retry'}),
+    );
+    expect(alert).not.toHaveTextContent('Supporting details');
+  });
+
+  it('reads an urgent title without a description as the title alone', () => {
+    render(<Banner status="error" title="Upload failed" role="alert" />);
+    expect(screen.getByRole('alert').textContent).toBe('Upload failed');
   });
 
   it('renders default icon per status with aria-hidden', () => {

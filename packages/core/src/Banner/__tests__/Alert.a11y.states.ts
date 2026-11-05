@@ -20,12 +20,12 @@ export interface BannerAlertBindingDefinition {
   /** The title the caller authors first; the public update replaces it. */
   readonly title: string;
   readonly replacementTitle: string;
-  /** Caller-authored supporting text, part of the alert's message. */
+  /** Caller-authored description, part of the urgent message. */
   readonly description?: string;
   readonly dismissible: boolean;
   /** Label of a caller-supplied `endContent` action. */
   readonly endContentLabel?: string;
-  /** Caller-authored supporting content, rendered as Banner children. */
+  /** Caller-authored supporting content, rendered as Banner children; outside the urgent message. */
   readonly supportingContent?: string;
   /**
    * How Banner shows the supporting content: behind its default closed
@@ -36,18 +36,17 @@ export interface BannerAlertBindingDefinition {
 }
 
 /**
- * The message is everything the caller authors as visible alert text: the
- * title and, when present, the description or visible supporting content.
- * Controls are not message text. Closed supporting content is not visible, so
- * it is not message text.
+ * The urgent message is the title and, when present, the description
+ * (component:Banner FR8). Controls, `endContent` and the supporting content
+ * area are outside it, open or closed.
  */
 function alertFacts(
   title: string,
   replacementTitle: string,
-  visibleSupportingText?: string,
+  description?: string,
 ): AlertFacts {
   const message = (value: string) =>
-    visibleSupportingText == null ? value : `${value} ${visibleSupportingText}`;
+    description == null ? value : `${value} ${description}`;
   return {
     kind: 'live-region',
     role: 'alert',
@@ -115,11 +114,7 @@ export const BANNER_ALERT_BINDING_STATES: ReadonlyArray<
     binding: 'Banner urgent alert',
     summary:
       'an explicitly urgent warning with open supporting content remains an assertive alert when its title is replaced',
-    facts: alertFacts(
-      'Session expires soon',
-      'Session has expired',
-      'Save your work to keep your changes.',
-    ),
+    facts: alertFacts('Session expires soon', 'Session has expired'),
     status: 'warning',
     title: 'Session expires soon',
     replacementTitle: 'Session has expired',
@@ -133,11 +128,7 @@ export const BANNER_ALERT_BINDING_STATES: ReadonlyArray<
     binding: 'Banner urgent alert',
     summary:
       'an explicitly urgent warning with always-visible supporting content remains an assertive alert when its title is replaced',
-    facts: alertFacts(
-      'Session expires soon',
-      'Session has expired',
-      'Save your work to keep your changes.',
-    ),
+    facts: alertFacts('Session expires soon', 'Session has expired'),
     status: 'warning',
     title: 'Session expires soon',
     replacementTitle: 'Session has expired',
