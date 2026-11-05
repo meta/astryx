@@ -6,11 +6,13 @@
  * @description Splits the spec files of one Playwright suite into legs of
  *   about equal running time, from the per-file times a CI run recorded
  *   (spec:AST-030 FR13).
- * @input `plan`: the suite's times key, its config and project, this leg and
- *   the leg count, and any Playwright path filters;
- *   `.github/playwright-leg-durations.json`. `record`: CI job logs of the list
- *   reporter.
- * @output `plan`: this leg's spec files, one per line, for Playwright's
+ * @input `legs`: the suite's times key, its path filters, the changed files,
+ *   a leg's setup time and time limit. `plan`: the suite's times key, its
+ *   config and project, this leg and the leg count, and any Playwright path
+ *   filters; `.github/playwright-leg-durations.json`. `record`: CI job logs
+ *   of the list reporter.
+ * @output `legs`: `count=<legs>` and `runs=<true|false>` for this leg.
+ *   `plan`: this leg's spec files, one per line, for Playwright's
  *   `--test-list`, and `files=<count>` for `$GITHUB_OUTPUT`. `record`: the
  *   durations file, rewritten for the suite.
  * @position The pr-interaction, pr-interaction-webkit and docsite-browser
@@ -22,7 +24,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-import {costOf, splitByDuration} from '../../scripts/lib/duration-split.mjs';
+import {
+  costOf,
+  medianOf,
+  splitByDuration,
+} from '../../scripts/lib/duration-split.mjs';
 import {listedFiles} from './a11y-pr-contracts.mjs';
 
 // CI may run this file from the workflow's own commit, outside the checkout,
@@ -48,6 +54,55 @@ export function planLegs(files, durations, legs) {
     files: leg,
     seconds: leg.reduce((sum, file) => sum + cost(file), 0),
   }));
+}
+
+/**
+ * The seconds a suite's proofs take: each listed spec file a filter selects,
+ * and each changed spec, at its recorded time. A spec with no time of its own
+ * counts its time in `fallback` (another browser's), else the median.
+ */
+export function estimateSeconds(
+  times,
+  filters,
+  {listed = [], changed = [], fallback = {}} = {},
+) {
+  const files = new Set(
+    listed.filter(file => filters.some(filter => file.includes(filter))),
+  );
+  for (const file of changed) files.add(file);
+  const median = medianOf(Object.values(times));
+  let seconds = 0;
+  for (const file of files) seconds += times[file] ?? fallback[file] ?? median;
+  return seconds;
+}
+
+/**
+ * The fewest legs, at most `maxLegs`, in which each leg's setup and share of
+ * the proofs fits `maxSeconds`. One leg while the whole estimate fits.
+ */
+export function legCount({seconds, setupSeconds, maxSeconds, maxLegs}) {
+  if (!Number.isFinite(seconds) || seconds < 0)
+    throw new Error(`the proofs' estimate is not a time: ${seconds}`);
+  if (!(maxSeconds > setupSeconds) || !(maxLegs >= 1))
+    throw new Error(
+      'a leg needs more time than its setup, and one leg at least',
+    );
+  const needed = Math.ceil(seconds / (maxSeconds - setupSeconds));
+  return Math.min(maxLegs, Math.max(1, needed));
+}
+
+/**
+ * Whether a file is an interaction proof spec, as playwright.interaction
+ * .config.ts matches them: any `*.interaction.browser.spec.ts`, and the
+ * gesture system's own `*.browser.spec.ts` proofs.
+ */
+export function isInteractionSpec(file) {
+  return (
+    file.endsWith('.interaction.browser.spec.ts') ||
+    /^packages\/core\/src\/gestures\/__tests__\/browser\/[^/]+\.browser\.spec\.ts$/.test(
+      file,
+    )
+  );
 }
 
 // A suite with one unnamed project prints no `[project]`.
@@ -184,6 +239,54 @@ function plan(args) {
     );
 }
 
+function legs(args) {
+  const split = args.indexOf('--');
+  const own = split === -1 ? args : args.slice(0, split);
+  const filters = split === -1 ? [] : args.slice(split + 1);
+  const key = option(own, '--key');
+  const leg = Number(option(own, '--leg'));
+  const limits = {
+    setupSeconds: Number(option(own, '--setup-seconds')),
+    maxSeconds: Number(option(own, '--max-seconds')),
+    maxLegs: Number(option(own, '--max-legs')),
+  };
+  if (!key || !Number.isInteger(leg) || leg < 1 || filters.length === 0)
+    throw new Error(
+      'usage: legs --key <times key> --leg <i> --listed <file> --setup-seconds <s> --max-seconds <s> --max-legs <n> [--fallback-key <times key>] [--durations <file>] [--changed <file>] -- <filters...>',
+    );
+  const specs = file =>
+    fs.readFileSync(file, 'utf8').split('\n').filter(isInteractionSpec);
+  const listedFile = option(own, '--listed');
+  const listed =
+    listedFile && fs.existsSync(listedFile) ? specs(listedFile) : [];
+  if (listed.length === 0)
+    throw new Error(`--listed names no ${key} spec files to count`);
+  // Each leg counts on its own. A leg without the changed files could count
+  // fewer legs than the others and leave a share of the proofs to no leg, so
+  // it stops instead.
+  const changedFile = option(own, '--changed');
+  if (own.includes('--changed') && !(changedFile && fs.existsSync(changedFile)))
+    throw new Error(
+      'The scope step could not list the changed files, so this leg cannot count its share of the proofs. Re-run the job.',
+    );
+  const durations = readDurations(option(own, '--durations') ?? DURATIONS);
+  const seconds = estimateSeconds(durations[key] ?? {}, filters, {
+    listed,
+    changed: changedFile ? specs(changedFile) : [],
+    fallback: durations[option(own, '--fallback-key')] ?? {},
+  });
+  const count = legCount({seconds, ...limits});
+  const runs = leg <= count;
+  console.log(
+    `${key}: about ${Math.round(seconds)} s of proofs and ${limits.setupSeconds} s of setup a leg, so ${count} leg${count === 1 ? '' : 's'} within ${limits.maxSeconds} s; leg ${leg} ${runs ? 'runs' : 'has no share'}`,
+  );
+  if (process.env.GITHUB_OUTPUT)
+    fs.appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `count=${count}\nruns=${runs}\n`,
+    );
+}
+
 function record(args) {
   const key = option(args, '--key');
   const project = option(args, '--project');
@@ -224,9 +327,10 @@ if (
 ) {
   const [command, ...args] = process.argv.slice(2);
   try {
-    if (command === 'plan') plan(args);
+    if (command === 'legs') legs(args);
+    else if (command === 'plan') plan(args);
     else if (command === 'record') record(args);
-    else throw new Error('usage: playwright-legs.mjs plan|record ...');
+    else throw new Error('usage: playwright-legs.mjs legs|plan|record ...');
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;
