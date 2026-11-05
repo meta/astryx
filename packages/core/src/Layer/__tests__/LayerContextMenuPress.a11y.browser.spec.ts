@@ -2,9 +2,9 @@
 // @pr-a11y scope core/Layer
 
 /**
- * @file LayerContextMenuPress.a11y.chromium.spec.ts
+ * @file LayerContextMenuPress.a11y.browser.spec.ts
  * @input The `Core/Layer` ContextMenuPressOpensALayer story in a built
- *   Storybook, driven by real Chromium mouse input.
+ *   Storybook, driven by real Chromium and WebKit mouse input.
  * @output Real-engine proof that a light-dismissible layer, and a
  *   DropdownMenu opened through `isMenuOpen`, stay open after the release of
  *   the right-button press whose `contextmenu` opened them, also when that

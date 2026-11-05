@@ -6,9 +6,8 @@
  * @file gestureCounter.ts
  * @input Listens for pointerdown, pointerup, pointercancel, contextmenu,
  *   keydown, and click on the document
- * @output Exports the current gesture identity, whether its click has run,
- *   and claimContextMenuPress, which keeps the release of the press that
- *   opened a layer from dismissing it
+ * @output Exports the gesture identity, whether its click has run, and
+ *   claimContextMenuPress
  * @position Internal to Layer; used by useLayer to tell a click that belongs
  *   to a dismissing press from a fresh one
  *
@@ -79,11 +78,11 @@ export function currentGestureHasClicked(): boolean {
 
 /**
  * Keeps the release of the press in flight from dismissing `layer`, when that
- * press opened a context menu (a right click, or a held finger). The browser's
- * light dismiss reads a release outside every open popover as a dismissal,
- * also the release of the press that opened the popover. A pointer captured
- * by the layer releases on the layer, so that press cannot also close it. The
- * browser drops the capture at the release. A later press dismisses as usual.
+ * press opened a context menu (a right click). The browser's light dismiss
+ * reads a release outside every open popover as a dismissal, also the release
+ * of the press that opened the popover. A pointer captured by the layer
+ * releases on the layer, so that press cannot also close it. The browser drops
+ * the capture at the release. A later press dismisses as usual.
  */
 export function claimContextMenuPress(layer: HTMLElement): void {
   listen();

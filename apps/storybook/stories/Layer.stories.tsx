@@ -1604,7 +1604,7 @@ export const BrowserHideWakesAFocusLayer: Story = {
 };
 
 /**
- * A right click (or a held finger) on a zone opens a light-dismissible layer
+ * A right click on a zone opens a light-dismissible layer
  * from its `contextmenu` event, and a DropdownMenu through `isMenuOpen`. The
  * release of that same press stays outside both, so the browser's light
  * dismiss reads it as a dismissal unless the layer claims the press.

@@ -2681,7 +2681,7 @@ describe('a light-dismiss layer opened by a context-menu press', () => {
     );
   }
 
-  let captured: Array<{element: Element; pointerId: number}> = [];
+  let captured: {element: Element; pointerId: number}[] = [];
   beforeEach(() => {
     captured = [];
     HTMLElement.prototype.setPointerCapture = function (pointerId: number) {
