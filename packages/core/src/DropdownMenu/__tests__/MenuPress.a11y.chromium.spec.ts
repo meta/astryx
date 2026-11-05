@@ -15,7 +15,12 @@
  *   paths jsdom cannot exercise (hit testing, touch synthesis, scrolling)
  */
 
-import {expect, test, type Page, type CDPSession} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Page,
+  type CDPSession,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

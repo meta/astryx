@@ -10,7 +10,7 @@
  *   RadioList, Text, TextInput, PowerSearchValueEditor, the internal sheet
  *   confirmation and search-drag owners, i18n
  * @output Exports PowerSearchBottomSheet — the touch surface of
- *   `PowerSearch experimental.presentation="bottom-sheet"`: a Filters sheet
+ *   `PowerSearch presentation="bottom-sheet"`: a Filters sheet
  *   with editable rows and trailing remove actions, Add filter in its fixed
  *   header and Clear all / Done in its fixed footer, an Add filter sheet with
  *   grouped field rows or the content search with inline suggestions, and a
@@ -76,6 +76,7 @@ import {useAnnounce, type AnnounceFn} from '../hooks/useAnnounce';
 import type {TranslatorFn} from '../i18n';
 import {useListFormatter} from '../i18n/useListFormatter';
 import {useLocale} from '../i18n/useLocale';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {SheetConfirmation} from '../internal/SheetConfirmation';
 import {useDismissSearchOnTouchDrag} from '../internal/useDismissSearchOnTouchDrag';
 import {
@@ -181,7 +182,14 @@ export interface PowerSearchBottomSheetProps {
   config: InternalConfig;
   /** The caller's config, handed to Editor overrides as they expect it. */
   configProp: PowerSearchConfig;
+  /** The committed filters; the draft the sheet edits starts from them. */
   filters: ReadonlyArray<PowerSearchFilter>;
+  /**
+   * The field's `onChange`. Done replays the draft's edits through it, in
+   * order, onto the field's latest filters, each call carrying that list
+   * with the edit applied; nothing is reported before Done, and nothing when
+   * the field is read-only or disabled at Done.
+   */
   onChange: (
     filters: ReadonlyArray<PowerSearchFilter>,
     changeType: PowerSearchChangeType,
@@ -207,6 +215,116 @@ export interface PowerSearchBottomSheetProps {
 // =============================================================================
 // Styles
 // =============================================================================
+
+/** One edit of the draft: the draft before and after it, and its type and index in the draft; Done replays it onto the field's latest filters. */
+interface DraftEdit {
+  before: ReadonlyArray<PowerSearchFilter>;
+  after: ReadonlyArray<PowerSearchFilter>;
+  changeType: PowerSearchChangeType;
+  index: number;
+}
+
+// Whether two filter lists hold the same filters in the same order, by the
+// key-order-insensitive signature the sheet matches filters with.
+function hasSameFilters(
+  a: ReadonlyArray<PowerSearchFilter>,
+  b: ReadonlyArray<PowerSearchFilter>,
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (filter, index) =>
+        b[index] != null &&
+        filterSignature(filter) === filterSignature(b[index]),
+    )
+  );
+}
+
+// The filters `before` holds that `after` does not, as a multiset by
+// signature, in `before` order.
+function removedFilters(
+  before: ReadonlyArray<PowerSearchFilter>,
+  after: ReadonlyArray<PowerSearchFilter>,
+): PowerSearchFilter[] {
+  const remaining = new Map<string, number>();
+  for (const filter of after) {
+    const signature = filterSignature(filter);
+    remaining.set(signature, (remaining.get(signature) ?? 0) + 1);
+  }
+  return before.filter(filter => {
+    const signature = filterSignature(filter);
+    const count = remaining.get(signature) ?? 0;
+    if (count > 0) {
+      remaining.set(signature, count - 1);
+      return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Replays the draft's edits onto `base`, the field's latest filters, and
+ * reports each through `report` with the list after it. An add appends; an
+ * edit replaces the first filter matching the one it edited; a removal drops
+ * the filters it removed, by signature. An edit or removal whose target is
+ * not in the base list is skipped: the parent removed it meanwhile.
+ */
+export function replayDraftEdits(
+  base: ReadonlyArray<PowerSearchFilter>,
+  edits: ReadonlyArray<DraftEdit>,
+  report: (
+    filters: ReadonlyArray<PowerSearchFilter>,
+    changeType: PowerSearchChangeType,
+    index: number,
+  ) => void,
+): ReadonlyArray<PowerSearchFilter> {
+  let current = base;
+  for (const edit of edits) {
+    if (edit.changeType === 'add') {
+      const added = edit.after[edit.index];
+      if (added == null) {
+        continue;
+      }
+      current = [...current, added];
+      report(current, 'add', current.length - 1);
+    } else if (edit.changeType === 'edit') {
+      const original = edit.before[edit.index];
+      const updated = edit.after[edit.index];
+      if (original == null || updated == null) {
+        continue;
+      }
+      const signature = filterSignature(original);
+      const index = current.findIndex(
+        filter => filterSignature(filter) === signature,
+      );
+      if (index === -1) {
+        continue;
+      }
+      current = current.map((filter, i) => (i === index ? updated : filter));
+      report(current, 'edit', index);
+    } else {
+      const removed = removedFilters(edit.before, edit.after).map(
+        filterSignature,
+      );
+      const indexes: number[] = [];
+      for (const signature of removed) {
+        const index = current.findIndex(
+          (filter, i) =>
+            !indexes.includes(i) && filterSignature(filter) === signature,
+        );
+        if (index !== -1) {
+          indexes.push(index);
+        }
+      }
+      if (indexes.length === 0) {
+        continue;
+      }
+      current = current.filter((_, i) => !indexes.includes(i));
+      report(current, 'remove', Math.min(...indexes));
+    }
+  }
+  return current;
+}
 
 // The trailing plus a field row shows when choosing it adds the filter at
 // once, and the Add filter actions' glyph. Core's default icon set has no plus.
@@ -834,8 +952,8 @@ export function PowerSearchBottomSheet({
   resultCountText,
   config,
   configProp,
-  filters,
-  onChange,
+  filters: committedFilters,
+  onChange: onCommit,
   searchSource,
   placeholder,
   isReadOnly,
@@ -851,8 +969,38 @@ export function PowerSearchBottomSheet({
   const {NestedEditor} = editors;
   const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'PowerSearch');
   const formatList = useListFormatter();
   const isInteractive = !isDisabled && !isReadOnly;
+
+  // ---- draft ----
+  // One open flow edits one draft of the filter list; `onChange` waits for
+  // Done, and a dismissal with a changed draft asks first.
+  const [filtersAtOpen, setFiltersAtOpen] = useState(() => committedFilters);
+  const [filters, setFilters] = useState(() => committedFilters);
+  // The draft as of the last edit, for the edit log's `before` lists.
+  const draftRef = useRef(filters);
+  const draftEditsRef = useRef<DraftEdit[]>([]);
+  const onChange = useCallback(
+    (
+      next: ReadonlyArray<PowerSearchFilter>,
+      changeType: PowerSearchChangeType,
+      index: number,
+    ) => {
+      draftEditsRef.current.push({
+        before: draftRef.current,
+        after: next,
+        changeType,
+        index,
+      });
+      draftRef.current = next;
+      setFilters(next);
+    },
+    [],
+  );
+  const isDraftDirty = !hasSameFilters(filtersAtOpen, filters);
+  const [isDiscardConfirmationOpen, setIsDiscardConfirmationOpen] =
+    useState(false);
 
   const contentSearchFieldKey = config.config.contentSearchFieldKey;
   const contentSearchOperator =
@@ -961,9 +1109,6 @@ export function PowerSearchBottomSheet({
   const [contentQuery, setContentQuery] = useState('');
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
   const clearAllButtonRef = useRef<HTMLButtonElement>(null);
-  // Set while Clear all commits, so the result count that changes in that
-  // commit is spoken with Clear all's outcome, as one message.
-  const isClearingRef = useRef(false);
 
   // `useAnnounce` delivers inside the open Astryx modal that encloses its
   // caller, and this component renders above the
@@ -990,13 +1135,21 @@ export function PowerSearchBottomSheet({
   if (isOpen !== wasOpen) {
     setWasOpen(isOpen);
     if (isOpen) {
+      // A fresh draft from the committed filters; the entry step is judged
+      // against them, not the previous session's draft.
+      setFiltersAtOpen(committedFilters);
+      setFilters(committedFilters);
+      draftRef.current = committedFilters;
+      draftEditsRef.current = [];
+      const startsOnAddFilter = committedFilters.length === 0 && isInteractive;
       setFieldQuery('');
       setContentQuery('');
-      setStep(isEntryAddFilter ? 'fields' : 'manage');
-      setFieldPickerOrigin(isEntryAddFilter ? 'trigger' : 'manage');
+      setStep(startsOnAddFilter ? 'fields' : 'manage');
+      setFieldPickerOrigin(startsOnAddFilter ? 'trigger' : 'manage');
     } else {
       setStep(null);
       setIsClearConfirmationOpen(false);
+      setIsDiscardConfirmationOpen(false);
     }
   }
 
@@ -1005,6 +1158,34 @@ export function PowerSearchBottomSheet({
     setStep(null);
     onOpenChange(false);
   }, [onOpenChange]);
+  // Done replays each edit in order onto the field's latest filters, so a
+  // consumer gets the calls a popover session makes and keeps a filter it
+  // added meanwhile.
+  const commitAndClose = useCallback(() => {
+    // A field that became read-only while the flow was open reports nothing.
+    if (isDraftDirty && isInteractive) {
+      replayDraftEdits(committedFilters, draftEditsRef.current, onCommit);
+    }
+    draftEditsRef.current = [];
+    closeFlow();
+  }, [closeFlow, committedFilters, isDraftDirty, isInteractive, onCommit]);
+  const requestDismiss = useCallback(() => {
+    if (isDraftDirty) {
+      setIsDiscardConfirmationOpen(true);
+    } else {
+      closeFlow();
+    }
+  }, [closeFlow, isDraftDirty]);
+  const closeDiscardConfirmation = () => {
+    // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the confirmation must be gone before focus moves back into the sheet
+    flushSync(() => setIsDiscardConfirmationOpen(false));
+    const target =
+      stepRef.current === 'manage'
+        ? (managerAddButtonRef.current ??
+          manageSheetRef.current?.closest<HTMLElement>('[tabindex="-1"]'))
+        : fieldsSheetRef.current?.closest<HTMLElement>('[tabindex="-1"]');
+    target?.focus({preventScroll: true});
+  };
 
   // Whether a Filters row is a button: the field interactive and the
   // filter not read-only. The row opens the value step — the editor for its
@@ -1279,17 +1460,8 @@ export function PowerSearchBottomSheet({
   // is quiet then, so the change is spoken here, inside the dialog. Only a
   // change after the flow opened is spoken.
   const announcedResultCountRef = useRef(resultCountText);
-  // The latest result count, for Clear all's handler to read after its
-  // commit has flushed.
-  const latestResultCountRef = useRef(resultCountText);
-  useLayoutEffect(() => {
-    latestResultCountRef.current = resultCountText;
-  }, [resultCountText]);
   useEffect(() => {
-    if (
-      isClearingRef.current ||
-      resultCountText === announcedResultCountRef.current
-    ) {
+    if (resultCountText === announcedResultCountRef.current) {
       return;
     }
     announcedResultCountRef.current = resultCountText;
@@ -1354,13 +1526,14 @@ export function PowerSearchBottomSheet({
               filter.value,
               Number.MAX_SAFE_INTEGER,
               locale,
+              calendar,
               t,
               formatList,
               timezoneID,
             );
       return {label, value};
     },
-    [config, editors, formatList, locale, t, timezoneID],
+    [calendar, config, editors, formatList, locale, t, timezoneID],
   );
   const describeFilter = useCallback(
     (filter: PowerSearchFilter): string => {
@@ -1630,52 +1803,31 @@ export function PowerSearchBottomSheet({
   // confirmation must be gone before focus moves into the sheet and the
   // outcome is routed into the sheet's region, so its close is flushed
   // first. The outcome is "Editable filters removed" while a read-only filter
-  // remains, otherwise "All filters removed", joined with a result count that
-  // changed in the same commit as one catalog message; focus moves to the
-  // sheet's first remaining control: a kept read-only row has none, so Add
-  // filter.
+  // remains, otherwise "All filters removed"; the result count follows the
+  // applied filters, which change on Done, so none changes here. Focus moves
+  // to the sheet's first remaining control: a kept read-only row has none,
+  // so Add filter.
   const closeClearConfirmation = (confirmed: boolean) => {
     const kept = filters.filter(filter => filter.isReadOnly);
     const firstRemovedIndex = filters.findIndex(filter => !filter.isReadOnly);
     const isClearing = confirmed && isInteractive && firstRemovedIndex >= 0;
-    isClearingRef.current = isClearing;
-    try {
-      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the confirmation must be gone before focus moves into the sheet and the words are routed into it
-      flushSync(() => {
-        setIsClearConfirmationOpen(false);
-        if (isClearing) {
-          onChange(kept, 'remove', firstRemovedIndex);
-        }
-      });
-    } finally {
-      isClearingRef.current = false;
-    }
+    // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the confirmation must be gone before focus moves into the sheet and the words are routed into it
+    flushSync(() => {
+      setIsClearConfirmationOpen(false);
+      if (isClearing) {
+        onChange(kept, 'remove', firstRemovedIndex);
+      }
+    });
     if (!isClearing) {
       clearAllButtonRef.current?.focus();
       return;
     }
     managerAddButtonRef.current?.focus({preventScroll: true});
-    const resultCount = latestResultCountRef.current;
-    const changedCount =
-      resultCount !== announcedResultCountRef.current ? resultCount : null;
-    announcedResultCountRef.current = resultCount;
-    if (kept.length > 0) {
-      announce(
-        changedCount == null
-          ? t('@astryx.powersearch.editableFiltersRemoved')
-          : t('@astryx.powersearch.sheet.editableFiltersClearedWithCount', {
-              resultCount: changedCount,
-            }),
-      );
-    } else {
-      announce(
-        changedCount == null
-          ? t('@astryx.powersearch.allFiltersRemoved')
-          : t('@astryx.powersearch.sheet.filtersClearedWithCount', {
-              resultCount: changedCount,
-            }),
-      );
-    }
+    announce(
+      kept.length > 0
+        ? t('@astryx.powersearch.editableFiltersRemoved')
+        : t('@astryx.powersearch.allFiltersRemoved'),
+    );
   };
 
   const handleOperatorSelect = useCallback((operator: PowerSearchOperator) => {
@@ -1776,10 +1928,10 @@ export function PowerSearchBottomSheet({
   const handleManageOpenChange = useCallback(
     (isSheetOpen: boolean) => {
       if (!isSheetOpen && stepRef.current === 'manage') {
-        closeFlow();
+        requestDismiss();
       }
     },
-    [closeFlow],
+    [requestDismiss],
   );
   const handleFieldsOpenChange = useCallback(
     (isSheetOpen: boolean) => {
@@ -1787,13 +1939,13 @@ export function PowerSearchBottomSheet({
         return;
       }
       if (fieldPickerOrigin === 'trigger') {
-        closeFlow();
+        requestDismiss();
         return;
       }
       queueManagerAddFocus();
       setStep('manage');
     },
-    [closeFlow, fieldPickerOrigin, queueManagerAddFocus],
+    [fieldPickerOrigin, queueManagerAddFocus, requestDismiss],
   );
   const handleValueOpenChange = useCallback(
     (isSheetOpen: boolean) => {
@@ -2076,7 +2228,11 @@ export function PowerSearchBottomSheet({
                 // is spoken in this sheet when it appears.
                 isManageSheetOpen && (
                   <EmptyState
-                    title={t('@astryx.powersearch.sheet.noFilters')}
+                    title={t(
+                      isDraftDirty
+                        ? '@astryx.powersearch.sheet.noFiltersInDraft'
+                        : '@astryx.powersearch.sheet.noFilters',
+                    )}
                     description={t(
                       '@astryx.powersearch.sheet.noFiltersDescription',
                     )}
@@ -2157,7 +2313,10 @@ export function PowerSearchBottomSheet({
               )}
             </div>
           </div>
-          {filterRows.length > 0 && (
+          {/* The footer stays while the draft differs from the applied
+              filters: an emptied draft still needs Done to apply the
+              removals. */}
+          {(filterRows.length > 0 || isDraftDirty) && (
             <div {...stylex.props(styles.footer, styles.fixedFooter)}>
               {isClearAllShown && (
                 <Button
@@ -2178,7 +2337,7 @@ export function PowerSearchBottomSheet({
                     ? styles.footerEqualAction
                     : [styles.footerSoleAction, styles.touchHitArea]
                 }
-                onClick={closeFlow}
+                onClick={commitAndClose}
                 width={isClearAllShown ? undefined : '100%'}
               />
             </div>
@@ -2373,7 +2532,7 @@ export function PowerSearchBottomSheet({
                 variant="primary"
                 width="100%"
                 xstyle={styles.touchAction}
-                onClick={closeFlow}
+                onClick={commitAndClose}
               />
             </div>
           )}
@@ -2516,6 +2675,25 @@ export function PowerSearchBottomSheet({
           actionLabel={t('@astryx.powersearch.sheet.clearAllConfirm')}
           cancelLabel={t('@astryx.powersearch.sheet.clearAllCancel')}
           onAction={() => closeClearConfirmation(true)}
+        />
+      )}
+      {isDiscardConfirmationOpen && (
+        <SheetConfirmation
+          isOpen
+          onOpenChange={isConfirmationOpen => {
+            if (!isConfirmationOpen) {
+              closeDiscardConfirmation();
+            }
+          }}
+          title={t('@astryx.powersearch.sheet.discardTitle')}
+          description={t('@astryx.powersearch.sheet.discardDescription')}
+          actionLabel={t('@astryx.powersearch.sheet.discardConfirm')}
+          cancelLabel={t('@astryx.powersearch.sheet.keepEditing')}
+          onAction={() => {
+            setIsDiscardConfirmationOpen(false);
+            draftEditsRef.current = [];
+            closeFlow();
+          }}
         />
       )}
     </>

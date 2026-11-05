@@ -50,9 +50,11 @@ import {Divider} from '../Divider';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {useKeepLayerOpenProps, type LayerPlacement} from '../Layer/useLayer';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Spinner} from '../Spinner';
 import {PanelSearchInput} from '../Field/PanelSearchInput';
+import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {
@@ -66,6 +68,7 @@ import {
   fontWeightVars,
   typeScaleVars,
   borderVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import type {SelectorOptionType, SelectorOptionData} from './types';
 import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
@@ -79,6 +82,7 @@ import {SelectorOption} from './SelectorOption';
 import {SelectorRowLayoutContext} from './SelectorRowLayoutContext';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {warnOnce} from '../utils/devWarning';
 import {useSize} from '../SizeContext/SizeContext';
 import {
@@ -347,10 +351,31 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
   },
 
+  // A panel with a search field, capped as a whole.
+  searchPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    // No taller than its layer's block-size cap, which folds in the software
+    // keyboard's. The search field's row keeps its height, and the list takes
+    // what is left.
+    maxHeight: stylex.firstThatWorks(
+      `calc(${layerViewportInset.maxBlockSize})`,
+      `calc(${layerViewportInset.maxBlockSizeFallback})`,
+    ),
+  },
+
   // Dropdown container
   dropdown: {
     boxSizing: 'border-box',
-    maxHeight: '300px',
+    // In a search panel, the list shrinks below its content to fit the cap.
+    minHeight: 0,
+    // 300 px, and no taller than its layer's block-size cap, which folds in
+    // the software keyboard's: the list ends above the keyboard with the
+    // layer.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     outline: 'none',
     paddingBlock: spacingVars['--spacing-1'],
@@ -455,7 +480,7 @@ const styles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     textAlign: 'start',
-    outline: 'none',
+    outlineStyle: 'none',
   },
   itemContent: {
     display: 'flex',
@@ -487,6 +512,15 @@ const styles = stylex.create({
   },
   itemHighlighted: {
     backgroundColor: colorVars['--color-overlay-hover'],
+  },
+  // The fill alone does not reach 3:1 against the listbox. After keyboard
+  // input, the active option also draws the standard focus ring, inside the
+  // row by its own width, as a focused menu row does.
+  itemKeyboardHighlighted: {
+    outlineWidth: focusVars['--focus-outline-width'],
+    outlineStyle: focusVars['--focus-outline-style'],
+    outlineColor: focusVars['--focus-outline-color'],
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   itemSelected: {
     fontWeight: fontWeightVars['--font-weight-medium'],
@@ -919,13 +953,20 @@ interface SelectorOptionRowProps {
   flatIndex: number;
   id: string;
   isHighlighted: boolean;
+  /** The highlight came from keyboard input, so the row draws the focus ring. */
+  isKeyboardHighlighted: boolean;
   isSelected: boolean;
   size: SelectorSize;
   indicatorPosition: IndicatorPosition;
   renderOption: ((option: SelectorOptionData) => ReactNode) | undefined;
   SelectionMark: IndicatorComponent<IndicatorMap['check']>;
   onSelect: (item: SelectorOptionData) => void;
-  onHover: (item: SelectorOptionData, flatIndex: number) => void;
+  /** `isActive`: the option was already the highlighted one when entered. */
+  onHover: (
+    item: SelectorOptionData,
+    flatIndex: number,
+    isActive: boolean,
+  ) => void;
 }
 
 /**
@@ -937,6 +978,7 @@ const SelectorOptionRow = memo(function SelectorOptionRow({
   flatIndex,
   id,
   isHighlighted,
+  isKeyboardHighlighted,
   isSelected,
   size,
   indicatorPosition,
@@ -978,7 +1020,7 @@ const SelectorOptionRow = memo(function SelectorOptionRow({
       aria-selected={isSelected}
       aria-disabled={item.disabled}
       onClick={() => onSelect(item)}
-      onMouseEnter={() => onHover(item, flatIndex)}
+      onMouseEnter={() => onHover(item, flatIndex, isHighlighted)}
       {...mergeProps(
         // Stable theme target on the option row itself, mirroring
         // `multi-selector-option`: it carries the row's size and runtime
@@ -997,6 +1039,7 @@ const SelectorOptionRow = memo(function SelectorOptionRow({
           styles.item,
           itemSizeStyles[size],
           isHighlighted && styles.itemHighlighted,
+          isKeyboardHighlighted && styles.itemKeyboardHighlighted,
           isSelected && styles.itemSelected,
           item.disabled && styles.itemDisabled,
         ),
@@ -1481,10 +1524,10 @@ export function Selector<T extends SelectorOptionType>(
     highlightedIndex,
     setHighlightedIndex,
     getItemId,
-    onTriggerClick,
-    onKeyDown,
+    onTriggerClick: comboboxTriggerClick,
+    onKeyDown: comboboxKeyDown,
     onItemSelect,
-    onItemMouseEnter,
+    onItemMouseEnter: comboboxItemMouseEnter,
   } = useCombobox({
     selectableItems: filteredItems,
     // The optimistic value, not the raw prop: with a pending changeAction the
@@ -1502,6 +1545,44 @@ export function Selector<T extends SelectorOptionType>(
     onSearchSeed: appendSearchQuery,
     listboxId,
   });
+
+  // Only after keyboard input does the active option draw the focus ring; a
+  // pointer highlight keeps the fill alone, as a focused menu row does.
+  // Modality changes only on a key or a press, so a hover alone still reads
+  // as keyboard. The option the mouse enters therefore draws no ring until a
+  // key moves the highlight again. Entering the option that is already
+  // active, as when a key scrolls it under a still mouse, changes nothing.
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const keyDownAfterHover = useCallback(
+    (e: React.KeyboardEvent) => {
+      setHoveredIndex(null);
+      comboboxKeyDown(e);
+    },
+    [comboboxKeyDown],
+  );
+  const mouseEnterOption = useCallback(
+    (item: SelectorOptionData, index: number, isActive: boolean) => {
+      if (!isActive) {
+        setHoveredIndex(index);
+      }
+      comboboxItemMouseEnter(item, index);
+    },
+    [comboboxItemMouseEnter],
+  );
+  const {
+    isKeyboardHighlight: isHighlightFromKeyboard,
+    noteHighlightMove,
+    onKeyDown,
+    onItemMouseEnter,
+  } = useKeyboardHighlight(
+    triggerModality.readModality,
+    keyDownAfterHover,
+    mouseEnterOption,
+  );
+  const onTriggerClick = useCallback(() => {
+    comboboxTriggerClick();
+    noteHighlightMove();
+  }, [comboboxTriggerClick, noteHighlightMove]);
 
   // Type-to-select, shared with the other collections (menus, listboxes).
   // Open, it walks the highlight — aria-activedescendant announces each match.
@@ -1562,7 +1643,8 @@ export function Selector<T extends SelectorOptionType>(
       const index = optionIndexFromRow(row);
       const item = filteredItems[index];
       if (item != null) {
-        onItemMouseEnter(item, index);
+        // A press is pointer input, even on the active option.
+        onItemMouseEnter(item, index, false);
       }
     },
     onActivate: row => {
@@ -1579,6 +1661,8 @@ export function Selector<T extends SelectorOptionType>(
       if (isDisabled || isEffectivelyReadOnly) {
         return;
       }
+      noteHighlightMove();
+      setHoveredIndex(null);
       // With hasSearch the query input owns typing, so type-to-select is off.
       if (!hasSearch && typeahead.onKeyDown(e)) {
         e.preventDefault();
@@ -1586,7 +1670,14 @@ export function Selector<T extends SelectorOptionType>(
       }
       onKeyDown(e);
     },
-    [isDisabled, isEffectivelyReadOnly, hasSearch, typeahead, onKeyDown],
+    [
+      isDisabled,
+      isEffectivelyReadOnly,
+      hasSearch,
+      typeahead,
+      onKeyDown,
+      noteHighlightMove,
+    ],
   );
 
   // Highlight scrolling (and its hover/keyboard split) lives in useCombobox.
@@ -1728,6 +1819,11 @@ export function Selector<T extends SelectorOptionType>(
         flatIndex={flatIndex}
         id={getItemId(flatIndex)}
         isHighlighted={flatIndex === highlightedIndex}
+        isKeyboardHighlighted={
+          flatIndex === highlightedIndex &&
+          isHighlightFromKeyboard &&
+          flatIndex !== hoveredIndex
+        }
         isSelected={item.value === normalizedValue}
         size={size}
         indicatorPosition={indicatorPosition}
@@ -1741,6 +1837,8 @@ export function Selector<T extends SelectorOptionType>(
       renderOption,
       indicatorPosition,
       highlightedIndex,
+      isHighlightFromKeyboard,
+      hoveredIndex,
       size,
       normalizedValue,
       getItemId,
@@ -1900,7 +1998,7 @@ export function Selector<T extends SelectorOptionType>(
     );
 
   const panelContent = hasSearch ? (
-    <div>
+    <div {...stylex.props(styles.searchPanel)}>
       {renderSearch()}
       <Divider />
       <div
@@ -1988,13 +2086,7 @@ export function Selector<T extends SelectorOptionType>(
   // A disabled trigger stays focusable but, like a natively disabled button,
   // runs no caller event handler other than focus and blur, and a press on it
   // reaches no handler at all (`spec:AST-085` FR2).
-  const callerProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const callerProps = withholdCallerHandlers(rest, isDisabled);
   const triggerSharedProps: React.HTMLAttributes<HTMLElement> = {
     ...callerProps,
     onClick: isDisabled

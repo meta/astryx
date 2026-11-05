@@ -21,6 +21,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../test-utils/linked-fixture.mjs';
+import {
   generateThemeRulesSplit as mockGenerateThemeRulesSplit,
   generateOnMediaCSS as mockGenerateOnMediaCSS,
 } from '@astryxdesign/core/theme';
@@ -896,16 +900,13 @@ describe('themeBuild() — icon registry detection', () => {
 
 describe('themeBuild() — extends', () => {
   // These fixtures `import {defineTheme} from '@astryxdesign/core/theme'` the
-  // way a real theme file does, so they have to sit somewhere that specifier
-  // resolves — an OS temp dir has no node_modules above it.
+  // way a real theme file does, so each links the CLI's packages.
   let extDir;
   beforeEach(() => {
-    extDir = fs.mkdtempSync(
-      path.join(path.resolve(import.meta.dirname, '../../..'), '.tmp-extends-'),
-    );
+    extDir = makeLinkedFixture('astryx-extends-', ['@astryxdesign']);
   });
   afterEach(() => {
-    fs.rmSync(extDir, {recursive: true, force: true});
+    removeLinkedFixture(extDir);
   });
 
   /**

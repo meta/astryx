@@ -90,12 +90,13 @@ export function TokenLink({
   removeButton,
   onClick: onClickProp,
   onMouseUp: onMouseUpProp,
+  onPointerDown: onPointerDownProp,
   ...containerProps
 }: TokenLinkProps) {
   const containerRef = useRef<HTMLElement | null>(null);
   const linkRef = useRef<HTMLElement | null>(null);
 
-  const {onClick, onMouseUp} = useClickableContainer({
+  const {onClick, onMouseUp, onPointerDown} = useClickableContainer({
     containerRef,
     interactiveRef: linkRef,
     href,
@@ -113,6 +114,11 @@ export function TokenLink({
         isDisabled
           ? onMouseUpProp
           : composeEventHandlers(onMouseUpProp, onMouseUp)
+      }
+      onPointerDown={
+        isDisabled
+          ? onPointerDownProp
+          : composeEventHandlers(onPointerDownProp, onPointerDown)
       }>
       {icon}
       {isDisabled ? (

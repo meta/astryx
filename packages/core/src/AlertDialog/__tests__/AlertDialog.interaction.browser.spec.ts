@@ -13,7 +13,12 @@
  *   this folder. Run with `pnpm test:interaction AlertDialog`.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   drag,
   frames,

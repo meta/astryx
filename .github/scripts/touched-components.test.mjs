@@ -581,40 +581,21 @@ describe('pr-touched-components routing', () => {
     expect(checkout.with?.ref).toBeUndefined();
   });
 
-  // spec:AST-030 FR12: a browser accessibility spec the change adds or
-  // modifies is caught on its own pull request, not first on main.
-  it('runs the changed browser accessibility specs, and only on a pull request that changes one', () => {
-    const find = step('Find the changed browser accessibility specs');
-    expect(find.env.FILES_PATH).toBe(
-      '${{ steps.scope.outputs.changed_files_path }}',
-    );
-    // The same spec list playwright.config.ts runs, not a copy of its globs.
-    expect(find.run).toContain(
-      'import {isA11ySpecFile} from "./.github/scripts/lib/a11y-spec-files.mjs";',
-    );
-    expect(find.run).not.toContain('spec\\.ts');
-    const runSpecs = step('Run the changed browser accessibility specs');
-    expect(runSpecs.if).toBe(
-      "always() && steps.playwright.outcome == 'success' && steps.specs.outputs.has_specs == 'true'",
-    );
-    expect(runSpecs.run).toBe(
-      'node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH"',
-    );
-    // A failing spec turns the job red: no continue-on-error.
-    expect(runSpecs['continue-on-error']).toBeUndefined();
-    // Bounded inside the job's 15 minutes, past the runner's own 8-minute stop.
-    expect(runSpecs['timeout-minutes']).toBe(9);
-    // Setup, Storybook and Playwright run for a spec-only change too.
+  it('runs no accessibility contract: the contracts job owns them', () => {
+    const names = job.steps.map(({name}) => name);
+    expect(names).not.toContain('Find the changed browser accessibility specs');
+    expect(JSON.stringify(job)).not.toContain('a11y-pr-contracts.mjs');
     for (const name of [
       'Setup Node and pnpm',
       'Download Storybook artifact',
       'Install Playwright',
     ]) {
+      // A changed story no other audit covers needs the same setup (FR12).
       expect(step(name).if).toBe(
-        "steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'",
+        "(steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')",
       );
     }
-    expect(step('Upload touched-components results').with.path).toContain(
+    expect(step('Upload touched-components results').with.path).not.toContain(
       'pr-a11y-evidence/',
     );
     // Still advisory: no required context depends on this job.
@@ -663,8 +644,8 @@ describe('pr-touched-components routing', () => {
     expect(
       step('Skip when no component changed or the change is wide').if,
     ).toBe("steps.touched.outputs.has_components != 'true'");
-    // Every later step runs for touched components, or (setup, Storybook,
-    // Playwright, the spec run and the upload) for a changed browser spec.
+    // Every later step runs for touched components only, or for a changed
+    // story no other audit covers (FR12).
     const skipIndex = job.steps.findIndex(
       candidate =>
         candidate.name ===
@@ -672,7 +653,7 @@ describe('pr-touched-components routing', () => {
     );
     for (const candidate of job.steps.slice(skipIndex + 1)) {
       expect(candidate.if, candidate.name).toMatch(
-        /steps\.touched\.outputs\.has_components == 'true'|steps\.specs\.outputs\.has_specs == 'true'/,
+        /steps\.touched\.outputs\.(has_components|changed_stories) == 'true'/,
       );
     }
   });
@@ -682,5 +663,282 @@ describe('pr-touched-components routing', () => {
     expect(upload.with.name).toBe('touched-components');
     expect(upload.with.path).toContain('touched-components.json');
     expect(upload.if).toContain("steps.touched.outputs.wide_change == 'true'");
+  });
+});
+
+describe('pr-component-a11y-contracts routing', () => {
+  const contracts = ci.jobs['pr-component-a11y-contracts'];
+  const contractStep = name =>
+    contracts.steps.find(candidate => candidate.name === name);
+  const runStep = contractStep(
+    "Run the touched components' accessibility contracts",
+  );
+  const ran =
+    "steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'";
+
+  it('starts after the Storybook build, beside the test owners, never after pr-visual or the touched check', () => {
+    expect(contracts.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'build-storybook',
+    ]);
+    // The same gate as the interaction proofs, which the test join also reads.
+    expect(contracts.if).toBe(ci.jobs['pr-interaction'].if);
+    expect(contracts['runs-on']).toBe('ubuntu-latest');
+    expect(contracts['timeout-minutes']).toBeLessThanOrEqual(15);
+    expect(contracts.permissions).toEqual({
+      contents: 'read',
+      'pull-requests': 'read',
+    });
+  });
+
+  it('blocks the merge through the test join, with no new required context', () => {
+    expect(ci.jobs.test.needs).toContain('pr-component-a11y-contracts');
+    const join = ci.jobs.test.steps.find(
+      candidate => candidate.name === 'Require expected test-owner outcomes',
+    );
+    expect(join.env.PR_COMPONENT_A11Y_CONTRACTS_RESULT).toBe(
+      '${{ needs.pr-component-a11y-contracts.result }}',
+    );
+    expect(runStep['continue-on-error']).toBeUndefined();
+    for (const name of Object.keys(ci.jobs)) {
+      if (name === 'test') continue;
+      expect([ci.jobs[name].needs].flat(), name).not.toContain(
+        'pr-component-a11y-contracts',
+      );
+    }
+  });
+
+  it('skips with success outside a pull request, on a specialized lane, and when nothing it owns changed', () => {
+    const scope = contractStep("Decide this job's scope");
+    expect(scope.with).toMatchObject({
+      paths: '^(packages/[^/]+/src/|internal/a11y-spec/)',
+      'outside-pull-request': 'skip',
+      'component-audit': 'true',
+    });
+    expect(contractStep('Skip the contracts outside their scope').if).toBe(
+      "steps.scope.outputs.applies != 'true'",
+    );
+    const skipIndex = contracts.steps.findIndex(
+      candidate => candidate.name === 'Skip the contracts outside their scope',
+    );
+    for (const candidate of contracts.steps.slice(skipIndex + 1)) {
+      expect(candidate.if, candidate.name).toMatch(
+        /steps\.scope\.outputs\.applies == 'true'|steps\.touched\.outputs\.has_components == 'true'|steps\.contracts\.outcome/,
+      );
+    }
+  });
+
+  it('fails, never passes, when the scope step cannot list the changed files', () => {
+    const guard = contractStep('Require the changed-file list');
+    expect(guard.if).toBe(
+      "steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''",
+    );
+    expect(guard.run).toContain('exit 1');
+    expect(guard['continue-on-error']).toBeUndefined();
+    const names = contracts.steps.map(({name}) => name);
+    expect(names.indexOf('Require the changed-file list')).toBeLessThan(
+      names.indexOf("Run the touched components' accessibility contracts"),
+    );
+  });
+
+  it('decides the touched components as the touched check does, and finds changed specs from the Playwright list', () => {
+    const decide = contractStep('Decide the touched components');
+    expect(decide.run).toContain('touched-components.mjs scope');
+    expect(decide.run).toContain('--files "$FILES_PATH"');
+    const find = contractStep('Find the changed browser accessibility specs');
+    expect(find.run).toContain(
+      'import {isA11ySpecFile} from "./.github/scripts/lib/a11y-spec-files.mjs";',
+    );
+    // The merge commit, as the touched check: an older head lacks these scripts.
+    expect(
+      contractStep('Check out the selection scripts').with?.ref,
+    ).toBeUndefined();
+  });
+
+  it("runs the head's own specs against the Storybook that head built", () => {
+    const storybookCheckout = ci.jobs['build-storybook'].steps.find(
+      candidate =>
+        candidate.uses?.startsWith('actions/checkout@') && candidate.with?.ref,
+    );
+    const headCheckout = contractStep(
+      'Check out the head that built the Storybook',
+    );
+    expect(storybookCheckout.with.ref).toBe(
+      '${{ github.event.pull_request.head.sha || github.sha }}',
+    );
+    expect(headCheckout.with.ref).toBe(storybookCheckout.with.ref);
+    expect(headCheckout.if).toBe(ran);
+    const names = contracts.steps.map(({name}) => name);
+    const at = name => names.indexOf(name);
+    expect(at('Check out the head that built the Storybook')).toBeGreaterThan(
+      Math.max(
+        at('Decide the touched components'),
+        at('Find the changed browser accessibility specs'),
+      ),
+    );
+    for (const name of [
+      'Setup Node and pnpm',
+      'Download Storybook artifact',
+      'Install Playwright',
+      "Run the touched components' accessibility contracts",
+    ]) {
+      expect(at(name), name).toBeGreaterThan(
+        at('Check out the head that built the Storybook'),
+      );
+    }
+    // Only the selection and head checkouts: no later checkout moves the tree.
+    expect(
+      contracts.steps
+        .filter(candidate => candidate.uses?.startsWith('actions/checkout@'))
+        .map(({name}) => name),
+    ).toEqual([
+      'Check out the scope action',
+      'Check out the selection scripts',
+      'Check out the head that built the Storybook',
+    ]);
+  });
+
+  it('runs the changed specs and the touched owners, on four workers, inside the job budget', () => {
+    expect(runStep.if).toBe(ran);
+    // The runner comes from the merge commit; the head may predate it.
+    expect(runStep.run).toContain(
+      'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
+    );
+    expect(runStep.run).toContain(
+      'node "$runner" --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS"',
+    );
+    // Every changed path, not only the changed specs: a change in a
+    // component folder owns that folder's specs.
+    expect(runStep.env.FILES_PATH).toBe(
+      '${{ steps.scope.outputs.changed_files_path }}',
+    );
+    // A wide change has no owned specs.
+    expect(runStep.env.OWNERS).toBe(
+      "${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners || '' }}",
+    );
+    expect(runStep.env.A11Y_CONTRACT_WORKERS).toBe(4);
+    expect(runStep.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+    // Past the runner's own eight-minute stop, inside the job's 15 minutes.
+    expect(runStep['timeout-minutes']).toBeGreaterThan(8);
+    expect(runStep['timeout-minutes']).toBeLessThan(
+      contracts['timeout-minutes'],
+    );
+    for (const name of [
+      'Setup Node and pnpm',
+      'Download Storybook artifact',
+      'Install Playwright',
+    ]) {
+      expect(contractStep(name).if, name).toBe(ran);
+    }
+    expect(contractStep('Upload contract evidence').with.path).toContain(
+      'pr-a11y-evidence/',
+    );
+  });
+});
+
+// A story the change adds or changes that no other audit covers is audited
+// on its own (spec:AST-030 FR12), new violations only.
+describe('the audit of changed stories no other audit covers', () => {
+  const audit = step(
+    'Accessibility audit for changed stories no other audit covers',
+  );
+  const either =
+    "(steps.touched.outputs.has_components == 'true' || steps.touched.outputs.changed_stories == 'true')";
+
+  it('runs after the Storybook build and browser are in place, whenever a story file changed', () => {
+    expect(audit.if).toBe(
+      "always() && steps.playwright.outcome == 'success' && steps.touched.outputs.changed_stories == 'true'",
+    );
+    for (const name of [
+      'Setup Node and pnpm',
+      'Download Storybook artifact',
+      'Install Playwright',
+    ]) {
+      expect(step(name).if, name).toBe(either);
+    }
+    expect(job.steps.indexOf(audit)).toBeGreaterThan(
+      job.steps.indexOf(step('Install Playwright')),
+    );
+  });
+
+  it("audits only those stories, against the head's baseline, failing on a new violation", () => {
+    expect(audit.env).toEqual({
+      FILES_PATH: '${{ steps.scope.outputs.changed_files_path }}',
+      TOUCHED_AUDIT:
+        "${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners != '' }}",
+    });
+    expect(audit.run).toContain('--changed-story-files "$FILES_PATH"');
+    // The touched components' audit already runs their stories: the same
+    // filters it uses are left out here.
+    expect(audit.run).toContain(
+      'COVERED=$(node .github/scripts/a11y-pr-scope.mjs analysis.json)',
+    );
+    expect(audit.run).toContain('--covered-components "$COVERED"');
+    expect(
+      step('Accessibility audit for the touched components').run,
+    ).toContain(
+      'COMPONENTS=$(node .github/scripts/a11y-pr-scope.mjs analysis.json)',
+    );
+    expect(audit.run).toContain(
+      '--baseline .head-baseline/.github/a11y-baseline.json',
+    );
+    expect(audit.run).toContain('--fail-on-new');
+    expect(audit.run).not.toContain('--components');
+    expect(step('Upload touched-components results').with.path).toContain(
+      'a11y-stories-report.json',
+    );
+  });
+
+  it('still leaves a Lab-only pull request to its own lane (FR26)', () => {
+    expect(job.if).toContain(
+      "needs.build-storybook.outputs.lab_only != 'true'",
+    );
+  });
+
+  it('reports whether a story file changed, wide change or not', async () => {
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const {execFileSync} = await import('node:child_process');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'touched-stories-'));
+    try {
+      const run = files => {
+        fs.writeFileSync(path.join(dir, 'files.txt'), `${files.join('\n')}\n`);
+        fs.writeFileSync(path.join(dir, 'analysis.json'), '{}');
+        const out = path.join(dir, 'out.txt');
+        fs.writeFileSync(out, '');
+        execFileSync(
+          'node',
+          [
+            new URL('./touched-components.mjs', import.meta.url).pathname,
+            'scope',
+            '--analysis',
+            path.join(dir, 'analysis.json'),
+            '--files',
+            path.join(dir, 'files.txt'),
+            '--out',
+            path.join(dir, 'touched.json'),
+          ],
+          {env: {...process.env, GITHUB_OUTPUT: out}},
+        );
+        return Object.fromEntries(
+          fs
+            .readFileSync(out, 'utf8')
+            .split('\n')
+            .filter(Boolean)
+            .map(line => line.split('=')),
+        );
+      };
+      expect(
+        run(['apps/storybook/stories/ScrollRegionA11y.stories.tsx'])
+          .changed_stories,
+      ).toBe('true');
+      expect(
+        run(['packages/core/src/Layout/LayoutContent.tsx']).changed_stories,
+      ).toBe('false');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });

@@ -3,7 +3,7 @@
 /**
  * @file actionGroupTracker.ts
  * @input The tracked elements, the action selector and hit expansion, and the
- *   press paint and fade clocks
+ *   press paint and the press controller's fade clock
  * @output createActionGroupTracker, ActionGroupTracker,
  *   ActionGroupTrackerOptions, ActionGroupTarget
  * @position Internal core tracker for a held finger that slides across a
@@ -14,8 +14,7 @@
 
 import {clickAndReport, clickForLift} from '../utils/browserClickWait';
 import {armClickGuard} from '../utils/clickGuard';
-import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
-import {PRESS_FADE_MS} from '../utils/pressGesture';
+import {PRESSED_ATTRIBUTE, pressFadeMs} from '../utils/pressFeedback';
 
 /** An action that is not enabled takes no highlight and does not run. */
 const DISABLED = ':disabled, [aria-disabled="true"]';
@@ -193,6 +192,8 @@ export function createActionGroupTracker(
     }
     clearFade(element);
     element.setAttribute(PRESSED_ATTRIBUTE, 'fading');
+    // The stylesheet's release follows the theme's tempo, so the fade ends on
+    // the press controller's clock.
     fades.set(
       element,
       setTimeout(() => {
@@ -200,7 +201,7 @@ export function createActionGroupTracker(
         if (element.getAttribute(PRESSED_ATTRIBUTE) === 'fading') {
           element.removeAttribute(PRESSED_ATTRIBUTE);
         }
-      }, PRESS_FADE_MS),
+      }, pressFadeMs(element)),
     );
   };
 

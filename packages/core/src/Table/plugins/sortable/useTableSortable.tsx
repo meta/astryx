@@ -168,7 +168,7 @@ const sortStyles = stylex.create({
     fontSize: 10,
     // eslint-disable-next-line @astryx/no-hardcoded-styles -- no token for lineHeight:1 (tight badge)
     lineHeight: '1',
-    color: colorVars['--color-accent'],
+    color: colorVars['--color-text-accent'],
   },
 });
 

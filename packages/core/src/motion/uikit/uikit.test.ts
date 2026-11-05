@@ -15,7 +15,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {
-  PRESS_FADE_MS,
   PRESS_FLASH_MS,
   PRESS_ONSET_MS,
   PRESS_SCROLL_BRAKE_MS,
@@ -373,7 +372,6 @@ describe('UIKit constants table: values', () => {
   it('press clocks agree with the touch press model they were measured for', () => {
     expect(scroll.delaysContentTouchesMs).toBe(PRESS_ONSET_MS);
     expect(timing.press.flashMs).toBe(PRESS_FLASH_MS);
-    expect(timing.press.highlightOutMs).toBe(PRESS_FADE_MS);
     expect(timing.press.scrollBrakeMs).toBe(PRESS_SCROLL_BRAKE_MS);
   });
 

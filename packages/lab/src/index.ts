@@ -33,6 +33,10 @@ export {
   type SelectableCardGroupItemProps,
 } from './SelectableCardGroup';
 
+// CircleCheckIndicator — the iOS multiple-selection circle, a checkbox-family
+// indicator a theme can map to `checkbox`
+export {CircleCheckIndicator} from './CircleCheckIndicator';
+
 // EmojiPicker — standalone searchable emoji panel
 export {
   EmojiPicker,
@@ -372,3 +376,12 @@ export {
 // RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:
 //   import {RichTextEditor, RichTextView} from '@astryxdesign/richtext';
+
+// Pull to refresh as UIRefreshControl, applied by the app to its own scroll
+// container, on Core's touch foundation.
+export {
+  REFRESH_REVEAL_VAR,
+  useRefreshControl,
+  type UseRefreshControlOptions,
+  type UseRefreshControlResult,
+} from './RefreshControl';
