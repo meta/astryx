@@ -117,8 +117,11 @@ function ToastAnnouncementHarness({type}: {type: 'info' | 'error'}) {
 }
 
 function ToastTopLayerAnnouncementHarness({type}: {type: 'info' | 'error'}) {
+  // The viewport's own regions exist from its first render, so the channel
+  // needs no priming.
   return (
     <ToastViewport>
+      <span data-a11y-ready="true" hidden />
       <button data-a11y-relation="focus-anchor" type="button">
         Keep focus
       </button>

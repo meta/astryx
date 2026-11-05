@@ -277,12 +277,12 @@ describe('ToastViewport modal hosting', () => {
     expect(getDialog('Edit').contains(getViewport())).toBe(true);
     // The region moves with the viewport into the modal, so it stays exposed.
     expect(getDialog('Edit').contains(region)).toBe(true);
+    // Inside the modal the card is still no live region, and its text sits in
+    // none. (The dismiss Button keeps its own empty loading region.)
+    expect(cardLiveRegionOf('Saved')).toBeNull();
     for (const card of document.querySelectorAll('[data-toast-id]')) {
       expect(
         card.closest('[aria-live], [role="status"], [role="alert"]'),
-      ).toBeNull();
-      expect(
-        card.querySelector('[aria-live], [role="status"], [role="alert"]'),
       ).toBeNull();
     }
   });
