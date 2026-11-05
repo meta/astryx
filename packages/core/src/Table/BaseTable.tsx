@@ -655,6 +655,17 @@ function BaseTableInner<T extends Record<string, unknown>>({
         'Give every row a unique id.',
     );
   }
+  // An identity-dependent plugin without an explicit idKey stays inert on
+  // every row: the plugin cannot tell a missing idKey from an invalid value,
+  // so the parent owns this diagnostic and the plugin stays silent.
+  if (canonicalIdentityOptIn && idKey == null && hasData) {
+    warnOnce(
+      'table-identity-plugin-without-idkey',
+      'Table',
+      'Table hosts a plugin that reads row identity but has no explicit idKey, ' +
+        'so identity-dependent behavior is inert. Pass a stable unique idKey.',
+    );
+  }
 
   let tableElement: ReactNode = (
     <table
@@ -708,13 +719,16 @@ function BaseTableInner<T extends Record<string, unknown>>({
                           ? idKey(item)
                           : String(item[idKey]);
                   // Type-tagged reconciliation keys live only on the
-                  // new-capability function-key path; property keys keep the
-                  // released string projection.
+                  // new-capability path; the released path keeps its keys
+                  // exactly. Valid keys carry a type tag and invalid rows a
+                  // per-index fallback, so a repeated or invalid row at index
+                  // 0 never shares a React key with a valid row whose id is
+                  // `row:0`.
                   const reactKey =
-                    canonicalIdentityOptIn &&
-                    isFunctionIdKey &&
-                    typeof resolvedRowKey !== 'undefined'
-                      ? `${typeof resolvedRowKey}:${String(resolvedRowKey)}`
+                    canonicalIdentityOptIn && idKey != null
+                      ? resolvedRowKey !== undefined
+                        ? `${typeof resolvedRowKey}:${String(resolvedRowKey)}`
+                        : `invalid:${rowIndex}`
                       : rowKey;
                   return (
                     <MemoizedTableRow<T>

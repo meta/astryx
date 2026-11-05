@@ -85,9 +85,16 @@ export interface UseTableActivationConfig<T extends Record<string, unknown>> {
  * is applied imperatively through per-row ref callbacks, so changing only
  * `activeKey` touches at most the old and new active rows instead of
  * re-rendering the table.
+ *
+ * Subscriptions are bucketed by canonical row key. A key-only update
+ * notifies only the buckets for the previous and current active keys; a
+ * predicate or callback change notifies every bucket, because any row may
+ * have flipped eligibility. Anything else notifies only the current active
+ * bucket, which keeps the visible current row converged without rewriting
+ * every mounted row.
  */
 interface ActivationStore<T extends Record<string, unknown>> {
-  subscribe: (listener: () => void) => () => void;
+  subscribe: (key: string | number, listener: () => void) => () => void;
   notify: () => void;
   getConfig: () => UseTableActivationConfig<T>;
 }
@@ -95,17 +102,49 @@ interface ActivationStore<T extends Record<string, unknown>> {
 function createActivationStore<T extends Record<string, unknown>>(
   configRef: React.RefObject<UseTableActivationConfig<T>>,
 ): ActivationStore<T> {
-  const listeners = new Set<() => void>();
+  const buckets = new Map<string | number, Set<() => void>>();
+  let previous = configRef.current;
 
-  return {
-    subscribe(listener: () => void) {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    notify() {
-      for (const listener of listeners) {
+  const notifyBuckets = (keys: ReadonlyArray<string | number | null>) => {
+    for (const key of keys) {
+      if (key == null) {
+        continue;
+      }
+      for (const listener of buckets.get(key) ?? []) {
         listener();
       }
+    }
+  };
+
+  return {
+    subscribe(key: string | number, listener: () => void) {
+      let bucket = buckets.get(key);
+      if (bucket == null) {
+        bucket = new Set();
+        buckets.set(key, bucket);
+      }
+      bucket.add(listener);
+      return () => {
+        bucket.delete(listener);
+      };
+    },
+    notify() {
+      const current = configRef.current;
+      if (
+        current.getIsItemActivatable !== previous.getIsItemActivatable ||
+        current.onActivate !== previous.onActivate
+      ) {
+        for (const bucket of buckets.values()) {
+          for (const listener of bucket) {
+            listener();
+          }
+        }
+      } else if (current.activeKey !== previous.activeKey) {
+        notifyBuckets([previous.activeKey, current.activeKey]);
+      } else {
+        notifyBuckets([current.activeKey]);
+      }
+      previous = current;
     },
     getConfig() {
       return configRef.current;
@@ -304,11 +343,10 @@ function shouldSuppressActivation(
 }
 
 /**
- * Whether a live text selection intersects the row. The shared
- * `hasTextSelection` only sees selections anchored inside, so a drag that
- * starts outside and covers the row would still activate it; an intersection
- * check keeps the drag inert whichever end the anchor is on. Implemented from
- * anchor/focus containment plus document order rather than
+ * Whether a live text selection intersects the row. Every selected range is
+ * checked, so a multi-range selection (one range per table cell in some
+ * browsers) suppresses the click when any range touches the row. Endpoints
+ * are compared in document order rather than through
  * `selection.containsNode`: equivalent semantics, and jsdom's `containsNode`
  * answers true for disjoint nodes, which would make any page selection block
  * every row under test.
@@ -350,8 +388,18 @@ function selectionIntersectsRow(row: Element): boolean {
   if (selection == null || selection.isCollapsed) {
     return false;
   }
-  const {anchorNode, focusNode} = selection;
-  return selectionEndsIntersectRow(row, anchorNode, focusNode);
+  for (let i = 0; i < selection.rangeCount; i++) {
+    const range = selection.getRangeAt(i);
+    if (range.collapsed) {
+      continue;
+    }
+    if (
+      selectionEndsIntersectRow(row, range.startContainer, range.endContainer)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // =============================================================================
@@ -459,14 +507,10 @@ export function useTableActivation<T extends Record<string, unknown>>(
           return props;
         }
         // No stable identity without an explicit idKey: stay inert rather
-        // than keying activation by row position.
+        // than keying activation by row position. The parent owns the
+        // missing-idKey diagnostic, so an invalid value under an explicit
+        // idKey stays silent here.
         if (rowKey === undefined) {
-          warnOnce(
-            'table-activation-missing-idkey',
-            'useTableActivation',
-            'Table rendered without an explicit idKey, so row activation is inert. ' +
-              'Pass a stable unique idKey for rows to be activatable.',
-          );
           return props;
         }
         // A row an earlier plugin already marked current keeps its
@@ -510,13 +554,28 @@ export function useTableActivation<T extends Record<string, unknown>>(
             return;
           }
           const applyStyle = () => {
+            const eligibleNow = isEligibleNow();
+            // Keyboard affordances follow the same liveness as paint and
+            // presses: a row a later plugin marked current, or one the
+            // caller predicate now excludes, is not a tab stop and
+            // announces no key affordances. The transform runs before later
+            // plugins, so this converges imperatively wherever the store
+            // reaches the row; full order-independence waits on the parent
+            // admission protocol.
+            if (!eligibleNow || hasCompetingCurrentOwner(row)) {
+              row.removeAttribute('tabindex');
+              row.removeAttribute('aria-keyshortcuts');
+            } else {
+              row.setAttribute('tabindex', String(tabIndex));
+              row.setAttribute('aria-keyshortcuts', keyShortcuts);
+            }
             applyRowActivationStyle(
               row,
-              isEligibleNow() && key === store.getConfig().activeKey,
+              eligibleNow && key === store.getConfig().activeKey,
             );
           };
           applyStyle();
-          const unsubscribe = store.subscribe(() => {
+          const unsubscribe = store.subscribe(key, () => {
             if (!row.isConnected) {
               clearRowActivationStyle(row);
               unsubscribe();

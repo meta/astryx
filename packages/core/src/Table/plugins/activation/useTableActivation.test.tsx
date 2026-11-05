@@ -1131,3 +1131,239 @@ describe('paint ownership and cleanup', () => {
     }
   });
 });
+
+// =============================================================================
+// Review follow-ups: bounded updates, key tagging, plugin order, ranges
+// =============================================================================
+
+describe('review follow-ups', () => {
+  it('touches only the old and new active rows on a key-only change', () => {
+    // Stable callbacks: only `activeKey` changes, the FR12 key-only path.
+    const onActivate = () => {};
+    function Harness({activeKey}: {activeKey: string | null}) {
+      const plugin = useTableActivation<Member>({
+        activeKey,
+        onActivate,
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    const {rerender} = render(<Harness activeKey="1" />);
+    const rows = bodyRows();
+    const addSpies = rows.map(row => vi.spyOn(row.classList, 'add'));
+    const removeSpies = rows.map(row => vi.spyOn(row.classList, 'remove'));
+    try {
+      rerender(<Harness activeKey="2" />);
+      // The untouched row is never rewritten; only old/new active rows repaint.
+      expect(addSpies[2]).not.toHaveBeenCalled();
+      expect(removeSpies[2]).not.toHaveBeenCalled();
+      expect(rows[0].hasAttribute('data-active')).toBe(false);
+      expect(rows[1].getAttribute('data-active')).toBe('true');
+    } finally {
+      for (const spy of [...addSpies, ...removeSpies]) {
+        spy.mockRestore();
+      }
+    }
+  });
+
+  it('leaves a later current-state owner in place without affordances', () => {
+    const onActivate = vi.fn();
+    function laterOwnerPlugin(): TablePlugin<Member> {
+      return {
+        transformBodyRow: props => ({
+          ...props,
+          htmlProps: {
+            ...props.htmlProps,
+            'aria-current': 'page' as const,
+          },
+        }),
+      };
+    }
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: '1',
+        onActivate,
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin, later: laterOwnerPlugin()}}
+        />
+      );
+    }
+    render(<Harness />);
+    const rows = bodyRows();
+    expect(rows[0].getAttribute('aria-current')).toBe('page');
+    expect(rows[0].hasAttribute('data-active')).toBe(false);
+    // The row stays inert without advertising activation affordances.
+    expect(rows[0].hasAttribute('tabindex')).toBe(false);
+    expect(rows[0].hasAttribute('aria-keyshortcuts')).toBe(false);
+    fireEvent.click(rows[0]);
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('sheds affordances when a new predicate excludes the active row', () => {
+    const onActivate = vi.fn();
+    function Harness({
+      getIsItemActivatable,
+    }: {
+      getIsItemActivatable: (item: Member) => boolean;
+    }) {
+      const plugin = useTableActivation<Member>({
+        activeKey: '1',
+        onActivate,
+        getIsItemActivatable,
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    const {rerender} = render(<Harness getIsItemActivatable={() => true} />);
+    expect(bodyRows()[0].getAttribute('tabindex')).toBe('0');
+    rerender(<Harness getIsItemActivatable={item => item.id !== '1'} />);
+    const rows = bodyRows();
+    expect(rows[0].hasAttribute('data-active')).toBe(false);
+    expect(rows[0].hasAttribute('tabindex')).toBe(false);
+    expect(rows[0].hasAttribute('aria-keyshortcuts')).toBe(false);
+    fireEvent.click(rows[0]);
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('keys an invalid row apart from a valid row:0 id', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    __resetDevWarnings();
+    const tricky: Member[] = [
+      {id: 'dup', name: 'First', team: 'Core'},
+      {id: 'dup', name: 'Second', team: 'Infra'},
+      {id: 'row:0', name: 'Row zero', team: 'Core'},
+    ];
+    function Harness() {
+      const plugin = useTableActivation<Member>({
+        activeKey: 'row:0',
+        onActivate: () => {},
+      });
+      return (
+        <Table
+          data={tricky}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    try {
+      render(<Harness />);
+      expect(bodyRows()).toHaveLength(3);
+      expect(
+        error.mock.calls.some(call => String(call[0]).includes('same key')),
+      ).toBe(false);
+      const rows = bodyRows();
+      expect(rows[0].hasAttribute('data-active')).toBe(false);
+      expect(rows[1].hasAttribute('data-active')).toBe(false);
+      expect(rows[2].getAttribute('data-active')).toBe('true');
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it('suppresses activation when any selected range intersects the row', () => {
+    function Harness({
+      onActivate,
+    }: {
+      onActivate: (item: Member, key: string | number) => void;
+    }) {
+      const plugin = useTableActivation<Member>({
+        activeKey: null,
+        onActivate,
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    const onActivate = vi.fn();
+    render(<Harness onActivate={onActivate} />);
+    const rows = bodyRows();
+    const outside = document.createElement('p');
+    outside.textContent = 'outside';
+    document.body.appendChild(outside);
+    const outsideRange = document.createRange();
+    outsideRange.selectNodeContents(outside);
+    const inRowRange = document.createRange();
+    inRowRange.selectNodeContents(rows[0].querySelector('td')!);
+    const originalGetSelection = document.getSelection;
+    document.getSelection = (() => ({
+      isCollapsed: false,
+      rangeCount: 2,
+      getRangeAt: (index: number) => (index === 0 ? outsideRange : inRowRange),
+    })) as unknown as typeof document.getSelection;
+    try {
+      fireEvent.click(rows[0]);
+      expect(onActivate).not.toHaveBeenCalled();
+    } finally {
+      document.getSelection = originalGetSelection;
+      outside.remove();
+    }
+  });
+
+  it('keeps activation when no selected range intersects the row', () => {
+    function Harness({
+      onActivate,
+    }: {
+      onActivate: (item: Member, key: string | number) => void;
+    }) {
+      const plugin = useTableActivation<Member>({
+        activeKey: null,
+        onActivate,
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    const onActivate = vi.fn();
+    render(<Harness onActivate={onActivate} />);
+    const rows = bodyRows();
+    const outside = document.createElement('p');
+    outside.textContent = 'outside';
+    document.body.appendChild(outside);
+    const firstRange = document.createRange();
+    firstRange.selectNodeContents(outside);
+    const secondRange = document.createRange();
+    secondRange.selectNodeContents(outside);
+    const originalGetSelection = document.getSelection;
+    document.getSelection = (() => ({
+      isCollapsed: false,
+      rangeCount: 2,
+      getRangeAt: (index: number) => (index === 0 ? firstRange : secondRange),
+    })) as unknown as typeof document.getSelection;
+    try {
+      fireEvent.click(rows[0]);
+      expect(onActivate).toHaveBeenCalledTimes(1);
+    } finally {
+      document.getSelection = originalGetSelection;
+      outside.remove();
+    }
+  });
+});
