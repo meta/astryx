@@ -877,7 +877,8 @@ describe('ChatComposerInput', () => {
     });
 
     it('paste inserts a token chip for long pastes after a focus() with no selection range', () => {
-      render(<ChatComposerInput />);
+      const onChange = vi.fn();
+      render(<ChatComposerInput onChange={onChange} />);
       const textbox = screen.getByRole('textbox');
 
       textbox.focus();
@@ -893,6 +894,7 @@ describe('ChatComposerInput', () => {
       });
 
       expect(textbox.querySelector('[data-astryx-token]')).toBeInTheDocument();
+      expect(onChange).toHaveBeenCalledTimes(1);
     });
 
     it('imperative insertToken works after a focus() with no selection range', () => {

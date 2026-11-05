@@ -900,9 +900,13 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         return;
       }
 
-      // Paste-as-token: convert long pastes to token chips.
+      // Paste-as-token: convert long pastes to token chips. The default
+      // converter inserts through the handle, which publishes the change.
+      const versionBeforeToken = emitChangeVersionRef.current;
       if (pasteAsToken?.onPaste(e, text)) {
-        emitChange();
+        if (emitChangeVersionRef.current === versionBeforeToken) {
+          emitChange();
+        }
         return;
       }
 
