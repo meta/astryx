@@ -68,16 +68,18 @@ async function measure(page: Page) {
       Number.parseFloat(
         element.style.getPropertyValue(`--astryx-hit-inset-${side}`) || '0',
       );
-    const week = document.querySelector<HTMLElement>(
-      '#storybook-root [data-value="week"]',
+    // The first segment sits under the button, so a tap between them is
+    // a tap between two targets.
+    const segment = document.querySelector<HTMLElement>(
+      '#storybook-root [data-value="day"]',
     )!;
     const button = [
       ...document.querySelectorAll<HTMLElement>('#storybook-root button'),
     ].find(element => element.textContent?.includes('Refresh'))!;
     return {
-      week: box(week),
+      segment: box(segment),
       button: box(button),
-      insets: {top: inset(week, 'top'), bottom: inset(week, 'bottom')},
+      insets: {top: inset(segment, 'top'), bottom: inset(segment, 'bottom')},
     };
   });
 }
@@ -90,12 +92,12 @@ test.describe('SegmentedControl touch target (spec:AST-094 FR42), under a finger
   }) => {
     await openStory(page, storybook(), 'core-segmentedcontrol--below-a-button');
     await waitForHitArea(page);
-    const {week, button, insets} = await measure(page);
-    expect(week.bottom - week.top).toBe(LG_SEGMENT_HEIGHT);
+    const {segment, button, insets} = await measure(page);
+    expect(segment.bottom - segment.top).toBe(LG_SEGMENT_HEIGHT);
     // Below: nothing near, so the band reaches the full 44 px share.
     expect(insets.bottom).toBe((44 - LG_SEGMENT_HEIGHT) / 2);
     // Above: the band stops at half the gap to the button.
-    expect(insets.top).toBeLessThanOrEqual((week.top - button.bottom) / 2);
+    expect(insets.top).toBeLessThanOrEqual((segment.top - button.bottom) / 2);
     expect(insets.top).toBeGreaterThan(0);
   });
 
@@ -103,38 +105,44 @@ test.describe('SegmentedControl touch target (spec:AST-094 FR42), under a finger
     await openStory(page, storybook(), 'core-segmentedcontrol--below-a-button');
     await waitForHitArea(page);
     const driver = await touchDriver(page);
-    const {week, insets} = await measure(page);
-    const week$ = page.locator('#storybook-root [data-value="week"]');
-    await expect(week$).toHaveAttribute('aria-checked', 'false');
-    await tapAt(driver, {x: centerX(week), y: week.bottom + insets.bottom - 2});
-    await expect(week$).toHaveAttribute('aria-checked', 'true');
+    const {segment, insets} = await measure(page);
+    const segment$ = page.locator('#storybook-root [data-value="day"]');
+    await expect(segment$).toHaveAttribute('aria-checked', 'false');
+    await tapAt(driver, {x: centerX(segment), y: segment.bottom + insets.bottom - 2});
+    await expect(segment$).toHaveAttribute('aria-checked', 'true');
   });
 
-  test('a tap on the band above a segment selects it; a tap past the band, nearer the button, selects nothing; a tap on the button is the button’s', async ({
+  test('a tap on the band above a segment selects it; a tap past the band, nearer the button, is not the segment’s; a tap on the button is the button’s', async ({
     page,
   }) => {
     await openStory(page, storybook(), 'core-segmentedcontrol--below-a-button');
     await waitForHitArea(page);
     const driver = await touchDriver(page);
-    const {week, button, insets} = await measure(page);
-    const week$ = page.locator('#storybook-root [data-value="week"]');
+    const {segment, button, insets} = await measure(page);
     const day$ = page.locator('#storybook-root [data-value="day"]');
+    const month$ = page.locator('#storybook-root [data-value="month"]');
     const refreshed = page.getByText(/Refreshed \d+ times/);
+    // Under the button and over the first segment, so both are near.
+    const x = Math.min(centerX(segment), (button.left + button.right) / 2);
 
-    // Past the band, in the button's half of the gap: neither takes it.
-    await tapAt(driver, {x: centerX(week), y: week.top - insets.top - 2});
+    // Past the band, in the button's half of the gap: the segment does not
+    // take it.
+    await tapAt(driver, {x, y: segment.top - insets.top - 2});
     await page.waitForTimeout(400);
-    await expect(day$).toHaveAttribute('aria-checked', 'true');
-    await expect(refreshed).toHaveText('Refreshed 0 times');
+    await expect(day$).toHaveAttribute('aria-checked', 'false');
+    await expect(month$).toHaveAttribute('aria-checked', 'true');
 
     // On the button: the button's tap, and the selection does not move.
-    await tapAt(driver, {x: centerX(week), y: button.bottom - 4});
-    await expect(refreshed).toHaveText('Refreshed 1 times');
-    await expect(day$).toHaveAttribute('aria-checked', 'true');
+    const before = Number(
+      (await refreshed.textContent())?.match(/\d+/)?.[0] ?? '0',
+    );
+    await tapAt(driver, {x, y: button.bottom - 4});
+    await expect(refreshed).toHaveText(`Refreshed ${before + 1} times`);
+    await expect(month$).toHaveAttribute('aria-checked', 'true');
 
     // On the band above the segment: the segment's tap.
-    await tapAt(driver, {x: centerX(week), y: week.top - insets.top + 1});
-    await expect(week$).toHaveAttribute('aria-checked', 'true');
-    await expect(refreshed).toHaveText('Refreshed 1 times');
+    await tapAt(driver, {x, y: segment.top - insets.top + 1});
+    await expect(day$).toHaveAttribute('aria-checked', 'true');
+    await expect(refreshed).toHaveText(`Refreshed ${before + 1} times`);
   });
 });

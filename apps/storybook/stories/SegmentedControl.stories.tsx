@@ -302,7 +302,7 @@ export const BelowAButton: Story = {
     },
   },
   render: () => {
-    const [value, setValue] = useState('day');
+    const [value, setValue] = useState('month');
     const [refreshes, setRefreshes] = useState(0);
     return (
       <div
