@@ -89,6 +89,9 @@ function sortPluginEntries<T extends Record<string, unknown>>(
 // ======================================================================
 // Plugin Validation (dev mode only)
 // ======================================================================
+/** Known declaration fields on the TablePlugin interface. */
+const VALID_DECLARATION_KEYS = new Set(['rowModel']);
+
 /** Known transform method names on the TablePlugin interface. */
 const VALID_TRANSFORM_KEYS = new Set([
   'transformColumns',
@@ -117,11 +120,11 @@ function validatePlugin<T extends Record<string, unknown>>(
 
   // Warn about unknown keys (likely misspelled transform names)
   for (const key of keys) {
-    if (!VALID_TRANSFORM_KEYS.has(key)) {
+    if (!VALID_TRANSFORM_KEYS.has(key) && !VALID_DECLARATION_KEYS.has(key)) {
       devWarn(
         'Table',
         `Plugin "${name}" has unknown key "${key}". ` +
-          `Valid keys: ${[...VALID_TRANSFORM_KEYS].join(', ')}. ` +
+          `Valid keys: ${[...VALID_DECLARATION_KEYS, ...VALID_TRANSFORM_KEYS].join(', ')}. ` +
           `This key will be ignored.`,
       );
     }

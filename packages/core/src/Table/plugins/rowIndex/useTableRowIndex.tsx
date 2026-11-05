@@ -4,7 +4,7 @@
 
 /**
  * @file useTableRowIndex.tsx
- * @input React, StyleX, Table types + the rendered data array
+ * @input React, StyleX, Table types, and each body row's TableRowContext
  * @output Exports useTableRowIndex hook + config type
  * @position Row-index plugin; consumed by Table via plugins prop
  *
@@ -21,21 +21,21 @@ import type {TableColumn, TablePlugin} from '../../types';
 /**
  * Configuration for {@link useTableRowIndex}.
  *
- * Astryx's `renderCell` receives only the row item (not its position), so the
- * plugin needs the rendered `data` array — the same array passed to
- * `<Table data>` — to derive each row's 1-based ordinal. Pass `getRowKey` when
- * items don't have a stable identity by reference (e.g. new objects each
- * render); it must return a **unique** string per row (duplicate keys collapse
- * to a single ordinal).
+ * Table gives each body row its position, so the plugin numbers rows without
+ * the data. `data` and `getRowKey` are a fallback for an index cell that
+ * renders outside Table's body rows.
  */
 export interface UseTableRowIndexConfig<T extends Record<string, unknown>> {
-  /** The data array currently rendered by the table (post sort/filter/page). */
-  data: T[];
   /**
-   * Optional key extractor returning a **unique** string per row. When
-   * provided, index lookup is keyed by the returned string (stable across new
-   * object identities); otherwise items are matched by reference identity.
-   * For a stable plugin identity across renders, memoize this with
+   * The data array the table renders (after sort, filter and pagination).
+   * Only an index cell rendered outside Table's body rows uses it.
+   */
+  data?: T[];
+  /**
+   * Optional key extractor returning a **unique** string per row, for the
+   * `data` fallback. When provided, the fallback matches rows by the returned
+   * string (stable across new object identities); otherwise by reference
+   * identity. For a stable plugin identity across renders, memoize this with
    * `useCallback`.
    */
   getRowKey?: (item: T) => string;
@@ -45,6 +45,7 @@ export interface UseTableRowIndexConfig<T extends Record<string, unknown>> {
   startFrom?: number;
 }
 
+const INDEX_COLUMN_KEY = '__rowIndex';
 const INDEX_COLUMN_WIDTH = {type: 'pixel' as const, value: 48};
 
 const styles = stylex.create({
@@ -58,24 +59,27 @@ const styles = stylex.create({
 
 /**
  * Returns a {@link TablePlugin} that prepends a right-aligned, monospaced
- * row-number column. Numbering follows the order of the rendered `data` array,
- * so it reflects the current sort / filter / pagination view.
+ * row-number column. Numbering follows the rows the table renders, so it
+ * reflects the current sort / filter / pagination view.
  *
  * @example
  * ```
- * const rowIndex = useTableRowIndex({data});
+ * const rowIndex = useTableRowIndex();
  * <Table data={data} columns={columns} idKey="id" plugins={{rowIndex}} />;
  * ```
  */
 export function useTableRowIndex<T extends Record<string, unknown>>(
-  config: UseTableRowIndexConfig<T>,
+  config: UseTableRowIndexConfig<T> = {},
 ): TablePlugin<T> {
   const {data, getRowKey, label = '#', startFrom = 1} = config;
 
-  // Single item → ordinal lookup, built in one pass and rebuilt only when the
-  // data array or key extractor changes. Keyed by getRowKey when provided
-  // (stable across new object identities), otherwise by object reference.
+  // The fallback lookup for an index cell outside Table's body rows. Keyed by
+  // getRowKey when provided (stable across new object identities), otherwise
+  // by object reference.
   const lookup = useMemo(() => {
+    if (data == null) {
+      return () => undefined;
+    }
     const map = new Map<unknown, number>();
     for (let i = 0; i < data.length; i++) {
       const item = data[i];
@@ -85,19 +89,27 @@ export function useTableRowIndex<T extends Record<string, unknown>>(
       map.get(getRowKey ? getRowKey(item) : item);
   }, [data, getRowKey]);
 
-  // The plugin object depends only on the stable lookup and the presentational
-  // props — not on data directly — so it stays as stable as its inputs allow.
-  return useMemo(
-    (): TablePlugin<T> => ({
+  return useMemo((): TablePlugin<T> => {
+    // Table runs a row's cell transforms before it renders the cells, so the
+    // index cell's renderer finds the position its own transform stored.
+    const positions = new WeakMap<T, number>();
+    return {
+      rowModel: 'flat',
+      transformBodyCell(props, column, item, _columnIndex, _columns, context) {
+        if (column.key === INDEX_COLUMN_KEY && context != null) {
+          positions.set(item, context.logicalIndex);
+        }
+        return props;
+      },
       transformColumns(columns) {
         const indexColumn: TableColumn<T> = {
-          key: '__rowIndex',
+          key: INDEX_COLUMN_KEY,
           header: label,
           width: INDEX_COLUMN_WIDTH,
           align: 'end',
           resizable: false,
           renderCell: (item: T) => {
-            const idx = lookup(item);
+            const idx = positions.get(item) ?? lookup(item);
             if (idx == null) {
               return null;
             }
@@ -108,7 +120,6 @@ export function useTableRowIndex<T extends Record<string, unknown>>(
         };
         return [indexColumn, ...columns];
       },
-    }),
-    [label, startFrom, lookup],
-  );
+    };
+  }, [label, startFrom, lookup]);
 }

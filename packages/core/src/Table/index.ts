@@ -81,6 +81,8 @@ export type {
   BodyCellRenderProps,
   ScrollWrapperRenderProps,
   BaseTableProps,
+  TableRenderContext,
+  TableRowContext,
 } from './types';
 export type {
   TableProps,
