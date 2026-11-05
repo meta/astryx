@@ -16,7 +16,7 @@
  */
 
 import {canVibrate, playHaptic} from '../gestures/haptics';
-import {createMotionAnimator, type MotionCurve} from '../motion/animator';
+import {createMotionEngine, type MotionCurve} from '../motion/animator';
 import {reducedMotionFade} from '../motion/reducedMotion';
 import {picker} from '../motion/uikit/picker';
 import {
@@ -132,7 +132,7 @@ function now(): number {
  * ```
  */
 export function createWheelStrip(initialLayout: WheelLayout): WheelStrip {
-  const animator = createMotionAnimator(null);
+  const animator = createMotionEngine(null);
   let layout = initialLayout;
   let running: Running | null = null;
   let nearestListener: ((position: number) => void) | null = null;

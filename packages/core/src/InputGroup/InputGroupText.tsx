@@ -10,6 +10,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/InputGroup/InputGroup.doc.mjs
+ * - /packages/core/src/InputGroup/InputGroupText.doc.mjs
  * - /packages/core/src/InputGroup/index.ts
  * - /packages/cli/assets/templates/blocks/components/InputGroup/
  */
@@ -81,7 +82,7 @@ export interface InputGroupTextProps extends BaseProps<HTMLDivElement> {
  *
  * @example
  * ```
- * <InputGroup label="URL">
+ * <InputGroup label="Website">
  *   <InputGroupText>https://</InputGroupText>
  *   <TextInput label="URL" isLabelHidden value={url} onChange={setUrl} />
  * </InputGroup>
