@@ -15,6 +15,7 @@
  *   - useDirection                — hook returning the ambient text direction
  *   - getLocaleDirection          — server-safe locale → direction helper
  *   - Translator                  — interface for consumer-injected runtimes
+ *   - CalendarSystem              — the calendars date components can show
  *
  * `useTranslator` and `InternationalizationContext` are the public paths
  * that resolve any Astryx key, so they register the whole English catalog.
@@ -39,6 +40,7 @@ export {useLocale} from './useLocale';
 export {useCollator} from './useCollator';
 export {useDirection} from './useDirection';
 export {getLocaleDirection} from './getLocaleDirection';
+export type {CalendarSystem} from '../utils/calendarSystem';
 export type {Translator} from './translator';
 export type {
   Locale,

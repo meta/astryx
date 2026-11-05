@@ -33,6 +33,10 @@ export {
   type SelectableCardGroupItemProps,
 } from './SelectableCardGroup';
 
+// CircleCheckIndicator — the iOS multiple-selection circle, a checkbox-family
+// indicator a theme can map to `checkbox`
+export {CircleCheckIndicator} from './CircleCheckIndicator';
+
 // EmojiPicker — standalone searchable emoji panel
 export {
   EmojiPicker,

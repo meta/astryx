@@ -29,6 +29,7 @@ import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import type {DropdownMenuOption} from '@astryxdesign/core/DropdownMenu';
 import {Link} from '@astryxdesign/core/Link';
 import {Icon} from '@astryxdesign/core/Icon';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {Divider} from '@astryxdesign/core/Divider';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
@@ -381,7 +382,11 @@ function PageHeader({
             <HStack gap={4} vAlign="center" wrap="wrap">
               <Link href="#" type="supporting" color="secondary">
                 <HStack as="span" gap={1} vAlign="center">
-                  <Icon icon={ArrowLeftIcon} size="sm" />
+                  <Icon
+                    icon={ArrowLeftIcon}
+                    size="sm"
+                    xstyle={rtlStyles.mirror}
+                  />
                   All Tasks
                 </HStack>
               </Link>
@@ -463,7 +468,6 @@ function PageHeader({
                 onRemove={onRemove}
               />
             )}
-            presentation="popover"
           />
         </HStack>
       </VStack>
