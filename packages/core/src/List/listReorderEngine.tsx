@@ -487,7 +487,8 @@ interface PendingMove {
 interface PendingAnnouncement {
   readonly row: HTMLElement;
   readonly to: number;
-  readonly landed: string;
+  /** Read as the move lands, so it names the rows as they are named then. */
+  readonly landed: () => string;
   readonly kept: string;
   readonly politeness: AnnouncePoliteness | undefined;
 }
@@ -670,19 +671,18 @@ export class ListReorderController implements ListReorderSession {
   }
 
   /**
-   * Records a row's handle, the row's item key (ListItem `itemKey`) and its
-   * name; returns the removal. A row moves only with a handle recorded here.
+   * Records a row's handle and the row's item key (ListItem `itemKey`);
+   * returns the removal. A row moves only with a handle recorded here. Its
+   * name is recorded apart, so a new name leaves the row in reorder mode.
    */
-  registerHandle(handle: Element | null, key: Key, name: string): () => void {
+  registerHandle(handle: Element | null, key: Key): () => void {
     if (handle == null) {
       return () => {};
     }
     this.keys.set(handle, key);
-    this.names.set(handle, name);
     return () => {
       if (this.keys.get(handle) === key) {
         this.keys.delete(handle);
-        this.names.delete(handle);
         if (this.modeHandle === handle) {
           this.setMode(null);
         }
@@ -690,7 +690,7 @@ export class ListReorderController implements ListReorderSession {
     };
   }
 
-  /** Records the name of a row without a handle; returns the removal. */
+  /** Records the name of a row, or of its handle; returns the removal. */
   registerName(row: Element | null, name: string): () => void {
     if (row == null) {
       return () => {};
@@ -774,9 +774,9 @@ export class ListReorderController implements ListReorderSession {
   /**
    * Ends reorder mode, keeping its moves, and announces where the row is
    * ("Done, Milk at position 3 of 5"). Escape, another activation of the
-   * handle, or the hint's Done ends it so. Focus that a screen reader moved
-   * into the hint goes back to the handle. A drag or the row leaving ends it
-   * without a word.
+   * handle, the hint's Done, or a drag ends it so. Focus that a screen
+   * reader moved into the hint goes back to the handle. The row leaving ends
+   * it without a word.
    */
   endMode(): void {
     const handle = this.modeHandle;
@@ -1329,7 +1329,7 @@ export class ListReorderController implements ListReorderSession {
     this.announceWhenCommitted({
       row: element,
       to: position,
-      landed: dropped,
+      landed: () => dropped,
       kept: this.messages?.cancelled(dragged + 1, rows.length) ?? '',
       politeness: 'polite',
     });
@@ -1517,7 +1517,7 @@ export class ListReorderController implements ListReorderSession {
         clearTimeout(this.announcementFallback);
         this.announcementFallback = null;
       }
-      this.announce(announcement.landed, announcement.politeness);
+      this.announce(announcement.landed(), announcement.politeness);
     }
     const move = this.committedMove;
     if (move != null && !sameOrder(rowsOf(list), move.rows)) {
@@ -1737,14 +1737,12 @@ export class ListReorderController implements ListReorderSession {
       this.announce(this.messages?.refused(this.nameOf(rows[to], to)) ?? '');
       return;
     }
-    const order = rows.filter(element => element !== row);
-    order.splice(to, 0, row);
     this.focusRow = row;
     this.lastStep = delta;
     this.announceWhenCommitted({
       row,
       to,
-      landed: this.placeIn(order, to),
+      landed: () => this.placeIn(rowsOf(list), to),
       kept: this.placeIn(rows, index),
       politeness: undefined,
     });
