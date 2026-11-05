@@ -2261,16 +2261,18 @@ describe('DateTimeInput', () => {
       expect(timeInput).toHaveAttribute('aria-expanded', 'true');
     });
 
-    it('drops the watcher of a press that never became a click when the field unmounts', () => {
-      // The press defers its show to a one-shot `document` click watcher, and a
-      // press that ends without a click leaves that watcher standing. It belongs
-      // to this field, so unmounting takes it along: otherwise the next click
-      // anywhere in the document runs work for a field that is gone. The Layer
-      // gesture counter also watches `click` on the document, in the capture
-      // phase and for the life of the page, so only the bubble phase is this
-      // field's business. The count comes from running the listener the document
-      // really holds, so this fails when the watcher survives, not when the spy
-      // misfires.
+    it('drops the watchers of a press that never became a click when the field unmounts', () => {
+      // A press installs one-shot `document` click listeners that end its
+      // deferral, from the input and from the wrapper, and a press that ends
+      // without a click leaves them in place. They belong to this field, so
+      // unmounting takes them along: otherwise the next click anywhere runs this
+      // field's reset for a field that is gone. The deferred show is not one of
+      // them — the input's own click installs it and delivers it in the same
+      // dispatch, measured at three installed and three fired. The Layer gesture
+      // counter also watches `click` on the document, in the capture phase and
+      // for the life of the page, so only the bubble phase is this field's
+      // business. The count comes from running the listener the document really
+      // holds, so this fails when a watcher survives, not when the spy misfires.
       const add = document.addEventListener.bind(document);
       const remove = document.removeEventListener.bind(document);
       const isCapture = (options?: boolean | AddEventListenerOptions) =>

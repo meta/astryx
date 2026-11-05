@@ -1142,18 +1142,16 @@ function PointerDateTimeField({
   // it, as BaseTypeahead does.
   const timePointerActiveRef = useRef(false);
 
-  // The watchers carrying that deferral are one-shot listeners on `document`,
-  // and they belong to this field. Unmounting takes them with it: a watcher
-  // left standing answers the next click anywhere in the document with work for
-  // a field that is gone.
+  // These one-shot `document` listeners belong to this field. Unmount removes
+  // them. Otherwise the next click runs work for a field that is gone.
   const timeClickWatchersRef = useRef<Set<EventListener> | null>(null);
 
   const addTimeClickWatcher = useCallback((handler: () => void) => {
     const watchers = timeClickWatchersRef.current ?? new Set<EventListener>();
     timeClickWatchersRef.current = watchers;
     const watcher: EventListener = () => {
-      // The `once` option removes this listener as the browser delivers it;
-      // deleting here is what keeps the set from holding every past press.
+      // The `once` option removes the listener from the document. Delete it from
+      // the set too, or the set keeps every past press.
       watchers.delete(watcher);
       handler();
     };
