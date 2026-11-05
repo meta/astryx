@@ -207,7 +207,7 @@ test('a duration that is not a positive length gives no curve in either pattern'
 /** The page's bundle. */
 type Bundle = typeof ThemeTimingModule;
 
-test('a calc() --duration-exit times the press release clock as its fade’s transition resolves it', async ({
+test('a calc() --duration-exit times the press release clock as its release animation resolves it', async ({
   page,
 }) => {
   await open(page);

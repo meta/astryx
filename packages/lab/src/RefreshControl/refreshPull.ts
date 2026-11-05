@@ -175,7 +175,8 @@ export function endTiming(
   const style = getComputedStyle(element);
   const duration = style.getPropertyValue(refreshControl.endDurationToken);
   const easing = style.getPropertyValue(refreshControl.endEasingToken);
-  // With no theme tokens here, the end has no slide.
+  // Core's token defaults do not apply here. The end slides only when the
+  // theme sets both tokens.
   if (duration.trim() === '' || easing.trim() === '') {
     return null;
   }
