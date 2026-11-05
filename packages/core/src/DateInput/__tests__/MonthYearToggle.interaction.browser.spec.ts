@@ -151,6 +151,43 @@ function expectToggleRun(
 const STORY = 'core-dateinput--bottom-sheet-calendar';
 const DTI_STORY = 'core-datetimeinput--bottom-sheet-calendar';
 
+/**
+ * Resolves once `locator`'s element shows `property` at `value` and no
+ * animation inside it is left unfinished. The page checks the value once a
+ * frame, then awaits each animation's own `finished` promise. It sets no
+ * deadline of its own, so a starved runner only makes it later.
+ */
+async function settlesAt(locator: Locator, property: string, value: string) {
+  await locator.evaluate(
+    async (element, [name, expected]) => {
+      await new Promise<void>(resolve => {
+        const check = () => {
+          if (getComputedStyle(element).getPropertyValue(name) === expected) {
+            resolve();
+          } else {
+            requestAnimationFrame(check);
+          }
+        };
+        check();
+      });
+      for (;;) {
+        const unfinished = element
+          .getAnimations({subtree: true})
+          .filter(animation => animation.playState !== 'finished');
+        if (unfinished.length === 0) {
+          return;
+        }
+        await Promise.all(
+          unfinished.map(async animation =>
+            animation.finished.catch(() => undefined),
+          ),
+        );
+      }
+    },
+    [property, value] as const,
+  );
+}
+
 async function openCalendar(
   page: Page,
   {rtl = false, story = STORY}: {rtl?: boolean; story?: string} = {},
@@ -179,7 +216,7 @@ async function openCalendar(
     .getByRole('dialog')
     .locator('.astryx-bottom-sheet')
     .first();
-  await waitForRest(sheet);
+  await settlesAt(sheet, 'transform', 'matrix(1, 0, 0, 1, 0, 0)');
   // Under a finger the hidden wheels warm up once the sheet has settled
   // (useWheelsWarmUp): their `visibility` turns visible at opacity 0, with its
   // own transition. Wait for its end, so a test's first tap meets a panel at
@@ -191,7 +228,7 @@ async function openCalendar(
       timeout: SHEET_SETTLE_MS + 2000,
     })
     .toBe('visible');
-  await waitForRest(wheels);
+  await settlesAt(wheels, 'visibility', 'visible');
   const title = page.locator('[data-title="month-year"]');
   const titleBox = await title.boundingBox();
   if (titleBox == null) {
