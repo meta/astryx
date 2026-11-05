@@ -4,11 +4,12 @@
  * @file animator.ts
  * @input An element, target values, and a spring, momentum curves (coast.ts)
  *   or any closed-form curve
- * @output Exports `createAnimator`: a compositor animator for translate,
- *   rotate, scale and opacity, with presentation values and velocities read
- *   from the analytic curves, velocity-preserving retargeting, freeze-in-place
- *   `stop`, completion promises, a shared clock, and UIKit's Reduced Motion
- *   substitution; plus its option, handle and transition types
+ * @output Exports `createMotionAnimator`, a compositor animator for
+ *   translate, rotate, scale and opacity, and its option, handle and
+ *   transition types. It reads presentation values and velocities from the
+ *   analytic curves. It retargets with the velocity kept, freezes in place on
+ *   `stop`, and gives completion promises, a shared clock, and UIKit's
+ *   Reduced Motion substitution.
  * @position Motion foundation (DOM). Internal to core: components use it for
  *   every touch-presentation animation; not exported from the package entry
  *
@@ -180,6 +181,7 @@
  */
 
 import {cubicBezier} from './bezier';
+import {LATE_START_MS} from './frameBlock';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
 import {registerPresentedOffset, type PresentedSource} from './presentation';
 import {resolveMotion} from './resolveMotion';
@@ -188,6 +190,7 @@ import {
   registerReducedMotionCrossFade,
 } from './uikit/timing';
 import {planReducedMotion, type ReducedMotionView} from './reducedMotionPlan';
+import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 /**
  * A value the animator can drive.
@@ -244,18 +247,18 @@ export interface AnimateOptions {
   crossfadeAs?: 'entrance' | 'exit';
   /**
    * When the call's animations start. By default a call from rest starts
-   * when the browser commits it, and a call that continues motion on screen
-   * (a retarget) starts now, from the value on screen. Ignored with `at`.
+   * when the browser commits it. A call that continues motion on screen (a
+   * retarget) starts now, from the value on screen. A curve whose tail
+   * already shows as at rest counts as rest. Ignored with `at`.
    * - `'commit'`: a call that continues motion also starts when the browser
-   *   commits it, dated by the browser rather than by the main thread, as a
-   *   call from rest is.
-   * - `'presented'`: a call from rest leaves its element at rest and creates
-   *   its animations two frames later, once the frame that carries the
-   *   element at rest has been presented; they then start at their commit. A
-   *   busy UI process delays the motion instead of skipping into it, for two
-   *   frames more before an idle start. Any other change to the animator
-   *   before then creates the animations first, in call order. A call that
-   *   continues motion on screen (a retarget) starts now, as by default.
+   *   commits it. The browser dates it, as it dates a call from rest.
+   * - `'presented'`: a call from rest leaves its element at rest. Its
+   *   animations are created two frames later, once the frame with the
+   *   element at rest has been presented. They then start at their commit,
+   *   so a busy UI process delays the motion instead of skipping into it.
+   *   Any other change to the animator before then creates the animations
+   *   first, in call order. A call that continues motion on screen starts
+   *   now, as by default.
    */
   start?: 'commit' | 'presented';
   /**
@@ -297,7 +300,7 @@ export interface MotionCurve {
 }
 
 /**
- * Options of `createAnimator`.
+ * Options of `createMotionAnimator`.
  */
 /** How `set` puts values in place. */
 export interface SetOptions {
@@ -652,15 +655,20 @@ const SAMPLE_TOLERANCE: Record<MotionProperty, number> = {
 /** Keyframes start on this grid (ms) and are split where the curve needs it. */
 const SAMPLE_GRID_MS = 1000 / 30;
 
-/** A curve that has not settled by then (an undamped spring) snaps. */
-const MAX_DURATION_MS = 30_000;
+/**
+ * A curve within this many sample tolerances of its target can show as at
+ * rest. A call on it then starts as one from rest does, at the browser's start.
+ */
+const REST_DISTANCE_TOLERANCES = 2;
 
 /**
- * How long a task must run on past its first call from rest before that
- * counts as a block (WebKit; startAfterBlock): two frames at 60 Hz.
+ * A curve shows as at rest only while it moves at most one `SAMPLE_TOLERANCE`
+ * a frame at this rate.
  */
-// Browser start times are frame times and a task's end a live clock, so only a block longer than a frame plus the task's own length can be told apart from that quantization.
-const LATE_START_MS = 34;
+const REST_FRAMES_PER_SECOND = 60;
+
+/** A curve that has not settled by then (an undamped spring) snaps. */
+const MAX_DURATION_MS = 30_000;
 
 /**
  * The task calls from rest are made in, shared by every call made in it
@@ -803,7 +811,7 @@ export function animatorFor(
   const key = options.pseudoElement ?? '';
   let animator = byPseudo.get(key);
   if (animator == null) {
-    animator = createAnimator(element, options);
+    animator = createMotionAnimator(element, options);
     byPseudo.set(key, animator);
   }
   return animator;
@@ -920,7 +928,7 @@ const REDUCED_TRANSITION: SpringTransition = {
  *
  * @example
  * ```
- * const animator = createAnimator(sheet);
+ * const animator = createMotionAnimator(sheet);
  * // finger lifts at 1200 px/s heading for the detent at 0 (a component
  * // passes the spring of its motion role):
  * animator.animate({y: 0}, {spring: {response: 0.45, dampingRatio: 0.9}, velocity: {y: 1200}});
@@ -929,7 +937,7 @@ const REDUCED_TRANSITION: SpringTransition = {
  * animator.stop(['y']);
  * ```
  */
-export function createAnimator(
+export function createMotionAnimator(
   element: HTMLElement | null,
   options: AnimatorOptions = {},
 ): Animator {
@@ -958,8 +966,10 @@ export function createAnimator(
         };
   const pseudoElement = options.pseudoElement;
   // Reduced Motion reads the person's settings and nothing else: no option
-  // overrides them (design:reduced-motion DR4).
-  const prefersReducedMotion = defaultPrefersReducedMotion;
+  // overrides them (design:reduced-motion DR4). A theme that reduces motion
+  // for everyone counts as the setting.
+  const prefersReducedMotion = () =>
+    defaultPrefersReducedMotion() || themeReducesMotion(target);
   const isCoarsePointer = defaultIsCoarsePointer;
   const resting: Record<MotionProperty, number> = {
     ...IDENTITY,
@@ -1164,6 +1174,22 @@ export function createAnimator(
     }
     return curveAt(property, time);
   };
+
+  /**
+   * Whether a curve's tail already shows as at rest at `time`. Under a
+   * starved main thread the browser commits a call late. A call that starts
+   * at its own time then skips that far into its curve. One that starts at
+   * the commit holds an element that hardly moves.
+   */
+  const showsAtRest = (
+    property: MotionProperty,
+    segment: Segment,
+    time: number,
+  ): boolean =>
+    Math.abs(valueAt(property, time) - segment.target) <=
+      REST_DISTANCE_TOLERANCES * SAMPLE_TOLERANCE[property] &&
+    Math.abs(velocityAt(property, time)) <=
+      SAMPLE_TOLERANCE[property] * REST_FRAMES_PER_SECOND;
 
   const velocityAt = (property: MotionProperty, time: number): number => {
     const held = segments.get(property);
@@ -2033,10 +2059,10 @@ export function createAnimator(
   // -- starting from rest ---------------------------------------------------
 
   /**
-   * A call starts from rest when nothing on the channels it drives is moving
-   * (a curve still waiting for its first frame counts as rest) and nothing
-   * pins its clock (`at`). Returns its start group, or null for an explicit
-   * start.
+   * A call starts from rest when nothing on the channels it drives moves on
+   * screen and nothing pins its clock (`at`). A curve still waiting for its
+   * first frame counts as rest, as does one whose tail already shows as at
+   * rest. Returns its start group, or null for an explicit start.
    */
   const beginGroup = (
     time: number,
@@ -2070,10 +2096,12 @@ export function createAnimator(
       }
       return null;
     }
-    // A call that continues motion starts now unless it asks for the
-    // browser's start (`commit`). `presented` asks only for a call from rest:
-    // an element still moving is not at rest, so a retarget starts now, from
-    // the value and velocity on screen (spec:AST-094 FR6).
+    // A call that continues motion starts now, unless it asks for the
+    // browser's start (`commit`). `presented` asks only for a call from rest.
+    // A curve that still moves is not at rest, so a call on it starts now,
+    // from the value and velocity on screen. A tail that shows as at rest
+    // counts as rest, so a call on it waits, under `presented` for its two
+    // frames.
     for (const channel of start === 'commit' ? [] : channels) {
       for (const property of CHANNELS[channel]) {
         const segment = segments.get(property);
@@ -2084,7 +2112,8 @@ export function createAnimator(
           time < endOf(property, segment) &&
           (segment.group == null ||
             segment.group.resolved ||
-            shownSince(property, segment) != null)
+            shownSince(property, segment) != null) &&
+          !showsAtRest(property, segment, time)
         ) {
           return null;
         }

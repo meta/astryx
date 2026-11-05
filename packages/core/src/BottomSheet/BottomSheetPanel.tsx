@@ -14,7 +14,7 @@
  * - /packages/core/src/BottomSheet/BottomSheet.tsx
  * - /packages/core/src/BottomSheet/BottomSheetPanel.test.tsx
  * - /packages/core/src/BottomSheet/snapOffsets.ts
- * - /packages/core/src/BottomSheet/useMobileKeyboard.ts
+ * - /packages/core/src/keyboard/useMobileKeyboard.ts
  * - /packages/core/src/BottomSheet/useSheetGestures.ts
  * - /packages/core/src/Layout/container.stylex.ts (bottom-sheet padding chain)
  */
@@ -26,6 +26,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -60,13 +61,14 @@ import {
   paddingStyles,
   spacingStepToToken,
 } from '../Layout/padding.stylex';
+import {subscribeInput} from '../utils/inputStream';
 import type {SpacingStep} from '../utils/types';
 import {
   isValidSnapPoint,
   resolveSnapPoints,
   type BottomSheetSnapPoint,
 } from './snapOffsets';
-import {useMobileKeyboard} from './useMobileKeyboard';
+import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
 import {
   scrollPreservationPadding,
   sheetLayoutHeight,
@@ -82,8 +84,20 @@ const HEIGHT_BUDGETS = {
 export type BottomSheetHeight = keyof typeof HEIGHT_BUDGETS;
 export type {BottomSheetSnapPoint};
 
-// SYNC: must match OVERSCROLL_MAX in useSheetGestures.ts.
-const OVERSCROLL_PADDING = 48;
+// The reserve: how far the sheet's surface reaches below the screen, so a
+// pull past the top never shows the page under it.
+// SYNC: OVERSCROLL_MAX in useSheetGestures.ts must not exceed MIN_RESERVE.
+const MIN_RESERVE = 48;
+// A finger can pull past the top by at most the viewport's height. The rubber
+// band over a sheet as tall as the viewport then shows 35.5% of it.
+const RESERVE_VIEWPORT_SHARE = 0.4;
+
+function sheetReserve(viewportHeight: number): number {
+  return Math.max(
+    MIN_RESERVE,
+    Math.ceil(viewportHeight * RESERVE_VIEWPORT_SHARE),
+  );
+}
 const MOBILE_KEYBOARD_BOTTOM_CLEARANCE = 48;
 const TRANSITION_BACKSTOP_BUFFER_MS = 50;
 // The floating handle bar's height. The bar is out of flow, so this is not
@@ -92,12 +106,36 @@ const TRANSITION_BACKSTOP_BUFFER_MS = 50;
 // padding already provides.
 const HANDLE_BAR_HEIGHT = spacingVars['--spacing-6'];
 
+const BLOCK_SIZE_PROPERTIES = [
+  'height',
+  'minHeight',
+  'maxHeight',
+  'blockSize',
+  'minBlockSize',
+  'maxBlockSize',
+] as const;
+
+/** Whether StyleX styles hold any style: they can nest in arrays. */
+function hasStyles(xstyle: unknown): boolean {
+  return Array.isArray(xstyle)
+    ? xstyle.some(hasStyles)
+    : xstyle != null && typeof xstyle === 'object';
+}
+
 // Measure the viewport that the height budgets use. They are `dvh`, which
 // the virtual keyboard does not shrink, so `visualViewport` would differ by
 // the keyboard's height. `useMobileKeyboard` handles the keyboard and does
 // not change the detents.
 function layoutViewportHeight(): number {
   return typeof window === 'undefined' ? 0 : window.innerHeight;
+}
+
+function subscribeToResize(onChange: () => void): () => void {
+  return subscribeInput(window, 'resize', onChange);
+}
+
+function subscribeToNothing(): () => void {
+  return () => {};
 }
 
 /**
@@ -159,8 +197,8 @@ const styles = stylex.create({
     boxShadow: shadowVars['--shadow-high'],
     outline: 'none',
     overflow: 'hidden',
-    paddingBlockEnd: `calc(env(safe-area-inset-bottom, 0px) + ${OVERSCROLL_PADDING}px)`,
-    marginBlockEnd: `${-OVERSCROLL_PADDING}px`,
+    paddingBlockEnd: `calc(env(safe-area-inset-bottom, 0px) + var(--_sheet-reserve, ${MIN_RESERVE}px))`,
+    marginBlockEnd: `calc(-1 * var(--_sheet-reserve, ${MIN_RESERVE}px))`,
     // Under reduced motion no transform runs. On a coarse primary pointer the
     // entrance is an opacity cross-fade of at most 200 ms. A fine pointer gets
     // the change at once (the 0.01s collapse).
@@ -255,6 +293,10 @@ const styles = stylex.create({
     // surface behind the pill itself, fading out across the lower half so the
     // content emerging below has no visible cut line.
     backgroundImage: `linear-gradient(to bottom, ${colorVars['--color-background-surface']} 60%, transparent)`,
+    // WebKit can draw this bar under the scrolling body's own layer while the
+    // sheet's transform animates, so the pill vanishes until the sheet rests.
+    // A layer of its own keeps it above the body.
+    willChange: 'transform',
     // Drags are the handle's; a pinch still zooms the page (WCAG 1.4.4).
     touchAction: 'pinch-zoom',
     cursor: {
@@ -296,30 +338,51 @@ const styles = stylex.create({
   },
   content: {
     // Preserve the body's block formatting (including margin/float isolation)
-    // and its definite percentage-height basis. min-content lets this real
+    // and its definite percentage-height basis. fit-content lets this real
     // observed box grow with async content beyond a fixed-height viewport.
     // This box is also the sheet's container: it carries the padding and
     // publishes it, so a lone Section child escapes it exactly as in Dialog.
     display: 'flow-root',
     boxSizing: 'border-box',
     height: '100%',
-    minHeight: 'min-content',
+    // fit-content, not min-content: they are one size in the block axis, but
+    // WebKit ignores min-content on a block's min-height. There the box keeps
+    // its body's height on a budget-height sheet. Content placed directly in
+    // it then overflows the box, and its block-end padding leaves the scroll
+    // range.
+    minHeight: 'fit-content',
   },
   tallKeyboardBody: {
     scrollPaddingBlockEnd: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
+  },
+  // The inset the keyboard takes at the end of a Tall sheet's content
+  // (useMobileKeyboard), so its last control can scroll above the keyboard.
+  // It is the content box's last in-flow box, after the content's own
+  // children, not a box after the content. Firefox resolves the content's
+  // `min-height: min-content` as `auto` in the block axis. The content box
+  // then keeps the body's height while its children overflow it. An inset
+  // after that box sat inside the overflow and added no scroll range. In
+  // Firefox for Android, the body's scrollHeight was 1491 with and without a
+  // 357 px inset.
+  tallKeyboardContent: {
     '::after': {
       content: '""',
       display: 'block',
-      blockSize: 'var(--_sheet-keyboard-inset, 0px)',
+      blockSize: 0,
       pointerEvents: 'none',
     },
   },
+  keyboardInset: (inset: number) => ({
+    '::after': {
+      blockSize: inset,
+    },
+  }),
   budget: {
-    height: `calc(var(--_sheet-budget) + ${OVERSCROLL_PADDING}px)`,
+    height: `calc(var(--_sheet-budget) + var(--_sheet-reserve, ${MIN_RESERVE}px))`,
   },
   hugHeight: {
     height: 'fit-content',
-    maxHeight: `calc(${HEIGHT_BUDGETS.hug} + ${OVERSCROLL_PADDING}px)`,
+    maxHeight: `calc(${HEIGHT_BUDGETS.hug} + var(--_sheet-reserve, ${MIN_RESERVE}px))`,
   },
 });
 
@@ -413,6 +476,7 @@ function waitForTransition(
 
   let done = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let backstopMs = 0;
   const finish = () => {
     if (done) {
       return;
@@ -426,9 +490,24 @@ function waitForTransition(
     complete();
   };
   const handleTransitionEnd = (event: TransitionEvent) => {
-    if (event.target === element && event.propertyName === propertyName) {
-      finish();
+    if (event.target !== element || event.propertyName !== propertyName) {
+      return;
     }
+    // The engine cancels a transition whose end value changes mid-flight. A
+    // percentage transform does when the closing frame moves the height by a
+    // fraction of a pixel. A replacement runs on from where it was. That one
+    // ends the motion, not the cancel.
+    if (
+      event.type === 'transitioncancel' &&
+      hasRunningTransition(element, propertyName)
+    ) {
+      if (timer != null) {
+        clearTimeout(timer);
+        timer = setTimeout(finish, backstopMs);
+      }
+      return;
+    }
+    finish();
   };
   element.addEventListener('transitionend', handleTransitionEnd);
   element.addEventListener('transitioncancel', handleTransitionEnd);
@@ -479,7 +558,8 @@ function waitForTransition(
     return () => {};
   }
 
-  timer = setTimeout(finish, transitionMs + TRANSITION_BACKSTOP_BUFFER_MS);
+  backstopMs = transitionMs + TRANSITION_BACKSTOP_BUFFER_MS;
+  timer = setTimeout(finish, backstopMs);
   return () => {
     if (timer != null) {
       clearTimeout(timer);
@@ -487,6 +567,19 @@ function waitForTransition(
     element.removeEventListener('transitionend', handleTransitionEnd);
     element.removeEventListener('transitioncancel', handleTransitionEnd);
   };
+}
+
+// Whether a CSS transition of `propertyName` still runs on `element`.
+function hasRunningTransition(
+  element: HTMLElement,
+  propertyName: string,
+): boolean {
+  return (element.getAnimations?.() ?? []).some(
+    animation =>
+      (animation as Animation & {transitionProperty?: string})
+        .transitionProperty === propertyName &&
+      (animation.playState === 'running' || animation.playState === 'paused'),
+  );
 }
 
 function parseTransitionTime(value: string): number | null {
@@ -525,6 +618,9 @@ export function BottomSheetPanel({
   ...props
 }: BottomSheetPanelProps) {
   const elementRef = useRef<HTMLDivElement | null>(null);
+  const dismissKeyboardRef = useRef<
+    ((focusTarget?: HTMLElement) => void) | null
+  >(null);
   const previousStateRef = useRef(state);
   const reactivatedEntranceRef = useRef(false);
   const onMotionStartRef = useRef(onMotionStart);
@@ -591,6 +687,24 @@ export function BottomSheetPanel({
 
   // A caller's height owns the element's height: the drag never writes it.
   const consumerHeight = style?.height;
+  // StyleX styles and a class name can size the sheet too. Their rules are
+  // only class names here, so any of them counts as a size.
+  const isSizedByCaller =
+    BLOCK_SIZE_PROPERTIES.some(property => style?.[property] != null) ||
+    hasStyles(xstyle) ||
+    (className != null && className !== '');
+  // Only a finger stretches the sheet past MIN_RESERVE, so a device with no
+  // touch pointer keeps the smallest reserve. So does a sheet the caller
+  // sizes, which nothing extends by the reserve; the stretch stops at it.
+  const hasTouchPointer = useMediaQuery('(any-pointer: coarse)');
+  const tracksViewport = isPresented && hasTouchPointer && !isSizedByCaller;
+  const viewportHeight = useSyncExternalStore(
+    tracksViewport ? subscribeToResize : subscribeToNothing,
+    () => (tracksViewport ? layoutViewportHeight() : 0),
+    () => 0,
+  );
+  const reserve =
+    viewportHeight > 0 ? sheetReserve(viewportHeight) : MIN_RESERVE;
   const {
     contentProps,
     handleProps,
@@ -600,7 +714,6 @@ export function BottomSheetPanel({
     dragOffset,
     settledOffset,
     isDragging,
-    isTraveling,
     isDismissedByTouchDrag,
     sheetHeight,
     scrollPreservationInset,
@@ -611,9 +724,13 @@ export function BottomSheetPanel({
     isOpen: isInteractive,
     isOpenRequested: isOpenRequested ?? isInteractive,
     canDismiss: isSwipeDismissAllowed,
-    offscreenBlockEndInset: OVERSCROLL_PADDING,
+    offscreenBlockEndInset: reserve,
     onDismiss,
     snapHeights,
+    onTravelStart: () => {
+      // Focusing the sheet dismisses the keyboard as the sheet starts to move.
+      dismissKeyboardRef.current?.(elementRef.current ?? undefined);
+    },
     onScrimOpacity,
     hasFixedHeight: consumerHeight != null,
   });
@@ -647,17 +764,19 @@ export function BottomSheetPanel({
     isPresentedRef.current = isPresented;
     sheetRef(isPresented ? elementRef.current : null);
   }, [isPresented, sheetRef]);
-  useMobileKeyboard({
-    bodyRef: bodyElementRef,
-    bottomClearance: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
-    isEnabled: height === 'tall',
-    isFullyExpanded: settledOffset === 0,
-    isPageScrollLocked,
-    isSheetTraveling: isTraveling,
+  const keyboard = useMobileKeyboard(elementRef, {
+    move: 'ride',
+    inset: true,
+    offset: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
+    isEnabled: height === 'tall' && isPresented,
+    isExpanded: settledOffset === 0,
     isOpen: isInteractive,
-    isPresented,
-    sheetRef: elementRef,
+    isPageScrollLocked,
   });
+  const keyboardInset = keyboard.inset;
+  // The drag's own callback dismisses the keyboard as the sheet starts to
+  // move. It runs in the gesture, so it reads the newest dismiss.
+  dismissKeyboardRef.current = keyboard.dismiss;
   // Keep controller registration attached to one stable host ref. React
   // detaches an old callback ref when a consumer supplies a new identity; if
   // that public ref were merged with setElement, an ordinary parent rerender
@@ -671,6 +790,8 @@ export function BottomSheetPanel({
   const isCoarseCrossFade = useMediaQuery(REDUCED_MOTION_COARSE_QUERY);
   const isCrossFade =
     isCoarseCrossFade || (isReducedMotion && isDismissedByTouchDrag);
+  // Syncs the motion with the panel's CSS transition. The motion completes when
+  // that transition ends.
   useLayoutEffect(() => {
     if (motion == null) {
       return;
@@ -866,6 +987,7 @@ export function BottomSheetPanel({
         className,
         {
           ['--_sheet-budget' as string]: budget,
+          ['--_sheet-reserve' as string]: `${reserve}px`,
           ...(isInteractive
             ? gestureStyle
             : isRetained || isClosing
@@ -902,6 +1024,10 @@ export function BottomSheetPanel({
             getContentProps<HTMLDivElement>(
               stylex.props(
                 styles.content,
+                height === 'tall' && styles.tallKeyboardContent,
+                height === 'tall' &&
+                  keyboardInset > 0 &&
+                  styles.keyboardInset(keyboardInset),
                 ...container(
                   usesThemePadding
                     ? {useThemeDefault: 'bottom-sheet'}

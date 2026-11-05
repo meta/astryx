@@ -59,6 +59,7 @@ import {useLayerInternal} from '../Layer/useLayer';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {currentGesture} from '../Layer/gestureCounter';
+import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {MenuBottomSheetActionList} from '../DropdownMenu/MenuBottomSheetActionList';
 import {menuBottomSheetStyles} from '../DropdownMenu/menuBottomSheet.stylex';
 import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
@@ -531,6 +532,7 @@ export function ContextMenu({
         return;
       }
       if (menu && !menu.contains(e.target as Node)) {
+        noteOutsideDismissal(menu.ownerDocument);
         closeMenu();
       }
     };
@@ -712,14 +714,14 @@ export function ContextMenu({
   );
   const handleTriggerTouchEnd = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
-      handleLongPressTouchEnd();
+      handleLongPressTouchEnd(event);
       onTouchEndProp?.(event);
     },
     [handleLongPressTouchEnd, onTouchEndProp],
   );
   const handleTriggerTouchCancel = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
-      handleLongPressTouchCancel();
+      handleLongPressTouchCancel(event);
       onTouchCancelProp?.(event);
     },
     [handleLongPressTouchCancel, onTouchCancelProp],

@@ -43,9 +43,10 @@ import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
-import {overlayPaddingReset} from '../Layout/padding.stylex';
+import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isRtlElement} from '../hooks/isRtlElement';
@@ -54,6 +55,8 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Lightbox/Lightbox.generated';
+import {isRenderable} from '../utils/isRenderable';
+import {prepareFocusReturnOnRemoval} from '../utils/focusReturn';
 
 registerEnglishFallback(english);
 /**
@@ -339,6 +342,9 @@ export function Lightbox({
   const t = useComponentTranslator();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const mergedDialogRef = useMergedRefs(ref, dialogRef);
+  // Native showModal() lets Tab leave for the browser's own UI, so the shared
+  // module wraps it.
+  useFocusRegionContainment(dialogRef, isOpen);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageWrapperRef = useRef<HTMLDivElement>(null);
   const triggerElementRef = useRef<Element | null>(null);
@@ -427,6 +433,7 @@ export function Lightbox({
   // Open/close dialog. The dialog renders only with an item, so a viewer
   // opened before its first item arrives opens when that item does.
   const hasItem = currentItem != null;
+  // Syncs the native dialog with `isOpen` through `showModal()` and `close()`.
   useIsomorphicLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog || !hasItem) {
@@ -443,6 +450,23 @@ export function Lightbox({
       }
     }
   }, [isOpen, hasItem]);
+
+  // A viewer that unmounts while open (rendered only while open, or removed
+  // with the rest of a view) never runs the close branch above. Focus the
+  // removal lost goes back to the opener while the opener is still on the
+  // page.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog == null) {
+      return;
+    }
+    const returnFocusOnRemoval = prepareFocusReturnOnRemoval(dialog);
+    return () => {
+      if (dialog.open) {
+        returnFocusOnRemoval(triggerElementRef.current);
+      }
+    };
+  }, [hasItem]);
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
@@ -762,7 +786,7 @@ export function Lightbox({
                   )}
                 </div>
 
-                {currentItem.caption && (
+                {isRenderable(currentItem.caption) && (
                   <div {...stylex.props(styles.caption)}>
                     {currentItem.caption}
                   </div>

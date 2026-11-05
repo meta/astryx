@@ -5,7 +5,7 @@
 /**
  * @file Dialog.tsx
  * @input Uses React, DialogHTMLAttributes, ReactNode, container (Layout), DialogContext, layerTextReset,
- *   layerStructureReset, modalOutlet, interactionModality, chainEventHandlers
+ *   layerStructureReset, modalOutlet, interactionModality, chainEventHandlers, holdEntranceInput
  * @output Exports Dialog component, DialogProps, DialogVariant, DialogPurpose types
  * @position Core implementation; consumed by index.ts, tested by Dialog.test.tsx
  *
@@ -27,6 +27,7 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Dialog/Dialog.doc.mjs (props table, features, implementation notes)
  * - /packages/core/src/Dialog/Dialog.test.tsx (tests for new/changed behavior)
+ * - /packages/core/src/Dialog/__tests__/DialogTouchEntrance.interaction.browser.spec.ts (the touch entrance hold)
  * - /packages/core/src/Dialog/index.ts (exports if types change)
  * - /apps/storybook/stories/Dialog.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/Dialog/ (showcase blocks)
@@ -51,7 +52,10 @@ import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
+import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {useBackdropPress} from '../Layer/useBackdropPress';
+import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 import {useModalOutlet} from '../Layer/modalOutlet';
 import {
   colorVars,
@@ -80,10 +84,16 @@ import {themeProps} from '../utils/themeProps';
 import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
-import {focusForLastInput} from '../utils/focusReturn';
+import {
+  focusForLastInput,
+  prepareFocusReturnOnRemoval,
+  returnFocusForLastInput,
+} from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+
+type PointerHandler = (event: React.PointerEvent<HTMLDialogElement>) => void;
 /**
  * Calculate a directional translate offset for dialog entry animation.
  * Returns a normalized vector from the trigger element toward the viewport
@@ -186,8 +196,22 @@ const styles = stylex.create({
     position: 'fixed',
     margin: 'auto',
     padding: 0,
-    borderWidth: 0,
-    borderStyle: 'none',
+    // The backdrop does not blur the page. Forced colors override the
+    // backdrop's colour, so a 1px border keeps the modal separate from the
+    // page. It is a border, not an outline: the focus ring
+    // (focusOutlineProps) owns the outline longhands on this element.
+    borderWidth: {
+      default: 0,
+      '@media (forced-colors: active)': 1,
+    },
+    borderStyle: {
+      default: 'none',
+      '@media (forced-colors: active)': 'solid',
+    },
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
     backgroundColor: colorVars['--color-background-surface'],
     '--_dialog-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_dialog-radius)',
@@ -233,11 +257,10 @@ const styles = stylex.create({
   openSettled: {
     animationName: 'none',
   },
-  // Backdrop using ::backdrop pseudo-element
+  // No backdrop-filter: a full-viewport blur is costly to repaint.
   backdrop: {
     '::backdrop': {
       backgroundColor: colorVars['--color-overlay'],
-      backdropFilter: 'blur(2px)',
     },
   },
   fullscreen: {
@@ -246,6 +269,8 @@ const styles = stylex.create({
     maxWidth: '100dvw',
     maxHeight: '100dvh',
     borderRadius: 0,
+    // Nothing of the page shows around a full-screen dialog: no edge.
+    borderWidth: 0,
     margin: 0,
     inset: 0,
   },
@@ -526,6 +551,9 @@ export function Dialog({
     props['aria-label'] != null || props['aria-labelledby'] != null;
 
   const dialogRef = useRef<HTMLDialogElement>(null);
+  // Native showModal() lets Tab leave for the browser's own UI, so the shared
+  // module wraps it. An inline preview is not modal and contains nothing.
+  useFocusRegionContainment(dialogRef, isOpen && !isInline);
 
   // Callback ref on the <dialog>: sync the default aria-labelledby from the
   // DialogHeader title (if one rendered) in the same commit, with no second
@@ -585,7 +613,8 @@ export function Dialog({
   const allowEscape = purpose !== 'required';
   const allowBackdropClick = purpose === 'info';
 
-  // Handle open/close state — skip for inline rendering
+  // Syncs the native dialog with `isOpen` through `showModal()` and `close()`.
+  // An inline dialog is not in the top layer, so it skips this.
   useEffect(() => {
     if (isInline) {
       return;
@@ -620,6 +649,11 @@ export function Dialog({
           focusForLastInput(autofocusTarget);
         }
       }
+      // Under a coarse primary pointer, a tap or a drag during the entrance
+      // reaches nothing. Keys and assistive technology stay live. The hold
+      // ends with the entrance, or with this effect's cleanup on a close or
+      // unmount.
+      return holdEntranceInput(dialog) ?? undefined;
     } else {
       if (dialog.open) {
         dialog.close();
@@ -628,11 +662,23 @@ export function Dialog({
       // the last input in that element's own document calls for.
       const trigger = triggerElementRef.current;
       if (trigger) {
-        focusForLastInput(trigger);
+        returnFocusForLastInput(trigger);
       }
       triggerElementRef.current = null;
     }
   }, [isOpen, isInline]);
+
+  // A dialog that unmounts while open (rendered only while open, or removed
+  // with the rest of a view) never runs the close branch above. Focus the
+  // removal lost goes back to the opener.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (isInline || dialog == null) {
+      return;
+    }
+    const returnFocusOnRemoval = prepareFocusReturnOnRemoval(dialog);
+    return () => returnFocusOnRemoval(triggerElementRef.current);
+  }, [isInline]);
 
   // Host app-global surfaces (toasts) inside this modal while it is open, so
   // they stay visible and operable above it.
@@ -687,16 +733,16 @@ export function Dialog({
     }
   }, [isOpen, isInline, hasConsumerName, titleId]);
 
-  // Handle backdrop click — when the user clicks the ::backdrop pseudo-element,
-  // the event target is the <dialog> element itself; clicks on child content
-  // always target the child. This avoids false positives from native browser
+  // A press on the ::backdrop targets the <dialog> itself, so native browser
   // popups (date pickers, selects, color pickers) that render outside the
-  // dialog's bounding rect.
-  const handleClick = (event: React.MouseEvent<HTMLDialogElement>) => {
-    if (event.target === event.currentTarget && allowBackdropClick) {
-      onOpenChange(false);
-    }
-  };
+  // dialog's rect never count. The press must start and end there.
+  const handleBackdropPress = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+  const backdropPress = useBackdropPress(
+    handleBackdropPress,
+    allowBackdropClick,
+  );
 
   // The native `cancel` event is the browser's own close-watcher firing: an
   // Android back gesture, or a close request the stack never saw a press for.
@@ -854,8 +900,20 @@ export function Dialog({
       // written.
       {...layerClickBoundary({
         ...safeProps,
-        onClick: chainEventHandlers(handleClick, onClickProp),
+        onClick: chainEventHandlers(backdropPress.onClick, onClickProp),
       })}
+      onPointerDownCapture={chainEventHandlers(
+        backdropPress.onPointerDownCapture,
+        safeProps.onPointerDownCapture as PointerHandler | undefined,
+      )}
+      onPointerUpCapture={chainEventHandlers(
+        backdropPress.onPointerUpCapture,
+        safeProps.onPointerUpCapture as PointerHandler | undefined,
+      )}
+      onPointerCancelCapture={chainEventHandlers(
+        backdropPress.onPointerCancelCapture,
+        safeProps.onPointerCancelCapture as PointerHandler | undefined,
+      )}
       onCancel={handleCancel}
       aria-modal={isHydrating ? undefined : 'true'}
       // The default aria-labelledby (from a DialogHeader title) is set

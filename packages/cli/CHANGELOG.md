@@ -1,5 +1,98 @@
 # @xds/cli
 
+# 0.7.8
+
+#### Experimental APIs
+
+- `astryx` discovery lists the lab's new `SelectableCardGroup`.
+
+#### New Features
+
+- In Chrome on Android, on a touch screen, a Tall BottomSheet places the focused field just above the on-screen keyboard when Chrome reports it, then rides the rest of Gboard's slide; through the hide the sheet's scroll room stays while its content rides down, so nothing jumps while the keyboard is still on screen. Under Reduce Motion it cross-fades instead of moving. The browser-support guide says so.
+- A component doc can mark its component deprecated with `deprecated: {replacement, description}`: the `name` of the component to use instead and the modernization route. `astryx search` results and `astryx build` kit entries for that component carry the field as `deprecated` (a `deprecated:` line in their text output), and the docsite shows a Deprecated badge in the component's page header (beside any stability badge) and a notice at the top of its page that names and links the replacement, and labels it Deprecated on its components index tile and in site search. `BottomSheetSwitcher` sets it, naming `BottomSheet`; the component keeps working unchanged.
+- `createAnimator(element)` and its hook `useAnimator(ref)` animate one element with the motion Astryx's components use; the hook takes the element's ref, so a gesture hook can share the element. `animate` springs `x`, `y`, `scale`, `rotate` and `opacity` to a target on the state-change motion, `decay` coasts any of them from a release velocity, `set` jumps, `get` and `getVelocity` read, and `stop` halts; `animate` and `decay` return a promise. Reduce Motion is planned for every call. `createAnimator` is exported from the package root and `useAnimator` from `@astryxdesign/core/hooks`; the CLI's templates gain a playing-cards example of each.
+- `astryx upgrade` gains the `promote-tokenizer-presentation` codemod. It rewrites a static `experimental={{presentation: x}}` on Tokenizer, the 0.7.7 spelling that Tokenizer no longer reads, to `presentation={x}`. Where it cannot prove the rewrite, including any Tokenizer that spreads props (a spread may also set `presentation`), it leaves the call unchanged with a TODO.
+
+#### Fixes
+
+- `astryx component` takes a component's exact name in another case as that component's, never a module's that only shares the spelling. `tokenizer` opens Tokenizer's doc instead of CodeBlock's, which it reached through `CodeBlock/tokenizer.ts`. `--source` with `tokenizer`, `slider`, `switch` or `progressBar` no longer prints `CodeBlock/tokenizer.ts` or the motion tables in `motion/uikit/`, and answers `ERR_NO_SOURCE`, as `--source badge` does.
+- The theme token `--duration-exit`, the standard dismissal duration, now exists. It defaults to `var(--duration-fast)`, so it follows a theme's `tempo` through that token, and a theme can set it like any duration token. Before, a theme or component that read `var(--duration-exit)` found no value. The motion and token docs, and the theme template's token list, name it.
+
+#### Performance
+
+- `integrationComponentConflicts()`, `integrationDocConflicts()` and `integrationCheck()` from `@astryxdesign/cli/api`, and `doctor integration components`, `doctor integration docs` and `integration check`, find Core's components from the folder listings they already read, with far fewer file system calls. Their results are unchanged.
+- A run of `astryx` loads only the command it names, so it starts with less work: `astryx --version` uses about 0.31 s less CPU, and `astryx docs --json`, `astryx component --list` and `astryx theme build` about 0.25–0.3 s less. Help, the manifest and an unknown command still load every command. Output and exit codes are unchanged.
+- `astryx search` and `astryx build` parse a page template's source for the components it renders only when the query could match one of them. A query no page renders parses only the few pages whose source holds an escape, and a first search for it uses about 20% less CPU. A query whose words name components on most pages still parses most of them and can take up to about 4% more. Results are unchanged.
+
+#### Documentation
+
+- The browser-support guide has a section on the on-screen keyboard: a fully expanded Tall BottomSheet measures it as the layout viewport's height minus the visual viewport's, and keeps the focused field above it in Safari on iOS, Firefox for Android and Chrome on Android. In Chrome, by default (`interactive-widget=resizes-visual`), the sheet adds its scroll room once Chrome reports the keyboard; with `interactive-widget=resizes-content` Chrome shrinks the page for the keyboard itself and the sheet changes nothing. Your app owns its viewport `<meta>` element; Astryx never sets it.
+- Hook docs for `useLightbox`, so `astryx hook useLightbox` and `astryx search` return it, and a `useLightbox — Gallery Grid` example block: a grid of photo thumbnails that opens a fullscreen gallery at the clicked item.
+- A new `useAnnounce — Filter Result Count` example block shows the hook on a product filter: once typing pauses for 500 ms, a screen reader hears the result count ("3 results", or "No results"). The count has its own `hasReplace` instance, as the hook's docs advise for a changing value. Copy it with `astryx template useAnnounceHookUsage <path>`.
+- A new `useClipboard — Share Link` example block shows the hook on a share card: Copy writes the invite link, the button reads "Copied" while `isCopied` is true and resets on the hook's timer, and a screen reader hears "Link copied". Copy it with `astryx template useClipboardHookUsage <path>`.
+- A new `useFocusTrap — Quick Edit Panel` example block traps focus in a custom quick-edit panel that is not built on Dialog: `focusFirst` moves focus to its field on open, Tab and Shift+Tab stay inside it, Escape closes it through `onEscape`, and closing returns focus to the Quick edit button. Copy it with `astryx template useFocusTrapHookUsage <path>`.
+- A new `useHotkeys — Search and Help Shortcuts` example block shows the hook on a page header: "/" focuses the search field and "?" opens the shortcut help, typing either character in the field does not trigger them, and a switch turns the single-key shortcuts off through `isDisabled`. Copy it with `astryx template useHotkeysHookUsage <path>`.
+- A new `useInputStatusIcon — Coupon Code Status` example block shows a custom bordered input that takes its status affordance from `useInputStatusIcon`: a wrong code shows the error status and the valid code shows success, and the variant switch moves between a glyph with a message below (attached), no icon on the field (detached), and a focusable button with a tooltip that keyboard and screen-reader users can reach (tooltip). Copy it with `astryx template useInputStatusIconHookUsage <path>`.
+- The `useKeyboardHint — Arrow-key Hint` example block now calls `useKeyboardHint` itself instead of relying on Toolbar, which calls the hook internally. It is a five-star rating with one Tab stop, where Left and Right change the rating: tabbing into it shows the "← → to navigate" hint, the first arrow press dismisses it, and tabbing back in does not show it again. Copy it with `astryx template useKeyboardHintHookUsage <path>`.
+- A new `useLocale — Invoice Summary` example block formats an invoice date and amount with `Intl` using the locale from `useLocale`, so switching the provider from English to German changes "Nov 2, 2026 · $1,234.50" to "2. Nov. 2026 · 1.234,50 $" with no second locale source. Copy it with `astryx template useLocaleHookUsage <path>`.
+- A new `useScrollableArea — Activity Log Panel` example block shows a fixed-height Activity log whose entries scroll. `useScrollableArea` makes the panel a keyboard tab stop only when its entries overflow, shows a top or bottom edge shadow only where entries are hidden, and stops a scroll at the end from scrolling the page. Add entry flips it from not scrollable to scrollable. Copy it with `astryx template useScrollableAreaHookUsage <path>`.
+- A new `useTreeFocus — Keyboard File Tree` example block builds a small file tree from plain rows with tree roles and gives it the WAI-ARIA tree keyboard model with `useTreeFocus`: arrow keys move over the visible rows and open, enter, leave or close folders, Home and End jump to the ends, a typed letter jumps to a matching name, Enter opens a file, and one row is the tab stop. Copy it with `astryx template useTreeFocusHookUsage <path>`.
+- A new `useTypeahead — Type to Focus a Country` example block adds type-to-focus to a country list of buttons. Typing "can" focuses Canada, pressing "b" again and again cycles through Belgium, Brazil and Bulgaria, and "e" finds Éire with the accent ignored. `useTypeahead` reports each match through `onMatch`, and `useListFocus` moves focus. Copy it with `astryx template useTypeaheadHookUsage <path>`.
+
+#### Other Changes
+
+- Internal: the file read behind `astryx doctor --built` takes its file limit as an option, 20,000 unless a caller passes one, and the checks' messages name the limit the read used. The command's checks and output are unchanged. Not exported from the package entry point.
+- `astryx discover` no longer lists the Lab components `MobileTokenizer` and `MobilePowerSearch`, which are removed from `@astryxdesign/lab`; their touch flows are Core's Tokenizer and PowerSearch `presentation` sheets.
+- Internal: the public-import check's `declaredTargets` and `missingNames` are exported from their foundation module, so the docsite's production registry judges a copied example's imports by the same rule. The CLI's checks and their output are unchanged. Not exported from the package entry point.
+- Internal: a gap-report handler's time budget starts once its module has loaded. Starting its worker and loading the module have the default deadline, so a short budget in a contract test no longer covers a slow start on a busy machine. The 30-second handler budget is unchanged.
+- Internal: generating the CLI's type declarations no longer fails when builds in two checkouts run at once on one machine, and it no longer needs pnpm on PATH.
+- The Tokenizer blocks and page templates that show a prop the bottom sheet does not render (`hasClear`, `endContent`, `tokenOverflowBehavior`, `hasEntriesOnFocus`, `renderToken`) pass `presentation="popover"`, so they keep the inline field on phones under Tokenizer's new `'adaptive'` default.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @10k11
+- @cixzhang
+- @Geervan
+- @imdreamrunner
+- @kyu-rong
+- @MannXo
+- @vjeux
+
+---
+
+# 0.7.7
+
+#### New Components
+
+- `astryx discover` no longer lists `InfoTip` among the components `@astryxdesign/lab` contributes: InfoTip is a Core component now, described by `astryx component InfoTip`.
+
+#### Performance
+
+- With TypeScript 5.3 or later, `validateIntegration()`, `integrationComponentConflicts()` and `integrationCheck()` from `@astryxdesign/cli/api`, and the commands that run them, reuse each TypeScript file a check parsed for later checks in the same process that parse it the same way, while the file is unchanged, instead of parsing it again for every check. Their results are unchanged.
+
+#### Documentation
+
+- Hook docs for `useOutlineFromMarkdown`, so `astryx hook useOutlineFromMarkdown` and `astryx search` return it, and a `useOutlineFromMarkdown — Docs Article` example block: a Markdown article and an Outline built from the same string through the hook, with a button that adds a section and its linked entry.
+- The `usePressFeedback — Pressable Card` example now shows a small card in real playing-card proportions, with corner indices, a full face and a patterned back, and a line under it that says what to try: press and hold to see the press, tap, click, Enter or Space to flip. Copying the example (`astryx template`, the docsite's Code tab and Install) still gives you only the hook on a Card (`width={120}`, `padding={1}`) with one `<Text>` placeholder: the hint line is left out, not replaced.
+- A new `useCombobox — Assign To Field` example block spreads the field, listbox and option props from `useCombobox` onto a `TextInput` and a list of `Item` rows: typing filters a list of teammates, ArrowUp and ArrowDown move the active option while focus stays in the input, Enter or a press picks one, and Escape closes the list. Copy it with `astryx template useComboboxHookUsage <path>`.
+- A new `useGridFocus — Color Swatch Grid` example block wires `useGridFocus` to a color swatch picker in rows of eight: the grid has one Tab stop, the arrow keys move focus cell to cell, Home and End jump within a row, Ctrl+Home and Ctrl+End jump to the corners. Each swatch is a button, so Enter or a click picks it. Copy it with `astryx template useGridFocusHookUsage <path>`.
+- A new `useListFocus — Recent Files` example block gives a list of buttons keyboard navigation from `useListFocus`: ArrowUp and ArrowDown move between rows, Home and End jump to the first and last row, focus wraps at the ends, and only one row is in the tab order. Copy it with `astryx template useListFocusHookUsage <path>`.
+- A new `useOverflow — Editor Toolbar` example block shows the hook on its own: eight toolbar actions sit in a card you can resize, a hidden copy of the row holds every action plus the `More` menu marked `data-overflow-indicator`, and the actions that do not fit move into the `More` menu with no flicker. Copy it with `astryx template useOverflowHookUsage <path>`.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @hskl18
+- @kyu-rong
+- @maheshrijal
+- @vjeux
+
+---
+
 # 0.7.6
 
 #### New Features

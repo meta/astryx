@@ -35,21 +35,23 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {Field} from '../Field/Field';
+import {InputClearButton} from '../Field/InputClearButton';
 import {
-  Field,
-  InputClearButton,
-  type InputStatus,
   inputWrapperStyles,
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-} from '../Field';
-import {renderIconSlot, type IconType} from '../Icon';
+} from '../Field/inputStyles.stylex';
+import type {InputStatus} from '../Field/types';
+import {renderIconSlot, type IconType} from '../Icon/Icon';
 import {isRenderable} from '../utils/isRenderable';
-import {Spinner} from '../Spinner';
-import {useTooltip} from '../Tooltip';
-import {VisuallyHidden} from '../VisuallyHidden';
-import {getInputARIA, isImeKeyEvent} from '../utils';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
+import {Spinner} from '../Spinner/Spinner';
+import {useTooltip} from '../Tooltip/useTooltip';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
+import {getInputARIA} from '../utils/inputAria';
+import {isImeKeyEvent} from '../utils/ime';
 import {
   textEntryTraitAttributes,
   type TextEntryTraitProps,
@@ -109,7 +111,7 @@ export type {
   InputStatus as TextInputStatus,
   InputStatusType as TextInputStatusType,
 } from '../Field';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
@@ -373,13 +375,7 @@ export function TextInput({
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   // A disabled field keeps its tab stop but, like a natively disabled one,
   // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
-  const fieldProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const fieldProps = withholdCallerHandlers(rest, isDisabled);
   const size = useSize(sizeProp, 'md');
 
   const generatedID = useId();
