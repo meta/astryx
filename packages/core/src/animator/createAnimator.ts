@@ -18,9 +18,9 @@
  */
 
 import {
-  createMotionAnimator,
+  createMotionEngine,
   SETTLE_THRESHOLD,
-  type Animator as MotionAnimator,
+  type Animator as MotionEngine,
   type MotionCurve,
   type MotionProperty,
   type MotionValues,
@@ -199,7 +199,7 @@ export function createAttachableAnimator(): {
   readonly animator: Animator;
   readonly attach: (element: HTMLElement | null) => void;
 } {
-  const motion: MotionAnimator = createMotionAnimator(null);
+  const motion: MotionEngine = createMotionEngine(null);
   // Calls do nothing while no element is attached, before the ref attaches
   // or after it lets go. They also do nothing after destroy, and animate and
   // decay then resolve at once.
