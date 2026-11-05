@@ -707,6 +707,73 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     expect(result.current.visibleCount).toBe(3);
   });
 
+  // Under observeParent, OverflowList fills its parent's width only while
+  // items are collapsed (component:OverflowList FR4). A fold that shows or
+  // hides the indicator changes the list's width inside the observed parent,
+  // which can change the parent's height when a sibling wraps.
+  function boxWithParent(parentWidth: number): {
+    container: HTMLElement;
+    parent: {clientWidth: number} & Element;
+  } {
+    vi.stubGlobal('getComputedStyle', () => ({
+      paddingLeft: '0px',
+      paddingRight: '0px',
+    }));
+    const parent = {clientWidth: parentWidth} as unknown as {
+      clientWidth: number;
+    } & Element;
+    const container = {offsetWidth: 0} as unknown as HTMLElement;
+    Object.defineProperty(container, 'parentElement', {
+      value: parent,
+      configurable: true,
+    });
+    return {container, parent};
+  }
+
+  it.each([
+    ['shows', 200, 100, 3, 1],
+    ['hides', 100, 200, 1, 3],
+  ])(
+    'renders after paint when an observeParent fold %s the indicator',
+    async (_label, fromWidth, toWidth, before, after) => {
+      const {result} = renderHook(() =>
+        useOverflow(3, {gap: 10, behavior: 'observeParent'}),
+      );
+      const {container, parent} = boxWithParent(fromWidth);
+      act(() => {
+        result.current.measureRef(mockMeasure([50, 50, 50], 30));
+        result.current.containerRef(container);
+      });
+      expect(result.current.visibleCount).toBe(before);
+
+      parent.clientWidth = toWidth;
+      await deliverBeforePaint(parent);
+      expect(result.current.visibleCount).toBe(before);
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      expect(result.current.visibleCount).toBe(after);
+    },
+  );
+
+  it('renders before paint when an observeParent fold keeps the indicator', async () => {
+    const {result} = renderHook(() =>
+      useOverflow(4, {gap: 10, behavior: 'observeParent'}),
+    );
+    const {container, parent} = boxWithParent(160);
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50, 50], 30));
+      result.current.containerRef(container);
+    });
+    expect(result.current.visibleCount).toBe(2);
+
+    parent.clientWidth = 100;
+    await deliverBeforePaint(parent);
+    expect(result.current.visibleCount).toBe(1);
+    expect(result.current.hasOverflow).toBe(true);
+  });
+
   it('measures every list that one delivery reports, then renders once', async () => {
     let renders = 0;
     const {result} = renderHook(() => {

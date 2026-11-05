@@ -351,7 +351,16 @@ export function useOverflow(
             indicatorFirst: collapseFrom === 'start',
           };
         };
+        // Under observeParent the list fills its parent's width only while
+        // items are collapsed. A fold that shows or hides the indicator
+        // changes that width, which can change the observed parent's height
+        // when a sibling wraps.
+        const changesParentFill =
+          observeParent &&
+          appliedRef.current.visibleCount < itemCount !==
+            nextVisible < itemCount;
         if (
+          changesParentFill ||
           canChangeListHeight(
             renderedSet(appliedRef.current.visibleCount),
             renderedSet(nextVisible),
