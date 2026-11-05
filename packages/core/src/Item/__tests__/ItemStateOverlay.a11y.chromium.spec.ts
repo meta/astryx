@@ -5,8 +5,8 @@
  * @file ItemStateOverlay.a11y.chromium.spec.ts
  * @input The built Core/Item "States" story; real Chromium mouse input
  * @output Browser evidence that a highlighted or selected row still paints
- *   the hover and a mouse press's `:active` overlay over its own fill, and
- *   that its fill at rest is unchanged
+ *   the hover and a mouse press's `:active` overlay over its own fill, as a
+ *   row at rest does, and that its fill returns once the pointer leaves
  * @position Chromium proof for component:Item FR9 and design:user-states (the
  *   pressed overlay composes over a persistent state fill). jsdom resolves no
  *   cascade, so only a browser shows which paint wins.
@@ -46,7 +46,8 @@ async function colourAt(page: Page, x: number, y: number): Promise<Rgb> {
 const differs = (a: Rgb, b: Rgb) => a.some((channel, i) => channel !== b[i]);
 
 for (const mode of ['light', 'dark'] as const) {
-  for (const label of ['Highlighted', 'Selected']) {
+  // Rest is the control: a row with no state fill, which has always painted both.
+  for (const label of ['Rest', 'Highlighted', 'Selected']) {
     test(`a ${label.toLowerCase()} row paints hover and press over its fill (${mode})`, async ({
       page,
     }) => {
