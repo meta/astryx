@@ -70,18 +70,25 @@ describe('run-named.sh', () => {
 });
 
 describe('run-named.sh on a failing test run', () => {
-  // Vitest's shape: a FAIL line, the assertion, and the stack line naming the
-  // test file, with colour codes as a CI terminal gets them.
+  // Vitest's shape in CI: a passing test's console output (which can hold
+  // "Error:"), its github-actions annotation, then the failure report after
+  // the "Failed Tests" banner, with colour codes.
   const vitestFailure = [
     'printf "\\033[32m ✓\\033[39m |node| a.test.mjs (3 tests)\\n"',
+    'printf "stderr | src/frontmatter.test.tsx > rejects bad metadata\\n"',
+    'printf "TypeError: frontmatter metadata must be finite JSON-like data\\n"',
+    'printf "::error file=/repo/.github/scripts/ci-test-routing.test.mjs,line=287,column=45::AssertionError: expected 1 to be 2\\n"',
+    'printf "\\033[31m⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯\\033[39m\\n"',
     'printf "\\033[31m FAIL \\033[39m |node| .github/scripts/ci-test-routing.test.mjs > ci.yml test routing > splits each lane\\n"',
-    'printf "AssertionError: expected 1 to be 2 // 100%% sure\\n"',
+    'printf "AssertionError: expected 1 to be 2\\n"',
     'printf " ❯ .github/scripts/ci-test-routing.test.mjs:287:45\\n"',
     'printf " Test Files  1 failed | 1 passed (2)\\n"',
     'exit 1',
   ].join('; ');
+  const afterGroup = result =>
+    result.stdout.slice(result.stdout.indexOf('::endgroup::'));
 
-  it('prints the failure lines after the group and names the first failing file and line', () => {
+  it("prints Vitest's failure report lines after the group", () => {
     const result = run(
       'Tests that read source files',
       '--',
@@ -90,35 +97,28 @@ describe('run-named.sh on a failing test run', () => {
       vitestFailure,
     );
     expect(result.status).toBe(1);
-    const after = result.stdout.slice(result.stdout.indexOf('::endgroup::'));
+    const after = afterGroup(result);
     expect(after).toContain(
-      'Tests that read source files failed. Its failure lines:',
+      'Tests that read source files failed. Its failure lines:\n FAIL  |node| .github/scripts/ci-test-routing.test.mjs > ci.yml test routing > splits each lane\nAssertionError: expected 1 to be 2\n',
     );
-    expect(after).toContain(
-      ' FAIL  |node| .github/scripts/ci-test-routing.test.mjs > ci.yml test routing > splits each lane',
-    );
-    expect(after).toContain('AssertionError: expected 1 to be 2');
     expect(after).not.toContain('\u001b[');
-    expect(after).not.toContain('a.test.mjs (3 tests)');
-    const error = after.split('\n').find(line => line.startsWith('::error '));
-    expect(error).toMatch(
-      /^::error file=\.github\/scripts\/ci-test-routing\.test\.mjs,line=287,title=Tests that read source files failed::Tests that read source files exited with status 1\. First failure: FAIL {2}\|node\| /,
-    );
+    // A passing test's console output is not a failure line.
+    expect(after).not.toContain('frontmatter');
   });
 
-  it('escapes a percent sign in the annotation and keeps it on one line', () => {
+  it("annotates once: Vitest's own annotation is not echoed, and run-named's names the count", () => {
     const result = run(
-      'T',
+      'Tests that read source files',
       '--',
       'bash',
       '-c',
-      'echo "Error: 100% broken"; exit 2',
+      vitestFailure,
     );
-    const error = result.stdout
-      .split('\n')
-      .find(line => line.startsWith('::error '));
-    expect(error).toContain('First failure: Error: 100%25 broken');
-    expect(error).not.toContain('file=');
+    const after = afterGroup(result).split('\n');
+    expect(after.filter(line => line.startsWith('::error')).length).toBe(1);
+    expect(after.find(line => line.startsWith('::error'))).toBe(
+      '::error title=Tests that read source files failed::Tests that read source files exited with status 1; 1 failing test(s), listed after the "Tests that read source files" group. Vitest\'s annotations name each file and line. Its output is in the "Tests that read source files" group of this step\'s log.',
+    );
   });
 
   it('caps the failure lines at 30', () => {
@@ -127,15 +127,16 @@ describe('run-named.sh on a failing test run', () => {
       '--',
       'bash',
       '-c',
-      'for i in $(seq 1 50); do echo " FAIL  |ui| f$i.test.tsx"; done; exit 1',
+      'echo "⎯ Failed Tests 50 ⎯"; for i in $(seq 1 50); do echo " FAIL  |ui| f$i.test.tsx"; done; exit 1',
     );
-    const after = result.stdout.slice(result.stdout.indexOf('::endgroup::'));
-    expect(
-      after.split('\n').filter(line => line.startsWith(' FAIL ')).length,
-    ).toBe(30);
+    const lines = afterGroup(result).split('\n');
+    expect(lines.filter(line => line.startsWith(' FAIL ')).length).toBe(30);
+    expect(lines.find(line => line.startsWith('::error'))).toContain(
+      '50 failing test(s)',
+    );
   });
 
-  it('reads the failure lines from standard error with --stdout', () => {
+  it('reads a non-Vitest failure from standard error with --stdout', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-named-'));
     try {
       const file = path.join(dir, 'list.txt');
@@ -151,7 +152,10 @@ describe('run-named.sh on a failing test run', () => {
       expect(fs.readFileSync(file, 'utf8')).toBe('listed\n');
       expect(result.stderr).toContain('Error: cannot read the list');
       expect(result.stdout).toContain(
-        'List failed. Its failure lines:\nError: cannot read the list',
+        'List failed. Its failure lines:\nError: cannot read the list\n',
+      );
+      expect(result.stdout).toContain(
+        '::error title=List failed::List exited with status 1. Its failure lines follow the "List" group.',
       );
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
