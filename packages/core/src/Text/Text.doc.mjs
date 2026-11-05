@@ -104,7 +104,7 @@ export const docs = {
       name: 'maxLines',
       type: 'number',
       description:
-        'Maximum lines before truncation. 0 means no truncation. When set, truncated content shows its full text in a tooltip on hover, and is a tab stop so the tooltip opens on keyboard focus too.',
+        'Maximum lines before truncation. 0 means no truncation. When set, truncated content shows its full text in a tooltip on hover, and is a tab stop so the tooltip opens on keyboard focus too. Inside a control that takes focus (a link, a button, a menu item, an option, a grid row or cell) it adds no tab stop. Pass tabIndex={-1} to keep one Text out of the tab order.',
       default: '0',
     },
     {
