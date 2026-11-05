@@ -37,6 +37,7 @@ import {
 } from '../utils/plainDate';
 import {
   type CalendarSystem,
+  calendarMonthOf,
   calendarYearMonthOf,
   formatCalendarDate,
 } from '../utils/calendarSystem';
@@ -279,7 +280,8 @@ function formatRangeDisplay(
   }
   const start = plainDateFromISO(range.start);
   const end = plainDateFromISO(range.end);
-  const yearOf = (pd: PlainDate) => calendarYearMonthOf(calendar, pd).year;
+  const yearOf = (pd: PlainDate) =>
+    calendarYearMonthOf(calendar, calendarMonthOf(calendar, pd)).year;
   const currentYear = yearOf(plainDateToday());
   const sameYear =
     yearOf(start) === yearOf(end) && yearOf(start) === currentYear;
