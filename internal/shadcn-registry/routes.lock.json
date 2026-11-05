@@ -568,6 +568,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-circle-check-indicator",
+      "path": "components/lab/circle-check-indicator",
+      "aliases": []
+    },
+    {
       "name": "component-lab-circular-progress",
       "path": "components/lab/circular-progress",
       "aliases": []
@@ -3712,6 +3717,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-icon-status-row",
+      "path": "examples/use-icon/status-row",
+      "aliases": []
+    },
+    {
       "name": "example-use-image-mode-photo-caption",
       "path": "examples/use-image-mode/photo-caption",
       "aliases": []
@@ -3949,6 +3959,11 @@
     {
       "name": "hook-use-hover-card",
       "path": "hooks/use-hover-card",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-icon",
+      "path": "hooks/use-icon",
       "aliases": []
     },
     {

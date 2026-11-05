@@ -65,6 +65,7 @@ import {usePopover} from '../Popover';
 import {
   isFocusInsideOwnedLayer,
   isPressInsideOwnedLayer,
+  noteOutsideDismissal,
   useOutsidePress,
 } from '../Layer/outsidePress';
 import {NativeDateField} from './NativeDateField';
@@ -818,6 +819,7 @@ function PointerDateField({
         return;
       }
       isFocusMovingAwayRef.current = true;
+      noteOutsideDismissal(e.currentTarget.ownerDocument);
       popover.hide();
     },
     [popover],

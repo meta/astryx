@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "icon",
-    "matchCount": 228,
+    "matchCount": 230,
     "results": [
       {
         "domain": "component",
@@ -48,6 +48,17 @@
         "description": "<text>",
         "import": "@astryxdesign/core/InfoTip",
         "command": "astryx component InfoTip",
+        "mentions": []
+      },
+      {
+        "domain": "hook",
+        "name": "useIcon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Icon",
+        "command": "astryx hook useIcon",
         "mentions": []
       },
       {
@@ -231,18 +242,6 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ChatComposerDrawerShowcase --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ChatComposerDrawerWithProgress",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ChatComposerDrawerWithProgress --type block",
         "mentions": []
       }
     ]
