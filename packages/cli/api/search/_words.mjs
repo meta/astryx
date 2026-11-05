@@ -5,6 +5,8 @@
  * identifier spelling, joined names, and typo tolerance.
  */
 
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
+
 /**
  * Light stemmer: strips common English suffixes so "charts"/"charting" and
  * "chart" share a root. Deliberately crude (no Porter) — good enough to bridge
@@ -155,3 +157,27 @@ export const isTypo = (a, b, dist) =>
   dist <= 3 &&
   Math.min(a.length, b.length) >=
     TYPO_MIN_LENGTH[/** @type {1 | 2 | 3} */ (dist)];
+
+/**
+ * The edit distance between two words when it counts as a typo (isTypo), or
+ * null. The shorter word's length caps the distance that can count. A pair
+ * the cap rules out needs no distance table, and the others compute only the
+ * cells within the cap.
+ * @param {string} a
+ * @param {string} b
+ * @returns {1 | 2 | 3 | null}
+ */
+export function typoDistance(a, b) {
+  const shorter = Math.min(a.length, b.length);
+  const cap =
+    shorter >= TYPO_MIN_LENGTH[3]
+      ? 3
+      : shorter >= TYPO_MIN_LENGTH[2]
+        ? 2
+        : shorter >= TYPO_MIN_LENGTH[1]
+          ? 1
+          : 0;
+  if (cap === 0) return null;
+  const dist = levenshteinDistance(a, b, cap);
+  return dist >= 1 && dist <= cap ? /** @type {1 | 2 | 3} */ (dist) : null;
+}

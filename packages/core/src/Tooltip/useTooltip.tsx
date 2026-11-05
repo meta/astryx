@@ -37,6 +37,7 @@ import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {registerLayerSurface} from '../Layer/layerSurfacePress';
+import {noteOutsideDismissal} from '../Layer/outsidePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -451,6 +452,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       ) {
         return;
       }
+      noteOutsideDismissal(view.document);
       releaseHold();
     },
     [isHeldOpen, layerId, releaseHold],

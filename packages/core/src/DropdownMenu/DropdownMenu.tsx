@@ -74,7 +74,7 @@ import {useDropdownMenuPress} from '../hooks/useMenuPress';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
-import {focusForLastInput} from '../utils/focusReturn';
+import {returnFocusForLastInput} from '../utils/focusReturn';
 import {useMenuOverflow} from './useMenuOverflow';
 import {MenuRegionsContext} from './menuRegionsContext';
 import {moveRegionsTab} from './menuRegionStops';
@@ -1033,7 +1033,7 @@ function DropdownMenuPopover({
     // reaches only the design system's own Button; the browser's focus option
     // also reaches a control the caller renders, which the browser would
     // otherwise ring (Chromium after a mouse pick, WebKit after a touch).
-    focusForLastInput(trigger, {preventScroll: true});
+    returnFocusForLastInput(trigger);
   }, [hideOpenFlyouts, isControlled, onOpenChange, prepareFocusReturn]);
 
   // Defer item focus until the layer has committed open, so focus restore

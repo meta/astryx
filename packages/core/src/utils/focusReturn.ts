@@ -5,8 +5,9 @@
  * @input The document's current active element and the shared interaction
  *   modality.
  * @output Whether focus would be lost if a surface hid now; a focus move whose
- *   ring follows the last input; and the one path that moves focus out of
- *   content a change removed or hid (`noteFocusWithin`, `moveFocusLeftBehind`).
+ *   ring follows the last input; the focus return of a closed overlay, which
+ *   never scrolls the page; and the one path that moves focus out of content a
+ *   change removed or hid (`noteFocusWithin`, `moveFocusLeftBehind`).
  * @position Utility; used by overlays (BottomSheet, Dialog, DropdownMenu) that
  *   move focus programmatically, and by disclosures that hide focused
  *   content. isFocusDetached lives in isFocusDetached.ts, so the utils entry,
@@ -130,6 +131,19 @@ export function focusForLastInput(
 }
 
 /**
+ * Returns focus to `opener` after an overlay closes, without a scroll and with
+ * the ring the last input calls for. WebKit records the nearest focusable
+ * ancestor of a tapped button as the opener, such as a `tabindex="-1"` main
+ * region. A reveal of that region scrolls the page to its top edge.
+ */
+export function returnFocusForLastInput(
+  opener: HTMLElement,
+  modality?: InteractionModality,
+): void {
+  focusForLastInput(opener, {preventScroll: true}, modality);
+}
+
+/**
  * Prepares the focus return for an open surface that may be removed while
  * open (rendered only while open, or removed with its view). Removing a
  * `<dialog>` runs no close and no browser focus return. Call this while the
@@ -153,7 +167,7 @@ export function prepareFocusReturnOnRemoval(
         return;
       }
       if (isFocusLost(surface) && (host == null || isFocusLost(host))) {
-        focusForLastInput(opener as HTMLElement);
+        returnFocusForLastInput(opener as HTMLElement);
       }
     });
   };
