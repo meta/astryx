@@ -428,12 +428,19 @@ describe('useLayerKeyboardClearance', () => {
     expect(capOf(container)).toBe(`${VIEWPORT - 300 - 10 - BOX.top}px`);
   });
 
-  it('publishes the keyboard\u2019s inset, clearance included, while the keyboard is up', () => {
-    const {container} = render(<Harness />);
+  it('publishes the keyboard\u2019s inset, clearance included, and keeps its largest value until the layer closes', () => {
+    const {container, rerender} = render(<Harness />);
     expect(insetOf(container)).toBe('');
     guide.emit({kind: 'change', from: 0, to: 300, animated: false});
     expect(insetOf(container)).toBe(`${300 + LAYER_KEYBOARD_CLEARANCE_PX}px`);
+    // A taller keyboard raises it. A shorter one, or none, leaves it.
+    guide.emit({kind: 'change', from: 300, to: COVER, animated: false});
+    expect(insetOf(container)).toBe(`${COVER + LAYER_KEYBOARD_CLEARANCE_PX}px`);
+    guide.emit({kind: 'change', from: COVER, to: 300, animated: false});
+    expect(insetOf(container)).toBe(`${COVER + LAYER_KEYBOARD_CLEARANCE_PX}px`);
     guide.emit({kind: 'hide', from: 300, to: 0});
+    expect(insetOf(container)).toBe(`${COVER + LAYER_KEYBOARD_CLEARANCE_PX}px`);
+    rerender(<Harness isOpen={false} />);
     expect(insetOf(container)).toBe('');
   });
 
@@ -448,6 +455,31 @@ describe('useLayerKeyboardClearance', () => {
     expect(layer.getBoundingClientRect().bottom).toBe(
       VIEWPORT - COVER - LAYER_KEYBOARD_CLEARANCE_PX,
     );
+  });
+
+  it('takes the cap off a layer that does not read the inset at once as the keyboard goes down, even where that moves it (spec:AST-059 FR10)', () => {
+    // At its full height the viewport fit places this layer over its
+    // trigger; capped, it sits below the trigger.
+    const {container} = render(
+      <Harness box={{top: 300, bottom: 700}} shiftedTop={120} />,
+    );
+    guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
+    expect(capOf(container)).not.toBe('');
+    const layer = screen.getByTestId('layer');
+    expect(layer.getBoundingClientRect().top).toBe(300);
+    guide.emit({kind: 'hide', from: COVER, to: 0});
+    expect(capOf(container)).toBe('');
+    expect(layer.getBoundingClientRect().top).toBe(120);
+  });
+
+  it('leaves a layer that slid above the keyboard where it is when the keyboard goes down', () => {
+    const {container} = render(<Harness slidesAboveKeyboard />);
+    guide.emit({kind: 'change', from: 0, to: COVER, animated: false});
+    const layer = screen.getByTestId('layer');
+    const placed = layer.getBoundingClientRect().top;
+    guide.emit({kind: 'hide', from: COVER, to: 0});
+    expect(capOf(container)).toBe('');
+    expect(layer.getBoundingClientRect().top).toBe(placed);
   });
 
   it('caps in layout px under a pinch zoom, where WebKit reports innerHeight zoomed (spec:AST-059 FR9)', () => {

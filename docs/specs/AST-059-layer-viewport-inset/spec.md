@@ -319,13 +319,15 @@ the app reaches every layer instead of the components that happen to read it.
   surface inside it capped by that definition shrink together. Each layer
   carries its own cap on its own element: a layer opened inside a capped
   layer is capped only for its own box, never by its host's.
-  While a software keyboard is up, the runtime also writes its block-end inset
+  Once a software keyboard is up, the runtime also writes its block-end inset
   on each open anchor-mode layer, beside the cap: the keyboard's height plus
-  the 10 px clearance. The inset is a private custom property that only the
-  runtime writes, never public API, and the fallback order never reads it. A
-  layer that places itself on its block axis, such as Selector's selected-item
-  overlay, ends above the line the inset marks. It moves in the commit that
-  publishes the inset, before the cap reads its box.
+  the 10 px clearance. The inset keeps its largest value until the layer
+  closes. The inset is a private custom property that only the runtime writes,
+  never public API, and the fallback order never reads it. A layer that places
+  itself on its block axis, such as Selector's selected-item overlay, ends
+  above the line the inset marks. It moves in the commit that publishes the
+  inset, before the cap reads its box. A keyboard that goes down then leaves
+  it where it is.
 - **FR10 — The keyboard cap changes where the keyboard hides the change.**
   A
   box's height cannot change on the compositor, so the cap changes once per

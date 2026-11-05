@@ -9,6 +9,9 @@
  * @output Browser proof that the selected-item overlay slides above the
  *   software keyboard. The list ends clear of the keyboard with its rows in
  *   view, whether the keyboard was up before the list opened or rose after.
+ *   When the keyboard's report ends, the open list keeps its top: a list the
+ *   cap held grows downward in place. A list that slid above a late keyboard
+ *   holds against a shorter one.
  * @position Chromium contract for the Selector overlay beside the keyboard
  */
 
@@ -66,14 +69,39 @@ async function installKeyboard(page: Page) {
   });
 }
 
-const raiseKeyboard = async (page: Page) =>
+const raiseKeyboard = async (page: Page, cover = COVER) =>
   page.evaluate(
-    cover =>
+    value =>
       (window as unknown as {__keyboard: (cover: number) => void}).__keyboard(
-        cover,
+        value,
       ),
-    COVER,
+    cover,
   );
+
+/**
+ * Sets the keyboard's cover (0 ends its report) and returns the open list's
+ * top in each of the next 30 frames, read in the page.
+ */
+async function coverAndTrackTop(page: Page, cover = 0): Promise<number[]> {
+  return page.getByRole('listbox').evaluate(async (list, value) => {
+    (window as unknown as {__keyboard: (cover: number) => void}).__keyboard(
+      value,
+    );
+    const tops: number[] = [];
+    for (let frame = 0; frame < 30; frame++) {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      tops.push(list.getBoundingClientRect().top);
+    }
+    return tops;
+  }, cover);
+}
+
+function expectTopHeld(tops: number[], top: number, detail: string) {
+  expect(tops.length, detail).toBeGreaterThan(0);
+  for (const each of tops) {
+    expect(Math.abs(each - top), detail).toBeLessThanOrEqual(0.5);
+  }
+}
 
 /**
  * Opens the story with its trigger moved down by `drop` px. The centered story
@@ -156,6 +184,25 @@ for (const drop of [80, 150, 190]) {
     }).toPass({timeout: 3_000});
   });
 
+  test(`a list opened with the keyboard up stays where it is when the keyboard's report ends, trigger ${drop} px lower`, async ({
+    page,
+  }) => {
+    const trigger = await openStory(page, drop);
+    await raiseKeyboard(page);
+    await trigger.click();
+    await expect(page.getByRole('listbox')).toBeVisible();
+    await expect(async () => {
+      expectClearOfKeyboard(await listFacts(page));
+    }).toPass({timeout: 3_000});
+    const placed = await listFacts(page);
+    const tops = await coverAndTrackTop(page);
+    const detail = JSON.stringify({placed, tops});
+    expectTopHeld(tops, placed.top, detail);
+    const after = await listFacts(page);
+    expect(after.rows, detail).toBe(OPTIONS);
+    expect(after.rowsWithBox, detail).toBe(OPTIONS);
+  });
+
   test(`an open list moves above a keyboard that rises, trigger ${drop} px lower`, async ({
     page,
   }) => {
@@ -170,4 +217,68 @@ for (const drop of [80, 150, 190]) {
       expectClearOfKeyboard(await listFacts(page));
     }).toPass({timeout: 3_000});
   });
+
+  test(`a list that slid above a late keyboard holds against a shorter one, trigger ${drop} px lower`, async ({
+    page,
+  }) => {
+    const trigger = await openStory(page, drop);
+    await trigger.click();
+    await expect(page.getByRole('listbox')).toBeVisible();
+    await raiseKeyboard(page);
+    await expect(async () => {
+      expectClearOfKeyboard(await listFacts(page));
+    }).toPass({timeout: 3_000});
+    const placed = await listFacts(page);
+    const tops = await coverAndTrackTop(page, COVER - 100);
+    expectTopHeld(tops, placed.top, JSON.stringify({placed, tops}));
+  });
 }
+
+test('a list the cap holds above the keyboard grows downward in place when the report ends', async ({
+  page,
+}) => {
+  // A 300 px list in a 600 px viewport. The keyboard leaves 210 px above
+  // its line, so the cap holds the list there and it scrolls.
+  const cover = 380;
+  const line = 600 - cover - LAYER_KEYBOARD_CLEARANCE_PX;
+  await installKeyboard(page);
+  await page.setViewportSize({width: 390, height: 600});
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-selector--long-list&viewMode=story`,
+    {waitUntil: 'load'},
+  );
+  const trigger = page.getByRole('combobox').first();
+  await expect(trigger).toBeVisible();
+  await raiseKeyboard(page, cover);
+  await trigger.click();
+  const listbox = page.getByRole('listbox');
+  await expect(listbox).toBeVisible();
+  const read = async () =>
+    listbox.evaluate(list => {
+      const box = list.getBoundingClientRect();
+      const finger = [...list.querySelectorAll('[role="option"]')]
+        .map(row => row.getBoundingClientRect())
+        .filter(row => row.height > 0 && row.top >= box.top)[2];
+      return {
+        top: box.top,
+        bottom: box.bottom,
+        fingerTop: finger?.top ?? Number.NaN,
+      };
+    });
+  let held = await read();
+  await expect(async () => {
+    held = await read();
+    expect(held.bottom - held.top, JSON.stringify(held)).toBeGreaterThan(100);
+    expect(held.bottom, JSON.stringify(held)).toBeLessThanOrEqual(line + 0.5);
+    expect(held.fingerTop, JSON.stringify(held)).toBeGreaterThan(held.top);
+  }).toPass({timeout: 3_000});
+  const tops = await coverAndTrackTop(page);
+  const after = await read();
+  const detail = JSON.stringify({held, after, tops});
+  expectTopHeld(tops, held.top, detail);
+  expect(
+    Math.abs(after.fingerTop - held.fingerTop),
+    detail,
+  ).toBeLessThanOrEqual(0.5);
+  expect(after.bottom, detail).toBeGreaterThan(held.bottom + 40);
+});

@@ -63,11 +63,12 @@ export const LAYER_KEYBOARD_CAP_PROPERTY = '--_layer-keyboard-max-block-size';
 export const LAYER_KEYBOARD_OVERFLOW_PROPERTY = '--_layer-keyboard-overflow';
 
 /**
- * The custom property each layer's style sets beside the cap. While a
- * software keyboard is up, it holds how far above the layout viewport's bottom
- * an anchored layer must end: the keyboard and `LAYER_KEYBOARD_CLEARANCE_PX`.
- * Otherwise it holds no value. A layer that places itself, such as Selector's
- * overlay, slides above the keyboard with it before the cap measures.
+ * The custom property each layer's style sets beside the cap. Once a software
+ * keyboard is up, it holds how far above the layout viewport's bottom an
+ * anchored layer must end: the keyboard and `LAYER_KEYBOARD_CLEARANCE_PX`. It
+ * keeps its largest value until the layer closes. Otherwise it holds no value.
+ * A layer that places itself, such as Selector's overlay, slides above the
+ * keyboard with it before the cap measures, and stays there.
  */
 export const LAYER_KEYBOARD_INSET_PROPERTY =
   '--_layer-keyboard-inset-block-end';
@@ -105,9 +106,9 @@ export interface LayerKeyboardClearance {
   /** The block size that keeps the layer clear of the keyboard, or null. */
   readonly cap: number | null;
   /**
-   * While a software keyboard is up, the layout px between the layout
-   * viewport's bottom and the line an anchored layer ends above. Otherwise
-   * null.
+   * Once a software keyboard is up, the layout px between the layout
+   * viewport's bottom and the line an anchored layer ends above. It keeps its
+   * largest value until the layer closes. Otherwise null.
    */
   readonly inset: number | null;
   /**
@@ -191,8 +192,12 @@ export function useLayerKeyboardClearance(
     // returns whether the layer is capped.
     const capFor = (inset: number): boolean => {
       // The inset goes out in the commit that lifts the cap. So a layer that
-      // places itself by the inset has moved before its box is read.
-      commitCap(null, inset > 0 ? inset + LAYER_KEYBOARD_CLEARANCE_PX : null);
+      // places itself by the inset has moved before its box is read. While
+      // the layer stays open, the inset only grows. A keyboard that goes down
+      // then leaves a layer placed by it where it is.
+      const reported = inset > 0 ? inset + LAYER_KEYBOARD_CLEARANCE_PX : 0;
+      const held = Math.max(reported, keyboardInsetRef.current ?? 0);
+      commitCap(null, held > 0 ? held : null);
       if (inset <= 0) {
         return false;
       }

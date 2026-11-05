@@ -70,9 +70,11 @@ const styles = stylex.create({
   // also writes the overflow a capped surface takes. Popover's surface reads
   // it, so it scrolls from the commit that caps it. Beside them, the
   // keyboard's inset from the viewport's bottom lets a layer that places
-  // itself slide above the keyboard. Every layer sets it, `initial` when no
-  // keyboard is up, so a nested layer does not inherit it. All three are
-  // private runtime state, never set by an app or a theme.
+  // itself slide above the keyboard. The inset keeps its largest value until
+  // the layer closes, so that layer stays put as the keyboard goes. Every
+  // layer sets it, `initial` until a keyboard is up, so a nested layer does
+  // not inherit it. All three are private runtime state, never set by an app
+  // or a theme.
   // SYNC: the properties are LAYER_KEYBOARD_CAP_PROPERTY,
   // LAYER_KEYBOARD_OVERFLOW_PROPERTY and LAYER_KEYBOARD_INSET_PROPERTY
   // (useLayerKeyboardClearance.ts).
