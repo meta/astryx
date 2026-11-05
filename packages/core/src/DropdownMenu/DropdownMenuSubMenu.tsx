@@ -98,7 +98,6 @@ import {
   mergeProps,
   rtlStyles,
 } from '../utils';
-import {focusForLastInput} from '../utils/focusReturn';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {getInteractionModality} from '../utils/interactionModality';
@@ -759,8 +758,8 @@ export function DropdownMenuSubMenu(
         return;
       }
       layer.hide();
-      if (options?.focusTrigger !== false && triggerRef.current != null) {
-        focusForLastInput(triggerRef.current);
+      if (options?.focusTrigger !== false) {
+        triggerRef.current?.focus();
       }
     },
     [activeDrillIn, isOnStack, onOpenChange, layer],
@@ -793,9 +792,7 @@ export function DropdownMenuSubMenu(
       return;
     }
     pendingTriggerFocusRef.current = false;
-    if (triggerRef.current != null) {
-      focusForLastInput(triggerRef.current, {preventScroll: true});
-    }
+    triggerRef.current?.focus({preventScroll: true});
   }, [isOnStack]);
 
   // Single ref for the trigger row: store it for focus management AND wire it

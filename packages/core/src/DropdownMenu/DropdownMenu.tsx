@@ -1353,8 +1353,8 @@ function DropdownMenuPopover({
       // remember whatever was focused BEFORE the press as the element to hand
       // focus back to when it closes. Focusing the trigger first gives the
       // popover the state a click-open already has: the trigger is where
-      // Escape or a pick returns focus (the APG menu-button pattern). The
-      // focus follows the last input, so a finger's press shows no ring.
+      // Escape or a pick returns focus (the APG menu-button pattern). A
+      // finger's press shows no ring here.
       if (buttonRef.current != null) {
         focusForLastInput(buttonRef.current, {preventScroll: true});
       }
