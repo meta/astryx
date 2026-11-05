@@ -6,8 +6,8 @@
  *   table group and the key of one of its values. The element the motion
  *   plays on, for its theme's tempo (themeTempo.ts)
  * @output resolveMotion: the role's value at the theme's tempo.
- *   resolveSettleMs: how long a spring role takes to settle there, for a CSS
- *   part that plays with it
+ *   resolveSettleMs: how long a spring role, or one move on it, takes to
+ *   settle there, for a CSS part that plays with it
  * @position Motion foundation; the animator resolves every spring and curve
  *   it is handed with it, and components resolve the durations they time
  *   with it
@@ -31,7 +31,12 @@
 import {motionRoleIn, motionRoleOf} from './roles';
 import {isSpring} from './roleValue';
 import type {MotionCurvePoints} from './roles';
-import {settlingDuration, toSpring, type SpringDescription} from './spring';
+import {
+  settlingDuration,
+  solveSpring,
+  toSpring,
+  type SpringDescription,
+} from './spring';
 import {themeTempo} from './themeTempo';
 
 /**
@@ -140,11 +145,23 @@ export function resolveMotion(
   return isSpring(value) ? springAtTempo(value, tempo) : value;
 }
 
+/** One move a spring plays, as the animator plays it. */
+export interface SpringMove {
+  readonly from: number;
+  readonly to: number;
+  /** The start velocity, in units per second. 0 by default. */
+  readonly velocity?: number;
+  /** The move is over once it stays this close to `to`. */
+  readonly epsilon: number;
+}
+
 /**
  * How long `spring` takes to settle, in milliseconds, at the tempo of the
  * theme `element` is in. A CSS part that plays with the spring takes this
  * duration, such as a scrim's fade under a sheet. Then the two start and land
- * together on one clock. It is the resolved spring's settling duration. A
+ * together on one clock. Without `move`, it is the resolved spring's settling
+ * duration. With `move`, it is how long that move plays. The animator times
+ * its moves the same way, so a part that plays with one passes the move. A
  * fixed role, or a spring that is not a role, gives its own.
  *
  * @example
@@ -155,6 +172,10 @@ export function resolveMotion(
 export function resolveSettleMs(
   element: Element | null | undefined,
   spring: SpringDescription,
+  move?: SpringMove,
 ): number {
-  return settlingDuration(toSpring(resolveMotion(element, spring))) * 1000;
+  const resolved = toSpring(resolveMotion(element, spring));
+  return move == null
+    ? settlingDuration(resolved) * 1000
+    : solveSpring(resolved, move).settleTime(move.epsilon) * 1000;
 }

@@ -242,6 +242,25 @@ function mockResizeObserverInstances(): ResizeObserverRecord[] {
   return observers;
 }
 
+/**
+ * Lays a sheet out `height` px tall, as the browser's resize observer would.
+ * A touch release lands by the sheet's geometry, so a touch dismissal needs
+ * one.
+ */
+function layOutSheet(
+  observers: ResizeObserverRecord[],
+  sheet: HTMLElement,
+  height = 400,
+) {
+  const observer = observers.find(instance => instance.observed.has(sheet));
+  act(() => {
+    observer?.callback(
+      [resizeEntry(height)],
+      observer as unknown as ResizeObserver,
+    );
+  });
+}
+
 function finishSheetExit() {
   fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
 }
@@ -1112,6 +1131,7 @@ describe('BottomSheet', () => {
     it("a sheet opened from inside another sheet's content drags to dismiss by its own handle, and the covered host neither drags nor takes the pointer (FR6, FR7)", () => {
       const onInnerOpenChange = vi.fn();
       const onOuterOpenChange = vi.fn();
+      const observers = mockResizeObserverInstances();
       render(
         <BottomSheet isOpen onOpenChange={onOuterOpenChange} label="Outer">
           Outer content
@@ -1135,6 +1155,10 @@ describe('BottomSheet', () => {
       const innerHandle = innerDialog.querySelector<HTMLElement>(
         '.astryx-bottom-sheet > [aria-hidden="true"]',
       )!;
+      layOutSheet(
+        observers,
+        innerDialog.querySelector<HTMLElement>('.astryx-bottom-sheet')!,
+      );
       // `setPointerCapture` is a prototype stub here, so record who captures.
       const captured: Element[] = [];
       const capture = vi
@@ -4203,8 +4227,10 @@ describe('BottomSheet', () => {
 
     it("a touch swipe dismissal under reduced motion fades out in place on a fine pointer (design:reduced-motion DR2, a touch drag's release)", () => {
       stubReducedMotion(false);
+      const observers = mockResizeObserverInstances();
       render(<Controlled />);
       const dialog = screen.getByRole('dialog');
+      layOutSheet(observers, getSheet());
       drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
       // Exiting: a transform end does not close the dialog, the fade does.
       fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
@@ -4233,8 +4259,10 @@ describe('BottomSheet', () => {
           </>
         );
       }
+      const observers = mockResizeObserverInstances();
       render(<Reopenable />);
       const dialog = screen.getByRole('dialog');
+      layOutSheet(observers, getSheet());
       drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
       fireEvent.transitionEnd(getSheet(), {propertyName: 'opacity'});
       expect(dialog).not.toHaveAttribute('open');

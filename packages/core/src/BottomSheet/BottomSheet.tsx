@@ -544,6 +544,33 @@ function StandaloneBottomSheet({
       String(opacity),
     );
   }, []);
+  // The fade duration a touch drag's close wrote, until that close ends.
+  const scrimFadeRef = useRef<string | null>(null);
+  const handleScrimFadeDuration = useCallback(
+    (panel: HTMLElement, ms: number | null) => {
+      const dialog = panel.closest('dialog');
+      const view = stackViewRef.current;
+      if (dialog == null || (view.isStacked && !view.ownsScrim)) {
+        return;
+      }
+      const current = dialog.style.getPropertyValue('--_sheet-scrim-duration');
+      if (ms == null) {
+        // Only its own value: a stack's 0s pin in the meantime stays.
+        if (scrimFadeRef.current != null && current === scrimFadeRef.current) {
+          dialog.style.removeProperty('--_sheet-scrim-duration');
+        }
+        scrimFadeRef.current = null;
+        return;
+      }
+      // A stack's 0s pin hands the scrim over with no fade; it stays.
+      if (current === '0s') {
+        return;
+      }
+      scrimFadeRef.current = `${ms}ms`;
+      dialog.style.setProperty('--_sheet-scrim-duration', scrimFadeRef.current);
+    },
+    [],
+  );
 
   // A sheet joins the registry for as long as it is presented. For a modal
   // sheet the registry shows the dialog (in open order, repairing same-commit
@@ -946,6 +973,7 @@ function StandaloneBottomSheet({
         xstyle={xstyle}
         onDismiss={dismissOnLightInteraction}
         onScrimOpacity={handleScrimOpacity}
+        onScrimFadeDuration={handleScrimFadeDuration}
         onElementChange={handlePanelElementChange}
         onMotionStart={handleMotionStart}
         onMotionComplete={handleMotionComplete}>

@@ -9,13 +9,14 @@
  *   forms. A duration scales. A curve, a part that follows a finger and a
  *   busy loop stay as measured. A role resolves to one object per tempo and
  *   is never scaled twice. The animator plays the slowed spring. A CSS part
- *   timed from a spring lasts the resolved spring's settling duration
+ *   timed from a spring lasts the resolved spring's settling duration, or
+ *   as long as the animator plays one move on it
  * @position Testing for /packages/core/src/motion/resolveMotion.ts (the
  *   browser proof: themeTempo.interaction.browser.spec.ts)
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {createMotionEngine} from './animator';
+import {createMotionEngine, SETTLE_THRESHOLD} from './animator';
 import {resolveMotion, resolveSettleMs} from './resolveMotion';
 import {
   settlingDuration,
@@ -199,6 +200,32 @@ describe('a CSS part timed from its spring', () => {
     );
     const inline = {response: 0.4, dampingRatio: 0.9};
     expect(resolveSettleMs(target, inline)).toBe(settleMs(inline));
+  });
+
+  it('lasts as long as the animator plays one move on the spring', () => {
+    tempo = '1.5';
+    const target = element();
+    const animator = createMotionEngine(target, {now: () => 0});
+    const close = animator.animate(
+      {y: 400},
+      {spring: springs.sheetDismissSwipe, velocity: {y: 3000}},
+      {at: 0},
+    );
+    const move = {
+      from: 0,
+      to: 400,
+      velocity: 3000,
+      epsilon: SETTLE_THRESHOLD.y,
+    };
+    const curveMs = (close.curve('y')?.duration ?? Number.NaN) * 1000;
+    expect(
+      resolveSettleMs(target, springs.sheetDismissSwipe, move),
+    ).toBeCloseTo(curveMs, 6);
+    // A long, fast move settles later than a unit move from rest.
+    expect(curveMs).toBeGreaterThan(
+      resolveSettleMs(target, springs.sheetDismissSwipe),
+    );
+    animator.dispose();
   });
 });
 
