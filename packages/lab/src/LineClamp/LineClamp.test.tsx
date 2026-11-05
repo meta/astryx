@@ -22,7 +22,7 @@ import {
 import {LineClamp} from './LineClamp';
 
 // jsdom has no layout engine, so content never actually overflows and
-// isTruncated stays false — same constraint core's Text.test.tsx works
+// isTruncated stays false, the same constraint core's Text.test.tsx works
 // under for the same useTruncation hook. These tests cover the
 // non-truncated (default) rendering path; the tooltip-on-truncation path is
 // exercised manually in Storybook.
@@ -86,7 +86,7 @@ describe('LineClamp', () => {
   });
 
   // jsdom still can't lay out real text, so `-webkit-line-clamp` never
-  // actually clips anything here — but the tab-order fix (#4259) reacts to
+  // actually clips anything here, but the tab-order fix reacts to
   // plain geometry (getBoundingClientRect), not to useTruncation's
   // isTruncated flag, so it's fully testable by mocking that geometry: a
   // container rect and a descendant rect are all the effect ever reads.
@@ -391,6 +391,94 @@ describe('LineClamp', () => {
       fireEvent.blur(screen.getByText('Read more'));
 
       expect(onBlur).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a link in a nested clamp to the nested clamp', async () => {
+      const rectMap = new Map<Element, {top: number; bottom: number}>();
+      const content = () => (
+        <LineClamp maxLines={5} data-testid="outer" hasTruncateTooltip={false}>
+          <LineClamp
+            maxLines={2}
+            data-testid="inner"
+            hasTruncateTooltip={false}>
+            <a href="/more">Read more</a>
+          </LineClamp>
+        </LineClamp>
+      );
+      const {rerender} = render(content());
+      const link = screen.getByText('Read more');
+      // Clipped by the inner clamp, well inside the outer clamp's box.
+      rectMap.set(screen.getByTestId('outer'), {top: 0, bottom: 200});
+      rectMap.set(screen.getByTestId('inner'), {top: 0, bottom: 40});
+      rectMap.set(link, {top: 40, bottom: 56});
+      mockRects(rectMap);
+      rerender(content());
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(link).toHaveAttribute('inert');
+
+      // The inner clamp grows: its link is on screen and reachable again.
+      rectMap.set(screen.getByTestId('inner'), {top: 0, bottom: 80});
+      rerender(content());
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(link).not.toHaveAttribute('inert');
+      expect(link).not.toHaveAttribute('data-line-clamp-hidden');
+    });
+
+    it("keeps its own inert writes straight through a caller's inline callback ref", async () => {
+      const rectMap = new Map<Element, {top: number; bottom: number}>();
+      // A new function every render, so the merged ref changes every render.
+      const content = () => (
+        <>
+          <LineClamp
+            maxLines={2}
+            data-testid="clamp"
+            hasTruncateTooltip={false}
+            ref={() => {}}>
+            <a href="/more">Read more</a>
+          </LineClamp>
+          <LineClamp maxLines={2} hasTruncateTooltip={false} ref={() => {}}>
+            Other
+          </LineClamp>
+        </>
+      );
+      const {rerender} = render(content());
+      const link = screen.getByText('Read more');
+      rectMap.set(screen.getByTestId('clamp'), {top: 0, bottom: 40});
+      rectMap.set(link, {top: 10, bottom: 26});
+      mockRects(rectMap);
+      const observe = vi.spyOn(MutationObserver.prototype, 'observe');
+      rerender(content());
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(link).not.toHaveAttribute('inert');
+      // Renders do not detach and re-attach the clamp's own observer, the one
+      // that watches attributes.
+      const clampObservations = observe.mock.calls.filter(
+        ([, options]) => options?.attributes,
+      );
+      expect(clampObservations).toHaveLength(0);
+
+      // Hide the link, then render again before the observer reports the write.
+      rectMap.set(link, {top: 40, bottom: 56});
+      rerender(content());
+      rerender(content());
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(link).toHaveAttribute('inert');
+
+      // It scrolls into view for good: the clamp still owns the attribute.
+      rectMap.set(link, {top: 10, bottom: 26});
+      rerender(content());
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(link).not.toHaveAttribute('inert');
     });
 
     it("keeps a caller's inert that is set while the link is clipped", async () => {

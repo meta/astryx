@@ -20,9 +20,9 @@
 import {
   lazy,
   Suspense,
-  useCallback,
   useLayoutEffect,
   useRef,
+  useState,
   type FocusEvent,
   type ReactNode,
 } from 'react';
@@ -53,10 +53,10 @@ const styles = stylex.create({
     WebkitBoxOrient: 'vertical',
     // `clip`, not `hidden`: both clip the same way visually, but `hidden`
     // makes the box a scroll container, so a browser bringing a focused
-    // descendant into view scrolls it — which, against a clamped box, means
+    // descendant into view scrolls it, which, against a clamped box, means
     // focusing a clipped link replaces the visible line with the hidden one
     // out from under the reader. `clip` clips without becoming scrollable,
-    // so that scroll-into-view path never triggers (#4259).
+    // so that scroll-into-view path never triggers.
     overflow: 'clip',
     wordBreak: 'break-word',
     overflowWrap: 'break-word',
@@ -68,6 +68,17 @@ const styles = stylex.create({
 });
 
 const HIDDEN_ATTRIBUTE = 'data-line-clamp-hidden';
+const ROOT_ATTRIBUTE = 'data-line-clamp-root';
+
+/**
+ * Whether `container` is the nearest clamp around `el`. A clamp nested inside
+ * another manages its own descendants, so the outer one must not hide, restore
+ * or disown them: it would undo the inner clamp's decisions with the outer
+ * clamp's box in mind, not the inner one's.
+ */
+function isOwnedBy(container: HTMLElement, el: Element): boolean {
+  return el.parentElement?.closest(`[${ROOT_ATTRIBUTE}]`) === container;
+}
 
 // For each clamp root being observed, the `inert` writes the clamp made that
 // its observer has not reported yet, per element. The observer reports a write
@@ -133,6 +144,9 @@ function syncFocusableClipping(
     `${FOCUSABLE_SELECTOR}, [data-line-clamp-hidden]`,
   );
   for (const el of candidates) {
+    if (!isOwnedBy(container, el)) {
+      continue;
+    }
     // Never take the element that holds focus out of the tab order: focus
     // would be lost from under the reader.
     const isFocused =
@@ -169,7 +183,8 @@ function handBackCallerInert(
     if (
       record.type !== 'attributes' ||
       record.attributeName !== 'inert' ||
-      !(record.target instanceof HTMLElement)
+      !(record.target instanceof HTMLElement) ||
+      !isOwnedBy(container, record.target)
     ) {
       continue;
     }
@@ -254,32 +269,36 @@ export function LineClamp({
 
   // A resize can move a descendant across the clip edge without a render, and
   // a child can add or re-enable a focusable element past it, so the sync also
-  // runs from the shared observers. A callback ref attaches them with the root
-  // and releases them when it goes, including when `as` replaces it.
-  const observeRoot = useCallback((container: HTMLElement | null) => {
-    if (container == null) {
+  // runs from the shared observers. They attach to the root element held in
+  // state, so they stay put through renders and are released only when the root
+  // goes, including when `as` replaces it. A caller's inline callback ref
+  // changes the merged ref on every render, which re-attaches a callback ref
+  // each time; the state setter is stable, so it does not.
+  const [root, setRoot] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (root == null) {
       return;
     }
-    const sync = () => syncFocusableClipping(container);
-    ownInertWrites.set(container, new WeakMap());
+    const sync = () => syncFocusableClipping(root);
+    ownInertWrites.set(root, new WeakMap());
     // The mutation observer goes first: `observeResize` runs `sync` as it
     // registers, and the writes that makes have to be reported to be counted.
     const unobserveMutations = observeMutations(
-      container,
+      root,
       MUTATION_OPTIONS,
       records => {
-        handBackCallerInert(container, records);
+        handBackCallerInert(root, records);
         sync();
       },
     );
-    const unobserveResize = observeResize(container, sync);
+    const unobserveResize = observeResize(root, sync);
     return () => {
       unobserveResize();
       unobserveMutations();
-      ownInertWrites.delete(container);
+      ownInertWrites.delete(root);
     };
-  }, []);
-  const mergedRef = useMergedRefs(ref, truncation.ref, elementRef, observeRoot);
+  }, [root]);
+  const mergedRef = useMergedRefs(ref, truncation.ref, elementRef, setRoot);
 
   const tooltipPlacement: LayerPlacement =
     typeof hasTruncateTooltip === 'string' ? hasTruncateTooltip : 'above';
@@ -319,6 +338,7 @@ export function LineClamp({
         // full text through the tooltip, which opens on focus. A caller's own
         // `tabIndex` wins.
         tabIndex={tooltipEnabled ? 0 : undefined}
+        {...{[ROOT_ATTRIBUTE]: ''}}
         onBlur={composeEventHandlers(handleBlur, onBlur)}
         {...props}>
         {children}
