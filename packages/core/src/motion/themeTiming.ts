@@ -102,7 +102,6 @@ export function easedProgress(
   };
 }
 
-/** The first transition's duration in a computed style, in ms. */
 function firstDurationMs(style: CSSStyleDeclaration): number | null {
   return parseMotionRoleValue(
     'duration',
@@ -182,7 +181,7 @@ function progressOf(
  * them where `element` is. A plain time or easing parses as written. Other
  * text, such as `calc()`, resolves on a hidden probe's transition. The
  * duration is null when it is not a time of zero or more. The easing is null
- * when it is not a cubic Bézier, and a text left out gives null.
+ * when it is not a cubic Bézier. A value left out gives null.
  */
 export function resolveTiming(
   element: Element,
