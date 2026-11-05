@@ -58,7 +58,7 @@ export const docs = {
   ],
   usage: {
     description:
-      "Reports a drag on an element as values, without React, for a surface the product moves itself: a card that follows the finger, a drawer pulled by its handle. A finger, a mouse and a pen all drive it. A mouse or pen drag that starts on selectable text selects that text, and the pan reports nothing. Give that text `user-select: none`. The drag claims its touch at UIKit’s 10 pt, as `UIPanGestureRecognizer` does, so a tap stays a tap and a press or a long press is never reported as a pan. Use the `usePanGesture` hook in React. Where a component already offers the behavior, use its prop instead: BottomSheet's `snapPoints`, Carousel's `hasSnap`.",
+      "Reports a drag on an element as values, without React, for a surface the product moves itself: a card that follows the finger, a drawer pulled by its handle. A finger, a mouse and a pen all drive it. A mouse or pen drag that starts on selectable text selects that text, and the pan reports nothing. Give that text `user-select: none`. The drag claims its touch at UIKit’s 10 pt, as `UIPanGestureRecognizer` does, so a tap stays a tap and a press or a long press is never reported as a pan. Use the `usePanGesture` hook in React. Where a component already offers the behavior, use its prop instead: BottomSheet's `snapPoints`, Carousel's `hasSnap`. Its example is on the usePanGesture page: one draggable box, made once with the hook and once with createPanGesture.",
     bestPractices: [
       {
         guidance: true,
