@@ -224,6 +224,18 @@ async function observe(page: Page) {
           null;
         const label = content?.firstElementChild ?? null;
         const labelStyle = label ? getComputedStyle(label) : null;
+        // How many lines the label takes with no clamp: an unclamped copy at
+        // the same width.
+        let labelNaturalLines = 0;
+        if (label != null && labelStyle != null && label.parentElement) {
+          const copy = label.cloneNode(true) as HTMLElement;
+          copy.style.cssText = `display:block;-webkit-line-clamp:unset;overflow:visible;white-space:normal;position:absolute;visibility:hidden;inline-size:${label.getBoundingClientRect().width}px`;
+          label.parentElement.appendChild(copy);
+          labelNaturalLines = Math.round(
+            copy.getBoundingClientRect().height / px(labelStyle.lineHeight),
+          );
+          copy.remove();
+        }
         return {
           text: label?.textContent?.trim() ?? '',
           caseName:
@@ -234,6 +246,7 @@ async function observe(page: Page) {
           labelOverflows: label
             ? label.scrollHeight > label.clientHeight
             : false,
+          labelNaturalLines,
           direction: style.direction,
           box: box(row.getBoundingClientRect()),
           data: {
@@ -412,6 +425,10 @@ for (const item of cases) {
         );
         // labelLines={2}: the label shows two lines and clips the rest.
         if (row.caseName === 'clamped') {
+          check(
+            row.labelNaturalLines > 2,
+            `${where} fixture does not exceed two lines (${row.labelNaturalLines})`,
+          );
           check(
             row.labelHeight <= 2 * row.labelLineHeight + 0.5 &&
               row.labelHeight > row.labelLineHeight + 0.5 &&

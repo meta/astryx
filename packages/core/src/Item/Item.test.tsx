@@ -875,16 +875,28 @@ describe('Item', () => {
   });
 
   it('truncates the label and description to the lines it is given', () => {
+    // The clamp count reaches CSS through a custom property, so resolve it.
+    const lineClamp = (element: HTMLElement) => {
+      const value = getComputedStyle(element)
+        .getPropertyValue('-webkit-line-clamp')
+        .trim();
+      const variable = /^var\((--[^),]+)\)$/.exec(value)?.[1];
+      return variable == null
+        ? value
+        : getComputedStyle(element).getPropertyValue(variable).trim() ||
+            element.style.getPropertyValue(variable).trim();
+    };
+    // A node label wraps by default, so one line comes from labelLines.
     const {rerender} = render(
       <Item
-        label="A long label"
+        label={<span>A long label</span>}
         labelLines={1}
-        description="A long description"
+        description={<span>A long description</span>}
         descriptionLines={1}
       />,
     );
     for (const text of ['A long label', 'A long description']) {
-      const style = getComputedStyle(screen.getByText(text));
+      const style = getComputedStyle(screen.getByText(text).parentElement!);
       expect(style.overflow).toBe('hidden');
       expect(style.textOverflow).toBe('ellipsis');
       expect(style.whiteSpace).toBe('nowrap');
@@ -897,12 +909,16 @@ describe('Item', () => {
         descriptionLines={2}
       />,
     );
-    for (const text of ['A long label', 'A long description']) {
-      const style = getComputedStyle(screen.getByText(text));
+    const label = screen.getByText('A long label');
+    const description = screen.getByText('A long description');
+    for (const element of [label, description]) {
+      const style = getComputedStyle(element);
       expect(style.overflow).toBe('hidden');
       expect(style.display).toBe('-webkit-box');
       expect(style.whiteSpace).not.toBe('nowrap');
     }
+    expect(lineClamp(label)).toBe('3');
+    expect(lineClamp(description)).toBe('2');
   });
 
   it('reflects highlighted, selected, and disabled on the item theme target', () => {
