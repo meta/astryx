@@ -5,7 +5,8 @@
  * @input Production docsite blog post (the 0.6.0 release post)
  * @output Proof that post headings reveal a copy-link control, that it copies
  *   the heading's permalink, and that a copied link lands the heading below
- *   the sticky header, left to right and right to left
+ *   the sticky header on a fresh load and in place, left to right and right
+ *   to left
  * @position Docsite browser tests; jsdom has no hover, clipboard, or layout
  */
 
@@ -56,6 +57,26 @@ test('hovering a post heading reveals a control that copies its permalink', asyn
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(new URL(copied).pathname).toBe(POST);
   expect(new URL(copied).hash).toBe(`#${HEADING_ID}`);
+});
+
+test('opening a copied heading link lands the heading below the sticky header', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 1280, height: 900});
+  // A fresh load scrolls to the fragment before hydration. The offset must
+  // already include the whole header, banner included.
+  await page.goto(`${POST}#${HEADING_ID}`);
+
+  const heading = page.getByRole('heading', {name: HEADING});
+  await expect(heading).toBeInViewport();
+  const headerBox = await page
+    .locator('.astryx-app-shell-header')
+    .first()
+    .boundingBox();
+  const headingTop = (await heading.boundingBox())?.y ?? -1;
+  expect(headingTop).toBeGreaterThanOrEqual(
+    (headerBox?.y ?? 0) + (headerBox?.height ?? 0) - 1,
+  );
 });
 
 for (const [dir, colorScheme] of [

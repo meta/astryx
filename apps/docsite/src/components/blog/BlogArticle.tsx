@@ -107,7 +107,7 @@ export function BlogArticle({post}: BlogArticleProps) {
           </AspectRatio>
         ) : null}
 
-        <BlogPostBody body={post.body} />
+        <BlogPostBody body={post.body} slug={post.slug} />
 
         {post.tags.length > 0 ? (
           <HStack gap={1} xstyle={styles.tagRow}>

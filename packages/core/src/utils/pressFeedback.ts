@@ -2,48 +2,41 @@
 
 /**
  * @file pressFeedback.ts
- * @input The press state machine (pressGesture.ts) and the document's pointer,
- *   keyboard, scroll and visibility events
- * @output Exports PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps and
- *   installPressFeedback
- * @position The DOM half of the touch press model: one delegated controller
- *   per document that writes `data-astryx-press` on the nearest pressable surface.
- *   Installed by usePressFeedback (hooks/usePressFeedback.ts) on first mount;
- *   the CSS arms that read the attribute live in interactionOverlay.stylex.ts
- *   and in each component with its own `:active` rule. Tested by
- *   pressFeedback.test.ts.
- *
- * ONE listener set for every pressable surface in the document.
- *
- * Why a delegated document-level controller and not a hook on the element: a
- * virtualized list can carry more than a thousand rows, and four listeners
- * plus a state hook per row is not a cost a list like that can pay. This is
- * a handful of listeners for the whole document, and a press costs one
- * attribute write on one element: no React render, no subscription, no
- * per-element anything. It also makes the behaviour uniform for free: every
- * component that paints a press carries {@link PRESSABLE_ATTRIBUTE}, so all of
- * them change together.
- *
- * Where the primary pointer is fine (a desktop), the controller ignores the
- * mouse and the keyboard: CSS `:active` keeps their press, as it always has,
- * and the mouse path costs nothing. Under a finger the `:active` arm is
- * dropped by the CSS (`@media (pointer: coarse)`) and this writes
- * `data-astryx-press="on"` when the press is believed and
- * `data-astryx-press="fading"` for the release's exit.
- *
- * That query reads the PRIMARY pointer, so on a phone or a tablet the
- * stylesheet drops `:active` for every press, including a mouse or trackpad
- * click and a Space press on a focused button. There, the controller paints
- * those too: at once (no scroller can claim a mouse button or a key, so
- * nothing waits), held while the button or key is down, and faded at the
- * release, the way a finger's press leaves. The query is the stylesheet's
- * own, so the two cannot disagree about which presses are the controller's.
+ * @input The press state machine (pressGesture.ts), the menu-press and
+ *   press-group markers, the scroll-view test (scrollView.ts) and the document's pointer, keyboard, scroll and
+ *   visibility events
+ * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps,
+ *   pressFadeMs, installPressFeedback and cancelPress
+ * @position The DOM half of the touch press model. usePressFeedback installs
+ *   it, and the CSS arms live in interactionOverlay.stylex.ts.
  *
  * SYNC: When modified, update pressGesture.ts, hooks/usePressFeedback.ts,
  * hooks/usePressFeedback.doc.mjs, utils/interactionOverlay.stylex.ts and
  * pressFeedback.test.ts.
  */
 
+// One delegated controller per document writes `data-astryx-press` on the
+// nearest pressable surface. A virtualized list can have more than a thousand
+// rows, and listeners and state for each row cost too much. A press here
+// costs one attribute write and no React render.
+//
+// Where the primary pointer is fine, the controller ignores the mouse and the
+// keyboard, and CSS `:active` keeps their press. Under a coarse primary
+// pointer the CSS drops `:active`, so the controller paints every press. A
+// mouse, trackpad or Space press paints at once. The controller reads the
+// same query as the stylesheet, so they agree.
+//
+// A finger waits only inside a scroller. Outside one, a surface highlights in
+// the frame the finger lands, as a UIControl does. Inside one, it waits the
+// content-touch delay, because the touch can become a scroll. Rows follow the
+// same rule.
+//
+// A surface's hold does nothing, so it keeps the browser's long-press text
+// selection (AST-094). Only an element whose hold does something suppresses
+// it, through the gesture host. The `touchcancel` listener is on only while
+// the primary pointer is coarse.
+
+import {MENU_PRESS_MARKER} from '../hooks/menuPressMarker';
 import type {PressGesture, PressPaint, PressStep} from './pressGesture';
 import {
   idlePressGesture,
@@ -53,7 +46,14 @@ import {
   PRESS_SCROLL_BRAKE_MS,
   pressGestureStep,
 } from './pressGesture';
+import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {parseMotionRoleValue} from '../motion/roles';
+import {subscribeInput} from './inputStream';
+import {isInsideScrollView} from './scrollView';
 import {TOUCH_QUERY} from './touchPresentation';
+import {holdsPressThroughDrag} from '../privateAttributes/pressHoldsDrag.stylex';
+import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
 
 /**
  * The marker the controller finds with `closest()`. Every Astryx component
@@ -103,11 +103,10 @@ const SPACE_ACTIVATED_INPUT_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * A menu's own highlight is its only paint (`module:DropdownMenu/useMenuPress`
- * FR6, DEC-6): a press held on one row while the highlight follows the
- * pointer to another would light two rows.
+ * A menu's own highlight is its only paint. A press held on one row while the
+ * highlight follows the pointer to another would light two rows.
  */
-const MENU_PRESS_ROOT = '[data-astryx-menu-press]';
+const MENU_PRESS_ROOT = `[${MENU_PRESS_MARKER}]`;
 
 interface LiveGesture {
   element: HTMLElement;
@@ -117,7 +116,8 @@ interface LiveGesture {
    * for a press of the Space key.
    */
   pointerId: number | null;
-  timer: ReturnType<typeof setTimeout> | null;
+  /** Cancels the clock the current phase owes, or the release it waits for. */
+  timer: (() => void) | null;
 }
 
 /**
@@ -156,6 +156,98 @@ const TIMER_MS: Record<NonNullable<PressStep['timer']>, number> = {
   onset: PRESS_ONSET_MS,
 };
 
+/**
+ * The release fade's clock on `element`, read once, at the release, from the
+ * token its stylesheet reads: the theme's `--duration-exit`. Without a
+ * readable value it is the token's default. Under Reduce Motion it is no
+ * longer than the Reduce Motion fade, as in the stylesheet.
+ */
+export function pressFadeMs(element: Element): number {
+  const exit =
+    parseMotionRoleValue(
+      'duration',
+      getComputedStyle(element).getPropertyValue('--duration-exit'),
+    ) ?? PRESS_FADE_MS;
+  const reduced =
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const bound = parseMotionRoleValue(
+    'duration',
+    reducedMotionFadeConsts.duration,
+  );
+  return reduced && bound != null ? Math.min(exit, bound) : exit;
+}
+
+/**
+ * The release animations that still run for `element`'s press. Each is a
+ * finite CSS animation that has not finished. It runs on the element, on its
+ * `::before` or `::after`, or on a descendant whose nearest press owner is
+ * the element, because a component can draw its release on a part inside the
+ * surface. A press owner nested inside plays the release of its own press,
+ * so it never extends this one. The list is empty where the engine has no Web
+ * Animations.
+ */
+function releaseAnimationsOf(element: Element): Animation[] {
+  if (typeof element.getAnimations !== 'function') {
+    return [];
+  }
+  return element.getAnimations({subtree: true}).filter(animation => {
+    // The effect of a CSS animation is a KeyframeEffect. Its target is the
+    // element, also when the animation runs on a pseudo-element.
+    const effect = animation.effect as KeyframeEffect | null;
+    const target = effect?.target ?? null;
+    if (
+      effect == null ||
+      target == null ||
+      !('animationName' in animation) ||
+      (target !== element &&
+        target.closest(`[${PRESSABLE_ATTRIBUTE}]`) !== element)
+    ) {
+      return false;
+    }
+    if (!Number.isFinite(Number(effect.getComputedTiming().endTime))) {
+      return false;
+    }
+    return animation.playState !== 'finished';
+  });
+}
+
+/**
+ * Calls `end` when the release on `element` is over. A busy main thread
+ * delays the first frame of the release animation, and with it the end. So a
+ * clock that starts at the `fading` write can cut the release short. When
+ * `clockMs` runs out, the release waits for each release animation that still
+ * runs or still waits for its first frame. It ends when those finish or are
+ * cancelled, as when the surface is unmounted or restyled. With no release
+ * animation (an instant release, a surface without one, an engine without Web
+ * Animations), the release ends at the clock. Returns a cancel.
+ */
+function endAfterRelease(
+  element: Element,
+  clockMs: number,
+  end: () => void,
+): () => void {
+  let waiting = true;
+  const timer = setTimeout(() => {
+    const running = releaseAnimationsOf(element);
+    if (running.length === 0) {
+      end();
+      return;
+    }
+    void Promise.allSettled(
+      running.map(async animation => animation.finished),
+    ).then(() => {
+      if (waiting) {
+        end();
+      }
+    });
+  }, clockMs);
+  return () => {
+    waiting = false;
+    clearTimeout(timer);
+  };
+}
+
 const TIMER_EVENT = {
   fade: 'fadeEnd',
   flash: 'flashEnd',
@@ -167,12 +259,16 @@ function paintElement(element: HTMLElement, paint: PressPaint): void {
     element.removeAttribute(PRESSED_ATTRIBUTE);
     return;
   }
-  element.setAttribute(PRESSED_ATTRIBUTE, paint);
+  // A step that keeps the paint writes nothing, so the element sees one
+  // change per paint.
+  if (element.getAttribute(PRESSED_ATTRIBUTE) !== paint) {
+    element.setAttribute(PRESSED_ATTRIBUTE, paint);
+  }
 }
 
 function clearTimer(slot: Slot): void {
   if (slot.live?.timer != null) {
-    clearTimeout(slot.live.timer);
+    slot.live.timer();
     slot.live.timer = null;
   }
 }
@@ -180,22 +276,16 @@ function clearTimer(slot: Slot): void {
 /**
  * Run one event through the machine and make the DOM say what it answered.
  *
- * THE TIMER RULE, and why it is not "clear, then maybe re-arm": a step that
- * returns `timer: null` WITHOUT changing phase is a pass-through, and the
- * phase it left running still owes its transition. Clearing unconditionally
- * strands three gestures, each ending with a paint on a control nobody is
- * touching, until some later touch happens to clean it up:
- *
- *  - a finger that jitters inside the slop during the 150 ms delay (which is
- *    every real finger; only a synthetic touch holds perfectly still) kills
- *    the onset timer, so the press never paints at all;
- *  - a `pointercancel` or a scroll inside a quick tap's 100 ms flash kills
- *    `flashEnd`, leaving `data-astryx-press="on"` painted indefinitely. iOS Safari
- *    delivers that cancel at `scrollend`, seconds after the tap, so it is not
- *    a corner case;
- *  - the same inside the 200 ms fade strands `data-astryx-press="fading"` and the
- *    controller's single tracking slot, holding a reference to an element a
- *    virtualized list may already have unmounted.
+ * A step that returns `timer: null` without a phase change is a
+ * pass-through: the running phase still owes its transition. So do not clear
+ * the timer on every step. That would strand a paint on a control that nobody
+ * touches:
+ * - Finger jitter inside the slop during the onset delay kills the onset
+ *   timer, so the press never paints.
+ * - A `pointercancel` or scroll during a quick tap's flash leaves `on`
+ *   painted. iOS Safari sends that cancel at `scrollend`, seconds later.
+ * - The same during the fade strands `fading` and the tracking slot, which
+ *   holds an element that a virtualized list may have unmounted.
  */
 function apply(slot: Slot, step: PressStep): void {
   const live = slot.live;
@@ -214,10 +304,7 @@ function apply(slot: Slot, step: PressStep): void {
   }
   if (step.timer != null) {
     const kind = step.timer;
-    // A TIMER, never `requestAnimationFrame`: iOS throttles frame callbacks
-    // while a scroll runs, so a frame-based delay would fire late, after the
-    // scroll, and paint a control nobody is pressing any more.
-    live.timer = setTimeout(() => {
+    const fire = () => {
       if (slot.live != null) {
         slot.live.timer = null;
       }
@@ -227,7 +314,22 @@ function apply(slot: Slot, step: PressStep): void {
           kind: TIMER_EVENT[kind],
         }),
       );
-    }, TIMER_MS[kind]);
+    };
+    if (kind === 'fade') {
+      // The release fade follows the theme's tempo (AST-108). It ends when
+      // its animation ends, however late a busy main thread let it start.
+      live.timer = endAfterRelease(
+        live.element,
+        pressFadeMs(live.element),
+        fire,
+      );
+    } else {
+      // A TIMER, never `requestAnimationFrame`: iOS throttles frame callbacks
+      // while a scroll runs, so a frame-based delay would fire late, after the
+      // scroll, and paint a control nobody is pressing any more.
+      const timer = setTimeout(fire, TIMER_MS[kind]);
+      live.timer = () => clearTimeout(timer);
+    }
   }
 }
 
@@ -251,25 +353,14 @@ function surfaceAt(target: EventTarget | null): HTMLElement | null {
 }
 
 /**
- * Is this touch a BRAKE on a list the finger set moving, rather than a press?
+ * Is this touch a brake on a list that the finger set moving, not a press?
+ * A native list highlights nothing for a brake. No later signal cancels it,
+ * because the stopped scroll sends no more events.
  *
- * A native list highlights nothing for one, and nothing else would cancel it:
- * stopping the scroll is exactly what makes the scroll events stop arriving,
- * so there is no later signal to react to.
- *
- * Two narrowings, because "a scroll happened recently" is far too broad and
- * would swallow presses nobody asked it to. Apps scroll things by themselves
- * all the time: a transcript pinned to the bottom scrolls on every streamed
- * frame, keyboard navigation calls `scrollIntoView`, a route change restores
- * a position. None of those is a finger braking anything.
- *
- *  1. The scroller must CONTAIN the pressed element. A pane scrolling itself
- *     says nothing about a control elsewhere.
- *  2. The scroll must have been driven by a finger IN THAT SCROLLER, which is
- *     what `onScroll` records. "Any finger anywhere, recently" is not enough:
- *     tap a control, then within the memory window press a button inside a
- *     pane that is scrolling on its own, and that press would be swallowed by
- *     a scroll no finger drove.
+ * Apps often scroll by themselves (a pinned transcript, `scrollIntoView`, a
+ * restored position), so two conditions narrow it:
+ * 1. The scroller contains the pressed element.
+ * 2. A finger in that scroller drove the scroll, as `onScroll` records.
  */
 function scrollerIsBraking(element: HTMLElement): boolean {
   if (Date.now() - lastScrollAt >= PRESS_SCROLL_BRAKE_MS) {
@@ -306,6 +397,21 @@ function finish(slot: Slot): void {
   }
 }
 
+/**
+ * Ends the press the controller follows on `element`, and its paint, at once.
+ * A clickable container calls it when a press starts on an interactive
+ * element inside it: that press does not activate the container, so the
+ * container shows no press.
+ */
+export function cancelPress(element: Element): void {
+  if (finger.live?.element === element) {
+    finish(finger);
+  }
+  if (button.live?.element === element) {
+    finish(button);
+  }
+}
+
 /** A new press on an element owns its paint: the other slot's gesture there ends. */
 function takeOver(other: Slot, element: HTMLElement): void {
   if (other.live?.element === element) {
@@ -319,9 +425,8 @@ function takeOver(other: Slot, element: HTMLElement): void {
  * so a layout that must not depend on it stays independent.
  */
 function stylesheetDroppedActive(): boolean {
-  // The shared touch resolver's key (`spec:AST-012` FR2): the condition the
-  // stylesheet drops `:active` under (`COARSE` in
-  // interactionOverlay.stylex.ts), read once per press.
+  // The shared touch resolver's key (AST-012): the condition under which the
+  // stylesheet drops `:active`, read once per press.
   return (
     typeof window.matchMedia === 'function' &&
     window.matchMedia(TOUCH_QUERY).matches
@@ -330,8 +435,9 @@ function stylesheetDroppedActive(): boolean {
 
 /**
  * The surface a mouse button's or the Space key's press paints, if any: the
- * innermost marked surface, outside a menu. A key's press paints only a
- * focused element that is itself the surface, as `:active` does.
+ * innermost marked surface, outside a menu and off a tracked action. A key's
+ * press paints only a focused element that is itself the surface, as
+ * `:active` does.
  */
 function buttonSurfaceAt(
   target: EventTarget | null,
@@ -339,6 +445,10 @@ function buttonSurfaceAt(
 ): HTMLElement | null {
   const element = surfaceAt(target);
   if (element == null || element.closest(MENU_PRESS_ROOT) != null) {
+    return null;
+  }
+  // A tracker that follows a mouse paints a mouse press on its own actions.
+  if (pointerId != null && isTrackedByGroup(element, 'mouse')) {
     return null;
   }
   if (pointerId == null && element !== target) {
@@ -394,6 +504,7 @@ function onPointerDown(event: PointerEvent): void {
     }
     return;
   }
+  armTouchCancel();
   if (finger.live != null) {
     const fingerIsUp =
       finger.live.gesture.phase === 'fading' ||
@@ -418,7 +529,14 @@ function onPointerDown(event: PointerEvent): void {
   const braking = element != null && scrollerIsBraking(element);
   lastTouchAt = Date.now();
   lastTouchTarget = event.target instanceof Node ? event.target : null;
-  if (element == null || braking) {
+  // A group's tracker that follows this pointer paints its action, so two
+  // writers would erase each other's paint. The touch still counts for the
+  // brake above.
+  if (
+    element == null ||
+    braking ||
+    isTrackedByGroup(element, event.pointerType)
+  ) {
     return;
   }
   takeOver(button, element);
@@ -434,6 +552,7 @@ function onPointerDown(event: PointerEvent): void {
       kind: 'down',
       x: event.clientX,
       y: event.clientY,
+      delayed: isInsideScrollView(element),
     }),
   );
 }
@@ -444,6 +563,10 @@ function onPointerMove(event: PointerEvent): void {
     live == null ||
     (live.pointerId != null && event.pointerId !== live.pointerId)
   ) {
+    return;
+  }
+  // The finger drags the surface's own control: its travel keeps the press.
+  if (holdsPressThroughDrag(live.element)) {
     return;
   }
   apply(
@@ -487,10 +610,9 @@ function onPointerUp(event: PointerEvent): void {
 /**
  * The scroller claimed the gesture, or the platform took it.
  *
- * `pointercancel` is the primary one: measured on iOS 26.2 it fires before
- * the first `scroll` event (+303 ms against +304 ms on a slow drag, +31 ms
- * against +47 ms on a fling), which is what puts this cancel one frame ahead
- * of the list's motion, the way UIKit's `touchesCancelled` is.
+ * `pointercancel` is the primary signal. On iOS it fires before the first
+ * `scroll` event, so this cancel runs one frame ahead of the list's motion,
+ * as UIKit's `touchesCancelled` does.
  */
 function onCancel(event?: Event): void {
   // A cancelled mouse pointer ends the mouse's press, not a finger's.
@@ -561,6 +683,11 @@ function activatesOnSpace(target: EventTarget | null): boolean {
   );
 }
 
+/** A tracked action takes no `:active` paint, so a key's press paints here. */
+function isTrackedAction(target: EventTarget | null): boolean {
+  return target instanceof Element && isTrackedByGroup(target);
+}
+
 /**
  * Space went down on a focused button that is itself a pressable surface.
  * Heard in the BUBBLE phase, after the page's own handlers, so a press the
@@ -574,7 +701,7 @@ function onKeyDown(event: KeyboardEvent): void {
     event.isComposing ||
     event.defaultPrevented ||
     !activatesOnSpace(event.target) ||
-    !stylesheetDroppedActive()
+    !(stylesheetDroppedActive() || isTrackedAction(event.target))
   ) {
     return;
   }
@@ -615,37 +742,77 @@ function onVisibilityChange(): void {
   }
 }
 
-const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
-const PASSIVE = {passive: true} as const;
+/** The input stream subscriptions while installed. */
+let unsubscribers: (() => void)[] = [];
 
+/** The touch-only `touchcancel` subscription, while the pointer is coarse. */
+let stopTouchCancel: (() => void) | null = null;
+let stopWatchingPointer: (() => void) | null = null;
+
+/**
+ * The touch-only listener is on only while the primary pointer is coarse.
+ * Where it is fine, a finger's press still ends through `pointercancel`.
+ */
+function hearTouchCancel(on: boolean): void {
+  if (on === (stopTouchCancel != null)) {
+    return;
+  }
+  if (on) {
+    stopTouchCancel = subscribeInput(window, 'touchcancel', onCancel);
+  } else {
+    stopTouchCancel?.();
+    stopTouchCancel = null;
+  }
+}
+
+/**
+ * Read the primary pointer when the first finger or pen lands, and follow it
+ * from then on: installing asks nothing, so a page no one touches never
+ * queries it.
+ */
+function armTouchCancel(): void {
+  if (stopWatchingPointer != null) {
+    return;
+  }
+  stopWatchingPointer = watchCoarsePointer(window, hearTouchCancel);
+  hearTouchCancel(isCoarsePointer(window));
+}
+
+// The pointer, drag, scroll and visibility listeners are passive and on the
+// window's capture phase, through the shared input stream
+// (utils/inputStream.ts): a page of pressables blocks no scroll, and an app's
+// capture-phase stopPropagation at the document cannot starve the controller.
 function addListeners(): void {
-  window.addEventListener('pointerdown', onPointerDown, PASSIVE_CAPTURE);
-  window.addEventListener('pointermove', onPointerMove, PASSIVE_CAPTURE);
-  window.addEventListener('pointerup', onPointerUp, PASSIVE_CAPTURE);
-  window.addEventListener('pointercancel', onCancel, PASSIVE_CAPTURE);
-  window.addEventListener('touchcancel', onCancel, PASSIVE_CAPTURE);
-  window.addEventListener('dragstart', onDragStart, PASSIVE_CAPTURE);
-  // `scroll` does not bubble, so the capture phase is the only way one
-  // listener hears every scroller in the document.
-  document.addEventListener('scroll', onScroll, PASSIVE_CAPTURE);
-  document.addEventListener('visibilitychange', onVisibilityChange);
-  // Only Space's press needs the key's release and focus loss, so those two
-  // are attached while it is held (holdKey).
+  unsubscribers = [
+    subscribeInput(window, 'pointerdown', onPointerDown),
+    subscribeInput(window, 'pointermove', onPointerMove),
+    subscribeInput(window, 'pointerup', onPointerUp),
+    subscribeInput(window, 'pointercancel', onCancel),
+    subscribeInput(window, 'dragstart', onDragStart),
+    // `scroll` does not bubble; the capture phase hears every scroller.
+    subscribeInput(window, 'scroll', onScroll),
+    subscribeInput(window, 'visibilitychange', onVisibilityChange),
+  ];
+  // The key path listens after the page's own handlers, at the window's
+  // bubble phase: a Space press the page cancels (`defaultPrevented`) paints
+  // nothing. Only Space's press needs the key's release and focus loss, so
+  // those two are attached while it is held (holdKey).
   window.addEventListener('keydown', onKeyDown, PASSIVE);
 }
 
 function removeListeners(): void {
-  window.removeEventListener('pointerdown', onPointerDown, PASSIVE_CAPTURE);
-  window.removeEventListener('pointermove', onPointerMove, PASSIVE_CAPTURE);
-  window.removeEventListener('pointerup', onPointerUp, PASSIVE_CAPTURE);
-  window.removeEventListener('pointercancel', onCancel, PASSIVE_CAPTURE);
-  window.removeEventListener('touchcancel', onCancel, PASSIVE_CAPTURE);
-  window.removeEventListener('dragstart', onDragStart, PASSIVE_CAPTURE);
-  document.removeEventListener('scroll', onScroll, PASSIVE_CAPTURE);
-  document.removeEventListener('visibilitychange', onVisibilityChange);
+  for (const unsubscribe of unsubscribers.splice(0)) {
+    unsubscribe();
+  }
+  stopWatchingPointer?.();
+  stopWatchingPointer = null;
+  hearTouchCancel(false);
   window.removeEventListener('keydown', onKeyDown);
   holdKey(false);
 }
+
+const PASSIVE_CAPTURE = {capture: true, passive: true} as const;
+const PASSIVE = {passive: true} as const;
 
 /** Whether the key-release listeners are attached. */
 let keyHeld = false;

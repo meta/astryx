@@ -115,7 +115,7 @@ export const doc = {
     {
       type: 'template.show',
       description:
-        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and `demoMediaReplaced` — how many Astryx demo media references (images, posters, videos) in the source were replaced with placeholders for you to swap for your own media.",
+        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and `demoMediaReplaced` — how many Astryx demo media references (images, posters, videos) in the source were replaced with placeholders for you to swap for your own media, and `demoContentReplaced` — how many Astryx docs-only demo content elements were replaced with a `<Text>` placeholder for your own content.",
     },
     {
       type: 'template.skeleton',
@@ -125,7 +125,7 @@ export const doc = {
     {
       type: 'template.copy',
       description:
-        'A receipt after scaffolding the template into the project: the template id, output directory, written file name, file count, `demoMediaReplaced` — how many Astryx demo media references were replaced with placeholders, `notes` — setup notes naming what the template needs that the project lacks (missing packages, missing StyleX compiler; empty when satisfied), `missingPackages` — external package names the template imports that are not in the project, and `installCommand` — a ready-to-run install command with the detected package manager and workspace version ranges (null when nothing is missing, or when several lockfiles leave the package manager undetermined; `missingPackages` still names the packages).',
+        'A receipt after scaffolding the template into the project: the template id, output directory, written file name, file count, `demoMediaReplaced` — how many Astryx demo media references were replaced with placeholders, `demoContentReplaced` — how many Astryx docs-only demo content elements were replaced with a `<Text>` placeholder, `notes` — setup notes naming what the template needs that the project lacks (missing packages, missing StyleX compiler; empty when satisfied), `missingPackages` — external package names the template imports that are not in the project, and `installCommand` — a ready-to-run install command with the detected package manager and workspace version ranges (null when nothing is missing, or when several lockfiles leave the package manager undetermined; `missingPackages` still names the packages).',
     },
     {
       type: 'template.cdn',

@@ -2,8 +2,9 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
-import {Profiler} from 'react';
+import {Profiler, StrictMode, useState} from 'react';
 import {Lightbox} from './Lightbox';
+import {getFocusableElements} from '../hooks/useFocusTrap';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
 
@@ -130,6 +131,24 @@ describe('Lightbox', () => {
     const closeButton = screen.getByLabelText('Close');
     fireEvent.click(closeButton);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('ignores a cancel that bubbles up from inside it', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={onOpenChange}
+        media={{src: '/photo.jpg', alt: 'Photo'}}
+      />,
+    );
+    // Only a close request fired at the <dialog> itself dismisses; a bubbling
+    // `cancel` from a control inside (a dismissed file picker) does not.
+    const inside = document.querySelector('dialog button')!;
+    const fromInside = new Event('cancel', {bubbles: true, cancelable: true});
+    inside.dispatchEvent(fromInside);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(fromInside.defaultPrevented).toBe(false);
   });
 
   it('calls onOpenChange(false) on Escape via cancel event', () => {
@@ -815,5 +834,121 @@ describe('Lightbox with an unusable controlled index', () => {
         />,
       ),
     ).not.toThrow();
+  });
+});
+
+// AR3: a viewer that unmounts while open (rendered only while open, or removed
+// with its view) returns focus to the element that opened it, as a close does.
+describe('Lightbox unmounting while open', () => {
+  const items = [
+    {src: 'a.jpg', alt: 'Sunrise'},
+    {src: 'b.jpg', alt: 'Sunset'},
+  ];
+  function Gallery() {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button type="button" onClick={() => setIsOpen(true)}>
+          View photos
+        </button>
+        {isOpen ? (
+          <Lightbox isOpen onOpenChange={setIsOpen} media={items} index={0} />
+        ) : null}
+        <button type="button" onClick={() => setIsOpen(false)}>
+          Remove viewer
+        </button>
+      </>
+    );
+  }
+
+  it('returns focus to the opener when the viewer unmounts', async () => {
+    render(<Gallery />);
+    const opener = screen.getByRole('button', {name: 'View photos'});
+    opener.focus();
+    fireEvent.click(opener);
+    const next = screen.getByLabelText('Next');
+    next.focus();
+
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Remove viewer', hidden: true}),
+    );
+    await Promise.resolve();
+
+    expect(document.querySelector('dialog')).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('leaves focus on a page control the user pressed to remove the viewer', async () => {
+    render(<Gallery />);
+    const opener = screen.getByRole('button', {name: 'View photos'});
+    opener.focus();
+    fireEvent.click(opener);
+    const remove = screen.getByRole('button', {
+      name: 'Remove viewer',
+      hidden: true,
+    });
+    remove.focus();
+
+    fireEvent.click(remove);
+    await Promise.resolve();
+
+    expect(document.querySelector('dialog')).toBeNull();
+    expect(document.activeElement).toBe(remove);
+  });
+
+  it('keeps focus inside through StrictMode effects, then returns it on unmount', async () => {
+    render(
+      <StrictMode>
+        <Gallery />
+      </StrictMode>,
+    );
+    const opener = screen.getByRole('button', {name: 'View photos'});
+    opener.focus();
+    fireEvent.click(opener);
+    const next = screen.getByLabelText('Next');
+    next.focus();
+    await Promise.resolve();
+    expect(document.activeElement).toBe(next);
+
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Remove viewer', hidden: true}),
+    );
+    await Promise.resolve();
+
+    expect(document.activeElement).toBe(opener);
+  });
+});
+
+// Tab from the last tabbable control wraps to the first and Shift+Tab from the
+// first wraps to the last, so focus never leaves the modal for the browser's
+// own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+describe('Lightbox focus region (Dialog DEC-2)', () => {
+  it('wraps Tab and Shift+Tab inside the open viewer', () => {
+    render(
+      <Lightbox
+        isOpen
+        onOpenChange={() => {}}
+        media={[
+          {src: '/one.jpg', alt: 'One'},
+          {src: '/two.jpg', alt: 'Two'},
+        ]}
+      />,
+    );
+    expectTabWrapsInside(document.querySelector('dialog') as HTMLElement);
   });
 });

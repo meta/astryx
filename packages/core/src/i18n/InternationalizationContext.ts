@@ -25,17 +25,23 @@
 import {createContext} from 'react';
 import {getResolve} from './resolve';
 import type {Locale, MessagesByLocale, Overrides} from './types';
+import type {CalendarSystem} from '../utils/calendarSystem';
 
 export interface InternationalizationContextValue {
   locale: Locale;
   direction: 'ltr' | 'rtl';
+  /**
+   * The provider's requested calendar system. A context without it means
+   * Gregorian dates.
+   */
+  calendar?: CalendarSystem;
   messages: MessagesByLocale;
   overrides?: Overrides;
   translate: ReturnType<typeof getResolve>;
 }
 
 /**
- * Default value falls through to the shipped en catalog in resolve().
+ * Default value falls through to the shipped English fallback in resolve().
  * A consumer that doesn't render a provider still gets English defaults.
  */
 export const InternationalizationContext =

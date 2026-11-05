@@ -7,6 +7,10 @@
  * packages/core/locales/*.json remain the canonical Crowdin sources and keep
  * translator descriptions. Each generated module exports only the
  * key-to-defaultMessage map used at runtime.
+ *
+ * It also derives Core's per-module English fallback maps (see
+ * scripts/i18n-english-fallback.mjs) and fails when a Core module that names
+ * catalog keys does not import and register its own map.
  */
 
 import {spawn} from 'node:child_process';
@@ -14,6 +18,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createPseudoCatalog} from '../packages/core/scripts/build-pseudo-locale.mjs';
+import {
+  CORE_SRC_DIR,
+  collectEnglishFallbackSlices,
+  findWiringProblems,
+  isShippedSourceModule,
+  writeEnglishFallbackSlices,
+} from './i18n-english-fallback.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPT_DIR, '..');
@@ -144,10 +155,24 @@ export function isSourceLocaleFile(file) {
 
 export async function generateRuntimeCatalogs({check = false} = {}) {
   const runtimeCatalogs = createRuntimeCatalogs(readSourceCatalogs());
+  const english = runtimeCatalogs[EN_FILE];
+  const slices = collectEnglishFallbackSlices(english);
+  const wiringProblems = findWiringProblems(slices);
+  const failOnWiringProblems = () => {
+    if (wiringProblems.length === 0) return;
+    throw new Error(
+      `${wiringProblems.length} Core module(s) do not reach their English fallback:\n` +
+        wiringProblems.map(problem => `  - ${problem}`).join('\n'),
+    );
+  };
 
   if (check) {
+    failOnWiringProblems();
     console.log(
       `✓ ${Object.keys(runtimeCatalogs).length} authored locale catalogs produce metadata-free runtime maps`,
+    );
+    console.log(
+      `✓ All ${slices.size} Core modules that name catalog keys reach their English`,
     );
     return;
   }
@@ -163,10 +188,16 @@ export async function generateRuntimeCatalogs({check = false} = {}) {
     if (writeIfChanged(getGeneratedModulePath(file), output)) changed += 1;
   }
 
+  const fallback = writeEnglishFallbackSlices(english, slices);
+
   console.log(
     `Generated ${Object.keys(runtimeCatalogs).length} runtime locale modules ` +
-      `(${changed} changed, ${removed} stale removed)`,
+      `(${changed} changed, ${removed} stale removed) and ${slices.size} ` +
+      `English fallback maps (${fallback.changed} changed, ${fallback.removed} stale removed)`,
   );
+  // Written first so a development server still gets current maps; a module
+  // that cannot reach its English still fails the build and the test run.
+  failOnWiringProblems();
 }
 
 export function createSpawnInvocation(
@@ -189,17 +220,26 @@ export function createSpawnInvocation(
   };
 }
 
-async function watchRuntimeCatalogs(command) {
+/**
+ * Runs `command` once the runtime catalogs are current and regenerates them
+ * while it runs. A test passes its own `generate`, `run` and `watch`.
+ */
+export async function watchRuntimeCatalogs(
+  command,
+  {
+    generate = generateRuntimeCatalogs,
+    run = runForwardingSignals,
+    watch = fs.watch,
+  } = {},
+) {
   let debounce;
   let regeneration = Promise.resolve();
   const queueGeneration = () => {
-    const next = regeneration.then(() => generateRuntimeCatalogs());
+    const next = regeneration.then(() => generate());
     regeneration = next.catch(() => {});
     return next;
   };
-  const watcher = fs.watch(SOURCE_LOCALES_DIR, (_event, file) => {
-    const fileName = file == null ? null : String(file);
-    if (fileName !== null && !isSourceLocaleFile(fileName)) return;
+  const scheduleGeneration = () => {
     clearTimeout(debounce);
     debounce = setTimeout(() => {
       void queueGeneration().catch(error => {
@@ -209,33 +249,60 @@ async function watchRuntimeCatalogs(command) {
         );
       });
     }, 75);
+  };
+  const watcher = watch(SOURCE_LOCALES_DIR, (_event, file) => {
+    const fileName = file == null ? null : String(file);
+    if (fileName !== null && !isSourceLocaleFile(fileName)) return;
+    scheduleGeneration();
   });
+  // Core modules decide which keys each English fallback map holds, so a
+  // module edit regenerates the maps too.
+  const sourceWatcher = watch(
+    CORE_SRC_DIR,
+    {recursive: true},
+    (_event, file) => {
+      const fileName =
+        file == null ? null : String(file).split(path.sep).join('/');
+      if (fileName !== null && !isShippedSourceModule(fileName)) return;
+      scheduleGeneration();
+    },
+  );
 
   try {
     // Register the watcher first so an edit during initial generation queues a
     // second pass instead of leaving the child process on stale catalogs.
     await queueGeneration();
-
-    const spawnOptions = {env: process.env, stdio: 'inherit'};
-    const invocation = createSpawnInvocation(command);
-    const child = spawn(invocation.file, invocation.args, spawnOptions);
-    const forwardInterrupt = () => child.kill('SIGINT');
-    const forwardTermination = () => child.kill('SIGTERM');
-    process.on('SIGINT', forwardInterrupt);
-    process.on('SIGTERM', forwardTermination);
-
-    try {
-      return await new Promise((resolve, reject) => {
-        child.once('error', reject);
-        child.once('exit', (code, signal) => resolve(signal ? 1 : (code ?? 1)));
-      });
-    } finally {
-      process.removeListener('SIGINT', forwardInterrupt);
-      process.removeListener('SIGTERM', forwardTermination);
-    }
+    return await run(command);
   } finally {
     clearTimeout(debounce);
     watcher.close();
+    sourceWatcher.close();
+  }
+}
+
+/**
+ * Runs `command` as a child and forwards SIGINT and SIGTERM to it until it
+ * exits. Resolves with the child's exit code, or 1 when a signal ended it.
+ */
+export async function runForwardingSignals(command) {
+  const invocation = createSpawnInvocation(command);
+  const child = spawn(invocation.file, invocation.args, {
+    env: process.env,
+    stdio: 'inherit',
+  });
+  const forwardInterrupt = () => child.kill('SIGINT');
+  const forwardTermination = () => child.kill('SIGTERM');
+  process.on('SIGINT', forwardInterrupt);
+  process.on('SIGTERM', forwardTermination);
+
+  try {
+    return await new Promise((resolve, reject) => {
+      child.once('error', reject);
+      child.once('exit', (code, signal) => resolve(signal ? 1 : (code ?? 1)));
+    });
+  } finally {
+    process.removeListener('SIGINT', forwardInterrupt);
+    process.removeListener('SIGTERM', forwardTermination);
   }
 }
 
