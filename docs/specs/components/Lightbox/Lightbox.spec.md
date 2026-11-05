@@ -37,8 +37,10 @@ system_specs: [spec:AST-017, spec:AST-020, spec:AST-086, spec:AST-094]
 
 ## Intent
 
-Lightbox presents one active image or video in a full-viewport viewer and may
-add gallery navigation, a caption, and a position counter. On a touch screen it
+Lightbox presents one active item in a full-viewport viewer and may add gallery
+navigation, a caption, and a position counter. An item is an image, a video, or
+caller-provided React content, so rich previews reuse the viewer's navigation,
+dismissal, and scroll lock instead of building their own overlay. On a touch screen it
 behaves like a native photo viewer: a person pinches and double-taps to zoom,
 swipes between items, drags a photo down or pinches it in to close, and taps to
 hide the controls. Every gesture has a button, key, or single-pointer
@@ -66,8 +68,15 @@ same actions.
   cross-device consistency under FR59 and need fine-pointer evidence before and
   after. `[experimental]`: the thumbnail transition and `experimental.sourceFor`
   (FR12, FR21)
+- Custom items (FR17–FR21, AR9) are additive under `spec:AST-017` FR5: `media`
+  accepts a third item kind, and `LightboxItem` and `LightboxCustomItem` are new
+  type exports. A media-only caller changes nothing: for media items a consumer
+  `onKeyDown` still runs after Lightbox's shortcuts and cannot cancel them, as
+  released; only while a custom item is active does it run first and cancel
+  them (FR20)
 - Controlled/uncontrolled behavior: unchanged; a swipe reports through
-  `onIndexChange`, and a controlled `index` the caller refuses springs back
+  `onIndexChange`, and a controlled `index` the caller refuses springs back;
+  `index` and `onIndexChange` address media and custom items alike
 - Migration decision: none required. `hasZoom={false}` turns off FR6, FR9, and
   FR10 (FR13)
 
@@ -101,6 +110,9 @@ the requirement it misses and the person it affects.
   nothing, a ctrl-wheel zooms the page, and a wheel does not pan a zoomed photo.
 - **Touch exit (FR16).** On a touch screen the viewer disappears at once when
   it closes.
+- **Custom items (FR17–FR21, AR9).** `media` accepts only images and videos, so
+  a product that shows live previews, embeds, or rich cards builds its own
+  overlay without Lightbox's navigation, dismissal, and scroll lock.
 
 ## Ownership boundary
 
@@ -110,6 +122,10 @@ the requirement it misses and the person it affects.
 - Media presentation, optional Caption and Counter placement, gallery
   navigation, image zoom and pan, the touch presentation (FR5–FR12), and the
   touch exit (FR16).
+- The item model: the media and custom item kinds, their shared gallery index,
+  and naming the dialog from the active item (FR17, AR9).
+- The keyboard boundary between Lightbox shortcuts and custom content (FR19,
+  FR20).
 - The accessible alternative for every gesture it presents (AR1–AR8).
 
 **Does not own / non-goals**
@@ -117,6 +133,8 @@ the requirement it misses and the person it affects.
 - The Close, Previous, and Next button surfaces — delegated to
   `component:Button` through IconButton.
 - Caller-provided Caption content.
+- A custom item's content: its layout, sizing, styling, semantics, and its own
+  keyboard and pointer interaction — owned by the caller.
 - New targets for Media, Caption, or Counter; none exist.
 - Shared layer hosting or dismissal policy — owned by
   `architecture:layer-runtime` and `family:overlay-dismissal`.
@@ -125,53 +143,77 @@ the requirement it misses and the person it affects.
 
 ## Public concepts
 
-No new stable public concept is introduced. `experimental.sourceFor` is an
-experimental option inside the `experimental` prop object (`spec:AST-017`
-FR21). Consumer props and usage remain documented in `Lightbox.doc.mjs`.
+| Concept                   | Closed values or states                       | Meaning                                                                     | Availability by variant/orientation/state | Default                                     | Owner                              | Stability | Invalid-value behavior                |
+| ------------------------- | --------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------- | ------------------------------------------- | ---------------------------------- | --------- | ------------------------------------- |
+| Item collection (`media`) | One item, or an ordered array of items        | The items the viewer presents; an array enables gallery mode                | `Lightbox` and `useLightbox`              | Required; no default                        | `component:Lightbox`               | Stable    | Types reject non-item values          |
+| Item kind (`type`)        | `image`, `video`, `custom`                    | Selects media presentation or caller content                                | Every item; kinds may mix in one gallery  | `image` when omitted                        | `component:Lightbox`               | Stable    | Types reject other values             |
+| Custom content            | Any React node in `content`                   | The caller's subtree presented as the active Media                          | `custom` items only                       | Required; no default                        | Caller                             | Stable    | Types require it                      |
+| Item name                 | `alt` on media items; `label` on custom items | Names the dialog while the item is active and the item in gallery narration | Every item                                | A custom `label` has no default or fallback | `component:Lightbox`               | Stable    | Types require `label` on custom items |
+| Caption                   | Absent, or any React node in `caption`        | Non-interactive context below the active item                               | Every item kind                           | Absent                                      | Caller content; Lightbox placement | Stable    | Not applicable                        |
+
+`LightboxItem` (`LightboxMedia | LightboxCustomItem`) and `LightboxCustomItem`
+(`{type: 'custom', content, label, caption?}`) are exported with
+`LightboxMedia` and `LightboxMediaType` from the Lightbox entry point and the
+package root. `experimental.sourceFor` is an experimental option inside the
+`experimental` prop object (`spec:AST-017` FR21). Consumer props and usage
+remain documented in `Lightbox.doc.mjs`.
 
 ## Behavioral and layout contract
 
-| ID   | Candidate invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Basis                                        | Draft review state          |
-| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | --------------------------- |
-| FR1  | The viewer contains one active Media item and a Close button; galleries additionally contain Previous and Next buttons plus a Counter, and Caption renders only when supplied.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Current source, docs, and tests              | settled                     |
-| FR2  | Viewer overlay carries the current `lightbox` target. Media, Caption, and Counter carry no Lightbox public target.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Current source and public docs               | settled                     |
-| FR3  | Close, Previous, and Next button surfaces use Button's `button` target through IconButton rather than Lightbox-owned button targets.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Current source and target docs               | settled                     |
-| FR4  | The open viewer is a focus region through Core's shared focus-region module (`component:Dialog/DEC-2`): Tab from its last control moves focus to its first and Shift+Tab from its first moves focus to its last, so focus never leaves the viewer for the browser's own interface.                                                                                                                                                                                                                                                                                                                                                                                                                                          | `component:Dialog/DEC-2`                     | settled; implementation gap |
-| FR5  | Under a coarse primary pointer, after hydration, Lightbox presents FR6–FR10 with no opt-in. Lightbox's main interaction is a gesture, so every move in them (the zoom settle, a double tap's zoom, the page settle, the dismiss and the pinch close) is a spring on a named motion role read through the motion role table, never a literal, and a release starts at the gesture's velocity; the controls fade is companion motion on the pace of the main spring (`spec:AST-094` FR45). Under reduced motion they follow AR6.                                                                                                                                                                                              | `spec:AST-094` FR4, FR13                     | settled; implementation gap |
-| FR6  | With `hasZoom`, on an image, a pinch zooms about the fingers and pans while it zooms; past the minimum or maximum the photo resists and eases back without overshoot. A double tap zooms to the larger of filling the viewer and 2×, about the tapped point; a second double tap returns to the fitted size. A zoomed photo pans with momentum and rubber-band edges. A pinch on the controls or the caption still zooms the page.                                                                                                                                                                                                                                                                                          | `spec:AST-094` FR3, FR10                     | settled; implementation gap |
-| FR7  | In a gallery, a horizontal drag moves the row of items, which sit apart by the measured gap. The release lands on at most one neighbouring item by `spec:AST-094` FR3's paging rule (DEC-25). Paging applies over a video item's frame as over a photo; a drag that starts on the video's own controls, such as its scrubber or volume, stays the video's. A zoomed photo pans to its edge before a new drag pages. A pinch never pages. Previous, Next, and the arrow keys keep paging. A controlled `index` the caller refuses springs back. `onIndexChange` reports a swipe.                                                                                                                                             | `spec:AST-094` FR3, FR14, FR36–FR39, DEC-25  | settled; implementation gap |
-| FR8  | On a fitted image, a downward drag moves the photo with the finger, shrinks it, and fades the backdrop. The release decides once: a projected travel past the commit point closes the viewer and reports `onOpenChange(false)` at the lift; a release moving back springs back. Video is unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                         | `spec:AST-094` FR36–FR40                     | settled; implementation gap |
-| FR9  | With `hasZoom`, a pinch in from the fitted size is a release decision: below the measured fraction of the fitted size the release closes the viewer; opening the fingers again by the measured amount before the lift is moving back and cancels. A pinch that starts zoomed in never closes the viewer.                                                                                                                                                                                                                                                                                                                                                                                                                    | `spec:AST-094` FR36, FR37                    | settled; implementation gap |
-| FR10 | With `hasZoom`, under a coarse pointer only, a tap on the photo fades the controls and caption and darkens the backdrop. While they are hidden, the next tap on the photo, a tap beside the photo, or a cancelled drag brings them back, and that tap beside the photo does not close the viewer (ORD3). AR5 governs keyboard and assistive-technology access while they are hidden.                                                                                                                                                                                                                                                                                                                                        | `architecture:public-component-api` INV16    | settled; implementation gap |
-| FR11 | A mouse, a pen, and a trackpad also use FR7's drag paging, FR8's drag to close, a ctrl-wheel or trackpad pinch over the photo for FR6's zoom and FR9's close, and a wheel to pan a zoomed photo; over the photo these replace the browser's page zoom and scroll. A double-click zooms 2× about the clicked point. A click on the photo keeps the controls, and the viewer opens and closes at once.                                                                                                                                                                                                                                                                                                                        | `spec:AST-094` FR43; `spec:AST-017` FR59     | settled; implementation gap |
-| FR12 | Inside `experimental` only, under a coarse pointer, the photo grows out of its source when the viewer opens, and returns into it when it closes, on springs, `springs.settle` unless the motion table names another role, since Lightbox's main interaction is a gesture (`spec:AST-094` FR7, FR45): the element `experimental.sourceFor(index)` returns, else the opener when it shows a picture. A close reports `onOpenChange(false)` at the request; the viewer stays only until the photo lands. Pointer input during the entrance is held; keys and assistive technology stay live. Without `experimental`, opening is unchanged and closing plays FR16.                                                              | `spec:AST-017` FR21; `spec:AST-094` FR35     | settled; implementation gap |
-| FR13 | `hasZoom={false}` turns off FR6, FR9, and FR10. FR7 and FR8 add to the buttons, keys, and Escape and remove none of them, so Lightbox takes no `presentation` prop.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `architecture:public-component-api` INV16    | settled                     |
-| FR14 | Gestures, paging, motion, and reduced motion run through Core's one shared set of internal touch modules; Lightbox bundles no copy of a module's primitive and adds no gesture listener outside them.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `architecture:react-component-runtime` INV13 | settled; implementation gap |
-| FR15 | Lightbox supports a Picture-in-Picture window as its only second document; there it ranks Escape and platform close among that window's members.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `family:overlay-dismissal` FR8               | settled                     |
-| FR16 | Under a coarse primary pointer, a close that is not a drag down (FR8), a pinch in (FR9), or a return into a source (FR12) plays the touch exit: Close, Escape, a platform close, and a tap beside the photo while the controls are shown (ORD3). The photo shrinks a little and fades out in place with the backdrop and controls, as the native viewer's zoom transition does without a source, on a spring from rest, `springs.settle` unless the motion table names another role, with the backdrop and controls fading on its pace (`spec:AST-094` FR7, FR45). `onOpenChange(false)` reports at the request, and the viewer takes no input while the exit plays. Under a fine pointer the viewer closes at once (FR11). | `spec:AST-094` FR7                           | settled; implementation gap |
+| ID   | Candidate invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Basis                                                                     | Draft review state          |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | --------------------------- |
+| FR1  | The viewer contains one active Media item and a Close button; galleries additionally contain Previous and Next buttons plus a Counter, and Caption renders only when supplied.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Current source, docs, and tests                                           | settled                     |
+| FR2  | Viewer overlay carries the current `lightbox` target. Media, Caption, and Counter carry no Lightbox public target.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Current source and public docs                                            | settled                     |
+| FR3  | Close, Previous, and Next button surfaces use Button's `button` target through IconButton rather than Lightbox-owned button targets.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Current source and target docs                                            | settled                     |
+| FR4  | The open viewer is a focus region through Core's shared focus-region module (`component:Dialog/DEC-2`): Tab from its last control moves focus to its first and Shift+Tab from its first moves focus to its last, so focus never leaves the viewer for the browser's own interface.                                                                                                                                                                                                                                                                                                                                                                                                                                          | `component:Dialog/DEC-2`                                                  | settled; implementation gap |
+| FR5  | Under a coarse primary pointer, after hydration, Lightbox presents FR6–FR10 with no opt-in. Lightbox's main interaction is a gesture, so every move in them (the zoom settle, a double tap's zoom, the page settle, the dismiss and the pinch close) is a spring on a named motion role read through the motion role table, never a literal, and a release starts at the gesture's velocity; the controls fade is companion motion on the pace of the main spring (`spec:AST-094` FR45). Under reduced motion they follow AR6.                                                                                                                                                                                              | `spec:AST-094` FR4, FR13                                                  | settled; implementation gap |
+| FR6  | With `hasZoom`, on an image, a pinch zooms about the fingers and pans while it zooms; past the minimum or maximum the photo resists and eases back without overshoot. A double tap zooms to the larger of filling the viewer and 2×, about the tapped point; a second double tap returns to the fitted size. A zoomed photo pans with momentum and rubber-band edges. A pinch on the controls or the caption still zooms the page.                                                                                                                                                                                                                                                                                          | `spec:AST-094` FR3, FR10                                                  | settled; implementation gap |
+| FR7  | In a gallery, a horizontal drag moves the row of items, which sit apart by the measured gap. The release lands on at most one neighbouring item by `spec:AST-094` FR3's paging rule (DEC-25). Paging applies over a video item's frame as over a photo; a drag that starts on the video's own controls, such as its scrubber or volume, stays the video's. A zoomed photo pans to its edge before a new drag pages. A pinch never pages. Previous, Next, and the arrow keys keep paging. A controlled `index` the caller refuses springs back. `onIndexChange` reports a swipe.                                                                                                                                             | `spec:AST-094` FR3, FR14, FR36–FR39, DEC-25                               | settled; implementation gap |
+| FR8  | On a fitted image, a downward drag moves the photo with the finger, shrinks it, and fades the backdrop. The release decides once: a projected travel past the commit point closes the viewer and reports `onOpenChange(false)` at the lift; a release moving back springs back. Video is unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                         | `spec:AST-094` FR36–FR40                                                  | settled; implementation gap |
+| FR9  | With `hasZoom`, a pinch in from the fitted size is a release decision: below the measured fraction of the fitted size the release closes the viewer; opening the fingers again by the measured amount before the lift is moving back and cancels. A pinch that starts zoomed in never closes the viewer.                                                                                                                                                                                                                                                                                                                                                                                                                    | `spec:AST-094` FR36, FR37                                                 | settled; implementation gap |
+| FR10 | With `hasZoom`, under a coarse pointer only, a tap on the photo fades the controls and caption and darkens the backdrop. While they are hidden, the next tap on the photo, a tap beside the photo, or a cancelled drag brings them back, and that tap beside the photo does not close the viewer (ORD3). AR5 governs keyboard and assistive-technology access while they are hidden.                                                                                                                                                                                                                                                                                                                                        | `architecture:public-component-api` INV16                                 | settled; implementation gap |
+| FR11 | A mouse, a pen, and a trackpad also use FR7's drag paging, FR8's drag to close, a ctrl-wheel or trackpad pinch over the photo for FR6's zoom and FR9's close, and a wheel to pan a zoomed photo; over the photo these replace the browser's page zoom and scroll. A double-click zooms 2× about the clicked point. A click on the photo keeps the controls, and the viewer opens and closes at once.                                                                                                                                                                                                                                                                                                                        | `spec:AST-094` FR43; `spec:AST-017` FR59                                  | settled; implementation gap |
+| FR12 | Inside `experimental` only, under a coarse pointer, the photo grows out of its source when the viewer opens, and returns into it when it closes, on springs, `springs.settle` unless the motion table names another role, since Lightbox's main interaction is a gesture (`spec:AST-094` FR7, FR45): the element `experimental.sourceFor(index)` returns, else the opener when it shows a picture. A close reports `onOpenChange(false)` at the request; the viewer stays only until the photo lands. Pointer input during the entrance is held; keys and assistive technology stay live. Without `experimental`, opening is unchanged and closing plays FR16.                                                              | `spec:AST-017` FR21; `spec:AST-094` FR35                                  | settled; implementation gap |
+| FR13 | `hasZoom={false}` turns off FR6, FR9, and FR10. FR7 and FR8 add to the buttons, keys, and Escape and remove none of them, so Lightbox takes no `presentation` prop.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `architecture:public-component-api` INV16                                 | settled                     |
+| FR14 | Gestures, paging, motion, and reduced motion run through Core's one shared set of internal touch modules; Lightbox bundles no copy of a module's primitive and adds no gesture listener outside them.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | `architecture:react-component-runtime` INV13                              | settled; implementation gap |
+| FR15 | Lightbox supports a Picture-in-Picture window as its only second document; there it ranks Escape and platform close among that window's members.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `family:overlay-dismissal` FR8                                            | settled                     |
+| FR16 | Under a coarse primary pointer, a close that is not a drag down (FR8), a pinch in (FR9), or a return into a source (FR12) plays the touch exit: Close, Escape, a platform close, and a tap beside the photo while the controls are shown (ORD3). The photo shrinks a little and fades out in place with the backdrop and controls, as the native viewer's zoom transition does without a source, on a spring from rest, `springs.settle` unless the motion table names another role, with the backdrop and controls fading on its pace (`spec:AST-094` FR7, FR45). `onOpenChange(false)` reports at the request, and the viewer takes no input while the exit plays. Under a fine pointer the viewer closes at once (FR11). | `spec:AST-094` FR7                                                        | settled; implementation gap |
+| FR17 | `media` MUST accept one item or an ordered array that mixes media and custom items in any order. Each item MUST occupy one position in the same gallery index, Counter, navigation, controlled `index`, dismissal, and scroll lock. `useLightbox` MUST accept the same `media` value.                                                                                                                                                                                                                                                                                                                                                                                                                                       | DEC-5                                                                     | settled; implementation gap |
+| FR18 | The active custom item MUST render its `content` as Media and MUST NOT offer zoom, pan, or a zoom control.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | DEC-5                                                                     | settled; implementation gap |
+| FR19 | A key event whose target is inside the active custom item's content MUST NOT change the gallery index, zoom, or pan, and Lightbox MUST NOT prevent its default action. Shortcuts MUST still respond to key events outside that content.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | DEC-7                                                                     | settled; implementation gap |
+| FR20 | While a custom item is active, a consumer `onKeyDown` on Lightbox MUST receive each key event before Lightbox's gallery shortcuts, and when it prevents the default action Lightbox MUST NOT perform a shortcut for that event. While a media item is active, a consumer `onKeyDown` keeps its released order: it runs after Lightbox's shortcuts and does not cancel them.                                                                                                                                                                                                                                                                                                                                                 | DEC-7; `architecture:public-component-api` INV7, INV9; `spec:AST-017` FR5 | settled; implementation gap |
+| FR21 | A custom item's `caption` MUST render as Caption under FR1. Caption is non-interactive context outside FR19, so interactive controls belong in `content`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | DEC-5                                                                     | settled; implementation gap |
 
 ### Allowed variation
 
-- **AV1 — Media mode.** Media may be an image or video; zoom, pan, drag down to
-  close, pinch to close, and the tap that hides the controls are available only
-  on images. Paging applies to both (FR7).
+- **AV1 — Item kind.** An item may be an image, a video, or custom content;
+  zoom, pan, drag down to close, pinch to close, and the tap that hides the
+  controls are available only on images. Paging applies to images and videos
+  (FR7).
 - **AV2 — Gallery mode.** Previous, Next, and Counter are absent for a single
   item. Navigation button disabled state follows the current gallery boundary.
 - **AV3 — Caption content.** Caller-provided Caption content may vary without
   becoming a Lightbox-owned target.
 - **AV4 — Measured values.** Thresholds, gaps, commit points, and timings may
   change with the measured motion table without changing this record.
+- **AV5 — Custom content.** Custom content may vary in size, structure, and
+  interactivity; the caller sizes and styles it.
 
 ### Representative states
 
-| State            | Required invariant                                                                      | Allowed variation                             |
-| ---------------- | --------------------------------------------------------------------------------------- | --------------------------------------------- |
-| Single image     | Viewer overlay, Media, and Close button render.                                         | Caption and zoom may be absent or present.    |
-| Gallery boundary | Both navigation buttons and Counter remain rendered.                                    | Previous or Next is disabled at its boundary. |
-| Video            | Media renders native video controls without image zoom interaction.                     | Autoplay follows the existing consumer prop.  |
-| Captioned media  | Caption follows the active Media inside the centered media group.                       | Caption content remains caller-provided.      |
-| Zoomed image     | A double tap or double-click, `-`, or `0` returns to the fitted size.                   | The zoom level and pan position.              |
-| Controls hidden  | Controls stay focusable and in the accessibility tree; focus or a key brings them back. | Backdrop shade while hidden.                  |
+| State                                   | Required invariant                                                                        | Allowed variation                             |
+| --------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Single image                            | Viewer overlay, Media, and Close button render.                                           | Caption and zoom may be absent or present.    |
+| Gallery boundary                        | Both navigation buttons and Counter remain rendered.                                      | Previous or Next is disabled at its boundary. |
+| Video                                   | Media renders native video controls without image zoom interaction.                       | Autoplay follows the existing consumer prop.  |
+| Captioned media                         | Caption follows the active Media inside the centered media group.                         | Caption content remains caller-provided.      |
+| Zoomed image                            | A double tap or double-click, `-`, or `0` returns to the fitted size.                     | The zoom level and pan position.              |
+| Controls hidden                         | Controls stay focusable and in the accessibility tree; focus or a key brings them back.   | Backdrop shade while hidden.                  |
+| Custom item                             | Media presents the caller's content with no zoom control; the dialog is named by `label`. | Content and Caption are caller-provided.      |
+| Mixed gallery                           | Counter and navigation span media and custom items in caller order.                       | Zoom appears only on image items.             |
+| Key inside custom content               | Gallery index, zoom, and pan stay unchanged, and the key's default action proceeds.       | The focused control inside the content.       |
+| Consumer cancels a key on a custom item | No gallery shortcut runs for that event.                                                  | The key.                                      |
+| Consumer handler on a media item        | Lightbox's shortcut runs, then the consumer `onKeyDown`, as released.                     | The key.                                      |
 
 ### Transformation and precedence order
 
@@ -182,6 +224,11 @@ FR21). Consumer props and usage remain documented in `Lightbox.doc.mjs`.
 - **ORD3 — Hidden controls before closing.** While the controls are hidden, the
   first tap beside the photo only brings them back; only while they are shown
   does a tap beside the photo close the viewer (FR10, FR16).
+- **ORD4 — Key handling.** While a custom item is active: custom-content
+  ownership (FR19), then the consumer `onKeyDown`, then Lightbox shortcuts; a
+  prevented default ends the order before Lightbox shortcuts (FR20). While a
+  media item is active: Lightbox shortcuts, then the consumer `onKeyDown`, as
+  released.
 
 ### Performance and resources
 
@@ -210,9 +257,10 @@ under `spec:AST-020` FR1; reduced motion cites `design:reduced-motion`.
   to the element that opened the viewer when that element is still connected and
   can receive focus (`family:overlay-dismissal` AV1).
 - **AR4 — Screen-reader semantics and announcements (WCAG 2.2 1.1.1, 4.1.2,
-  4.1.3).** The viewer is a modal dialog named by the active item's `alt`, or a
-  localized "Media viewer" when it has none. Every item requires `alt`, which
-  reaches the image's alternative text or the video's accessible name. Moving to
+  4.1.3).** The viewer is a modal dialog named by the active media item's `alt`, or a
+  localized "Media viewer" when it has none, and by a custom item's `label`
+  (AR9). Every media item requires `alt`, which reaches the image's alternative
+  text or the video's accessible name. Moving to
   another item in an open viewer, by button, key, or swipe, announces the item
   and its position ("<alt>, 3 of 12") once, through the `spec:AST-086` FR14
   route. Every zoom change, by any input, announces the new zoom level once when
@@ -237,17 +285,23 @@ under `spec:AST-020` FR1; reduced motion cites `design:reduced-motion`.
   never covers it.
 - **AR8 — The page keeps its own zoom (WCAG 2.2 1.4.4).** A pinch on the
   controls or the caption zooms the page, so their text stays resizable (FR6).
+- **AR9 — A custom item is named by its `label` (WCAG 2.2 4.1.2, 4.1.3).**
+  While a custom item is active, the dialog's accessible name MUST be its
+  `label`. Gallery navigation onto a custom item MUST announce its `label` where
+  a media item's announcement uses `alt`. Lightbox supplies no fallback name for
+  a custom item. Semantics, focus order, and keyboard operation inside custom
+  content belong to the caller.
 
 ## Design relationships
 
 | Anatomy or state | Design requirement                                                   | Representation authority       | Hierarchy role    | Component contract |
 | ---------------- | -------------------------------------------------------------------- | ------------------------------ | ----------------- | ------------------ |
 | Viewer overlay   | Presents the full-viewport dialog and surrounding overlay treatment. | Current source and public docs | Supporting        | FR1, FR2           |
-| Media            | Presents the active image or video.                                  | Current source and public docs | Prominent         | FR1, FR2           |
+| Media            | Presents the active image, video, or custom content.                 | Current source and public docs | Prominent         | FR1, FR2, FR18     |
 | Close button     | Provides the persistent viewer dismissal action.                     | `component:Button`             | Supporting        | FR1, FR3, AR1      |
 | Previous button  | Moves gallery presentation to the preceding item.                    | `component:Button`             | Supporting        | FR1, FR3, AR1      |
 | Next button      | Moves gallery presentation to the following item.                    | `component:Button`             | Supporting        | FR1, FR3, AR1      |
-| Caption          | Presents caller-provided context below the active Media.             | Current source and public docs | Context-dependent | FR1, FR2           |
+| Caption          | Presents caller-provided, non-interactive context below the Media.   | Current source and public docs | Context-dependent | FR1, FR2, FR21     |
 | Counter          | Presents current gallery position and total.                         | Current source and tests       | Supporting        | FR1, FR2           |
 | Reduced motion   | `design:reduced-motion/DR1`–`DR3`                                    | prescribed                     | Supporting        | AR6                |
 
@@ -264,7 +318,7 @@ a decision that they must remain unthemeable.
   "Viewer overlay": {"target": "lightbox"},
   "Media": {
     "none": {
-      "reason": "reachability-gap: No current public target is applied to the active image or video"
+      "reason": "reachability-gap: No current public target is applied to the active item"
     }
   },
   "Close button": {
@@ -306,7 +360,9 @@ a decision that they must remain unthemeable.
 - `architecture:react-component-runtime` owns the shared internal touch modules
   FR14 uses (INV13).
 - `architecture:public-component-api` owns the caller's way back from touch
-  defaults (INV16); FR13 applies it.
+  defaults (INV16), which FR13 applies; the shared handler-cancellation
+  contract (INV7) and released-API compatibility (INV9), which FR20 applies;
+  and export reachability for `LightboxItem` and `LightboxCustomItem`.
 - `family:overlay-dismissal` owns shared Escape and platform-close ordering,
   including per-document ranking (FR8), and records Lightbox as an adopter.
 - `architecture:interaction-modality` owns shared modality boundaries; this
@@ -333,6 +389,9 @@ a decision that they must remain unthemeable.
 | AR5, AR7            | Browser tests with the controls hidden                                                                                  | Tab, assistive-technology focus, a key press, keyboard zoom                                                                                             | A hidden control that is unfocusable, absent from the tree, or still hidden when focused fails.                                                                                                                                                       | `audit:Lightbox/accessibility` |
 | AR6                 | Reduced-motion tests under a coarse and a fine pointer                                                                  | Transition, page settle, dismiss, pinch close, controls fade                                                                                            | Travel, scaling, or a cross-fade over 200 ms under reduced motion fails.                                                                                                                                                                              | `audit:Lightbox/accessibility` |
 | AR8                 | Touch test pinching on the controls and on the caption                                                                  | Single image, gallery                                                                                                                                   | A pinch on the controls or caption that does not zoom the page fails.                                                                                                                                                                                 | `audit:Lightbox/accessibility` |
+| FR17, FR18, FR21    | `Lightbox.test.tsx` custom-item suites                                                                                  | Single custom item, mixed image/custom/video gallery, controlled index, captioned custom item                                                           | A custom item leaves the shared index, renders an image or video element, exposes a zoom surface, or loses its Caption.                                                                                                                               | `audit:Lightbox/anatomy`       |
+| FR19, FR20, ORD4    | `Lightbox.test.tsx` keyboard suites                                                                                     | Arrow keys from fields, editable regions, and nested widgets in custom content; a consumer `onKeyDown` on a custom item and on a media item             | A key inside custom content navigates or is default-prevented, an outside key stops navigating, a cancelled key on a custom item runs a shortcut, or a media item's handler order changes.                                                            | `audit:Lightbox/accessibility` |
+| AR9                 | `Lightbox.test.tsx` naming and announcement suites                                                                      | Custom item active on open; navigation onto a custom item                                                                                               | The dialog name or the announcement uses anything other than `label` for a custom item.                                                                                                                                                               | `audit:Lightbox/accessibility` |
 | Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                           | Canonical anatomy and current target                                                                                                                    | Missing, extra, prefixed, stale, or multiply assigned mappings fail repository validation.                                                                                                                                                            | `audit:Lightbox/theming`       |
 
 ## Decision log
@@ -376,10 +435,62 @@ the landing stay inside `experimental` (FR12), so their API can still change.
 gestures only add to existing controls, so Lightbox needs no `presentation`
 prop (FR13).
 
+### DEC-5 — Custom content is an item kind in `media`
+
+**Reference:** `component:Lightbox/DEC-5`
+**Decider:** imdreamrunner, 2026-10-12
+
+Lightbox hosts caller-provided React content as a third item kind,
+`{type: 'custom', content, label, caption?}`, inside the existing `media`
+collection. Custom items share the one gallery index with images and videos, so
+mixed galleries, the controlled index, navigation, dismissal, and scroll lock
+need no second API, and existing media callers keep their code. Zoom and pan stay
+image-only because arbitrary content has no zoom meaning.
+
+Rejected: a separate `content` or `children` prop, which creates a second index
+space, and renaming `media` to `items`, which breaks every caller without
+changing behavior.
+
+### DEC-6 — A custom item carries a required `label`
+
+**Reference:** `component:Lightbox/DEC-6`
+**Decider:** imdreamrunner, 2026-10-12
+
+Custom content has no `alt`, and Lightbox cannot derive a name from an arbitrary
+subtree. Every custom item therefore supplies `label`, which names the dialog
+and gallery announcements (AR9).
+
+Rejected: an optional `label` with a generic fallback, which leaves
+screen-reader users unable to tell custom items apart.
+
+### DEC-7 — Custom content owns its keyboard events
+
+**Reference:** `component:Lightbox/DEC-7`
+**Decider:** imdreamrunner, 2026-10-12
+
+Text fields, sliders, and composite widgets inside custom content need their
+arrow keys. Lightbox shortcuts apply only to key events outside that content
+(FR19). While a custom item is active, a consumer `onKeyDown` runs first and
+can cancel a shortcut by preventing default; a media item keeps the released
+order, in which the consumer handler runs after the shortcuts, so no media-only
+caller changes (FR20, `spec:AST-017` FR5).
+
+Rejected: gallery arrows that act on every key event in the dialog, which
+breaks editing and widgets inside custom content; and a consumer `onKeyDown`
+that runs first for every item kind, which changes the released order for
+media-only callers.
+
 ## Open questions
 
-None. Media, Caption, and Counter keep no public target; adding one is a change
-to this record.
+- **OQ1 — Should FR19 extend to content a custom item renders outside its
+  stage, such as through a React portal?** (`human-api`) FR19 covers key events
+  whose target is inside the stage.
+- **OQ2 — Which touch and pointer gestures apply over a custom item?**
+  (`human-api`) AV1 limits zoom, pan, drag down to close, pinch to close, and the
+  tap that hides the controls to images, and FR7 pages over images and videos.
+  Whether a drag over custom content pages the gallery, and whether a drag that
+  starts on a control inside it stays the content's as on a video's controls,
+  is not decided.
 
 ## Content boundary
 
