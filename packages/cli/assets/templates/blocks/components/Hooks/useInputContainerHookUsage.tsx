@@ -4,7 +4,7 @@
 
 import {useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Button} from '@astryxdesign/core/Button';
+import {InputClearButton} from '@astryxdesign/core/Field';
 import {useInputContainer} from '@astryxdesign/core/hooks';
 import {Icon} from '@astryxdesign/core/Icon';
 import {
@@ -13,7 +13,7 @@ import {
   radiusVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {MagnifyingGlassIcon, XMarkIcon} from '@heroicons/react/24/outline';
+import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
 
 const styles = stylex.create({
   field: {
@@ -80,12 +80,8 @@ export default function UseInputContainerHookUsage() {
         {...stylex.props(styles.input)}
       />
       {query !== '' && (
-        <Button
-          label="Clear"
-          variant="ghost"
-          size="sm"
-          icon={<Icon icon={XMarkIcon} />}
-          isIconOnly
+        <InputClearButton
+          label="Clear search"
           onClick={() => {
             setQuery('');
             inputRef.current?.focus();
