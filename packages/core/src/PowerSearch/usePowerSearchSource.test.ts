@@ -698,7 +698,14 @@ describe('usePowerSearchSource', () => {
               {
                 key: 'is',
                 label: 'is',
-                value: {type: 'string', searchSource: ownerSource},
+                value: {
+                  type: 'string',
+                  searchSource: ownerSource,
+                  // Set so only the `string`-type clause skips this
+                  // operator: without it, the `string_list` clause skips it
+                  // too and the test below cannot tell them apart.
+                  isArbitraryStringAllowed: true,
+                },
               },
               {
                 key: 'is-either',

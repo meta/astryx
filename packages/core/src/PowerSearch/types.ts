@@ -350,7 +350,8 @@ export interface PowerSearchConfig {
    * `'field-prefix'` answers only field-prefixed queries; `'all-string-fields'`
    * additionally emits a `<Field> <op> "<text>"` item for every visible
    * string/string_list operator, skipping opted-out fields, short queries,
-   * and search-source operators without arbitrary strings.
+   * `string` operators with a `searchSource`, and `string_list` operators
+   * with one unless `isArbitraryStringAllowed` is set.
    * @default 'field-prefix'
    */
   readonly valueMatchBehavior?: 'field-prefix' | 'all-string-fields';
