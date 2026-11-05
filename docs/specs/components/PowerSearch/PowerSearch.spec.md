@@ -90,10 +90,10 @@ present-tense implementation gap note.
 - Calendar: date values follow the provider's calendar. A provider locale with a
   `-u-ca-` keyword keeps Gregorian dates (`spec:AST-111` DEC-2); set the
   provider's `calendar` to choose one. Implementation gap: a date value's
-  editor, when it is the `DateRangeInput` of a `date_range` value,
-  shows the calendar that input resolves, which is Gregorian; under a provider
-  calendar such as `persian`, a date token and its editor name one day in two
-  calendars.
+  editor is a `DateInput`, or a `DateRangeInput` for a `date_range` value, and
+  shows dates the way that input does; where that input shows Gregorian dates
+  (its record names which surfaces do), a date token and its editor name one
+  day in two calendars.
 - Migration decisions: `component:PowerSearch/DEC-1`,
   `component:PowerSearch/DEC-2`, and, for the `adaptive` default,
   `presentation="popover"` (below).
