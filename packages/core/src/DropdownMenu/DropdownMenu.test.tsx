@@ -36,6 +36,10 @@ import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {MENU_PRESS_LONG_PRESS_MS} from '../hooks/useMenuPress';
+import {MENU_PRESS_SETTLE_MS} from '../hooks/menuPressGesture';
+import {TOUCH_QUERY} from '../utils/touchPresentation';
+import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 
 // Mock showPopover and hidePopover methods since they're not implemented in jsdom
 beforeEach(() => {
@@ -167,6 +171,82 @@ describe('DropdownMenu', () => {
     expect(ref).toHaveBeenCalledWith(
       screen.getByRole('button', {name: /Project actions/}),
     );
+  });
+
+  describe('bottom sheet opened from a custom trigger', () => {
+    it("names the sheet and its heading after the caller's aria-label", async () => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          aria-label="Create"
+          presentation="bottom-sheet"
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              Add
+            </button>
+          )}
+          items={[{label: 'Contact'}, {label: 'Invoice'}]}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', {name: 'Add'}));
+
+      expect(screen.getByRole('dialog', {name: 'Create'})).toBeInTheDocument();
+      expect(screen.getByRole('heading', {name: 'Create'})).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', {name: 'Menu'})).toBeNull();
+    });
+
+    it("falls back to the trigger's own name without an aria-label", async () => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          presentation="bottom-sheet"
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              Create
+            </button>
+          )}
+          items={[{label: 'Contact'}, {label: 'Invoice'}]}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', {name: 'Create'}));
+
+      expect(screen.getByRole('dialog', {name: 'Create'})).toBeInTheDocument();
+      expect(screen.getByRole('heading', {name: 'Create'})).toBeInTheDocument();
+    });
+
+    it('names an open controlled sheet from the trigger on its first render', () => {
+      render(
+        <DropdownMenu
+          isMenuOpen
+          presentation="bottom-sheet"
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              Create
+            </button>
+          )}
+          items={[{label: 'Contact'}]}
+        />,
+      );
+
+      expect(screen.getByRole('dialog', {name: 'Create'})).toBeInTheDocument();
+    });
+
+    it('keeps the default title when the trigger has no name to read', async () => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          presentation="bottom-sheet"
+          renderTrigger={props => <button type="button" {...props} />}
+          items={[{label: 'Contact'}]}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', {name: ''}));
+
+      expect(screen.getByRole('dialog', {name: 'Menu'})).toBeInTheDocument();
+    });
   });
 
   it('renders data-driven actions in a bottom sheet when requested', async () => {
@@ -721,7 +801,7 @@ describe('DropdownMenu', () => {
         );
       });
       expect(menu).toHaveStyle(
-        'max-height: min(300px,calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))))',
+        'max-height: min(300px,min(calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))), var(--_layer-keyboard-max-block-size, 100dvb)))',
       );
       expect(menu).not.toHaveStyle({overflowY: 'auto'});
       expect(menu).toHaveAttribute('tabindex', '-1');
@@ -934,6 +1014,38 @@ describe('DropdownMenu', () => {
     fireEvent.keyDown(menu, {key: 'd'});
     expect(
       screen.getByRole('menuitem', {name: 'Delete', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('typeahead reaches an accented item with a plain letter (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'Share'}}
+        items={[{label: 'Copy'}, {label: 'Ánh'}, {label: 'Łódź'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /Share/}));
+    const menu = screen.getByRole('menu', {hidden: true});
+    fireEvent.keyDown(menu, {key: 'l'});
+    expect(
+      screen.getByRole('menuitem', {name: 'Łódź', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('typeahead puts the exact item first for a typed mark (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'People'}}
+        items={[{label: 'Anh'}, {label: 'Dung'}, {label: 'Đào'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /People/}));
+    const menu = screen.getByRole('menu', {hidden: true});
+    fireEvent.keyDown(menu, {key: 'đ'});
+    expect(
+      screen.getByRole('menuitem', {name: 'Đào', hidden: true}),
     ).toHaveFocus();
   });
 
@@ -2841,6 +2953,24 @@ describe('DropdownMenu press model', () => {
   const item = (name: string) =>
     screen.getByRole('menuitem', {name, hidden: true});
 
+  // A phone or tablet's primary pointer.
+  function stubCoarsePointer() {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query === TOUCH_QUERY,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    expect(window.matchMedia(TOUCH_QUERY).matches).toBe(true);
+  }
+
   it('a finger that lands on one row and lifts on another acts on the second, once', async () => {
     const onPick = vi.fn();
     const user = userEvent.setup();
@@ -2991,24 +3121,126 @@ describe('DropdownMenu press model', () => {
     expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
   });
 
-  it('a held touch on the trigger opens with the finger down and a slide picks', () => {
+  it('a held touch on the trigger opens with the finger down, and a slide past the handoff picks (spec:AST-094 FR29, FR43)', () => {
     vi.useFakeTimers();
     try {
       const onPick = vi.fn();
       const trigger = renderMenu(onPick);
-      fireEvent.pointerDown(trigger, touch);
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
       act(() => {
         vi.advanceTimersByTime(500);
       });
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
-      fireEvent.pointerMove(item('Delete'), touch);
+      // The handoff counts from the first position the open menu sees.
+      fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 3});
+      const past = {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      };
+      fireEvent.pointerMove(item('Delete'), past);
       expect(item('Delete')).toHaveFocus();
-      fireEvent.pointerUp(item('Delete'), touch);
+      fireEvent.pointerUp(item('Delete'), past);
       expect(onPick).toHaveBeenCalledWith('Delete');
       // The click the browser aims at the trigger for this gesture is spent.
       fireEvent.click(trigger, {detail: 1});
       expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('under a coarse pointer the finger that opened the menu picks only once it travels the handoff (spec:AST-094 FR29)', () => {
+    stubCoarsePointer();
+    vi.useFakeTimers();
+    try {
+      const onPick = vi.fn();
+      const trigger = renderMenu(onPick);
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      // A still lift picks nothing, however long the finger rested.
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_SETTLE_MS);
+      });
+      fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 3});
+      expect(item('Delete')).not.toHaveFocus();
+      // UIMenu's handoff: the finger picks once it travels from the first
+      // sample the menu saw.
+      fireEvent.pointerMove(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      });
+      expect(item('Delete')).toHaveFocus();
+      fireEvent.pointerUp(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      });
+      expect(onPick).toHaveBeenCalledWith('Delete');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('on a fine primary pointer too, the finger that opened the menu picks only once it travels the handoff, as on a phone (spec:AST-094 FR29, FR43)', () => {
+    vi.useFakeTimers();
+    try {
+      const onPick = vi.fn();
+      const trigger = renderMenu(onPick);
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_SETTLE_MS);
+      });
+      fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 3});
+      expect(item('Delete')).not.toHaveFocus();
+      fireEvent.pointerMove(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      });
+      expect(item('Delete')).toHaveFocus();
+      fireEvent.pointerUp(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      });
+      expect(onPick).toHaveBeenCalledWith('Delete');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('presentation="popover" pins the settle rule under a finger: once the opening press has settled, a still lift picks the row under it', () => {
+    // spec:AST-094 FR25: a moved touch default comes back through
+    // `presentation`, never through a public threshold.
+    stubCoarsePointer();
+    vi.useFakeTimers();
+    try {
+      const onPick = vi.fn<(label: string) => void>();
+      render(
+        <DropdownMenu button={{label: 'Pinned'}} presentation="popover">
+          <DropdownMenuItem label="Edit" onClick={() => onPick('Edit')} />
+          <DropdownMenuItem label="Delete" onClick={() => onPick('Delete')} />
+        </DropdownMenu>,
+      );
+      const trigger = screen.getByRole('button', {name: /Pinned/});
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS + MENU_PRESS_SETTLE_MS);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 2});
+      fireEvent.pointerUp(item('Delete'), {...touch, clientX: 0, clientY: 2});
+      expect(onPick).toHaveBeenCalledWith('Delete');
     } finally {
       vi.useRealTimers();
     }
@@ -3254,11 +3486,13 @@ describe('DropdownMenu menuMaxHeight', () => {
     const menu = screen.getByRole('menu', {hidden: true});
     // The cap is lifted to the given height, still bounded by the viewport.
     expect(menu).toHaveStyle({maxHeight: 'var(--x-maxHeight)'});
-    expect(menu.getAttribute('style')).toContain('min(528px, calc(100dvb');
+    expect(menu.getAttribute('style')).toContain('min(528px, min(calc(100dvb');
     expect(menu.getAttribute('style')).not.toContain('min(300px');
     // The popover viewport that holds the menu lifts its cap with it.
     const popover = menu.closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain('min(528px, calc(100dvb');
+    expect(popover?.getAttribute('style')).toContain(
+      'min(528px, min(calc(100dvb',
+    );
   });
 
   it('keeps the viewport bound below the raised cap', () => {
@@ -3273,7 +3507,7 @@ describe('DropdownMenu menuMaxHeight', () => {
       />,
     );
     const menu = screen.getByRole('menu', {hidden: true});
-    expect(menu.getAttribute('style')).toContain('min(720px, calc(100dvb');
+    expect(menu.getAttribute('style')).toContain('min(720px, min(calc(100dvb');
   });
 });
 
@@ -4456,9 +4690,12 @@ describe('DropdownMenu trigger refs across renders', () => {
     }
     const {rerender} = render(<Menu count={0} />);
     const trigger = screen.getByRole('button', {name: /^Menu/});
+    // Neither the closed menu nor the closed tooltip makes it an anchor.
+    expect(anchorNames(trigger)).toBe('');
+    // The open menu's anchor, on the trigger that also carries the tooltip.
+    fireEvent.click(trigger);
     const before = anchorNames(trigger);
-    // The menu's anchor and the tooltip's, on one element.
-    expect(before.split(',')).toHaveLength(2);
+    expect(before.split(',')).toHaveLength(1);
 
     const stopWatching = watchStyleWrites(trigger);
     rerender(<Menu count={1} />);
@@ -4484,8 +4721,10 @@ describe('DropdownMenu trigger refs across renders', () => {
     }
     const {rerender} = render(<Menu count={0} />);
     const trigger = screen.getByRole('button', {name: 'Actions'});
+    expect(anchorNames(trigger)).toBe('');
+    fireEvent.click(trigger);
     const before = anchorNames(trigger);
-    expect(before.split(',')).toHaveLength(2);
+    expect(before.split(',')).toHaveLength(1);
 
     const stopWatching = watchStyleWrites(trigger);
     rerender(<Menu count={1} />);

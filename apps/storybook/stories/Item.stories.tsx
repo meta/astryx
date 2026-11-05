@@ -11,7 +11,6 @@ import {useState, type ReactNode} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
-import {IconButton} from '@astryxdesign/core/IconButton';
 import {expect} from 'storybook/test';
 import {Item} from '@astryxdesign/core/Item';
 import {Avatar} from '@astryxdesign/core/Avatar';
@@ -22,7 +21,6 @@ import {Stack} from '@astryxdesign/core/Layout';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
-import {Token} from '@astryxdesign/core/Token';
 
 const storyStyles = stylex.create({
   markerAnatomy: {
@@ -53,8 +51,6 @@ import {
   ArchiveBoxIcon,
   EnvelopeIcon,
   TrashIcon,
-  ShareIcon,
-  ArrowUturnLeftIcon,
 } from '@heroicons/react/24/outline';
 
 const meta: Meta<typeof Item> = {
@@ -325,69 +321,6 @@ export const SearchResults: Story = {
   ),
 };
 
-/**
- * Rows holding a control of their own in `endContent`: a row with an action
- * rings for that action, a row without one draws no ring, and the end
- * control rings itself, so each tab stop shows one focus ring.
- */
-export const WithEndActions: Story = {
-  render: () => (
-    <div style={{maxWidth: 420}}>
-      <Item
-        label="Quarterly report"
-        description="Opens the report"
-        onClick={() => {}}
-        endContent={
-          <IconButton
-            label="Share Quarterly report"
-            icon={<Icon icon={ShareIcon} />}
-            variant="ghost"
-            size="sm"
-          />
-        }
-      />
-      <Item
-        label="Archived notes"
-        description="No row action"
-        endContent={
-          <IconButton
-            label="Restore Archived notes"
-            icon={<Icon icon={ArrowUturnLeftIcon} />}
-            variant="ghost"
-            size="sm"
-          />
-        }
-      />
-    </div>
-  ),
-};
-
-/** A row with its own action and a clickable Token in its end slot. */
-export const WithTokenAction: Story = {
-  render: () => (
-    <div style={{maxWidth: 420}}>
-      <Item
-        label="Launch plan"
-        description="Opens the plan"
-        onClick={() => {}}
-        endContent={<Token label="Design" onClick={() => {}} />}
-      />
-    </div>
-  ),
-};
-
-/** Numbered rows with their own action: the marker sits beside the row. */
-export const NumberedWithActions: Story = {
-  render: () => (
-    <div style={{maxWidth: 420}}>
-      <List listStyle="decimal">
-        <ListItem label="Open the report" onClick={() => {}} />
-        <ListItem label="Read the summary" href="#summary" />
-      </List>
-    </div>
-  ),
-};
-
 /** Disabled items. */
 export const Disabled: Story = {
   render: () => (
@@ -405,6 +338,37 @@ export const Disabled: Story = {
         onClick={() => {}}
         isDisabled
       />
+    </Stack>
+  ),
+};
+
+/**
+ * Each row state on one interactive row: rest, highlighted (the active row of
+ * a menu or a picker), selected, disabled, and selected while disabled. The
+ * row reflects each state on its `item` theme target.
+ */
+export const States: Story = {
+  render: () => (
+    <Stack gap={0}>
+      {(
+        [
+          ['Rest', {}],
+          ['Highlighted', {isHighlighted: true}],
+          ['Selected', {isSelected: true}],
+          ['Disabled', {isDisabled: true}],
+          ['Selected and disabled', {isSelected: true, isDisabled: true}],
+        ] as const
+      ).map(([label, state]) => (
+        <Item
+          key={label}
+          {...state}
+          startContent={<Icon icon={DocumentIcon} size="sm" />}
+          label={label}
+          description="Edited 2 hours ago"
+          endContent={<Badge label="Draft" />}
+          onClick={() => {}}
+        />
+      ))}
     </Stack>
   ),
 };

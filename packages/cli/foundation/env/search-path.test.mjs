@@ -3,13 +3,17 @@
 /**
  * @file Reading the `astryx` commands on the search path (spec AST-081
  * FR11): links, and each package manager's shim, down to the CLI package and
- * its version.
+ * its version. Also the walk every command name takes along the search path.
  */
 
 import {afterEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {astryxCommandsOnSearchPath, astryxCliRootOf} from './search-path.mjs';
+import {
+  astryxCommandsOnSearchPath,
+  astryxCliRootOf,
+  executablesOnSearchPath,
+} from './search-path.mjs';
 import {
   cleanupFixtures,
   tempDir,
@@ -118,5 +122,36 @@ describe.skipIf(process.platform === 'win32')('astryxCliRootOf', () => {
         platform: 'linux',
       })[0],
     ).toMatchObject({version: '0.8.0', handsOff: true});
+  });
+});
+
+describe.skipIf(process.platform === 'win32')('executablesOnSearchPath', () => {
+  it("finds each folder's first runnable name, in search-path order", () => {
+    const first = tempDir('walk');
+    shim(path.join(first, 'tool'), '');
+    const second = tempDir('walk');
+    shim(path.join(second, 'tool.cmd'), '');
+    shim(path.join(second, 'tool'), '');
+    expect(
+      executablesOnSearchPath(['tool.cmd', 'tool'], {
+        searchPath: [first, second].join(path.delimiter),
+        platform: 'linux',
+      }),
+    ).toEqual([path.join(first, 'tool'), path.join(second, 'tool.cmd')]);
+  });
+
+  it('skips a file this user may not run, a directory, and a missing folder', () => {
+    const plain = tempDir('walk');
+    fs.writeFileSync(path.join(plain, 'tool'), '');
+    fs.chmodSync(path.join(plain, 'tool'), 0o644);
+    const folder = tempDir('walk');
+    fs.mkdirSync(path.join(folder, 'tool'));
+    const missing = path.join(tempDir('walk'), 'missing');
+    expect(
+      executablesOnSearchPath(['tool'], {
+        searchPath: ['', plain, folder, missing].join(path.delimiter),
+        platform: 'linux',
+      }),
+    ).toEqual([]);
   });
 });

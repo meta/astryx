@@ -64,7 +64,11 @@ defineTheme({
     motion duration;
   - `character` is `'crisp'`, `'standard'` (default), or `'expressive'`; it
     picks the entrance and move curves and the spring bounce. A continuous bounce
-    is not offered;
+    is not offered. No character turns a curve into a spring or plays a
+    platform-measured curve; which motion springs and which plays the curve
+    tokens is `spec:AST-094` FR45's, and tap-started expand and collapse,
+    including the animated-layout glide (`spec:AST-105` FR4), plays the curve
+    tokens;
   - `reducedMotion` is `'system'` (default) or `'always'`; `'always'` applies
     `design:reduced-motion` DR1–DR3 for everyone, and `'system'` follows each
     person's setting. No value loosens Reduce Motion.
@@ -169,7 +173,7 @@ defineTheme({
   `spec:AST-012` FR4 (`reducedMotion` stays root-owned),
   `architecture:theme-application` INV1 (`'always'` reaches nested
   providers), `architecture:theme-authoring-contract` (the internal motion resolver),
-  `component:Button` FR15 (its release fade follows `tempo`), the draft `design:motion` DR3, and `spec:AST-090` are amended to
+  `component:Button` FR15 (its release fade follows `tempo` through `--duration-exit`, which references a tempo-scaled duration), the draft `design:motion` DR3, and `spec:AST-090` are amended to
   match.
 
 ## Verification

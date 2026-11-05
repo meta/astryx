@@ -200,6 +200,62 @@ describe('CommentComposer', () => {
     expect(screen.getByTestId('draft').textContent).toBe('Ship it 🎉');
   });
 
+  it('ends the upload busy state when onActionPendingChange is a new function each render', async () => {
+    let finishUpload: (images: {url: string; alt: string}[]) => void = () => {};
+    const onUploadImages = vi.fn(
+      () =>
+        new Promise<{url: string; alt: string}[]>(resolve => {
+          finishUpload = resolve;
+        }),
+    );
+    function Host() {
+      const [draft, setDraft] = useState('See this');
+      const [pending, setPending] = useState(false);
+      return (
+        <>
+          <CommentComposerBase
+            value={draft}
+            onChange={setDraft}
+            onSubmit={() => {}}
+            placeholder="Reply"
+            context={{kind: 'comment'}}
+            highlightColor="yellow"
+            triggers={[]}
+            agentCommands={[]}
+            hasEmojiPicker={false}
+            isSubmitting={false}
+            onUploadImages={onUploadImages}
+            // Inline: a new callback on every render of the host.
+            onActionPendingChange={isPending => setPending(isPending)}
+          />
+          <output data-testid="pending">{String(pending)}</output>
+        </>
+      );
+    }
+    const {container} = render(<Host />);
+    const input = container.querySelector('input[type="file"]');
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error('File input not found');
+    }
+    const file = new File(['png'], 'chart.png', {type: 'image/png'});
+    await act(async () => {
+      fireEvent.change(input, {target: {files: [file]}});
+      await Promise.resolve();
+    });
+    await settle();
+    expect(onUploadImages).toHaveBeenCalledWith([file]);
+    expect(screen.getByTestId('pending').textContent).toBe('true');
+
+    await act(async () => {
+      finishUpload([{url: 'https://example.com/a.png', alt: 'Chart'}]);
+      await Promise.resolve();
+    });
+    await settle();
+
+    expect(screen.getByTestId('pending').textContent).toBe('false');
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
   it('uploads attached images and appends them as Markdown', async () => {
     const onChange = vi.fn();
     const onUploadImages = vi

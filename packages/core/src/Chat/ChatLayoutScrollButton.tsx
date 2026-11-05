@@ -32,7 +32,13 @@ import {Button} from '../Button';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatLayoutScrollButton.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -138,7 +144,7 @@ export function ChatLayoutScrollButton({
   style,
   ...rest
 }: ChatLayoutScrollButtonProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   return (
     // Two elements, two responsibilities. The outer one centres the pill and
     // holds the gap above the composer — spacing outside the pill's border

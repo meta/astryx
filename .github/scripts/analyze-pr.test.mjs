@@ -16,6 +16,11 @@
  * with origin/main, reproducing the CI failure; running analyze-pr.js against
  * it must exit 0 and report the Core, Rich Text, and Vega components the branch
  * touched.
+ *
+ * The base and head size tests keep their fixtures under the checkout's
+ * `node_modules/.cache`, not the system temporary directory: esbuild reads the listing of every
+ * directory above a file it bundles, and a shared machine's temporary
+ * directory can hold hundreds of thousands of entries.
  */
 
 import {execFileSync} from 'node:child_process';
@@ -25,6 +30,7 @@ import path from 'node:path';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {describe, it, expect} from 'vitest';
+import {createRepository} from '../../scripts/lib/git-fixture.mjs';
 
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(SCRIPTS_DIR, 'analyze-pr.js');
@@ -44,6 +50,16 @@ function gitTry(dir, args) {
   }
 }
 
+/** Write the record Main keeps for a built tree, as deploy.yml does. */
+function mainRecord(root, output, env = process.env) {
+  execFileSync(process.execPath, [SCRIPT, '--main-record', '--output', output], {
+    cwd: root,
+    encoding: 'utf8',
+    env,
+  });
+  return JSON.parse(fs.readFileSync(output, 'utf8'));
+}
+
 /**
  * Build the synthetic repo and return the shallow clone dir:
  *   upstream/: branch point, 60 churn commits on main, feature off the point
@@ -55,114 +71,135 @@ function buildFixture() {
   const upstream = path.join(base, 'upstream');
   const clone = path.join(base, 'clone');
 
-  fs.mkdirSync(path.join(upstream, 'packages/core/src/Card'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/core/src/Button'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/core/src/Line'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/core/src/InteractiveRoleContext'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/lab/src/Sankey'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/richtext/src'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/vega/src'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/themes/neutral/src'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/themes/probe/src'), {recursive: true});
-
-  git(upstream, ['init', '-q', '-b', 'main']);
-  git(upstream, ['config', 'user.email', 'test@test.co']);
-  git(upstream, ['config', 'user.name', 'Test']);
-  fs.writeFileSync(path.join(upstream, 'package.json'), '{}');
-  fs.mkdirSync(path.join(upstream, 'packages/core/src/Badge'), {recursive: true});
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/index.ts'), "export {Card} from './Card';\nexport {Badge} from './Badge';\n");
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.tsx'), 'export function Badge() {}\n');
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.doc.mjs'), "export default {name: 'Badge'};\n");
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/index.ts'), "export {Badge} from './Badge';\n");
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.spec.md'), '---\nschema_version: 3\n---\n');
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/Card.tsx'), 'export function Card() {}\n');
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/Card.doc.mjs'), "export default {name: 'Card'};\n");
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/index.ts'), "export {Card} from './Card';\n");
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Button/index.ts'), 'export {}\n');
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Line/index.ts'), 'export {}\n');
-  fs.writeFileSync(
-    path.join(upstream, 'packages/richtext/src/RichTextEditor.tsx'),
-    'export function RichTextEditor() {}\n',
-  );
-  fs.writeFileSync(
-    path.join(upstream, 'packages/richtext/src/RichTextEditorAutoLinkPlugin.tsx'),
-    'export function RichTextEditorAutoLinkPlugin() {}\n',
-  );
-  fs.writeFileSync(
-    path.join(upstream, 'packages/richtext/src/RichTextView.tsx'),
-    'export function RichTextView() {}\n',
-  );
-  fs.writeFileSync(
-    path.join(upstream, 'packages/richtext/src/index.ts'),
-    [
+  const atBranchPoint = {
+    'package.json': '{}',
+    'packages/core/src/index.ts':
+      "export {Card} from './Card';\nexport {Badge} from './Badge';\n",
+    'packages/core/src/Badge/Badge.tsx': 'export function Badge() {}\n',
+    'packages/core/src/Badge/Badge.doc.mjs':
+      "export default {name: 'Badge'};\n",
+    'packages/core/src/Badge/index.ts': "export {Badge} from './Badge';\n",
+    'docs/specs/components/Badge/Badge.spec.md':
+      '---\nschema_version: 3\n---\n',
+    'packages/core/src/Card/Card.tsx': 'export function Card() {}\n',
+    'packages/core/src/Card/Card.doc.mjs': "export default {name: 'Card'};\n",
+    'packages/core/src/Card/index.ts': "export {Card} from './Card';\n",
+    'packages/core/src/Button/index.ts': 'export {}\n',
+    'packages/core/src/Line/index.ts': 'export {}\n',
+    'packages/richtext/src/RichTextEditor.tsx':
+      'export function RichTextEditor() {}\n',
+    'packages/richtext/src/RichTextEditorAutoLinkPlugin.tsx':
+      'export function RichTextEditorAutoLinkPlugin() {}\n',
+    'packages/richtext/src/RichTextView.tsx':
+      'export function RichTextView() {}\n',
+    'packages/richtext/src/index.ts': [
       "export {RichTextEditor} from './RichTextEditor';",
       "export {RichTextEditorAutoLinkPlugin} from './RichTextEditorAutoLinkPlugin';",
       "export {RichTextView} from './RichTextView';",
       '',
     ].join('\n'),
-  );
-  fs.writeFileSync(
-    path.join(upstream, 'packages/vega/src/VegaChart.tsx'),
-    'export function VegaChart() {}\n',
-  );
-  fs.writeFileSync(path.join(upstream, 'packages/vega/src/index.ts'), "export {VegaChart} from './VegaChart';\n");
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/InteractiveRoleContext/internal.ts'), 'export const shared = true;\n');
-  fs.writeFileSync(path.join(upstream, 'packages/lab/src/Sankey/internal.ts'), 'export const family = true;\n');
-  fs.writeFileSync(
-    path.join(upstream, 'packages/themes/neutral/package.json'),
-    JSON.stringify({name: '@astryxdesign/theme-neutral', private: false}),
-  );
-  fs.writeFileSync(path.join(upstream, 'packages/themes/neutral/src/theme.ts'), 'export {}\n');
-  fs.writeFileSync(
-    path.join(upstream, 'packages/themes/probe/package.json'),
-    JSON.stringify({name: '@astryxdesign/theme-probe', private: true}),
-  );
-  fs.writeFileSync(path.join(upstream, 'packages/themes/probe/src/theme.ts'), 'export {}\n');
-  git(upstream, ['add', '-A']);
-  git(upstream, ['commit', '-qm', 'branch point']);
-  const branchPoint = git(upstream, ['rev-parse', 'HEAD']);
+    'packages/vega/src/VegaChart.tsx': 'export function VegaChart() {}\n',
+    'packages/vega/src/index.ts': "export {VegaChart} from './VegaChart';\n",
+    'packages/core/src/InteractiveRoleContext/internal.ts':
+      'export const shared = true;\n',
+    'packages/lab/src/Sankey/internal.ts': 'export const family = true;\n',
+    'packages/themes/neutral/package.json': JSON.stringify({
+      name: '@astryxdesign/theme-neutral',
+      private: false,
+    }),
+    'packages/themes/neutral/src/theme.ts': 'export {}\n',
+    'packages/themes/probe/package.json': JSON.stringify({
+      name: '@astryxdesign/theme-probe',
+      private: true,
+    }),
+    'packages/themes/probe/src/theme.ts': 'export {}\n',
+  };
+  const appended = (file, text) => ({[file]: atBranchPoint[file] + text});
 
   // 60 churn commits on main so the branch point is beyond any small depth.
-  for (let i = 1; i <= 60; i++) {
-    fs.appendFileSync(path.join(upstream, 'packages/core/src/Button/index.ts'), `b${i}\n`);
-    fs.appendFileSync(path.join(upstream, 'packages/core/src/Line/index.ts'), `l${i}\n`);
-    git(upstream, ['add', '-A']);
-    git(upstream, ['commit', '-qm', `churn ${i}`]);
-  }
+  const churn = Array.from({length: 60}, (_, index) => {
+    const lines = prefix =>
+      Array.from({length: index + 1}, (__, n) => `${prefix}${n + 1}\n`).join(
+        '',
+      );
+    return {
+      ref: 'refs/heads/main',
+      message: `churn ${index + 1}`,
+      files: {
+        'packages/core/src/Button/index.ts': `export {}\n${lines('b')}`,
+        'packages/core/src/Line/index.ts': `export {}\n${lines('l')}`,
+      },
+    };
+  });
 
   // Feature branch off the branch point, touching Core, Rich Text, and Vega.
-  git(upstream, ['branch', 'feature', branchPoint]);
-  git(upstream, ['checkout', '-q', 'feature']);
-  fs.appendFileSync(path.join(upstream, 'packages/core/src/Card/index.ts'), 'export const Card = {}\n');
   // Only Badge's knowledge record changes: no browser audit owns Badge.
-  fs.appendFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.spec.md'), 'record text\n');
-  fs.appendFileSync(
-    path.join(upstream, 'packages/richtext/src/RichTextEditor.tsx'),
-    'export const richTextChanged = true\n',
-  );
-  fs.appendFileSync(
-    path.join(upstream, 'packages/richtext/src/RichTextEditorAutoLinkPlugin.tsx'),
-    'export const autoLinkChanged = true\n',
-  );
-  fs.appendFileSync(
-    path.join(upstream, 'packages/richtext/src/RichTextView.tsx'),
-    'export const viewChanged = true\n',
-  );
-  fs.appendFileSync(
-    path.join(upstream, 'packages/vega/src/VegaChart.tsx'),
-    'export const vegaChanged = true\n',
-  );
-  fs.appendFileSync(path.join(upstream, 'packages/core/src/InteractiveRoleContext/internal.ts'), 'export const sharedChanged = true\n');
-  fs.appendFileSync(path.join(upstream, 'packages/lab/src/Sankey/internal.ts'), 'export const familyChanged = true\n');
-  fs.appendFileSync(path.join(upstream, 'packages/themes/neutral/src/theme.ts'), 'export const changed = true\n');
-  fs.appendFileSync(path.join(upstream, 'packages/themes/probe/src/theme.ts'), 'export const changed = true\n');
-  git(upstream, ['add', '-A']);
-  git(upstream, ['commit', '-qm', 'touch three component packages']);
+  const feature = {
+    ref: 'refs/heads/feature',
+    parent: 'point',
+    message: 'touch three component packages',
+    files: {
+      ...appended(
+        'packages/core/src/Card/index.ts',
+        'export const Card = {}\n',
+      ),
+      ...appended('docs/specs/components/Badge/Badge.spec.md', 'record text\n'),
+      ...appended(
+        'packages/richtext/src/RichTextEditor.tsx',
+        'export const richTextChanged = true\n',
+      ),
+      ...appended(
+        'packages/richtext/src/RichTextEditorAutoLinkPlugin.tsx',
+        'export const autoLinkChanged = true\n',
+      ),
+      ...appended(
+        'packages/richtext/src/RichTextView.tsx',
+        'export const viewChanged = true\n',
+      ),
+      ...appended(
+        'packages/vega/src/VegaChart.tsx',
+        'export const vegaChanged = true\n',
+      ),
+      ...appended(
+        'packages/core/src/InteractiveRoleContext/internal.ts',
+        'export const sharedChanged = true\n',
+      ),
+      ...appended(
+        'packages/lab/src/Sankey/internal.ts',
+        'export const familyChanged = true\n',
+      ),
+      ...appended(
+        'packages/themes/neutral/src/theme.ts',
+        'export const changed = true\n',
+      ),
+      ...appended(
+        'packages/themes/probe/src/theme.ts',
+        'export const changed = true\n',
+      ),
+    },
+  };
+
+  // One import writes the whole history: three git launches with the clone.
+  const {point: branchPoint} = createRepository(upstream, [
+    {
+      ref: 'refs/heads/main',
+      name: 'point',
+      message: 'branch point',
+      files: atBranchPoint,
+    },
+    ...churn,
+    feature,
+  ]);
 
   // Shallow single-branch clone of the feature branch.
   git(null, [
-    'clone', '-q', '--depth=5', '--single-branch', '--branch=feature',
-    `file://${upstream}`, clone,
+    'clone',
+    '-q',
+    '--depth=5',
+    '--single-branch',
+    '--branch=feature',
+    `file://${upstream}`,
+    clone,
   ]);
 
   return {base, clone, branchPoint};
@@ -303,9 +340,34 @@ describe('analyze-pr component ownership', () => {
   });
 });
 
+// Where a reach fixture and analyze-pr's own scratch files live. Not
+// os.tmpdir(): every analyze-pr run here bundles with esbuild, which reads the
+// listing of each directory above the files it bundles, and a shared
+// machine's temporary directory (hundreds of thousands of entries) made each
+// build read it, several times per test, which a loaded machine stretched
+// past the test's time.
+const FIXTURE_ROOT = path.join(SCRIPTS_DIR, '../../node_modules/.cache/analyze-pr-test');
+
+/** A fixture repository and analyze-pr's scratch directory under FIXTURE_ROOT. */
+function fixtureBox(name) {
+  fs.mkdirSync(FIXTURE_ROOT, {recursive: true});
+  const box = fs.mkdtempSync(path.join(FIXTURE_ROOT, `${name}-`));
+  const repo = path.join(box, 'repo');
+  const scratch = path.join(box, 'tmp');
+  fs.mkdirSync(repo);
+  fs.mkdirSync(scratch);
+  return {box, repo, env: {...process.env, TMPDIR: scratch}};
+}
+
 describe('analyze-pr base and head sizes', () => {
   it('sizes a component whose bundle reaches a changed shared module', () => {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-reach-'));
+    const {box, repo, env} = fixtureBox('reach');
+    const analyze = (...flags) =>
+      execFileSync(
+        process.execPath,
+        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json', ...flags],
+        {cwd: repo, encoding: 'utf8', env},
+      );
     const write = (file, content) => {
       fs.mkdirSync(path.dirname(path.join(repo, file)), {recursive: true});
       fs.writeFileSync(path.join(repo, file), content);
@@ -335,11 +397,7 @@ describe('analyze-pr base and head sizes', () => {
       write('packages/core/dist/hooks/useHold.js', 'export function useHold() { return 2; }\n');
       write('packages/core/dist/index.js', "export {Card} from './Card/Card.js';\nexport {Badge} from './Badge/Badge.js';\n");
 
-      execFileSync(
-        process.execPath,
-        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json'],
-        {cwd: repo, encoding: 'utf8'},
-      );
+      analyze();
       const analysis = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
       expect(Object.keys(analysis.componentSizes)).toEqual(['core/Card']);
       // The shared hook's reverse dependent is audited, not the whole roster.
@@ -354,11 +412,7 @@ describe('analyze-pr base and head sizes', () => {
 
       // A change to shared infrastructure asks for full audits whatever it
       // reaches.
-      execFileSync(
-        process.execPath,
-        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json', '--force-full'],
-        {cwd: repo, encoding: 'utf8'},
-      );
+      analyze('--force-full');
       const forced = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
       expect(forced.forceFullComponentAudits).toBe(true);
 
@@ -368,11 +422,7 @@ describe('analyze-pr base and head sizes', () => {
       git(repo, ['add', '-A']);
       git(repo, ['commit', '-qm', 'add a module nothing imports']);
       write('packages/core/dist/hooks/useOrphan.js', 'export function useOrphan() { return 1; }\n');
-      execFileSync(
-        process.execPath,
-        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json'],
-        {cwd: repo, encoding: 'utf8'},
-      );
+      analyze();
       const orphan = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
       expect(orphan.dependentComponentOwners).toEqual(['core/Card']);
       expect(orphan.forceFullComponentAudits).toBe(false);
@@ -380,21 +430,17 @@ describe('analyze-pr base and head sizes', () => {
       // Without a build to read reach from, a shared module stays unresolved:
       // full audits.
       fs.rmSync(path.join(repo, 'packages/core/dist'), {recursive: true});
-      execFileSync(
-        process.execPath,
-        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json'],
-        {cwd: repo, encoding: 'utf8'},
-      );
+      analyze();
       const unbuilt = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
       expect(unbuilt.unresolvedComponentSources).toEqual(['core/hooks']);
       expect(unbuilt.forceFullComponentAudits).toBe(true);
     } finally {
-      fs.rmSync(repo, {recursive: true, force: true});
+      fs.rmSync(box, {recursive: true, force: true});
     }
   });
 
   it('adds the components of another package whose bundle reaches a changed Core module', () => {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-crossreach-'));
+    const {box, repo, env} = fixtureBox('crossreach');
     const write = (file, content) => {
       fs.mkdirSync(path.dirname(path.join(repo, file)), {recursive: true});
       fs.writeFileSync(path.join(repo, file), content);
@@ -435,7 +481,7 @@ describe('analyze-pr base and head sizes', () => {
       execFileSync(
         process.execPath,
         [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json'],
-        {cwd: repo, encoding: 'utf8'},
+        {cwd: repo, encoding: 'utf8', env},
       );
       const analysis = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
       // RTL and visual follow the Core change into Lab, as the full audit the
@@ -443,12 +489,12 @@ describe('analyze-pr base and head sizes', () => {
       expect(analysis.dependentComponentOwners).toEqual(['core/Card', 'lab/Sketch']);
       expect(analysis.forceFullComponentAudits).toBe(false);
     } finally {
-      fs.rmSync(repo, {recursive: true, force: true});
+      fs.rmSync(box, {recursive: true, force: true});
     }
   });
 
-  it('decides reach in the merge-base build when only the base is built', () => {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-basereach-'));
+  it('decides reach from the merge base record when only the base is built', () => {
+    const {box, repo, env} = fixtureBox('basereach');
     const baseRoot = path.join(repo, '.size-base');
     const write = (root, file, content) => {
       fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
@@ -475,27 +521,29 @@ describe('analyze-pr base and head sizes', () => {
       git(repo, ['checkout', '-q', '-b', 'feature']);
       write(repo, 'packages/core/src/hooks/useHold.ts', 'export function useHold() { return 2; }\n');
       git(repo, ['commit', '-qam', 'touch the shared hook only']);
-      // Only the merge base is built, as in the size-base job.
+      // Only the merge base is built, as on main, which keeps its record.
       write(baseRoot, 'packages/core/dist/Card/Card.js', "import {useHold} from '../hooks/useHold.js';\nexport function Card() { return useHold(); }\n");
       write(baseRoot, 'packages/core/dist/Badge/Badge.js', 'export function Badge() { return 0; }\n');
       write(baseRoot, 'packages/core/dist/hooks/useHold.js', 'export function useHold() { return 1; }\n');
       write(baseRoot, 'packages/core/dist/index.js', "export {Card} from './Card/Card.js';\nexport {Badge} from './Badge/Badge.js';\n");
 
+      mainRecord(baseRoot, path.join(repo, 'record.json.out'), env);
       execFileSync(
         process.execPath,
-        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--base-root', '.size-base', '--base-only', '--output', 'base.json'],
-        {cwd: repo, encoding: 'utf8'},
+        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--base-record', 'record.json.out', '--output', 'base.json'],
+        {cwd: repo, encoding: 'utf8', env},
       );
       const base = JSON.parse(fs.readFileSync(path.join(repo, 'base.json'), 'utf8'));
+      // Badge's bundle never reached the hook, so it stays out.
       expect(Object.keys(base.baseComponentSizes)).toEqual(['core/Card']);
       expect(base.baseComponentSizes['core/Card'].importGzipBytes).toBeGreaterThan(0);
     } finally {
-      fs.rmSync(repo, {recursive: true, force: true});
+      fs.rmSync(box, {recursive: true, force: true});
     }
   });
 
   it('measures the merge base through its own defining module when the pull request renames it', () => {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-rename-'));
+    const {box, repo, env} = fixtureBox('rename');
     const baseRoot = path.join(repo, '.size-base');
     const write = (root, file, content) => {
       fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
@@ -524,20 +572,21 @@ describe('analyze-pr base and head sizes', () => {
       write(baseRoot, 'packages/core/dist/Card/Card.js', 'export function Card() { return 1; }\n');
       write(baseRoot, 'packages/core/dist/index.js', 'export const other = 1;\n');
 
+      mainRecord(baseRoot, path.join(repo, 'record.json.out'), env);
       execFileSync(
         process.execPath,
-        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--base-root', '.size-base', '--base-only', '--output', 'base.json'],
-        {cwd: repo, encoding: 'utf8'},
+        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--base-record', 'record.json.out', '--output', 'base.json'],
+        {cwd: repo, encoding: 'utf8', env},
       );
       const base = JSON.parse(fs.readFileSync(path.join(repo, 'base.json'), 'utf8'));
       expect(base.baseComponentSizes['core/Card'].importGzipBytes).toBeGreaterThan(0);
     } finally {
-      fs.rmSync(repo, {recursive: true, force: true});
+      fs.rmSync(box, {recursive: true, force: true});
     }
   });
 
-  it('measures ESM entries by module type and reads base sizes from a merge-base build', () => {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-size-'));
+  it('measures ESM entries by module type and reads base sizes from the merge base record', () => {
+    const {box, repo, env} = fixtureBox('size');
     const baseRoot = path.join(repo, '.size-base');
     const write = (root, file, content) => {
       fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
@@ -624,6 +673,7 @@ describe('analyze-pr base and head sizes', () => {
         'export const head = 2;\n'.repeat(40),
       );
 
+      mainRecord(baseRoot, path.join(repo, 'record.json.out'), env);
       execFileSync(
         process.execPath,
         [
@@ -632,12 +682,12 @@ describe('analyze-pr base and head sizes', () => {
           'main',
           '--head',
           'HEAD',
-          '--base-root',
-          '.size-base',
+          '--base-record',
+          'record.json.out',
           '--output',
           'analysis.json',
         ],
-        {cwd: repo, encoding: 'utf8'},
+        {cwd: repo, encoding: 'utf8', env},
       );
       const analysis = JSON.parse(
         fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'),
@@ -664,32 +714,20 @@ describe('analyze-pr base and head sizes', () => {
       expect(headBundle.gzipBytes).toBeGreaterThan(0);
       expect(baseBundle.gzipBytes).toBeGreaterThan(0);
 
+      expect(analysis.baseSha).toBe(git(repo, ['rev-parse', 'main']));
+      expect(analysis.baseComponentSizes['core/Chat'].importGzipBytes).toBeGreaterThan(0);
+
+      // Without a readable record, Before stays empty rather than failing.
       execFileSync(
         process.execPath,
-        [
-          SCRIPT,
-          '--base',
-          'main',
-          '--head',
-          'HEAD',
-          '--base-root',
-          '.size-base',
-          '--base-only',
-          '--output',
-          'size-base.json',
-        ],
-        {cwd: repo, encoding: 'utf8'},
+        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--base-record', 'missing.json.out', '--output', 'analysis.json'],
+        {cwd: repo, encoding: 'utf8', env},
       );
-      const baseOnly = JSON.parse(
-        fs.readFileSync(path.join(repo, 'size-base.json'), 'utf8'),
-      );
-      expect(baseOnly.headSha).toBe(git(repo, ['rev-parse', 'HEAD']));
-      expect(baseOnly.baseSha).toBe(git(repo, ['rev-parse', 'main']));
-      expect(baseOnly.baseComponentStats.Card.esmBytes).toBe(100);
-      expect(baseOnly.componentStats).toBeUndefined();
-      expect(baseOnly.baseComponentSizes['core/Chat'].importGzipBytes).toBeGreaterThan(0);
+      const withoutRecord = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
+      expect(withoutRecord.baseComponentSizes).toBeUndefined();
+      expect(withoutRecord.componentSizes['core/Card'].importGzipBytes).toBeGreaterThan(0);
     } finally {
-      fs.rmSync(repo, {recursive: true, force: true});
+      fs.rmSync(box, {recursive: true, force: true});
     }
   });
 });

@@ -45,13 +45,16 @@ import {useContainerReveal} from '../hooks/useContainerReveal';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
-import {
-  focusOwnerProps,
-  focusWithinOwner,
-} from '../privateAttributes/focusOwner.stylex';
+import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Thumbnail/Thumbnail.generated';
+
+registerEnglishFallback(english);
 
 export interface ThumbnailProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root element */
@@ -361,7 +364,7 @@ export function Thumbnail({
   ...props
 }: ThumbnailProps) {
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
 
   // Track the exact src that failed (rather than a boolean) so a changed src
   // gets a fresh load attempt instead of the stale error.
@@ -484,10 +487,7 @@ export function Thumbnail({
       <div
         {...(isInteractive ? pressable : undefined)}
         {...mergeProps(
-          // Rings for the Open button only; the remove button rings itself
-          // (`architecture:interaction-modality` INV3).
-          stylex.props(
-            focusWithinOwner,
+          focusOutlineProps.focusWithin(
             styles.imageContainer,
             isInteractive && styles.interactive,
             isInteractive && styles.overlay,
@@ -504,7 +504,6 @@ export function Thumbnail({
             onKeyDown={isInteractive ? undefined : suppressActivationKeys}
             aria-label={t('@astryx.thumbnail.open', {accessibleName})}
             aria-disabled={isInteractive ? undefined : 'true'}
-            {...focusOwnerProps}
             {...stylex.props(styles.interactiveButton)}>
             {imageContent}
           </button>

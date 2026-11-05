@@ -27,6 +27,25 @@ affects_consumer_docs:
 
 # Status announcement delivery system spec
 
+<!-- review-applicability:v1 -->
+
+```json
+{
+  "scope": "global",
+  "concerns": {
+    "announcements": {
+      "names": [
+        "useAnnounce",
+        "useAnnounceRenderedText",
+        "useBusyAnnouncement"
+      ],
+      "patterns": ["aria-live", "role=[\"'{](?:status|alert|log)\\b"],
+      "claims": ["FR1", "FR2", "FR3", "FR12"]
+    }
+  }
+}
+```
+
 ## Intent
 
 A screen-reader user hears each status change once, when it happens, at the

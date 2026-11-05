@@ -26,7 +26,12 @@
  *   light impact at the moment of the tap. The switch itself never takes the
  *   touch (`pointer-events: none`; WebKit marks a switch's `touchstart`
  *   handled, which would stop a pan starting on it from scrolling the page),
- *   and its own events never reach the page.
+ *   its own events never bubble to the page (capture-phase listeners still
+ *   see its click; the gesture host's click swallower skips it by
+ *   attribute), and focus the label's activation gives it goes straight
+ *   back, so a later Space never toggles it. A label tied to its control
+ *   by `for`, or whose control is itself a switch, gets no switch; a label
+ *   wrapping its own control gets one, which hands each tap on to it.
  * - `playHaptic(kind)` vibrates where `navigator.vibrate` exists (Android
  *   browsers) with the kind's pattern, and does nothing elsewhere.
  *
@@ -38,9 +43,8 @@ import {
   HAPTIC_VIBRATION_PATTERNS,
   type HapticFeedbackKind,
 } from '../motion/uikit/gestures';
-
-/** Marks the hidden switch, so click handlers can recognize and ignore it. */
-export const HAPTIC_SWITCH_ATTRIBUTE = 'data-astryx-haptic-switch';
+import {isDisabledControl} from '../utils/pressDisabled';
+import {markHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
 
 /** Whether this browser vibrates at all. */
 export function canVibrate(): boolean {
@@ -78,14 +82,6 @@ const VISUALLY_HIDDEN =
   'opacity:0;pointer-events:none;';
 
 let nextLabelId = 0;
-
-/** A native disabled control, or one marked `aria-disabled`. */
-function isDisabledControl(control: HTMLElement): boolean {
-  return (
-    control.matches(':disabled') ||
-    control.getAttribute('aria-disabled') === 'true'
-  );
-}
 
 /** Whether `input` is a switch checkbox, which plays the tap haptic itself. */
 function isSwitch(input: HTMLInputElement): boolean {
@@ -125,7 +121,7 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
   const input = doc.createElement('input');
   input.type = 'checkbox';
   input.setAttribute('switch', '');
-  input.setAttribute(HAPTIC_SWITCH_ATTRIBUTE, '');
+  markHapticSwitch(input);
   input.setAttribute('aria-hidden', 'true');
   input.tabIndex = -1;
   input.style.cssText = VISUALLY_HIDDEN;

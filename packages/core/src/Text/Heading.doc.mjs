@@ -79,7 +79,7 @@ export const docs = {
       name: 'wordBreak',
       type: "'break-word' | 'break-all'",
       description:
-        "Word break behavior when truncating. Defaults to 'break-all' for single-line truncation, 'break-word' otherwise.",
+        "Word break behavior when truncating. Defaults to 'break-all' for single-line truncation, 'break-word' otherwise. Without truncation, a token longer than its line (a URL, an ID) wraps (`overflow-wrap: break-word`), so in ordinary flow text does not make the page scroll sideways. Inside a flex row, give the flex child `min-width: 0` so it can shrink. A container you style with `overflow-wrap: anywhere` does not reach this text; Astryx's own containers pass their wrap through.",
     },
     {
       name: 'textWrap',
@@ -110,6 +110,28 @@ export const docs = {
       name: 'id',
       type: 'string',
       description: 'HTML id attribute.',
+    },
+    {
+      name: 'xstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles applied to the heading element. Must be a stylex.create() value: not an inline style object like style={{}}.',
+    },
+    {
+      name: 'className',
+      type: 'string',
+      description: 'CSS class name applied to the heading element.',
+    },
+    {
+      name: 'style',
+      type: 'React.CSSProperties',
+      description:
+        'Inline styles applied to the heading element. When `maxLines` is above 1, its line clamp replaces any `WebkitLineClamp` in `style`.',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLHeadingElement>',
+      description: 'Ref forwarded to the heading element.',
     },
   ],
 };
@@ -181,7 +203,7 @@ export const docsZh = {
       name: 'wordBreak',
       type: "'break-word' | 'break-all'",
       description:
-        "截断时的断词行为。单行截断默认为 'break-all'，其他情况默认为 'break-word'。",
+        "截断时的断词行为。单行截断默认为 'break-all'，其他情况默认为 'break-word'。不截断时，超过一行宽度的长串（如 URL、ID）会换行（`overflow-wrap: break-word`），因此在普通文档流中文本不会让页面横向滚动。在 flex 行中，请为 flex 子元素设置 `min-width: 0` 以便其收缩。你自己设置了 `overflow-wrap: anywhere` 的容器不会作用于此文本；Astryx 自带的容器会传递其换行方式。",
     },
     {
       name: 'textWrap',
@@ -212,6 +234,28 @@ export const docsZh = {
       type: 'string',
       description: 'HTML id 属性。',
     },
+    {
+      name: 'xstyle',
+      type: 'StyleXStyles',
+      description:
+        '应用于标题元素的 StyleX 样式。必须是 stylex.create() 的值，而不是 style={{}} 这样的内联样式对象。',
+    },
+    {
+      name: 'className',
+      type: 'string',
+      description: '应用于标题元素的 CSS 类名。',
+    },
+    {
+      name: 'style',
+      type: 'React.CSSProperties',
+      description:
+        '应用于标题元素的内联样式。当 `maxLines` 大于 1 时，其行数截断会替换 `style` 中的 `WebkitLineClamp`。',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLHeadingElement>',
+      description: '转发到标题元素的 Ref。',
+    },
   ],
 };
 
@@ -237,12 +281,17 @@ export const docsDense = {
     hasTruncateTooltip:
       "Tooltip for truncated text; true=default position, false=disabled, or a placement ('above' | 'below' | 'start' | 'end').",
     wordBreak:
-      "Word break behavior; defaults 'break-all' for single-line, 'break-word' otherwise.",
+      "Word break behavior when truncating; defaults 'break-all' for single-line, 'break-word' otherwise. Untruncated long tokens wrap (overflow-wrap: break-word); a flex child needs min-width: 0; your own container's overflow-wrap: anywhere does not reach this text (Astryx containers pass theirs through).",
     textWrap: 'Text wrapping behavior.',
     justify:
       "Text alignment (justification); logical values 'start' | 'center' | 'end' for RTL.",
     hasCapsize: 'Optical alignment via text-box-trim; forces block display.',
     hasStrikethrough: 'Strikethrough text decoration.',
     id: 'HTML id attribute.',
+    xstyle: 'StyleX styles on the heading; stylex.create() value only.',
+    className: 'CSS class on the heading.',
+    style:
+      'inline styles on the heading; with maxLines>1 the line clamp replaces WebkitLineClamp.',
+    ref: 'ref to the heading element.',
   },
 };

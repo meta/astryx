@@ -46,16 +46,14 @@ import {
 } from '../theme/tokens.stylex';
 import type {SizeValue, SpacingStep, Elevation} from '../utils/types';
 import {mergeProps} from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {Card} from '../Card/Card';
 import type {CardVariant} from '../Card/Card';
 import {useClickableContainer} from '../hooks/useClickableContainer';
 import type {BaseProps} from '../BaseProps';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {themeProps} from '../utils/themeProps';
-import {
-  focusOwnerProps,
-  focusWithinOwner,
-} from '../privateAttributes/focusOwner.stylex';
+import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
@@ -317,6 +315,7 @@ export function ClickableCard({
   label,
   onClick: onClickProp,
   onMouseUp: onMouseUpProp,
+  onPointerDown: onPointerDownProp,
   href,
   target,
   isDisabled = false,
@@ -373,7 +372,7 @@ export function ClickableCard({
 
   const LinkComponent = useLinkComponent();
 
-  const {onClick, onMouseUp} = useClickableContainer({
+  const {onClick, onMouseUp, onPointerDown} = useClickableContainer({
     containerRef,
     interactiveRef,
     onClick: onClickProp,
@@ -411,9 +410,7 @@ export function ClickableCard({
       elevation={elevation}
       {...mergeProps(
         themeProps('clickable-card', {variant}),
-        // Rings for the card's own link or button only; a control in its
-        // children rings itself (`architecture:interaction-modality` INV3).
-        stylex.props(focusWithinOwner),
+        focusOutlineProps.focusWithin(),
         classNameProp,
         style,
       )}
@@ -432,6 +429,11 @@ export function ClickableCard({
       }
       onClick={!isDisabled ? onClick : undefined}
       onMouseUp={!isDisabled ? handleMouseUp : undefined}
+      onPointerDown={
+        !isDisabled
+          ? chainEventHandlers(onPointerDown, onPointerDownProp)
+          : onPointerDownProp
+      }
       {...props}>
       {isLink ? (
         <LinkRoot
@@ -444,7 +446,6 @@ export function ClickableCard({
           aria-disabled={isDisabled || undefined}
           // A disabled card keeps its Tab stop (spec:AST-085 FR1).
           tabIndex={0}
-          {...focusOwnerProps}
           {...stylex.props(styles.srOnly)}
         />
       ) : (
@@ -456,7 +457,6 @@ export function ClickableCard({
           onClick={onClickProp}
           // Focusable while disabled (FR1), but inert (FR2).
           {...(isDisabled ? disabledInteractionProps() : null)}
-          {...focusOwnerProps}
           {...stylex.props(styles.srOnly)}
         />
       )}

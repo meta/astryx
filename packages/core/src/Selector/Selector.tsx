@@ -10,7 +10,7 @@
  * @position Core implementation; consumed by index.ts
  *
  * SYNC: When modified, update:
- * - /packages/core/src/Selector/Selector.spec.md
+ * - /docs/specs/components/Selector/Selector.spec.md
  * - /packages/core/src/Selector/Selector.doc.mjs
  * - /packages/core/src/Selector/Selector.test.tsx
  * - /packages/core/src/Selector/index.ts
@@ -20,6 +20,7 @@
  */
 
 import React, {
+  memo,
   use,
   useCallback,
   useEffect,
@@ -32,24 +33,28 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {useIndicator} from '../Indicator';
 import type {IndicatorPosition} from '../Indicator';
+import type {IndicatorComponent, IndicatorMap} from '../Indicator/types';
 import type {IconName} from '../Icon';
 import {
   Field,
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputWrapperStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Divider} from '../Divider';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {useKeepLayerOpenProps, type LayerPlacement} from '../Layer/useLayer';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Spinner} from '../Spinner';
 import {PanelSearchInput} from '../Field/PanelSearchInput';
+import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {
@@ -63,15 +68,11 @@ import {
   fontWeightVars,
   typeScaleVars,
   borderVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import type {SelectorOptionType, SelectorOptionData} from './types';
-import {
-  isOptionData,
-  isDivider,
-  isSection,
-  normalizeOption,
-  getSelectableOptions,
-} from './utils';
+import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
+import {getSelectableOptionEntries} from './selectableOptionEntries';
 import {useCombobox, useSelectedItemOffset} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
@@ -81,6 +82,7 @@ import {SelectorOption} from './SelectorOption';
 import {SelectorRowLayoutContext} from './SelectorRowLayoutContext';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {warnOnce} from '../utils/devWarning';
 import {useSize} from '../SizeContext/SizeContext';
 import {
@@ -89,6 +91,7 @@ import {
 } from '../Field/fieldParts';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
@@ -103,11 +106,26 @@ import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useTranslator} from '../i18n';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from './SelectorBottomSheet';
 import {useSelectorPresentation} from './useSelectorPresentation';
 import {selectorPresentationStyles} from './selectorPresentation.stylex';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Selector/Selector.generated';
+
+registerEnglishFallback(english);
+
+/**
+ * A guess, confirmed by the open measure: more options than this overflow
+ * the popover listbox's 300 px block size even at 24 px rows, under the
+ * smallest default row (28 px). A wrong guess (a theme with shorter rows, a
+ * taller bottom sheet) costs only the measure's correction.
+ */
+const MOST_ROWS_THAT_FIT = 12;
 
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
@@ -299,21 +317,6 @@ const styles = stylex.create({
       '[data-astryx-press="on"]': 'scale(0.98)',
     },
   },
-  // A disabled input-variant trigger keeps its tab stop (`spec:AST-085` FR1),
-  // and the shared disabled wrapper style drops the field focus ring, so the
-  // trigger shows keyboard focus here instead (FR6). It keys on the trigger
-  // itself, a direct child, so a focused status button keeps its own outline.
-  triggerDisabledFocus: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':has(> [aria-disabled="true"]:focus-visible)':
-        colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   triggerGhostDisabled: {
     backgroundImage: 'none',
     transform: {
@@ -352,16 +355,51 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
   },
 
+  // A panel with a search field, capped as a whole.
+  searchPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    // No taller than its layer's block-size cap, which folds in the software
+    // keyboard's. The search field's row keeps its height, and the list takes
+    // what is left.
+    maxHeight: stylex.firstThatWorks(
+      `calc(${layerViewportInset.maxBlockSize})`,
+      `calc(${layerViewportInset.maxBlockSizeFallback})`,
+    ),
+  },
+
   // Dropdown container
   dropdown: {
     boxSizing: 'border-box',
-    maxHeight: '300px',
+    // In a search panel, the list shrinks below its content to fit the cap.
+    minHeight: 0,
+    // 300 px, and no taller than its layer's block-size cap, which folds in
+    // the software keyboard's: the list ends above the keyboard with the
+    // layer.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     outline: 'none',
     paddingBlock: spacingVars['--spacing-1'],
     paddingInline: spacingVars['--spacing-1'],
     opacity: 1,
-    transition: `opacity ${durationVars['--duration-fast']}`,
+    // Under Reduce Motion the list appears at once on a fine pointer, and
+    // takes the shared cross-fade on a coarse one.
+    transitionProperty: 'opacity',
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.duration,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
+    transitionTimingFunction: {
+      default: 'ease',
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.easing,
+    },
   },
   dropdownInput: {
     // The input trigger's text inset includes its border. Mirror that extra
@@ -387,7 +425,8 @@ const styles = stylex.create({
   },
   dropdownHidden: {
     opacity: 0,
-    transition: 'none',
+    // A longhand: the shorthand would lose to the list's longhands.
+    transitionProperty: 'none',
   },
 
   // Popover container (for anchor positioning)
@@ -445,7 +484,7 @@ const styles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     textAlign: 'start',
-    outline: 'none',
+    outlineStyle: 'none',
   },
   itemContent: {
     display: 'flex',
@@ -477,6 +516,15 @@ const styles = stylex.create({
   },
   itemHighlighted: {
     backgroundColor: colorVars['--color-overlay-hover'],
+  },
+  // The fill alone does not reach 3:1 against the listbox. After keyboard
+  // input, the active option also draws the standard focus ring, inside the
+  // row by its own width, as a focused menu row does.
+  itemKeyboardHighlighted: {
+    outlineWidth: focusVars['--focus-outline-width'],
+    outlineStyle: focusVars['--focus-outline-style'],
+    outlineColor: focusVars['--focus-outline-color'],
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   itemSelected: {
     fontWeight: fontWeightVars['--font-weight-medium'],
@@ -730,7 +778,7 @@ interface SelectorPropsBase<
    * - 'tooltip': message is exposed from the on-field status icon
    * @default 'attached' for input selectors; 'detached' for secondary/ghost selectors
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -904,6 +952,117 @@ function DefaultOption({option}: {option: SelectorOptionData}) {
   );
 }
 
+interface SelectorOptionRowProps {
+  item: SelectorOptionData;
+  flatIndex: number;
+  id: string;
+  isHighlighted: boolean;
+  /** The highlight came from keyboard input, so the row draws the focus ring. */
+  isKeyboardHighlighted: boolean;
+  isSelected: boolean;
+  size: SelectorSize;
+  indicatorPosition: IndicatorPosition;
+  renderOption: ((option: SelectorOptionData) => ReactNode) | undefined;
+  SelectionMark: IndicatorComponent<IndicatorMap['check']>;
+  onSelect: (item: SelectorOptionData) => void;
+  /** `isActive`: the option was already the highlighted one when entered. */
+  onHover: (
+    item: SelectorOptionData,
+    flatIndex: number,
+    isActive: boolean,
+  ) => void;
+}
+
+/**
+ * Keep each prop stable across renders that do not change this row. A new
+ * `onSelect` or `renderOption` re-renders every row.
+ */
+const SelectorOptionRow = memo(function SelectorOptionRow({
+  item,
+  flatIndex,
+  id,
+  isHighlighted,
+  isKeyboardHighlighted,
+  isSelected,
+  size,
+  indicatorPosition,
+  renderOption,
+  SelectionMark,
+  onSelect,
+  onHover,
+}: SelectorOptionRowProps) {
+  /*
+   * Rendered UNCONDITIONALLY, with the state passed down: the default
+   * check draws nothing when unchecked, but a theme that replaces the
+   * `check` indicator with a radio needs the unselected state to draw
+   * its empty circle. `{isSelected && …}` would make that impossible.
+   *
+   * `selector-check` stays the stable target for the mark's position
+   * in the row; the indicator owns what the mark looks like.
+   */
+  const mark = (
+    <span {...stylex.props(styles.itemMarkColumn)}>
+      <SelectionMark
+        state={isSelected ? 'checked' : 'unchecked'}
+        size="sm"
+        isDisabled={item.disabled ?? false}
+        {...themeProps('selector-check')}
+      />
+    </span>
+  );
+
+  const optionContent = (
+    <span {...stylex.props(styles.itemContent)}>
+      {renderOption ? renderOption(item) : <DefaultOption option={item} />}
+    </span>
+  );
+
+  return (
+    <div
+      id={id}
+      role="option"
+      aria-selected={isSelected}
+      aria-disabled={item.disabled}
+      onClick={() => onSelect(item)}
+      onMouseEnter={() => onHover(item, flatIndex, isHighlighted)}
+      {...mergeProps(
+        // Stable theme target on the option row itself, mirroring
+        // `multi-selector-option`: it carries the row's size and runtime
+        // state so a theme can express "selected option at large" or
+        // restyle a given row density without structural selectors. The
+        // row's padding is split across a base and a per-size override (the
+        // default `md` trims the block axis), so `size` is what a theme
+        // needs to reach it. Named `-option-row` because `selector-option`
+        // is the public SelectorOption content primitive, not this row.
+        themeProps('selector-option-row', {
+          size,
+          selected: isSelected ? 'selected' : null,
+          disabled: item.disabled ? 'disabled' : null,
+        }),
+        stylex.props(
+          styles.item,
+          itemSizeStyles[size],
+          isHighlighted && styles.itemHighlighted,
+          isKeyboardHighlighted && styles.itemKeyboardHighlighted,
+          isSelected && styles.itemSelected,
+          item.disabled && styles.itemDisabled,
+        ),
+      )}>
+      {indicatorPosition === 'start' ? (
+        <>
+          {mark}
+          {optionContent}
+        </>
+      ) : (
+        <>
+          {optionContent}
+          {mark}
+        </>
+      )}
+    </div>
+  );
+});
+
 // Case-insensitive substring match for a single option. The one predicate used
 // by both the flat filter (count + keyboard nav) and the grouped renderer, so
 // what is shown while searching stays in lockstep with the announced count.
@@ -950,7 +1109,7 @@ function filterOptionsByQuery(
 export function Selector<T extends SelectorOptionType>(
   props: SelectorProps<T>,
 ) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const pressable = usePressFeedback();
   const {
     label,
@@ -1042,8 +1201,10 @@ export function Selector<T extends SelectorOptionType>(
   // shorter inner button makes every size's selected row land too low.
   const anchorRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
+  const triggerModality = useInteractionModalityTracking();
   const triggerButtonRef = useMergedRefs<HTMLButtonElement>(
     triggerRef as React.Ref<HTMLButtonElement>,
+    triggerModality.ref,
     ref,
   );
   const searchRef = useRef<HTMLInputElement>(null);
@@ -1103,9 +1264,18 @@ export function Selector<T extends SelectorOptionType>(
       : ariaLabelledBy;
 
   // Flatten options for keyboard navigation
-  const selectableItems = useMemo(
-    () => getSelectableOptions(options),
+  const selectableEntries = useMemo(
+    () => getSelectableOptionEntries(options),
     [options],
+  );
+  const selectableItems = useMemo(
+    () => selectableEntries.map(entry => entry.item),
+    [selectableEntries],
+  );
+  // Rows need the same item object on every render, or their memo fails.
+  const normalizedOf = useMemo(
+    () => new Map(selectableEntries.map(entry => [entry.source, entry.item])),
+    [selectableEntries],
   );
 
   // `action` is declared on the shared option type for `MultiSelector`;
@@ -1185,6 +1355,7 @@ export function Selector<T extends SelectorOptionType>(
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     triggerRef,
+    triggerModality,
     popoverOptions: {
       hasLightDismiss: true,
       hasCloseButton: false,
@@ -1357,10 +1528,10 @@ export function Selector<T extends SelectorOptionType>(
     highlightedIndex,
     setHighlightedIndex,
     getItemId,
-    onTriggerClick,
-    onKeyDown,
+    onTriggerClick: comboboxTriggerClick,
+    onKeyDown: comboboxKeyDown,
     onItemSelect,
-    onItemMouseEnter,
+    onItemMouseEnter: comboboxItemMouseEnter,
   } = useCombobox({
     selectableItems: filteredItems,
     // The optimistic value, not the raw prop: with a pending changeAction the
@@ -1378,6 +1549,44 @@ export function Selector<T extends SelectorOptionType>(
     onSearchSeed: appendSearchQuery,
     listboxId,
   });
+
+  // Only after keyboard input does the active option draw the focus ring; a
+  // pointer highlight keeps the fill alone, as a focused menu row does.
+  // Modality changes only on a key or a press, so a hover alone still reads
+  // as keyboard. The option the mouse enters therefore draws no ring until a
+  // key moves the highlight again. Entering the option that is already
+  // active, as when a key scrolls it under a still mouse, changes nothing.
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const keyDownAfterHover = useCallback(
+    (e: React.KeyboardEvent) => {
+      setHoveredIndex(null);
+      comboboxKeyDown(e);
+    },
+    [comboboxKeyDown],
+  );
+  const mouseEnterOption = useCallback(
+    (item: SelectorOptionData, index: number, isActive: boolean) => {
+      if (!isActive) {
+        setHoveredIndex(index);
+      }
+      comboboxItemMouseEnter(item, index);
+    },
+    [comboboxItemMouseEnter],
+  );
+  const {
+    isKeyboardHighlight: isHighlightFromKeyboard,
+    noteHighlightMove,
+    onKeyDown,
+    onItemMouseEnter,
+  } = useKeyboardHighlight(
+    triggerModality.readModality,
+    keyDownAfterHover,
+    mouseEnterOption,
+  );
+  const onTriggerClick = useCallback(() => {
+    comboboxTriggerClick();
+    noteHighlightMove();
+  }, [comboboxTriggerClick, noteHighlightMove]);
 
   // Type-to-select, shared with the other collections (menus, listboxes).
   // Open, it walks the highlight — aria-activedescendant announces each match.
@@ -1415,10 +1624,13 @@ export function Selector<T extends SelectorOptionType>(
     return match == null ? -1 : Number(match[1]);
   }, []);
   // Re-measured when the option set changes; the count is the dependency.
+  // A list longer than the most rows that can fit cannot fit, so it starts
+  // as a scroll container and the open measure only confirms it.
   const listboxHasOverflow = useMenuOverflow(
     listboxRef,
     filteredItems.length,
     surface.isOpen,
+    filteredItems.length > MOST_ROWS_THAT_FIT,
   );
   const listboxPress = useMenuPress({
     menuRef: listboxRef,
@@ -1435,7 +1647,8 @@ export function Selector<T extends SelectorOptionType>(
       const index = optionIndexFromRow(row);
       const item = filteredItems[index];
       if (item != null) {
-        onItemMouseEnter(item, index);
+        // A press is pointer input, even on the active option.
+        onItemMouseEnter(item, index, false);
       }
     },
     onActivate: row => {
@@ -1452,6 +1665,8 @@ export function Selector<T extends SelectorOptionType>(
       if (isDisabled || isEffectivelyReadOnly) {
         return;
       }
+      noteHighlightMove();
+      setHoveredIndex(null);
       // With hasSearch the query input owns typing, so type-to-select is off.
       if (!hasSearch && typeahead.onKeyDown(e)) {
         e.preventDefault();
@@ -1459,7 +1674,14 @@ export function Selector<T extends SelectorOptionType>(
       }
       onKeyDown(e);
     },
-    [isDisabled, isEffectivelyReadOnly, hasSearch, typeahead, onKeyDown],
+    [
+      isDisabled,
+      isEffectivelyReadOnly,
+      hasSearch,
+      typeahead,
+      onKeyDown,
+      noteHighlightMove,
+    ],
   );
 
   // Highlight scrolling (and its hover/keyboard split) lives in useCombobox.
@@ -1594,88 +1816,33 @@ export function Selector<T extends SelectorOptionType>(
 
   // Render an individual item
   const renderItem = useCallback(
-    (item: SelectorOptionData, flatIndex: number) => {
-      const isHighlighted = flatIndex === highlightedIndex;
-      const isSelected = item.value === normalizedValue;
-
-      /*
-       * Rendered UNCONDITIONALLY, with the state passed down: the default
-       * check draws nothing when unchecked, but a theme that replaces the
-       * `check` indicator with a radio needs the unselected state to draw
-       * its empty circle. `{isSelected && …}` would make that impossible.
-       *
-       * `selector-check` stays the stable target for the mark's position
-       * in the row; the indicator owns what the mark looks like.
-       */
-      const mark = (
-        <span {...stylex.props(styles.itemMarkColumn)}>
-          <SelectionMark
-            state={isSelected ? 'checked' : 'unchecked'}
-            size="sm"
-            isDisabled={item.disabled ?? false}
-            {...themeProps('selector-check')}
-          />
-        </span>
-      );
-
-      const optionContent = (
-        <span {...stylex.props(styles.itemContent)}>
-          {renderOption ? renderOption(item) : <DefaultOption option={item} />}
-        </span>
-      );
-
-      const content =
-        indicatorPosition === 'start' ? (
-          <>
-            {mark}
-            {optionContent}
-          </>
-        ) : (
-          <>
-            {optionContent}
-            {mark}
-          </>
-        );
-
-      return (
-        <div
-          key={item.value}
-          id={getItemId(flatIndex)}
-          role="option"
-          aria-selected={isSelected}
-          aria-disabled={item.disabled}
-          onClick={() => onItemSelect(item)}
-          onMouseEnter={() => onItemMouseEnter(item, flatIndex)}
-          {...mergeProps(
-            // Stable theme target on the option row itself, mirroring
-            // `multi-selector-option`: it carries the row's size and runtime
-            // state so a theme can express "selected option at large" or
-            // restyle a given row density without structural selectors. The
-            // row's padding is split across a base and a per-size override (the
-            // default `md` trims the block axis), so `size` is what a theme
-            // needs to reach it. Named `-option-row` because `selector-option`
-            // is the public SelectorOption content primitive, not this row.
-            themeProps('selector-option-row', {
-              size,
-              selected: isSelected ? 'selected' : null,
-              disabled: item.disabled ? 'disabled' : null,
-            }),
-            stylex.props(
-              styles.item,
-              itemSizeStyles[size],
-              isHighlighted && styles.itemHighlighted,
-              isSelected && styles.itemSelected,
-              item.disabled && styles.itemDisabled,
-            ),
-          )}>
-          {content}
-        </div>
-      );
-    },
+    (item: SelectorOptionData, flatIndex: number) => (
+      <SelectorOptionRow
+        key={item.value}
+        item={item}
+        flatIndex={flatIndex}
+        id={getItemId(flatIndex)}
+        isHighlighted={flatIndex === highlightedIndex}
+        isKeyboardHighlighted={
+          flatIndex === highlightedIndex &&
+          isHighlightFromKeyboard &&
+          flatIndex !== hoveredIndex
+        }
+        isSelected={item.value === normalizedValue}
+        size={size}
+        indicatorPosition={indicatorPosition}
+        renderOption={renderOption}
+        SelectionMark={SelectionMark}
+        onSelect={onItemSelect}
+        onHover={onItemMouseEnter}
+      />
+    ),
     [
       renderOption,
       indicatorPosition,
       highlightedIndex,
+      isHighlightFromKeyboard,
+      hoveredIndex,
       size,
       normalizedValue,
       getItemId,
@@ -1738,7 +1905,7 @@ export function Selector<T extends SelectorOptionType>(
       } else if (isSection(option)) {
         const sectionItems: ReactNode[] = [];
         for (const opt of option.options) {
-          const normalized = normalizeOption(opt);
+          const normalized = normalizedOf.get(opt) ?? normalizeOption(opt);
           if (isSearching && !optionMatchesQuery(normalized, searchQuery)) {
             continue;
           }
@@ -1771,7 +1938,7 @@ export function Selector<T extends SelectorOptionType>(
           </div>,
         );
       } else if (isOptionData(option)) {
-        const normalized = normalizeOption(option);
+        const normalized = normalizedOf.get(option) ?? normalizeOption(option);
         if (isSearching && !optionMatchesQuery(normalized, searchQuery)) {
           continue;
         }
@@ -1783,6 +1950,7 @@ export function Selector<T extends SelectorOptionType>(
     return elements;
   }, [
     options,
+    normalizedOf,
     renderItem,
     hasSearch,
     searchQuery,
@@ -1834,14 +2002,14 @@ export function Selector<T extends SelectorOptionType>(
     );
 
   const panelContent = hasSearch ? (
-    <div>
+    <div {...stylex.props(styles.searchPanel)}>
       {renderSearch()}
       <Divider />
       <div
         ref={attachListbox}
         id={listboxId}
         role="listbox"
-        aria-labelledby={triggerId}
+        aria-label={label}
         {...listboxPress.menuProps}
         {...stylex.props(
           styles.dropdown,
@@ -1861,17 +2029,10 @@ export function Selector<T extends SelectorOptionType>(
       id={listboxId}
       role="listbox"
       {...listboxPress.menuProps}
-      // The bottom sheet is a modal layer, so Chromium drops the trigger
-      // outside it from the accessibility tree and a reference to it yields
-      // no name. Name only this no-search sheet directly from the component's
-      // label; the searchable sheet and the popovers keep the trigger
-      // relationship.
-      aria-label={
-        surface.activePresentation === 'bottom-sheet' ? label : undefined
-      }
-      aria-labelledby={
-        surface.activePresentation === 'bottom-sheet' ? undefined : triggerId
-      }
+      // The trigger shows the value, so it cannot name the list.
+      // A modal sheet removes an outside label from the accessibility tree.
+      // The label element also holds the required marker and the tooltip.
+      aria-label={label}
       aria-activedescendant={
         surface.isOpen && highlightedIndex >= 0
           ? getItemId(highlightedIndex)
@@ -1929,13 +2090,7 @@ export function Selector<T extends SelectorOptionType>(
   // A disabled trigger stays focusable but, like a natively disabled button,
   // runs no caller event handler other than focus and blur, and a press on it
   // reaches no handler at all (`spec:AST-085` FR2).
-  const callerProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const callerProps = withholdCallerHandlers(rest, isDisabled);
   const triggerSharedProps: React.HTMLAttributes<HTMLElement> = {
     ...callerProps,
     onClick: isDisabled
@@ -2011,7 +2166,7 @@ export function Selector<T extends SelectorOptionType>(
             variant === 'input' &&
               isDisabled &&
               !surface.isTriggerFocusRingSuppressed &&
-              styles.triggerDisabledFocus,
+              inputDisabledFocusStyles.ring,
             isEffectivelyReadOnly && styles.triggerReadOnly,
             variant !== 'input' && isDisabled && styles.triggerGhostDisabled,
             variant !== 'input' &&

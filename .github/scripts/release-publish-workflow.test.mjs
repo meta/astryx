@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -35,13 +35,100 @@ function writeExecutable(root, name, contents) {
   fs.chmodSync(file, 0o755);
 }
 
-function runCanaryPublish({
-  httpStatus,
-  curlExitCode = '0',
+/**
+ * Copies the real per-package publisher into a scratch root and returns the
+ * environment that runs it quickly: an unreachable registry (every read is
+ * unknown, so nothing is skipped) and no waits between attempts.
+ */
+function withPublisher(root) {
+  for (const file of [
+    'publish-order.mjs',
+    'publish-package.mjs',
+    'registry.mjs',
+  ]) {
+    const target = path.join(root, 'scripts/npm', file);
+    fs.mkdirSync(path.dirname(target), {recursive: true});
+    fs.copyFileSync(path.join(ROOT, 'scripts/npm', file), target);
+  }
+  return {
+    ASTRYX_PUBLISH_REGISTRY: 'http://127.0.0.1:9',
+    ASTRYX_PUBLISH_WAITS_MS: '0',
+  };
+}
+
+// A pnpm stand-in: logs each call; FAIL_PACKAGE always fails, FAIL_ONCE
+// fails its first publish only (the transparency log's 409, then success).
+const PNPM_STUB =
+  '#!/bin/sh\nprintf "%s\\n" "$*" >> "$PUBLISH_LOG"\n' +
+  '[ -z "$FAIL_PACKAGE" ] || case "$*" in *"$FAIL_PACKAGE"*) exit 1;; esac\n' +
+  'if [ -n "$FAIL_ONCE" ]; then case "$*" in *"$FAIL_ONCE"*)\n' +
+  '  [ -f "$PUBLISH_LOG.once" ] || { : > "$PUBLISH_LOG.once"; echo "(409) an equivalent entry already exists in the transparency log" >&2; exit 1; };;\n' +
+  'esac; fi\n';
+
+/*
+ * A registry stand-in on a local port that answers as npm does. The private
+ * canary-only package's `latest` version document answers each status in
+ * `NATIVE_STATUSES` in turn (the last one repeats; `000` drops the
+ * connection). Its dist-tags answer 401, as npm answers for a missing scoped
+ * package. Other dist-tags answer 200 and other version documents 404. Each
+ * request path is logged.
+ */
+const REGISTRY_STUB = `
+import fs from 'node:fs';
+import http from 'node:http';
+const statuses = process.env.NATIVE_STATUSES.split(',');
+let nativeReads = 0;
+const server = http.createServer((request, response) => {
+  const url = decodeURIComponent(request.url);
+  fs.appendFileSync(process.env.REQUEST_LOG, url + '\\n');
+  if (url === '/-/package/@astryxdesign/native/dist-tags') {
+    response.writeHead(401).end('"Unauthorized"');
+    return;
+  }
+  if (url === '/@astryxdesign/native/latest') {
+    const status = statuses[Math.min(nativeReads, statuses.length - 1)];
+    nativeReads += 1;
+    if (status === '000') return request.socket.destroy();
+    response.writeHead(Number(status)).end('{}');
+    return;
+  }
+  response.writeHead(url.startsWith('/-/package/') ? 200 : 404).end('{}');
+});
+server.listen(0, '127.0.0.1', () => console.log(server.address().port));
+`;
+
+async function startRegistryStub(root, nativeStatuses) {
+  const script = path.join(root, 'registry-stub.mjs');
+  const requestLog = path.join(root, 'requests.log');
+  fs.writeFileSync(script, REGISTRY_STUB);
+  fs.writeFileSync(requestLog, '');
+  const child = spawn(process.execPath, [script], {
+    env: {
+      ...process.env,
+      NATIVE_STATUSES: nativeStatuses,
+      REQUEST_LOG: requestLog,
+    },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  const port = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.stdout.once('data', data => resolve(String(data).trim()));
+  });
+  return {
+    url: `http://127.0.0.1:${port}`,
+    requests: () => fs.readFileSync(requestLog, 'utf8'),
+    stop: () => child.kill(),
+  };
+}
+
+async function runCanaryPublish({
+  nativeStatuses,
   failingPackage = '',
+  failOnce = '',
 }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-canary-publish-'));
   const publishLog = path.join(root, 'publish.log');
+  const registry = await startRegistryStub(root, nativeStatuses);
   try {
     writeJson(root, 'packages/core/package.json', {
       name: '@astryxdesign/core',
@@ -57,17 +144,11 @@ function runCanaryPublish({
       name: '@astryxdesign/theme-neutral',
       version: '0.7.4',
     });
-    writeExecutable(
-      root,
-      'curl',
-      '#!/bin/sh\nprintf %s "$NATIVE_HTTP_STATUS"\nexit "$CURL_EXIT_CODE"\n',
-    );
-    writeExecutable(
-      root,
-      'pnpm',
-      '#!/bin/sh\nprintf "%s\\n" "$*" >> "$PUBLISH_LOG"\n' +
-        '[ -z "$FAIL_PACKAGE" ] || case "$*" in *"$FAIL_PACKAGE"*) exit 1;; esac\n',
-    );
+    writeExecutable(root, 'pnpm', PNPM_STUB);
+    const publisherEnv = {
+      ...withPublisher(root),
+      ASTRYX_PUBLISH_REGISTRY: registry.url,
+    };
 
     const runnerTemp = path.join(root, 'runner-temp');
     fs.mkdirSync(runnerTemp, {recursive: true});
@@ -79,10 +160,10 @@ function runCanaryPublish({
         encoding: 'utf8',
         env: {
           ...process.env,
-          CURL_EXIT_CODE: curlExitCode,
+          ...publisherEnv,
+          FAIL_ONCE: failOnce,
           FAIL_PACKAGE: failingPackage,
           GITHUB_SHA: 'abcdef1234567890',
-          NATIVE_HTTP_STATUS: httpStatus,
           PATH: `${path.join(root, 'bin')}:${process.env.PATH}`,
           PUBLISH_LOG: publishLog,
           RUNNER_TEMP: runnerTemp,
@@ -91,10 +172,112 @@ function runCanaryPublish({
     );
     return {
       ...result,
+      requests: registry.requests(),
       published: fs.existsSync(publishLog)
         ? fs.readFileSync(publishLog, 'utf8')
         : '',
     };
+  } finally {
+    registry.stop();
+    fs.rmSync(root, {recursive: true, force: true});
+  }
+}
+
+/** Runs the stable publish step over two packages with stubbed npm and pnpm. */
+function runStablePublish({
+  failingPackage = '',
+  failOnce = '',
+  verifyExit = null,
+} = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-stable-publish-'));
+  const publishLog = path.join(root, 'publish.log');
+  try {
+    writeJson(root, 'packages/core/package.json', {
+      name: '@astryxdesign/core',
+      version: '0.7.7',
+    });
+    writeJson(root, 'packages/themes/neutral/package.json', {
+      name: '@astryxdesign/theme-neutral',
+      version: '0.7.7',
+    });
+    // Listed before Core and depends on it: the publish order moves it after.
+    writeJson(root, 'packages/cli/package.json', {
+      name: '@astryxdesign/cli',
+      version: '0.7.7',
+      dependencies: {'@astryxdesign/core': '0.7.7'},
+    });
+    // Publishes after core in the loop and peers on it.
+    writeJson(root, 'packages/themes/stone/package.json', {
+      name: '@astryxdesign/theme-stone',
+      version: '0.7.7',
+      peerDependencies: {'@astryxdesign/core': '0.7.7'},
+    });
+    // `npm view` finds nothing on the registry, so every package publishes.
+    writeExecutable(root, 'npm', '#!/bin/sh\nexit 1\n');
+    writeExecutable(root, 'pnpm', PNPM_STUB);
+    const publisherEnv = withPublisher(root);
+    if (verifyExit !== null) writeVerifierStub(root, verifyExit);
+    const githubOutput = path.join(root, 'github-output');
+    fs.writeFileSync(githubOutput, '');
+    const result = spawnSync(
+      'bash',
+      ['-c', step(stable, 'Publish changed packages').run],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          ...publisherEnv,
+          DRY_RUN: 'false',
+          FAIL_ONCE: failOnce,
+          FAIL_PACKAGE: failingPackage,
+          GITHUB_OUTPUT: githubOutput,
+          PATH: `${path.join(root, 'bin')}:${process.env.PATH}`,
+          PUBLISH_LOG: publishLog,
+          RELEASE_VERSION: '0.7.7',
+        },
+      },
+    );
+    return {
+      ...result,
+      output: fs.readFileSync(githubOutput, 'utf8'),
+      published: fs.existsSync(publishLog)
+        ? fs.readFileSync(publishLog, 'utf8')
+        : '',
+    };
+  } finally {
+    fs.rmSync(root, {recursive: true, force: true});
+  }
+}
+
+/** A registry verifier stand-in that exits with `code`. */
+function writeVerifierStub(root, code) {
+  const file = path.join(root, 'scripts/npm/verify-published.mjs');
+  fs.mkdirSync(path.dirname(file), {recursive: true});
+  fs.writeFileSync(file, `process.exit(${code});\n`);
+}
+
+/** Runs one follow-up verification job's script with a verifier stand-in. */
+function runFollowUp(job, verifyExit) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-verify-'));
+  try {
+    writeVerifierStub(root, verifyExit);
+    const githubOutput = path.join(root, 'github-output');
+    fs.writeFileSync(githubOutput, '');
+    const result = spawnSync(
+      'bash',
+      ['-c', step(job, 'Verify published packages').run],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GITHUB_OUTPUT: githubOutput,
+          RELEASE_VERSION: '0.7.7',
+        },
+      },
+    );
+    return {...result, output: fs.readFileSync(githubOutput, 'utf8')};
   } finally {
     fs.rmSync(root, {recursive: true, force: true});
   }
@@ -220,8 +403,8 @@ describe('stable and canary publication authority', () => {
     expect(canaryText).not.toContain('release-publish-receipt');
   });
 
-  it('skips only an absent package that was private and canary-only', () => {
-    const result = runCanaryPublish({httpStatus: '404'});
+  it('skips only an absent package that was private and canary-only', async () => {
+    const result = await runCanaryPublish({nativeStatuses: '404'});
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(
@@ -232,38 +415,59 @@ describe('stable and canary publication authority', () => {
     expect(result.published).not.toContain('publish ./packages/native');
   });
 
-  it('publishes a bootstrapped private canary-only package normally', () => {
-    const result = runCanaryPublish({httpStatus: '200'});
+  it('publishes a bootstrapped private canary-only package normally', async () => {
+    const result = await runCanaryPublish({nativeStatuses: '200'});
 
     expect(result.status).toBe(0);
     expect(result.published).toContain('publish ./packages/native');
   });
 
-  it('fails on registry errors instead of treating them as package absence', () => {
-    const result = runCanaryPublish({httpStatus: '503'});
+  it('asks whether a package exists through its latest version document, never its full document', async () => {
+    const result = await runCanaryPublish({nativeStatuses: '200'});
+    const requests = result.requests.split('\n');
+
+    expect(requests).toContain('/@astryxdesign/native/latest');
+    expect(requests).not.toContain('/@astryxdesign/native');
+    expect(requests).not.toContain('/-/package/@astryxdesign/native/dist-tags');
+    expect(step(canary, 'Publish canary versions').run).not.toContain('curl');
+  });
+
+  it('fails on registry errors instead of treating them as package absence', async () => {
+    const result = await runCanaryPublish({nativeStatuses: '503'});
 
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain(
-      'Registry lookup for @astryxdesign/native returned HTTP 503',
+    expect(result.stderr).toContain(
+      'Could not tell whether @astryxdesign/native exists on the registry after 3 lookups.',
     );
+    expect(result.stdout).toContain(
+      'Canary publish failed for @astryxdesign/native',
+    );
+    expect(result.stdout).not.toContain('Skipping absent');
     expect(result.published).not.toContain('publish ./packages/native');
   });
 
-  it('records a failed registry request and continues later packages', () => {
-    const result = runCanaryPublish({httpStatus: '000', curlExitCode: '28'});
+  it('records a dropped registry request and continues later packages', async () => {
+    const result = await runCanaryPublish({nativeStatuses: '000'});
 
     expect(result.status).toBe(1);
     expect(result.stdout).toContain(
-      'Registry lookup for @astryxdesign/native returned HTTP 000',
+      'Canary publish failed for @astryxdesign/native',
     );
     expect(result.published).not.toContain('publish ./packages/native');
     expect(result.published).toContain('publish ./packages/themes/neutral');
   });
 
-  it('still fails when a present package cannot publish', () => {
-    const result = runCanaryPublish({
+  it('asks again after an unknown answer and publishes once the package is found', async () => {
+    const result = await runCanaryPublish({nativeStatuses: '000,503,200'});
+
+    expect(result.status).toBe(0);
+    expect(result.published).toContain('publish ./packages/native');
+  });
+
+  it('still fails when a present package cannot publish', async () => {
+    const result = await runCanaryPublish({
       failingPackage: 'packages/native',
-      httpStatus: '200',
+      nativeStatuses: '200',
     });
 
     expect(result.status).toBe(1);
@@ -271,6 +475,95 @@ describe('stable and canary publication authority', () => {
       'Canary publish failed for @astryxdesign/native',
     );
     expect(result.published).toContain('publish ./packages/native');
+  });
+
+  it('publishes every package through the at-most-once publisher, never a bare pnpm publish', () => {
+    for (const job of [stable, canary]) {
+      const text = job.steps.map(candidate => candidate.run ?? '').join('\n');
+      expect(text).not.toMatch(/pnpm publish/u);
+    }
+    expect(step(stable, 'Publish changed packages').run).toContain(
+      'node scripts/npm/publish-package.mjs --dir "./$pkg_dir" --tag latest',
+    );
+    expect(step(canary, 'Publish canary versions').run).toContain(
+      'node scripts/npm/publish-package.mjs --dir "./$pkg_dir" --tag canary',
+    );
+  });
+
+  it('retries a canary whose first signature is rejected, and passes', async () => {
+    const result = await runCanaryPublish({
+      failOnce: 'packages/themes/neutral',
+      nativeStatuses: '200',
+    });
+
+    expect(result.status).toBe(0);
+    expect(
+      result.published
+        .split('\n')
+        .filter(line => line.startsWith('publish ./packages/themes/neutral')),
+    ).toHaveLength(2);
+  });
+
+  it('keeps publishing stable packages after one fails, then fails the step', () => {
+    const result = runStablePublish({failingPackage: 'packages/core'});
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'Stable publish failed for @astryxdesign/core@0.7.7',
+    );
+    expect(result.stdout).toContain(
+      'Re-running this workflow on the same tag publishes only what is missing.',
+    );
+    expect(result.published).toContain('publish ./packages/themes/neutral');
+  });
+
+  it('holds back a stable package whose dependency failed, as failed too', () => {
+    const result = runStablePublish({failingPackage: 'packages/core'});
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'Not publishing @astryxdesign/theme-stone@0.7.7 because @astryxdesign/core failed',
+    );
+    expect(result.stdout).toMatch(
+      /Stable publish failed for: @astryxdesign\/core @astryxdesign\/cli @astryxdesign\/theme-stone\./u,
+    );
+    expect(result.published).not.toContain('publish ./packages/themes/stone');
+    expect(result.published).toContain('publish ./packages/themes/neutral');
+  });
+
+  it('holds back a package listed before its failed dependency', () => {
+    const result = runStablePublish({failingPackage: 'packages/core'});
+
+    expect(result.stdout).toContain(
+      'Not publishing @astryxdesign/cli@0.7.7 because @astryxdesign/core failed',
+    );
+    expect(result.published).not.toContain('publish ./packages/cli');
+  });
+
+  it('publishes every dependency before the packages that use it', () => {
+    const result = runStablePublish();
+    const order = result.published
+      .split('\n')
+      .filter(Boolean)
+      .map(line => line.split(' ')[1]);
+
+    expect(order.indexOf('./packages/core')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('./packages/core')).toBeLessThan(
+      order.indexOf('./packages/cli'),
+    );
+  });
+
+  it('retries a stable package whose first signature is rejected', () => {
+    // Both publish; the step then reaches registry verification, which this
+    // scratch root does not carry, so only the publish calls are asserted.
+    const result = runStablePublish({failOnce: 'packages/core'});
+
+    expect(
+      result.published
+        .split('\n')
+        .filter(line => line.startsWith('publish ./packages/core')),
+    ).toHaveLength(2);
+    expect(result.stdout).not.toContain('Stable publish failed');
   });
 
   it('validates every main merge-back against trusted policy and the immutable tag', () => {
@@ -311,7 +604,7 @@ describe('stable and canary publication authority', () => {
       'git show origin/main:scripts/release/active-release.mjs',
       'git show origin/main:scripts/lib/workspace-globs.mjs',
       'validate-merge-back',
-      '--base origin/main',
+      '--base HEAD^1',
       '--release-ref "v$VERSION"',
       '--active-branches "$ACTIVE_BRANCHES"',
     ]) {
@@ -322,7 +615,7 @@ describe('stable and canary publication authority', () => {
       'Validate published bytes and consumed-only Changeset merge-back',
     ).run;
     expect(validation).toContain('validate-merge-back');
-    expect(validation).toContain('--base origin/main');
+    expect(validation).toContain('--base HEAD^1');
     expect(validation).toContain('--release-ref "v$VERSION"');
     expect(validation).toContain('--active-branches "$ACTIVE_BRANCHES"');
     expect(
@@ -335,5 +628,120 @@ describe('stable and canary publication authority', () => {
     expect(parity).toContain('git worktree add --detach');
     expect(parity).toContain('pnpm build');
     expect(parity).toContain('verify-published.mjs --version "$VERSION"');
+  });
+});
+
+describe('stable publish requires the cut commit release-check (spec:AST-030 FR12, DEC-11)', () => {
+  it('checks the marker cut commit before anything is built or published', () => {
+    const names = stable.steps.map(candidate => candidate.name);
+    const guard = names.indexOf(
+      'Require a passing release-check at the exact cut commit',
+    );
+    expect(guard).toBeGreaterThan(
+      names.indexOf('Validate marked release branch, tag commit, and plan'),
+    );
+    expect(guard).toBeLessThan(names.indexOf('Build all packages'));
+    expect(guard).toBeLessThan(names.indexOf('Publish changed packages'));
+    const script = stable.steps[guard].with.script;
+    expect(script).toContain('scripts/release/release-check-receipt.mjs');
+    expect(script).toContain('.release/active.json');
+    expect(script).toContain('requireReleaseCheck(');
+    // The cut commit also needs a passing full unit run (FR21).
+    expect(script).toContain('requireUnitRun(');
+    expect(stable.steps[guard]['continue-on-error']).toBeUndefined();
+    expect(stable.permissions.actions).toBe('read');
+  });
+
+  it('passes the release when every package is readable in the first window', () => {
+    const result = runStablePublish({verifyExit: 0});
+
+    expect(result.status).toBe(0);
+    expect(result.output).toContain('verified=true');
+  });
+
+  it('ends the publish job as "not yet readable", not failed, and hands over to a follow-up', () => {
+    const result = runStablePublish({verifyExit: 2});
+
+    expect(result.status).toBe(0);
+    expect(result.output).toContain('verified=pending');
+    expect(result.stdout).toContain('not yet readable on the registry');
+  });
+
+  it('still fails the publish job on a verification error', () => {
+    const result = runStablePublish({verifyExit: 1});
+
+    expect(result.status).toBe(1);
+    expect(result.output).not.toContain('verified=');
+  });
+
+  it('runs at most two bounded follow-up verification jobs, each only while packages are pending', () => {
+    const first = workflow.jobs['verify-registry-1'];
+    const last = workflow.jobs['verify-registry-2'];
+    const followUps = Object.keys(workflow.jobs).filter(name =>
+      name.startsWith('verify-registry'),
+    );
+
+    expect(followUps).toEqual(['verify-registry-1', 'verify-registry-2']);
+    expect(stable.outputs.verified).toBe(
+      '${{ steps.publish.outputs.verified }}',
+    );
+    expect(first.needs).toBe('publish');
+    expect(first.if).toBe("needs.publish.outputs.verified == 'pending'");
+    expect(last.needs).toBe('verify-registry-1');
+    expect(last.if).toBe(
+      "needs.verify-registry-1.outputs.verified == 'pending'",
+    );
+    for (const job of [first, last]) {
+      expect(job['runs-on']).toBe('ubuntu-latest');
+      expect(job['timeout-minutes']).toBeLessThanOrEqual(10);
+      expect(job.permissions).toEqual({contents: 'read'});
+      expect(step(job, 'Verify published packages').run).toContain(
+        'node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest --window-ms 420000',
+      );
+    }
+  });
+
+  it('hands a still-pending check from the first follow-up to the last one', () => {
+    const pending = runFollowUp(workflow.jobs['verify-registry-1'], 2);
+    expect(pending.status).toBe(0);
+    expect(pending.output).toContain('verified=pending');
+
+    const readable = runFollowUp(workflow.jobs['verify-registry-1'], 0);
+    expect(readable.status).toBe(0);
+    expect(readable.output).toContain('verified=true');
+  });
+
+  it('fails the release when the last follow-up still finds a package unreadable', () => {
+    const result = runFollowUp(workflow.jobs['verify-registry-2'], 2);
+
+    expect(result.status).toBe(2);
+    expect(result.stdout).toContain(
+      'still not readable on the registry after three verification windows',
+    );
+  });
+
+  it('lets nothing act on a stable release before the final verification decides the run', () => {
+    // Every job that depends on the publish job is the next verification
+    // window, so no release step can start on the publish job's pass alone.
+    const dependents = name =>
+      Object.entries(workflow.jobs)
+        .filter(([, job]) => [job.needs].flat().includes(name))
+        .map(([jobName]) => jobName);
+    expect(dependents('publish')).toEqual(['verify-registry-1']);
+    expect(dependents('verify-registry-1')).toEqual(['verify-registry-2']);
+    expect(dependents('verify-registry-2')).toEqual([]);
+
+    // Pending in the publish job and in follow-up 1, still unreadable in
+    // follow-up 2: the run ends failed, so anything that waits for the run's
+    // conclusion does not proceed.
+    const publish = runStablePublish({verifyExit: 2});
+    const first = runFollowUp(workflow.jobs['verify-registry-1'], 2);
+    const last = runFollowUp(workflow.jobs['verify-registry-2'], 2);
+    const jobResults = [publish.status, first.status, last.status];
+    expect(jobResults).toEqual([0, 0, 2]);
+    expect(jobResults.some(status => status !== 0)).toBe(true);
+    expect(stable.outputs.verified).toBeDefined();
+    expect(publish.output).toContain('verified=pending');
+    expect(first.output).toContain('verified=pending');
   });
 });

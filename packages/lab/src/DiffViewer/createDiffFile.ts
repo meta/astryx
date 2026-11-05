@@ -8,11 +8,6 @@
  * @position Lab utility; computes a line diff (Myers) when the caller has two
  *   texts rather than a patch
  *
- * Shared leading and trailing lines are matched without a search. The minimal
- * search over the rest stops after MAX_EDIT_DISTANCE changed lines, so memory
- * stays bounded for any input; a middle that differs more than that is shown
- * as one replaced block rather than a minimal diff.
- *
  * SYNC: When modified, update:
  * - /packages/lab/src/DiffViewer/createDiffFile.test.ts
  * - /packages/lab/src/DiffViewer/DiffViewer.doc.mjs (utilities section)
@@ -64,19 +59,42 @@ function splitLines(value: string): string[] {
 }
 
 /**
- * Most changed lines the minimal search explores before giving up. The trace
- * it keeps grows with the square of this, so the cap bounds memory to a few
- * megabytes; past it the changed middle is shown as one replaced block.
+ * Most changed lines the search compares line by line; past it the changed
+ * middle is shown as one replaced block. The search keeps a few arrays the
+ * size of the input, so its memory does not grow with this limit.
  */
-const MAX_EDIT_DISTANCE = 2000;
+const MAX_EDIT_DISTANCE = 10_000;
+
+/**
+ * Most search work, counted as changed-middle lines times edits. The search
+ * time grows with both, so a long file gets a lower edit limit. A file of up
+ * to 50,000 lines keeps the full MAX_EDIT_DISTANCE.
+ */
+const MAX_SEARCH_WORK = 1_000_000_000;
+
+/**
+ * Most changed lines the traced search tries first. Most changes are small,
+ * and for them the traced search is faster than the linear-space one. Its
+ * trace grows with the square of the edits, so at this limit it stays near
+ * 4 MB.
+ */
+const TRACED_SEARCH_LIMIT = 1000;
+
+interface EditScript {
+  ops: Op[];
+  /** True when the middle was replaced as a whole, not compared line by line. */
+  isReplacedBlock: boolean;
+}
 
 /**
  * Line edit script from `a` to `b`. Shared leading and trailing lines are
- * context without a search; the middle uses Myers' O(ND) shortest edit script,
- * or, when it needs more than MAX_EDIT_DISTANCE edits, removes the old middle
- * and adds the new one.
+ * context without a search. The middle uses a shortest edit script, or, when
+ * it needs more edits than the limit, removes the old middle and adds the new
+ * one. The limit is MAX_EDIT_DISTANCE, lowered for a long middle so the work
+ * stays under MAX_SEARCH_WORK. The traced search runs first; the linear-space
+ * search takes over when the change is larger than TRACED_SEARCH_LIMIT.
  */
-function diffLines(a: string[], b: string[]): Op[] {
+function diffLines(a: string[], b: string[]): EditScript {
   let head = 0;
   while (head < a.length && head < b.length && a[head] === b[head]) {
     head++;
@@ -92,7 +110,23 @@ function diffLines(a: string[], b: string[]): Op[] {
   for (let i = 0; i < head; i++) {
     ops.push({kind: 'context', a: i, b: i});
   }
-  const middle = myers(a, b, head, tailA, tailB);
+  // When one side of the middle is empty, adding or removing the other side
+  // is already the minimal script.
+  const isOneSided = tailA === head || tailB === head;
+  const editLimit = Math.min(
+    MAX_EDIT_DISTANCE,
+    Math.floor(MAX_SEARCH_WORK / (tailA - head + (tailB - head))),
+  );
+  const middle = isOneSided
+    ? null
+    : (tracedEditScript(
+        a,
+        b,
+        head,
+        tailA,
+        tailB,
+        Math.min(TRACED_SEARCH_LIMIT, editLimit),
+      ) ?? shortestEditScript(a, b, head, tailA, tailB, editLimit));
   if (middle != null) {
     // A loop, not a spread: one call argument per op overflows the stack on
     // long inputs.
@@ -110,20 +144,241 @@ function diffLines(a: string[], b: string[]): Op[] {
   for (let i = 0; tailA + i < a.length; i++) {
     ops.push({kind: 'context', a: tailA + i, b: tailB + i});
   }
-  return ops;
+  return {ops, isReplacedBlock: middle == null && !isOneSided};
 }
 
 /**
- * Myers' shortest edit script over `a[start, endA)` and `b[start, endB)`,
- * with absolute indexes in the ops; null when it needs more than
- * MAX_EDIT_DISTANCE edits.
+ * Shortest edit script over `a[start, endA)` and `b[start, endB)`, with
+ * absolute indexes in the ops; null when it needs more than `maxEdits` edits.
+ *
+ * This is Myers' O(ND) search in linear space. Each step searches forward
+ * from the start and backward from the end at the same time until the two
+ * searches meet. The meeting point is on a shortest path, so the step then
+ * solves the part before it and the part after it. Lines are compared as
+ * integer ids.
  */
-function myers(
+function shortestEditScript(
   a: string[],
   b: string[],
   start: number,
   endA: number,
   endB: number,
+  maxEdits: number,
+): Op[] | null {
+  const ids = new Map<string, number>();
+  const toIds = (lines: string[], end: number) => {
+    const out = new Int32Array(end - start);
+    for (let i = start; i < end; i++) {
+      let id = ids.get(lines[i]);
+      if (id === undefined) {
+        id = ids.size;
+        ids.set(lines[i], id);
+      }
+      out[i - start] = id;
+    }
+    return out;
+  };
+  const oldIds = toIds(a, endA);
+  const newIds = toIds(b, endB);
+
+  // Each copy of a line that one side has more often than the other is an
+  // edit, so this count is a lower bound on the edits. When it is past the
+  // limit (a rewrite, for example), skip the search.
+  const surplus = new Int32Array(ids.size);
+  for (const id of oldIds) {
+    surplus[id]++;
+  }
+  for (const id of newIds) {
+    surplus[id]--;
+  }
+  let minEdits = 0;
+  for (const count of surplus) {
+    minEdits += Math.abs(count);
+  }
+  if (minEdits > maxEdits) {
+    return null;
+  }
+  // The furthest x each search reached on diagonal k (x - y), stored at
+  // index k + offset. The backward search counts x and y from the end.
+  const offset = oldIds.length + newIds.length + 1;
+  const forward = new Int32Array(2 * offset + 1);
+  const backward = new Int32Array(2 * offset + 1);
+  const ops: Op[] = [];
+
+  // A point on a shortest path through the box, or null when the path needs
+  // more than `limit` edits.
+  const meetingPoint = (
+    aLo: number,
+    aHi: number,
+    bLo: number,
+    bHi: number,
+    limit: number,
+  ): [number, number] | null => {
+    const n = aHi - aLo;
+    const m = bHi - bLo;
+    const delta = n - m;
+    const isOdd = (delta & 1) !== 0;
+    forward[offset + 1] = 0;
+    backward[offset + 1] = 0;
+    for (let d = 0; d <= Math.ceil((n + m) / 2); d++) {
+      // Forward step d can find a path of 2d - 1 edits, backward step d one
+      // of 2d edits.
+      if (2 * d - 1 > limit) {
+        return null;
+      }
+      for (let k = -d; k <= d; k += 2) {
+        let x =
+          k === -d ||
+          (k !== d && forward[offset + k - 1] < forward[offset + k + 1])
+            ? forward[offset + k + 1]
+            : forward[offset + k - 1] + 1;
+        let y = x - k;
+        while (x < n && y < m && oldIds[aLo + x] === newIds[bLo + y]) {
+          x++;
+          y++;
+        }
+        forward[offset + k] = x;
+        // The backward search has done d - 1 steps, so it holds diagonals
+        // -(d - 1)..d - 1, in its own coordinates.
+        const back = delta - k;
+        if (
+          isOdd &&
+          x <= n &&
+          y <= m &&
+          back >= 1 - d &&
+          back <= d - 1 &&
+          x + backward[offset + back] >= n
+        ) {
+          return [aLo + x, bLo + y];
+        }
+      }
+      if (2 * d > limit) {
+        return null;
+      }
+      for (let k = -d; k <= d; k += 2) {
+        let x =
+          k === -d ||
+          (k !== d && backward[offset + k - 1] < backward[offset + k + 1])
+            ? backward[offset + k + 1]
+            : backward[offset + k - 1] + 1;
+        let y = x - k;
+        while (x < n && y < m && oldIds[aHi - 1 - x] === newIds[bHi - 1 - y]) {
+          x++;
+          y++;
+        }
+        backward[offset + k] = x;
+        const front = delta - k;
+        if (
+          !isOdd &&
+          x <= n &&
+          y <= m &&
+          front >= -d &&
+          front <= d &&
+          x + forward[offset + front] >= n
+        ) {
+          const meetX = forward[offset + front];
+          return [aLo + meetX, bLo + meetX - front];
+        }
+      }
+    }
+    return null;
+  };
+
+  // Appends the script for the box to `ops`; false when the box needs more
+  // than `limit` edits. Only the outermost box sets a limit.
+  const solve = (
+    aLo: number,
+    aHi: number,
+    bLo: number,
+    bHi: number,
+    limit: number,
+  ): boolean => {
+    while (aLo < aHi && bLo < bHi && oldIds[aLo] === newIds[bLo]) {
+      ops.push({kind: 'context', a: start + aLo, b: start + bLo});
+      aLo++;
+      bLo++;
+    }
+    let tail = 0;
+    while (
+      aHi - tail > aLo &&
+      bHi - tail > bLo &&
+      oldIds[aHi - 1 - tail] === newIds[bHi - 1 - tail]
+    ) {
+      tail++;
+    }
+    const aEnd = aHi - tail;
+    const bEnd = bHi - tail;
+    if (aLo === aEnd || bLo === bEnd) {
+      if (aEnd - aLo + (bEnd - bLo) > limit) {
+        return false;
+      }
+      for (let i = aLo; i < aEnd; i++) {
+        ops.push({kind: 'removed', a: start + i});
+      }
+      for (let j = bLo; j < bEnd; j++) {
+        ops.push({kind: 'added', b: start + j});
+      }
+    } else {
+      const point = meetingPoint(aLo, aEnd, bLo, bEnd, limit);
+      if (
+        point == null ||
+        !solve(aLo, point[0], bLo, point[1], Infinity) ||
+        !solve(point[0], aEnd, point[1], bEnd, Infinity)
+      ) {
+        return false;
+      }
+    }
+    for (let t = tail; t > 0; t--) {
+      ops.push({kind: 'context', a: start + aHi - t, b: start + bHi - t});
+    }
+    return true;
+  };
+
+  if (!solve(0, oldIds.length, 0, newIds.length, maxEdits)) {
+    return null;
+  }
+  return removalsFirst(ops);
+}
+
+/**
+ * Put the removals of each run of changes before its additions, so split view
+ * pairs each removed line with the added line that replaced it.
+ */
+function removalsFirst(ops: Op[]): Op[] {
+  const sorted: Op[] = [];
+  const added: Op[] = [];
+  for (const op of ops) {
+    if (op.kind === 'added') {
+      added.push(op);
+      continue;
+    }
+    if (op.kind === 'context') {
+      for (const addedOp of added) {
+        sorted.push(addedOp);
+      }
+      added.length = 0;
+    }
+    sorted.push(op);
+  }
+  for (const addedOp of added) {
+    sorted.push(addedOp);
+  }
+  return sorted;
+}
+
+/**
+ * Myers' O(ND) shortest edit script over `a[start, endA)` and
+ * `b[start, endB)`, with absolute indexes in the ops; null when it needs more
+ * than `maxEdits` edits. It keeps every step's diagonals to trace the path
+ * back, so its memory grows with the square of the edits.
+ */
+function tracedEditScript(
+  a: string[],
+  b: string[],
+  start: number,
+  endA: number,
+  endB: number,
+  maxEdits: number,
 ): Op[] | null {
   const n = endA - start;
   const m = endB - start;
@@ -134,7 +389,7 @@ function myers(
   const trace: Int32Array[] = [];
 
   outer: for (let d = 0; d <= max; d++) {
-    if (d > MAX_EDIT_DISTANCE) {
+    if (d > maxEdits) {
       return null;
     }
     trace.push(v.slice(offset - d, offset + d + 1));
@@ -225,7 +480,7 @@ export function createDiffFile({
 
   const a = splitLines(oldValue);
   const b = splitLines(newValue);
-  const ops = diffLines(a, b);
+  const {ops, isReplacedBlock} = diffLines(a, b);
 
   const changed: number[] = [];
   ops.forEach((op, i) => {
@@ -302,6 +557,8 @@ export function createDiffFile({
       newStart,
       newLines: newCount,
       lines,
+      // A replaced block is the only change, so it fills the only hunk.
+      ...(isReplacedBlock ? {isReplacedBlock: true} : {}),
     });
     g = h;
   }

@@ -4,7 +4,7 @@
 
 /**
  * @file FieldLabel.tsx
- * @input Uses React, Icon, IconType, useTranslator, FormLayoutContext
+ * @input Uses React, Icon, IconType, useComponentTranslator, FormLayoutContext
  * @output Exports FieldLabel component, FieldLabelProps
  * @position Core label implementation; used by Field, CheckboxInput, Switch
  *
@@ -16,15 +16,7 @@
  * - /packages/core/locales/en.json (@astryx.field.required / @astryx.field.optional)
  */
 
-import {
-  use,
-  useMemo,
-  useRef,
-  type MouseEvent,
-  type PointerEvent,
-  type ReactNode,
-  type RefObject,
-} from 'react';
+import {use, useMemo, useRef, type ReactNode, type RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils/mergeProps';
@@ -39,11 +31,17 @@ import {
 import {Icon, renderIconSlot} from '../Icon/Icon';
 import type {IconType} from '../Icon';
 import {Tooltip} from '../Tooltip/Tooltip';
-import {TOUCH_POINTER_TYPES} from '../Layer/useTouchTrigger';
-import {useTranslator} from '../i18n/useTranslator';
+import {useTapStop} from '../Layer/useTouchTrigger';
 import {themeProps} from '../utils/themeProps';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Field/FieldLabel.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   // The label and its description read as a single block, with no space
@@ -221,7 +219,7 @@ export function FieldLabel({
   ref,
   ...rest
 }: FieldLabelProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {defaultOptionality} = use(FormLayoutContext);
 
   // A form-level `defaultOptionality` means "only the exception is marked": a
@@ -269,18 +267,8 @@ export function FieldLabel({
   // go on to activate the label's control, as a press anywhere else on the
   // label would (focus the field, toggle a switch). A mouse click on the icon
   // keeps that native activation, and hover shows the help.
-  const iconPressIsTapRef = useRef(false);
-  const handleIconPointerDown = (event: PointerEvent<Element>) => {
-    // A finger or a pen: the pointers whose tap the shared touch trigger
-    // answers, so the ones whose tap opens or closes the help.
-    iconPressIsTapRef.current = TOUCH_POINTER_TYPES.has(event.pointerType);
-  };
-  const handleIconClick = (event: MouseEvent<Element>) => {
-    if (iconPressIsTapRef.current) {
-      event.preventDefault();
-    }
-    iconPressIsTapRef.current = false;
-  };
+  const {onPointerDown: handleIconPointerDown, onClick: handleIconClick} =
+    useTapStop('click');
   const controlRef = useMemo<RefObject<HTMLElement | null>>(
     () => ({
       get current() {

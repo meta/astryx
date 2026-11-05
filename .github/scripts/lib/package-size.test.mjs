@@ -263,7 +263,7 @@ describe('renderPackageSizeSection', () => {
     );
     expect(markdown).toContain('### Published Package Size');
     expect(markdown).toContain(
-      '| @astryxdesign/core | 97.7KB | 98.6KB | +1000B (+1.0%) |',
+      '| @astryxdesign/core | 97.7 kB | 98.6 kB | +1000 B (+1.0%) |',
     );
     expect(markdown).not.toContain('theme-neutral');
     expect(markdown).toContain('2 other published packages are unchanged.');
@@ -279,7 +279,7 @@ describe('renderPackageSizeSection', () => {
       }),
     );
     expect(markdown).toContain(
-      '| @astryxdesign/core | 8.58MB | 8.68MB | +97.7KB (+1.1%) |',
+      '| @astryxdesign/core | 8.58 MB | 8.68 MB | +97.7 kB (+1.1%) |',
     );
   });
 

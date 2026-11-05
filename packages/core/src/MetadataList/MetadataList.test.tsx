@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import type {ReactNode} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -379,5 +380,55 @@ describe('MetadataList pass-through props', () => {
     const rootEl = screen.getByTestId('list');
     expect(rootEl).toHaveAttribute('data-columns', '2');
     expect(rootEl).toHaveAttribute('data-orientation', 'horizontal');
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no title wrapper for %s', (_name, title) => {
+    const {container: withTitle} = render(
+      <MetadataList title={title as ReactNode}>
+        <MetadataListItem label="Owner">Ana</MetadataListItem>
+      </MetadataList>,
+    );
+    const {container: without} = render(
+      <MetadataList>
+        <MetadataListItem label="Owner">Ana</MetadataListItem>
+      </MetadataList>,
+    );
+    // The list's generated id differs between the two renders.
+    const html = (element: HTMLElement) =>
+      element.innerHTML.replace(/id="[^"]*"/g, 'id');
+    expect(html(withTitle)).toBe(html(without));
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no item icon wrapper for %s', (_name, icon) => {
+    const {container: withIcon} = render(
+      <MetadataListItem label="Owner" icon={icon as ReactNode}>
+        Ana
+      </MetadataListItem>,
+    );
+    const {container: without} = render(
+      <MetadataListItem label="Owner">Ana</MetadataListItem>,
+    );
+    expect(withIcon.innerHTML).toBe(without.innerHTML);
+  });
+
+  it('renders 0 as a title and as an item icon, as React does', () => {
+    render(
+      <MetadataList title={0}>
+        <MetadataListItem label="Owner" icon={0}>
+          Ana
+        </MetadataListItem>
+      </MetadataList>,
+    );
+    expect(screen.getAllByText('0')).toHaveLength(2);
   });
 });
