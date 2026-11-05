@@ -228,6 +228,18 @@ describe('area', () => {
     expect(paths[1]).toHaveAttribute('stroke-width', '1.5');
   });
 
+  it('keeps a zero stroke width on the edge instead of restoring the default', () => {
+    const {plot: linePlot} = renderMarks([line('v', {strokeWidth: 0})]);
+    expect(linePlot.querySelector('path')).toHaveAttribute(
+      'stroke-width',
+      '0',
+    );
+    const {plot: areaPlot} = renderMarks([area('v', {strokeWidth: 0})]);
+    const paths = areaPlot.querySelectorAll('path');
+    expect(paths).toHaveLength(2);
+    expect(paths[1]).toHaveAttribute('stroke-width', '0');
+  });
+
   it('omits the stroke path when stroke is disabled', () => {
     const {plot} = renderMarks([area('v', {stroke: false})]);
     expect(plot.querySelectorAll('path')).toHaveLength(1);

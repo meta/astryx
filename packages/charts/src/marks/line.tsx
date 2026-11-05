@@ -18,6 +18,7 @@ import {
 } from 'd3-shape';
 import type {SeriesDef, ResolvedPoint} from '../types';
 import {seriesFill} from '../markColor';
+import {resolveStrokeWidth} from './strokeWidth';
 import {xPixel} from '../utils';
 
 const CURVES = {
@@ -44,11 +45,7 @@ function isFinitePoint(p: ResolvedPoint): boolean {
 export function line(dataKey: string, options: LineOptions = {}): SeriesDef {
   const color = options.color;
   const curve = options.curve ?? 'monotone';
-  const strokeWidth =
-    typeof options.strokeWidth === 'number' &&
-    Number.isFinite(options.strokeWidth)
-      ? Math.max(0, options.strokeWidth)
-      : 2;
+  const strokeWidth = resolveStrokeWidth(options.strokeWidth);
   const dots = options.dots ?? false;
 
   const seriesDef: SeriesDef = {

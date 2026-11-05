@@ -20,6 +20,7 @@ import {
 import {line as d3Line} from 'd3-shape';
 import type {SeriesDef, ResolvedPoint} from '../types';
 import {seriesFill} from '../markColor';
+import {resolveStrokeWidth} from './strokeWidth';
 import {xPixel} from '../utils';
 
 const CURVES = {
@@ -57,12 +58,7 @@ export function area(dataKey: string, options: AreaOptions = {}): SeriesDef {
   const curve = options.curve ?? 'monotone';
   const gradient = options.gradient ?? false;
   const stroke = options.stroke ?? true;
-  const strokeWidth =
-    typeof options.strokeWidth === 'number' &&
-    Number.isFinite(options.strokeWidth) &&
-    options.strokeWidth > 0
-      ? options.strokeWidth
-      : 2;
+  const strokeWidth = resolveStrokeWidth(options.strokeWidth);
 
   const seriesDef: SeriesDef = {
     type: 'area',
