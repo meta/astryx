@@ -11,6 +11,8 @@ An accessibility spec (`*.a11y.browser.spec.ts`, under
 [`playwright.config.ts`](../../playwright.config.ts)) may use the animation
 holds and the timer gate too, to check a state an animation passes through.
 
+The exemplar to copy is
+[`BottomSheetDetent.interaction.browser.spec.ts`](../../packages/core/src/BottomSheet/__tests__/BottomSheetDetent.interaction.browser.spec.ts).
 The harness proves its own instruments in
 [`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts).
 The busy-main-thread proof and the rendering-trace counts have a negative
@@ -24,7 +26,7 @@ self-tests check an instrument against a known answer.
 pnpm storybook:build                      # the specs read stories from the built Storybook
 pnpm exec playwright install chromium webkit
 pnpm test:interaction --project chromium  # everything, Chromium
-pnpm test:interaction <spec file>         # one spec, both engines
+pnpm test:interaction BottomSheetDetent   # one spec, both engines
 pnpm storyboards                          # only the tests tagged @storyboard
 ```
 
