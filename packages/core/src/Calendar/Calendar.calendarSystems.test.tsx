@@ -10,6 +10,7 @@
  */
 
 import 'temporal-polyfill/full/global';
+import type {ReactElement} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -291,31 +292,7 @@ describe('Calendar year paging in the Gregorian calendar', () => {
 });
 
 describe('date inputs under a provider calendar', () => {
-  // Their field text is Gregorian, so their popover calendars stay Gregorian.
-  it.each([
-    [
-      'DateInput',
-      <DateInput key="d" label="Date" value="2026-10-30" onChange={() => {}} />,
-    ],
-    [
-      'DateTimeInput',
-      <DateTimeInput
-        key="dt"
-        label="When"
-        value={'2026-10-30T09:00' as ISODateTimeString}
-        onChange={() => {}}
-      />,
-    ],
-    [
-      'DateRangeInput',
-      <DateRangeInput
-        key="r"
-        label="Dates"
-        value={{start: '2026-10-30', end: '2026-11-02'}}
-        onChange={() => {}}
-      />,
-    ],
-  ])('%s keeps a Gregorian popover calendar', async (_name, field) => {
+  async function openGridLabel(field: ReactElement): Promise<string> {
     const user = userEvent.setup();
     render(
       <InternationalizationProvider locale="en" calendar="persian">
@@ -329,7 +306,34 @@ describe('date inputs under a provider calendar', () => {
       expect(element).not.toBeNull();
       return element as HTMLElement;
     });
-    expect(grid.getAttribute('aria-label')).toContain('2026');
-    expect(grid.getAttribute('aria-label')).not.toContain('1405');
+    return grid.getAttribute('aria-label') ?? '';
+  }
+
+  // Their field text is in the calendar, so their popover calendars are too.
+  it.each([
+    [
+      'DateInput',
+      <DateInput key="d" label="Date" value="2026-10-30" onChange={() => {}} />,
+    ],
+    [
+      'DateRangeInput',
+      <DateRangeInput
+        key="dr"
+        label="Dates"
+        value={{start: '2026-10-30', end: '2026-11-02'}}
+        onChange={() => {}}
+      />,
+    ],
+    [
+      'DateTimeInput',
+      <DateTimeInput
+        key="dt"
+        label="When"
+        value={'2026-10-30T09:00' as ISODateTimeString}
+        onChange={() => {}}
+      />,
+    ],
+  ])('%s opens its popover calendar in the calendar', async (_name, field) => {
+    expect(await openGridLabel(field)).toContain('1405');
   });
 });
