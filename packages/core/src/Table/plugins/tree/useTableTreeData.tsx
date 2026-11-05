@@ -5,8 +5,8 @@
 /**
  * @file useTableTreeData.tsx
  * @input React, StyleX, Icon, Table types, theme tokens, i18n (useComponentTranslator),
- *   useTreeFocus (row-focus keyboard model), isRtlElement (inline arrow keys),
- *   focusOutline (row and chevron focus ring)
+ *   useTreeFocusInternal (row keys), isRtlElement (inline arrows), focusOutline (rings),
+ *   LayoutChangeSnapshot, useFocusLeavingChange, focusReturn, interactionModality
  * @output Exports useTableTreeData hook + config/meta types
  * @position Tree plugin; consumed by Table via plugins prop.
  *   Pairs with useTableTreeState (owns expansion state + flattening).
@@ -23,24 +23,12 @@
  * row's expander subscribes independently — a toggle re-renders only the
  * affected cells, not the whole body. Row ARIA (aria-level, aria-expanded,
  * aria-posinset, aria-setsize) is applied imperatively via a ref callback
- * on each <tr>, exactly like selection's row styling; each subscription
+ * on each <tr>, exactly like selection's row styling. Each subscription
  * self-cleans when the row disconnects.
  *
- * ## Treegrid (WAI-ARIA)
- *
- * Row ARIA is only valid inside a treegrid, so when any row is expandable
- * `transformTable` names the <table> `role="treegrid"` and wires the
- * row-focus keyboard model from `useTreeFocus` (the shared tree primitive,
- * pointed at the rows through its `itemSelector`): one roving tab stop
- * across the visible rows that follows focus onto a row, ArrowUp/ArrowDown
- * between rows, ArrowRight / ArrowLeft to expand and collapse, Home/End,
- * and Enter/Space to toggle. Unlike the tree view, ArrowRight on an
- * expanded row and ArrowLeft on a collapsed or leaf row hold focus (the
- * APG treegrid pattern). v1 scope is row focus only — no cell navigation —
- * and the keys apply only when a row itself owns focus, so controls inside
- * cells (chevron, selection checkbox, sort header, a text field) keep
- * their own keys and stay in the Tab order, in DOM order around the row
- * stop.
+ * The treegrid role and the row keys from useTreeFocusInternal switch on only
+ * when a row is expandable. A commit that drops the row holding focus or the
+ * Tab stop hands each to the nearest remaining ancestor row.
  *
  * When `hasExpandableRows` is false (flat data), every transform is a
  * pass-through: adopting the plugin ahead of hierarchical data is a
@@ -58,6 +46,7 @@ import {
   useSyncExternalStore,
   type ReactNode,
   type Ref,
+  type RefObject,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -69,8 +58,16 @@ import {
 import {Icon} from '../../../Icon';
 import {mergeRefs} from '../../../utils';
 import {focusOutlineStyles} from '../../../utils/focusOutline.stylex';
-import {useTreeFocus} from '../../../hooks/useTreeFocus';
+import {useTreeFocusInternal} from '../../../hooks/useTreeFocus';
 import {isRtlElement} from '../../../hooks/isRtlElement';
+import {LayoutChangeSnapshot} from '../../../motion/LayoutChangeSnapshot';
+import {
+  moveFocusLeftBehind,
+  noteFocusWithin,
+  type FocusWithin,
+} from '../../../utils/focusReturn';
+import {useInteractionModalityTrackingFor} from '../../../utils/interactionModality';
+import {useFocusLeavingChange} from '../../../utils/useFocusLeavingChange';
 import {
   hasInteractiveAncestor,
   hasTextSelection,
@@ -137,9 +134,9 @@ export interface UseTableTreeDataConfig<T extends Record<string, unknown>> {
   getRowLabel?: (item: T) => string;
   /**
    * Whether any row in the dataset is expandable. When false the plugin is
-   * a no-op: no expanders, no indent, no treegrid role, no row ARIA, no
-   * keyboard model — flat data renders identically to a Table without the
-   * plugin.
+   * a no-op: no expanders, no indent, no treegrid role, no row ARIA and no
+   * keyboard model. Flat data then renders identically to a Table without
+   * the plugin.
    */
   hasExpandableRows: boolean;
   /**
@@ -169,8 +166,8 @@ export interface UseTableTreeDataConfig<T extends Record<string, unknown>> {
    * When true, clicking anywhere on an expandable row toggles its expansion,
    * in addition to the chevron. Leaf rows stay inert. No-op on flat data.
    *
-   * This is a pointer-only convenience layered over the chevron: a keyboard
-   * user toggles a focused row with ArrowRight/ArrowLeft or Enter, and the
+   * This is a pointer-only convenience layered over the chevron. A keyboard
+   * user toggles a focused row with ArrowRight/ArrowLeft, Enter or Space. The
    * chevron button stays the accessible control for everyone. Clicks
    * originating from interactive cell content
    * (buttons, links, form controls) or a text selection do not toggle.
@@ -261,13 +258,11 @@ function useRowSnapshot<T extends Record<string, unknown>>(
 // =============================================================================
 
 /**
- * Stamp a row's treegrid ARIA (aria-level 1-based, aria-expanded on parents,
- * aria-posinset/aria-setsize when the meta carries them) plus the two hooks
- * the keyboard model reads: `data-tree-id` (handed back by useTreeFocus on a
- * toggle) and `data-tree-row` (the per-instance marker its itemSelector
- * matches). Without meta — flat data, or a row the tree does not know — every
- * one of them comes off, including the roving `tabindex` the keyboard model
- * stamped, so a row that leaves the treegrid leaves the tab order with it.
+ * Row ARIA plus the two attributes the row keys read. `data-tree-id` names
+ * the row to toggle. `data-tree-row` is this table's marker, so a nested
+ * table's rows stay out of its row set. Without meta, as for flat data or a
+ * row the tree does not know, all of them come off. A row that leaves the
+ * treegrid also loses its roving `tabindex`, so it leaves the Tab order.
  */
 function applyRowTreeAria(
   el: HTMLTableRowElement,
@@ -577,6 +572,139 @@ function TreeCellContentInner<T extends Record<string, unknown>>({
 }
 
 // =============================================================================
+// Dropped rows (focus and the Tab stop)
+// =============================================================================
+
+/**
+ * `row`, then the rows above it at each shallower level, nearest first: its
+ * visible ancestors, found the way the tree keys find a parent.
+ */
+function withVisibleAncestors(
+  rows: ReadonlyArray<HTMLElement>,
+  row: HTMLElement,
+): HTMLElement[] {
+  const chain = [row];
+  let level = Number(row.getAttribute('aria-level'));
+  for (let i = rows.indexOf(row) - 1; i >= 0 && level > 1; i--) {
+    const candidate = rows[i];
+    const candidateLevel = Number(candidate.getAttribute('aria-level'));
+    if (candidateLevel < level) {
+      chain.push(candidate);
+      level = candidateLevel;
+    }
+  }
+  return chain;
+}
+
+/** What a commit that may drop rows needs from before it. */
+interface DroppedRowsNote {
+  /** The focused element, when it was inside this table. */
+  focus: FocusWithin | null;
+  /** The row that owned focus, then its visible ancestors. */
+  focusRows: HTMLElement[];
+  /** The row that held the Tab stop, then its visible ancestors. */
+  stopRows: HTMLElement[];
+}
+
+/**
+ * Keeps focus and the Tab stop on the tree when a commit drops their rows.
+ * Each goes to the nearest row of the dropped row's ancestry still shown:
+ * for a collapse, the row that collapsed. Focus moves only if it was lost.
+ * Rendered after the table, so its effect sees the rows the commit left.
+ */
+function TreeDroppedRowsFocus({
+  tableContent,
+  hasExpandableRows,
+  tableRef,
+  rowSelector,
+  takeTabStop,
+}: {
+  /**
+   * The table content this plugin wraps. Each table render builds it anew,
+   * so every commit is noted, even one whose config keeps its identity.
+   */
+  tableContent: ReactNode;
+  hasExpandableRows: boolean;
+  tableRef: RefObject<HTMLTableElement | null>;
+  rowSelector: string;
+  takeTabStop: (row: HTMLElement) => void;
+}) {
+  // Moved focus draws its ring for the last input in the table's document.
+  useInteractionModalityTrackingFor(tableRef);
+  const noteDroppedRows = useFocusLeavingChange<ReactNode, DroppedRowsNote>(
+    tableContent,
+    () => {
+      const table = tableRef.current;
+      if (table == null) {
+        return null;
+      }
+      const rows = Array.from(table.querySelectorAll<HTMLElement>(rowSelector));
+      const focus = noteFocusWithin(table);
+      // A control inside a cell belongs to its row.
+      const focusRow = focus?.element.closest<HTMLElement>(rowSelector) ?? null;
+      const stopRow =
+        rows.find(row => row.getAttribute('tabindex') === '0') ?? null;
+      if (focusRow == null && stopRow == null) {
+        return null;
+      }
+      return {
+        focus,
+        focusRows: focusRow == null ? [] : withVisibleAncestors(rows, focusRow),
+        stopRows: stopRow == null ? [] : withVisibleAncestors(rows, stopRow),
+      };
+    },
+    noted => {
+      const table = tableRef.current;
+      // Flat data leaves the treegrid, and its rows take no focus.
+      if (table == null || !hasExpandableRows) {
+        return;
+      }
+      const isShown = (row: HTMLElement) =>
+        table.contains(row) && row.matches(rowSelector);
+      const [stopRow] = noted.stopRows;
+      if (stopRow != null && !isShown(stopRow)) {
+        const heir = noted.stopRows.find(isShown);
+        if (heir != null) {
+          takeTabStop(heir);
+        }
+      }
+      const [focusRow] = noted.focusRows;
+      if (focusRow == null || isShown(focusRow)) {
+        return;
+      }
+      // A dropped root row leaves no ancestor. Focus then goes to the row
+      // holding the Tab stop, or to the first row when the stop left too.
+      const target =
+        noted.focusRows.find(isShown) ??
+        table.querySelector<HTMLElement>(`${rowSelector}[tabindex="0"]`) ??
+        table.querySelector<HTMLElement>(rowSelector);
+      if (target == null) {
+        return;
+      }
+      // A row this commit mounted has no tabindex yet, so it cannot take
+      // focus. The roving model stamps it in a layout effect that runs later.
+      if (!target.hasAttribute('tabindex')) {
+        target.setAttribute('tabindex', '-1');
+      }
+      // moveFocusLeftBehind reports the attempt, so the stop moves only when
+      // focus did.
+      if (
+        moveFocusLeftBehind(noted.focus, target) &&
+        target.ownerDocument.activeElement === target
+      ) {
+        takeTabStop(target);
+      }
+    },
+  );
+  return (
+    <LayoutChangeSnapshot
+      value={tableContent}
+      onBeforeChange={noteDroppedRows}
+    />
+  );
+}
+
+// =============================================================================
 // Hook
 // =============================================================================
 
@@ -599,10 +727,9 @@ export function useTableTreeData<T extends Record<string, unknown>>(
     store.notify();
   });
 
-  // id → item for the keyboard model: `useTreeFocus` hands back the id it
-  // read off the focused <tr> (data-tree-id), while the config API is
-  // item-based (onToggleItem). Maintained by each row's ref callback and
-  // cleared on detach, so it only ever holds mounted rows.
+  // The row keys hand back the focused row's `data-tree-id`, but the config
+  // API takes an item (onToggleItem). Each row's ref callback adds its entry
+  // and removes it on detach, so the map holds only mounted rows.
   const idToItemRef = useRef<Map<string, T> | null>(null);
   if (idToItemRef.current == null) {
     idToItemRef.current = new Map();
@@ -619,24 +746,26 @@ export function useTableTreeData<T extends Record<string, unknown>>(
     [idToItem, store],
   );
 
-  // Row-focus keyboard model (WAI-ARIA treegrid; v1 scope is row focus only).
-  // The shared tree primitive walks the rows through `itemSelector`: rows are
-  // stamped with a per-instance marker so a nested table's rows never join
-  // this table's roving set, and it reads aria-level / aria-expanded /
-  // data-tree-id straight off each <tr>, which `applyRowTreeAria` keeps
-  // current. A treegrid has no type-ahead in the APG pattern, and printable
-  // keys must reach a text field inside a cell untouched.
+  // The row keys come from the shared tree primitive, pointed at this
+  // table's rows through `itemSelector`. A per-instance marker keeps a nested
+  // table's rows out of this table's roving set. The primitive reads
+  // aria-level, aria-expanded and data-tree-id off each <tr>, which
+  // `applyRowTreeAria` keeps current. A treegrid has no type-ahead in the APG
+  // pattern, and printable keys must reach a text field inside a cell
+  // untouched. The internal hook adds `takeTabStop`, which hands the stop on
+  // when its row is dropped.
   const rowMarker = useId();
   const rowSelector = `tr[data-tree-row="${rowMarker}"]`;
-  const {treeRef, handleKeyDown, handleFocus} = useTreeFocus<HTMLTableElement>({
-    itemSelector: rowSelector,
-    hasRovingTabIndex: true,
-    typeahead: false,
-    onToggleExpand,
-  });
+  const {treeRef, handleKeyDown, handleFocus, takeTabStop} =
+    useTreeFocusInternal<HTMLTableElement>({
+      itemSelector: rowSelector,
+      hasRovingTabIndex: true,
+      typeahead: false,
+      onToggleExpand,
+    });
 
-  // An earlier plugin's table ref is merged with ours once per incoming ref,
-  // so the merged callback keeps its identity and BaseTable does not
+  // An earlier plugin's table ref is merged with ours once per incoming ref.
+  // The merged callback then keeps its identity, so BaseTable does not
   // re-attach it (null, then the node) on every render.
   const tableRefCacheRef = useRef<{
     input: Ref<HTMLTableElement>;
@@ -694,7 +823,18 @@ export function useTableTreeData<T extends Record<string, unknown>>(
 
     return {
       transformTableContext(children: ReactNode) {
-        return <TreeStoreContext value={store}>{children}</TreeStoreContext>;
+        return (
+          <TreeStoreContext value={store}>
+            {children}
+            <TreeDroppedRowsFocus
+              tableContent={children}
+              hasExpandableRows={store.getConfig().hasExpandableRows}
+              tableRef={treeRef}
+              rowSelector={rowSelector}
+              takeTabStop={takeTabStop}
+            />
+          </TreeStoreContext>
+        );
       },
 
       transformTable(props: TableRenderProps): TableRenderProps {
@@ -731,10 +871,9 @@ export function useTableTreeData<T extends Record<string, unknown>>(
               if (event.defaultPrevented) {
                 return;
               }
-              // Row focus only (v1): the tree keys apply when a row itself
-              // owns focus. A key pressed on a control inside a cell — the
-              // chevron, a selection checkbox, a sort header, a text field —
-              // keeps its native meaning and never reaches the row model.
+              // Row focus only: the tree keys apply when a row itself
+              // owns focus. A key on a control inside a cell, such as the
+              // chevron or a text field, keeps its native meaning.
               const target = event.target;
               if (
                 !(target instanceof Element) ||
@@ -742,10 +881,16 @@ export function useTableTreeData<T extends Record<string, unknown>>(
               ) {
                 return;
               }
-              // APG treegrid, not tree: inline-end on an expanded row moves
-              // into its first cell, and inline-start on a collapsed or leaf
-              // row does not move. With no cell focus in v1, both hold focus
-              // on the row instead of jumping to the first child / parent.
+              // Alt and Meta chords stay the browser's, such as Back on
+              // Alt+ArrowLeft.
+              if (event.altKey || event.metaKey) {
+                return;
+              }
+              // On inline-end from an expanded row, the tree primitive jumps
+              // to the first child. On inline-start from a collapsed or leaf
+              // row, it jumps to the parent. A treegrid row does neither.
+              // The APG pattern enters the row's first cell on inline-end.
+              // With no cell focus here, both keys hold focus on the row.
               if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
                 const isInlineEnd =
                   (event.key === 'ArrowRight') !==
@@ -763,8 +908,8 @@ export function useTableTreeData<T extends Record<string, unknown>>(
               onFocus?.(event);
               // The row stop follows focus that lands on a row (a click, a
               // programmatic focus). A control inside a cell is its own Tab
-              // stop, so focusing it leaves the row stop in place and the
-              // Tab order stays the same in both directions.
+              // stop, so focusing it leaves the row stop in place. The Tab
+              // order then stays the same in both directions.
               const target = event.target;
               if (target instanceof Element && target.matches(rowSelector)) {
                 handleFocus(event);
@@ -867,13 +1012,13 @@ export function useTableTreeData<T extends Record<string, unknown>>(
       },
 
       transformBodyRow(props: BodyRowRenderProps, item: T) {
-        // Attach a ref that subscribes to the store for imperative row
-        // ARIA (and the id → item registration the keyboard model needs).
-        // The ref returns a cleanup so React unsubscribes on detach —
-        // without it, every row re-render would leak one subscription
-        // (toggles shift rowIndex and re-render rows, so the listener set
-        // would grow on every toggle). The ref is attached even when no row
-        // is expandable so tree ARIA is removed if the data turns flat.
+        // The row ref subscribes to the store, for imperative row ARIA and
+        // the row's id → item entry. It returns a cleanup so React
+        // unsubscribes on detach. Without it, every row re-render would leak
+        // one subscription: toggles shift rowIndex and re-render rows, so the
+        // listener set would grow on every toggle. The ref is attached even
+        // when no row is expandable so tree ARIA is removed if the data turns
+        // flat.
         const rowRef: React.RefCallback<HTMLTableRowElement> = el => {
           if (!el) {
             return;
@@ -987,5 +1132,6 @@ export function useTableTreeData<T extends Record<string, unknown>>(
     treeRef,
     handleKeyDown,
     handleFocus,
+    takeTabStop,
   ]);
 }

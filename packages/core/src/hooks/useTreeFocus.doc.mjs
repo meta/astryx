@@ -15,7 +15,7 @@ export const docs = {
     {
       name: 'options.itemSelector',
       type: 'string',
-      description: 'Selector for visible treeitems within the tree, in DOM order. The same selector resolves which item owns focus on a key press (the nearest matching ancestor of the active element), so a host whose items are not role="treeitem" — a treegrid\'s rows — passes its own selector and composes the whole keyboard model.',
+      description: 'Selector for visible treeitems within the tree, in DOM order. The same selector resolves which item owns focus on a key press (the nearest matching ancestor of the active element). A host whose items are not role="treeitem" passes its own `itemSelector` to reuse the keyboard model. A treegrid host such as the Table tree plugin overrides the arrows that move focus to a first child or a parent.',
       default: "'[role=\"treeitem\"]'",
       required: false,
     },

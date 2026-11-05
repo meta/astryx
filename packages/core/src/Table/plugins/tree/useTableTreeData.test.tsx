@@ -11,7 +11,7 @@
 import {describe, it, expect, vi} from 'vitest';
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {useState} from 'react';
+import {useMemo, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {focusOutlineStyles} from '../../../utils/focusOutline.stylex';
 import {Table} from '../../Table';
@@ -20,6 +20,7 @@ import type {TableColumn, TablePlugin} from '../../types';
 import {useTableSelection, useTableSelectionState} from '../selection';
 import {useTableSortableState} from '../sortable';
 import {useTableTreeData} from './useTableTreeData';
+import type {UseTableTreeDataConfig} from './useTableTreeData';
 import {useTableTreeState} from './useTableTreeState';
 import type {UseTableTreeStateConfig} from './useTableTreeState';
 
@@ -1455,13 +1456,39 @@ describe('useTableTreeData — keyboard model', () => {
     expect(src).toHaveFocus();
     expect(getRowByText('components')).toBeInTheDocument();
 
-    // APG treegrid: ArrowRight on an expanded row moves into its first cell.
-    // Row focus only (v1) has no cell to enter, so focus stays on the row
+    // Rows only: the APG treegrid pattern would enter the row's first cell
+    // here. No cell takes focus in this model, so focus stays on the row
     // rather than jumping to the first child (the tree-view behavior).
     const notPrevented = fireEvent.keyDown(src, {key: 'ArrowRight'});
     expect(src).toHaveFocus();
     expect(src).toHaveAttribute('aria-expanded', 'true');
     expect(notPrevented).toBe(false);
+  });
+
+  it('ArrowRight on a leaf row does nothing', () => {
+    render(<TreeTable defaultExpandedIds={['src']} />);
+    const utils = focusRow('utils.ts');
+
+    // Rows only: the APG treegrid pattern would enter the first cell here
+    // too. The key is still consumed, so it cannot scroll the table sideways
+    // from under the focused row.
+    const notPrevented = fireEvent.keyDown(utils, {key: 'ArrowRight'});
+
+    expect(utils).toHaveFocus();
+    expect(utils).not.toHaveAttribute('aria-expanded');
+    expect(notPrevented).toBe(false);
+  });
+
+  it('ArrowDown on the last row and ArrowUp on the first row do not move focus', () => {
+    render(<TreeTable defaultExpandedIds={['src']} />);
+
+    const readme = focusRow('README.md');
+    fireEvent.keyDown(readme, {key: 'ArrowDown'});
+    expect(readme).toHaveFocus();
+
+    const src = focusRow('src');
+    fireEvent.keyDown(src, {key: 'ArrowUp'});
+    expect(src).toHaveFocus();
   });
 
   it('ArrowLeft collapses an expanded row and holds focus on it', () => {
@@ -1478,8 +1505,8 @@ describe('useTableTreeData — keyboard model', () => {
   it('ArrowLeft on a leaf or collapsed child row does not move focus to its parent', () => {
     render(<TreeTable defaultExpandedIds={['src']} />);
 
-    // APG treegrid: ArrowLeft on a collapsed row or a row without children
-    // does not move focus (the tree-view behavior moves to the parent).
+    // ArrowLeft on a collapsed row or a row without children does not move
+    // focus (the tree-view behavior moves to the parent).
     const utils = focusRow('utils.ts');
     const notPrevented = fireEvent.keyDown(utils, {key: 'ArrowLeft'});
     expect(utils).toHaveFocus();
@@ -1503,6 +1530,24 @@ describe('useTableTreeData — keyboard model', () => {
     fireEvent.keyDown(readme, {key: 'Enter'});
     expect(readme).not.toHaveAttribute('aria-expanded');
     expect(readme).toHaveFocus();
+  });
+
+  it('Space toggles an expandable row, is inert on a leaf, and is consumed so it cannot scroll the page', () => {
+    render(<TreeTable />);
+    const src = focusRow('src');
+
+    const expandNotPrevented = fireEvent.keyDown(src, {key: ' '});
+    expect(src).toHaveAttribute('aria-expanded', 'true');
+    expect(expandNotPrevented).toBe(false);
+
+    fireEvent.keyDown(src, {key: ' '});
+    expect(src).toHaveAttribute('aria-expanded', 'false');
+
+    const readme = focusRow('README.md');
+    const leafNotPrevented = fireEvent.keyDown(readme, {key: ' '});
+    expect(readme).not.toHaveAttribute('aria-expanded');
+    expect(readme).toHaveFocus();
+    expect(leafNotPrevented).toBe(false);
   });
 
   it('follows the reading direction: ArrowLeft expands, then holds focus, under dir="rtl"', () => {
@@ -1572,5 +1617,495 @@ describe('useTableTreeData — keyboard model', () => {
     chevron.focus();
     fireEvent.keyDown(chevron, {key: 'ArrowDown'});
     expect(chevron).toHaveFocus();
+  });
+
+  it('leaves Alt+ArrowLeft and Meta+ArrowLeft to the browser on a collapsed or leaf row', () => {
+    render(<TreeTable defaultExpandedIds={['src']} />);
+
+    // Both chords are the browser's Back, so the hold must not cancel them.
+    for (const text of ['components', 'utils.ts']) {
+      const row = focusRow(text);
+      for (const modifier of [{altKey: true}, {metaKey: true}]) {
+        const notPrevented = fireEvent.keyDown(row, {
+          key: 'ArrowLeft',
+          ...modifier,
+        });
+        expect(notPrevented, `${text} ${JSON.stringify(modifier)}`).toBe(true);
+        expect(row).toHaveFocus();
+      }
+    }
+  });
+
+  it('neither expands nor collapses a row on an Alt or Meta arrow chord', () => {
+    render(<TreeTable defaultExpandedIds={['src']} />);
+
+    const components = focusRow('components');
+    const notPrevented = fireEvent.keyDown(components, {
+      key: 'ArrowRight',
+      altKey: true,
+    });
+    expect(components).toHaveAttribute('aria-expanded', 'false');
+    expect(notPrevented).toBe(true);
+
+    const src = focusRow('src');
+    fireEvent.keyDown(src, {key: 'ArrowLeft', altKey: true});
+    fireEvent.keyDown(src, {key: 'ArrowLeft', metaKey: true});
+    expect(src).toHaveAttribute('aria-expanded', 'true');
+    expect(src).toHaveFocus();
+  });
+
+  it('toggles a row on Space or Enter with Shift or Ctrl held, and consumes the key', () => {
+    render(<TreeTable />);
+    const src = focusRow('src');
+
+    // No Table code selects a row on these chords, so they act like the
+    // plain keys. Shift+Space that is not consumed scrolls the page up.
+    for (const chord of [
+      {key: ' ', shiftKey: true},
+      {key: ' ', ctrlKey: true},
+      {key: 'Enter', shiftKey: true},
+      {key: 'Enter', ctrlKey: true},
+    ]) {
+      const wasExpanded = src.getAttribute('aria-expanded') === 'true';
+      const notPrevented = fireEvent.keyDown(src, chord);
+      expect(src, JSON.stringify(chord)).toHaveAttribute(
+        'aria-expanded',
+        String(!wasExpanded),
+      );
+      expect(notPrevented, JSON.stringify(chord)).toBe(false);
+    }
+  });
+
+  it('Ctrl+Home / Ctrl+End still jump to the first and last rows', () => {
+    render(<TreeTable defaultExpandedIds={['src']} />);
+    const components = focusRow('components');
+
+    fireEvent.keyDown(components, {key: 'End', ctrlKey: true});
+    expect(getRowByText('README.md')).toHaveFocus();
+    fireEvent.keyDown(getRowByText('README.md'), {key: 'Home', ctrlKey: true});
+    expect(getRowByText('src')).toHaveFocus();
+  });
+});
+
+// =============================================================================
+// Dropped rows (focus and the Tab stop)
+// =============================================================================
+
+describe('useTableTreeData — dropped rows', () => {
+  // README.md first, so the hook's own fallback (the first row) is never the
+  // row that collapses.
+  const readmeFirst: FileRow[] = [fileTree[1], fileTree[0]];
+
+  it('moves focus on a row whose parent collapses to that parent, which takes the Tab stop', () => {
+    render(<TreeTable data={readmeFirst} defaultExpandedIds={['src']} />);
+    const components = focusRow('components');
+    expect(components).toHaveAttribute('tabindex', '0');
+    const src = getRowByText('src');
+
+    // A click that does not move focus, like element.click() from an app.
+    fireEvent.click(within(src).getByRole('button', {name: 'Collapse row'}));
+
+    expect(components).not.toBeInTheDocument();
+    expect(src).toHaveFocus();
+    expect(src).toHaveAttribute('tabindex', '0');
+    expect(getRowByText('README.md')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('moves focus to the outermost row that collapsed, and to the inner row when only it collapses', () => {
+    const {rerender} = render(
+      <TreeTable
+        data={readmeFirst}
+        expandedIds={new Set(['src', 'components'])}
+      />,
+    );
+
+    // Collapse all: src and components collapse together.
+    focusRow('Button.tsx');
+    rerender(<TreeTable data={readmeFirst} expandedIds={new Set()} />);
+    expect(getRowByText('src')).toHaveFocus();
+    expect(getRowByText('src')).toHaveAttribute('tabindex', '0');
+
+    // Only the outer row collapses; components stays expanded, unseen.
+    rerender(
+      <TreeTable
+        data={readmeFirst}
+        expandedIds={new Set(['src', 'components'])}
+      />,
+    );
+    focusRow('Button.tsx');
+    rerender(
+      <TreeTable data={readmeFirst} expandedIds={new Set(['components'])} />,
+    );
+    expect(getRowByText('src')).toHaveFocus();
+
+    // Only the inner row collapses.
+    rerender(
+      <TreeTable
+        data={readmeFirst}
+        expandedIds={new Set(['src', 'components'])}
+      />,
+    );
+    focusRow('Button.tsx');
+    rerender(<TreeTable data={readmeFirst} expandedIds={new Set(['src'])} />);
+    expect(getRowByText('components')).toHaveFocus();
+    expect(getRowByText('components')).toHaveAttribute('tabindex', '0');
+    expect(getRowByText('src')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('moves focus on a control inside a dropped row to the nearest row that remains', () => {
+    const {rerender} = render(
+      <TreeTable data={readmeFirst} expandedIds={new Set(['src'])} />,
+    );
+    const chevron = within(getRowByText('components')).getByRole('button', {
+      name: 'Expand row',
+    });
+    act(() => chevron.focus());
+    // A control inside a cell does not take the stop.
+    expect(getRowByText('README.md')).toHaveAttribute('tabindex', '0');
+
+    rerender(<TreeTable data={readmeFirst} expandedIds={new Set()} />);
+
+    expect(chevron).not.toBeInTheDocument();
+    expect(getRowByText('src')).toHaveFocus();
+    expect(getRowByText('src')).toHaveAttribute('tabindex', '0');
+    expect(getRowByText('README.md')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('leaves the Tab stop in place when the row that should take focus cannot', () => {
+    const {rerender} = render(
+      <TreeTable data={readmeFirst} expandedIds={new Set(['src'])} />,
+    );
+    const chevron = within(getRowByText('components')).getByRole('button', {
+      name: 'Expand row',
+    });
+    act(() => chevron.focus());
+    // jsdom focuses any row with a tabindex. The stub stands in for a row
+    // the browser cannot focus, such as one that CSS hides.
+    const src = getRowByText('src');
+    vi.spyOn(src, 'focus').mockImplementation(() => {});
+
+    rerender(<TreeTable data={readmeFirst} expandedIds={new Set()} />);
+
+    expect(chevron).not.toBeInTheDocument();
+    expect(src).not.toHaveFocus();
+    expect(getRowByText('README.md')).toHaveAttribute('tabindex', '0');
+    expect(src).toHaveAttribute('tabindex', '-1');
+  });
+
+  it("keeps focus on the parent's chevron and hands it the Tab stop when Shift+Tab, then Enter, collapses the active row's parent", async () => {
+    const user = userEvent.setup();
+    render(<TreeTable data={readmeFirst} defaultExpandedIds={['src']} />);
+    const components = focusRow('components');
+    const src = getRowByText('src');
+
+    // Rows other than the active one are not Tab stops, so reverse Tab lands
+    // on the parent's chevron, a control inside the parent row.
+    await user.tab({shift: true});
+    const chevron = within(src).getByRole('button', {name: 'Collapse row'});
+    expect(chevron).toHaveFocus();
+    await user.keyboard('{Enter}');
+
+    expect(components).not.toBeInTheDocument();
+    // Focus survived the collapse, so it is not moved.
+    expect(chevron).toHaveFocus();
+    expect(src).toHaveAttribute('tabindex', '0');
+    expect(getRowByText('README.md')).toHaveAttribute('tabindex', '-1');
+
+    // Reverse Tab returns to the row that collapsed, not the first row.
+    await user.tab({shift: true});
+    expect(src).toHaveFocus();
+  });
+
+  it('hands the Tab stop to the root ancestor when the header collapse-all toggle drops the active row', async () => {
+    const user = userEvent.setup();
+    render(
+      <TreeTable
+        data={readmeFirst}
+        hasExpandAllControl
+        defaultExpandedIds={['src', 'components']}
+      />,
+    );
+    const button = focusRow('Button.tsx');
+    expect(button).toHaveAttribute('tabindex', '0');
+    const toggle = within(screen.getAllByRole('row')[0]).getByRole('button', {
+      name: /collapse all/i,
+    });
+
+    await user.click(toggle);
+
+    expect(button).not.toBeInTheDocument();
+    expect(toggle).toHaveFocus();
+    expect(getRowByText('src')).toHaveAttribute('tabindex', '0');
+    expect(getRowByText('README.md')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('moves focus on a row the data drops to its nearest remaining ancestor', () => {
+    const withoutUtils: FileRow[] = [
+      fileTree[1],
+      {
+        ...fileTree[0],
+        children: fileTree[0].children?.filter(row => row.id !== 'utils'),
+      },
+    ];
+    const {rerender} = render(
+      <TreeTable data={readmeFirst} defaultExpandedIds={['src']} />,
+    );
+    const utils = focusRow('utils.ts');
+
+    rerender(<TreeTable data={withoutUtils} defaultExpandedIds={['src']} />);
+
+    expect(utils).not.toBeInTheDocument();
+    expect(getRowByText('src')).toHaveFocus();
+    expect(getRowByText('src')).toHaveAttribute('tabindex', '0');
+    expect(getRowByText('README.md')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('keeps focus on a row holding the one Tab stop when the data drops a focused root row', () => {
+    const {rerender} = render(<TreeTable defaultExpandedIds={['src']} />);
+    focusRow('README.md');
+
+    rerender(<TreeTable data={[fileTree[0]]} defaultExpandedIds={['src']} />);
+
+    // No ancestor remains. Which row takes focus is the owner's call; it is
+    // a row, and it holds the only stop.
+    const rows = getBodyRows();
+    expect(rows).toContain(document.activeElement);
+    expect(document.activeElement).toHaveAttribute('tabindex', '0');
+    expect(
+      rows.filter(row => row.getAttribute('tabindex') === '0'),
+    ).toHaveLength(1);
+  });
+
+  it('keeps focus on a row holding the one Tab stop when the data swaps the focused first root row for a new row', () => {
+    const lib: FileRow = {
+      id: 'lib',
+      name: 'lib',
+      size: 0,
+      children: [{id: 'index', name: 'index.ts', size: 1}],
+    };
+    const {rerender} = render(<TreeTable />);
+    const src = focusRow('src');
+    expect(src).toHaveAttribute('tabindex', '0');
+
+    // src leaves with the stop, and the first row is now one this commit
+    // mounted, which the roving model has not stamped yet.
+    rerender(<TreeTable data={[lib, fileTree[1]]} />);
+
+    expect(src).not.toBeInTheDocument();
+    const rows = getBodyRows();
+    expect(rows).toContain(document.activeElement);
+    expect(document.activeElement).toHaveAttribute('tabindex', '0');
+    expect(
+      rows.filter(row => row.getAttribute('tabindex') === '0'),
+    ).toHaveLength(1);
+  });
+
+  it('moves focus on a row the data drops when a hand-built config keeps its identity', () => {
+    interface OutlineRow extends Record<string, unknown> {
+      id: string;
+      name: string;
+      level: number;
+      hasChildren: boolean;
+    }
+    const outline: OutlineRow[] = [
+      {id: 'docs', name: 'docs', level: 0, hasChildren: true},
+      {id: 'guide', name: 'guide.md', level: 1, hasChildren: false},
+      {id: 'faq', name: 'faq.md', level: 1, hasChildren: false},
+    ];
+    // The meta comes from each item, so the config never has to change.
+    function OutlineTable({data}: {data: OutlineRow[]}) {
+      const config = useMemo(
+        (): UseTableTreeDataConfig<OutlineRow> => ({
+          getRowMeta: item => ({
+            id: item.id,
+            level: item.level,
+            hasChildren: item.hasChildren,
+            isExpanded: item.hasChildren,
+          }),
+          onToggleItem: () => {},
+          hasExpandableRows: true,
+        }),
+        [],
+      );
+      const tree = useTableTreeData(config);
+      return (
+        <Table
+          data={data}
+          columns={[{key: 'name', header: 'Name'}]}
+          idKey="id"
+          plugins={{tree}}
+        />
+      );
+    }
+    const {rerender} = render(<OutlineTable data={outline} />);
+    const faq = focusRow('faq.md');
+
+    rerender(<OutlineTable data={outline.slice(0, 2)} />);
+
+    expect(faq).not.toBeInTheDocument();
+    expect(getRowByText('docs')).toHaveFocus();
+    expect(getRowByText('docs')).toHaveAttribute('tabindex', '0');
+    expect(getRowByText('guide.md')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('moves no focus that is outside the table, and still hands the Tab stop to the row that collapsed', () => {
+    const {rerender} = render(
+      <>
+        <TreeTable data={readmeFirst} expandedIds={new Set(['src'])} />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    focusRow('components');
+    const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+    act(() => elsewhere.focus());
+
+    rerender(
+      <>
+        <TreeTable data={readmeFirst} expandedIds={new Set()} />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+
+    expect(elsewhere).toHaveFocus();
+    expect(getRowByText('src')).toHaveAttribute('tabindex', '0');
+    expect(getRowByText('README.md')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('keeps a nested tree table to its own rows, and moves focus out of a dropped row that hosts one', () => {
+    const innerData: FileRow[] = [
+      {
+        id: 'docs',
+        name: 'docs',
+        size: 0,
+        children: [{id: 'guide', name: 'guide.md', size: 5}],
+      },
+    ];
+    function InnerTreeTable() {
+      const {visibleData, treeConfig} = useTableTreeState<FileRow>({
+        data: innerData,
+        idKey: 'id',
+        defaultExpandedIds: ['docs'],
+      });
+      const tree = useTableTreeData(treeConfig);
+      return (
+        <Table
+          data={visibleData}
+          columns={columns}
+          idKey="id"
+          plugins={{tree}}
+        />
+      );
+    }
+    // utils.ts hosts the inner table in its Size cell.
+    const outerColumns: TableColumn<FileRow>[] = [
+      {key: 'name', header: 'Name'},
+      {
+        key: 'size',
+        header: 'Size',
+        renderCell: item =>
+          item.id === 'utils' ? <InnerTreeTable /> : String(item.size),
+      },
+    ];
+    function OuterTreeTable() {
+      const {visibleData, treeConfig} = useTableTreeState<FileRow>({
+        data: readmeFirst,
+        idKey: 'id',
+        defaultExpandedIds: ['src'],
+      });
+      const tree = useTableTreeData(treeConfig);
+      return (
+        <Table
+          data={visibleData}
+          columns={outerColumns}
+          idKey="id"
+          plugins={{tree}}
+        />
+      );
+    }
+    render(<OuterTreeTable />);
+    const [outer, inner] = screen.getAllByRole('treegrid');
+    // A table's own body row, by the text of its first cell.
+    const rowOf = (table: HTMLElement, text: string) => {
+      const row = within(table)
+        .getAllByRole('row')
+        .find(
+          candidate =>
+            candidate.closest('table') === table &&
+            candidate.querySelector('td')?.textContent === text,
+        );
+      if (row == null) {
+        throw new Error(`no row "${text}"`);
+      }
+      return row;
+    };
+
+    act(() => rowOf(inner, 'guide.md').focus());
+    fireEvent.click(
+      within(rowOf(inner, 'docs')).getByRole('button', {name: 'Collapse row'}),
+    );
+
+    // The inner table keeps focus and its stop to itself.
+    expect(rowOf(inner, 'docs')).toHaveFocus();
+    expect(rowOf(inner, 'docs')).toHaveAttribute('tabindex', '0');
+    expect(rowOf(outer, 'README.md')).toHaveAttribute('tabindex', '0');
+
+    fireEvent.click(
+      within(rowOf(outer, 'src')).getByRole('button', {name: 'Collapse row'}),
+    );
+
+    // The outer collapse drops utils.ts and the inner table with it.
+    expect(inner).not.toBeInTheDocument();
+    expect(rowOf(outer, 'src')).toHaveFocus();
+    expect(rowOf(outer, 'src')).toHaveAttribute('tabindex', '0');
+    expect(rowOf(outer, 'README.md')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('moves nothing when the active row itself collapses, another branch collapses, or siblings re-sort', () => {
+    const byName = (siblings: FileRow[]) =>
+      [...siblings].sort((a, b) => (a.name < b.name ? -1 : 1));
+    const byNameDescending = (siblings: FileRow[]) =>
+      [...siblings].sort((a, b) => (a.name < b.name ? 1 : -1));
+    const {rerender} = render(
+      <TreeTable
+        data={readmeFirst}
+        expandedIds={new Set(['src', 'components'])}
+        sortSiblings={byName}
+      />,
+    );
+    const src = focusRow('src');
+
+    // Another branch (inside the active row) collapses.
+    rerender(
+      <TreeTable
+        data={readmeFirst}
+        expandedIds={new Set(['src'])}
+        sortSiblings={byName}
+      />,
+    );
+    expect(src).toHaveFocus();
+    expect(src).toHaveAttribute('tabindex', '0');
+
+    // The rows re-sort around the active row.
+    rerender(
+      <TreeTable
+        data={readmeFirst}
+        expandedIds={new Set(['src'])}
+        sortSiblings={byNameDescending}
+      />,
+    );
+    expect(src).toHaveFocus();
+    expect(src).toHaveAttribute('tabindex', '0');
+
+    // The active row itself collapses: it stays, and so do focus and the stop.
+    rerender(
+      <TreeTable
+        data={readmeFirst}
+        expandedIds={new Set()}
+        sortSiblings={byNameDescending}
+      />,
+    );
+    expect(src).toHaveFocus();
+    expect(src).toHaveAttribute('tabindex', '0');
+    expect(getRowByText('README.md')).toHaveAttribute('tabindex', '-1');
   });
 });

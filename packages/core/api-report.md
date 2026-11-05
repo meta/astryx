@@ -5441,6 +5441,7 @@ interface TableProps<T extends Record<string, unknown>> extends Omit<BaseTablePr
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 interface TableRenderProps
   htmlProps: HTMLAttributes<HTMLTableElement>
+  ref?: Ref<HTMLTableElement>
   xstyle: StyleXStyles[]
 interface TableRowProps extends BaseProps<HTMLTableRowElement> (props of TableRow)
 interface TableRowStatus
@@ -5472,6 +5473,8 @@ interface TableTreeRowMeta
   id: string
   isExpanded: boolean
   level: number
+  posInSet?: number
+  setSize?: number
 type TableVerticalAlign = 'middle' | 'top' | 'bottom'
 interface TextAreaProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>, TextEntryTraitProps (props of TextArea)
 type TextAreaSize = 'sm' | 'md' | 'lg'

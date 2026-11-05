@@ -166,14 +166,21 @@ type Story = StoryObj;
  * Collapsed branches are unmounted, not hidden — the `<tbody>` holds exactly
  * the visible rows.
  *
- * With expandable rows the table is a WAI-ARIA treegrid. Keyboard (APG
- * treegrid, row focus): ArrowUp/ArrowDown move between rows, ArrowRight
- * expands, ArrowLeft collapses, Home/End jump to the ends, Enter toggles;
- * ArrowRight on an expanded row and ArrowLeft on a collapsed or leaf row keep
- * focus on the row. Tab order: the scroll region (only while the table
- * overflows horizontally), then the header controls, then the chevrons and
- * the one active row in DOM order. The active row follows focus onto a row.
- * Row focus only in this version — cell navigation is not implemented.
+ * With expandable rows the table takes the WAI-ARIA treegrid role. The keyboard
+ * model is a row-focus subset of the APG treegrid pattern, plus Enter/Space to
+ * toggle a focused row. Only rows take focus, and no key enters a cell. The
+ * visible rows share one roving tab stop, which follows focus onto a row.
+ * ArrowUp/ArrowDown move between rows, and Home/End jump to the ends.
+ * ArrowRight expands a collapsed row. ArrowLeft collapses an expanded row and
+ * does nothing on a collapsed row or a leaf. Left and Right swap under RTL.
+ * There is no type-ahead. Because no cell takes focus, the model differs from
+ * the pattern in two ways. ArrowRight on an expanded row or a leaf does
+ * nothing, where the pattern moves focus into the row's first cell. The
+ * controls inside cells (the chevron, a selection checkbox) stay in the
+ * ordinary page Tab order. The pattern's Tab visits only the focused row's
+ * controls and then leaves the treegrid. When a collapse or a data change
+ * removes the row that holds focus or the row stop, each moves to that row's
+ * nearest remaining ancestor. Focus moves only if it was lost.
  */
 export const Default: Story = {
   render: () => {

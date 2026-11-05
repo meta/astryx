@@ -53,9 +53,10 @@ export interface UseTreeFocusOptions {
    * {@link UseTreeFocusOptions.isItemDisabled}.
    *
    * The same selector resolves which item owns focus on a key press (the
-   * nearest matching ancestor of the active element), so a host whose items
-   * are not treeitems — a treegrid's rows — passes its own selector and
-   * composes the whole keyboard model.
+   * nearest matching ancestor of the active element). A host whose items are
+   * not treeitems passes its own selector to reuse the keyboard model. A
+   * treegrid host such as the Table tree plugin overrides the arrows that
+   * move focus to a first child or a parent.
    * @default '[role="treeitem"]'
    */
   itemSelector?: string;
@@ -254,8 +255,8 @@ export function useTreeFocus<T extends HTMLElement = HTMLElement>(
 /**
  * Options the package's own components can pass beyond the public hook.
  *
- * Not exported from the package: TreeList imports this module directly, so
- * `UseTreeFocusOptions` stays exactly as released.
+ * Not exported from the package: TreeList and the Table tree plugin import
+ * this module directly, so `UseTreeFocusOptions` stays exactly as released.
  */
 export type UseTreeFocusInternalOptions = UseTreeFocusOptions & {
   /**
@@ -273,9 +274,11 @@ export type UseTreeFocusInternalReturn<T extends HTMLElement = HTMLElement> =
   UseTreeFocusReturn<T> & {
     /**
      * With `hasRovingTabIndex`, makes `item` the tree's one Tab stop, by the
-     * same rule the hook's own moves follow: a disabled or hidden row never
-     * takes it, and the stop stays where it is. TreeList calls it when it
-     * moves focus to a collapsing row.
+     * same rule the hook's own moves follow. A disabled or hidden row never
+     * takes it, and the stop stays where it is. It moves no focus. TreeList
+     * calls it when it moves focus to a collapsing row. The Table tree plugin
+     * calls it when a commit drops a row, to hand the stop to a row that
+     * remains.
      */
     takeTabStop: (item: HTMLElement) => void;
   };
