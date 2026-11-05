@@ -336,8 +336,7 @@ export function selectionEndsIntersectRow(
   const focusPosition = row.compareDocumentPosition(focusNode);
   const anchorBefore =
     (anchorPosition & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
-  const anchorAfter =
-    (anchorPosition & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  const anchorAfter = (anchorPosition & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
   const focusBefore = (focusPosition & Node.DOCUMENT_POSITION_PRECEDING) !== 0;
   const focusAfter = (focusPosition & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
   return (anchorBefore && focusAfter) || (anchorAfter && focusBefore);

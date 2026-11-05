@@ -650,8 +650,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
                   let resolvedRowKey =
                     rawKey === undefined
                       ? undefined
-                      : typeof rawKey === 'number' ||
-                          typeof rawKey === 'string'
+                      : typeof rawKey === 'number' || typeof rawKey === 'string'
                         ? rawKey
                         : String(rawKey);
                   if (resolvedRowKey !== undefined) {

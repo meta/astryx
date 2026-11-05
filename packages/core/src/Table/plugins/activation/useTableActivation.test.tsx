@@ -623,12 +623,12 @@ describe('pointer activation', () => {
     document.body.append(after);
     const inRow = rows[1].querySelector('td')!.firstChild!;
     // Either end inside the row intersects.
-    expect(
-      selectionEndsIntersectRow(rows[1], inRow, before.firstChild),
-    ).toBe(true);
-    expect(
-      selectionEndsIntersectRow(rows[1], before.firstChild, inRow),
-    ).toBe(true);
+    expect(selectionEndsIntersectRow(rows[1], inRow, before.firstChild)).toBe(
+      true,
+    );
+    expect(selectionEndsIntersectRow(rows[1], before.firstChild, inRow)).toBe(
+      true,
+    );
     // Ends on opposite sides of the row intersect, in either direction.
     expect(
       selectionEndsIntersectRow(rows[1], before.firstChild, after.firstChild),
@@ -643,9 +643,9 @@ describe('pointer activation', () => {
     expect(selectionEndsIntersectRow(rows[1], after, after.firstChild)).toBe(
       false,
     );
-    expect(
-      selectionEndsIntersectRow(rows[1], before.firstChild, null),
-    ).toBe(false);
+    expect(selectionEndsIntersectRow(rows[1], before.firstChild, null)).toBe(
+      false,
+    );
     before.remove();
     after.remove();
   });
