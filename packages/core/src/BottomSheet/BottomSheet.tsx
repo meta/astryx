@@ -545,41 +545,6 @@ function StandaloneBottomSheet({
     );
   }, []);
 
-  // A sheet removed while open (rendered only while open, or removed with its
-  // view) runs no close, so focus would drop to the page. The removal is a
-  // close for focus: focus goes where an ordinary close sends it. A covered
-  // sheet moves no focus, because focus is in the sheet on top, and a sheet
-  // that took focus in the same commit (a replace, a switcher step) keeps it.
-  // Declared before the registration below, so its cleanup still sees this
-  // sheet in the stack.
-  useLayoutEffect(() => {
-    const dialog = dialogRef.current;
-    if (dialog == null) {
-      return;
-    }
-    const key = stackKeyRef.current;
-    const repairOnRemoval = prepareFocusRepairOnRemoval(dialog);
-    return () => {
-      if (!isSheetHostPresented(dialog) || stackViewRef.current.depth > 0) {
-        return;
-      }
-      const returnTarget =
-        finalFocusRefRef.current?.current ?? triggerRef.current;
-      const revealed = hasScrim ? getBottomSheetBeneath(key) : null;
-      repairOnRemoval(() => {
-        if (
-          revealed != null &&
-          revealed.element.isConnected &&
-          (returnTarget == null || !revealed.element.contains(returnTarget))
-        ) {
-          revealed.focus();
-        } else if (returnTarget != null && returnTarget.isConnected) {
-          returnFocusForLastInput(returnTarget);
-        }
-      });
-    };
-  }, [hasScrim]);
-
   // A sheet joins the registry for as long as it is presented. For a modal
   // sheet the registry shows the dialog (in open order, repairing same-commit
   // ties before paint), moves focus into it when it lands on top, and reports
@@ -591,7 +556,13 @@ function StandaloneBottomSheet({
       return;
     }
     const key = stackKeyRef.current;
-    return registerBottomSheet(
+    const dialog = dialogRef.current;
+    // Removing an open dialog runs no close, so focus would drop to the page.
+    // A sheet removed while open is closed for focus: once the commit has
+    // finished, focus goes where a close sends it, if the removal lost focus.
+    const repairOnRemoval =
+      dialog == null ? null : prepareFocusRepairOnRemoval(dialog);
+    const leave = registerBottomSheet(
       {
         key,
         getElement: () => dialogRef.current,
@@ -649,6 +620,26 @@ function StandaloneBottomSheet({
       isOpenRef.current,
       hasScrim,
     );
+    return () => {
+      // Read before the registry lets go of the sheet beneath.
+      if (repairOnRemoval != null && isSheetHostPresented(dialog)) {
+        const returnTarget =
+          finalFocusRefRef.current?.current ?? triggerRef.current;
+        const revealed = hasScrim ? getBottomSheetBeneath(key) : null;
+        repairOnRemoval(() => {
+          if (
+            revealed != null &&
+            revealed.element.isConnected &&
+            (returnTarget == null || !revealed.element.contains(returnTarget))
+          ) {
+            revealed.focus();
+          } else if (returnTarget != null && returnTarget.isConnected) {
+            returnFocusForLastInput(returnTarget);
+          }
+        });
+      }
+      leave();
+    };
   }, [hasScrim, shouldPresent, writeScrim]);
   useLayoutEffect(() => {
     if (!isOpen) {

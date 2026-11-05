@@ -424,7 +424,57 @@ describe('BottomSheet removed while open', () => {
     expect(sort).toHaveFocus();
   });
 
-  it('moves no focus when a covered sheet is removed', async () => {
+  it('returns focus to the first opener when a whole stack is removed', async () => {
+    function Stack() {
+      const [isOpen, setIsOpen] = useState(false);
+      const [isSortOpen, setIsSortOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setIsOpen(true)}>
+            Filters
+          </button>
+          {isOpen && (
+            <BottomSheet isOpen onOpenChange={setIsOpen} label="Filters">
+              <button type="button" onClick={() => setIsSortOpen(true)}>
+                Sort
+              </button>
+              {isSortOpen && (
+                <BottomSheet
+                  isOpen
+                  onOpenChange={setIsSortOpen}
+                  label="Sort by">
+                  <button type="button" onClick={() => setIsOpen(false)}>
+                    Apply all
+                  </button>
+                </BottomSheet>
+              )}
+            </BottomSheet>
+          )}
+        </>
+      );
+    }
+    render(<Stack />);
+    const opener = screen.getByRole('button', {name: 'Filters'});
+    act(() => opener.focus());
+    fireEvent.click(opener);
+    const sort = screen.getByRole('button', {name: 'Sort', hidden: true});
+    act(() => sort.focus());
+    fireEvent.click(sort);
+    const applyAll = screen.getByRole('button', {
+      name: 'Apply all',
+      hidden: true,
+    });
+    act(() => applyAll.focus());
+
+    fireEvent.click(applyAll);
+    await settle();
+
+    expect(sheetNamed('Filters')).toBeNull();
+    expect(sheetNamed('Sort by')).toBeNull();
+    expect(opener).toHaveFocus();
+  });
+
+  it('moves no focus when a covered sheet is removed under a top sheet that stays', async () => {
     function Siblings() {
       const [isFiltersShown, setIsFiltersShown] = useState(true);
       const [isSortOpen, setIsSortOpen] = useState(false);
