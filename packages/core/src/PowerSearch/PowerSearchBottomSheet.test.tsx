@@ -64,6 +64,13 @@ import {
 } from './powerSearchSheetUtils';
 import {renderHook} from '@testing-library/react';
 
+// PowerSearch and Tokenizer load their sheets on demand, and a first load
+// under the test transform can take seconds on a busy machine. The file loads
+// both sheet modules before any test runs, so neither load counts against a
+// wait or a time limit.
+await import('./PowerSearchBottomSheet');
+await import('../Tokenizer/TokenizerBottomSheet');
+
 // =============================================================================
 // Environment
 // =============================================================================
@@ -542,19 +549,21 @@ function expectBleedRowsOnBodyInset(list: HTMLElement): void {
 }
 
 // The sheet flow is loaded with React.lazy, so the first flow renders a tick
-// after it opens. Open one up front so the module is cached and every later
-// flow renders synchronously.
+// after it opens. Open one up front so every later flow renders synchronously.
+// `act` renders the flow once its loaded module resolves, with no wait.
 beforeAll(async () => {
   stubEnvironment();
   try {
     setup({filters: [openFilter]});
-    openSheet();
-    await screen.findByRole('heading', {name: 'Filters'}, {timeout: 15000});
+    await act(async () => {
+      openSheet();
+    });
+    expect(screen.getByRole('heading', {name: 'Filters'})).toBeInTheDocument();
   } finally {
     cleanup();
     vi.unstubAllGlobals();
   }
-}, 20000);
+});
 
 // A list value's Tokenizer sheet is loaded with React.lazy too. Open one up
 // front, so every later Tokenizer sheet renders synchronously inside its press.
@@ -564,13 +573,15 @@ beforeAll(async () => {
     setup({config: valueTypesConfig});
     openAddFlow();
     tapRow('ID');
-    fireEvent.click(within(sheet()).getByRole('button', {name: 'ID'}));
-    await screen.findByRole('dialog', {name: 'ID'}, {timeout: 15000});
+    await act(async () => {
+      fireEvent.click(within(sheet()).getByRole('button', {name: 'ID'}));
+    });
+    expect(screen.getByRole('dialog', {name: 'ID'})).toBeInTheDocument();
   } finally {
     cleanup();
     vi.unstubAllGlobals();
   }
-}, 20000);
+});
 
 beforeEach(() => {
   __resetLiveRegionsForTest();
@@ -3852,6 +3863,36 @@ describe('PowerSearch sheet draft, Done and dismissal (FR15, FR15b, FR15c, FR22)
     ]);
   });
 
+  it('Done on a field that became read-only while the flow was open reports nothing and closes (FR15b)', () => {
+    const onChange = vi.fn();
+    function Harness() {
+      const [isReadOnly, setIsReadOnly] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setIsReadOnly(true)}>
+            Lock
+          </button>
+          <PowerSearch
+            config={config}
+            filters={[openFilter, authorFilter]}
+            onChange={onChange}
+            isReadOnly={isReadOnly}
+            presentation="bottom-sheet"
+          />
+        </>
+      );
+    }
+    render(<Harness />);
+    openSheet();
+    fireEvent.click(removeButton('Author'));
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', {name: 'Lock'}));
+    expect(isSheetOpen()).toBe(true);
+    done();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(isSheetOpen()).toBe(false);
+  });
+
   it('the popover presentation is unchanged: a token removal reports at once, with no draft and no Done (desktop)', async () => {
     const {onChange} = setup({
       presentation: 'popover',
@@ -4979,6 +5020,27 @@ describe('PowerSearch sheet value text', () => {
     expect(within(sheet()).getByRole('combobox', {name: 'Date'})).toHaveValue(
       'March 9, 2024',
     );
+  });
+
+  it('writes the trigger token and the Filters row in the provider calendar', () => {
+    // The buddhist calendar needs no Temporal.
+    render(
+      <InternationalizationProvider locale="en" calendar="buddhist">
+        <PowerSearch
+          config={valueTypesConfig}
+          filters={[dateFilter]}
+          onChange={() => {}}
+          presentation="bottom-sheet"
+        />
+      </InternationalizationProvider>,
+    );
+    expect(within(field()).getByText(/^Mar (9|10), 2567 BE$/)).toBeTruthy();
+    openSheet();
+    expect(
+      within(sheet()).getByRole('button', {
+        name: /^Created is after Mar (9|10), 2567 BE$/,
+      }),
+    ).toBeTruthy();
   });
 
   it("resolves the sheet's date-range and nested summaries through the catalog with the popover token's words", () => {

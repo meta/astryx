@@ -6,6 +6,7 @@ import {
   isFocusLost,
   moveFocusLeftBehind,
   noteFocusWithin,
+  returnFocusForLastInput,
 } from './focusReturn';
 import {isFocusDetached} from './isFocusDetached';
 import {
@@ -122,6 +123,49 @@ describe('focusForLastInput', () => {
       focus.mock.invocationCallOrder[0] ?? 0,
     );
     expect(document.activeElement).toBe(element);
+  });
+});
+
+describe('returnFocusForLastInput', () => {
+  beforeEach(() => {
+    __startInteractionModalityTrackingForTest();
+    __resetInteractionModalityForTest();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.innerHTML = '';
+  });
+
+  it('returns focus without a scroll after keyboard input', () => {
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    const focus = vi.spyOn(opener, 'focus');
+    returnFocusForLastInput(opener);
+    expect(focus.mock.calls).toEqual([[{preventScroll: true}]]);
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('returns focus without a scroll and without a ring after pointer input', () => {
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    document.dispatchEvent(new Event('pointerdown'));
+    const focus = vi.spyOn(opener, 'focus');
+    returnFocusForLastInput(opener);
+    expect(focus.mock.calls).toEqual([
+      [{preventScroll: true, focusVisible: false}],
+    ]);
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('takes the ring from the modality it is given', () => {
+    const opener = document.createElement('button');
+    document.body.appendChild(opener);
+    const focus = vi.spyOn(opener, 'focus');
+    returnFocusForLastInput(opener, 'pointer');
+    expect(focus.mock.calls).toEqual([
+      [{preventScroll: true, focusVisible: false}],
+    ]);
   });
 });
 

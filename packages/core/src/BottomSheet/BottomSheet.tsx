@@ -81,7 +81,11 @@ import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useModalOutlet} from '../Layer/modalOutlet';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
-import {focusForLastInput} from '../utils/focusReturn';
+import {useFocusRegionContainment} from '../hooks/useFocusTrap';
+import {
+  prepareFocusRepairOnRemoval,
+  returnFocusForLastInput,
+} from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
   BottomSheetPanel,
@@ -444,6 +448,10 @@ function StandaloneBottomSheet({
     false,
   );
   const isEntrySettled = settledOpen && isOpen;
+  // Only a modal sheet contains Tab; a non-modal one leaves the page's focus
+  // order alone. A closing sheet stops containing as soon as it starts to
+  // leave.
+  useFocusRegionContainment(dialogRef, isOpen && hasScrim);
   // Presentation outlives the controlled prop: a closing sheet stays mounted
   // and in its native host through its exit, and only its motion completion
   // (or a replace finishing) clears it. The open flip is derived during
@@ -548,7 +556,15 @@ function StandaloneBottomSheet({
       return;
     }
     const key = stackKeyRef.current;
-    return registerBottomSheet(
+    const dialog = dialogRef.current;
+    // Removing an open dialog runs no close, so focus would drop to the page.
+    // After the commit, the repair sends focus where a close would, if the
+    // removal lost focus.
+    const repairOnRemoval =
+      dialog == null
+        ? null
+        : prepareFocusRepairOnRemoval(dialog, {keepRestingFocus: true});
+    const leave = registerBottomSheet(
       {
         key,
         getElement: () => dialogRef.current,
@@ -606,6 +622,32 @@ function StandaloneBottomSheet({
       isOpenRef.current,
       hasScrim,
     );
+    return () => {
+      // Read before the registry lets go of the sheet beneath. Focus the
+      // person had already moved out of the sheet to the page body stays
+      // there: the removal did not lose it.
+      if (repairOnRemoval != null && isSheetHostPresented(dialog)) {
+        const returnTarget =
+          finalFocusRefRef.current?.current ?? triggerRef.current;
+        const revealed = hasScrim ? getBottomSheetBeneath(key) : null;
+        repairOnRemoval(() => {
+          // The sheet beneath left too. Its own repair returns focus for the
+          // stack.
+          if (revealed != null && !revealed.element.isConnected) {
+            return;
+          }
+          if (
+            revealed != null &&
+            (returnTarget == null || !revealed.element.contains(returnTarget))
+          ) {
+            revealed.focus();
+          } else if (returnTarget != null && returnTarget.isConnected) {
+            returnFocusForLastInput(returnTarget);
+          }
+        });
+      }
+      leave();
+    };
   }, [hasScrim, shouldPresent, writeScrim]);
   useLayoutEffect(() => {
     if (!isOpen) {
@@ -720,7 +762,7 @@ function StandaloneBottomSheet({
       ) {
         revealed.focus();
       } else if (returnTarget != null) {
-        focusForLastInput(returnTarget);
+        returnFocusForLastInput(returnTarget);
       }
       triggerRef.current = null;
     },

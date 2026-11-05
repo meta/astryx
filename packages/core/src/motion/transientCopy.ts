@@ -15,9 +15,12 @@
  * technology, carries no ids or test ids, joins no form or radio group (a
  * copied checked radio would uncheck the live one), and its frames and media
  * load nothing. Laying it out changes no ancestor's position, and a scaled
- * host draws it at the old size. Laid in a host outside the element's own
- * ancestors, it keeps what it inherited from them: its inherited properties
- * and custom properties that differ from the host's are written on it.
+ * host draws it at the old size. A clone restarts each CSS animation and runs
+ * no transition but a `@starting-style` one; the copy carries on its
+ * element's from where they were.
+ * Laid in a host outside the element's own ancestors, it keeps what it
+ * inherited from them: its inherited properties and custom properties that
+ * differ from the host's are written on it.
  * Limits: a rule keyed on a removed `id`, or matched through an ancestor
  * between the host and the element (`.collapsed .label`), does not style the
  * copy as it styled the element; and content holding a canvas whose pixels read back
@@ -29,6 +32,12 @@
  * - /packages/core/src/motion/animatedLayout.ts
  * - /packages/core/src/Layer/layerExitCopy.ts
  */
+
+import {
+  carryAnimations,
+  saveAnimations,
+  type SavedAnimations,
+} from './carryAnimations';
 
 /** Above this many elements, old content is not copied: the new one enters. */
 const MAX_COPIED_ELEMENTS = 1500;
@@ -172,11 +181,22 @@ const scrollOffsets = new WeakMap<
 >();
 
 /**
+ * The CSS animations and transitions a copy's element ran, and the copy of
+ * each element in the copied subtree. The copy carries them on once laid out
+ * (`placeOver`).
+ */
+const carriedMotion = new WeakMap<
+  HTMLElement,
+  {saved: SavedAnimations; copyOf: ReadonlyMap<Element, Element>}
+>();
+
+/**
  * A copy that takes no part: no ids or test ids, no form or radio group (a
  * copied checked radio would uncheck the live one), no label for a live
  * control, and copied frames and media load nothing. Copied elements carry no
- * anchor name. Scrolled descendants keep their offsets once the copy is laid
- * out (`placeOver`).
+ * anchor name. Scrolled descendants keep their offsets. The CSS animations
+ * and transitions running in it carry on from where they were, once the copy
+ * is laid out (`placeOver`).
  */
 export function inertCopy(element: HTMLElement): HTMLElement | null {
   const copy = element.cloneNode(true) as HTMLElement;
@@ -190,6 +210,10 @@ export function inertCopy(element: HTMLElement): HTMLElement | null {
   });
   scrollOffsets.set(copy, offsets);
   inheritedValues.set(copy, readInherited(element));
+  carriedMotion.set(copy, {
+    saved: saveAnimations(element),
+    copyOf: new Map(sourceNodes.map((node, index) => [node, copyNodes[index]])),
+  });
   for (const node of copyNodes) {
     for (const name of ['id', 'data-testid', 'name', 'for', 'autofocus']) {
       node.removeAttribute(name);
@@ -285,7 +309,8 @@ export function keepInherited(copy: HTMLElement, host: Element): void {
 /**
  * Lay `element` over `rect` (viewport coordinates), absolutely, as the last
  * child of `host`, wherever its containing block is: no ancestor's position
- * changes.
+ * changes. A copy's scrolled descendants then restore their offsets, and the
+ * CSS animations and transitions its element ran carry on in it.
  */
 export function placeOver(
   element: HTMLElement,
@@ -327,6 +352,15 @@ export function placeOver(
   element.style.left = `${(rect.left - origin.left) / scaleX}px`;
   element.style.top = `${(rect.top - origin.top) / scaleY}px`;
   restoreScrollOffsets(element);
+  const carried = carriedMotion.get(element);
+  if (carried != null) {
+    carriedMotion.delete(element);
+    carryAnimations(
+      carried.saved,
+      element,
+      node => carried.copyOf.get(node) ?? null,
+    );
+  }
 }
 
 /**
@@ -372,6 +406,12 @@ export function visiblePartCopy(element: HTMLElement): {
   const values = inheritedValues.get(content);
   if (values != null) {
     inheritedValues.set(holder, values);
+  }
+  // The content's CSS motion carries on when the holder is laid out.
+  const carried = carriedMotion.get(content);
+  if (carried != null) {
+    carriedMotion.set(holder, carried);
+    carriedMotion.delete(content);
   }
   const box = element.getBoundingClientRect();
   return {

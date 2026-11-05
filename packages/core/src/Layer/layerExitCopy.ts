@@ -161,8 +161,8 @@ function layoutBox(element: HTMLElement): LayerExitBox {
 /**
  * Copies `element` into a static box where it is drawn, marked with
  * `attribute`. It inserts the copy after the outermost layer around the
- * element, or after the element when no layer encloses it, and shows it in
- * the top layer. Returns null where there is no top layer to show it in (no
+ * element, or after the element when no layer encloses it. It shows the copy
+ * in the top layer. Returns null where there is no top layer to show it in (no
  * popover API). It also returns null for content past the copy cap, or
  * holding a canvas that reads back empty. The close is then immediate.
  *

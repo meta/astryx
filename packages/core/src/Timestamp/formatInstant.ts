@@ -2,7 +2,7 @@
 
 /**
  * @file formatInstant.ts
- * @input A Date, one absolute format name, and an optional time zone
+ * @input A Date, one absolute format name, an optional time zone and calendar
  * @output That instant rendered as a string
  * @position Leaf shared by Timestamp's visible text and each of its tooltip
  *   lines; owns every absolute format Timestamp can produce
@@ -30,6 +30,10 @@
  */
 
 import {SHARED_DATE_FORMAT_OPTIONS, getWallClock} from '../utils/plainDate';
+import {
+  formatCalendarInstant,
+  type CalendarSystem,
+} from '../utils/calendarSystem';
 import type {Locale} from '../i18n/types';
 import type {TimestampFormat} from './Timestamp';
 
@@ -80,6 +84,14 @@ export interface FormatInstantOptions {
    * @default 'short'
    */
   timeZoneNameStyle?: 'short' | 'long';
+  /**
+   * The calendar that date-bearing formats write the date in. Timestamp
+   * passes its resolved calendar. `time` has no date, and the `system_*`
+   * shapes and `unix_seconds` stay Gregorian ISO or calendar-neutral in every
+   * calendar.
+   * @default 'gregory'
+   */
+  calendar?: CalendarSystem;
 }
 
 // =============================================================================
@@ -139,6 +151,7 @@ export function formatInstant(
     timeZone,
     isTimezoneShown = false,
     timeZoneNameStyle = 'short',
+    calendar = 'gregory',
   }: FormatInstantOptions = {},
 ): string {
   const zone = timeZone === undefined ? {} : {timeZone};
@@ -146,41 +159,49 @@ export function formatInstant(
 
   switch (format) {
     case 'full':
-      return new Intl.DateTimeFormat(locale, {
-        ...FULL_OPTIONS,
-        timeZoneName: timeZoneNameStyle,
-        ...zone,
-        calendar: 'gregory',
-      }).format(date);
+      return formatCalendarInstant(
+        calendar,
+        date,
+        {...FULL_OPTIONS, timeZoneName: timeZoneNameStyle},
+        locale,
+        timeZone,
+      );
 
     case 'date':
-      return new Intl.DateTimeFormat(locale, {
-        ...SHARED_DATE_FORMAT_OPTIONS.date,
-        ...zone,
-        calendar: 'gregory',
-      }).format(date);
+      return formatCalendarInstant(
+        calendar,
+        date,
+        SHARED_DATE_FORMAT_OPTIONS.date,
+        locale,
+        timeZone,
+      );
 
     case 'date_long':
-      return new Intl.DateTimeFormat(locale, {
-        ...SHARED_DATE_FORMAT_OPTIONS.date_long,
-        ...zone,
-        calendar: 'gregory',
-      }).format(date);
+      return formatCalendarInstant(
+        calendar,
+        date,
+        SHARED_DATE_FORMAT_OPTIONS.date_long,
+        locale,
+        timeZone,
+      );
 
     case 'date_weekday':
-      return new Intl.DateTimeFormat(locale, {
-        ...SHARED_DATE_FORMAT_OPTIONS.date_weekday,
-        ...zone,
-        calendar: 'gregory',
-      }).format(date);
+      return formatCalendarInstant(
+        calendar,
+        date,
+        SHARED_DATE_FORMAT_OPTIONS.date_weekday,
+        locale,
+        timeZone,
+      );
 
     case 'date_time':
-      return new Intl.DateTimeFormat(locale, {
-        ...DATE_TIME_OPTIONS,
-        ...zoneName,
-        ...zone,
-        calendar: 'gregory',
-      }).format(date);
+      return formatCalendarInstant(
+        calendar,
+        date,
+        {...DATE_TIME_OPTIONS, ...zoneName},
+        locale,
+        timeZone,
+      );
 
     case 'time':
       return new Intl.DateTimeFormat(locale, {

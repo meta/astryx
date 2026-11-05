@@ -4,12 +4,12 @@
  * @file layerExitCopy.test.ts
  * @input vitest (jsdom), layerExitCopy
  * @output Checks the static copy a closing layer leaves for its close to
- *   play on: out of reach and out of the accessibility tree, no ids or form
- *   names, only in the top layer (hidden until a refused show succeeds, none
- *   without the popover API or past the copy cap), on the layer's layout box
- *   with fractions and the transform and opacity it was drawn with, with no
- *   keyframes or transitions replaying, one per layer, scrolled where the
- *   layer was
+ *   play on. It is out of reach and out of the accessibility tree, with no
+ *   ids or form names. It is only in the top layer: hidden until a refused
+ *   show succeeds, and none without the popover API or past the copy cap. It
+ *   sits on the layer's layout box with fractions, and with the transform and
+ *   opacity it was drawn with. No keyframes or transitions replay, there is
+ *   one copy per layer, and it is scrolled where the layer was.
  * @position Testing; the browser proofs are in
  *   __tests__/layerExitCopy.interaction.browser.spec.ts
  */

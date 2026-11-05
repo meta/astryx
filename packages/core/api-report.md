@@ -295,6 +295,7 @@ component ButtonGroup(props: ButtonGroupProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component Calendar(props: CalendarProps)
+  prop calendar?: CalendarSystem
   prop dateConstraints?: ReadonlyArray<(date: Date) => boolean>
   prop defaultValue?: ISODateString
   prop focusDate?: ISODateString
@@ -572,6 +573,7 @@ component CheckboxList(props: CheckboxListProps)
   prop isLabelHidden?: boolean = false
   prop isOptional?: boolean = false
   prop isReadOnly?: boolean = false
+  prop isRequired?: boolean = false
   prop label: string
   prop onChange?: (values: string[]) => void
   prop ref?: React.Ref<HTMLDivElement>
@@ -863,6 +865,7 @@ component ContextMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component DateInput(props: DateInputProps)
+  prop calendar?: CalendarSystem = the InternationalizationProvider's calendar, else `'gregory'`
   prop changeAction?: (value: ISODateString | undefined) => void | Promise<void>
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
@@ -898,6 +901,7 @@ component DateInput(props: DateInputProps)
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component DateRangeInput(props: DateRangeInputProps)
+  prop calendar?: CalendarSystem = the InternationalizationProvider's calendar, else `'gregory'`
   prop changeAction?: (value: DateRange | null) => void | Promise<void>
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
@@ -933,6 +937,7 @@ component DateRangeInput(props: DateRangeInputProps)
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component DateTimeInput(props: DateTimeInputProps)
+  prop calendar?: CalendarSystem = the InternationalizationProvider's calendar, else `'gregory'`
   prop changeAction?: (value: ISODateTimeString | undefined) => void | Promise<void>
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
@@ -1045,7 +1050,7 @@ component DropdownMenu(props: DropdownMenuProps)
   prop onClick?: () => void
   prop onOpenChange?: (isOpen: boolean) => void
   prop placement?: LayerPlacement = 'below'
-  prop presentation?: DropdownMenuPresentation = 'popover'
+  prop presentation?: DropdownMenuPresentation
   prop renderTrigger?: (props: DropdownMenuTriggerProps) => ReactNode
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -1361,6 +1366,7 @@ component InputGroupText(props: InputGroupTextProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component InternationalizationProvider(props: InternationalizationProviderProps)
+  prop calendar?: CalendarSystem
   prop children: ReactNode
   prop dir?: 'ltr' | 'rtl'
   prop locale: Locale
@@ -1452,7 +1458,7 @@ component LayoutPanel(props: LayoutPanelProps)
   prop label?: string
   prop padding?: SpacingStep
   prop ref?: React.Ref<HTMLDivElement>
-  prop resizable?: ResizableProps
+  prop resizable?: ResizableRegion | ResizableProps
   prop role?: AriaRole
   prop width?: SizeValue
   prop xstyle?: StyleXStyles
@@ -1599,7 +1605,7 @@ component MoreMenu(props: MoreMenuProps)
   prop label?: string = 'More options'
   prop onOpenChange?: (isOpen: boolean) => void
   prop placement?: LayerPlacement = 'below'
-  prop presentation?: DropdownMenuPresentation = 'popover'
+  prop presentation?: DropdownMenuPresentation
   prop ref?: React.Ref<HTMLButtonElement>
   prop size?: ButtonSize = 'md'
   prop variant?: ButtonVariant = 'ghost'
@@ -1931,7 +1937,7 @@ component ResizeHandle(props: ResizeHandleProps)
   prop pillPlacement?: PillPlacement = 'auto'
   prop position?: 'inline' | 'overlay' = 'inline'
   prop ref?: React.Ref<HTMLDivElement>
-  prop resizable?: ResizableProps
+  prop resizable?: ResizableRegion | ResizableProps
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component ScrollableArea(props: ScrollableAreaProps)
@@ -2075,7 +2081,7 @@ component SideNav(props: SideNavProps)
   prop handleRef?: React.Ref<SideNavImperativeCollapseHandle> @deprecated
   prop header?: ReactNode
   prop ref?: React.Ref<HTMLElement>
-  prop resizable?: boolean | ResizableConfig = false
+  prop resizable?: boolean | ResizableConfig | ResizableRegion = false
   prop style?: React.CSSProperties
   prop topContent?: ReactNode
   prop xstyle?: StyleXStyles
@@ -2925,6 +2931,7 @@ hook useOutlineFromDOM: (containerRef: React.RefObject<HTMLElement | null>) => O
 hook useOutlineFromMarkdown: <Node extends MarkdownExtensionNode = never>(markdown: string, options?: ParseOutlineFromMarkdownOptions<Node>) => OutlineItem[]
 hook useOverflow: (itemCount: number, options?: UseOverflowOptions) => UseOverflowReturn
 hook useOverlay: ({…}?: UseOverlayOptions) => UseOverlayResult
+hook usePanGesture: (ref: RefObject<Element | null>, options: PanGestureOptions) => void
 hook usePopover: (options?: UsePopoverOptions) => UsePopoverReturn
 hook usePowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
 hook usePressFeedback: () => typeof pressableProps
@@ -2989,6 +2996,7 @@ function createAnimator: (element: HTMLElement) => Animator
 function createCodeLanguage: ({…}: CreateCodeLanguageOptions) => CodeLanguage
 function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
+function createPanGesture: (element: Element, options: PanGestureOptions) => PanGesture
 function createPowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
 function createStaticSource: <T extends SearchableItem>(items: T[], options?: CreateStaticSourceOptions<T>) => SearchSource<T>
 function dateToISO: (pd: PlainDate) => ISODateString
@@ -3010,7 +3018,7 @@ function formatDisplayTime12h: (time: ISOTimeString | undefined, includeSeconds?
 function formatDisplayTime24h: (time: ISOTimeString | undefined, includeSeconds?: boolean) => string
 function formatHex: (r: number, g: number, b: number) => string
 function formatISOTime: (time: ParsedTime, includeSeconds?: boolean) => ISOTimeString
-function formatSharedDate: (pd: PlainDate, format: SharedDateFormat, locale?: Locale) => string
+function formatSharedDate: (pd: PlainDate, format: SharedDateFormat, locale?: Locale, calendar?: CalendarSystem) => string
 function generateAdaptationCSS: (theme: DefinedTheme, warnings?: string[]) => ThemeCSSOutput
 function generateColumns: <T extends Record<string, unknown>>(data: T[]) => TableColumn<T>[]
 function generateOnMediaCSS: (theme: DefinedTheme, warnings?: string[]) => string
@@ -3178,7 +3186,7 @@ const WIDTH_BREAKPOINT_NAMES: readonly ["sm", "md", "lg", "xl", "2xl"]
 const borderDefaults: { readonly '--border-width': "1px" }
 const borderVars: stylex.VarGroup<Readonly<{ readonly '--border-width': "1px" }>, symbol>
 const colorDefaults: object
-  --color-accent: 'light-dark(#0064E0, #2694FE)'
+  --color-accent: 'light-dark(#0064E0, #0171E3)'
   --color-accent-muted: 'light-dark(#0082FB33, #0082FB3F)'
   --color-on-accent: 'light-dark(#FFFFFF, #FFFFFF)'
   --color-neutral: 'light-dark(rgba(5, 54, 89, 0.1), rgba(223, 226, 229, 0.2))'
@@ -3276,7 +3284,7 @@ const colorDefaults: object
   --color-border-yellow: 'light-dark(#C58600, #B47700)'
   --color-icon-yellow: 'light-dark(#FBC02D, #FFEE58)'
   --color-text-yellow: 'light-dark(#753F07, #FBCE03)'
-const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #2694FE)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #a042f923
+const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #0171E3)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #a042f923
 const dataTokenDefaults: object
   --color-data-categorical-blue: 'light-dark(#0171E3, #0171E3)'
   --color-data-categorical-orange: 'light-dark(#EB6E00, #EB6E00)'
@@ -3758,6 +3766,7 @@ interface CalendarDay
 interface CalendarHandle
   navigateTo: (date: ISODateString) => void
 type CalendarProps = CalendarSingleProps | CalendarRangeProps (props of Calendar)
+type CalendarSystem = 'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-c … #85e5f84c
 interface CardProps extends BaseProps<HTMLDivElement> (props of Card)
 type CardVariant = keyof CardVariantMap
 interface CardVariantMap
@@ -3870,6 +3879,7 @@ interface ClickableCardProps extends BaseProps (props of ClickableCard)
 interface ClickableContainerResult
   onClick: (event: MouseEvent<HTMLElement>) => void
   onMouseUp: (event: MouseEvent<HTMLElement>) => void
+  onPointerDown: (event: PointerEvent<HTMLElement>) => void
 interface CodeBlockProps extends BaseProps<HTMLPreElement> (props of CodeBlock)
 type CodeColor = 'primary' | 'secondary' | 'inherit'
 type CodeLanguage
@@ -4544,6 +4554,7 @@ interface IntegerOperatorValue
   units?: string
 type InteractiveRole = 'link' | 'button' | 'inert'
 interface InternationalizationContextValue
+  calendar?: CalendarSystem
   direction: 'ltr' | 'rtl'
   locale: Locale
   messages: MessagesByLocale
@@ -4918,6 +4929,16 @@ interface PaginationVariantMap
   input: true
   none: true
   pages: true
+interface PanGesture
+  destroy: () => void
+interface PanGestureEvent
+  state: PanGestureState
+  translation: { x: number; y: number }
+  velocity: { x: number; y: number }
+interface PanGestureOptions
+  axis?: 'x' | 'y'
+  onPan: (event: PanGestureEvent) => void
+type PanGestureState = 'began' | 'changed' | 'ended' | 'cancelled'
 type ParseOptions<Plugins extends ReadonlyArray<MarkdownPluginEntry> = readonly []> = CommonParseOptions<Plugins> & { math?: false | undefined }
 interface ParseOutlineFromMarkdownOptions<Node extends MarkdownExtensionNode = never>
   isFinal?: boolean
@@ -5780,6 +5801,7 @@ interface UseCalendarConstraintsReturn
   maxDate: PlainDate | null
   minDate: PlainDate | null
 interface UseCalendarDaysOptions
+  calendar?: CalendarSystem = 'gregory'
   hasVariableRowCount?: boolean
   month: number
   weekStartsOn?: DayOfWeek
@@ -5790,6 +5812,7 @@ interface UseCalendarDaysReturn
   totalCells: number
   weeks: CalendarDay[][]
 interface UseCalendarNavigationOptions
+  calendar?: CalendarSystem = 'gregory'
   focusDate?: ISODateString
   initialValue?: ISODateString
   numberOfMonths?: 1 | 2
@@ -5800,6 +5823,7 @@ interface UseCalendarNavigationReturn
   monthYearLabel: string
   navigateMonth: (delta: number, focusedDate?: ISODateString, offset?: number) => void
   pendingFocus: ISODateString | null
+  visibleCalendarMonths: Array<{ year: number; month: number }>
   visibleMonths: PlainDate[]
 interface UseChatComposerTokensOptions
   editableRef: React.RefObject<HTMLDivElement | null>
@@ -8263,7 +8287,7 @@ usePowerSearchConfig (.)
 ### Functions
 
 ```text
-function formatFilterValue: (_config: InternalConfig, operatorValue: OperatorValue, filterValue: FilterValue, maxLength: number, t: TranslatorFn, locale: Locale, timezoneID?: string) => string
+function formatFilterValue: (_config: InternalConfig, operatorValue: OperatorValue, filterValue: FilterValue, maxLength: number, t: TranslatorFn, locale: Locale, timezoneID?: string, calendar?: CalendarSystem) => string
 ```
 
 ### Types
@@ -9086,6 +9110,10 @@ MenuPressEvent (.)
 MenuPressGesture (.)
 MenuPressPointerType (.)
 MenuPressStep (.)
+PanGesture (.)
+PanGestureEvent (.)
+PanGestureOptions (.)
+PanGestureState (.)
 ScrollAxis (.)
 ScrollAxisState (.)
 ScrollKeyboardAccess (.)
@@ -9156,6 +9184,7 @@ useMediaQuery (.)
 useMenuPress (.)
 useMergedRefs (.)
 useOverflow (.)
+usePanGesture (.)
 usePressFeedback (.)
 useScrollLock (.)
 useScrollOverflow (.)
@@ -9170,6 +9199,7 @@ useTypeahead (.)
 ### Also exported from an earlier entry point
 
 ```text
+CalendarSystem (.)
 Catalog (.)
 InternationalizationContext (.)
 InternationalizationContextValue (.)

@@ -21,22 +21,24 @@ import type {ThemeTimingTokens} from '../motion/themeTiming';
 import {popover} from '../motion/uikit/popover';
 
 /**
- * The growth plays the layer entrance's duration and the theme's entrance
- * easing. A tap opens the popover, and a tap has no velocity, so no spring
- * plays.
+ * The growth plays `--duration-medium-min`, which in the Storybook theme is
+ * the step nearest iOS's measured growth (`popover.growMs`), with the
+ * entrance easing. A tap opens the popover, and a tap has no velocity, so no
+ * spring plays.
  */
 export const POPOVER_ENTRANCE_TOKENS: ThemeTimingTokens = {
-  durations: ['--duration-fast-max'],
+  duration: '--duration-medium-min',
   easing: '--ease-entrance',
 };
 
 /**
- * The shrink plays the theme's exit duration and easing. A theme that sets
- * no exit duration gets the fast duration, which is the exit duration's
- * default.
+ * The shrink plays the theme's exit duration and easing, which every overlay
+ * shares; iOS's measured shrink (`popover.shrinkMs`) is only a reference. A
+ * theme that sets no exit duration gets the fast duration, which is the exit
+ * duration's default.
  */
 export const POPOVER_EXIT_TOKENS: ThemeTimingTokens = {
-  durations: ['--duration-exit', '--duration-fast'],
+  duration: '--duration-exit',
   easing: '--ease-exit',
 };
 

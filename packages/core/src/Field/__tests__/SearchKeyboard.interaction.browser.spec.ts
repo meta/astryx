@@ -47,8 +47,8 @@ test('a tap on Typeahead focuses a field that asks for the Search key and no aut
 test('a tap on the inline Tokenizer focuses a field that asks for the Search key and no autocorrection', async ({
   page,
 }) => {
-  // The story pins `presentation="popover"`, so the phone keeps the inline field.
-  await openStory(page, storybook(), 'core-tokenizer--with-end-content');
+  // `presentation="popover"` keeps the inline field on the phone.
+  await openStory(page, storybook(), 'core-tokenizer--popover-presentation');
   await expectSearchKeyboard(page.getByRole('combobox'));
 });
 

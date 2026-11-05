@@ -236,7 +236,8 @@ function mergeGenerativeAxes(inherited, own) {
  * standalone builds with current Core do not.
  *
  * @param {any} coreThemeModule - The installed `@astryxdesign/core/theme` namespace.
- * @param {any} [coreRootModule] - The installed `@astryxdesign/core` namespace.
+ * @param {any} [coreRootModule] - The installed `@astryxdesign/core` namespace,
+ *   or a function that loads it. A function is called once, on first use.
  * @returns {CoreInterception}
  */
 export function interceptCore(coreThemeModule, coreRootModule) {
@@ -287,14 +288,31 @@ export function interceptCore(coreThemeModule, coreRootModule) {
     };
   };
 
-  return {
-    modules: {
-      '@astryxdesign/core/theme': wrapNamespace(coreThemeModule),
+  const modules = {
+    '@astryxdesign/core/theme': wrapNamespace(coreThemeModule),
+  };
+  /** @type {any} */
+  let wrappedRoot;
+  // jiti reads a virtual module only when a theme imports its specifier. So
+  // the root, which loads all of Core, loads only for a theme that asks.
+  Object.defineProperty(modules, '@astryxdesign/core', {
+    enumerable: true,
+    configurable: true,
+    get() {
+      const root =
+        typeof coreRootModule === 'function'
+          ? coreRootModule()
+          : coreRootModule;
       // Falls back to the theme namespace only when the root could not be
       // imported at all; a partial root is better than none, and a core
       // missing its own root entry is already broken.
-      '@astryxdesign/core': wrapNamespace(coreRootModule ?? coreThemeModule),
+      wrappedRoot ??= wrapNamespace(root ?? coreThemeModule);
+      return wrappedRoot;
     },
+  });
+
+  return {
+    modules,
 
     // prettier-ignore
     observed(theme) { return wasObserved(theme, byReference); },

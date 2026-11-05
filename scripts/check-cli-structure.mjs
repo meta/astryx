@@ -484,8 +484,6 @@ const INV21_KNOWN_GAPS = new Map([
   ['integration/validate-integration.mjs', new Set(['fs', 'discovery'])],
   // remove with the layout command
   ['layout/expand/expand.mjs', new Set(['fs'])],
-  // imported by a leaf (copy), not only by the adapter
-  ['swizzle/_github.mjs', new Set(['child_process'])],
   ['swizzle/copy/copy.mjs', new Set(['fs', 'project', 'discovery'])],
   ['template/cdn/cdn.mjs', new Set(['fs'])],
   ['template/copy/copy.mjs', new Set(['fs', 'discovery'])],

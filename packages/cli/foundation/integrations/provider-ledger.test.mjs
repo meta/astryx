@@ -37,6 +37,7 @@ beforeAll(() => {
   root = fs.mkdtempSync(path.join(process.cwd(), '.astryx-provider-ledger-'));
 });
 
+// Only a seed that failed before removing its folder leaves one here.
 afterAll(() => {
   process.chdir(originalCwd);
   fs.rmSync(root, {recursive: true, force: true});
@@ -261,6 +262,9 @@ describe('provider ledger over generated projects', () => {
         ).toBe(true);
         if (standInWins || localReplaced) coverage.standIn++;
       }
+      // The seed's folder is read, so it goes now: inside this case's budget,
+      // not with every other seed's folder at once after the file.
+      fs.rmSync(dir, {recursive: true, force: true});
     }
 
     // The generator must keep reaching every shape, or the property is vacuous.

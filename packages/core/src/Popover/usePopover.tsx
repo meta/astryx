@@ -299,6 +299,7 @@ export interface UsePopoverReturn {
   /**
    * The CSS anchor name to use for positioning.
    * Use when you need to set anchorName manually (e.g., display:contents wrapper).
+   * Set it only while the layer is shown or its exit animation runs.
    */
   anchorId: string;
 
@@ -354,6 +355,18 @@ export interface UsePopoverReturn {
 }
 
 /**
+ * Options a core component may pass through `usePopoverInternal`; not part
+ * of the public `usePopover` options.
+ */
+interface InternalPopoverOptions extends UsePopoverOptions {
+  /**
+   * Runs as the popover starts to close, while the browser still shows it.
+   * A close that plays out after the popover is hidden starts here.
+   */
+  onCloseStart?: () => void;
+}
+
+/**
  * Hook for creating popover dialogs with focus trapping.
  *
  * Combines:
@@ -393,18 +406,6 @@ export interface UsePopoverReturn {
  * }
  * ```
  */
-/**
- * Options a core component may pass through `usePopoverInternal`; not part
- * of the public `usePopover` options.
- */
-interface InternalPopoverOptions extends UsePopoverOptions {
-  /**
-   * Runs as the popover starts to close, while the browser still shows it.
-   * A close that plays out after the popover is hidden starts here.
-   */
-  onCloseStart?: () => void;
-}
-
 function usePopoverImplementation(
   options: InternalPopoverOptions = {},
 ): UsePopoverReturn {
