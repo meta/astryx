@@ -11,7 +11,7 @@
 export const DEFAULT_STROKE_WIDTH = 2;
 
 /**
- * One stroke-width rule for every mark: a finite option clamps at zero (0
+ * Line and area marks share this rule: a finite option clamps at zero (0
  * draws nothing, negatives cannot invert), anything else falls back to 2.
  */
 export function resolveStrokeWidth(strokeWidth: number | undefined): number {
