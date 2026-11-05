@@ -12,7 +12,7 @@
  * @position Regression proof for the sort indicator wrapper's fixed block size
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

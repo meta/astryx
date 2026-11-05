@@ -159,7 +159,7 @@ export const docs = {
           },
         ],
         whenNull:
-          'Hides the glyph. The sort control keeps its label, its `aria-sort` direction, and its click and keyboard sorting.',
+          'Hides the glyph. The Sort control keeps its label and its click and keyboard sorting; the column header keeps `aria-sort`.',
       },
     ],
   },
