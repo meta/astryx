@@ -1013,31 +1013,44 @@ function resolveCoreRoot() {
 const _componentDeclCache = new Map();
 /**
  * @param {string} pascalName
+ * @param {{includeTypes?: boolean}} [options]
  * @returns {string}
  */
-function readComponentDeclarations(pascalName) {
-  if (_componentDeclCache.has(pascalName)) {
-    return _componentDeclCache.get(pascalName) ?? '';
+function readComponentDeclarations(pascalName, options = {}) {
+  const includeTypes = options.includeTypes === true;
+  const cacheKey = `${pascalName}:${includeTypes ? 'with-types' : 'index-only'}`;
+  if (_componentDeclCache.has(cacheKey)) {
+    return _componentDeclCache.get(cacheKey) ?? '';
   }
   let contents = '';
   const coreRoot = resolveCoreRoot();
   if (coreRoot) {
-    const candidates = [
-      path.join(coreRoot, 'dist', pascalName, 'index.d.ts'),
-      path.join(coreRoot, 'src', pascalName, 'index.ts'),
+    const candidateSets = [
+      [path.join(coreRoot, 'dist', pascalName, 'index.d.ts')],
+      [path.join(coreRoot, 'src', pascalName, 'index.ts')],
     ];
-    for (const file of candidates) {
-      try {
-        if (fs.existsSync(file)) {
-          contents = fs.readFileSync(file, 'utf-8');
-          break;
+    if (includeTypes) {
+      candidateSets[0].push(
+        path.join(coreRoot, 'dist', pascalName, 'types.d.ts'),
+      );
+      candidateSets[1].push(path.join(coreRoot, 'src', pascalName, 'types.ts'));
+    }
+    for (const files of candidateSets) {
+      if (fs.existsSync(files[0])) {
+        for (const file of files) {
+          try {
+            if (fs.existsSync(file)) {
+              contents += fs.readFileSync(file, 'utf-8') + '\n';
+            }
+          } catch {
+            // ignore
+          }
         }
-      } catch {
-        // ignore and try the next candidate
+        if (contents) break;
       }
     }
   }
-  _componentDeclCache.set(pascalName, contents);
+  _componentDeclCache.set(cacheKey, contents);
   return contents;
 }
 
@@ -1163,10 +1176,11 @@ async function resolveAugmentationTargetCandidates(componentName) {
  * re-exported) as a type/interface.
  * @param {string} pascalName
  * @param {string} interfaceName
+ * @param {{includeTypes?: boolean}} [options]
  * @returns {boolean}
  */
-function componentHasAugmentableInterface(pascalName, interfaceName) {
-  const decl = readComponentDeclarations(pascalName);
+function componentHasAugmentableInterface(pascalName, interfaceName, options) {
+  const decl = readComponentDeclarations(pascalName, options);
   if (!decl) return false;
   // Require an actual interface declaration in this public subpath, not just a
   // type re-export. Module augmentation only widens consumers that import the
@@ -1197,6 +1211,56 @@ function isComponentValueAugmentationPoint(pascalName, interfaceName) {
     !ARTWORK_REQUEST_MAPS.has(interfaceName) &&
     componentHasAugmentableInterface(pascalName, interfaceName)
   );
+}
+
+/**
+ * Extension points whose public module and interface do not follow the usual
+ * `<Component><Prop>Map` convention. TextType reads CustomTextTypes from the
+ * theme module, so both classification and declaration emission must resolve
+ * this same public augmentation point.
+ *
+ * @type {Record<string, {moduleName: string, interfaceName: string, includeTypes?: boolean}>}
+ */
+const AUGMENTATION_OVERRIDES = {
+  'text.type': {
+    moduleName: 'theme',
+    interfaceName: 'CustomTextTypes',
+    includeTypes: true,
+  },
+};
+
+/**
+ * Resolve the public module/interface that can widen a component prop value.
+ * @param {string} component
+ * @param {string} prop
+ * @returns {Promise<{moduleName: string, interfaceName: string}|null>}
+ */
+async function resolveAugmentationTarget(component, prop) {
+  const override = AUGMENTATION_OVERRIDES[`${component}.${prop}`];
+  if (override) {
+    return componentHasAugmentableInterface(
+      override.moduleName,
+      override.interfaceName,
+      {includeTypes: override.includeTypes},
+    )
+      ? {moduleName: override.moduleName, interfaceName: override.interfaceName}
+      : null;
+  }
+
+  const propPascal = prop.charAt(0).toUpperCase() + prop.slice(1);
+  const target = (await resolveAugmentationTargetCandidates(component)).find(
+    candidate =>
+      isComponentValueAugmentationPoint(
+        candidate.moduleName,
+        `${candidate.interfacePrefix}${propPascal}Map`,
+      ),
+  );
+  return target
+    ? {
+        moduleName: target.moduleName,
+        interfaceName: `${target.interfacePrefix}${propPascal}Map`,
+      }
+    : null;
 }
 
 /**
@@ -1503,14 +1567,7 @@ async function classifyComponentValue(component, prop, value) {
     return 'builtin';
   }
 
-  const propPascal = prop.charAt(0).toUpperCase() + prop.slice(1);
-  const target = (await resolveAugmentationTargetCandidates(component)).find(
-    candidate =>
-      isComponentValueAugmentationPoint(
-        candidate.moduleName,
-        `${candidate.interfacePrefix}${propPascal}Map`,
-      ),
-  );
+  const target = await resolveAugmentationTarget(component, prop);
   return target ? 'enrollment' : 'unresolved';
 }
 
@@ -1668,15 +1725,7 @@ async function generateVariantDeclarationsAsync(themeDef) {
     for (const [prop, values] of Object.entries(props)) {
       if (values.size === 0) continue;
 
-      const propPascal = prop.charAt(0).toUpperCase() + prop.slice(1);
-      const target = (
-        await resolveAugmentationTargetCandidates(component)
-      ).find(candidate =>
-        isComponentValueAugmentationPoint(
-          candidate.moduleName,
-          `${candidate.interfacePrefix}${propPascal}Map`,
-        ),
-      );
+      const target = await resolveAugmentationTarget(component, prop);
 
       // Resolve the augmentation point again to name it. Classification has
       // already established that one exists (that is what `enrollment` means),
@@ -1687,7 +1736,7 @@ async function generateVariantDeclarationsAsync(themeDef) {
       if (!target) continue;
 
       const modulePath = `@astryxdesign/core/${target.moduleName}`;
-      const interfaceName = `${target.interfacePrefix}${propPascal}Map`;
+      const {interfaceName} = target;
 
       sections.push(`declare module '${modulePath}' {`);
       sections.push(`  interface ${interfaceName} {`);
