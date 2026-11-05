@@ -1006,10 +1006,10 @@ describe('SideNavItem', () => {
   });
 
   it.each([
-    ['a button item', {}],
-    ['an item with href', {href: '/dashboard'}],
+    ['button item', {}],
+    ['item with href', {href: '/dashboard'}],
   ])(
-    'does not run a disabled %s’s caller handlers other than focus and blur',
+    'does not run a caller’s handlers other than focus and blur on a disabled %s',
     (_name, extraProps) => {
       const onKeyDown = vi.fn();
       const onKeyUp = vi.fn();
@@ -1031,6 +1031,7 @@ describe('SideNavItem', () => {
         />,
       );
       const button = screen.getByRole('button', {name: 'Dashboard'});
+      // fireEvent bypasses `pointer-events: none`, as programmatic input does.
       fireEvent.pointerDown(button);
       fireEvent.mouseDown(button);
       fireEvent.keyDown(button, {key: 'x'});

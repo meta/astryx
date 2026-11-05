@@ -365,9 +365,8 @@ function NavItemElement({
       ref={ref as React.Ref<HTMLButtonElement>}
       type="button"
       onClick={onClick}
-      // A disabled item keeps its tab stop, so the browser still sends it
-      // events. It runs no caller handler other than `onFocus` and `onBlur`
-      // (spec:AST-085 FR2), so the caller's `onKeyDown` is withheld too.
+      // A disabled item keeps its tab stop, so the browser still sends it events.
+      // It runs no caller handler except `onFocus` and `onBlur`.
       {...withholdCallerHandlers(rest, !!isDisabled)}
       {...(isDisabled
         ? {
