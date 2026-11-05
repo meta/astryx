@@ -4,10 +4,17 @@
 
 /**
  * @file ListItem.tsx
- * @input Uses React, ReactNode, StyleXStyles, theme tokens, the List row edge
- *   treatment, CheckboxInput, and the marker or task checkbox a
- *   ListMarkerScope sets (Markdown's nested lists and the task items of mixed
- *   lists)
+ * @input Uses React, ReactNode, StyleXStyles, theme tokens and the List row
+ *   edge treatment. It also uses the touch hit area (utils/touchHitArea.ts and
+ *   its layer) and CheckboxInput. It reads the marker or task checkbox a
+ *   ListMarkerScope sets, for Markdown's nested lists and the task items of mixed
+ *   lists. It also reads Item's private exact-marker formatting scope for numbered
+ *   rows. Number markers stay on one line in the List's shared column,
+ *   keeping every sibling's text and nested list on the same start line;
+ *   they end on one line too, right-aligned with tabular figures, and hang
+ *   into the row's inline inset before they widen that column. Markdown's
+ *   outside counters keep the themed column and may paint beyond it, matching
+ *   RichText's native outside markers without a finite width threshold.
  * @output Exports ListItem component, ListItemProps type
  * @position Core implementation; consumed by List, index.ts, tested by List.test.tsx
  *
@@ -22,7 +29,7 @@
  * - /packages/cli/assets/templates/blocks/components/List/ (showcase blocks)
  */
 
-import {use, type ReactNode} from 'react';
+import {use, useMemo, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {
@@ -33,11 +40,16 @@ import {
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {ListContext, type ListMarker} from './ListContext';
-import {CheckboxInput} from '../CheckboxInput';
-import {mergeProps} from '../utils';
-import {Item} from '../Item';
+import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
+import {mergeProps} from '../utils/mergeProps';
+import {Item, servesSwipeActions} from '../Item/Item';
+import {ItemListRowContext} from '../Item/ItemListRowContext';
+import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
 import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
 import {themeProps} from '../utils/themeProps';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useTouchHitArea} from '../utils/touchHitArea';
+import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
 
 // =============================================================================
 // Types
@@ -148,6 +160,14 @@ export interface ListItemProps extends BaseProps<HTMLLIElement> {
 // =============================================================================
 
 const styles = stylex.create({
+  numberColumns: {
+    display: {
+      default: 'flex',
+      '@supports (grid-template-columns: subgrid)': 'grid',
+    },
+    gridTemplateColumns: 'subgrid',
+    gridColumn: '1 / -1',
+  },
   withCounter: {
     counterIncrement: 'astryx-list',
   },
@@ -183,6 +203,21 @@ const styles = stylex.create({
       'max(var(--container-padding-inline-end, 0px), var(--_item-inset-inline))',
     borderRadius: 0,
   },
+  // Under a finger, the row's touch band rises above the rows after it. A
+  // later row is positioned with no z-index, so it would paint and hit-test
+  // over the band. Only inside a List (isInList).
+  bandRaised: {
+    '::after': {
+      zIndex: {default: null, '@media (pointer: coarse)': 1},
+    },
+  },
+  // A swipeable row is a stacking context at rest, since Item translates its
+  // swipe root. So its band's own z-index orders only inside it. Under a
+  // finger the row itself rises above the rows after it, whose boxes its band
+  // reaches into. The list isolates, so the row stays below a sticky header.
+  swipeRaised: {
+    zIndex: {default: null, '@media (pointer: coarse)': 1},
+  },
   withDivider: {
     borderBlockEndWidth: borderVars['--border-width'],
     borderBlockEndStyle: 'solid',
@@ -194,6 +229,15 @@ const styles = stylex.create({
     ':last-child': {
       borderBlockEndWidth: 0,
     },
+    // The touch hit layer's band starts past the divider, the edge of the box
+    // its insets are measured from (utils/touchHitArea.stylex.ts). The width
+    // sits on the layer itself, so content inside the row never inherits it.
+    '::after': {
+      '--_hit-border-bottom': {
+        default: borderVars['--border-width'],
+        ':last-child': '0px',
+      },
+    },
   },
 });
 
@@ -203,6 +247,16 @@ const styles = stylex.create({
 // =============================================================================
 
 const MARKER_DOT_SIZE = 6;
+
+/**
+ * How far a counter wider than its marker reaches toward the row's edge: the
+ * row's whole inline inset, the way a native outside marker hangs into its
+ * list's padding. Up to that width the item's text keeps its usual start; a
+ * wider counter widens the List's shared column instead. It is never
+ * clipped: the inset is inside the row, and the row inside the List's inline
+ * clip. Markdown's outside counters use a separate rule (`gutterHang`).
+ */
+const COUNTER_HANG = 'calc(-1 * var(--_item-inset-inline))';
 
 const markerStyles = stylex.create({
   container: {
@@ -237,27 +291,53 @@ const markerStyles = stylex.create({
   },
   number: {
     alignSelf: 'baseline',
+    // The counter ends where the marker ends, so every period in a list lines
+    // up, as a native outside marker's does. Tabular figures give each digit
+    // the same width down the list.
+    display: 'flex',
+    justifyContent: 'flex-end',
     flexShrink: 0,
     color: colorVars['--color-text-primary'],
     fontSize: typeScaleVars['--text-body-size'],
     lineHeight: typeScaleVars['--text-body-leading'],
-    width: spacingVars['--spacing-4'],
+    fontVariantNumeric: 'tabular-nums',
+    // Short counters retain their inset. A longer counter first reaches into
+    // the row's inline inset (COUNTER_HANG) and only then sizes the List's
+    // shared grid column, so no single number moves its item's text.
+    minWidth: spacingVars['--spacing-4'],
+    width: 'auto',
+    whiteSpace: 'nowrap',
   },
   // A number outside a counter style's range (zero or below, or past 3999
   // in roman) is written in decimal, as CSS counter styles fall back.
   decimal: {
     '::before': {
       content: 'counter(astryx-list) "."',
+      marginInlineStart: COUNTER_HANG,
     },
   },
   lowerAlpha: {
     '::before': {
       content: 'counter(astryx-list, lower-alpha) "."',
+      marginInlineStart: COUNTER_HANG,
     },
   },
   lowerRoman: {
     '::before': {
       content: 'counter(astryx-list, lower-roman) "."',
+      marginInlineStart: COUNTER_HANG,
+    },
+  },
+  // Markdown's non-swipe lists allow outside marker paint. Keep their marker
+  // column at the ordinary themed width, as RichText's native outside markers
+  // do (spec:AST-061 FR11). The counter itself stays intrinsic and unbroken;
+  // flex-end aligns its end even when it overflows toward inline-start. A
+  // larger finite negative margin would only move the parity failure threshold.
+  gutterHang: {
+    width: spacingVars['--spacing-4'],
+    '::before': {
+      marginInlineStart: 0,
+      flexShrink: 0,
     },
   },
 });
@@ -327,6 +407,28 @@ export function ListItem({
   ...restProps
 }: ListItemProps) {
   const ctx = use(ListContext);
+  // A List isolates its rows, so what a row raises stays below a page-level
+  // sticky header. Outside a List nothing bounds a raise, so a row raises
+  // nothing there.
+  const isInList = ctx != null;
+  // Under a finger, the row's hit target grows where its neighbors leave room.
+  const isTouchTarget =
+    (onClick != null || href != null || interactiveRef != null) && !isDisabled;
+  const hitAreaRef = useTouchHitArea(isTouchTarget);
+  const mergedRef = useMergedRefs(ref, hitAreaRef);
+  // A row that Item serves swipe actions on is a stacking context at rest. So
+  // its band's own z-index orders only inside it, and under a finger the row
+  // raises itself. Its root is its `<li>`, never a link.
+  const isRaisedSwipeRow =
+    isInList &&
+    isTouchTarget &&
+    servesSwipeActions({
+      swipeActions: restProps.swipeActions,
+      isDisabled,
+      isDelegate: interactiveRef != null,
+      isLinkRoot: false,
+      role: restProps.role,
+    });
   const density = ctx?.density ?? 'balanced';
   const hasDividers = ctx?.hasDividers ?? false;
   const edge = ctx?.edge ?? 'padded';
@@ -339,39 +441,49 @@ export function ListItem({
   // A task item in a list with markers shows its checkbox instead.
   const task = markerKind == null ? undefined : ctx?.task;
 
-  const marker =
-    task != null ? (
-      <span {...stylex.props(taskMarkerStyles.container)}>
-        <CheckboxInput
-          size="sm"
-          value={task.isChecked}
-          label={task.label}
-          isLabelHidden
-          isReadOnly
-        />
-      </span>
-    ) : markerKind === 'disc' ||
-      markerKind === 'circle' ||
-      markerKind === 'square' ? (
-      <span {...stylex.props(markerStyles.container)}>
+  const hasMarkerGutter = ctx?.hasMarkerGutter === true;
+  const marker = useMemo(
+    () =>
+      task != null ? (
+        <span {...stylex.props(taskMarkerStyles.container)}>
+          <CheckboxInput
+            size="sm"
+            value={task.isChecked}
+            label={task.label}
+            isLabelHidden
+            isReadOnly
+          />
+        </span>
+      ) : markerKind === 'disc' ||
+        markerKind === 'circle' ||
+        markerKind === 'square' ? (
+        <span {...stylex.props(markerStyles.container)}>
+          <span
+            {...stylex.props(
+              markerKind === 'disc'
+                ? markerStyles.dot
+                : markerKind === 'circle'
+                  ? markerStyles.circle
+                  : markerStyles.square,
+            )}
+          />
+        </span>
+      ) : markerKind != null ? (
         <span
           {...stylex.props(
-            markerKind === 'disc'
-              ? markerStyles.dot
-              : markerKind === 'circle'
-                ? markerStyles.circle
-                : markerStyles.square,
+            markerStyles.number,
+            NUMBER_STYLES[markerKind],
+            hasMarkerGutter && markerStyles.gutterHang,
           )}
         />
-      </span>
-    ) : markerKind != null ? (
-      <span {...stylex.props(markerStyles.number, NUMBER_STYLES[markerKind])} />
-    ) : null;
+      ) : null,
+    [task, markerKind, hasMarkerGutter],
+  );
 
-  return (
+  const item = (
     <Item
       as="li"
-      ref={ref}
+      ref={mergedRef}
       marker={marker}
       startContent={startContent}
       label={label}
@@ -388,9 +500,13 @@ export function ListItem({
       density={density}
       xstyle={
         [
+          listStyle === 'decimal' && styles.numberColumns,
           hasMarkers && styles.withCounter,
           hasDividers && styles.withDivider,
           hasDividers && embeddedStyles.noRadius,
+          isTouchTarget && touchHitAreaStyles.layer,
+          isTouchTarget && isInList && styles.bandRaised,
+          isRaisedSwipeRow && styles.swipeRaised,
           edge === 'flush' && styles.edgeFlush,
           edge === 'outset' && styles.edgeOutset,
           edge === 'bleed' && styles.edgeBleed,
@@ -400,6 +516,14 @@ export function ListItem({
       {...mergeProps(themeProps('list-item'), {className, style})}
       {...restProps}
     />
+  );
+  const row = <ItemListRowContext value>{item}</ItemListRowContext>;
+  // Only numbered rows contribute two cells to List's shared counter grid.
+  // Passing the marker identity keeps this request off unrelated Items in slots.
+  return listStyle === 'decimal' ? (
+    <ItemMarkerColumnsContext value={marker}>{row}</ItemMarkerColumnsContext>
+  ) : (
+    row
   );
 }
 

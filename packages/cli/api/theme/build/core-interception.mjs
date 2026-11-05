@@ -246,28 +246,6 @@ export function resolveEntry(require, specifier) {
 }
 
 /**
- * Core's root entry, loaded once, the first time a theme module requires
- * `@astryxdesign/core`. The root loads all of Core and React (thousands of
- * modules), and most themes import only the theme subpath, so nothing loads
- * it before a theme asks (the CommonJS patch for a theme's `.cjs` dependencies
- * wraps an installed root only when the load requires it, too). jiti asks for
- * a virtual module synchronously, so it loads through `require` of an ES
- * module, which the CLI's Node floor supports. An entry that fails to load
- * throws to the theme that imports it. Only a Core with no root entry has no
- * loader, and the theme namespace stands in for its root.
- * @param {string} file - The root entry's file
- * @returns {() => any}
- */
-export function lazyCoreRoot(file) {
-  /** @type {{root: any} | null} */
-  let loaded = null;
-  return () => {
-    loaded ??= {root: createRequire(file)(file)};
-    return loaded.root;
-  };
-}
-
-/**
  * Wrap an installed core module so every `defineTheme()` call records the raw
  * input against the theme it produced.
  *
@@ -283,8 +261,7 @@ export function lazyCoreRoot(file) {
  *
  * @param {any} coreThemeModule - The installed `@astryxdesign/core/theme` namespace.
  * @param {any} [coreRootModule] - The installed `@astryxdesign/core` namespace,
- *   or a function that loads it, called the first time a theme module
- *   requires the root.
+ *   or a function that loads it. A function is called once, on first use.
  * @returns {CoreInterception}
  */
 export function interceptCore(coreThemeModule, coreRootModule) {
@@ -335,30 +312,30 @@ export function interceptCore(coreThemeModule, coreRootModule) {
     };
   };
 
-  /** @type {Record<string, any>} */
   const modules = {
     '@astryxdesign/core/theme': wrapNamespace(coreThemeModule),
   };
-  // The root loads all of Core and React, so it is read only when a theme
-  // module requires it: jiti reads a virtual module when the specifier is
-  // required, not before. Falls back to the theme namespace only when the
-  // root could not be loaded at all; a partial root is better than none, and
-  // a core missing its own root entry is already broken.
   /** @type {any} */
-  let rootNamespace;
+  let wrappedRoot;
   let rootRead = false;
+  // jiti reads a virtual module only when a theme imports its specifier. So
+  // the root, which loads all of Core, loads only for a theme that asks.
   Object.defineProperty(modules, '@astryxdesign/core', {
     enumerable: true,
+    configurable: true,
     get() {
       if (!rootRead) {
-        rootRead = true;
         const root =
           typeof coreRootModule === 'function'
             ? coreRootModule()
             : coreRootModule;
-        rootNamespace = wrapNamespace(root ?? coreThemeModule);
+        // Falls back to the theme namespace only when the root could not be
+        // imported at all; a partial root is better than none, and a core
+        // missing its own root entry is already broken.
+        wrappedRoot = wrapNamespace(root ?? coreThemeModule);
+        rootRead = true;
       }
-      return rootNamespace;
+      return wrappedRoot;
     },
   });
 

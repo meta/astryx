@@ -84,16 +84,12 @@ describe('useTableSortable', () => {
       render(<SortableTable />);
 
       // Sortable columns should have sort buttons
-      expect(
-        screen.getByRole('button', {name: /sort by name/i}),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', {name: /sort by age/i}),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', {name: 'Name'})).toBeInTheDocument();
+      expect(screen.getByRole('button', {name: 'Age'})).toBeInTheDocument();
 
       // Non-sortable column should not have a sort button
       expect(
-        screen.queryByRole('button', {name: /sort by email/i}),
+        screen.queryByRole('button', {name: 'Email'}),
       ).not.toBeInTheDocument();
     });
 
@@ -104,9 +100,9 @@ describe('useTableSortable', () => {
         />,
       );
 
-      const button = screen.getByRole('button', {name: /sort by name/i});
+      const button = screen.getByRole('button', {name: 'Name'});
       expect(button).toBeInTheDocument();
-      expect(button.getAttribute('aria-label')).toContain('sorted ascending');
+      expect(button.closest('th')).toHaveAttribute('aria-sort', 'ascending');
     });
 
     it('renders descending icon when sort state is descending', () => {
@@ -116,15 +112,16 @@ describe('useTableSortable', () => {
         />,
       );
 
-      const button = screen.getByRole('button', {name: /sort by name/i});
-      expect(button.getAttribute('aria-label')).toContain('sorted descending');
+      const button = screen.getByRole('button', {name: 'Name'});
+      expect(button.closest('th')).toHaveAttribute('aria-sort', 'descending');
     });
 
     it('renders unsorted icon when column is sortable but not in sort state', () => {
       render(<SortableTable />);
 
-      const button = screen.getByRole('button', {name: /sort by name/i});
-      expect(button.getAttribute('aria-label')).toBe('Sort by Name');
+      const button = screen.getByRole('button', {name: 'Name'});
+      expect(button.closest('th')).not.toHaveAttribute('aria-sort');
+      expect(button).not.toHaveAttribute('aria-describedby');
     });
 
     it('renders no sort UI for columns without sortable config', () => {
@@ -132,14 +129,14 @@ describe('useTableSortable', () => {
 
       // Email column is not sortable
       expect(
-        screen.queryByRole('button', {name: /sort by email/i}),
+        screen.queryByRole('button', {name: 'Email'}),
       ).not.toBeInTheDocument();
     });
 
     it('renders sort button wrapping header content', () => {
       render(<SortableTable />);
 
-      const button = screen.getByRole('button', {name: /sort by name/i});
+      const button = screen.getByRole('button', {name: 'Name'});
       expect(button.tagName).toBe('BUTTON');
       expect(button).toHaveAttribute('type', 'button');
       expect(button.textContent).toContain('Name');
@@ -156,8 +153,8 @@ describe('useTableSortable', () => {
         />,
       );
 
-      const nameButton = screen.getByRole('button', {name: /sort by name/i});
-      const ageButton = screen.getByRole('button', {name: /sort by age/i});
+      const nameButton = screen.getByRole('button', {name: 'Name'});
+      const ageButton = screen.getByRole('button', {name: 'Age'});
 
       // Rank badges should be present
       expect(nameButton.textContent).toContain('1');
@@ -171,19 +168,17 @@ describe('useTableSortable', () => {
         />,
       );
 
-      const nameButton = screen.getByRole('button', {name: /sort by name/i});
-      // Should not contain a rank badge — just "Name" text + icon
-      expect(nameButton.getAttribute('aria-label')).toBe(
-        'Sort by Name, sorted ascending',
-      );
+      const nameButton = screen.getByRole('button', {name: 'Name'});
+      // Single sort has no priority: the name is the column text, and no
+      // description is attached.
+      expect(nameButton).toHaveAccessibleName('Name');
+      expect(nameButton).not.toHaveAttribute('aria-describedby');
     });
 
     it('renders sort indicators when data is empty', () => {
       render(<SortableTable data={[]} />);
 
-      expect(
-        screen.getByRole('button', {name: /sort by name/i}),
-      ).toBeInTheDocument();
+      expect(screen.getByRole('button', {name: 'Name'})).toBeInTheDocument();
     });
 
     it('uses custom sortKey from column config', () => {
@@ -198,10 +193,8 @@ describe('useTableSortable', () => {
         />,
       );
 
-      const button = screen.getByRole('button', {
-        name: /sort by full name/i,
-      });
-      expect(button.getAttribute('aria-label')).toContain('sorted ascending');
+      const button = screen.getByRole('button', {name: 'Full Name'});
+      expect(button.closest('th')).toHaveAttribute('aria-sort', 'ascending');
     });
 
     it('uses column key as default sortKey', () => {
@@ -211,8 +204,8 @@ describe('useTableSortable', () => {
         />,
       );
 
-      const button = screen.getByRole('button', {name: /sort by name/i});
-      expect(button.getAttribute('aria-label')).toContain('sorted ascending');
+      const button = screen.getByRole('button', {name: 'Name'});
+      expect(button.closest('th')).toHaveAttribute('aria-sort', 'ascending');
     });
   });
 
@@ -225,9 +218,7 @@ describe('useTableSortable', () => {
       const onSortChange = vi.fn();
       render(<SortableTable onSortChange={onSortChange} />);
 
-      await userEvent.click(
-        screen.getByRole('button', {name: /sort by name/i}),
-      );
+      await userEvent.click(screen.getByRole('button', {name: 'Name'}));
 
       expect(onSortChange).toHaveBeenCalledWith([
         {sortKey: 'name', direction: 'ascending'},
@@ -243,9 +234,7 @@ describe('useTableSortable', () => {
         />,
       );
 
-      await userEvent.click(
-        screen.getByRole('button', {name: /sort by name/i}),
-      );
+      await userEvent.click(screen.getByRole('button', {name: 'Name'}));
 
       expect(onSortChange).toHaveBeenCalledWith([
         {sortKey: 'name', direction: 'descending'},
@@ -261,9 +250,7 @@ describe('useTableSortable', () => {
         />,
       );
 
-      await userEvent.click(
-        screen.getByRole('button', {name: /sort by name/i}),
-      );
+      await userEvent.click(screen.getByRole('button', {name: 'Name'}));
 
       expect(onSortChange).toHaveBeenCalledWith([
         {sortKey: 'name', direction: 'ascending'},
@@ -280,9 +267,7 @@ describe('useTableSortable', () => {
         />,
       );
 
-      await userEvent.click(
-        screen.getByRole('button', {name: /sort by name/i}),
-      );
+      await userEvent.click(screen.getByRole('button', {name: 'Name'}));
 
       expect(onSortChange).toHaveBeenCalledWith([]);
     });
@@ -296,7 +281,7 @@ describe('useTableSortable', () => {
         />,
       );
 
-      await userEvent.click(screen.getByRole('button', {name: /sort by age/i}));
+      await userEvent.click(screen.getByRole('button', {name: 'Age'}));
 
       expect(onSortChange).toHaveBeenCalledWith([
         {sortKey: 'age', direction: 'ascending'},
@@ -315,7 +300,7 @@ describe('useTableSortable', () => {
       );
 
       await user.keyboard('{Shift>}');
-      await user.click(screen.getByRole('button', {name: /sort by age/i}));
+      await user.click(screen.getByRole('button', {name: 'Age'}));
       await user.keyboard('{/Shift}');
 
       expect(onSortChange).toHaveBeenCalledWith([
@@ -339,7 +324,7 @@ describe('useTableSortable', () => {
       );
 
       await user.keyboard('{Shift>}');
-      await user.click(screen.getByRole('button', {name: /sort by age/i}));
+      await user.click(screen.getByRole('button', {name: 'Age'}));
       await user.keyboard('{/Shift}');
 
       expect(onSortChange).toHaveBeenCalledWith([
@@ -364,7 +349,7 @@ describe('useTableSortable', () => {
       );
 
       await user.keyboard('{Shift>}');
-      await user.click(screen.getByRole('button', {name: /sort by age/i}));
+      await user.click(screen.getByRole('button', {name: 'Age'}));
       await user.keyboard('{/Shift}');
 
       expect(onSortChange).toHaveBeenCalledWith([
@@ -385,7 +370,7 @@ describe('useTableSortable', () => {
         />,
       );
 
-      await userEvent.click(screen.getByRole('button', {name: /sort by age/i}));
+      await userEvent.click(screen.getByRole('button', {name: 'Age'}));
 
       expect(onSortChange).toHaveBeenCalledWith([
         {sortKey: 'age', direction: 'ascending'},
@@ -398,7 +383,7 @@ describe('useTableSortable', () => {
 
       // Email column header text should exist but not as a button
       expect(
-        screen.queryByRole('button', {name: /sort by email/i}),
+        screen.queryByRole('button', {name: 'Email'}),
       ).not.toBeInTheDocument();
       expect(onSortChange).not.toHaveBeenCalled();
     });
@@ -445,25 +430,24 @@ describe('useTableSortable', () => {
       expect(emailHeader).not.toHaveAttribute('aria-sort');
     });
 
-    it('sort button has accessible aria-label', () => {
+    it('names the sort button by its column text and keeps direction on the header (AST-020 FR15)', () => {
       render(
         <SortableTable
           initialSort={[{sortKey: 'name', direction: 'ascending'}]}
         />,
       );
 
-      expect(
-        screen.getByRole('button', {
-          name: 'Sort by Name, sorted ascending',
-        }),
-      ).toBeInTheDocument();
+      const button = screen.getByRole('button', {name: 'Name'});
+      expect(button).not.toHaveAttribute('aria-label');
+      const header = screen.getByRole('columnheader', {name: 'Name'});
+      expect(header).toHaveAttribute('aria-sort', 'ascending');
     });
 
     it('sort button is keyboard accessible (Enter)', async () => {
       const onSortChange = vi.fn();
       render(<SortableTable onSortChange={onSortChange} />);
 
-      const button = screen.getByRole('button', {name: /sort by name/i});
+      const button = screen.getByRole('button', {name: 'Name'});
       button.focus();
       await userEvent.keyboard('{Enter}');
 
@@ -476,7 +460,7 @@ describe('useTableSortable', () => {
       const onSortChange = vi.fn();
       render(<SortableTable onSortChange={onSortChange} />);
 
-      const button = screen.getByRole('button', {name: /sort by name/i});
+      const button = screen.getByRole('button', {name: 'Name'});
       button.focus();
       await userEvent.keyboard(' ');
 
@@ -485,7 +469,7 @@ describe('useTableSortable', () => {
       ]);
     });
 
-    it('multi-sort aria-label includes priority', () => {
+    it('describes each sort button with its priority while several columns sort', () => {
       render(
         <SortableTable
           isMultiSortEnabled
@@ -497,15 +481,11 @@ describe('useTableSortable', () => {
       );
 
       expect(
-        screen.getByRole('button', {
-          name: 'Sort by Name, sorted ascending, priority 1 of 2',
-        }),
-      ).toBeInTheDocument();
+        screen.getByRole('button', {name: 'Name'}),
+      ).toHaveAccessibleDescription('Priority 1 of 2');
       expect(
-        screen.getByRole('button', {
-          name: 'Sort by Age, sorted descending, priority 2 of 2',
-        }),
-      ).toBeInTheDocument();
+        screen.getByRole('button', {name: 'Age'}),
+      ).toHaveAccessibleDescription('Priority 2 of 2');
     });
   });
 
@@ -528,8 +508,8 @@ describe('useTableSortable', () => {
       render(<SortableTable initialSort={[]} />);
 
       // All sortable columns should show unsorted state
-      const nameButton = screen.getByRole('button', {name: 'Sort by Name'});
-      const ageButton = screen.getByRole('button', {name: 'Sort by Age'});
+      const nameButton = screen.getByRole('button', {name: 'Name'});
+      const ageButton = screen.getByRole('button', {name: 'Age'});
       expect(nameButton).toBeInTheDocument();
       expect(ageButton).toBeInTheDocument();
     });
@@ -574,7 +554,8 @@ describe('useTableSortable', () => {
 
       render(<SortableTable columns={columns} />);
 
-      const button = screen.getByRole('button', {name: /sort by name/i});
+      // A node header names the button by its own text, not the column key.
+      const button = screen.getByRole('button', {name: 'Custom Name'});
       expect(button).toBeInTheDocument();
       expect(screen.getByTestId('custom-header')).toBeInTheDocument();
     });
@@ -593,13 +574,15 @@ describe('useTableSortable', () => {
       );
 
       // Both columns should show their sort state
-      const nameButton = screen.getByRole('button', {name: /sort by name/i});
-      const ageButton = screen.getByRole('button', {name: /sort by age/i});
-      expect(nameButton.getAttribute('aria-label')).toContain(
-        'sorted ascending',
+      const nameButton = screen.getByRole('button', {name: 'Name'});
+      const ageButton = screen.getByRole('button', {name: 'Age'});
+      expect(nameButton.closest('th')).toHaveAttribute(
+        'aria-sort',
+        'ascending',
       );
-      expect(ageButton.getAttribute('aria-label')).toContain(
-        'sorted descending',
+      expect(ageButton.closest('th')).toHaveAttribute(
+        'aria-sort',
+        'descending',
       );
     });
   });
@@ -699,39 +682,18 @@ describe('useTableSortable — context menu actions', () => {
 });
 
 // =============================================================================
-// i18n (header-button aria-labels route through the catalog)
+// i18n (the multi-sort priority description routes through the catalog)
 // =============================================================================
 
 describe('useTableSortable — i18n', () => {
-  it('localizes the unsorted sort-by aria-label via @astryx.table.sort.sortBy', () => {
-    render(
-      <InternationalizationProvider
-        locale="fr"
-        overrides={{
-          fr: {'@astryx.table.sort.sortBy': 'Trier par {label}'},
-        }}>
-        <SortableTable />
-      </InternationalizationProvider>,
-    );
-
-    expect(
-      screen.getByRole('button', {name: 'Trier par Name'}),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', {name: 'Trier par Age'}),
-    ).toBeInTheDocument();
-  });
-
-  it('localizes the multi-sort priority aria-label with ICU number args', () => {
+  it('localizes the multi-sort priority description with ICU number args', () => {
     render(
       <InternationalizationProvider
         locale="fr"
         overrides={{
           fr: {
-            '@astryx.table.sort.sortedByWithPriority':
-              'Trier par {label}, tri {direction}, priorité {rank, number} sur {total, number}',
-            '@astryx.table.sort.direction.ascending': 'croissant',
-            '@astryx.table.sort.direction.descending': 'décroissant',
+            '@astryx.table.sort.priority':
+              'Priorité {rank, number} sur {total, number}',
           },
         }}>
         <SortableTable
@@ -744,43 +706,12 @@ describe('useTableSortable — i18n', () => {
       </InternationalizationProvider>,
     );
 
-    // The overridden direction words deliberately differ from the raw enum
-    // values ('ascending'/'descending'), so an implementation interpolating
-    // the enum without translating it cannot pass — for either direction.
     expect(
-      screen.getByRole('button', {
-        name: 'Trier par Name, tri croissant, priorité 1 sur 2',
-      }),
-    ).toBeInTheDocument();
+      screen.getByRole('button', {name: 'Name'}),
+    ).toHaveAccessibleDescription('Priorité 1 sur 2');
     expect(
-      screen.getByRole('button', {
-        name: 'Trier par Age, tri décroissant, priorité 2 sur 2',
-      }),
-    ).toBeInTheDocument();
-  });
-
-  it('localizes the sorted aria-label and direction word via their own keys', () => {
-    render(
-      <InternationalizationProvider
-        locale="fr"
-        overrides={{
-          fr: {
-            '@astryx.table.sort.sortedBy': 'Trié par {label}, {direction}',
-            '@astryx.table.sort.direction.ascending': 'croissant',
-          },
-        }}>
-        <SortableTable
-          initialSort={[{sortKey: 'name', direction: 'ascending'}]}
-        />
-      </InternationalizationProvider>,
-    );
-
-    // Both the composed template and the direction word resolve through
-    // their own catalog keys; 'croissant' differs from the raw enum value,
-    // so neither a hardcoded English frame nor raw-enum interpolation passes.
-    expect(
-      screen.getByRole('button', {name: 'Trié par Name, croissant'}),
-    ).toBeInTheDocument();
+      screen.getByRole('button', {name: 'Age'}),
+    ).toHaveAccessibleDescription('Priorité 2 sur 2');
   });
 });
 
@@ -805,8 +736,8 @@ describe('useTableSortable — header alignment', () => {
       />,
     );
 
-    expect(buttonFor(/sort by age/i).className).not.toBe(
-      buttonFor(/sort by name/i).className,
+    expect(buttonFor(/^age$/i).className).not.toBe(
+      buttonFor(/^name$/i).className,
     );
   });
 
@@ -820,8 +751,8 @@ describe('useTableSortable — header alignment', () => {
       />,
     );
 
-    expect(buttonFor(/sort by age/i).className).not.toBe(
-      buttonFor(/sort by name/i).className,
+    expect(buttonFor(/^age$/i).className).not.toBe(
+      buttonFor(/^name$/i).className,
     );
   });
 
@@ -835,8 +766,8 @@ describe('useTableSortable — header alignment', () => {
       />,
     );
 
-    expect(buttonFor(/sort by name/i).className).not.toBe(
-      buttonFor(/sort by age/i).className,
+    expect(buttonFor(/^name$/i).className).not.toBe(
+      buttonFor(/^age$/i).className,
     );
   });
 
@@ -850,8 +781,6 @@ describe('useTableSortable — header alignment', () => {
       />,
     );
 
-    expect(buttonFor(/sort by age/i).className).toBe(
-      buttonFor(/sort by name/i).className,
-    );
+    expect(buttonFor(/^age$/i).className).toBe(buttonFor(/^name$/i).className);
   });
 });

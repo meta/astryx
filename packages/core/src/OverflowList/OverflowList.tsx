@@ -27,6 +27,7 @@ import {
   useState,
 } from 'react';
 import type {BaseProps} from '../BaseProps';
+import {isRenderable} from '../utils/isRenderable';
 import type {SpacingStep} from '../utils/types';
 import * as stylex from '@stylexjs/stylex';
 import {mergeProps} from '../utils';
@@ -349,6 +350,8 @@ export function OverflowList({
   const overflowItemsRef = useRef(overflowItems);
   overflowItemsRef.current = overflowItems;
 
+  // Reports the measured overflow to `onOverflowChange`. A ResizeObserver
+  // drives the measurement, so no event handler can report it.
   useIsomorphicLayoutEffect(() => {
     if (
       !onOverflowChange ||
@@ -370,7 +373,7 @@ export function OverflowList({
         inert
         {...stylex.props(styles.measureContainer, gapStyles[gap])}>
         {childArray}
-        {measureIndicator != null && (
+        {isRenderable(measureIndicator) && (
           <div {...stylex.props(styles.measureIndicator)}>
             {measureIndicator}
           </div>

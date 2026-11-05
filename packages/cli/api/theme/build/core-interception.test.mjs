@@ -6,11 +6,10 @@
  *   evaluating modules through the interception's virtual modules
  * @output The root namespace is read only when a theme module requires the
  *   root, once, with its own exports and `defineTheme` wrapped; a Core with
- *   no root entry gives the theme namespace, and a root entry that fails to
- *   load throws its own error; `patchCommonJs` reads only an absent Core
- *   entry as absent and throws any other error; jiti reads a virtual
- *   module only when a module requires it, so a theme that imports only the
- *   theme subpath never loads the root
+ *   no root entry gives the theme namespace; `patchCommonJs` reads only an
+ *   absent Core entry as absent and throws any other error; jiti reads a
+ *   virtual module only when a module requires it, so a theme that imports
+ *   only the theme subpath never loads the root
  * @position Unit test of packages/cli/api/theme/build/core-interception.mjs
  */
 
@@ -19,7 +18,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {createJiti} from 'jiti';
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {interceptCore, lazyCoreRoot} from './core-interception.mjs';
+import {interceptCore} from './core-interception.mjs';
 
 const themeNamespace = () => ({
   defineTheme: input => ({...input, defined: true}),
@@ -114,26 +113,6 @@ const CORE_PACKAGE = JSON.stringify({
 });
 
 describe("Core's entries", () => {
-  it('loads a root entry once, the first time it is asked for', () => {
-    const {core} = project({
-      'package.json': CORE_PACKAGE,
-      'index.cjs': "module.exports = {Button: 'root-only'};",
-    });
-    const loadRoot = lazyCoreRoot(path.join(core, 'index.cjs'));
-    expect(loadRoot().Button).toBe('root-only');
-    expect(loadRoot()).toBe(loadRoot());
-  });
-
-  it("throws a root entry's own error when it fails to load, rather than read it as no root", () => {
-    const {core} = project({
-      'package.json': CORE_PACKAGE,
-      'index.cjs': "throw new Error('the root entry failed to load');",
-    });
-    expect(lazyCoreRoot(path.join(core, 'index.cjs'))).toThrow(
-      /the root entry failed to load/,
-    );
-  });
-
   it('patchCommonJs reads an entry that is not there as absent', () => {
     const {theme} = project({
       'package.json': JSON.stringify({

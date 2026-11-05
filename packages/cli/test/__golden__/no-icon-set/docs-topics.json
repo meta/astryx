@@ -113,10 +113,11 @@
         "which-features-set-the-floor",
         "which-components-are-affected",
         "what-astryx-guarantees",
+        "the-on-screen-keyboard",
         "supporting-older-browsers",
         "how-these-tiers-move-over-time"
       ],
-      "skeleton": "98bdd1d0e1db35f5ad03896962be51d2f21679c3f3cd25cf724045778a959b5e",
+      "skeleton": "463a740e90118dea23181c46a2cca01695d9295027863282835518f0bd655bdb",
       "mentions": []
     },
     "color": {
@@ -152,7 +153,7 @@
         "example-apps",
         "explore-the-cli"
       ],
-      "skeleton": "6564c786e0e708b5ffb9a1811db06328dc9eb1f833c9722f7a4c417c46cc6eee",
+      "skeleton": "3cd256cfa2bad3dc6e87eb50075aef0d8afb437a7be74d4e5d4aebecf6948d0b",
       "mentions": []
     },
     "icons": {
@@ -199,9 +200,10 @@
         "movement-principles",
         "respecting-user-preferences",
         "usage",
+        "theme-motion",
         "best-practices"
       ],
-      "skeleton": "e648d618f9141bbd7f15bf970ba9e0d41b59ff9ae89e0cbbb2042e98bd5f0109",
+      "skeleton": "fd00e4ddb07bfdb6b20ba2d257fe04877d634ce3906fa2fae2a0c21da4161e2f",
       "mentions": []
     },
     "principles": {

@@ -12,13 +12,13 @@ An open source design system that's fully customizable and built for how we buil
 
 [![npm version](https://img.shields.io/npm/v/@astryxdesign/core?label=npm&color=cb3837&logo=npm)](https://www.npmjs.com/package/@astryxdesign/core)
 [![license MIT](https://img.shields.io/npm/l/@astryxdesign/core?color=blue)](LICENSE)
-[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/facebook/astryx/wiki/Contributing)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/meta/astryx/wiki/Contributing)
 
 [![Docs](https://img.shields.io/badge/Docs-astryx.atmeta.com-6741d9?logo=readthedocs&logoColor=white)](https://astryx.atmeta.com)
 [![Storybook](https://img.shields.io/badge/Storybook-live-ff4785?logo=storybook&logoColor=white)](https://astryx.atmeta.com/storybook/)
 [![Sandbox](https://img.shields.io/badge/Sandbox-playground-A9792B)](https://astryx.atmeta.com/sandbox/)
 
-**[Docs](https://astryx.atmeta.com)** · **[Storybook](https://astryx.atmeta.com/storybook/)** · **[Sandbox](https://astryx.atmeta.com/sandbox/)** · **[Contributing](https://github.com/facebook/astryx/wiki/Contributing)** · **[Discord](https://discord.com/invite/XnsUcFykEP)**
+**[Docs](https://astryx.atmeta.com)** · **[Storybook](https://astryx.atmeta.com/storybook/)** · **[Sandbox](https://astryx.atmeta.com/sandbox/)** · **[Contributing](https://github.com/meta/astryx/wiki/Contributing)** · **[Discord](https://discord.com/invite/XnsUcFykEP)**
 
 </div>
 
@@ -125,12 +125,12 @@ Questions, or want a hand with a PR? Come find us in
 **[Discord](https://discord.com/invite/XnsUcFykEP)**.
 
 Our conventions and review rubrics live in the
-[Contributing wiki](https://github.com/facebook/astryx/wiki/Contributing) —
-including [API Conventions](https://github.com/facebook/astryx/wiki/API-Conventions),
-[Design Conventions](https://github.com/facebook/astryx/wiki/Design-Conventions),
-the [Component Lifecycle](https://github.com/facebook/astryx/wiki/Component-Lifecycle),
-the [Contributing Templates](https://github.com/facebook/astryx/wiki/Contributing-Templates),
-and the [Blog Review Rubric](https://github.com/facebook/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria). Read the relevant rubric before opening a PR.
+[Contributing wiki](https://github.com/meta/astryx/wiki/Contributing) —
+including [API Conventions](https://github.com/meta/astryx/wiki/API-Conventions),
+[Design Conventions](https://github.com/meta/astryx/wiki/Design-Conventions),
+the [Component Lifecycle](https://github.com/meta/astryx/wiki/Component-Lifecycle),
+the [Contributing Templates](https://github.com/meta/astryx/wiki/Contributing-Templates),
+and the [Blog Review Rubric](https://github.com/meta/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria). Read the relevant rubric before opening a PR.
 
 Quick start for contributors: this repo uses **Node 22+ on an active LTS line**
 and **pnpm 11**. Install pnpm directly, or enable

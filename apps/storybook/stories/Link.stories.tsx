@@ -135,6 +135,70 @@ export const InlineWithText: Story = {
   ),
 };
 
+/**
+ * `maxLines={1}` inside a fixed-width line: the link, as an anchor or as a
+ * button, stops at the line and draws an ellipsis.
+ */
+export const TruncatedInConstrainedLine: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <div style={{display: 'grid', gap: 12, width: 220}} data-truncation-host="">
+      {(['anchor', 'button'] as const).map(form => (
+        <p
+          key={form}
+          data-truncation-line={form}
+          style={{
+            margin: 0,
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            textOverflow: 'ellipsis',
+          }}>
+          <Link
+            href={form === 'anchor' ? '/meetings/weekly' : undefined}
+            onClick={form === 'button' ? () => {} : undefined}
+            maxLines={1}>
+            Weekly design review with the product and research teams
+          </Link>
+        </p>
+      ))}
+    </div>
+  ),
+};
+
+/**
+ * An anchor Link and a button Link whose text wraps, in a start-aligned
+ * line, a right-to-left line and a centred line: each form lines up its
+ * wrapped lines the same way.
+ */
+export const WrappedLines: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <div style={{display: 'grid', gap: 16, width: 180}}>
+      {(
+        [
+          ['start', 'ltr', undefined],
+          ['rtl', 'rtl', undefined],
+          ['center', 'ltr', 'center'],
+        ] as const
+      ).map(([alignment, dir, textAlign]) =>
+        (['anchor', 'button'] as const).map(form => (
+          <p
+            key={`${alignment}-${form}`}
+            dir={dir}
+            data-wrapped-line={`${alignment}-${form}`}
+            style={{margin: 0, textAlign}}>
+            <Link
+              href={form === 'anchor' ? '/invitations/phone' : undefined}
+              onClick={form === 'button' ? () => {} : undefined}>
+              Send the phone interview invitation now
+            </Link>
+          </p>
+        )),
+      )}
+    </div>
+  ),
+};
+
 export const AllVariants: Story = {
   render: () => (
     <div

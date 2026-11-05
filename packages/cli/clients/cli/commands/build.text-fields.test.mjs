@@ -43,6 +43,21 @@ describe('build kit text fields mirror the JSON keys', () => {
     for (const field of fields) expect(keys).toContain(field);
   }, SLOW);
 
+  it("prints a deprecated component's `deprecated` field, as search does", async () => {
+    const idea = 'step by step wizard in a bottom sheet';
+    const json = await runCli(['build', idea, '--json', '--verbose'], REPO);
+    expect(json.status).toBe(0);
+    const {domain} = JSON.parse(json.stdout).data;
+    const deprecated = domain.find(entry => entry.deprecated);
+    expect(deprecated, 'the idea reaches a deprecated component').toBeDefined();
+    const line = `deprecated:  use ${deprecated.deprecated.replacement}: `;
+    for (const args of [['build', idea, '--verbose'], ['build', idea]]) {
+      const human = await runCli(args, REPO);
+      expect(human.status).toBe(0);
+      expect(human.stdout, args.join(' ')).toContain(line);
+    }
+  }, SLOW);
+
   it('leads with the start, then the alternatives, blocks and components', async () => {
     const human = await runCli(['build', 'analytics dashboard'], REPO);
     expect(human.status).toBe(0);

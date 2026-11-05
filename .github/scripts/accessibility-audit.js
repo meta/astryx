@@ -13,8 +13,9 @@
  *   --fail-on-new (exit 1 when violations not present in the baseline exist)
  *   --update-baseline (rewrite the baseline file from this run's report)
  * @output JSON report with accessibility violations; with --baseline, a gate
- *   summary (new / baselined / resolved) on stdout and a non-zero exit code
- *   when --fail-on-new finds regressions. Diff logic lives in
+ *   summary (new / baselined / resolved) on stdout, a warning annotation on
+ *   GitHub Actions when baseline entries no longer occur, and a non-zero exit
+ *   code when --fail-on-new finds regressions. Diff logic lives in
  *   lib/a11y-baseline.js. Pages are scanned with animations held at their end
  *   state.
  * @position Blocking PR accessibility audit; scoped stories share canonical
@@ -35,9 +36,11 @@ const {
   buildBaseline,
   diffAgainstBaseline,
   formatDiffSummary,
+  formatResolvedWarning,
   storyKey,
 } = require('./lib/a11y-baseline');
 const {waitForStoryReadiness} = require('./lib/a11y-story-readiness');
+const {routeRemoteImages} = require('./lib/offline-media');
 const {
   mergeA11yShards,
   parseShard,
@@ -71,7 +74,7 @@ const requestedStories = (storiesArg || '').split(',').filter(Boolean);
 // --components present but EMPTY means the caller derived an explicit empty
 // audit set (pr-a11y on a PR whose core/src changes map to no component —
 // e.g. a shared test file). Audit nothing and pass. Only an ABSENT flag
-// means "all stories" (the a11y-weekly contract).
+// means "all stories" (the full release-check contract).
 const emptyComponentSet = componentsArg !== null && components.length === 0;
 if (storiesArg !== null && requestedStories.length === 0) {
   throw new Error('--stories requires at least one story id');
@@ -385,24 +388,42 @@ async function runAccessibilityAudit() {
           reducedMotion: 'reduce',
         })
       : null;
+    // Animations are frozen from the page's first script on, however far the
+    // document has parsed: an adopted stylesheet needs no <head>.
+    // A story's remote photos (picsum.photos and the like) are answered with
+    // a local image, so no scan depends on a remote image host. The audit
+    // reads the same DOM: the image elements stay, only their bytes are local.
+    if (context) await routeRemoteImages(context, origin);
+    if (context) {
+      await context.addInitScript(css => {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(css);
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+      }, FREEZE_CSS);
+    }
 
     // Scan one story on a fresh page; returns its axe violations.
     const scanStory = async (component, story) => {
       const page = await context.newPage();
       try {
         const url = `${origin}/iframe.html?id=${story.id}&viewMode=story`;
-        // Higher timeout to accommodate axe-core's heavier DOM analysis
+        // The bound covers only the server's answer. Loading and rendering
+        // the story is CPU-bound, so the readiness gate waits for the outcome
+        // the page and Storybook report instead, with a per-story backstop
+        // that names a story that never renders (lib/a11y-story-readiness.js).
         await page.goto(url, {
-          waitUntil: 'domcontentloaded',
+          waitUntil: 'commit',
           timeout: 15000,
         });
-        await page.addStyleTag({ content: FREEZE_CSS }).catch(() => {});
         await waitForStoryReadiness(
           () =>
             page.evaluate(
               ({expectedOrigin, storyId}) => {
                 const currentUrl = new URL(window.location.href);
                 const root = document.querySelector('#storybook-root');
+                const preview = window.__STORYBOOK_PREVIEW__;
+                // Absent until the document has parsed its <body>.
+                const classes = document.body?.classList;
                 return {
                   url: currentUrl.href,
                   urlMatches:
@@ -410,19 +431,24 @@ async function runAccessibilityAudit() {
                     currentUrl.pathname === '/iframe.html' &&
                     currentUrl.searchParams.get('id') === storyId,
                   errorVisible:
-                    document.body.classList.contains('sb-show-errordisplay') ||
-                    document.body.classList.contains('sb-show-nopreview'),
-                  mainVisible:
-                    document.body.classList.contains('sb-show-main'),
+                    classes?.contains('sb-show-errordisplay') === true ||
+                    classes?.contains('sb-show-nopreview') === true,
+                  mainVisible: classes?.contains('sb-show-main') === true,
                   hasContent:
                     root != null &&
                     (root.childElementCount > 0 ||
                       (root.textContent ?? '').trim().length > 0),
+                  pageLoaded: document.readyState === 'complete',
+                  previewStarted: preview != null,
+                  renderPhase:
+                    preview?.selectionStore?.selection?.storyId === storyId
+                      ? (preview.currentRender?.phase ?? null)
+                      : null,
                 };
               },
               {expectedOrigin: origin, storyId: story.id},
             ),
-          {timeoutMs: 5000, pollMs: 50},
+          {storyId: story.id, pollMs: 50},
         );
         if (readySelector != null) {
           await page.waitForSelector(readySelector, {
@@ -665,6 +691,10 @@ function applyBaselineGate(report) {
   const baseline = loadBaselineFile(baselineFile);
   const diff = diffAgainstBaseline(report, baseline);
   console.log(formatDiffSummary(diff, { baselinePath: baselineFile }));
+  const resolvedWarning = formatResolvedWarning(diff, { baselinePath: baselineFile });
+  if (resolvedWarning && process.env.GITHUB_ACTIONS === 'true') {
+    console.log(resolvedWarning);
+  }
 
   if (diff.newViolations.length > 0 && failOnNew) {
     console.error(

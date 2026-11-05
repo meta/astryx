@@ -9,21 +9,49 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import {describe, expect, it} from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'vitest';
 
 import {
   auditArgs,
   auditedComponents,
   auditPlan,
+  CHANGED_SPEC_LIMIT,
+  changedOnly,
   changedSinceMergeBase,
+  DEFAULT_CHECK_BUDGET_MS,
+  fileSeconds,
   kebab,
+  ownedSpecs,
+  planDefaultCheck,
+  projectedMs,
+  RECORDED_TIME_MARGIN,
+  STARTUP_MS,
+  summaryMarkdown,
   planFor,
   parseRouting,
   IGNORED_RECORD_SEGMENTS,
   isKnowledgeRecord,
   selectSpecs,
   specOwners,
+  withinBudget,
 } from './a11y-pr-contracts.mjs';
+import {
+  createRepository,
+  importCommits,
+} from '../../scripts/lib/git-fixture.mjs';
+import {
+  A11Y_SPEC_GLOBS,
+  WEBKIT_A11Y_SPEC_GLOBS,
+  isA11ySpecFile,
+} from './lib/a11y-spec-files.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 
@@ -44,6 +72,452 @@ const pr = (specs, overrides = {}) =>
 
 const BINDING =
   'packages/core/src/Chat/__tests__/ChatSendButton.a11y.chromium.spec.ts';
+
+// The default check first runs the browser specs a pull request adds or
+// modifies.
+describe('changedOnly (the default check runs changed specs)', () => {
+  const NEW_SPEC =
+    'packages/core/src/Radio/__tests__/RadioKeyboard.a11y.chromium.spec.ts';
+  const ALWAYS =
+    'packages/core/src/__tests__/DisabledFocus.a11y.chromium.spec.ts';
+  const RELEASE =
+    'packages/core/src/Table/__tests__/TableFull.a11y.chromium.spec.ts';
+  const AUDIT =
+    'packages/core/src/Drawer/__tests__/DrawerAudit.a11y.chromium.spec.ts';
+  const specs = [
+    spec(NEW_SPEC),
+    spec(ALWAYS, ['// @pr-a11y always']),
+    spec(RELEASE, ['// @pr-a11y release-only']),
+    spec(AUDIT, ['// @pr-a11y audit Drawer']),
+    spec(BINDING),
+  ];
+  const run = changed =>
+    changedOnly(
+      selectSpecs({
+        specs,
+        isPullRequest: true,
+        changedPaths: changed,
+        components: [],
+        title: '',
+      }),
+      changed,
+    );
+
+  it('selects a spec the pull request adds, which no label-free run reached before', () => {
+    expect(run([NEW_SPEC])).toEqual([{file: NEW_SPEC, reason: 'spec changed'}]);
+  });
+
+  it('runs a changed always-spec too, but never an unchanged one', () => {
+    expect(run([NEW_SPEC]).map(({file}) => file)).not.toContain(ALWAYS);
+    expect(run([ALWAYS])).toEqual([{file: ALWAYS, reason: 'spec changed'}]);
+  });
+
+  it('runs a changed release-only spec on its own pull request', () => {
+    expect(run([RELEASE])).toEqual([{file: RELEASE, reason: 'spec changed'}]);
+  });
+
+  it('stops the default check at eight minutes, inside the job budget', () => {
+    expect(CHANGED_SPEC_LIMIT).toBe(4);
+    expect(DEFAULT_CHECK_BUDGET_MS).toBe(8 * 60 * 1000);
+    const runner = fs.readFileSync(
+      path.join(root, '.github/scripts/a11y-pr-contracts.mjs'),
+      'utf8',
+    );
+    // Only the default check carries the global timeout.
+    expect(runner).toMatch(
+      /changedOnlyFile != null\s*\?\s*\['--global-timeout', String\(DEFAULT_CHECK_BUDGET_MS\)\]\s*:\s*\[\]/,
+    );
+  });
+
+  it('leaves a changed audit spec to its own component-audit pull request', () => {
+    expect(run([AUDIT])).toEqual([]);
+  });
+
+  it('runs at most the budget of files, in path order, and reports the rest as not run', () => {
+    const files = Array.from(
+      {length: CHANGED_SPEC_LIMIT + 2},
+      (_, i) => `packages/core/src/C${i}/__tests__/C${i}.a11y.chromium.spec.ts`,
+    );
+    const {run: ran, notRun} = withinBudget(
+      [...files].reverse().map(file => ({file, reason: 'spec changed'})),
+    );
+    expect(ran.map(({file}) => file)).toEqual(
+      [...files].sort().slice(0, CHANGED_SPEC_LIMIT),
+    );
+    expect(notRun).toHaveLength(2);
+    expect(notRun[0].reason).toContain('ci:run-a11y');
+  });
+
+  it('widens to nothing else: a changed component folder selects no spec', () => {
+    expect(run(['packages/core/src/Chat/ChatSendButton.tsx'])).toEqual([]);
+  });
+});
+
+// The default check then runs each touched component's own scoped and
+// release-only specs, inside its budget.
+describe('the default check of the touched components', () => {
+  const SWITCH =
+    'packages/core/src/Switch/__tests__/Switch.a11y.chromium.spec.ts';
+  const LISTBOX =
+    'packages/core/src/Selector/__tests__/Listbox.a11y.chromium.spec.ts';
+  const COMBOBOX_FIELD =
+    'packages/core/src/Selector/__tests__/ComboboxField.a11y.chromium.spec.ts';
+  const EMPTY_STATE =
+    'packages/core/src/Selector/__tests__/EmptyStateAnnouncement.a11y.chromium.spec.ts';
+  const SELECTOR_AUDIT =
+    'packages/core/src/Selector/__tests__/SelectorAudit.a11y.chromium.spec.ts';
+  const specs = [
+    spec(SWITCH, ['// @pr-a11y release-only']),
+    spec(LISTBOX, ['// @pr-a11y release-only']),
+    spec(COMBOBOX_FIELD),
+    spec(EMPTY_STATE, ['// @pr-a11y always']),
+    spec(SELECTOR_AUDIT, ['// @pr-a11y audit Selector']),
+  ];
+  const seconds = {
+    [SWITCH]: 168.4,
+    [LISTBOX]: 325.2,
+    [COMBOBOX_FIELD]: 38.2,
+    [EMPTY_STATE]: 4,
+    'packages/core/src/TextInput/__tests__/TextInput.a11y.chromium.spec.ts': 478.7,
+  };
+  const plan = (owned, changed = [], workers = 4) =>
+    planDefaultCheck({
+      changed: changed.map(file => ({file, reason: 'spec changed'})),
+      owned: ownedSpecs({specs, components: owned, changedPaths: []}),
+      seconds,
+      workers,
+    });
+  const files = list => list.map(({file}) => file);
+
+  const owns = (components, changedPaths = [], list = specs) =>
+    ownedSpecs({specs: list, components, changedPaths});
+
+  it("selects a touched component's own scoped and release-only specs, and nothing else", () => {
+    expect(owns(['core/Switch'])).toEqual([
+      {file: SWITCH, reason: 'component core/Switch'},
+    ]);
+    // Not the always spec or the audit spec in the same folder.
+    expect(files(owns(['core/Selector']))).toEqual([LISTBOX, COMBOBOX_FIELD]);
+    // An untouched component, such as a reverse dependent, owns none.
+    expect(owns(['core/Toolbar'])).toEqual([]);
+  });
+
+  it('owns a scoped spec whose component scope token names a touched component', () => {
+    const pattern = spec(
+      'internal/a11y-spec/src/patterns/switch.chromium.spec.ts',
+      ['// @pr-a11y scope core/Switch'],
+    );
+    expect(owns(['core/Switch'], [], [pattern])).toEqual([
+      {file: pattern.file, reason: 'component core/Switch'},
+    ]);
+    expect(owns(['core/Slider'], [], [pattern])).toEqual([]);
+  });
+
+  it('owns nothing without a touched component, so a wide change runs only its changed specs', () => {
+    expect(owns([], ['packages/core/src/Switch/Switch.tsx'])).toEqual([]);
+  });
+
+  it('owns a binding by its folder component, its own name, or a change in its folder', () => {
+    const named = spec(
+      'packages/core/src/Chat/__tests__/ChatSendButton.a11y.chromium.spec.ts',
+      ['// @pr-a11y release-only'],
+    );
+    expect(files(owns(['core/ChatSendButton'], [], [named]))).toEqual([
+      named.file,
+    ]);
+    expect(files(owns(['core/Chat'], [], [named]))).toEqual([named.file]);
+    expect(owns(['core/ChatComposer'], [], [named])).toEqual([]);
+    expect(
+      owns(['core/ChatComposer'], ['packages/core/src/Chat/Chat.tsx'], [named]),
+    ).toEqual([
+      {file: named.file, reason: 'changed packages/core/src/Chat/Chat.tsx'},
+    ]);
+    // A changed knowledge record is not a change in the folder.
+    expect(
+      owns(
+        ['core/ChatComposer'],
+        ['docs/specs/components/Chat/Chat.spec.md'],
+        [named],
+      ),
+    ).toEqual([]);
+  });
+
+  it("owns a scoped spec whose path token names a touched component's folder", () => {
+    const slider = spec(
+      'internal/a11y-spec/src/patterns/slider.chromium.spec.ts',
+      [
+        '// @pr-a11y scope ^(internal/a11y-spec/src/patterns/slider|internal/a11y-spec/src/harness|packages/core/src/Slider/)',
+      ],
+    );
+    expect(
+      owns(['core/Slider'], ['packages/core/src/Slider/Slider.tsx'], [slider]),
+    ).toEqual([
+      {
+        file: slider.file,
+        reason: 'changed packages/core/src/Slider/Slider.tsx',
+      },
+    ]);
+    // A change to the harness the same token names is shared contract code.
+    expect(
+      owns(
+        ['core/Slider'],
+        ['internal/a11y-spec/src/harness/chromium.ts'],
+        [slider],
+      ),
+    ).toEqual([]);
+  });
+
+  it('never owns a spec through a path token or a shared pattern change', () => {
+    const shared = spec(
+      'packages/core/src/Selector/__tests__/SelectorReducedMotion.a11y.chromium.spec.ts',
+      ['// @pr-a11y scope ^packages/core/src/motion/'],
+    );
+    expect(
+      owns(
+        ['core/Switch'],
+        ['packages/core/src/motion/reducedMotion.ts'],
+        [shared],
+      ),
+    ).toEqual([]);
+    const pattern = spec(
+      'internal/a11y-spec/src/patterns/menu.chromium.spec.ts',
+    );
+    expect(
+      owns(
+        ['core/Switch'],
+        ['internal/a11y-spec/src/patterns/menu.ts'],
+        [pattern],
+      ),
+    ).toEqual([]);
+    // A release-only spec is never owned through a component token either.
+    const tokened = spec(
+      'internal/a11y-spec/src/patterns/switch.chromium.spec.ts',
+      ['// @pr-a11y release-only', '// @pr-a11y scope core/Switch'],
+    );
+    expect(owns(['core/Switch'], [], [tokened])).toEqual([]);
+  });
+
+  it('runs every owned file that fits the budget at its recorded time', () => {
+    expect(plan(['core/Switch'])).toEqual({
+      run: [{file: SWITCH, reason: 'component core/Switch'}],
+      notRun: [],
+    });
+    expect(files(plan(['core/Selector']).run).sort()).toEqual(
+      [COMBOBOX_FIELD, LISTBOX].sort(),
+    );
+  });
+
+  it('reports a file that does not fit as not run, with the label that runs it', () => {
+    // On one worker, in path order: ComboboxField fits, Listbox after it does
+    // not, Switch after ComboboxField does.
+    const {run, notRun} = plan(['core/Selector', 'core/Switch'], [], 1);
+    expect(files(run)).toEqual([COMBOBOX_FIELD, SWITCH]);
+    expect(files(notRun)).toEqual([LISTBOX]);
+    expect(notRun[0].reason).toContain('component core/Selector');
+    expect(notRun[0].reason).toContain('ci:run-a11y');
+    expect(notRun[0].reason).toContain('8-minute budget');
+    // On four workers they run side by side.
+    expect(plan(['core/Selector', 'core/Switch']).notRun).toEqual([]);
+  });
+
+  it('never starts a file that the recorded time says the stop would cut', () => {
+    const textInput = spec(
+      'packages/core/src/TextInput/__tests__/TextInput.a11y.chromium.spec.ts',
+      ['// @pr-a11y release-only'],
+    );
+    const {run, notRun} = planDefaultCheck({
+      changed: [],
+      owned: owns(['core/TextInput'], [], [textInput]),
+      seconds,
+      workers: 4,
+    });
+    expect(run).toEqual([]);
+    expect(notRun[0].reason).toContain('expected 479 s');
+    expect(STARTUP_MS + 478.7 * 1000 * RECORDED_TIME_MARGIN).toBeGreaterThan(
+      DEFAULT_CHECK_BUDGET_MS,
+    );
+  });
+
+  it('runs changed specs first and counts them against the budget, without running a file twice', () => {
+    expect(plan(['core/Selector'], [LISTBOX])).toEqual({
+      run: [
+        {file: LISTBOX, reason: 'spec changed'},
+        {file: COMBOBOX_FIELD, reason: 'component core/Selector'},
+      ],
+      notRun: [],
+    });
+    // On one worker, ComboboxField after the changed Listbox passes the
+    // budget: 30 + (325.2 + 38.2) * 1.25 s.
+    const {run, notRun} = plan(['core/Selector'], [LISTBOX], 1);
+    expect(run).toEqual([{file: LISTBOX, reason: 'spec changed'}]);
+    expect(files(notRun)).toEqual([COMBOBOX_FIELD]);
+  });
+
+  it('reports a changed spec that does not fit as not run, never starts it', () => {
+    const tokenizer =
+      'packages/core/src/Tokenizer/__tests__/TokenizerEndLane.a11y.chromium.spec.ts';
+    const {run, notRun} = planDefaultCheck({
+      changed: [
+        {file: SWITCH, reason: 'spec changed'},
+        {file: tokenizer, reason: 'spec changed'},
+      ],
+      owned: [],
+      seconds: {...seconds, [tokenizer]: 551.8},
+      workers: 4,
+    });
+    expect(run).toEqual([{file: SWITCH, reason: 'spec changed'}]);
+    expect(notRun).toEqual([
+      {
+        file: tokenizer,
+        reason: expect.stringMatching(
+          /^spec changed; its expected 552 s does not fit .*ci:run-a11y/,
+        ),
+      },
+    ]);
+  });
+
+  it('expects the median recorded time for a file that has none', () => {
+    const fresh = spec(
+      'packages/core/src/Switch/__tests__/SwitchFresh.a11y.chromium.spec.ts',
+      ['// @pr-a11y release-only'],
+    );
+    const {notRun} = planDefaultCheck({
+      changed: [],
+      owned: owns(['core/Switch'], [], [fresh]),
+      seconds,
+      workers: 4,
+      budgetMs: STARTUP_MS,
+    });
+    expect(notRun[0].reason).toContain('expected 168 s');
+  });
+
+  it('projects whole files in path order onto the first free worker', () => {
+    const ms = {a: 4, b: 1, c: 1, d: 3};
+    expect(projectedMs(['d', 'c', 'b', 'a'], file => ms[file], 2)).toBe(5);
+    expect(projectedMs(['a', 'b', 'c', 'd'], file => ms[file], 1)).toBe(9);
+    expect(projectedMs([], file => ms[file], 4)).toBe(0);
+  });
+
+  it('reads recorded seconds per file, not per test', () => {
+    expect(
+      fileSeconds({
+        seconds: {
+          [SWITCH]: 168.4,
+          [`${SWITCH} \u203A switch \u203A presses`]: 12,
+        },
+      }),
+    ).toEqual({[SWITCH]: 168.4});
+    expect(fileSeconds(undefined)).toEqual({});
+  });
+
+  it('summarizes what ran and what did not, never as passed', () => {
+    const summary = summaryMarkdown({
+      components: ['core/Switch'],
+      selected: [{file: SWITCH, reason: 'component core/Switch'}],
+      notRun: [{file: LISTBOX, reason: 'does not fit'}],
+    });
+    expect(summary).toContain('`core/Switch`');
+    expect(summary).toContain(`- \`${SWITCH}\` (component core/Switch)`);
+    expect(summary).toContain('Not run: 1 spec file(s)');
+    expect(summary).toContain('did not pass or fail here');
+    expect(
+      summaryMarkdown({components: [], selected: [], notRun: []}),
+    ).toContain('No accessibility contract to run.');
+  });
+
+  it('refuses owners without the changed-file list, so no owned contract is dropped silently', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'owned-'));
+    const specsFile = path.join(dir, 'specs.txt');
+    fs.writeFileSync(specsFile, '');
+    const run = args => {
+      try {
+        execFileSync(
+          process.execPath,
+          [path.join(root, '.github/scripts/a11y-pr-contracts.mjs'), ...args],
+          {cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']},
+        );
+        return {status: 0, output: ''};
+      } catch (error) {
+        return {status: error.status, output: String(error.stderr)};
+      }
+    };
+    try {
+      for (const args of [
+        ['--changed-only', specsFile, '--owned-by', 'core/ChatLayout'],
+        [
+          '--changed-only',
+          specsFile,
+          '--changed-files',
+          '',
+          '--owned-by',
+          'core/ChatLayout',
+        ],
+      ]) {
+        const result = run(args);
+        expect(result.status).not.toBe(0);
+        expect(result.output).toContain(
+          '--owned-by needs --changed-files with the list of changed paths',
+        );
+      }
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('is wired into the runner: owners, durations and workers reach the plan', () => {
+    const runner = fs.readFileSync(
+      path.join(root, '.github/scripts/a11y-pr-contracts.mjs'),
+      'utf8',
+    );
+    expect(runner).toContain("flagValue(argv, '--owned-by')");
+    // The folder-change rule reads every changed path, not the spec list.
+    expect(runner).toContain("flagValue(argv, '--changed-files')");
+    expect(runner).toContain(
+      'changedPaths: readLines(changedFilesFile) ?? changedPaths',
+    );
+    expect(runner).toContain('seconds: readDurations(root, policySha)');
+    expect(runner).toContain('workers: contractWorkers()');
+  });
+});
+
+describe('a11y-spec-files (one spec list for Playwright and the touched check)', () => {
+  it('is the list playwright.config.ts runs', () => {
+    const config = fs.readFileSync(
+      path.join(root, 'playwright.config.ts'),
+      'utf8',
+    );
+    expect(config).toContain('testMatch: [...A11Y_SPEC_GLOBS]');
+    expect(config).toContain('testMatch: [...WEBKIT_A11Y_SPEC_GLOBS]');
+    expect(A11Y_SPEC_GLOBS).toEqual(
+      expect.arrayContaining([...WEBKIT_A11Y_SPEC_GLOBS]),
+    );
+  });
+
+  it('matches each kind of browser accessibility spec and nothing else', () => {
+    expect(isA11ySpecFile(BINDING)).toBe(true);
+    expect(
+      isA11ySpecFile(
+        'packages/core/src/Dialog/DialogSecondDocument.a11y.browser.spec.ts',
+      ),
+    ).toBe(true);
+    expect(
+      isA11ySpecFile('internal/a11y-spec/src/patterns/menu.chromium.spec.ts'),
+    ).toBe(true);
+    expect(isA11ySpecFile('packages/core/src/Chat/ChatSendButton.tsx')).toBe(
+      false,
+    );
+    expect(
+      isA11ySpecFile(
+        'packages/core/src/Chat/__tests__/ChatSendButton.a11y.test.tsx',
+      ),
+    ).toBe(false);
+    expect(
+      isA11ySpecFile(
+        'internal/interaction-harness/src/harness.interaction.browser.spec.ts',
+      ),
+    ).toBe(false);
+  });
+});
 
 describe('parseRouting', () => {
   it('defaults to scoped with no tokens', () => {
@@ -165,10 +639,10 @@ describe('selectSpecs', () => {
     ).toEqual([always.file]);
   });
 
-  it('runs a scoped spec when its folder changes', () => {
+  it("runs the folder's scoped and release-only specs when its folder changes", () => {
     expect(
       pr(all, {changedPaths: ['packages/core/src/Chat/ChatLayout.tsx']}),
-    ).toEqual([always.file, scoped.file]);
+    ).toEqual([always.file, scoped.file, releaseOnly.file]);
   });
 
   it('does not run a scoped spec for a sibling folder sharing its prefix', () => {
@@ -205,7 +679,7 @@ describe('selectSpecs', () => {
   });
 
   it('runs no spec for a changed knowledge record alone', () => {
-    const record = 'packages/core/src/Chat/ChatLayout.spec.md';
+    const record = 'docs/specs/components/Chat/ChatLayout.spec.md';
     expect(pr(all, {changedPaths: [record]})).toEqual([always.file]);
     const pattern = spec(
       'internal/a11y-spec/src/patterns/accordion.chromium.spec.ts',
@@ -213,7 +687,7 @@ describe('selectSpecs', () => {
     );
     expect(
       pr([pattern], {
-        changedPaths: ['packages/core/src/Collapsible/Collapsible.spec.md'],
+        changedPaths: ['docs/specs/components/Collapsible/Collapsible.spec.md'],
       }),
     ).toEqual([]);
     // Code beside the record still selects the spec.
@@ -221,7 +695,7 @@ describe('selectSpecs', () => {
       pr(all, {
         changedPaths: [record, 'packages/core/src/Chat/ChatLayout.tsx'],
       }),
-    ).toEqual([always.file, scoped.file]);
+    ).toEqual([always.file, scoped.file, releaseOnly.file]);
   });
 
   it('still runs a spec for a fixture, test, or generated .spec.md', () => {
@@ -233,6 +707,7 @@ describe('selectSpecs', () => {
       expect(pr(all, {changedPaths: [file]}), file).toEqual([
         always.file,
         scoped.file,
+        releaseOnly.file,
       ]);
     }
   });
@@ -267,12 +742,30 @@ describe('selectSpecs', () => {
     ).toEqual([audit.file]);
   });
 
-  it('never runs a release-only spec on a pull request', () => {
+  it('runs a release-only spec on a pull request only for its own component', () => {
     expect(
       pr([releaseOnly], {
         changedPaths: null,
         components: ['core/ChatLayout'],
       }),
+    ).toEqual([]);
+    expect(pr([releaseOnly], {components: ['core/ChatLayout']})).toEqual([
+      releaseOnly.file,
+    ]);
+    expect(
+      pr([releaseOnly], {changedPaths: ['packages/core/src/Chat/Chat.tsx']}),
+    ).toEqual([releaseOnly.file]);
+    expect(pr([releaseOnly], {changedPaths: [releaseOnly.file]})).toEqual([
+      releaseOnly.file,
+    ]);
+    expect(pr([releaseOnly], {components: ['core/Selector']})).toEqual([]);
+    // A scope token never selects it.
+    const tokened = spec(
+      'packages/core/src/Chat/__tests__/ChatLayout.a11y.chromium.spec.ts',
+      ['// @pr-a11y release-only', '// @pr-a11y scope core/Selector ^apps/x'],
+    );
+    expect(
+      pr([tokened], {components: ['core/Selector'], changedPaths: ['apps/x']}),
     ).toEqual([]);
   });
 
@@ -401,45 +894,65 @@ describe('component audit axe pass', () => {
 describe('changedSinceMergeBase', () => {
   const git = (cwd, ...args) =>
     execFileSync('git', args, {cwd, encoding: 'utf8', stdio: 'pipe'}).trim();
-  const commit = (cwd, file, text) => {
-    fs.writeFileSync(path.join(cwd, file), text);
-    git(cwd, 'add', file);
-    git(
-      cwd,
-      '-c',
-      'user.email=a@b',
-      '-c',
-      'user.name=a',
-      'commit',
-      '-qm',
-      text,
-    );
-  };
+  // The origin's main has three commits, and its feature branch adds one
+  // file. A full clone sits on that branch, and main moves on after the clone.
+  // Built once, and fast-import writes the commits: five git launches in all.
+  const cwd = process.cwd();
+  let dir = '';
+  let clone = '';
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-pr-a11y-'));
+    const origin = path.join(dir, 'origin');
+    createRepository(origin, [
+      {ref: 'refs/heads/main', message: '1', files: {'base.txt': '1'}},
+      {ref: 'refs/heads/main', message: '2', files: {'base.txt': '2'}},
+      {
+        ref: 'refs/heads/main',
+        name: '3',
+        message: '3',
+        files: {'base.txt': '3'},
+      },
+      {
+        ref: 'refs/heads/feature',
+        parent: '3',
+        message: 'f',
+        files: {'feature.txt': 'f'},
+      },
+    ]);
+    clone = path.join(dir, 'clone');
+    git(dir, 'clone', '-q', origin, clone);
+    git(clone, 'checkout', '-q', 'feature');
+    importCommits(origin, [
+      {
+        ref: 'refs/heads/main',
+        parent: 'main',
+        message: 'l',
+        files: {'later.txt': 'l'},
+      },
+    ]);
+  });
+  afterAll(() => {
+    fs.rmSync(dir, {recursive: true, force: true});
+  });
+  beforeEach(() => {
+    process.chdir(clone);
+  });
+  afterEach(() => {
+    process.chdir(cwd);
+  });
 
-  it("lists the branch's own changes and never makes a full clone shallow", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-pr-a11y-'));
-    const cwd = process.cwd();
-    try {
-      const origin = path.join(dir, 'origin');
-      fs.mkdirSync(origin);
-      git(origin, 'init', '-q', '-b', 'main');
-      for (const n of ['1', '2', '3']) commit(origin, 'base.txt', n);
-      const clone = path.join(dir, 'clone');
-      git(dir, 'clone', '-q', origin, clone);
-      git(clone, 'checkout', '-qb', 'feature');
-      commit(clone, 'feature.txt', 'f');
-      git(clone, 'push', '-q', 'origin', 'feature');
-      commit(origin, 'later.txt', 'l');
-      process.chdir(clone);
-      expect(changedSinceMergeBase('main')).toEqual(['feature.txt']);
-      expect(changedSinceMergeBase('origin/main')).toEqual(['feature.txt']);
-      expect(git(clone, 'rev-parse', '--is-shallow-repository')).toBe('false');
-      expect(changedSinceMergeBase('no-such-ref')).toBeNull();
-      expect(changedSinceMergeBase(undefined)).toBeNull();
-    } finally {
-      process.chdir(cwd);
-      fs.rmSync(dir, {recursive: true, force: true});
-    }
+  it("lists the branch's own changes against a local base", () => {
+    expect(changedSinceMergeBase('main')).toEqual(['feature.txt']);
+  });
+
+  it('lists them against the remote base, and never makes a full clone shallow', () => {
+    expect(changedSinceMergeBase('origin/main')).toEqual(['feature.txt']);
+    expect(git(clone, 'rev-parse', '--is-shallow-repository')).toBe('false');
+  });
+
+  it('lists nothing for a base it cannot find, or no base', () => {
+    expect(changedSinceMergeBase('no-such-ref')).toBeNull();
+    expect(changedSinceMergeBase(undefined)).toBeNull();
   });
 });
 
@@ -476,12 +989,13 @@ describe('repository specs', () => {
       path.join(root, 'playwright.config.ts'),
       'utf8',
     );
+    expect(config).toContain('testMatch: [...A11Y_SPEC_GLOBS]');
     for (const glob of [
       'internal/a11y-spec/src/**/*.chromium.spec.ts',
       'packages/*/src/**/*.a11y.chromium.spec.ts',
       'packages/*/src/**/*.a11y.browser.spec.ts',
     ]) {
-      expect(config).toContain(`'${glob}'`);
+      expect(A11Y_SPEC_GLOBS).toContain(glob);
     }
     expect(files.length).toBeGreaterThan(100);
   });
@@ -493,6 +1007,47 @@ describe('repository specs', () => {
         file,
       ).not.toThrow();
     }
+  });
+
+  it("owns a component folder's contracts for a change in that folder", () => {
+    // A folder of several components: an edit to one of them names only that
+    // owner, so the folder's hook and surface specs are owned by the change.
+    const specs = files.map(file => ({
+      file,
+      routing: parseRouting(fs.readFileSync(path.join(root, file), 'utf8')),
+    }));
+    const owned = ownedSpecs({
+      specs,
+      components: ['core/ChatLayout'],
+      changedPaths: ['packages/core/src/Chat/ChatLayout.tsx'],
+    }).map(({file}) => file);
+    for (const file of [
+      'packages/core/src/Chat/__tests__/ChatLayoutScrollButtonSurface.a11y.chromium.spec.ts',
+      'packages/core/src/Chat/__tests__/useChatStreamScroll.a11y.chromium.spec.ts',
+    ]) {
+      expect(owned, file).toContain(file);
+    }
+    expect(
+      ownedSpecs({
+        specs,
+        components: ['core/ChatLayout'],
+        changedPaths: [],
+      }).map(({file}) => file),
+    ).not.toContain(
+      'packages/core/src/Chat/__tests__/useChatStreamScroll.a11y.chromium.spec.ts',
+    );
+    // Audit bindings in the folder still wait for their audit pull request.
+    expect(owned).not.toContain(
+      'packages/core/src/Chat/__tests__/ChatMessageList.a11y.chromium.spec.ts',
+    );
+    // A pattern contract whose path token names the touched folder.
+    expect(
+      ownedSpecs({
+        specs,
+        components: ['core/Slider'],
+        changedPaths: ['packages/core/src/Slider/Slider.tsx'],
+      }).map(({file}) => file),
+    ).toContain('internal/a11y-spec/src/patterns/slider.chromium.spec.ts');
   });
 });
 
@@ -506,9 +1061,9 @@ describe('isKnowledgeRecord', () => {
   });
 
   it('treats a component record as a record and its fixtures as not', () => {
-    expect(isKnowledgeRecord('packages/core/src/Chat/ChatLayout.spec.md')).toBe(
-      true,
-    );
+    expect(
+      isKnowledgeRecord('docs/specs/components/Chat/ChatLayout.spec.md'),
+    ).toBe(true);
     expect(
       isKnowledgeRecord('packages/core/src/Chat/.hidden/ChatLayout.spec.md'),
     ).toBe(false);

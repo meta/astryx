@@ -6,7 +6,8 @@
  *   computed borders, StyleX
  * @output Exports `glidingDividerStyles` (a row's stand-in divider while it
  *   glides), `markGlidingRows` (marks the moving rows for that glide and
- *   carries each row's own border onto the stand-in) and `rowEdge`
+ *   carries each row's own border onto the stand-in), `rowEdge`, and the
+ *   row and pinned-cell attribute names plugins/stickyColumns reads
  * @position Table internals. With collapsed borders the table paints every
  *   border at its cell's static place, so a row that moves leaves its divider
  *   behind. For the glide only, the moving row's cells are marked: their
@@ -37,8 +38,12 @@ const CELL_ATTRIBUTE = 'data-astryx-cell-gliding';
 const CELL_GLIDING = '[data-astryx-cell-gliding]';
 const CELL_LINE = '[data-astryx-cell-gliding="line"]';
 
-/** On a pinned (sticky) cell: plugins/stickyColumns. */
-const PINNED_ATTRIBUTE = 'data-astryx-table-pinned';
+/**
+ * On a pinned (sticky) cell, written by plugins/stickyColumns. Named here
+ * because that plugin already imports this module; naming it there would make
+ * the two import each other.
+ */
+export const PINNED_ATTRIBUTE = 'data-astryx-table-pinned';
 
 /**
  * A row's divider, carried on the row for its glide. Names no cell sets, so

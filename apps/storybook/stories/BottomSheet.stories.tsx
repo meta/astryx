@@ -3,8 +3,8 @@
 /**
  * @file BottomSheet.stories.tsx
  * @input BottomSheet, content primitives, and controlled story state
- * @output BottomSheet examples plus keyboard delegation and nested-layer
- *   Escape browser fixtures
+ * @output BottomSheet examples plus keyboard delegation, nested-layer
+ *   Escape, and exit-focus browser fixtures
  * @position Storybook coverage for BottomSheet presentation and interaction
  */
 
@@ -25,6 +25,7 @@ import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';
 import {Popover} from '@astryxdesign/core/Popover';
 
 const meta: Meta<typeof BottomSheet> = {
@@ -277,6 +278,9 @@ function MobileKeyboardCommentForm({onPost}: {onPost: () => void}) {
 export const Showcase: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);
+    const [inStock, setInStock] = useState(false);
+    const [onSale, setOnSale] = useState(false);
+    const [freeShipping, setFreeShipping] = useState(false);
     return (
       <>
         <Button label="Open sheet" onClick={() => setIsOpen(true)} />
@@ -285,11 +289,23 @@ export const Showcase: Story = {
             <VStack gap={4}>
               <Heading level={3}>Filters</Heading>
               <Divider />
-              <VStack gap={2}>
-                <CheckboxInput label="In stock" value={false} />
-                <CheckboxInput label="On sale" value={false} />
-                <CheckboxInput label="Free shipping" value={false} />
-              </VStack>
+              <CheckboxList label="Filters" isLabelHidden>
+                <CheckboxListItem
+                  label="In stock"
+                  isChecked={inStock}
+                  onCheck={setInStock}
+                />
+                <CheckboxListItem
+                  label="On sale"
+                  isChecked={onSale}
+                  onCheck={setOnSale}
+                />
+                <CheckboxListItem
+                  label="Free shipping"
+                  isChecked={freeShipping}
+                  onCheck={setFreeShipping}
+                />
+              </CheckboxList>
               <Button label="Apply" onClick={() => setIsOpen(false)} />
             </VStack>
           </Section>
@@ -565,6 +581,71 @@ export const HugHeight: Story = {
               <Button label="Copy link" />
               <Button label="Send in Messenger" />
               <Button label="Save for later" />
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
+/**
+ * A sheet whose height the caller sets. It keeps a 48 px surface below the
+ * screen, so a pull past the top stretches it at most that far.
+ */
+export const CallerHeight: Story = {
+  name: 'Caller height (500 px)',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <Button label="Open 500 px sheet" onClick={() => setIsOpen(true)} />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Caller height"
+          style={{height: 500}}>
+          <Section padding={4}>
+            <VStack gap={4}>
+              <Heading level={3}>Caller height</Heading>
+              <Text type="supporting" color="secondary">
+                The caller sets this sheet's height to 500 px.
+              </Text>
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
+const callerHeightStyles = stylex.create({
+  sheet: {height: 500},
+});
+
+export const CallerHeightXstyle: Story = {
+  name: 'Caller height through xstyle (500 px)',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <Button
+          label="Open 500 px xstyle sheet"
+          onClick={() => setIsOpen(true)}
+        />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Caller height through xstyle"
+          xstyle={callerHeightStyles.sheet}>
+          <Section padding={4}>
+            <VStack gap={4}>
+              <Heading level={3}>Caller height through xstyle</Heading>
+              <Text type="supporting" color="secondary">
+                The caller sets this sheet's height to 500 px through xstyle.
+              </Text>
               <Button label="Done" onClick={() => setIsOpen(false)} />
             </VStack>
           </Section>
@@ -912,4 +993,54 @@ export const ModalAutofocus: Story = {
       </>
     );
   },
+};
+
+type ExitFocusChange = 'remove' | 'disable';
+
+function ExitFocusChangeFixture({change}: {change: ExitFocusChange}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isDoneChanged, setIsDoneChanged] = useState(false);
+  const open = () => {
+    setIsDoneChanged(false);
+    setIsOpen(true);
+  };
+  const close = () => {
+    setIsOpen(false);
+    // The control changes after the close starts, during the exit motion.
+    window.setTimeout(() => setIsDoneChanged(true), 100);
+  };
+  return (
+    <>
+      <Button label="Open sheet" onClick={open} />
+      <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Exit focus">
+        <Section>
+          {change === 'remove' && isDoneChanged ? null : (
+            <Button
+              label="Done"
+              onClick={close}
+              isDisabled={change === 'disable' && isDoneChanged}
+            />
+          )}
+        </Section>
+      </BottomSheet>
+    </>
+  );
+}
+
+/**
+ * Browser fixture: Done closes the sheet, and 100 ms into the exit the Done
+ * control is removed. The sheet goes inert and hidden as focus leaves it.
+ */
+export const ExitFocusControlRemoved: Story = {
+  tags: ['!autodocs'],
+  render: () => <ExitFocusChangeFixture change="remove" />,
+};
+
+/**
+ * Browser fixture: Done closes the sheet, and 100 ms into the exit the Done
+ * control is disabled. The sheet goes inert and hidden as focus leaves it.
+ */
+export const ExitFocusControlDisabled: Story = {
+  tags: ['!autodocs'],
+  render: () => <ExitFocusChangeFixture change="disable" />,
 };

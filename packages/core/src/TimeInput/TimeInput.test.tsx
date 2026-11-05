@@ -829,3 +829,79 @@ describe('TimeInput disabled theme state', () => {
     expect(root).not.toHaveAttribute('data-disabled');
   });
 });
+
+describe('TimeInput locale time text (issue 8992)', () => {
+  function renderIn(
+    locale: string,
+    props: Partial<React.ComponentProps<typeof TimeInput>> = {},
+  ) {
+    return render(
+      <InternationalizationProvider locale={locale}>
+        <TimeInput
+          label="Time"
+          value={'14:30' as ISOTimeString}
+          onChange={() => {}}
+          presentation="text-input"
+          {...props}
+        />
+      </InternationalizationProvider>,
+    );
+  }
+
+  it.each([
+    ['en-US', '2:30 PM'],
+    ['en-GB', '14:30'],
+    ['de-DE', '14:30'],
+    ['vi-VN', '14:30'],
+    ['ko-KR', '오후 2:30'],
+  ])(
+    'follows the hour cycle of %s when hourFormat is unset',
+    (locale, text) => {
+      renderIn(locale);
+      expect(screen.getByRole('textbox')).toHaveValue(text);
+    },
+  );
+
+  it('follows a per-user preference carried on the locale tag', () => {
+    renderIn('en-US-u-hc-h23');
+    expect(screen.getByRole('textbox')).toHaveValue('14:30');
+  });
+
+  it('lets an explicit hourFormat win over the locale', () => {
+    renderIn('de-DE', {hourFormat: '12h'});
+    expect(screen.getByRole('textbox')).toHaveValue('2:30 PM');
+  });
+
+  it("writes the locale's day period instead of a fixed English AM/PM", () => {
+    renderIn('ja-JP', {hourFormat: '12h'});
+    expect(screen.getByRole('textbox')).toHaveValue('午後2:30');
+  });
+
+  it('commits an edit of the localized text', () => {
+    const onChange = vi.fn();
+    renderIn('ko-KR', {onChange});
+    const input = screen.getByRole('textbox');
+    fireEvent.focus(input);
+    fireEvent.change(input, {target: {value: '오전 9:15'}});
+    expect(onChange).toHaveBeenLastCalledWith('09:15');
+  });
+
+  it('announces a stepped time in the locale text', async () => {
+    const onChange = vi.fn();
+    renderIn('de-DE', {onChange});
+    fireEvent.keyDown(screen.getByRole('textbox'), {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith('14:31');
+    await waitFor(() => {
+      expect(politeRegion()).toHaveTextContent('14:31');
+    });
+  });
+
+  it('shows the catalog format hint for the resolved hour format', () => {
+    renderIn('de-DE', {value: undefined});
+    fireEvent.focus(screen.getByRole('textbox'));
+    expect(screen.getByRole('textbox')).toHaveAttribute(
+      'placeholder',
+      'e.g., 14:30',
+    );
+  });
+});

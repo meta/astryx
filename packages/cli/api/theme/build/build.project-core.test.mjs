@@ -126,7 +126,7 @@ describe('theme build generates with the Core the project installed', () => {
     const app = makeDir();
     installCore(app);
     await themeBuild('ocean.mjs', {}, {cwd: app});
-    // The root loads all of Core, and this theme never imports it.
+    // The theme imports nothing from the root entry, so the root never loads.
     expect(globalThis.__astryxProjectCoreLoads).toEqual(['theme']);
     // The same Core, re-exported, emits the same CSS as the CLI's own. The
     // generated header differs only in the Core version it records.

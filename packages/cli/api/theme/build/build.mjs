@@ -97,11 +97,7 @@ import {
   formatBatchFontLoadingHelp,
   formatFontLoadingHelp,
 } from './font-warning.mjs';
-import {
-  interceptCore,
-  lazyCoreRoot,
-  resolveEntry,
-} from './core-interception.mjs';
+import {interceptCore} from './core-interception.mjs';
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
 import {resolveIconImports} from './icon-imports.mjs';
 
@@ -139,10 +135,10 @@ import {resolveIconImports} from './icon-imports.mjs';
  * The `@astryxdesign/core` ROOT namespace, loaded separately because it
  * exports far more than the theme subpath. Interception must hand a theme file
  * that imports a component from the root the root's own exports, not the theme
- * namespace wearing its name. It loads all of Core and React, so it loads only
- * when a theme module asks for it (see `lazyCoreRoot` in core-interception.mjs).
+ * namespace wearing its name. It loads on first use: see lazyRootModule.
+ * @type {(() => any) | null}
  */
-/** @type {(() => any) | null} */ let _coreRootLoader = null;
+let _coreRootModule = null;
 /** @type {any} */ let _coreImportError = null;
 
 /**
@@ -150,7 +146,7 @@ import {resolveIconImports} from './icon-imports.mjs';
  * functions the build calls, and why the import failed, if it did.
  * @typedef {{
  *   themeModule: any,
- *   loadRoot: (() => any) | null,
+ *   rootModule: (() => any) | null,
  *   importError: any,
  *   defineTheme: any,
  *   generateThemeRulesSplit: any,
@@ -158,6 +154,47 @@ import {resolveIconImports} from './icon-imports.mjs';
  *   generateAdaptationCSS: any,
  * }} CoreBindings
  */
+
+/**
+ * A Core's root namespace, loaded on first use. The root entry loads all of
+ * Core and React, and only a theme that imports the root specifier needs it.
+ * Requiring the file an import resolves to returns the namespace `import()`
+ * gives. A root that cannot be loaded gives null, and interception then hands
+ * the theme namespace in its place. A root that only `import()` can load
+ * throws instead: one that awaits at its top level, or any root when Node runs
+ * without require(esm).
+ * @param {() => string | null} resolveFile
+ * @returns {() => any}
+ */
+export function lazyRootModule(resolveFile) {
+  /** @type {{namespace: any} | null} */
+  let loaded = null;
+  return () => {
+    if (loaded) return loaded.namespace;
+    let namespace = null;
+    let file = null;
+    try {
+      file = resolveFile();
+    } catch {
+      // A Core whose root entry does not resolve falls back below.
+    }
+    try {
+      if (file) namespace = createRequire(import.meta.url)(file);
+    } catch (error) {
+      const code = /** @type {any} */ (error)?.code;
+      // The theme namespace would stand in for the root's own exports here.
+      if (code === 'ERR_REQUIRE_ASYNC_MODULE' || code === 'ERR_REQUIRE_ESM') {
+        throw new Error(
+          `The @astryxdesign/core root entry at ${file} cannot be loaded with require() (${code}), so a theme that imports it cannot be built.`,
+          {cause: error},
+        );
+      }
+      // A Core without a usable root entry still builds themes.
+    }
+    loaded = {namespace};
+    return namespace;
+  };
+}
 
 /**
  * Import the CLI's own Core: the `@astryxdesign/core` this module resolves.
@@ -169,7 +206,7 @@ async function importCliCore() {
   /** @type {CoreBindings} */
   const core = {
     themeModule: null,
-    loadRoot: null,
+    rootModule: null,
     importError: null,
     defineTheme: null,
     generateThemeRulesSplit: null,
@@ -183,13 +220,9 @@ async function importCliCore() {
     core.generateThemeRulesSplit = coreTheme.generateThemeRulesSplit;
     core.generateOnMediaCSS = coreTheme.generateOnMediaCSS;
     core.generateAdaptationCSS = coreTheme.generateAdaptationCSS;
-    // A Core with no root entry still builds themes: interception gives the
-    // theme namespace for the root specifier.
-    const rootFile = resolveEntry(
-      createRequire(import.meta.url),
-      '@astryxdesign/core',
+    core.rootModule = lazyRootModule(() =>
+      fileURLToPath(import.meta.resolve('@astryxdesign/core')),
     );
-    core.loadRoot = rootFile ? lazyCoreRoot(rootFile) : null;
   } catch (e) {
     // Capture the reason so the theme action can surface a precise, actionable
     // error. The hard failure happens when `theme build` runs.
@@ -227,7 +260,7 @@ function loadCliCore() {
  */
 function setCore(core) {
   _coreThemeModule = core.themeModule;
-  _coreRootLoader = core.loadRoot;
+  _coreRootModule = core.rootModule;
   _coreImportError = core.importError;
   _defineTheme = core.defineTheme;
   _generateThemeRulesSplit = core.generateThemeRulesSplit;
@@ -356,13 +389,10 @@ async function loadProjectCore(cwd, cliCore, {projectOnly = false} = {}) {
       ERROR_CODES.ERR_CORE_INCOMPATIBLE,
     );
   }
-  // As with the CLI's own Core, the theme namespace stands in only for a
-  // root entry that is not there.
   const rootFile = importTarget(dir, '.');
   return {
     themeModule,
-    loadRoot:
-      rootFile && fs.existsSync(rootFile) ? lazyCoreRoot(rootFile) : null,
+    rootModule: lazyRootModule(() => rootFile),
     importError: null,
     defineTheme: themeModule.defineTheme,
     generateThemeRulesSplit: themeModule.generateThemeRulesSplit,
@@ -2065,7 +2095,7 @@ export async function validateThemePrivateInputs(
 
   // The CLI's own Core, unless a build in this process already chose one.
   await loadCliCore();
-  const interception = interceptCore(_coreThemeModule, _coreRootLoader);
+  const interception = interceptCore(_coreThemeModule, _coreRootModule);
   let theme;
   try {
     theme = (await extractThemeDefinition(filePath, interception)).theme;
@@ -2807,7 +2837,7 @@ async function themeBuildInternal(
     options.__familyInterception ??
     (_generateAdaptationCSS && themeFolderResolvesCore(filePath)
       ? undefined
-      : interceptCore(_coreThemeModule, _coreRootLoader));
+      : interceptCore(_coreThemeModule, _coreRootModule));
 
   // Extract theme definition
   let themeDef;
@@ -2815,12 +2845,29 @@ async function themeBuildInternal(
   let themeExportName;
   /** Paths through the load that interception could not fully observe. */
   let loadDegradation;
+  /**
+   * The theme file's bytes as loaded: read before and after the load, and the
+   * registry scan below reads these rather than the file again. An editor's
+   * in-place save truncates before it writes, so a later read can find an
+   * empty file the load never saw; a file that changed while it loaded is not
+   * built from.
+   * @type {string}
+   */
+  let themeSource;
   try {
+    const before = fs.readFileSync(filePath, 'utf8');
     const loaded = await extractThemeDefinition(
       filePath,
       interception,
       options.__familyLoader,
     );
+    const after = fs.readFileSync(filePath, 'utf8');
+    if (before !== after || before === '') {
+      throw new Error(
+        `${filePath} changed while it was loading. Build again once it is saved.`,
+      );
+    }
+    themeSource = before;
     themeDef = loaded.theme;
     themeExportName = loaded.exportName;
     loadDegradation = loaded.degraded;
@@ -2910,7 +2957,10 @@ async function themeBuildInternal(
       : []),
   ];
   const iconResolution = {
-    readSource: (/** @type {string} */ file) => fs.readFileSync(file, 'utf8'),
+    readSource: (/** @type {string} */ file) =>
+      path.resolve(file) === path.resolve(filePath)
+        ? themeSource
+        : fs.readFileSync(file, 'utf8'),
     resolveModule: resolveThemeModule,
     reservedNames: reservedNames(functionEntries),
     functionEntries,
@@ -3715,7 +3765,7 @@ export async function themeBuildFamily(
     throw new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
   }
   await selectCore(cwd);
-  const familyInterception = interceptCore(_coreThemeModule, _coreRootLoader);
+  const familyInterception = interceptCore(_coreThemeModule, _coreRootModule);
   // prettier-ignore
   const familyLoader = createJiti(import.meta.url, {moduleCache: true, interopDefault: false, jsx: true, extensions: THEME_MODULE_EXTENSIONS, virtualModules: familyInterception.modules});
   /** @type {any[]} */
