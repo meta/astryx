@@ -137,6 +137,11 @@
       "aliases": []
     },
     {
+      "name": "component-charts-line-chart",
+      "path": "components/charts/line-chart",
+      "aliases": []
+    },
+    {
       "name": "component-chat-composer",
       "path": "components/chat-composer",
       "aliases": []
