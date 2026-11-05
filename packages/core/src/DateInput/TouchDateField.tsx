@@ -4,7 +4,7 @@
 
 /**
  * @file TouchDateField.tsx
- * @input Uses React, Field, BottomSheet, Button, Icon, Calendar hooks, MonthScroller, MonthYearWheels
+ * @input Uses React, Field, BottomSheet, Button, Icon, Calendar hooks, the resolved calendar, MonthScroller, MonthYearWheels
  * @output Exports TouchDateField — the touch surface behind DateInput
  * @position Internal component; consumed by DateInput.tsx
  *
@@ -105,25 +105,27 @@ import {
   mergeProps,
   rtlStyles,
   themeProps,
-  formatSharedDate,
   plainDateFromISO,
   plainDateToday,
-  plainDateFormat,
-  DATE_FORMAT_WEEKDAY_ONLY,
   type ISODateString,
 } from '../utils';
-import {plainDateFormatStandaloneMonthYear} from '../utils/plainDate';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
+import {
+  calendarDayOfMonth,
+  formatCalendarMonthLabel,
+} from '../utils/calendarSystem';
+import {formatCalendarDateText} from '../utils/calendarDateParser';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
+import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
 import {MonthScroller, type MonthScrollerHandle} from './MonthScroller';
 import {MonthYearWheels} from './MonthYearWheels';
 import {
   DEFAULT_MONTH_REACH,
   clampIndex,
-  fromMonthIndex,
-  monthIndexOf,
+  createMonthModel,
 } from './monthGeometry';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {
@@ -582,6 +584,7 @@ export function TouchDateField({
   numberOfMonths: _numberOfMonths,
   weekStartsOn: weekStartsOnProp = 0,
   format = 'date_long',
+  calendar: calendarProp,
   width,
   containerXstyle,
   containerClassName,
@@ -613,6 +616,8 @@ export function TouchDateField({
     placeholderFromProps ?? t('@astryx.dateInput.placeholder');
   const size = useSize(sizeProp, 'md');
   const weekStartsOn = normalizeDayOfWeek(weekStartsOnProp);
+  const calendar = useCalendarSystem(calendarProp, 'DateInput');
+  const monthModel = useMemo(() => createMonthModel(calendar), [calendar]);
 
   const generatedID = useId();
   const id = idProp ?? generatedID;
@@ -676,6 +681,7 @@ export function TouchDateField({
   const scrollerHandleRef = useRef<MonthScrollerHandle | null>(null);
   // Pending focus handoff from the clear button; see handleClear.
   const clearFocusTimerRef = useRef<number | null>(null);
+  // Releases the focus timer on unmount.
   useEffect(
     () => () => {
       if (clearFocusTimerRef.current != null) {
@@ -698,8 +704,10 @@ export function TouchDateField({
   // century in each direction from wherever it opened. Anchored once, in a
   // state initializer: recomputing it as the selection moves would shift every
   // pane's scroll offset under the user mid-gesture.
+  // Indexes belong to the calendar, so DateInput remounts this surface when
+  // the calendar changes.
   const [anchorMonthIndex] = useState(() =>
-    monthIndexOf(
+    monthModel.indexOf(
       value != null && /^\d{4}-\d{2}-\d{2}$/.test(value)
         ? plainDateFromISO(value)
         : plainDateToday(),
@@ -707,62 +715,45 @@ export function TouchDateField({
   );
   const minMonthIndex =
     min != null
-      ? monthIndexOf(plainDateFromISO(min))
+      ? monthModel.indexOf(plainDateFromISO(min))
       : anchorMonthIndex - DEFAULT_MONTH_REACH;
   const maxMonthIndex =
     max != null
-      ? monthIndexOf(plainDateFromISO(max))
+      ? monthModel.indexOf(plainDateFromISO(max))
       : anchorMonthIndex + DEFAULT_MONTH_REACH;
 
   const [monthIndex, setMonthIndex] = useState(() =>
     clampIndex(anchorMonthIndex, minMonthIndex, maxMonthIndex),
   );
 
-  const {year, month} = fromMonthIndex(monthIndex);
-
-  /**
-   * Three-letter weekday names — "Sun", not Calendar's "Su".
-   *
-   * The sheet is full width and the columns are ~51px, so there is room for
-   * the form people actually read, and a picker operated by thumb should not
-   * make anyone decode "Tu" against "Th".
-   *
-   * This is CLDR's `abbreviated` width, which `Intl` produces natively — no
-   * truncation, so the 28 non-English locales stay correct rather than being
-   * sliced to three characters. (Verified against the CLDR tables for all 30
-   * locales in the catalog.) Calendar's 2-letter row is CLDR's *short* width,
-   * which `Intl` cannot express, which is exactly why that surface needs a
-   * generated table and this one does not.
-   *
-   * Built here rather than taken from `useCalendarDays`, which supplies the
-   * short form for Calendar's own header. The rotation matches: day 4 of
-   * January 1970 was a Sunday, so offsetting from it by `weekStartsOn` walks
-   * the week in the same order the panes lay out their columns.
-   */
-  const dayNames = useMemo(
-    () =>
-      Array.from({length: 7}, (_, offset) =>
-        plainDateFormat(
-          {year: 1970, month: 1, day: 4 + ((weekStartsOn + offset) % 7)},
-          DATE_FORMAT_WEEKDAY_ONLY,
-          locale,
-        ),
-      ),
+  const weekdayHeaders = useMemo(
+    () => getWeekdayHeaders(locale, weekStartsOn),
     [locale, weekStartsOn],
   );
-  const monthYearLabel = plainDateFormatStandaloneMonthYear(
-    {year, month, day: 1},
+  // The day the picker keeps: the selected date's day of its month. A month
+  // with an era change takes its heading era from this day.
+  const keptDay =
+    selectedDate == null ? 1 : calendarDayOfMonth(calendar, selectedDate);
+  const monthYearLabel = formatCalendarMonthLabel(
+    calendar,
+    monthModel.monthAt(monthIndex),
     locale,
+    keptDay,
   );
 
   // Formats the committed value only. A function format is called with the ISO
-  // value; a named one reuses Timestamp's shared date mapping, so the same
-  // literal renders the same shape here and on the desktop control.
+  // value; a named one writes the date in the calendar exactly as the desktop
+  // control commits it.
   const displayValue =
     optimisticValue != null && /^\d{4}-\d{2}-\d{2}$/.test(optimisticValue)
       ? typeof format === 'function'
         ? format(optimisticValue)
-        : formatSharedDate(plainDateFromISO(optimisticValue), format, locale)
+        : formatCalendarDateText(
+            plainDateFromISO(optimisticValue),
+            format,
+            locale,
+            calendar,
+          )
       : '';
 
   const fireChange = useCallback(
@@ -848,7 +839,7 @@ export function TouchDateField({
       return;
     }
     fireChange(undefined);
-    const currentMonth = monthIndexOf(today);
+    const currentMonth = monthModel.indexOf(today);
     if (currentMonth < minMonthIndex || currentMonth > maxMonthIndex) {
       return;
     }
@@ -857,7 +848,15 @@ export function TouchDateField({
     }
     setMonthIndex(currentMonth);
     scrollerHandleRef.current?.scrollToMonth(currentMonth, 'smooth');
-  }, [isDisabled, fireChange, today, monthIndex, minMonthIndex, maxMonthIndex]);
+  }, [
+    isDisabled,
+    fireChange,
+    monthModel,
+    today,
+    monthIndex,
+    minMonthIndex,
+    maxMonthIndex,
+  ]);
 
   // Selection commits on the tap and leaves the sheet up, so a mistake can be
   // corrected in place and a nearby date reconsidered without reopening.
@@ -1107,8 +1106,8 @@ export function TouchDateField({
           styles.weekdays,
           isWheelOpen && styles.weekdaysHidden,
         )}>
-        {dayNames.map(name => (
-          <div key={name} {...stylex.props(styles.weekday)}>
+        {weekdayHeaders.map(({dayOfWeek, name}) => (
+          <div key={dayOfWeek} {...stylex.props(styles.weekday)}>
             {name}
           </div>
         ))}
@@ -1130,6 +1129,7 @@ export function TouchDateField({
           <MonthScroller
             key={`${minMonthIndex}:${maxMonthIndex}`}
             handleRef={scrollerHandleRef}
+            monthModel={monthModel}
             minMonthIndex={minMonthIndex}
             maxMonthIndex={maxMonthIndex}
             initialMonthIndex={monthIndex}
@@ -1150,7 +1150,9 @@ export function TouchDateField({
             !isWheelOpen && styles.panelOverlayHidden,
           )}>
           <MonthYearWheels
+            monthModel={monthModel}
             monthIndex={monthIndex}
+            keptDay={keptDay}
             minMonthIndex={minMonthIndex}
             maxMonthIndex={maxMonthIndex}
             onChange={handleWheelChange}

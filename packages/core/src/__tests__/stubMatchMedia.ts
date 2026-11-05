@@ -19,9 +19,11 @@
  * it is exercising the real delay. The failure mode is invisible: every test
  * still passes.
  *
- * So the two answers are separate knobs here. `reduceMotion` answers
- * `prefers-reduced-motion` only; `matches` answers everything else (breakpoint
- * width queries, which tests below a breakpoint want to be true).
+ * So the answers are separate knobs here. `reduceMotion` answers
+ * `prefers-reduced-motion` only; `pointer` answers the pointer queries (a
+ * blanket `true` would also make the pointer coarse, rerouting anything that
+ * behaves differently under a finger); `matches` answers everything else
+ * (breakpoint width queries, which tests below a breakpoint want to be true).
  *
  * SYNC: When modified, update this header.
  */
@@ -31,8 +33,24 @@ import {vi} from 'vitest';
 export interface StubMatchMediaOptions {
   /** Whether the user prefers reduced motion. */
   reduceMotion?: boolean;
+  /** The primary pointer: `(pointer: coarse)` matches only for `'coarse'`. */
+  pointer?: 'fine' | 'coarse';
   /** Answer for every other query — width breakpoints, hover, etc. */
   matches?: boolean;
+}
+
+/** Answer a `pointer` query, or null if it isn't one. */
+function answerPointer(
+  query: string,
+  pointer: 'fine' | 'coarse',
+): boolean | null {
+  if (query.includes('pointer: coarse')) {
+    return pointer === 'coarse';
+  }
+  if (query.includes('pointer: fine')) {
+    return pointer === 'fine';
+  }
+  return null;
 }
 
 /**
@@ -77,12 +95,16 @@ function answerReducedMotion(
  */
 export function stubMatchMedia({
   reduceMotion = false,
+  pointer = 'fine',
   matches = true,
 }: StubMatchMediaOptions = {}): void {
   vi.stubGlobal(
     'matchMedia',
     vi.fn((query: string) => ({
-      matches: answerReducedMotion(query, reduceMotion) ?? matches,
+      matches:
+        answerReducedMotion(query, reduceMotion) ??
+        answerPointer(query, pointer) ??
+        matches,
       media: query,
       onchange: null,
       addEventListener: vi.fn(),

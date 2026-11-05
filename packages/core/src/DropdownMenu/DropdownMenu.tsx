@@ -70,11 +70,11 @@ import {
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useListFocus} from '../hooks/useListFocus';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useDropdownMenuPress} from '../hooks/useMenuPress';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
-import {focusForLastInput} from '../utils/focusReturn';
+import {returnFocusForLastInput} from '../utils/focusReturn';
 import {useMenuOverflow} from './useMenuOverflow';
 import {MenuRegionsContext} from './menuRegionsContext';
 import {moveRegionsTab} from './menuRegionStops';
@@ -460,7 +460,10 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
    * Surface used to present the actions. Pass a value selected by product
    * policy (for example, a compact-touch media query) when the presentation
    * should adapt. Bottom-sheet presentation is intended for short action sets.
-   * @default 'popover'
+   * Omitted, the menu is the anchored popover. Under a finger, on every
+   * device, the finger that opened it picks as UIMenu's does, once it has
+   * moved. `'popover'` pins the anchored popover with the pointer behavior on
+   * every device (the opening press follows the settle rule).
    */
   presentation?: DropdownMenuPresentation;
   items: DropdownMenuOption[];
@@ -468,6 +471,11 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
 }
 
 interface DropdownMenuCompoundProps extends DropdownMenuBaseProps {
+  /**
+   * `'popover'` pins the pointer behavior on every device (the opening press
+   * follows the settle rule). Omitted, on every device, the finger
+   * that opened the menu picks as UIMenu's does, once it has moved.
+   */
   presentation?: 'popover';
   items?: undefined;
   children: ReactNode;
@@ -533,6 +541,20 @@ function holdInvokerThroughPress(
   doc.addEventListener('pointercancel', onPressEnd, true);
 }
 
+/**
+ * The name of a menu opened from a custom trigger: the caller's `aria-label`
+ * when it is a non-empty string, else the trigger's own accessible name. The
+ * popover and the bottom sheet both name the menu through this.
+ */
+function resolveCustomTriggerMenuName(
+  callerLabel: unknown,
+  triggerName: string | undefined,
+): string | undefined {
+  return typeof callerLabel === 'string' && callerLabel.trim() !== ''
+    ? callerLabel
+    : triggerName;
+}
+
 function DropdownMenuBottomSheet({
   button: buttonFromProps,
   renderTrigger,
@@ -596,11 +618,22 @@ function DropdownMenuBottomSheet({
   useEffect(() => {
     void preloadMenuBottomSheetActionList();
   }, []);
+  // The control's name is only readable from the DOM once it is rendered.
+  const [triggerName, setTriggerName] = useState<string | undefined>(undefined);
+  useIsomorphicLayoutEffect(() => {
+    if (renderTrigger != null && isOpen) {
+      setTriggerName(readAccessibleName(buttonRef.current));
+    }
+  }, [renderTrigger, isOpen]);
+  const rootTitle =
+    (renderTrigger != null
+      ? resolveCustomTriggerMenuName(rest['aria-label'], triggerName)
+      : undefined) ?? button.label;
   const currentSubmenu = submenuPath.at(-1);
   const currentItems = currentSubmenu?.items ?? items;
-  const currentTitle = currentSubmenu?.label ?? button.label;
+  const currentTitle = currentSubmenu?.label ?? rootTitle;
   const sheetLabel =
-    typeof currentTitle === 'string' ? currentTitle : button.label;
+    typeof currentTitle === 'string' ? currentTitle : rootTitle;
 
   const setOpen = useCallback(
     (nextIsOpen: boolean) => {
@@ -856,6 +889,7 @@ function DropdownMenuPopover({
   placement = 'below',
   alignment = 'start',
   presentation: _presentation,
+  pressTouchModel = 'uikit',
   header,
   footer,
   className,
@@ -863,7 +897,13 @@ function DropdownMenuPopover({
   xstyle,
   'data-testid': testId,
   ...props
-}: DropdownMenuProps) {
+}: DropdownMenuProps & {
+  /**
+   * How a finger's press runs, on every device: UIMenu's, unless the caller
+   * pins `presentation="popover"`.
+   */
+  pressTouchModel?: 'pointer' | 'uikit';
+}) {
   const t = useComponentTranslator();
   const button = buttonFromProps ?? {label: t(DEFAULT_BUTTON_I18N_KEY)};
 
@@ -993,7 +1033,7 @@ function DropdownMenuPopover({
     // reaches only the design system's own Button; the browser's focus option
     // also reaches a control the caller renders, which the browser would
     // otherwise ring (Chromium after a mouse pick, WebKit after a touch).
-    focusForLastInput(trigger, {preventScroll: true});
+    returnFocusForLastInput(trigger);
   }, [hideOpenFlyouts, isControlled, onOpenChange, prepareFocusReturn]);
 
   // Defer item focus until the layer has committed open, so focus restore
@@ -1040,12 +1080,9 @@ function DropdownMenuPopover({
   // The design system's button names the menu by its label. A custom trigger
   // names it by reference (or the caller's `aria-label` does), so that name
   // is read off the control as the menu opens.
-  const callerMenuLabel = rest['aria-label'];
   const menuLabel =
     renderTrigger != null
-      ? typeof callerMenuLabel === 'string' && callerMenuLabel.trim() !== ''
-        ? callerMenuLabel
-        : triggerName
+      ? resolveCustomTriggerMenuName(rest['aria-label'], triggerName)
       : typeof button.label === 'string'
         ? button.label
         : undefined;
@@ -1337,12 +1374,15 @@ function DropdownMenuPopover({
   // The press model: the row under a release acts, the highlight follows a
   // held pointer. A mouse released outside the menu dismisses it; a finger
   // released outside leaves it open, so the hook never calls onDismiss then.
-  const menuPress = useMenuPress({
+  const menuPress = useDropdownMenuPress({
     menuRef: listRef,
     triggerRef: buttonRef,
     itemSelector: MENU_ITEM_SELECTOR,
     onTriggerPress: handleTriggerPress,
     onDismiss: closeMenu,
+    // Under a finger, on every device, the opening finger picks as UIMenu's
+    // does. `presentation="popover"` pins the pointer model.
+    touchModel: pressTouchModel,
   });
   cancelMenuPressRef.current = menuPress.cancel;
 
@@ -1764,7 +1804,13 @@ export function DropdownMenu(props: DropdownMenuProps) {
     );
   }
 
-  return <DropdownMenuPopover {...sharedProps} presentation="popover" />;
+  return (
+    <DropdownMenuPopover
+      {...sharedProps}
+      presentation="popover"
+      pressTouchModel={props.presentation === 'popover' ? 'pointer' : 'uikit'}
+    />
+  );
 }
 
 DropdownMenu.displayName = 'DropdownMenu';

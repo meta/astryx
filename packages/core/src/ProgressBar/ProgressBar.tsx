@@ -4,7 +4,7 @@
 
 /**
  * @file ProgressBar.tsx
- * @input Uses React, useId, stylex, tokens and ProgressBarTouch
+ * @input Uses React, useId, stylex, tokens, ProgressBarTouch and resolveMotion
  * @output Exports ProgressBar component, ProgressBarProps, ProgressBarVariant types
  * @position Core implementation; consumed by index.ts
  *
@@ -36,6 +36,10 @@ import {themeProps} from '../utils/themeProps';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {ProgressBarVariantMap} from './index';
 import {useProgressBarTouch} from './ProgressBarTouch';
+import {formatMotionRoleValue} from '../motion/roles';
+import {resolveMotion} from '../motion/resolveMotion';
+import {progressBar} from '../motion/uikit/progressBar';
+import {timing} from '../motion/uikit/timing';
 
 // Every mark is wrapped in a Tooltip (marks always carry a label), so load it
 // lazily: a ProgressBar with no marks never bundles the Tooltip chunk. While it
@@ -117,7 +121,7 @@ export interface ProgressBarProps extends BaseProps<HTMLDivElement> {
    * When true, renders an animated indeterminate progress indicator.
    * Use when the progress amount is unknown (e.g. loading, processing).
    * The `value` and `hasValueLabel` props are ignored in this mode.
-   * Respects `prefers-reduced-motion` by slowing the animation.
+   * Under reduced motion it pulses in place instead of sliding.
    * @default false
    */
   isIndeterminate?: boolean;
@@ -167,6 +171,19 @@ const indeterminateSlideRtl = stylex.keyframes({
   },
   '100%': {
     transform: 'translateX(-250%)',
+  },
+});
+
+// Under reduced motion the indeterminate fill stops travelling and pulses in
+// place. It goes from full opacity down to the pulse's floor
+// (`--_progress-bar-pulse-floor`, the progress table's) and back. The
+// animation alternates direction each pass.
+const indeterminatePulse = stylex.keyframes({
+  from: {
+    opacity: 1,
+  },
+  to: {
+    opacity: 'var(--_progress-bar-pulse-floor)',
   },
 });
 
@@ -266,7 +283,6 @@ const styles = stylex.create({
       default: '100%',
       '@media (forced-colors: active)': {
         default: 'var(--_progress-bar-fill, 0%)',
-        // Under a finger: the touch minimum and the flip offset (below).
         '@media (pointer: coarse)':
           'calc(max(var(--_progress-bar-fill, 0%), var(--_progress-bar-min, 0px)) + var(--_progress-bar-flip, 0) * 0.01px)',
       },
@@ -353,17 +369,37 @@ const styles = stylex.create({
       '@media (forced-colors: active)': 'CanvasText',
     },
     outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
-    width: '40%',
+    // Under reduced motion, on every pointer, the fill spans the whole track
+    // as one solid bar, and only its opacity pulses. Each way takes the
+    // `progress.reducedMotionPulseMs` role on the `timing.curves.move` curve
+    // (`--_progress-bar-pulse`, `--_progress-bar-pulse-curve`, set inline from
+    // the progress table). A busy loop: tempo does not scale it.
+    width: {
+      default: '40%',
+      '@media (prefers-reduced-motion: reduce)': '100%',
+    },
     borderRadius: radiusVars['--radius-full'],
     animationName: {
       default: indeterminateSlide,
-      ':is([dir="rtl"] *)': indeterminateSlideRtl,
+      ':is([dir="rtl"] *)': {
+        default: indeterminateSlideRtl,
+        '@media (prefers-reduced-motion: reduce)': indeterminatePulse,
+      },
+      '@media (prefers-reduced-motion: reduce)': indeterminatePulse,
     },
     animationDuration: {
       default: '1.5s',
-      '@media (prefers-reduced-motion: reduce)': '3s',
+      '@media (prefers-reduced-motion: reduce)': 'var(--_progress-bar-pulse)',
     },
-    animationTimingFunction: 'ease-in-out',
+    animationTimingFunction: {
+      default: 'ease-in-out',
+      '@media (prefers-reduced-motion: reduce)':
+        'var(--_progress-bar-pulse-curve)',
+    },
+    animationDirection: {
+      default: null,
+      '@media (prefers-reduced-motion: reduce)': 'alternate',
+    },
     animationIterationCount: 'infinite',
   },
   // A mark is a vertical tick centered on the track via their shared positioning container.
@@ -474,6 +510,15 @@ const markOnTrackStyles = stylex.create({
   },
 });
 
+// The reduced-motion pulse's variables, from the progress table.
+type PulseStyle = CSSProperties &
+  Record<
+    | '--_progress-bar-pulse'
+    | '--_progress-bar-pulse-curve'
+    | '--_progress-bar-pulse-floor',
+    string
+  >;
+
 // `CSSProperties` has no index signature for custom properties, so the fill's
 // inline style — which publishes the filled share as the private
 // `--_progress-bar-fill` — needs this augmentation to typecheck.
@@ -486,6 +531,20 @@ type FillStyle = CSSProperties &
     | '--_progress-bar-min',
     string
   >;
+
+/**
+ * The reduced-motion pulse plays the `progress.reducedMotionPulseMs` role on
+ * the `timing.curves.move` curve, down to the progress table's floor.
+ */
+function pulseStyle(element: Element | null): PulseStyle {
+  const pulseMs = resolveMotion(element, progressBar, 'reducedMotionPulseMs');
+  const curve = resolveMotion(element, timing.curves.move);
+  return {
+    '--_progress-bar-pulse': `${pulseMs}ms`,
+    '--_progress-bar-pulse-curve': formatMotionRoleValue('curve', curve),
+    '--_progress-bar-pulse-floor': String(progressBar.reducedMotionPulseFloor),
+  };
+}
 
 function defaultFormatValueLabel(value: number, max: number): string {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
@@ -662,6 +721,7 @@ export function ProgressBar({
                   variantStyles[fillVariant],
                 ),
               )}
+              style={pulseStyle(null)}
             />
           ) : (
             <div

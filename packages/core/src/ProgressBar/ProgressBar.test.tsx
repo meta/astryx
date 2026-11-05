@@ -24,6 +24,7 @@ import {
 } from '../motion/reducedMotion';
 import {TOUCH_QUERY} from '../utils/touchQueries';
 import {TOUCH_MIN_FILL_PX} from './ProgressBarTouch';
+import {timing} from '../motion/uikit/timing';
 
 // A labeled mark wraps the tick in a lazily-loaded Tooltip (React.lazy +
 // Suspense). Preload that chunk once so the Tooltip (and its
@@ -1259,6 +1260,86 @@ describe('ProgressBar under a finger: UIProgressView', () => {
     );
     for (const index of keys) {
       expect(duration.slice(index).split(',')[0]).toMatch(/'0s'$|\n\s*'0s'$/);
+    }
+  });
+});
+
+describe('ProgressBar under reduced motion: the indeterminate pulse', () => {
+  const fillOf = () =>
+    screen.getByRole('progressbar').firstElementChild as HTMLElement;
+  const source = () =>
+    readFileSync(path.resolve(__dirname, 'ProgressBar.tsx'), 'utf8');
+
+  for (const coarse of [false, true]) {
+    it(`spans the track and only pulses its opacity, with ${coarse ? 'a finger' : 'a mouse'}`, () => {
+      render(<ProgressBar isIndeterminate label="Loading" />);
+      const fill = fillOf();
+      const reduce = {coarse, reduce: true};
+      expect(valueUnder(fill, 'width', reduce)).toBe('100%');
+      expect(valueUnder(fill, 'animation-duration', reduce)).toMatch(
+        /^var\(--_progress-bar-pulse\)$/,
+      );
+      expect(valueUnder(fill, 'animation-timing-function', reduce)).toMatch(
+        /^var\(--_progress-bar-pulse-curve\)$/,
+      );
+      expect(valueUnder(fill, 'animation-direction', reduce)).toBe('alternate');
+      // Without reduced motion the 40% segment still slides.
+      const motion = {coarse, reduce: false};
+      expect(valueUnder(fill, 'width', motion)).toBe('40%');
+      expect(valueUnder(fill, 'animation-duration', motion)).toBe('1.5s');
+      expect(valueUnder(fill, 'animation-direction', motion)).toBeUndefined();
+    });
+  }
+
+  it('pulses from full opacity down to the progress table floor and back', () => {
+    render(<ProgressBar isIndeterminate label="Loading" />);
+    expect(fillOf().style.getPropertyValue('--_progress-bar-pulse-floor')).toBe(
+      String(progressBar.reducedMotionPulseFloor),
+    );
+    expect(progressBar.reducedMotionPulseFloor).toBe(0.84);
+    // jsdom has no CSSKeyframesRule global: match the rule's text.
+    const frames = Array.from(document.styleSheets)
+      .flatMap(sheet => Array.from(sheet.cssRules))
+      .map(rule => rule.cssText.replace(/\s+/g, ''))
+      .filter(text => text.startsWith('@keyframes'))
+      .filter(text => text.includes('--_progress-bar-pulse-floor'));
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatch(/opacity:1/);
+    expect(frames[0]).toMatch(/opacity:var\(--_progress-bar-pulse-floor\)/);
+    // The pulse never moves the fill.
+    expect(frames[0]).not.toMatch(/transform/);
+  });
+
+  it('plays the progress.reducedMotionPulseMs role on the timing.curves.move curve, which tempo does not scale', () => {
+    render(<ProgressBar isIndeterminate label="Loading" />);
+    const fill = fillOf();
+    expect(fill.style.getPropertyValue('--_progress-bar-pulse')).toBe(
+      `${progressBar.reducedMotionPulseMs}ms`,
+    );
+    expect(progressBar.reducedMotionPulseMs).toBe(2000);
+    expect(fill.style.getPropertyValue('--_progress-bar-pulse-curve')).toBe(
+      formatMotionRoleValue('curve', timing.curves.move),
+    );
+    registerProgressBarTable();
+    expect(motionRole('progress.reducedMotionPulseMs')?.value).toBe(
+      progressBar.reducedMotionPulseMs,
+    );
+    // A busy loop: nothing in the indeterminate fill reads the theme's tempo,
+    // and its reduced-motion keys play no literal.
+    const text = source();
+    const block = text.slice(
+      text.indexOf('  indeterminateFill: {'),
+      text.indexOf('  // A mark is a vertical tick'),
+    );
+    expect(block).not.toContain('--_astryx-motion-tempo');
+    const reduceValues = [
+      ...block.matchAll(
+        /'@media \(prefers-reduced-motion: reduce\)':\s*([^,\n]+)/g,
+      ),
+    ].map(match => match[1].trim());
+    expect(reduceValues.length).toBeGreaterThan(0);
+    for (const value of reduceValues) {
+      expect(value).not.toMatch(/^'\d+(\.\d+)?m?s'$|cubic-bezier|ease/);
     }
   });
 });

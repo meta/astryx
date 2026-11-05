@@ -12,7 +12,12 @@
  *   (`*.interaction.browser.spec.ts`, run by `pnpm test:interaction`)
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   openStory,
   touchDriver,
@@ -229,17 +234,18 @@ test('on a touch screen, under Reduced Motion an arrow dips the calendar and cha
     )
     .toBe(0);
   // design:reduced-motion DR2: one opacity dip, dark at its middle and back
-  // at its end, in at most the cross-fade's 200 ms.
+  // at its end, in at most the cross-fade's 200 ms. It plays as two halves,
+  // so the month changes between them.
   const runs = await page.evaluate(
     () => (window as unknown as {createdRuns: CreatedRun[]}).createdRuns,
   );
-  expect(runs).toHaveLength(1);
-  const [dip] = runs;
-  expect(dip.properties).toEqual(['opacity']);
-  expect(dip.opacities[0]).toBe(1);
-  expect(dip.opacities[dip.opacities.length - 1]).toBe(1);
-  expect(Math.min(...dip.opacities)).toBeLessThan(0.5);
-  expect(dip.duration).toBeLessThanOrEqual(200);
+  expect(runs).toHaveLength(2);
+  const [fadeOut, fadeIn] = runs;
+  expect(fadeOut.properties).toEqual(['opacity']);
+  expect(fadeIn.properties).toEqual(['opacity']);
+  expect(fadeOut.opacities).toEqual([1, 0]);
+  expect(fadeIn.opacities).toEqual([0, 1]);
+  expect(fadeOut.duration + fadeIn.duration).toBeLessThanOrEqual(200);
   // The month changes with no travel: one jump from the old offset to the
   // new one, and the scroller stays there.
   const after = await viewport.evaluate(element => element.scrollLeft);

@@ -6,13 +6,13 @@
  */
 
 import * as fs from 'node:fs';
-import {fileURLToPath} from 'node:url';
 import * as path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {classesIn, cutCss, layerOrderOf, requiredClasses} from './css-cut.mjs';
 import {readSourceBlock, sourceBlock} from './source-block.mjs';
 import {isAstryxMarkup, parseHtml} from './html-reader.mjs';
 import {renderPage} from './render-page.mjs';
+import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 describe('requiredClasses with grouped selectors', () => {
   it('keeps a rule whose :is() or :where() alternatives are not all used', async () => {
@@ -103,15 +103,13 @@ describe('the HTML reader', () => {
 
 describe('renderPage time limit', () => {
   it('stops a page that never finishes rendering', async () => {
-    const dir = fs.mkdtempSync(
-      path.join(path.dirname(fileURLToPath(import.meta.url)), '../../.astryx-render-loop-'),
-    );
+    const dir = makeLinkedFixture('astryx-render-loop-', ['react', 'react-dom']);
     try {
       const file = path.join(dir, 'loop.jsx');
       fs.writeFileSync(file, 'export default function Page() { for (;;) {} }\n');
       await expect(renderPage(file, {timeoutMs: 1500})).rejects.toMatchObject({code: 'ERR_RENDER_TIMEOUT'});
     } finally {
-      fs.rmSync(dir, {recursive: true, force: true});
+      removeLinkedFixture(dir);
     }
   }, 30_000);
 });

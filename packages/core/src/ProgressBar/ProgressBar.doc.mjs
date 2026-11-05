@@ -101,7 +101,8 @@ export const docs = {
     {
       name: 'isIndeterminate',
       type: 'boolean',
-      description: 'Animated loading indicator for unknown progress.',
+      description:
+        'Animated loading indicator for unknown progress. Under reduced motion it pulses in place instead of sliding.',
       default: 'false',
     },
     {
@@ -390,7 +391,8 @@ export const docsDense = {
     formatValueLabel:
       'Custom value label formatter; defaults to percentage string.',
     variant: 'Semantic color variant.',
-    isIndeterminate: 'Animated loading indicator for unknown progress.',
+    isIndeterminate:
+      'Animated loading indicator for unknown progress. Under reduced motion it pulses in place instead of sliding.',
     marks:
       'Fixed target marks ({value, label?}) drawn on the track in the 0..max scale; stay visible past the fill. Marks inside the fill take the variant on-color; marks on the bare track take the primary text color (secondary when disabled). A label reveals a tooltip on hover/focus. Ignored when indeterminate.',
     isDisabled: 'Visually disabled: grays out fill and text.',

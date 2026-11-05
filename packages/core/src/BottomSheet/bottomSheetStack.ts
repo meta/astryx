@@ -4,7 +4,8 @@
 
 /**
  * @file bottomSheetStack.ts
- * @input The DOM (dialog elements, document order) and focusForLastInput
+ * @input The DOM (dialog elements, document order) and the focus-return
+ *   utilities
  * @output The private bottom-sheet stack registry: host registration,
  *   open-order ranking, top-layer reconciliation, one view per host, the
  *   replace handoff, and the shared native show/hide and focus helpers
@@ -50,7 +51,7 @@
 // version keeps its own stack. Each document is its own stack.
 
 import {notifyTopLayerEntry} from '../Layer/modalOutlet';
-import {focusForLastInput} from '../utils/focusReturn';
+import {focusForLastInput, returnFocusForLastInput} from '../utils/focusReturn';
 
 export interface BottomSheetStackView {
   /** Another modal sheet is presented alongside this one. */
@@ -458,7 +459,7 @@ function completeClosingGroup(group: ClosingGroup): void {
   group.reported = true;
   const target = group.returnTarget;
   if (target != null && target.isConnected) {
-    focusForLastInput(target);
+    returnFocusForLastInput(target);
   }
 }
 
@@ -866,12 +867,16 @@ function openModalsOutside(element: Element): HTMLDialogElement[] {
     if (dialog === element || dialog.contains(element)) {
       continue;
     }
-    // A modal on its way out (a closing sheet keeps its dialog modal through
-    // the exit animation, inert and hidden) blocks nothing any more: it is
-    // gone for this decision.
+    // A modal on its way out blocks nothing any more: it is gone for this
+    // decision. A closing sheet keeps its dialog modal through the exit
+    // animation; it is inert and hidden then, unless focus was inside it at
+    // the close, so the registry's own record of the close counts too.
     if (
       dialog.hasAttribute('inert') ||
-      dialog.getAttribute('aria-hidden') === 'true'
+      dialog.getAttribute('aria-hidden') === 'true' ||
+      state.entries.some(
+        entry => !entry.isOpen && entry.getElement() === dialog,
+      )
     ) {
       continue;
     }
@@ -1877,7 +1882,7 @@ export function getBottomSheetBeneath(
 
 // preventScroll on both: presenting a sheet must not scroll the page to reveal
 // what it just focused. For an autofocused field that reveal is the mobile
-// keyboard's, and it moves the document under a fixed sheet; useMobileKeyboard
+// keyboard's, and it moves the document under a fixed sheet. useMobileKeyboard
 // brings the field into view within the sheet instead.
 /**
  * Move focus into a sheet panel. Focus already inside the sheet stays put:

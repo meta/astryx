@@ -1080,8 +1080,11 @@ describe('ContextMenu compound mode', () => {
       );
       const anchor = getCursorAnchor(screen.getByTestId('ctx'));
       expect(anchor.tagName).toBe('SPAN');
-      // Carries an anchor-name so the menu can be anchored to it via CSS
-      // anchor positioning (context mode), not fixed viewport coordinates.
+      // Carries an anchor-name while the menu is open, so the menu is
+      // anchored to it via CSS anchor positioning (context mode), not fixed
+      // viewport coordinates. Closed, it is no anchor.
+      expect(anchor.style.anchorName).toBe('');
+      openMenu();
       expect(anchor.style.anchorName).toMatch(/^--astryx-layer-/);
       // Owns a box: WebKit counts an empty anchor box inside a scroll
       // container as clipped, and `position-visibility` hides the menu.
