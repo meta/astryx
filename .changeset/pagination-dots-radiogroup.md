@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Pagination: the dots variant now exposes the radio group it already behaves as. The container is a `radiogroup`, each dot is a `radio` named by its page ("Page 3") with `aria-checked` on the current page, so a screen reader announces the dot's position ("3 of 7") and the arrow-key behavior matches what it hears. Keyboard behavior is unchanged; `aria-current` is no longer set on the dots, since `aria-checked` carries the state.
+[fix] Pagination: the dots variant now exposes the APG radio group it already behaves as. Before, the dots were a `group` of `button`s named "Go to page N", with `aria-current="page"` on the current page. Now the container is a `radiogroup` named by the page-indicators label, and each dot is a `radio` named "Page N" with `aria-checked` on the current page and no `aria-current`. Keyboard behavior is unchanged.
 
 @cixzhang

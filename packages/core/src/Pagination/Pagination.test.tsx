@@ -611,30 +611,6 @@ describe('Pagination', () => {
       expect(dots).toHaveLength(5);
     });
 
-    it('exposes the dots as a radio group: one checked radio per page, named by its page', () => {
-      render(
-        <Pagination
-          page={3}
-          onChange={() => {}}
-          totalPages={5}
-          variant="dots"
-        />,
-      );
-      const activeDot = screen.getByRole('radio', {name: 'Page 3'});
-      expect(activeDot).toHaveAttribute('aria-checked', 'true');
-      // aria-checked alone carries the state, so it is not announced twice.
-      expect(activeDot).not.toHaveAttribute('aria-current');
-      expect(
-        screen
-          .getAllByRole('radio')
-          .filter(dot => dot.getAttribute('aria-checked') === 'true'),
-      ).toEqual([activeDot]);
-      expect(screen.getByRole('radio', {name: 'Page 1'})).toHaveAttribute(
-        'aria-checked',
-        'false',
-      );
-    });
-
     // -------------------------------------------------------------------------
     // Keyboard navigation (roving tabindex + arrow keys via useListFocus).
     // Selection follows focus: arrow/Home/End move focus and select that page.

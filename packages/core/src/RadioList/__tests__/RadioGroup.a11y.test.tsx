@@ -133,10 +133,6 @@ describe('the radio-group binding inventory', () => {
         classification: 'out-of-scope',
       },
       {
-        owner: 'Pagination dots',
-        classification: 'out-of-scope',
-      },
-      {
         owner: 'Home and End keyboard shortcuts',
         classification: 'out-of-scope',
       },
