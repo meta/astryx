@@ -246,6 +246,10 @@
         },
         {
           "kind": "template",
+          "name": "DialogHeroHeaderShowcase"
+        },
+        {
+          "kind": "template",
           "name": "DiffViewerShowcase"
         },
         {

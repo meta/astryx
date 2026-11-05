@@ -4612,6 +4612,11 @@
       "aliases": []
     },
     {
+      "name": "showcase-dialog-hero-header-default",
+      "path": "showcases/dialog-hero-header/default",
+      "aliases": []
+    },
+    {
       "name": "showcase-dialog-default",
       "path": "showcases/dialog/default",
       "aliases": []
