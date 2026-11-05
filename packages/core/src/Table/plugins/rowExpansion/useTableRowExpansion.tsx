@@ -41,6 +41,7 @@ import {panelDividerFor} from '../../rowDivider';
 import {useTheme, useThemeName} from '../../../theme/useTheme';
 import {Icon} from '../../../Icon';
 import {ComponentIcon} from '../../../Icon/ComponentIcon';
+import {iconBoxSizeStyles} from '../../../Icon/IconSize.stylex';
 import {VisuallyHidden} from '../../../VisuallyHidden';
 import {resolveContextActions} from '../../tableContextMenu';
 import {useTableContext} from '../../useTableCellStyles';
@@ -218,6 +219,22 @@ const expansionStyles = stylex.create({
       color: colorVars['--color-icon-primary'],
     },
   },
+  // A box the size of the default glyph that holds whatever the slot
+  // resolves, centred and out of flow. The button then takes its baseline
+  // from this box, so a theme's glyph size or a hidden glyph leaves the row
+  // height as the default glyph sets it.
+  glyphBox: {
+    display: 'inline-block',
+    position: 'relative',
+    flexShrink: 0,
+  },
+  glyphCenter: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   chevron: {
     transitionProperty: 'transform',
     transitionDuration: durationVars['--duration-fast'],
@@ -389,17 +406,21 @@ function ExpansionChevron({
       }}
       aria-label={ariaLabel}
       aria-expanded={isExpanded}>
-      <ComponentIcon
-        slot="table-row-expand"
-        state={{expanded: isExpanded}}
-        fallback={{icon: 'chevronRight', size: 'xsm'}}
-        xstyle={[
-          expansionStyles.chevron,
-          isExpanded
-            ? expansionStyles.chevronExpanded
-            : expansionStyles.chevronCollapsed,
-        ]}
-      />
+      <span {...stylex.props(expansionStyles.glyphBox, iconBoxSizeStyles.xsm)}>
+        <span {...stylex.props(expansionStyles.glyphCenter)}>
+          <ComponentIcon
+            slot="table-row-expand"
+            state={{expanded: isExpanded}}
+            fallback={{icon: 'chevronRight', size: 'xsm'}}
+            xstyle={[
+              expansionStyles.chevron,
+              isExpanded
+                ? expansionStyles.chevronExpanded
+                : expansionStyles.chevronCollapsed,
+            ]}
+          />
+        </span>
+      </span>
     </button>
   );
 }
