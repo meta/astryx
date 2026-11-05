@@ -1324,11 +1324,12 @@ test.describe('frame evidence', () => {
   test('in the WebKit container, compiled shaders outlive the run', async ({
     browser,
   }, testInfo) => {
-    // The official Playwright image keeps its browsers here.
+    // Only webkit-container.mjs sets ASTRYX_WEBKIT_CONTAINER, and only it
+    // keeps the shader cache on the host.
     test.skip(
       testInfo.project.name !== 'webkit' ||
-        process.env.PLAYWRIGHT_BROWSERS_PATH !== '/ms-playwright',
-      'runs inside webkit-container.mjs',
+        process.env.ASTRYX_WEBKIT_CONTAINER !== '1',
+      'no host-kept shader cache: runs only under webkit-container.mjs',
     );
     // A cache inside the container dies with it: every run then compiled each
     // shader again, 450–700 ms in the first frame of a blurred layer.
