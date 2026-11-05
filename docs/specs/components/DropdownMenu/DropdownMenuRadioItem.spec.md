@@ -43,7 +43,7 @@ system_specs: [spec:AST-020]
 | Behavior                | Enabled activation emits the row value through the group, applies the group close policy, then runs the caller click handler; disabled activation does none of these.                   |
 | End-user impact         | Assistive technology hears one radio option with its checked state; pointer and keyboard selection commit the same value, and a disabled option cannot be chosen.                       |
 | Builder impact          | Place the row inside a DropdownMenuRadioGroup and give it a unique value and a label; caller handlers run alongside the row's own behavior.                                             |
-| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change.                                                                                                                               |
+| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"` (FR4).                                                                                                                               |
 | Review checks           | Reject a nested semantic radio, a second keyboard owner, local selection state, a dropped caller input, or disabled activation that selects, closes, or calls the caller click handler. |
 | Governing rules         | `spec:AST-020` FR15; `architecture:public-component-api/INV5–INV8`; `architecture:component-theming-surface/INV4–INV6`; `spec:AST-020/FR1,FR2`.                                         |
 
@@ -61,8 +61,8 @@ activation, and the menu lifecycle.
 ## Compatibility and migration
 
 - Released default preserved: yes (`isDisabled=false`).
-- Compatibility class: records shipped behavior; no public prop, default,
-  export, or DOM change.
+- Compatibility class: records shipped behavior; no public prop or export
+  change; a disabled row gains `tabindex="-1"` (FR4).
 - Controlled behavior: the checked state always derives from the group `value`;
   the row holds no selection state.
 - Migration decision: none.
