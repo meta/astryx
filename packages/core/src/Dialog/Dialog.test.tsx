@@ -524,6 +524,22 @@ describe('Dialog', () => {
     expect(screen.getByRole('button', {name: 'Continue'})).toHaveFocus();
   });
 
+  it('honors its own initial-focus request inside an inert region of the page', () => {
+    render(
+      <div inert>
+        <Dialog isOpen={true} onOpenChange={() => {}}>
+          <button type="button" data-autofocus>
+            Continue
+          </button>
+        </Dialog>
+      </div>,
+    );
+
+    expect(
+      screen.getByRole('button', {name: 'Continue', hidden: true}),
+    ).toHaveFocus();
+  });
+
   it('falls through an initial-focus request that cannot take focus', () => {
     render(
       <Dialog isOpen={true} onOpenChange={() => {}}>
@@ -974,6 +990,25 @@ describe('Dialog', () => {
           </>
         );
       }
+
+      it("honors an explicit request before a header's title request", () => {
+        render(
+          createPortal(
+            <Dialog isOpen={true} onOpenChange={() => {}} aria-label="Review">
+              <h2 tabIndex={-1} data-autofocus="dialog-title">
+                Hero title
+              </h2>
+              <button type="button" data-autofocus>
+                Continue
+              </button>
+            </Dialog>,
+            secondDocument.body,
+          ),
+        );
+
+        const continueButton = secondDocument.querySelector('button')!;
+        expect(secondDocument.activeElement).toBe(continueButton);
+      });
 
       function SecondDocumentFieldDialog({isOpen}: {isOpen: boolean}) {
         return createPortal(

@@ -663,14 +663,21 @@ export function Dialog({
           ),
         ];
         for (const target of autofocusTargets) {
-          if (target.closest('[hidden], [inert], [aria-hidden="true"]')) {
+          // Only hiding inside the dialog makes a request ineligible: the
+          // modal dialog is not part of an inert region around it.
+          const hiddenAncestor = target.closest(
+            '[hidden], [inert], [aria-hidden="true"]',
+          );
+          if (hiddenAncestor != null && dialog.contains(hiddenAncestor)) {
             continue;
           }
           // Disabled and CSS-hidden targets cannot receive focus in the
           // browser. If a request cannot land, try the next eligible request
           // and finally the title; otherwise preserve native initial focus.
+          // The dialog's own document reports its focus, also when the dialog
+          // renders in an iframe or a Picture-in-Picture window.
           focusForLastInput(target);
-          if (document.activeElement === target) {
+          if (target.ownerDocument.activeElement === target) {
             break;
           }
         }
