@@ -1047,7 +1047,7 @@ component DropdownMenu(props: DropdownMenuProps)
   prop onClick?: () => void
   prop onOpenChange?: (isOpen: boolean) => void
   prop placement?: LayerPlacement = 'below'
-  prop presentation?: DropdownMenuPresentation = 'popover'
+  prop presentation?: DropdownMenuPresentation
   prop renderTrigger?: (props: DropdownMenuTriggerProps) => ReactNode
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -1602,7 +1602,7 @@ component MoreMenu(props: MoreMenuProps)
   prop label?: string = 'More options'
   prop onOpenChange?: (isOpen: boolean) => void
   prop placement?: LayerPlacement = 'below'
-  prop presentation?: DropdownMenuPresentation = 'popover'
+  prop presentation?: DropdownMenuPresentation
   prop ref?: React.Ref<HTMLButtonElement>
   prop size?: ButtonSize = 'md'
   prop variant?: ButtonVariant = 'ghost'
@@ -3013,7 +3013,7 @@ function formatDisplayTime12h: (time: ISOTimeString | undefined, includeSeconds?
 function formatDisplayTime24h: (time: ISOTimeString | undefined, includeSeconds?: boolean) => string
 function formatHex: (r: number, g: number, b: number) => string
 function formatISOTime: (time: ParsedTime, includeSeconds?: boolean) => ISOTimeString
-function formatSharedDate: (pd: PlainDate, format: SharedDateFormat, locale?: Locale) => string
+function formatSharedDate: (pd: PlainDate, format: SharedDateFormat, locale?: Locale, calendar?: CalendarSystem) => string
 function generateAdaptationCSS: (theme: DefinedTheme, warnings?: string[]) => ThemeCSSOutput
 function generateColumns: <T extends Record<string, unknown>>(data: T[]) => TableColumn<T>[]
 function generateOnMediaCSS: (theme: DefinedTheme, warnings?: string[]) => string
@@ -5786,6 +5786,7 @@ interface UseCalendarConstraintsReturn
   maxDate: PlainDate | null
   minDate: PlainDate | null
 interface UseCalendarDaysOptions
+  calendar?: CalendarSystem = 'gregory'
   hasVariableRowCount?: boolean
   month: number
   weekStartsOn?: DayOfWeek
@@ -5796,6 +5797,7 @@ interface UseCalendarDaysReturn
   totalCells: number
   weeks: CalendarDay[][]
 interface UseCalendarNavigationOptions
+  calendar?: CalendarSystem = 'gregory'
   focusDate?: ISODateString
   initialValue?: ISODateString
   numberOfMonths?: 1 | 2
@@ -5806,6 +5808,7 @@ interface UseCalendarNavigationReturn
   monthYearLabel: string
   navigateMonth: (delta: number, focusedDate?: ISODateString, offset?: number) => void
   pendingFocus: ISODateString | null
+  visibleCalendarMonths: Array<{ year: number; month: number }>
   visibleMonths: PlainDate[]
 interface UseChatComposerTokensOptions
   editableRef: React.RefObject<HTMLDivElement | null>
@@ -8269,7 +8272,7 @@ usePowerSearchConfig (.)
 ### Functions
 
 ```text
-function formatFilterValue: (_config: InternalConfig, operatorValue: OperatorValue, filterValue: FilterValue, maxLength: number, t: TranslatorFn, locale: Locale, timezoneID?: string) => string
+function formatFilterValue: (_config: InternalConfig, operatorValue: OperatorValue, filterValue: FilterValue, maxLength: number, t: TranslatorFn, locale: Locale, timezoneID?: string, calendar?: CalendarSystem) => string
 ```
 
 ### Types

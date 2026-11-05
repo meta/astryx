@@ -3,24 +3,26 @@
 /**
  * @file calendarSystem.ts
  * @input A calendar identifier and Gregorian PlainDates
- * @output Calendar months located by their Gregorian days, month and year
- *   steps, dates from calendar fields, availability of each calendar, and
- *   calendar labels and digits
- * @position Shared date utility; read by the i18n calendar resolution and by
- *   Calendar. Values stay Gregorian PlainDates. Temporal owns the arithmetic of
+ * @output Calendar months located by their Gregorian days, their year and
+ *   month numbers, month and year steps, dates from calendar fields,
+ *   availability of each calendar, and calendar labels and digits
+ * @position Shared date utility; read by the i18n calendar resolution, by
+ *   Calendar, and by its public hooks. Values stay Gregorian PlainDates. Temporal owns the arithmetic of
  *   every calendar whose months are not Gregorian.
  */
 
 import type {Locale} from '../i18n/types';
 import type {PlainDate} from './dateTypes';
 import {
+  dateTimeFormatAtCall,
   dateTimeFormatFor,
   plainDateAddDays,
   plainDateAddMonths,
-  plainDateFormat,
   plainDateFormatDayNumber,
   plainDateFormatStandaloneMonthYear,
   plainDateFormatToParts,
+  plainDateFromDate,
+  plainDateFromInstant,
   plainDateIsInRange,
   getDaysInMonth,
 } from './plainDate';
@@ -97,7 +99,7 @@ interface TemporalPlainDate {
   readonly day: number;
   readonly daysInMonth: number;
   readonly monthsInYear: number;
-  with(fields: {day: number}): TemporalPlainDate;
+  with(fields: {year?: number; month?: number; day: number}): TemporalPlainDate;
   add(duration: {months?: number; years?: number}): TemporalPlainDate;
   withCalendar(calendar: 'iso8601'): TemporalPlainDate;
 }
@@ -216,6 +218,61 @@ export function calendarMonthOf(
   return temporalMonth(inCalendar(calendar, pd).with({day: 1}));
 }
 
+/**
+ * A calendar month by its year and its position in that year, as
+ * `Temporal.PlainDate` numbers them: month 13 exists in a Hebrew leap year.
+ */
+export interface CalendarYearMonth {
+  readonly year: number;
+  readonly month: number;
+}
+
+// Temporal counts the years of these Gregorian-aligned calendars from another
+// epoch: 2026 is 2569 in `buddhist` and 115 in `roc`.
+const GREGORIAN_YEAR_OFFSETS: Partial<Record<CalendarSystem, number>> = {
+  buddhist: 543,
+  roc: -1911,
+};
+
+/** The year and month numbers of a calendar month. */
+export function calendarYearMonthOf(
+  calendar: CalendarSystem,
+  month: CalendarMonth,
+): CalendarYearMonth {
+  if (isGregorianAligned(calendar)) {
+    return {
+      year: month.start.year + (GREGORIAN_YEAR_OFFSETS[calendar] ?? 0),
+      month: month.start.month,
+    };
+  }
+  const {year, month: monthOfYear} = inCalendar(calendar, month.start);
+  return {year, month: monthOfYear};
+}
+
+/**
+ * The calendar month with these year and month numbers. A month past the end
+ * of its year becomes the last month of that year, as Temporal constrains it.
+ */
+export function calendarMonthFromYearMonth(
+  calendar: CalendarSystem,
+  {year, month}: CalendarYearMonth,
+): CalendarMonth {
+  if (isGregorianAligned(calendar)) {
+    return gregorianMonth(
+      year - (GREGORIAN_YEAR_OFFSETS[calendar] ?? 0),
+      month,
+    );
+  }
+  // `with` replaces the year and month of any date in the calendar.
+  return temporalMonth(
+    inCalendar(calendar, {year: 2000, month: 1, day: 1}).with({
+      year,
+      month,
+      day: 1,
+    }),
+  );
+}
+
 /** The calendar month `n` months after `month`, or before it when negative. */
 export function calendarAddMonths(
   calendar: CalendarSystem,
@@ -325,7 +382,7 @@ function monthPartsKey(parts: Intl.DateTimeFormatPart[]): string {
  * The label always names the month and day that the grid shows. Intl and the
  * runtime's Temporal can disagree on where a month of the Chinese or Dangi
  * calendar starts; the label then takes its month and year from the middle of
- * the Temporal month, its day from Temporal, and its weekday from the date.
+ * the Temporal month, and its day from Temporal.
  */
 export function formatCalendarDate(
   calendar: CalendarSystem,
@@ -333,15 +390,32 @@ export function formatCalendarDate(
   options: Intl.DateTimeFormatOptions,
   locale: Locale,
 ): string {
-  if (isGregorianAligned(calendar)) {
-    return plainDateFormat(
-      pd,
-      {...options, calendar: labelCalendar(calendar)},
-      locale,
-    );
+  return joinParts(formatCalendarDateToParts(calendar, pd, options, locale));
+}
+
+/** The parts of `formatCalendarDate`'s label. */
+export function formatCalendarDateToParts(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+): Intl.DateTimeFormatPart[] {
+  const parts = formatToParts(labelCalendar(calendar), pd, options, locale);
+  return withTemporalDay(calendar, pd, parts, options, locale);
+}
+
+// Returns `parts` itself where Intl already names Temporal's month and day.
+function withTemporalDay(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+  parts: Intl.DateTimeFormatPart[],
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+): Intl.DateTimeFormatPart[] {
+  if (isGregorianAligned(calendar) || !isCalendarSystemAvailable(calendar)) {
+    return parts;
   }
   const date = inCalendar(calendar, pd);
-  const parts = formatToParts(calendar, pd, options, locale);
   const middle = plainDateAddDays(
     pd,
     Math.floor(date.daysInMonth / 2) - (date.day - 1),
@@ -357,23 +431,71 @@ export function formatCalendarDate(
     Number(intlDay) === date.day &&
     monthPartsKey(parts) === monthPartsKey(middleParts)
   ) {
-    return parts.map(part => part.value).join('');
+    return parts;
   }
   const {numberingSystem} = dateTimeFormatFor(locale, {
     ...options,
     calendar,
     timeZone: 'UTC',
   }).resolvedOptions();
-  const weekday = parts.find(part => part.type === 'weekday')?.value;
-  return middleParts
-    .map(part =>
-      part.type === 'day'
-        ? plainDateFormatDayNumber(date.day, locale, numberingSystem)
-        : part.type === 'weekday' && weekday != null
-          ? weekday
-          : part.value,
-    )
-    .join('');
+  const middleValues = new Map(
+    middleParts.map(part => [part.type, part.value]),
+  );
+  return parts.map(part =>
+    part.type === 'day'
+      ? {
+          ...part,
+          value: plainDateFormatDayNumber(date.day, locale, numberingSystem),
+        }
+      : MONTH_PART_TYPES.has(part.type)
+        ? {...part, value: middleValues.get(part.type) ?? part.value}
+        : part,
+  );
+}
+
+/**
+ * Formats an instant as `formatCalendarDate` formats the day it falls on in
+ * `timeZone`, the host's zone when omitted. Intl writes any time of day that
+ * `options` asks for.
+ */
+export function formatCalendarInstant(
+  calendar: CalendarSystem,
+  instant: Date,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+  timeZone?: string,
+): string {
+  return instantLabel(calendar, instant, options, locale, timeZone).text;
+}
+
+function instantLabel(
+  calendar: CalendarSystem,
+  instant: Date,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+  timeZone: string | undefined,
+) {
+  const format = dateTimeFormatAtCall(locale, {
+    ...options,
+    ...(timeZone === undefined ? {} : {timeZone}),
+    calendar: labelCalendar(calendar),
+  });
+  const parts = format.formatToParts(instant);
+  const day =
+    timeZone === undefined
+      ? plainDateFromDate(instant)
+      : plainDateFromInstant(instant.getTime(), timeZone);
+  const fixed = withTemporalDay(calendar, day, parts, options, locale);
+  const isIntl = fixed === parts;
+  return {
+    format,
+    isIntl,
+    text: isIntl ? format.format(instant) : joinParts(fixed),
+  };
+}
+
+function joinParts(parts: Intl.DateTimeFormatPart[]): string {
+  return parts.map(part => part.value).join('');
 }
 
 /**

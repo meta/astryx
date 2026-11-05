@@ -86,6 +86,7 @@ import {
 import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {themeProps} from '../utils/themeProps';
 import {useLocale} from '../i18n/useLocale';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {Locale} from '../i18n/types';
 import type {SearchableItem} from '../Typeahead/types';
 import type {
@@ -599,6 +600,7 @@ export function PowerSearch({
   const searchSource = usePowerSearchSource(config, maxSearchResults);
   const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'PowerSearch');
   const label = labelFromProps ?? t('@astryx.powersearch.label');
   const placeholder =
     placeholderFromProps ?? t('@astryx.powersearch.placeholder');
@@ -723,6 +725,7 @@ export function PowerSearch({
               10,
             ),
             locale,
+            calendar,
             undefined,
             undefined,
             timezoneID,
@@ -730,7 +733,7 @@ export function PowerSearch({
         : null;
       return {label, value, full: value != null ? `${label} ${value}` : label};
     },
-    [config, maxTokenLength, t, locale, timezoneID],
+    [config, maxTokenLength, t, locale, timezoneID, calendar],
   );
   // The built-in token being edited. A token from a `components` override
   // names itself, so its editor keeps the plain popover.
@@ -881,6 +884,7 @@ export function PowerSearch({
             t,
             locale,
             timezoneID,
+            calendar,
           )
         : '';
 
@@ -899,7 +903,7 @@ export function PowerSearch({
         },
       };
     });
-  }, [filters, config, maxTokenLength, timezoneID, t, locale]);
+  }, [filters, config, maxTokenLength, timezoneID, t, locale, calendar]);
 
   // Handle tokenizer onChange (field selected from typeahead)
   const handleTokenizerChange = useCallback(

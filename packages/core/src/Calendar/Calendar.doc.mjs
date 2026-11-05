@@ -40,6 +40,11 @@ export const docs = {
           'Show two months side by side when the user frequently selects dates that span a month boundary.',
       },
       {
+        guidance: true,
+        description:
+          'For a custom month view, use useCalendarNavigation and useCalendarDays from @astryxdesign/core/Calendar. To show another calendar system, pass the same calendar to both and feed visibleCalendarMonths into useCalendarDays. The hooks default to gregory and never read the InternationalizationProvider calendar.',
+      },
+      {
         guidance: false,
         description:
           'Use a calendar for dates far in the past or future like a birth date. A text input is faster for open-ended entry.',
@@ -191,8 +196,43 @@ export const docs = {
       name: 'calendar',
       type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
       description:
-        "Calendar system the grid shows, such as 'persian', 'hebrew', or 'islamic-umalqura'. It sets the months, their names, and month and year navigation. value, min, max, focusDate, and every callback stay Gregorian ISO dates. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal; where the runtime lacks it, load a polyfill such as temporal-polyfill/full/global on the server and in the browser, or the grid shows Gregorian months. Month starts in the Chinese and Dangi calendars come from the runtime's Temporal, and some polyfills start a few months one day apart from native Temporal; when you render on the server, load the same Temporal implementation on the server and in the browser.",
+        "Calendar system the grid shows, such as 'persian', 'hebrew', or 'islamic-umalqura'. It sets the months, their names, and month and year navigation. value, min, max, focusDate, and every callback stay Gregorian ISO dates. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal; where the runtime lacks it, load a polyfill such as temporal-polyfill/full/global on the server and in the browser, or the grid shows Gregorian months. Month starts in the Chinese and Dangi calendars come from the runtime's Temporal, and some polyfills start a few months one day apart from native Temporal; when server and browser markup must match, use one implementation on both sides, such as installImplementation() from temporal-polyfill/full/shim, which replaces a native Temporal.",
       default: 'the InternationalizationProvider calendar, else gregory',
+    },
+  ],
+  examples: [
+    {
+      label: 'A custom month view in the Persian calendar',
+      code: `import {Button} from '@astryxdesign/core/Button';
+import {
+  useCalendarDays,
+  useCalendarNavigation,
+} from '@astryxdesign/core/Calendar';
+
+function PersianMonth() {
+  const {monthYearLabel, visibleCalendarMonths, navigateMonth} =
+    useCalendarNavigation({initialValue: '2026-10-30', calendar: 'persian'});
+  // visibleCalendarMonths[0] is {year: 1405, month: 8}: Aban 1405.
+  const {weeks} = useCalendarDays({
+    ...visibleCalendarMonths[0],
+    calendar: 'persian',
+  });
+  return (
+    <section aria-label={monthYearLabel}>
+      <Button label="Previous month" onClick={() => navigateMonth(-1)} />
+      <Button label="Next month" onClick={() => navigateMonth(1)} />
+      {weeks.map(week => (
+        <div key={week[0].iso}>
+          {week.map(day => (
+            <span key={day.iso} data-date={day.iso}>
+              {day.isOutside ? '' : day.dayNumber}
+            </span>
+          ))}
+        </div>
+      ))}
+    </section>
+  );
+}`,
     },
   ],
   theming: {
@@ -238,6 +278,11 @@ export const docsZh = {
         guidance: true,
         description:
           'Show two months side by side when the user frequently selects dates that span a month boundary.',
+      },
+      {
+        guidance: true,
+        description:
+          'For a custom month view, use useCalendarNavigation and useCalendarDays from @astryxdesign/core/Calendar. To show another calendar system, pass the same calendar to both and feed visibleCalendarMonths into useCalendarDays. The hooks default to gregory and never read the InternationalizationProvider calendar.',
       },
       {
         guidance: false,
@@ -341,7 +386,7 @@ export const docsZh = {
       name: 'calendar',
       type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
       description:
-        "网格显示的历法，如 'persian'、'hebrew' 或 'islamic-umalqura'。它决定月份、月份名称以及按月和按年的导航。value、min、max、focusDate 和所有回调仍为公历 ISO 日期。gregory、iso8601、buddhist、roc 和 japanese 以外的历法需要 Temporal；运行环境没有 Temporal 时，请在服务端和浏览器中加载 polyfill（如 temporal-polyfill/full/global），否则网格显示公历月份。农历（chinese）和檀纪历（dangi）的月初取自运行环境的 Temporal，部分 polyfill 与原生 Temporal 有少数月份的月初相差一天；服务端渲染时，请在服务端和浏览器中加载同一种 Temporal 实现。",
+        "网格显示的历法，如 'persian'、'hebrew' 或 'islamic-umalqura'。它决定月份、月份名称以及按月和按年的导航。value、min、max、focusDate 和所有回调仍为公历 ISO 日期。gregory、iso8601、buddhist、roc 和 japanese 以外的历法需要 Temporal；运行环境没有 Temporal 时，请在服务端和浏览器中加载 polyfill（如 temporal-polyfill/full/global），否则网格显示公历月份。农历（chinese）和檀纪历（dangi）的月初取自运行环境的 Temporal，部分 polyfill 与原生 Temporal 有少数月份的月初相差一天；服务端渲染且需要两端标记一致时，请在两端使用同一种实现，例如 temporal-polyfill/full/shim 的 installImplementation()，它会替换原生 Temporal。",
       default: 'InternationalizationProvider 的历法，否则为 gregory',
     },
   ],
@@ -390,6 +435,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Show two months side by side when user frequently selects dates spanning a month boundary.',
+      },
+      {
+        guidance: true,
+        description:
+          'Custom month view: useCalendarNavigation + useCalendarDays; pass the same calendar to both, feed visibleCalendarMonths into useCalendarDays. Default gregory; never read the provider calendar.',
       },
       {
         guidance: false,

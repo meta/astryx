@@ -744,8 +744,10 @@ function motionStepPx(values: readonly number[]): number {
  * at the first presented change inside it: WebKit presents a just-started
  * compositor animation late (a sheet's release held on screen for 130 to
  * 300 ms while its timeline ran, and the screencast reaches Node about 0.7 s
- * late on a loaded runner, too late to wait on before blocking). Every frame
- * after that first change is judged, so a freeze later in the block fails.
+ * late on a loaded runner, too late to wait on before blocking). Only a hold
+ * at `setBeforeBlock`, the value the page itself last set before the block,
+ * is excused. Every frame after that first change is judged, so a freeze
+ * later in the block fails.
  * The judged part still ends with the block and the `minJudgedFrames` floor
  * applies to it, so a start the block itself delays fails; any other
  * animation that was already moving is judged from the block's start, and a
@@ -810,6 +812,7 @@ export function busyWindowProof(
     settledWithin,
     settledWithinSteps,
     settledAt,
+    setBeforeBlock,
     maxMedianFrameMs = Infinity,
     maxStallFrames = 3,
     minMovedFraction = 0.9,
@@ -861,6 +864,17 @@ export function busyWindowProof(
      * position until the main thread commits the end state.
      */
     settledAt?: number;
+    /**
+     * The tracked value the page itself last set before the block, such as a
+     * drag's last position at its release. It is in the tracked box's
+     * coordinates: where the box sits at rest, plus the offset the page wrote.
+     * A hold that starts before the block and ends at its first presented
+     * change can be a late hand-off. It is one only when it holds this value,
+     * where the animation starts. Without it, or when the hold shows another
+     * value, the hold is judged as a stall. An animation can freeze at the
+     * block's start.
+     */
+    setBeforeBlock?: number;
     /**
      * When the compositor presented each frame, epoch ms on the page clock
      * (`startCompositorTrace`; Chromium). Empty or absent, the screencast is
@@ -1003,11 +1017,20 @@ export function busyWindowProof(
         v.t < (inWindow[0] ?? -Infinity) &&
         Math.abs(v.value - lead[lead.length - 1]) <= 0.25,
     ).length;
+  // A late hand-off holds the page's last position. An animation that froze
+  // at the block's start holds a position of its own. Within one cast step:
+  // WebKit's cast reads positions on a 2 px grid, so a held position can read
+  // up to a step off. A cast with no step is read within a pixel.
+  const matchPx = tracked.some(f => f.step != null)
+    ? castStep(tracked, axis)
+    : 1;
   const heldFromBeforeBlock =
+    setBeforeBlock != null &&
     lead.length > 0 &&
     holdStart > 0 &&
     prior[holdStart].t < window.from &&
-    heldFrames >= 2;
+    heldFrames >= 2 &&
+    Math.abs(lead[lead.length - 1] - setBeforeBlock) <= matchPx;
   const onScreenFrom =
     prior.length > 0 &&
     (!movedBefore || heldFromBeforeBlock) &&
