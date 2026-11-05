@@ -2761,11 +2761,12 @@ jobs:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
           path: apps/storybook/dist
 
-      # The image carries WebKit and its system libraries; `install` finds the
-      # browser in place and downloads nothing.
+      # The image carries WebKit, Chromium's headless shell and their system
+      # libraries; `install` finds them in place and downloads nothing. A spec
+      # that decodes a WebKit recording does so in the headless shell.
       - name: Install Playwright WebKit
         if: steps.scope.outputs.applies == 'true'
-        run: pnpm install --frozen-lockfile && npx playwright install webkit
+        run: pnpm install --frozen-lockfile && npx playwright install webkit chromium-headless-shell
 
       # This leg's share of the WebKit spec files, from the paths the lane
       # covers, by their recorded times. The planner and the times come from

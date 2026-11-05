@@ -119,12 +119,38 @@ describe('WebKit interaction proof routing', () => {
     );
     // The image already holds WebKit and its system libraries: no apt step.
     expect(step(webkit, 'Install Playwright WebKit').run).toBe(
-      'pnpm install --frozen-lockfile && npx playwright install webkit',
+      'pnpm install --frozen-lockfile && npx playwright install webkit chromium-headless-shell',
     );
     const run = step(webkit, 'Run WebKit interaction proofs').run;
     expect(run).toContain('--config playwright.interaction.config.ts');
     expect(run).toContain('--project webkit');
     expect(run).not.toContain('--project chromium');
+  });
+
+  it("installs Chromium's headless shell when an interaction spec launches Chromium", () => {
+    // A changed interaction spec runs in the WebKit legs too, so a spec that
+    // launches Chromium (to decode a WebKit recording) needs the shell there.
+    const launchesChromium = source => /\bchromium\.launch\(/.test(source);
+    expect(launchesChromium('const decoder = await chromium.launch();')).toBe(
+      true,
+    );
+    expect(launchesChromium('await webkit.launch();')).toBe(false);
+    const specs = execFileSync(
+      'git',
+      ['ls-files', '*.interaction.browser.spec.ts'],
+      {cwd: root, encoding: 'utf8'},
+    )
+      .split('\n')
+      .filter(Boolean);
+    const launchers = specs.filter(file =>
+      launchesChromium(fs.readFileSync(path.join(root, file), 'utf8')),
+    );
+    if (launchers.length > 0) {
+      expect(
+        step(webkit, 'Install Playwright WebKit').run.split(/\s+/),
+        launchers.join(', '),
+      ).toContain('chromium-headless-shell');
+    }
   });
 
   it("runs in Playwright's image for exactly the Playwright version the lockfile resolves", () => {
