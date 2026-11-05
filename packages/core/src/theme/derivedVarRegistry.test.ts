@@ -125,6 +125,14 @@ const STRUCTURAL_VARS = new Set([
   '--_progress-bar-pulse',
   '--_progress-bar-pulse-curve',
   '--_progress-bar-pulse-floor',
+  // The room a layer has above the software keyboard. The layer runtime
+  // writes it on each open layer from the keyboard's measured height
+  // (Layer/useLayerKeyboardClearance.ts). Runtime geometry, never authored by
+  // a theme.
+  '--_layer-keyboard-max-block-size',
+  // Written beside it: `auto` while the keyboard caps the layer, so the
+  // surface scrolls from that commit. Runtime state, never authored by a theme.
+  '--_layer-keyboard-overflow',
 ]);
 
 /**
@@ -372,6 +380,8 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--_toast-swipe-exit-y',
   '--_toast-swipe-opacity',
   '--_toast-swipe-scale',
+  '--_toast-start-opacity',
+  '--_toast-start-slide',
   // Set by each ChatMessage article from its own content and read as its
   // avatar's top margin, so the avatar lines up with a name row. Content
   // state, not a value a theme author sets.

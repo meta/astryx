@@ -599,7 +599,7 @@ export function main(argv = process.argv.slice(2)) {
       wide_change: String(decision.wideChange),
       component_count: String(decision.componentCount),
       has_components: String(scope.touched.length > 0 && !decision.wideChange),
-      // A changed story no component owns is audited on its own (FR12),
+      // A changed story no other audit covers is audited on its own (FR12),
       // wide change or not.
       changed_stories: String(files.some(file => STORY_FILE.test(file))),
       visual_components: scope.visualComponents.join(','),

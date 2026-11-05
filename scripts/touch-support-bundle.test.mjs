@@ -172,8 +172,12 @@ function filesUnder(dir, pattern) {
  * that reaches it, with a comment naming the gesture.
  */
 const GESTURE_USERS = new Set([
-  // AlertDialog: its actions' press, tracked across both for every pointer.
+  // AlertDialog: its actions' press, tracked across both for a finger and a
+  // pen under the touch presentation.
   'AlertDialog',
+  // ButtonGroup: a finger's or a pen's press, tracked across its buttons
+  // under the touch presentation.
+  'ButtonGroup',
   // Through AlertDialog: Tokenizer's bottom sheet confirms with an alert, and
   // PowerSearch and Table's filtering render a Tokenizer. Both also reach
   // TimeInput's wheels: PowerSearch's edit popover and Table's filtering.
@@ -212,6 +216,8 @@ const GESTURE_USERS = new Set([
   'SideNav',
   'TimeInput',
   'TopNav',
+  // The public pan, which the root's createPanGesture shares.
+  'hooks: usePanGesture',
 ]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */

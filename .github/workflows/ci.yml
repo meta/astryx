@@ -2509,7 +2509,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -2535,6 +2535,8 @@ jobs:
           cp .test-scope/scripts/lib/duration-split.mjs "$RUNNER_TEMP/interaction-legs/scripts/lib/"
           cp .test-scope/.github/scripts/a11y-pr-contracts.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/.github/playwright-leg-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
+          cp .test-scope/.github/scripts/lane-environment.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/interaction-legs/.github/"
 
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
@@ -2567,6 +2569,15 @@ jobs:
         env:
           EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+
+      # The head's specs run in this lane's environment, which comes from the
+      # merge commit. A head older than that environment stops here.
+      - name: Require this lane's environment in the branch
+        if: steps.scope.outputs.applies == 'true'
+        run: >-
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/lane-environment.mjs" check --lane interaction-chromium
+          --workflow "$RUNNER_TEMP/interaction-legs/.github/lane-environments.json"
+          --head .github/lane-environments.json
 
       - name: Setup Node and pnpm
         if: steps.scope.outputs.applies == 'true'
@@ -2635,8 +2646,9 @@ jobs:
     needs: [room, admission, heavy-ci, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
-    # Two legs share the spec files by their recorded times, as the Chromium
-    # proofs' two do; the harness spec alone fills one.
+    # One leg runs every spec while the planner's estimate fits; past that two
+    # legs share the spec files by their recorded times, as the Chromium
+    # proofs' two do.
     strategy:
       fail-fast: false
       matrix:
@@ -2655,6 +2667,15 @@ jobs:
     defaults:
       run:
         shell: bash
+    env:
+      # The specs the WebKit legs run, besides each interaction spec the pull
+      # request changes.
+      WEBKIT_SPEC_PATHS: >-
+        packages/core/src/gestures/
+        packages/core/src/motion/__tests__/animatedLayout.interaction
+        packages/core/src/motion/__tests__/animator.interaction
+        packages/core/src/hooks/__tests__/usePager.interaction
+        internal/interaction-harness/
     permissions:
       # The heavy-suite caps read the author's pull requests and runs.
       actions: read
@@ -2681,7 +2702,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/Layer/(inputHold|modalOutlet)\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/playwright-leg-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/Layer/(inputHold|modalOutlet)\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(playwright-legs|a11y-pr-contracts|lane-environment)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/(playwright-leg-durations|lane-environments)\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
           # Lists the changed files, so the planner adds a changed spec.
@@ -2709,12 +2730,42 @@ jobs:
           cp .test-scope/scripts/lib/duration-split.mjs "$RUNNER_TEMP/interaction-legs/scripts/lib/"
           cp .test-scope/.github/scripts/a11y-pr-contracts.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/.github/playwright-leg-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
+          cp .test-scope/.github/scripts/lane-environment.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/interaction-legs/.github/"
+
+      # One leg runs every proof while its setup and the recorded times fit
+      # ten minutes, which leaves a third of the job's limit for a slow
+      # runner. Past that the planner adds the second leg, so a growing suite
+      # does not reach the limit. Each leg decides the same way, before its
+      # own setup, from the workflow's times and the changed files. The spec
+      # files come from the merge commit's tree, which the scope checkout
+      # fetched whole, so a spec with no recorded time still counts.
+      - name: Count this run's WebKit legs
+        id: legs
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
+        run: |
+          read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"
+          git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
+            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" \
+            --key interaction-webkit --fallback-key interaction-chromium \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
+            --changed "${CHANGED_FILES:-}" \
+            --setup-seconds 90 --max-seconds 600 \
+            --leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }} \
+            -- "${SPEC_PATHS[@]}"
+
+      - name: Leave the proofs to the first leg
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs != 'true'
+        run: echo "One leg holds this run's WebKit proofs (${{ steps.legs.outputs.count }} leg planned), so this leg runs none."
 
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
       # checkout below replaces this directory.
       - name: Check out the heavy-suite caps
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
         with:
           path: .heavy-caps
@@ -2722,16 +2773,16 @@ jobs:
           persist-credentials: false
 
       - name: Per-author heavy-suite caps
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: ./.heavy-caps/.github/actions/heavy-caps
 
       # The daily heavy-run cap counts this step (spec:AST-030 FR16).
       - name: Heavy suite runs
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         run: 'true'
 
       - name: Checkout
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -2739,23 +2790,32 @@ jobs:
       # The container runs as root over a workspace the runner owns, and git
       # refuses a repository another user owns unless it is marked safe.
       - name: Trust the checkout in the container
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Verify evidence checkout
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         env:
           EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
 
+      # The head's specs run in this lane's environment, which comes from the
+      # merge commit. A head older than that environment stops here.
+      - name: Require this lane's environment in the branch
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
+        run: >-
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/lane-environment.mjs" check --lane interaction-webkit
+          --workflow "$RUNNER_TEMP/interaction-legs/.github/lane-environments.json"
+          --head .github/lane-environments.json
+
       - name: Setup Node and pnpm
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: ./.github/actions/setup
         with:
           install: 'false'
 
       - name: Download Storybook artifact
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/download-artifact@v8
         with:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
@@ -2765,7 +2825,7 @@ jobs:
       # libraries; `install` finds them in place and downloads nothing. A spec
       # that decodes a WebKit recording does so in the headless shell.
       - name: Install Playwright WebKit
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install webkit chromium-headless-shell
 
       # This leg's share of the WebKit spec files, from the paths the lane
@@ -2774,10 +2834,11 @@ jobs:
       # pull request changes runs here too, wherever it lives.
       - name: Plan this leg's WebKit interaction proofs
         id: plan
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         env:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
         run: |
+          read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"
           CHANGED_SPECS=()
           if [ -n "${CHANGED_FILES:-}" ] && [ -s "$CHANGED_FILES" ]; then
             while IFS= read -r file; do
@@ -2790,14 +2851,10 @@ jobs:
           fi
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
             --key interaction-webkit --config playwright.interaction.config.ts --project webkit \
-            --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
+            --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }} \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --out "$RUNNER_TEMP/interaction-leg.txt" -- \
-            packages/core/src/gestures/ \
-            packages/core/src/motion/__tests__/animatedLayout.interaction \
-            packages/core/src/motion/__tests__/animator.interaction \
-            packages/core/src/hooks/__tests__/usePager.interaction \
-            internal/interaction-harness/ \
+            "${SPEC_PATHS[@]}" \
             "${CHANGED_SPECS[@]}"
 
       # WebKit renders through Mesa's llvmpipe, which sizes its thread pool
@@ -2807,7 +2864,7 @@ jobs:
       # set (the job's share, rounded up); without a quota the count stays
       # nproc, llvmpipe's own default.
       - name: Run WebKit interaction proofs
-        if: steps.scope.outputs.applies == 'true' && steps.plan.outputs.files != '0'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outputs.files != '0'
         run: |
           LP_NUM_THREADS="$(nproc)"
           if [ -r /sys/fs/cgroup/cpu.max ]; then
@@ -2830,7 +2887,7 @@ jobs:
             --output interaction-proof-output-webkit
 
       - name: Upload WebKit interaction evidence
-        if: always() && steps.scope.outputs.applies == 'true'
+        if: always() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: interaction-evidence-webkit-${{ matrix.leg }}
@@ -3882,7 +3939,7 @@ jobs:
             echo "No component changed; no component audit."
           fi
           if [ "$STORIES" = true ]; then
-            echo "Changed stories no component owns are audited below."
+            echo "Changed stories no other audit covers are audited below."
           fi
 
       - name: Setup Node and pnpm
@@ -3919,21 +3976,28 @@ jobs:
             --concurrency 4 \
             --components "$COMPONENTS"
 
-      # A story the change adds or changes that no component owns (an `a11y/`
-      # page, say) is in no touched component's audit, so it is audited on its
-      # own: new violations against the head's baseline fail the job
-      # (spec:AST-030 FR12).
-      - name: Accessibility audit for changed stories no component owns
+      # A story the change adds or changes that no other audit covers (one an
+      # untouched component owns, or an `a11y/` page no component owns) is
+      # audited on its own: new violations against the head's baseline fail
+      # the job (spec:AST-030 FR12). The touched components' audit already
+      # runs their own stories, so those are left out.
+      - name: Accessibility audit for changed stories no other audit covers
         id: story-a11y
         if: always() && steps.playwright.outcome == 'success' && steps.touched.outputs.changed_stories == 'true'
         env:
           FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          TOUCHED_AUDIT: ${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners != '' }}
         run: |
+          COVERED=''
+          if [ "$TOUCHED_AUDIT" = true ]; then
+            COVERED=$(node .github/scripts/a11y-pr-scope.mjs analysis.json)
+          fi
           node .github/scripts/accessibility-audit.js \
             --storybook-dir apps/storybook/dist \
             --output a11y-stories-report.json \
             --concurrency 4 \
             --changed-story-files "$FILES_PATH" \
+            --covered-components "$COVERED" \
             --baseline .head-baseline/.github/a11y-baseline.json \
             --fail-on-new
 
@@ -4030,10 +4094,15 @@ jobs:
       contents: read
       pull-requests: read
     steps:
+      # The workflow's own commit: the scope action, and this lane's
+      # environment marker and its check (in .github, a parent of the scripts,
+      # so the checkout's cone holds the marker).
       - name: Check out the scope action
         uses: actions/checkout@v7
         with:
-          sparse-checkout: .github/actions/test-scope
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
           path: .test-scope
           persist-credentials: false
 
@@ -4054,6 +4123,15 @@ jobs:
       - name: Skip the contracts outside their scope
         if: steps.scope.outputs.applies != 'true'
         run: echo "No component or browser accessibility spec changed; no contract to run."
+
+      # The checkouts below replace the workspace, scope checkout included, so
+      # the marker of this lane's environment, and its check, move out first.
+      - name: Keep this lane's environment marker from the workflow's commit
+        if: steps.scope.outputs.applies == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/lane-environment/.github/scripts"
+          cp .test-scope/.github/scripts/lane-environment.mjs "$RUNNER_TEMP/lane-environment/.github/scripts/"
+          cp .test-scope/.github/lane-environments.json "$RUNNER_TEMP/lane-environment/.github/"
 
       # The tested merge commit, as the touched-components job checks out: a
       # head that predates these scripts does not have them. The specs run at
@@ -4139,6 +4217,15 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
+
+      # The head's specs run in this lane's environment, which comes from the
+      # merge commit. A head older than that environment stops here.
+      - name: Require this lane's environment in the branch
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        run: >-
+          node "$RUNNER_TEMP/lane-environment/.github/scripts/lane-environment.mjs" check --lane a11y-contracts
+          --workflow "$RUNNER_TEMP/lane-environment/.github/lane-environments.json"
+          --head .github/lane-environments.json
 
       - name: Setup Node and pnpm
         if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'

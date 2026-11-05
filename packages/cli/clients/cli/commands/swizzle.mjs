@@ -90,6 +90,16 @@ export function registerSwizzle(program) {
           ].join('\n'),
         ),
       ];
+      // Files the copy wrote outside the component folder: the owner modules
+      // and their unexported style modules (spec:AST-110 FR4).
+      const shared = (result.data.files ?? []).filter(f => f.startsWith('../'));
+      if (shared.length > 0) {
+        out.push(
+          text(
+            `Shared modules: ${shared.join(', ')} (copied whole; their imports between each other stay relative)`,
+          ),
+        );
+      }
 
       // StyleX build requirement — swizzled StyleX source throws on import
       // ("Unexpected 'stylex.create' call at runtime") unless the consumer's
