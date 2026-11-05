@@ -49,6 +49,7 @@ import {Card} from '../Card/Card';
 import type {CardVariant} from '../Card/Card';
 import {useClickableContainer} from '../hooks/useClickableContainer';
 import {closestLayerRoot} from '../privateAttributes/layerRoot.stylex';
+import {TextFocusOwnerContext} from '../Text/TextFocusOwnerContext';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -572,7 +573,9 @@ export function SelectableCard({
         onKeyDown={handleKeyDown}
         {...stylex.props(styles.srOnly)}
       />
-      {children}
+      {/* The hidden checkbox above takes focus for the whole card, so a
+          truncated Text inside adds no tab stop of its own. */}
+      <TextFocusOwnerContext value={true}>{children}</TextFocusOwnerContext>
     </Card>
   );
 }

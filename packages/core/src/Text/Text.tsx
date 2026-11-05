@@ -16,7 +16,15 @@
  * - /packages/cli/assets/templates/blocks/components/Text/ (showcase blocks)
  */
 
-import {lazy, Suspense, useRef, type ReactNode} from 'react';
+import {
+  lazy,
+  Suspense,
+  use,
+  useCallback,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {
   TextType,
@@ -47,6 +55,7 @@ import {
   truncationTooltipStyles,
 } from './text.stylex';
 import {useTruncation} from './useTruncation';
+import {TextFocusOwnerContext} from './TextFocusOwnerContext';
 import type {LayerPlacement} from '../Layer';
 import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -98,7 +107,8 @@ export interface TextProps extends Omit<BaseProps, 'children'> {
 
   /**
    * Maximum lines before truncation. 0 = no truncation.
-   * When set, shows tooltip on hover if content is truncated.
+   * When set, truncated content shows its full text in a tooltip on hover,
+   * and is a tab stop so the tooltip opens on keyboard focus too (FR4).
    * @default 0
    */
   maxLines?: number;
@@ -205,6 +215,37 @@ export function resolveStyleColor(color: TextColor): BuiltinTextColor {
   return 'primary';
 }
 
+// Controls that already take focus or act as one item; a truncated Text inside
+// one leaves keyboard focus to it. Only interactive elements and widget roles:
+// a focusable region such as a main landmark or a scroll container is not a
+// control, so a Text inside it still becomes a tab stop.
+// Text inside (or itself) hidden from assistive technology takes no stop.
+const HIDDEN_SELECTOR = '[aria-hidden="true"], [inert]';
+
+const CONTROL_SELECTOR = [
+  'a[href]',
+  'area[href]',
+  'button',
+  'input',
+  'select',
+  'textarea',
+  'summary',
+  '[contenteditable]:not([contenteditable="false"])',
+  '[role="button"]',
+  '[role="link"]',
+  '[role="menuitem"]',
+  '[role="menuitemcheckbox"]',
+  '[role="menuitemradio"]',
+  '[role="option"]',
+  '[role="tab"]',
+  '[role="treeitem"]',
+  '[role="gridcell"]',
+  '[role="row"]',
+  '[role="switch"]',
+  '[role="checkbox"]',
+  '[role="radio"]',
+].join(', ');
+
 /**
  * Semantic text component. Renders text with type-based styling from the theme.
  *
@@ -220,6 +261,7 @@ export function resolveStyleColor(color: TextColor): BuiltinTextColor {
  * <Text type="body" maxLines={2}>Clamped text</Text>
  * ```
  */
+
 export function Text({
   type = 'body',
   size,
@@ -276,8 +318,62 @@ export function Text({
   // Ref for the text element (used as tooltip anchor)
   const textRef = useRef<HTMLElement>(null);
 
+  // A truncated Text is a tab stop so its tooltip opens from the keyboard
+  // (FR4), unless it sits inside a control that already takes focus: one that
+  // wraps it in the DOM (a link, a button, a menu item), found from its
+  // ancestors when the element attaches, or one that provides
+  // TextFocusOwnerContext (a clickable card). A focusable span nested in a
+  // control would add a second, unnamed tab stop inside it. Text hidden from
+  // assistive technology (`aria-hidden`, `inert`) adds none either: focus
+  // would land on content a screen reader cannot perceive. The stop renders
+  // as a prop, so it is in the DOM before the tooltip attaches its focus
+  // trigger, and a caller's own tabIndex still wins.
+  const isInsideFocusOwner = use(TextFocusOwnerContext);
+  const [isExcludedByAncestor, setIsExcludedByAncestor] = useState(false);
+  const controlRef = useCallback((element: HTMLElement | null) => {
+    if (element == null) {
+      return;
+    }
+    const isInsideControl =
+      element.parentElement?.closest(CONTROL_SELECTOR) != null;
+    const update = () =>
+      setIsExcludedByAncestor(
+        isInsideControl || element.closest(HIDDEN_SELECTOR) != null,
+      );
+    update();
+    // Content revealed later (a closed Overlay's inert scrim, a collapsed
+    // drawer) gets its stop when the hiding attribute goes away.
+    const hiddenAncestors: Element[] = [];
+    for (
+      let node = element.closest(HIDDEN_SELECTOR);
+      node != null;
+      node = node.parentElement?.closest(HIDDEN_SELECTOR) ?? null
+    ) {
+      hiddenAncestors.push(node);
+    }
+    if (hiddenAncestors.length === 0) {
+      return;
+    }
+    const observer = new MutationObserver(update);
+    for (const node of hiddenAncestors) {
+      observer.observe(node, {
+        attributes: true,
+        attributeFilter: ['aria-hidden', 'inert'],
+      });
+    }
+    return () => observer.disconnect();
+  }, []);
+  const callerTabIndex = props.tabIndex;
+  const isTabStop =
+    tooltipEnabled && !isExcludedByAncestor && !isInsideFocusOwner;
+
   // Keep the merged ref stable across rerenders.
-  const mergedRef = useMergedRefs(ref, truncation.ref, textRef);
+  const mergedRef = useMergedRefs(
+    ref,
+    truncation.ref,
+    textRef,
+    maxLines > 0 && hasTruncateTooltip !== false ? controlRef : undefined,
+  );
 
   // Build inline style for -webkit-line-clamp (dynamic value)
   const inlineStyle = maxLines > 1 ? {WebkitLineClamp: maxLines} : undefined;
@@ -317,6 +413,7 @@ export function Text({
           className,
           {...style, ...inlineStyle},
         )}
+        tabIndex={isTabStop ? 0 : undefined}
         {...props}>
         {children}
       </Component>
@@ -330,6 +427,11 @@ export function Text({
               </span>
             }
             placement={tooltipPlacement}
+            // The tooltip decides once, when it attaches, whether to listen
+            // for focus; a stop added later (revealed content) re-attaches it.
+            focusTrigger={
+              isTabStop && callerTabIndex == null ? 'always' : 'auto'
+            }
           />
         </Suspense>
       )}
