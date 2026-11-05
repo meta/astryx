@@ -7,10 +7,8 @@
  * @input Listens for pointerdown, pointerup and pointercancel on a document
  * @output Exports watchOutsidePress and useOutsidePress, which owns one watch
  *   for a component: start on show, stop on hide, stop on unmount;
- *   noteOutsideDismissal and outsideDismissalCount, which count the layers an
- *   outside press or focus move closed in each document (the watch here, the
- *   touch trigger, a field's blur, ContextMenu and a held Tooltip record
- *   theirs); and the
+ *   noteOutsideDismissal and outsideDismissalCount, a per-document count of
+ *   layers that an outside press or focus move closed; and the
  *   inside tests a text field's owner runs: isPressInsideOwnedLayer for a
  *   press, isFocusInsideOwnedLayer for a blur
  * @position Internal to Layer; the outside-press dismissal for a manual
@@ -31,7 +29,7 @@ import {useCallback, useEffect, useMemo, useRef} from 'react';
 // the host is that layer's, so the host stays open.
 const outsideDismissals = new WeakMap<Document, number>();
 
-/** Records that an outside press in `doc` is closing a layer. */
+/** Records that a layer in `doc` is closing because a press or focus went outside it. */
 export function noteOutsideDismissal(doc: Document): void {
   outsideDismissals.set(doc, (outsideDismissals.get(doc) ?? 0) + 1);
 }

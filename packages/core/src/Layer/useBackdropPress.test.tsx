@@ -17,6 +17,8 @@ import type {ReactElement} from 'react';
 import {Dialog} from '../Dialog/Dialog';
 import {Drawer} from '../Drawer/Drawer';
 import {CommandPalette} from '../CommandPalette/CommandPalette';
+import {DateTimeInput} from '../DateTimeInput/DateTimeInput';
+import type {ISODateTimeString} from '../DateTimeInput/DateTimeInput';
 import {createStaticSource} from '../Typeahead/createStaticSource';
 import {resetLayerStackForTests} from './layerStack';
 
@@ -281,3 +283,36 @@ describe.each([
     });
   },
 );
+
+describe('a backdrop press while a DateTimeInput time list inside a Dialog is open', () => {
+  it('with a mouse, closes only the list when the field blurs at mousedown; the next press closes the Dialog', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Dialog isOpen onOpenChange={onOpenChange} aria-label="Note">
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-15T14:00' as ISODateTimeString}
+          timeOptionInterval={60}
+          onChange={() => {}}
+        />
+      </Dialog>,
+    );
+    const backdrop = backdropOf();
+    const timeInput = screen.getByLabelText('Meeting time');
+    fireEvent.keyDown(timeInput, {key: 'ArrowDown', altKey: true});
+    expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.pointerDown(backdrop, {pointerType: 'mouse'});
+    // The mousedown moves focus from the field to the dialog.
+    fireEvent.blur(timeInput, {relatedTarget: backdrop});
+    fireEvent.pointerUp(backdrop, {pointerType: 'mouse'});
+    fireEvent.click(backdrop);
+    expect(timeInput).toHaveAttribute('aria-expanded', 'false');
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    fireEvent.pointerDown(backdrop, {pointerType: 'mouse'});
+    fireEvent.pointerUp(backdrop, {pointerType: 'mouse'});
+    fireEvent.click(backdrop);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+});
