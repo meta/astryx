@@ -60,7 +60,7 @@ import {
 } from './monthGeometry';
 import {WHEEL_ROW_HEIGHT} from './wheelOptions';
 import {datePicker} from '../motion/uikit/datePicker';
-import {timing} from '../motion/uikit/timing';
+import {expandMotionScale} from '../theme/expandMotionScale';
 import {SWIPE_DISTANCE} from './useOwnScrollGesture';
 import {DRAG_SLOP} from './usePointerDragScroll';
 import {SCROLL_QUIET_MS} from './useScrollSettle';
@@ -3756,12 +3756,6 @@ describe('DateInput — scroll CSS (definition-level)', () => {
    * The title chevron is the exception and keeps the token: it rotates, and
    * rotation is travel.
    */
-  /**
-   * UIDatePicker's month/year toggle: every fade and the chevron's quarter
-   * turn on `UIView.animate`'s default ease-in-ease-out, 0.25 s
-   * (motion/uikit/datePicker.ts `calendar.monthYearToggle`). StyleX inlines
-   * only literals, so the tokens repeat the table; they must stay it.
-   */
   it('fades linearly, and eases only the thing that travels', () => {
     const source = read('TouchDateField.tsx');
     const styles = source.slice(
@@ -3773,33 +3767,49 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     );
     expect(chevron).toContain("transitionProperty: 'transform'");
     expect(chevron).toContain("default: easeVars['--ease-standard']");
-    // The chevron is the only eased transition; every fade is linear.
+    // The chevron is the only eased transition; every fade is linear, in its
+    // shown and its hidden style.
     expect(
       styles.match(/default: easeVars\['--ease-standard'\]/g),
     ).toHaveLength(1);
-    expect(styles.match(/default: 'linear'/g)).toHaveLength(4);
+    expect(styles.match(/default: 'linear'/g)).toHaveLength(8);
   });
 
   /**
-   * Under a finger the swap is UIDatePicker's month/year toggle: every fade
-   * and the chevron's turn take 0.25 s on ease-in-ease-out. They read the
-   * motion roles' CSS variables (motion/uikit/datePicker.ts
-   * `calendar.monthYearToggle`). StyleX inlines only literals, so the tokens repeat the table
-   * as the variables' fallbacks; they must stay it.
+   * Under a finger the swap plays the theme duration token nearest
+   * UIDatePicker's measured toggle (motion/uikit/datePicker.ts
+   * `calendar.monthYearToggle`) in the Storybook theme, neutral. A part that
+   * arrives eases on the entrance curve, a part that leaves on the exit curve,
+   * and the chevron's turn on the move curve. Only the turn's angle comes from
+   * the table; StyleX inlines only literals, so the constant repeats it.
    */
-  it('under a finger: fades and turns on UIDatePicker\u2019s toggle clock, from the table', () => {
+  it('under a finger: fades and turns on the theme\u2019s tokens nearest UIDatePicker\u2019s toggle', () => {
     const source = read('TouchDateField.tsx');
     const styles = source.slice(
       source.indexOf('const styles = stylex.create('),
     );
-    // The arrows, Reset, the weekday row and the layer above fade on the
-    // toggle's clock under a finger, in CSS: one touch key each.
+    // The arrows, Reset, the weekday row and the layer above fade in on the
+    // entrance curve. Their hidden styles carry the exit curve: one touch key
+    // each.
     expect(
-      styles.match(/'@media \(pointer: coarse\)': TOGGLE_CURVE/g),
-    ).toHaveLength(5);
+      styles.match(/'@media \(pointer: coarse\)': TOGGLE_ENTRANCE/g),
+    ).toHaveLength(4);
+    expect(
+      styles.match(/'@media \(pointer: coarse\)': TOGGLE_EXIT/g),
+    ).toHaveLength(4);
+    for (const hidden of [
+      'monthArrowsHidden',
+      'headerResetHidden',
+      'weekdaysHidden',
+      'panelOverlayHidden',
+    ]) {
+      expect(declarations(source, hidden)).toContain(
+        "'@media (pointer: coarse)': TOGGLE_EXIT",
+      );
+    }
     expect(styles).not.toContain("-webkit-touch-callout: none)': TOGGLE");
     const chevron = declarations(source, 'titleChevron');
-    expect(chevron).toContain("'@media (pointer: coarse)': TOGGLE_CURVE");
+    expect(chevron).toContain("'@media (pointer: coarse)': TOGGLE_TURN");
     // At rest it points along the reading direction (mirrored under RTL,
     // with the same function list in both states so the turn stays a turn).
     expect(chevron).toContain('default: `rotate(-${CHEVRON_TURN})`');
@@ -3809,27 +3819,51 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     const open = declarations(source, 'titleChevronOpen');
     expect(open).toContain("default: 'rotate(0deg)'");
     expect(open).toContain("':is([dir=\"rtl\"] *)': 'scaleX(-1) rotate(0deg)'");
+    expect(source).toContain(
+      "const TOGGLE_DURATION = durationVars['--duration-medium-min']",
+    );
+    expect(source).toContain(
+      "const TOGGLE_ENTRANCE = easeVars['--ease-entrance']",
+    );
+    expect(source).toContain("const TOGGLE_EXIT = easeVars['--ease-exit']");
+    expect(source).toContain("const TOGGLE_TURN = easeVars['--ease-move']");
+    // In the Storybook theme, neutral, the duration token nearest the
+    // measured 250 ms is --duration-medium-min, at 225 ms. The scale is read
+    // from neutral's source, so a change to it is a change here.
+    const toggle = datePicker.calendar.monthYearToggle;
+    const neutralSource = readFileSync(
+      'packages/themes/neutral/src/neutralTheme.ts',
+      'utf8',
+    );
+    const motion = /motion:\s*\{([^}]*)\}/.exec(neutralSource)?.[1] ?? '';
+    const scale = Object.fromEntries(
+      motion.split(',').map(entry => {
+        const [name, value] = entry.split(':').map(part => part.trim());
+        return [name, Number(value)];
+      }),
+    ) as {fast: number; medium: number; slow: number; ratio: number};
+    const steps = Object.entries(expandMotionScale(scale))
+      .filter(([name]) => name.startsWith('--duration-'))
+      .map(([name, value]) => ({name, ms: Number.parseFloat(value)}));
+    const nearest = steps.reduce((best, step) =>
+      Math.abs(step.ms - toggle.fadeMs) < Math.abs(best.ms - toggle.fadeMs)
+        ? step
+        : best,
+    );
+    expect([toggle.fadeMs, nearest.name, nearest.ms]).toEqual([
+      250,
+      '--duration-medium-min',
+      225,
+    ]);
     // Not in tokens.stylex.ts: that module is a released subpath.
     const tokens = read('monthYearToggle.stylex.ts');
-    const toggle = datePicker.calendar.monthYearToggle;
-    // Prettier may break a long value onto its own line.
-    const flat = tokens.replace(/:\s+'/g, ": '");
-    // Internal motion roles (spec:AST-094 FR4): the toggle's 0.25 s is
-    // timing.stateChangeMs, read through its variable.
-    expect(toggle.fadeMs).toBe(timing.stateChangeMs);
-    expect(flat).toContain(
-      `duration: 'var(--motion-timing-state-change-ms, ${timing.stateChangeMs}ms)'`,
-    );
-    expect(flat).toContain(
-      `curve: 'var(--motion-timing-curves-move, cubic-bezier(${timing.curves.move.join(', ')}))'`,
-    );
     expect(tokens).toContain(`chevronTurn: '${toggle.chevronTurnDegrees}deg'`);
   });
 
   /**
    * Everything in the swap runs for the same time, so it reads as one change
    * rather than several, the chevron included: today's token with a mouse,
-   * UIKit's 0.25 s under a finger.
+   * the toggle's token under a finger.
    */
   it('runs the whole swap on one duration', () => {
     const source = read('TouchDateField.tsx');
@@ -3847,7 +3881,7 @@ describe('DateInput — scroll CSS (definition-level)', () => {
       "const SWAP_DURATION = durationVars['--duration-fast']",
     );
     expect(source).toContain(
-      'const TOGGLE_DURATION = monthYearToggleMotion.duration',
+      "const TOGGLE_DURATION = durationVars['--duration-medium-min']",
     );
   });
 
@@ -3876,10 +3910,13 @@ describe('DateInput — scroll CSS (definition-level)', () => {
         "'@media (pointer: coarse)': 'opacity, visibility'",
       );
       expect(lines).toContain("'@media (pointer: coarse)': TOGGLE_DURATION");
-      expect(lines).toContain("'@media (pointer: coarse)': TOGGLE_CURVE");
+      expect(lines).toContain("'@media (pointer: coarse)': TOGGLE_ENTRANCE");
+      expect(declarations(source, `${object}Hidden`)).toContain(
+        "'@media (pointer: coarse)': TOGGLE_EXIT",
+      );
     }
     const chevron = declarations(source, 'touchTitleChevron');
-    expect(chevron).toContain("'@media (pointer: coarse)': TOGGLE_CURVE");
+    expect(chevron).toContain("'@media (pointer: coarse)': TOGGLE_TURN");
     expect(declarations(source, 'touchTitleChevronOpen')).toContain(
       "default: 'rotate(0deg)'",
     );
