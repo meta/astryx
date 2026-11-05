@@ -73,7 +73,7 @@ export function Sparkline({
 }: SparklineProps) {
   const t = useTranslator();
   const rows = useMemo(
-    () => data.map((value, index) => ({index, value})),
+    () => data.map((value, index) => ({index: index + 1, value})),
     [data],
   );
 
