@@ -13,6 +13,7 @@ import {Text} from '@astryxdesign/core/Text';
 export default function UseOverlayHookUsage() {
   const overlay = useOverlay({
     showOn: 'hover',
+    position: 'bottom',
     align: 'center',
     content: <Button label="Quick view" variant="secondary" size="sm" />,
   });

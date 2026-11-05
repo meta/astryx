@@ -81,6 +81,11 @@ describe('useOverlay example', () => {
     ).toHaveLength(1);
   });
 
+  it('shows Quick view in a bottom strip, which leaves the image link above it clickable', () => {
+    const scrim = quickView().closest('.astryx-overlay-scrim');
+    expect(scrim?.getAttribute('data-position')).toBe('bottom');
+  });
+
   it('puts the image link before Quick view in tab order, so focus can reveal it', () => {
     const link = container.querySelector('a');
     if (link == null) {
