@@ -191,6 +191,21 @@ function withLayout<T>(fn: () => T): T {
   }
 }
 
+/** As `withLayout`, around work that waits on timers. */
+async function withLayoutAsync(fn: () => Promise<void>): Promise<void> {
+  Object.defineProperty(HTMLElement.prototype, 'clientWidth', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.dataset?.scroller === 'months' ? SCROLLPORT_WIDTH : 0;
+    },
+  });
+  try {
+    await fn();
+  } finally {
+    delete (HTMLElement.prototype as {clientWidth?: unknown}).clientWidth;
+  }
+}
+
 beforeAll(() => {
   Element.prototype.scrollTo = vi.fn();
   // jsdom's <dialog> implements none of these.
@@ -2630,6 +2645,56 @@ describe('DateInput — nested scrollers keep their own touch gesture', () => {
     expect(ancestor.seen).toEqual(['touchstart', 'touchmove']);
     touch(scroller, 'touchend');
     ancestor.stop();
+  });
+
+  /**
+   * A trackpad's scroll on the calendar: precise deltas, with the legacy
+   * `wheelDelta` that a trackpad's wheels carry at three times each delta.
+   */
+  const trackpadScroll = (el: Element, dx: number) => {
+    const event = new WheelEvent('wheel', {
+      deltaX: dx,
+      deltaMode: 0,
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, 'wheelDeltaX', {value: -3 * dx});
+    Object.defineProperty(event, 'wheelDeltaY', {value: 0});
+    el.dispatchEvent(event);
+  };
+  const wait = async (ms: number) =>
+    act(async () => new Promise<void>(resolve => setTimeout(resolve, ms)));
+
+  it('under a finger: a slow 30 px trackpad swipe leaves the calendar on its month', async () => {
+    renderAndOpen();
+    const scroller = document.querySelector('[data-scroller="months"]')!;
+    const title = document.querySelector('[data-title="month-year"]')!;
+    expect(title).toHaveTextContent('March 2026');
+    await withLayoutAsync(async () => {
+      // Five 6 px steps, 40 ms apart: under a tenth of a page.
+      for (let i = 0; i < 5; i++) {
+        act(() => trackpadScroll(scroller, 6));
+        await wait(40);
+      }
+      // The swipe ends 220 ms after its last wheel, then the grid settles.
+      await wait(900);
+    });
+    expect(title).toHaveTextContent('March 2026');
+  });
+
+  it('under a finger: a trackpad swipe past half a page pages one month', async () => {
+    renderAndOpen();
+    const scroller = document.querySelector('[data-scroller="months"]')!;
+    const title = document.querySelector('[data-title="month-year"]')!;
+    await withLayoutAsync(async () => {
+      // 40 steps of 6.5 px: 260 px toward the next month.
+      for (let i = 0; i < 40; i++) {
+        act(() => trackpadScroll(scroller, 6.5));
+        await wait(8);
+      }
+      await wait(900);
+    });
+    expect(title).toHaveTextContent('April 2026');
   });
 
   it('keeps a diagonal drag, because a thumb arcs as it swipes', () => {
