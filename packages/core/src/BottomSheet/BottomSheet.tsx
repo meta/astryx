@@ -82,7 +82,10 @@ import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useModalOutlet} from '../Layer/modalOutlet';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {useFocusRegionContainment} from '../hooks/useFocusTrap';
-import {returnFocusForLastInput} from '../utils/focusReturn';
+import {
+  prepareFocusRepairOnRemoval,
+  returnFocusForLastInput,
+} from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
   BottomSheetPanel,
@@ -541,6 +544,41 @@ function StandaloneBottomSheet({
       String(opacity),
     );
   }, []);
+
+  // A sheet removed while open (rendered only while open, or removed with its
+  // view) runs no close, so focus would drop to the page. The removal is a
+  // close for focus: focus goes where an ordinary close sends it. A covered
+  // sheet moves no focus, because focus is in the sheet on top, and a sheet
+  // that took focus in the same commit (a replace, a switcher step) keeps it.
+  // Declared before the registration below, so its cleanup still sees this
+  // sheet in the stack.
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog == null) {
+      return;
+    }
+    const key = stackKeyRef.current;
+    const repairOnRemoval = prepareFocusRepairOnRemoval(dialog);
+    return () => {
+      if (!isSheetHostPresented(dialog) || stackViewRef.current.depth > 0) {
+        return;
+      }
+      const returnTarget =
+        finalFocusRefRef.current?.current ?? triggerRef.current;
+      const revealed = hasScrim ? getBottomSheetBeneath(key) : null;
+      repairOnRemoval(() => {
+        if (
+          revealed != null &&
+          revealed.element.isConnected &&
+          (returnTarget == null || !revealed.element.contains(returnTarget))
+        ) {
+          revealed.focus();
+        } else if (returnTarget != null && returnTarget.isConnected) {
+          returnFocusForLastInput(returnTarget);
+        }
+      });
+    };
+  }, [hasScrim]);
 
   // A sheet joins the registry for as long as it is presented. For a modal
   // sheet the registry shows the dialog (in open order, repairing same-commit
