@@ -36,8 +36,12 @@ import {
   type FocusWithin,
 } from '../utils/focusReturn';
 import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
-import {useAnnounce, type AnnouncePoliteness} from '../hooks/useAnnounce';
-import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
+import {
+  announceInModal,
+  enclosingModalDialog,
+  useAnnounce,
+  type AnnouncePoliteness,
+} from '../hooks/useAnnounce';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
@@ -318,7 +322,6 @@ function ToastRow({
 ToastRow.displayName = 'ToastRow';
 
 /** How long a toast's text stays in a top-layer viewport's own live region. */
-const OWN_REGION_CLEAR_DELAY_MS = 2000;
 
 /**
  * Container that renders and manages toast notifications. Place at the root
@@ -426,49 +429,22 @@ export function ToastViewport({
   // re-renders never re-announce). It is client-only (addToast never runs
   // during SSR), so it is SSR-safe.
   // The viewport is each toast's only announcement owner; the card carries no
-  // live role. A top-layer viewport is rehosted above open modals, where the
-  // page's shared channel is not exposed, so it writes into its own
-  // persistent regions, which move with it. A viewport rendered in place uses
-  // `useAnnounce`, which delivers inside an enclosing Astryx modal.
+  // live role. A top-layer viewport's host moves into the latest open native
+  // modal, where the page's shared channel is not exposed, so it writes
+  // through the containers of the modal its host sits in. A
+  // viewport rendered in place uses `useAnnounce`, which finds an enclosing
+  // modal through its context.
   const announceShared = useAnnounce();
-  const politeRegionRef = useRef<HTMLDivElement>(null);
-  const assertiveRegionRef = useRef<HTMLDivElement>(null);
-  const ownRegionTimersRef = useRef<
-    Partial<Record<AnnouncePoliteness, {frame: number; clear: number}>>
-  >({});
-  useEffect(() => {
-    const timers = ownRegionTimersRef.current;
-    return () => {
-      for (const pending of Object.values(timers)) {
-        cancelAnimationFrame(pending.frame);
-        clearTimeout(pending.clear);
-      }
-    };
-  }, []);
+  // The top-layer host (below), read at write time for the modal it sits in.
+  const hostRef = useRef<HTMLDivElement | null>(null);
   const announce = useCallback(
     (text: string, politeness: AnnouncePoliteness) => {
-      const region = (
-        politeness === 'assertive' ? assertiveRegionRef : politeRegionRef
-      ).current;
-      if (!isTopLayer || region == null) {
-        announceShared(text, politeness);
+      const modal = isTopLayer ? enclosingModalDialog(hostRef.current) : null;
+      if (modal != null) {
+        announceInModal(modal, text, politeness);
         return;
       }
-      // As the shared channel delivers: clear, write next frame, clear later.
-      const previous = ownRegionTimersRef.current[politeness];
-      if (previous) {
-        cancelAnimationFrame(previous.frame);
-        clearTimeout(previous.clear);
-      }
-      region.textContent = '';
-      ownRegionTimersRef.current[politeness] = {
-        frame: requestAnimationFrame(() => {
-          region.textContent = text;
-        }),
-        clear: window.setTimeout(() => {
-          region.textContent = '';
-        }, OWN_REGION_CLEAR_DELAY_MS),
-      };
+      announceShared(text, politeness);
     },
     [announceShared, isTopLayer],
   );
@@ -786,10 +762,12 @@ export function ToastViewport({
     }
     const element = document.createElement('div');
     element.style.display = 'contents';
+    hostRef.current = element;
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- the host exists only on the client, so server and hydration markup carry no portal
     setHost(element);
     return () => {
       element.remove();
+      hostRef.current = null;
       setHost(null);
     };
   }, [isTopLayer]);
@@ -973,30 +951,7 @@ export function ToastViewport({
       {isTopLayer ? (
         <>
           <div ref={rootOutletRef} {...stylex.props(styles.rootOutlet)} />
-          {host != null
-            ? createPortal(
-                <>
-                  {viewport}
-                  <VisuallyHidden
-                    as="div"
-                    ref={politeRegionRef}
-                    role="status"
-                    aria-live="polite"
-                    aria-atomic="true">
-                    {null}
-                  </VisuallyHidden>
-                  <VisuallyHidden
-                    as="div"
-                    ref={assertiveRegionRef}
-                    role="alert"
-                    aria-live="assertive"
-                    aria-atomic="true">
-                    {null}
-                  </VisuallyHidden>
-                </>,
-                host,
-              )
-            : null}
+          {host != null ? createPortal(viewport, host) : null}
         </>
       ) : (
         viewport

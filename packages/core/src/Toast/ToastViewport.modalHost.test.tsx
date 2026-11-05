@@ -256,34 +256,59 @@ describe('ToastViewport modal hosting', () => {
       ),
     ].filter(region => region.textContent?.includes(text));
 
-  it('announces each toast once, through its own persistent region, and the card has no live role, over a modal or not', async () => {
-    render(
-      <ToastViewport>
-        <ToastButton />
-        <DialogFixture label="Edit">
-          <ToastButton label="Show toast from dialog" />
-        </DialogFixture>
-      </ToastViewport>,
-    );
+  it("announces each toast once: through the shared channel on the page, and through the modal's container once its host is in a modal; the card has no live role", async () => {
+    const matches = Element.prototype.matches;
+    const spy = vi
+      .spyOn(Element.prototype, 'matches')
+      .mockImplementation(function (this: Element, selector: string) {
+        return selector === ':modal'
+          ? this instanceof HTMLDialogElement && this.open
+          : matches.call(this, selector);
+      });
+    try {
+      render(
+        <ToastViewport>
+          <ToastButton />
+          <DialogFixture label="Edit">
+            <ToastButton label="Show toast from dialog" />
+          </DialogFixture>
+        </ToastViewport>,
+      );
 
-    fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
-    expect(cardLiveRegionOf('Saved')).toBeNull();
-    await waitFor(() => expect(liveRegionsWith('Saved')).toHaveLength(1));
-    const [region] = liveRegionsWith('Saved');
-    expect(region).toHaveAttribute('aria-live', 'polite');
-    expect(getViewport().contains(region)).toBe(false);
+      fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
+      expect(cardLiveRegionOf('Saved')).toBeNull();
+      await waitFor(() => expect(liveRegionsWith('Saved')).toHaveLength(1));
+      const [pageRegion] = liveRegionsWith('Saved');
+      expect(pageRegion).toHaveAttribute('data-astryx-live-region', 'polite');
+      expect(getViewport().contains(pageRegion)).toBe(false);
 
-    fireEvent.click(screen.getByRole('button', {name: 'Toggle Edit'}));
-    expect(getDialog('Edit').contains(getViewport())).toBe(true);
-    // The region moves with the viewport into the modal, so it stays exposed.
-    expect(getDialog('Edit').contains(region)).toBe(true);
-    // Inside the modal the card is still no live region, and its text sits in
-    // none. (The dismiss Button keeps its own empty loading region.)
-    expect(cardLiveRegionOf('Saved')).toBeNull();
-    for (const card of document.querySelectorAll('[data-toast-id]')) {
+      fireEvent.click(screen.getByRole('button', {name: 'Toggle Edit'}));
+      const dialog = getDialog('Edit');
+      expect(dialog.contains(getViewport())).toBe(true);
+      fireEvent.click(
+        screen.getByRole('button', {name: 'Show toast from dialog'}),
+      );
+      await waitFor(() =>
+        expect(
+          dialog.querySelector(
+            ':scope > [data-astryx-modal-live-region="polite"]',
+          ),
+        ).toHaveTextContent('Saved'),
+      );
+      // The viewport adds no live region of its own, on the page or in the
+      // modal, and no card is live.
       expect(
-        card.closest('[aria-live], [role="status"], [role="alert"]'),
+        getViewport().querySelector(
+          ':scope > [aria-live], :scope > [role="status"], :scope > [role="alert"]',
+        ),
       ).toBeNull();
+      for (const card of document.querySelectorAll('[data-toast-id]')) {
+        expect(
+          card.closest('[aria-live], [role="status"], [role="alert"]'),
+        ).toBeNull();
+      }
+    } finally {
+      spy.mockRestore();
     }
   });
 

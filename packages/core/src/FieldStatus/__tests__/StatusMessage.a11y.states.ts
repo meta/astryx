@@ -87,7 +87,7 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
     id: 'toast-info-announcement-top-layer',
     binding: 'Toast announcement channel',
     summary:
-      'a top-layer viewport announces an info toast once through its own persistent polite region',
+      'a top-layer viewport outside a modal announces an info toast once through the shared polite region, and adds no region of its own',
     facts: liveFacts({
       role: 'status',
       politeness: 'polite',
@@ -101,7 +101,7 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
     id: 'toast-error-announcement-top-layer',
     binding: 'Toast announcement channel',
     summary:
-      'a top-layer viewport announces an error toast once through its own persistent assertive region',
+      'a top-layer viewport outside a modal announces an error toast once through the shared assertive region, and adds no region of its own',
     facts: liveFacts({
       role: 'alert',
       politeness: 'assertive',
