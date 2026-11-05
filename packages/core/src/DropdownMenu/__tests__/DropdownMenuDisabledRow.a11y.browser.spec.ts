@@ -8,7 +8,8 @@
  * @output Real-engine proof that a keyboard open lands on the first enabled
  *   row, that ArrowDown and End reach the disabled row, which takes focus and
  *   is exposed as a disabled menu item, and that Enter and Space on it do
- *   nothing and leave the menu open (component:DropdownMenu FR17, DEC-11).
+ *   nothing and leave the menu open, and that a mouse press leaves it
+ *   unfocused (component:DropdownMenu FR17, DEC-11; useMenuPress FR2).
  * @position Run with `pnpm test:a11y-contract`.
  */
 
@@ -73,4 +74,23 @@ test('Enter and Space on a disabled row do nothing and leave the menu open', asy
     'aria-expanded',
     'true',
   );
+});
+
+test('a mouse press on a disabled row leaves it unfocused', async ({page}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-dropdownmenu--with-disabled-items&viewMode=story`,
+  );
+  await page.getByRole('button', {name: 'Actions'}).click();
+  const disabledRow = page.getByRole('menuitem', {name: 'Delete (disabled)'});
+  await expect(disabledRow).toBeVisible();
+  const box = await disabledRow.boundingBox();
+  if (box == null) {
+    throw new Error('the disabled row has no box');
+  }
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await expect(disabledRow).not.toBeFocused();
+  await page.mouse.up();
+  await expect(disabledRow).not.toBeFocused();
+  await expect(page.getByRole('menu')).toBeVisible();
 });
