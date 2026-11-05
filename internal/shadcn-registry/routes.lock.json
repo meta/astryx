@@ -3862,6 +3862,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-table-sortable-state-multi-sort-orders",
+      "path": "examples/use-table-sortable-state/multi-sort-orders",
+      "aliases": []
+    },
+    {
       "name": "example-use-table-sticky-columns-pinned-columns",
       "path": "examples/use-table-sticky-columns/pinned-columns",
       "aliases": []
@@ -4219,6 +4224,11 @@
     {
       "name": "hook-use-table-sortable",
       "path": "hooks/use-table-sortable",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-table-sortable-state",
+      "path": "hooks/use-table-sortable-state",
       "aliases": []
     },
     {
