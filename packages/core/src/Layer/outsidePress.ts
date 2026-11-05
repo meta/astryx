@@ -77,6 +77,7 @@ export function watchOutsidePress(
   const close = () => {
     startedOutside = false;
     panStart = null;
+    noteOutsideDismissal(doc);
     onOutside();
   };
 
