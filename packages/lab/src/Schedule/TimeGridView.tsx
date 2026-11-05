@@ -382,14 +382,14 @@ export function TimeGridView({
                   display="block"
                   xstyle={styles.timeGridHeaderHeading}>
                   <span {...stylex.props(styles.timeGridHeaderHeadingContent)}>
-                    {formatWeekday(day, timezoneID, 'short', locale, calendar)}
+                    {formatWeekday(day, 'short', locale, calendar)}
                     <span
                       {...stylex.props(
                         styles.timeGridDayNumber,
                         plainDateIsEqual(day, focusDate) &&
                           styles.timeGridCurrentDayPill,
                       )}>
-                      {formatDayNumber(day, timezoneID, locale, calendar)}
+                      {formatDayNumber(day, locale, calendar)}
                     </span>
                   </span>
                 </Heading>
@@ -533,12 +533,7 @@ export function TimeGridView({
                   {...(hasPopover
                     ? {
                         role: 'group',
-                        'aria-label': formatFullDate(
-                          day,
-                          timezoneID,
-                          locale,
-                          calendar,
-                        ),
+                        'aria-label': formatFullDate(day, locale, calendar),
                       }
                     : {'aria-hidden': true})}
                   {...stylex.props(
@@ -742,7 +737,7 @@ function TimeGridAccessibilityGrid({
             aria-current={
               plainDateIsEqual(day, focusDate) ? 'date' : undefined
             }>
-            {formatFullDate(day, timezoneID, locale, calendar)}
+            {formatFullDate(day, locale, calendar)}
           </div>
         ))}
       </div>
@@ -763,7 +758,7 @@ function TimeGridAccessibilityGrid({
                 categories,
                 day,
                 events: cellEvents,
-                label: `${formatFullDate(day, timezoneID, locale, calendar)} all day`,
+                label: `${formatFullDate(day, locale, calendar)} all day`,
                 locale,
                 calendar,
                 timezoneID,
@@ -790,7 +785,7 @@ function TimeGridAccessibilityGrid({
                   categories,
                   day,
                   events: cellEvents,
-                  label: `${formatFullDate(day, timezoneID, locale, calendar)} ${formatHour(
+                  label: `${formatFullDate(day, locale, calendar)} ${formatHour(
                     hour,
                     locale,
                   )}`,
@@ -868,7 +863,6 @@ function formatEventButtonLabel(
   );
   return `${event.title}, ${timeLabel}, ${category.label}, ${formatFullDate(
     day,
-    timezoneID,
     locale,
     calendar,
   )}`;

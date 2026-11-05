@@ -173,11 +173,9 @@ function LocalizedMonthTitle({
 export function ScheduleRangeMonthTitle({
   start,
   end,
-  timezoneID,
 }: {
   start: PlainDate;
   end: PlainDate;
-  timezoneID: string;
 }) {
   const {locale} = useScheduleContext();
   const calendar = useScheduleCalendar();
@@ -194,7 +192,7 @@ export function ScheduleRangeMonthTitle({
   const endMonthTitle = (
     <LocalizedMonthTitle date={end} locale={locale} calendar={calendar} />
   );
-  return isSameCalendarYear(start, end, timezoneID, locale, calendar) ? (
+  return isSameCalendarYear(start, end, locale, calendar) ? (
     <>
       <span {...stylex.props(styles.titleEmphasis)}>{startMonth}</span> -{' '}
       {endMonthTitle}
@@ -518,7 +516,6 @@ function isSameCalendarMonth(
 function isSameCalendarYear(
   a: PlainDate,
   b: PlainDate,
-  timezoneID: string,
   locale: Locale,
   calendar: CalendarSystem,
 ): boolean {
@@ -536,7 +533,6 @@ function isSameCalendarYear(
 
 export function formatMonthTitle(
   date: PlainDate,
-  timezoneID: string,
   locale: Locale,
   calendar: CalendarSystem,
 ): string {
@@ -554,12 +550,11 @@ export function formatMonthTitle(
 export function formatWeekTitle(
   start: PlainDate,
   end: PlainDate,
-  timezoneID: string,
   locale: Locale,
   calendar: CalendarSystem,
 ): string {
   if (isSameCalendarMonth(start, end, calendar)) {
-    return formatMonthTitle(start, timezoneID, locale, calendar);
+    return formatMonthTitle(start, locale, calendar);
   }
   const startMonth = formatWithPlainDate(
     monthLabelDate(start, calendar),
@@ -567,15 +562,14 @@ export function formatWeekTitle(
     locale,
     calendar,
   );
-  const endMonthTitle = formatMonthTitle(end, timezoneID, locale, calendar);
-  return isSameCalendarYear(start, end, timezoneID, locale, calendar)
+  const endMonthTitle = formatMonthTitle(end, locale, calendar);
+  return isSameCalendarYear(start, end, locale, calendar)
     ? `${startMonth} - ${endMonthTitle}`
-    : `${formatMonthTitle(start, timezoneID, locale, calendar)} - ${endMonthTitle}`;
+    : `${formatMonthTitle(start, locale, calendar)} - ${endMonthTitle}`;
 }
 
 export function formatFullDate(
   date: PlainDate,
-  timezoneID: string,
   locale: Locale,
   calendar: CalendarSystem,
 ): string {
@@ -612,7 +606,6 @@ export function formatWeekRange(
 
 export function formatWeekday(
   date: PlainDate,
-  timezoneID: string,
   weekday: 'short' | 'long',
   locale: Locale,
   calendar: CalendarSystem,
@@ -622,7 +615,6 @@ export function formatWeekday(
 
 export function formatDayNumber(
   date: PlainDate,
-  timezoneID: string,
   locale: Locale,
   calendar: CalendarSystem,
 ): string {

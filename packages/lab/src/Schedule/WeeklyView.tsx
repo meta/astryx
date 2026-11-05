@@ -47,7 +47,6 @@ function ScheduleWeeklyView({
   const titleLabel = formatWeekTitle(
     days[0],
     days[days.length - 1],
-    timezoneID,
     locale,
     calendar,
   );
@@ -55,11 +54,7 @@ function ScheduleWeeklyView({
   return (
     <ScheduleFrame
       title={
-        <ScheduleRangeMonthTitle
-          start={days[0]}
-          end={days[days.length - 1]}
-          timezoneID={timezoneID}
-        />
+        <ScheduleRangeMonthTitle start={days[0]} end={days[days.length - 1]} />
       }
       titleLabel={titleLabel}
       isLoading={isLoading}>

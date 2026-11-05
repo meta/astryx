@@ -72,7 +72,7 @@ describe.each(CALENDAR_LOCALES)(
   'Schedule date labels in $calendar under $locale',
   ({calendar, locale, year}) => {
     it('writes the full date in the calendar', () => {
-      const value = formatFullDate(DATE, 'UTC', locale, calendar);
+      const value = formatFullDate(DATE, locale, calendar);
       expect(value).toBe(
         oracle(locale, calendar, {
           weekday: 'long',
@@ -86,7 +86,7 @@ describe.each(CALENDAR_LOCALES)(
     });
 
     it('writes the month title in the calendar', () => {
-      const value = formatMonthTitle(DATE, 'UTC', locale, calendar);
+      const value = formatMonthTitle(DATE, locale, calendar);
       expect(value).toBe(
         oracle(locale, calendar, {month: 'long', year: 'numeric'}),
       );
@@ -94,7 +94,7 @@ describe.each(CALENDAR_LOCALES)(
     });
 
     it('writes the day number in the calendar', () => {
-      expect(formatDayNumber(DATE, 'UTC', locale, calendar)).toBe(
+      expect(formatDayNumber(DATE, locale, calendar)).toBe(
         oracle(locale, calendar, {day: 'numeric'}),
       );
     });
@@ -139,7 +139,6 @@ describe('Schedule ranges in another calendar', () => {
     const title = formatWeekTitle(
       {year: 1989, month: 1, day: 1},
       {year: 1989, month: 1, day: 31},
-      'UTC',
       'en',
       'japanese',
     );
@@ -152,7 +151,6 @@ describe('Schedule ranges in another calendar', () => {
       formatWeekTitle(
         {year: 2026, month: 10, day: 1},
         {year: 2026, month: 10, day: 31},
-        'UTC',
         'en',
         'persian',
       ),
@@ -164,7 +162,6 @@ describe('Schedule ranges in another calendar', () => {
       formatWeekTitle(
         {year: 2026, month: 10, day: 1},
         {year: 2026, month: 10, day: 31},
-        'UTC',
         'en',
         'gregory',
       ),
@@ -194,7 +191,7 @@ describe('Schedule views under a provider calendar', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole('cell', {
-        name: formatFullDate(DATE, 'UTC', 'en', 'persian'),
+        name: formatFullDate(DATE, 'en', 'persian'),
       }),
     ).toBeInTheDocument();
   });
@@ -203,7 +200,7 @@ describe('Schedule views under a provider calendar', () => {
     renderMonth({locale: 'fa-IR'});
     expect(
       screen.getByRole('table', {
-        name: formatMonthTitle(DATE, 'UTC', 'fa-IR', 'gregory'),
+        name: formatMonthTitle(DATE, 'fa-IR', 'gregory'),
       }),
     ).toBeInTheDocument();
   });
@@ -282,7 +279,7 @@ describe('Schedule views under a provider calendar', () => {
       </InternationalizationProvider>,
     );
     expect(
-      screen.getAllByText(formatFullDate(DATE, 'UTC', 'en', 'hebrew')).length,
+      screen.getAllByText(formatFullDate(DATE, 'en', 'hebrew')).length,
     ).toBeGreaterThan(0);
   });
 

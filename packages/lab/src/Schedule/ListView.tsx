@@ -63,7 +63,6 @@ function ScheduleListView(
   const titleLabel = formatWeekTitle(
     range.startDate,
     endDate,
-    timezoneID,
     locale,
     calendar,
   );
@@ -85,13 +84,7 @@ function ScheduleListView(
 
   return (
     <ScheduleFrame
-      title={
-        <ScheduleRangeMonthTitle
-          start={range.startDate}
-          end={endDate}
-          timezoneID={timezoneID}
-        />
-      }
+      title={<ScheduleRangeMonthTitle start={range.startDate} end={endDate} />}
       titleLabel={titleLabel}
       isLoading={isLoading}>
       <div {...stylex.props(styles.list)}>
@@ -105,7 +98,6 @@ function ScheduleListView(
             <ListDayHeading
               day={day}
               isCurrentDay={isCurrentDay}
-              timezoneID={timezoneID}
               headingLevel={headingLevel}
             />
             <div {...stylex.props(styles.listEvents)}>
@@ -126,12 +118,10 @@ function ScheduleListView(
 function ListDayHeading({
   day,
   isCurrentDay,
-  timezoneID,
   headingLevel,
 }: {
   day: PlainDate;
   isCurrentDay: boolean;
-  timezoneID: string;
   headingLevel: 2 | 3 | 4 | 5 | 6;
 }) {
   const {locale} = useScheduleContext();
@@ -141,7 +131,7 @@ function ListDayHeading({
       level={headingLevel}
       color="secondary"
       display="block"
-      aria-label={formatFullDate(day, timezoneID, locale, calendar)}
+      aria-label={formatFullDate(day, locale, calendar)}
       aria-current={isCurrentDay ? 'date' : undefined}
       xstyle={styles.listDayHeading}>
       <span
@@ -150,10 +140,10 @@ function ListDayHeading({
           isCurrentDay && styles.listDayNumberCurrent,
         )}>
         <span {...stylex.props(styles.listDayNumberText)}>
-          {formatDayNumber(day, timezoneID, locale, calendar)}
+          {formatDayNumber(day, locale, calendar)}
         </span>
       </span>
-      {formatWeekday(day, timezoneID, 'short', locale, calendar)}
+      {formatWeekday(day, 'short', locale, calendar)}
     </Heading>
   );
 }
