@@ -676,7 +676,7 @@ describe('usePowerSearchSource', () => {
 
     it('skips search-source operators without arbitrary strings', () => {
       const ownerSource = {
-        search: () => [{id: 'nest', label: 'nest'}],
+        search: () => [{id: 'other', label: 'other'}],
         bootstrap: () => [],
       };
       const config: PowerSearchConfig = {
@@ -704,7 +704,7 @@ describe('usePowerSearchSource', () => {
                 key: 'is-either',
                 label: 'is-either',
                 value: {
-                  type: 'string',
+                  type: 'string_list',
                   searchSource: ownerSource,
                   isArbitraryStringAllowed: true,
                 },
@@ -715,8 +715,8 @@ describe('usePowerSearchSource', () => {
       };
       const labels = syncSearch(createSource(config), 'nest').map(r => r.label);
       // Committing 'Owner is "nest"' would offer a value the Owner editor
-      // never lists, so the closed operator stays out; the open one and the
-      // plain Title operators still match.
+      // never lists, so the closed operator stays out; the open list
+      // operator and the plain Title operators still match.
       expect(labels).toContain('Title contains "nest"');
       expect(labels).toContain('Owner is-either "nest"');
       expect(labels.some(l => l.startsWith('Owner is '))).toBe(false);
