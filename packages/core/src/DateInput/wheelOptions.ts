@@ -3,8 +3,8 @@
 /**
  * @file wheelOptions.ts
  * @input Nothing; types, the row height and pure functions
- * @output WheelOption, WheelProps, WHEEL_ROW_HEIGHT, nearestEnabledIndex,
- *   steppedIndex and endIndex: what both wheels share
+ * @output WheelOption, WheelProps, WheelHandle, WHEEL_ROW_HEIGHT, canSpinTo,
+ *   nearestEnabledIndex, steppedIndex and endIndex: what both wheels share
  * @position Internal; read by Wheel.tsx (which re-exports all of it) and
  *   PickerWheel.tsx
  *
@@ -12,6 +12,8 @@
  * - /packages/core/src/DateInput/Wheel.tsx
  * - /packages/core/src/DateInput/PickerWheel.tsx
  */
+
+import type {Ref} from 'react';
 
 /**
  * The row height, px (`dateInputTouchSizes.wheelItemSize`): the pitch of both
@@ -37,6 +39,19 @@ export interface WheelOption {
   order?: number;
 }
 
+/** What a Wheel's `ref` exposes. */
+export interface WheelHandle {
+  /**
+   * Turn the wheel onto `index` (an index into `options`) on the tap spin, then
+   * commit it as a rest would. Resolves true once that row is the committed
+   * one, false if a finger or another turn interrupted it or the wheel went
+   * away first. An index outside `options` or a disabled row resolves false at
+   * once, and nothing turns. Under a fine pointer the row commits at once. The
+   * column then scrolls to it as for any new value, on the same rule.
+   */
+  spinTo(index: number): Promise<boolean>;
+}
+
 export interface WheelProps {
   /** Accessible name for the column, e.g. "Month". */
   label: string;
@@ -53,6 +68,20 @@ export interface WheelProps {
    * motion.
    */
   isActive?: boolean;
+  /** Programmatic turns: `spinTo(index)`. */
+  ref?: Ref<WheelHandle>;
+}
+
+/**
+ * Whether `spinTo(index)` may turn onto `index`: an enabled row of `options`.
+ * The touch wheel and the scrolling column answer a spin by the same rule.
+ */
+export function canSpinTo(
+  options: ReadonlyArray<WheelOption>,
+  index: number,
+): boolean {
+  const option = options[index];
+  return option != null && !option.isDisabled;
 }
 
 /**

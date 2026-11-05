@@ -81,7 +81,8 @@ import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useModalOutlet} from '../Layer/modalOutlet';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
-import {focusForLastInput} from '../utils/focusReturn';
+import {useFocusRegionContainment} from '../hooks/useFocusTrap';
+import {returnFocusForLastInput} from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
   BottomSheetPanel,
@@ -444,6 +445,10 @@ function StandaloneBottomSheet({
     false,
   );
   const isEntrySettled = settledOpen && isOpen;
+  // Only a modal sheet contains Tab; a non-modal one leaves the page's focus
+  // order alone. A closing sheet stops containing as soon as it starts to
+  // leave.
+  useFocusRegionContainment(dialogRef, isOpen && hasScrim);
   // Presentation outlives the controlled prop: a closing sheet stays mounted
   // and in its native host through its exit, and only its motion completion
   // (or a replace finishing) clears it. The open flip is derived during
@@ -720,7 +725,7 @@ function StandaloneBottomSheet({
       ) {
         revealed.focus();
       } else if (returnTarget != null) {
-        focusForLastInput(returnTarget);
+        returnFocusForLastInput(returnTarget);
       }
       triggerRef.current = null;
     },

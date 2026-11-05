@@ -33,6 +33,8 @@ verified_by:
 modules:
   [
     module:Table/useTableActivation,
+    module:Table/useTableRowExpansion,
+    module:Table/useTableTreeData,
     module:Table/useTableInfiniteScroll,
     module:Table/useTableRowStatus,
     module:Table/useTableRowsVirtualization,

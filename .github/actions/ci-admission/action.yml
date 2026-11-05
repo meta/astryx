@@ -23,10 +23,12 @@
 #   jobs a run) always count at least eighteen jobs, which covers all but their
 #   rarest bursts, so the room they can still take is kept free. A pull-request run (`main: false`) also
 #   waits while a
-#   `main` full check or release re-check is waiting, so `main` fits first;
-#   pull-request runs never wait for each other.
-# - It waits at most `max-wait-minutes` (fifteen for `main`, twelve for a pull
-#   request, inside its fifteen-minute job budget), looking at even intervals
+#   `main` full check or release re-check is waiting, for that wait's first
+#   fifteen minutes, so `main` fits first; pull-request runs never wait for
+#   each other.
+# - It waits at most `max-wait-minutes` (120 for `main`, on a standard runner,
+#   since a slim job stops at fifteen minutes; twelve for a pull request,
+#   inside its fifteen-minute job budget), looking at even intervals
 #   plus a random 0-20 s so runs that look together spread out, and then
 #   starts (a pull request: see above).
 # - Each CI or Main run counts its live jobs, read once per look. A
@@ -39,7 +41,7 @@
 #   stale record GitHub still lists as active, and counts nothing.
 # - A look costs two run listings plus one call per active CI or Main run, and
 #   a run looks at most `max-looks` times: twice for a pull request (at once and
-#   after its longest wait), every two minutes for the rare `main` run. A
+#   after its longest wait), about every four minutes for the rare `main` run. A
 #   pull-request run that would fit but yields to a waiting `main` check looks
 #   again every two minutes while it does, and a run within ten jobs of room
 #   every four, both outside that count and inside the run's longest wait. When the
@@ -136,8 +138,8 @@ runs:
           const MAX_LOOKS = Math.max(1, Number(process.env.MAX_LOOKS || '8'));
           const LOOK_MS = MAX_LOOKS > 1 ? (MAX_WAIT_MS - JITTER_MS) / (MAX_LOOKS - 1) : MAX_WAIT_MS;
           // A run that would fit but yields to a waiting `main` check looks
-          // again this soon, outside its count of looks, since `main` waits
-          // are short.
+          // again this soon, outside its count of looks: the yield lasts at
+          // most MAIN_YIELD_MS.
           const YIELD_LOOK_MS = 2 * 60_000;
           // A run with no room but within this many jobs of it looks again
           // this soon, also outside its count of looks: near-full CI frees
@@ -175,6 +177,11 @@ runs:
           // At most this many pull-request runs wait at once; one more finding
           // no room is turned away (spec:AST-030 DEC-16).
           const MAX_WAITING = 10;
+          // A pull-request run yields to a waiting `main` run for the first
+          // fifteen minutes of that wait. After that the `main` run still counts
+          // its whole peak, so a pull-request run starts only when it fits
+          // beside it (spec:AST-030 DEC-16).
+          const MAIN_YIELD_MS = 15 * 60_000;
           const PHASE = process.env.PHASE || 'whole';
           // The most jobs a run holds at once, by workflow: ci.yml's
           // release-check and Main's runs (a push's fast checks or a unit run)
@@ -309,7 +316,7 @@ runs:
                     // it runs: the job that waits and its Storybook build,
                     // which starts beside it.
                     const holds = isMain(run) ? estimate(run) : Math.max(1, jobs.filter(job => LIVE.includes(job.status)).length);
-                    if (isMain(run) && !main) mainWaiting = true;
+                    if (isMain(run) && !main && !(Date.now() - span.began >= MAIN_YIELD_MS)) mainWaiting = true;
                     if (run.event === 'pull_request') waitingPulls += 1;
                     large += holds;
                     counted.push(`${short(run)} ${run.id} ${run.event}: ${holds} waiting`);

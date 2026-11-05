@@ -24,11 +24,6 @@ import {holdPageScroll} from '../gestures/pageHold';
 import {isPageZoomedIn, isPanAbsorbedBeforePage} from './scrollLockTouchGuard';
 import {holdScrollbarGutter, type ScrollbarGutterHold} from './scrollbarGutter';
 
-// iOS Safari scrolls an `overflow: hidden` page under a finger.
-// So the lock also cancels each one-finger pan that would reach the page. The
-// scroll offset never changes, so unlock restores nothing, and iOS Safari's
-// toolbar keeps its state.
-
 interface ActiveLock {
   releaseRootStyle: () => void;
   releasePageHold: () => void;
@@ -41,8 +36,9 @@ let activeLock: ActiveLock | null = null;
 /**
  * Locks page scroll while `isLocked` is true.
  *
- * The page keeps its scroll offset, so nothing jumps on lock or unlock. Where
- * the primary pointer is coarse (phones and tablets), the lock cancels a
+ * The page keeps its scroll offset, so nothing jumps on lock or unlock. iOS
+ * Safari scrolls an `overflow: hidden` page under a finger. So where the
+ * primary pointer is coarse (phones and tablets), the lock cancels a
  * one-finger pan that would reach the page.
  * Pans that a scroller in the overlay takes, and two-finger zoom, go through.
  * The gutter of a classic scrollbar stays open, so the page does not shift

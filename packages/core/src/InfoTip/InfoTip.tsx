@@ -4,8 +4,8 @@
 
 /**
  * @file InfoTip.tsx
- * @input Uses React, StyleX, Tooltip, Icon, useComponentTranslator, the shared
- *   touch hit area, color/spacing/radius/duration/ease tokens
+ * @input Uses React, StyleX, useTooltip, Icon, useComponentTranslator, the
+ *   shared touch hit area, color/spacing/radius/duration/ease tokens
  * @output Exports InfoTip component, InfoTipProps, InfoTipSize types
  * @position Core implementation; consumed by index.ts, tested by
  *   InfoTip.test.tsx; `@astryxdesign/lab` re-exports it, deprecated
@@ -15,15 +15,24 @@
  * - /docs/specs/components/InfoTip/InfoTip.spec.md (contract)
  * - /packages/core/src/InfoTip/InfoTip.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/InfoTip/index.ts (exports if types change)
+ * - /packages/cli/assets/templates/blocks/components/InfoTip/ (showcase and example blocks)
  */
 
-import {useCallback, type ReactNode, type Ref} from 'react';
+import {
+  useCallback,
+  useState,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 
 import type {BaseProps} from '../BaseProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon, type IconSize} from '../Icon/Icon';
-import {TooltipWithTriggerBehavior} from '../Tooltip/Tooltip';
+import {stopInReactTree} from '../Layer/layerClickBoundary';
+import {useTooltip} from '../Tooltip/useTooltip';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -38,7 +47,8 @@ import {
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {mergeProps} from '../utils/mergeProps';
-import {watchHitArea, writeHitInsets} from '../utils/hitArea';
+import {useTouchHitArea} from '../utils/touchHitArea';
+import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
 
 registerEnglishFallback(english);
 
@@ -98,21 +108,6 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
   },
-  // The invisible hit area. Under a coarse pointer, the shared hit area writes
-  // how far the button may grow toward 44 px on each side. It never takes a
-  // neighbour's tap, and it writes 0 elsewhere. This layer takes taps out to
-  // there.
-  // SYNC: /packages/core/src/utils/hitArea.ts (HIT_INSET_PROPERTIES)
-  hitArea: {
-    '::after': {
-      content: '""',
-      position: 'absolute',
-      // Physical sides on purpose: the shared hit area measures each side
-      // from the page's rects, left and right included, in any direction.
-      inset:
-        'calc(var(--astryx-hit-inset-top, 0px) * -1) calc(var(--astryx-hit-inset-right, 0px) * -1) calc(var(--astryx-hit-inset-bottom, 0px) * -1) calc(var(--astryx-hit-inset-left, 0px) * -1)',
-    },
-  },
 });
 
 /**
@@ -122,9 +117,9 @@ const styles = stylex.create({
  * labels, values, and metrics for permission notes, metric definitions, and
  * field help.
  *
- * InfoTip is a press-to-pin Tooltip on a named button: Tooltip opens, pins,
- * announces, and closes the help. The info icon resolves from
- * the icon registry, so themes can replace it.
+ * InfoTip is a named button that toggles `useTooltip`'s `show()` and `hide()`:
+ * the hook previews, holds, announces, and closes the help. The info icon
+ * resolves from the icon registry, so themes can replace it.
  *
  * @example
  * ```
@@ -142,36 +137,75 @@ export function InfoTip({
   style,
 }: InfoTipProps): ReactNode {
   const t = useComponentTranslator();
-  // Under a coarse pointer the button takes taps out toward 44 px. The watch
-  // lives as long as the button is attached: the ref's cleanup stops it, and a
-  // replaced button starts its own.
-  const watchButtonHitArea = useCallback((button: HTMLButtonElement | null) => {
-    if (button == null) {
-      return;
-    }
-    return watchHitArea(button, insets => writeHitInsets(button, insets));
+  const hitAreaRef = useTouchHitArea(true);
+  // Whether a press pinned the help. A hover or focus preview is not pinned.
+  const [isPinned, setIsPinned] = useState(false);
+  // Whether the help shows, pinned or previewed: the button names it in
+  // `aria-controls` only then.
+  const [isShown, setIsShown] = useState(false);
+  const handleShow = useCallback(() => setIsShown(true), []);
+  // Every close ends the pin: a second press, Escape, a press outside, or
+  // focus leaving.
+  const handleHide = useCallback(() => {
+    setIsShown(false);
+    setIsPinned(false);
   }, []);
-  const mergedRef = useMergedRefs(ref, watchButtonHitArea);
+  const tooltip = useTooltip({onShow: handleShow, onHide: handleHide});
+  const mergedRef = useMergedRefs(ref, hitAreaRef, tooltip.ref);
 
-  // No Escape handler of its own. Tooltip's entry in the shared dismissal
+  // A primary mouse or pen press on a preview calls show() first. The hook's
+  // press-to-close then leaves it open. The click pins it.
+  const handlePointerDownCapture = useCallback(
+    (event: PointerEvent<HTMLButtonElement>) => {
+      if (
+        event.button !== 0 ||
+        event.pointerType === 'touch' ||
+        isPinned ||
+        !isShown
+      ) {
+        return;
+      }
+      tooltip.show();
+    },
+    [isPinned, isShown, tooltip],
+  );
+
+  // A click, tap, Enter, or Space pins the help, and the next one closes it.
+  // The press stops at the button: a clickable row, card, or label around it
+  // does nothing, and document listeners still see it.
+  const handleClick = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      stopInReactTree(event);
+      event.preventDefault();
+      if (isPinned) {
+        tooltip.hide();
+        return;
+      }
+      tooltip.show();
+      setIsPinned(true);
+    },
+    [isPinned, tooltip],
+  );
+
+  // No Escape handler of its own. The tooltip's entry in the shared dismissal
   // stack takes Escape, so one press never closes both the help and an
   // enclosing Dialog.
   return (
-    <TooltipWithTriggerBehavior
-      content={content}
-      // The tooltip is the button's only purpose. A click, a tap, Enter, or
-      // Space pins it open, and the press stops at the button. So an InfoTip's
-      // content is reachable on a phone and from the keyboard alike.
-      triggerBehavior="toggle">
+    <>
       <button
         ref={mergedRef}
         type="button"
         aria-label={label ?? t('@astryx.infoTip.label')}
+        aria-describedby={tooltip.describedBy}
+        aria-expanded={isPinned}
+        aria-controls={isShown ? tooltip.describedBy : undefined}
+        onPointerDownCapture={handlePointerDownCapture}
+        onClick={handleClick}
         {...mergeProps(
           stylex.props(
             focusOutlineStyles.focusVisible,
             styles.trigger,
-            styles.hitArea,
+            touchHitAreaStyles.layer,
             xstyle,
           ),
           className,
@@ -179,7 +213,8 @@ export function InfoTip({
         )}>
         <Icon icon="info" size={size} />
       </button>
-    </TooltipWithTriggerBehavior>
+      {tooltip.renderTooltip(content)}
+    </>
   );
 }
 

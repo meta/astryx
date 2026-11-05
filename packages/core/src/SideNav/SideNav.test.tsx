@@ -825,10 +825,12 @@ describe('SideNavHeading collapsed', () => {
     const popoverEl = document.querySelector('[popover]') as HTMLElement;
     const anchorId = popoverEl.style.positionAnchor;
     expect(anchorId).not.toBe('');
-    const triggerAnchorNames = trigger.style.anchorName
-      .split(',')
-      .map(s => s.trim());
-    expect(triggerAnchorNames).toContain(anchorId);
+    const triggerAnchorNames = () =>
+      trigger.style.anchorName.split(',').map(s => s.trim());
+    // A closed menu's trigger is no anchor; an open one's is.
+    expect(triggerAnchorNames()).not.toContain(anchorId);
+    fireEvent.click(trigger);
+    expect(triggerAnchorNames()).toContain(anchorId);
   });
 });
 

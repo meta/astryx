@@ -2292,6 +2292,16 @@
       "aliases": []
     },
     {
+      "name": "example-info-tip-metric-definitions",
+      "path": "examples/info-tip/metric-definitions",
+      "aliases": []
+    },
+    {
+      "name": "example-info-tip-permission-notes",
+      "path": "examples/info-tip/permission-notes",
+      "aliases": []
+    },
+    {
       "name": "example-input-group-basic",
       "path": "examples/input-group/basic",
       "aliases": []
@@ -3652,6 +3662,16 @@
       "aliases": []
     },
     {
+      "name": "example-use-clickable-container-clickable-project-card",
+      "path": "examples/use-clickable-container/clickable-project-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-clipboard-share-link",
+      "path": "examples/use-clipboard/share-link",
+      "aliases": []
+    },
+    {
       "name": "example-use-collapsible-custom-disclosure",
       "path": "examples/use-collapsible/custom-disclosure",
       "aliases": []
@@ -3682,8 +3702,23 @@
       "aliases": []
     },
     {
+      "name": "example-use-hotkeys-search-and-help-shortcuts",
+      "path": "examples/use-hotkeys/search-and-help-shortcuts",
+      "aliases": []
+    },
+    {
       "name": "example-use-hover-card-profile-preview",
       "path": "examples/use-hover-card/profile-preview",
+      "aliases": []
+    },
+    {
+      "name": "example-use-image-mode-photo-caption",
+      "path": "examples/use-image-mode/photo-caption",
+      "aliases": []
+    },
+    {
+      "name": "example-use-input-status-icon-coupon-code-status",
+      "path": "examples/use-input-status-icon/coupon-code-status",
       "aliases": []
     },
     {
@@ -3697,8 +3732,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-lightbox-gallery-grid",
+      "path": "examples/use-lightbox/gallery-grid",
+      "aliases": []
+    },
+    {
       "name": "example-use-list-focus-recent-files",
       "path": "examples/use-list-focus/recent-files",
+      "aliases": []
+    },
+    {
+      "name": "example-use-locale-invoice-summary",
+      "path": "examples/use-locale/invoice-summary",
       "aliases": []
     },
     {
@@ -3719,6 +3764,11 @@
     {
       "name": "example-use-press-feedback-pressable-card",
       "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scrollable-area-activity-log-panel",
+      "path": "examples/use-scrollable-area/activity-log-panel",
       "aliases": []
     },
     {
@@ -3784,6 +3834,16 @@
     {
       "name": "example-use-translator-load-more-footer",
       "path": "examples/use-translator/load-more-footer",
+      "aliases": []
+    },
+    {
+      "name": "example-use-tree-focus-keyboard-file-tree",
+      "path": "examples/use-tree-focus/keyboard-file-tree",
+      "aliases": []
+    },
+    {
+      "name": "example-use-typeahead-type-to-focus-a-country",
+      "path": "examples/use-typeahead/type-to-focus-a-country",
       "aliases": []
     },
     {
@@ -3934,6 +3994,11 @@
     {
       "name": "hook-use-layer",
       "path": "hooks/use-layer",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-lightbox",
+      "path": "hooks/use-lightbox",
       "aliases": []
     },
     {
@@ -4544,6 +4609,11 @@
     {
       "name": "showcase-icon-default",
       "path": "showcases/icon/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-info-tip-default",
+      "path": "showcases/info-tip/default",
       "aliases": []
     },
     {

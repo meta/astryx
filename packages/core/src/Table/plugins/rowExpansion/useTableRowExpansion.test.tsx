@@ -67,6 +67,7 @@ function Harness({
   panelVariant,
   dividers,
   isStriped,
+  getRowLabel,
 }: {
   initialExpanded?: Set<string>;
   isItemExpandable?: (item: Row) => boolean;
@@ -77,6 +78,7 @@ function Harness({
   panelVariant?: 'muted' | 'transparent';
   dividers?: 'rows' | 'columns' | 'grid' | 'none';
   isStriped?: boolean;
+  getRowLabel?: (item: Row) => string;
 }) {
   const [expandedKeys, setExpandedKeys] = useState(initialExpanded);
   const expansion = useTableRowExpansion<Row>({
@@ -96,6 +98,7 @@ function Harness({
     getIsItemExpandable: isItemExpandable,
     hasRowClickExpansion,
     panelVariant,
+    getRowLabel,
   });
   return (
     <Table
@@ -111,11 +114,122 @@ function Harness({
 }
 
 describe('useTableRowExpansion (detail panel)', () => {
+  it.each(['omitted', 'blank', 'named'] as const)(
+    'resolves %s labels inside the Table provider and follows locale changes',
+    mode => {
+      function LocalizedTable({locale}: {locale: 'fr' | 'de'}) {
+        const [expandedKeys, setExpandedKeys] = useState(EMPTY_KEYS);
+        const expansion = useTableRowExpansion<Row>({
+          expandedKeys,
+          onToggle: key =>
+            setExpandedKeys(prev =>
+              prev.has(key) ? EMPTY_KEYS : new Set([key]),
+            ),
+          getRowKey: item => item.id,
+          renderExpanded: defaultRenderExpanded,
+          getRowLabel:
+            mode === 'omitted'
+              ? undefined
+              : mode === 'blank'
+                ? () => '   '
+                : item => item.name,
+        });
+        return (
+          <InternationalizationProvider
+            locale={locale}
+            overrides={{
+              fr: {
+                '@astryx.tableRowExpansion.expandRow': 'Développer la ligne',
+                '@astryx.tableRowExpansion.collapseRow': 'Réduire la ligne',
+                '@astryx.tableRowExpansion.expandRowNamed':
+                  'Développer {label}',
+                '@astryx.tableRowExpansion.collapseRowNamed': 'Réduire {label}',
+              },
+              de: {
+                '@astryx.tableRowExpansion.expandRow': 'Zeile öffnen',
+                '@astryx.tableRowExpansion.collapseRow': 'Zeile schließen',
+                '@astryx.tableRowExpansion.expandRowNamed': '{label} öffnen',
+                '@astryx.tableRowExpansion.collapseRowNamed':
+                  '{label} schließen',
+              },
+            }}>
+            <Table
+              data={rows}
+              columns={columns}
+              idKey="id"
+              plugins={{expansion}}
+            />
+          </InternationalizationProvider>
+        );
+      }
+      const named = mode === 'named';
+      const view = render(<LocalizedTable locale="fr" />);
+      const trigger = screen.getAllByRole('button', {
+        name: named ? 'Développer Ada' : 'Développer la ligne',
+      })[0];
+      fireEvent.click(trigger);
+      expect(
+        screen.getByRole('button', {
+          name: named ? 'Réduire Ada' : 'Réduire la ligne',
+        }),
+      ).toHaveAttribute('aria-expanded', 'true');
+      view.rerender(<LocalizedTable locale="de" />);
+      expect(
+        screen.getByRole('button', {
+          name: named ? 'Ada schließen' : 'Zeile schließen',
+        }),
+      ).toHaveAttribute('aria-expanded', 'true');
+    },
+  );
   it('renders an "Expand row" chevron button for every expandable row', () => {
     render(<Harness />);
     expect(screen.getAllByRole('button', {name: /expand row/i})).toHaveLength(
       3,
     );
+  });
+
+  it('names each expansion control when getRowLabel is provided', () => {
+    render(<Harness getRowLabel={item => item.name} />);
+
+    expect(
+      screen.getByRole('button', {name: 'Expand Ada'}),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Expand Bo'})).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Expand Cy'})).toBeInTheDocument();
+  });
+
+  it('keeps the row identity when the expansion state changes', () => {
+    render(
+      <Harness
+        initialExpanded={new Set(['a'])}
+        getRowLabel={item => item.name}
+      />,
+    );
+
+    expect(screen.getByRole('button', {name: 'Collapse Ada'})).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('button', {name: 'Expand Bo'})).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
+  it('falls back to the generic label when getRowLabel returns blank text', () => {
+    render(<Harness getRowLabel={() => '   '} />);
+
+    expect(screen.getAllByRole('button', {name: 'Expand row'})).toHaveLength(3);
+  });
+
+  it('keeps the context-menu action generic when row-specific labels are enabled', () => {
+    render(<Harness getRowLabel={item => item.name} />);
+
+    fireEvent.contextMenu(screen.getByText('Ada'));
+    expect(
+      screen.getAllByRole('menuitem', {name: 'Expand row', hidden: true})
+        .length,
+    ).toBeGreaterThan(0);
   });
 
   it('does not render the detail panel while collapsed', () => {

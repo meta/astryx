@@ -7,7 +7,8 @@
  * @input A read-only operation (`withListingCache(fn)`), and directory paths
  *   its discovery helpers list or probe.
  * @output The same answers `fs.readdirSync` / `fs.existsSync` give, read from
- *   disk once per path while the operation runs.
+ *   disk once per path while the operation runs, and `oncePerListing`, a
+ *   value computed once per operation.
  * @position Used by the name resolvers in foundation/discovery and by
  *   `existsCaseExact`. A search or build resolves ~160 components and their
  *   hooks, and each resolution walks the same source tree again; inside one
@@ -25,6 +26,7 @@ import * as fs from 'node:fs';
  *   entries: Map<string, fs.Dirent[]>,
  *   byName: Map<string, Map<string, fs.Dirent>>,
  *   exists: Map<string, boolean>,
+ *   memos: Map<string, unknown>,
  * }} ListingCache
  */
 
@@ -46,9 +48,25 @@ export function withListingCache(fn) {
       entries: new Map(),
       byName: new Map(),
       exists: new Map(),
+      memos: new Map(),
     },
     fn,
   );
+}
+
+/**
+ * `compute()` once per operation, under `key`. A later call in the same
+ * operation gets the first result; outside an operation it computes each time.
+ * @template T
+ * @param {string} key
+ * @param {() => T} compute
+ * @returns {T}
+ */
+export function oncePerListing(key, compute) {
+  const cache = scope.getStore();
+  if (!cache) return compute();
+  if (!cache.memos.has(key)) cache.memos.set(key, compute());
+  return /** @type {T} */ (cache.memos.get(key));
 }
 
 /**

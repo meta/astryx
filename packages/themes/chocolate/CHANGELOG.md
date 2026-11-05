@@ -1,5 +1,9 @@
 # @xds/theme-chocolate
 
+# 0.7.8
+
+---
+
 # 0.7.7
 
 ---

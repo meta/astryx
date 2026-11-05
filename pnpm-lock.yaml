@@ -62,6 +62,9 @@ importers:
       '@babel/core':
         specifier: 'catalog:'
         version: 7.29.7
+      '@babel/preset-typescript':
+        specifier: 'catalog:'
+        version: 7.29.7(@babel/core@7.29.7)
       '@changesets/cli':
         specifier: ^2.31.0
         version: 2.31.0(@types/node@25.9.4)
@@ -601,6 +604,9 @@ importers:
 
   internal/test-utils:
     dependencies:
+      '@stylexjs/stylex':
+        specifier: 'catalog:'
+        version: 0.19.0
       '@testing-library/jest-dom':
         specifier: 'catalog:'
         version: 6.9.1
@@ -748,7 +754,7 @@ importers:
   packages/charts:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../core
       '@stylexjs/stylex':
         specifier: '>=0.10.0'
@@ -930,11 +936,14 @@ importers:
       tailwindcss:
         specifier: ^4.3.2
         version: 4.3.2
+      temporal-polyfill:
+        specifier: ^1.0.6
+        version: 1.0.6
 
   packages/lab:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../core
       '@stylexjs/stylex':
         specifier: '>=0.10.0'
@@ -994,6 +1003,9 @@ importers:
       emojibase-data:
         specifier: 17.0.0
         version: 17.0.0(emojibase@17.0.0)
+      temporal-polyfill:
+        specifier: ^1.0.6
+        version: 1.0.6
 
   packages/native:
     devDependencies:
@@ -1004,7 +1016,7 @@ importers:
   packages/richtext:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../core
       '@stylexjs/stylex':
         specifier: '>=0.10.0'
@@ -1083,7 +1095,7 @@ importers:
   packages/themes/butter:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../core
       lucide-react:
         specifier: ^1.18.0
@@ -1093,13 +1105,13 @@ importers:
         version: 19.2.7
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../cli
 
   packages/themes/chocolate:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../core
       lucide-react:
         specifier: ^1.18.0
@@ -1109,13 +1121,13 @@ importers:
         version: 19.2.7
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../cli
 
   packages/themes/gothic:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../core
       lucide-react:
         specifier: ^1.18.0
@@ -1125,13 +1137,13 @@ importers:
         version: 19.2.7
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../cli
 
   packages/themes/matcha:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../core
       lucide-react:
         specifier: ^1.18.0
@@ -1141,13 +1153,13 @@ importers:
         version: 19.2.7
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../cli
 
   packages/themes/neutral:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../core
       lucide-react:
         specifier: ^1.18.0
@@ -1157,20 +1169,20 @@ importers:
         version: 19.2.7
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../cli
 
   packages/themes/probe:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../core
       react:
         specifier: '>=19'
         version: 19.2.7
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../cli
       tsup:
         specifier: ^8.3.0
@@ -1179,7 +1191,7 @@ importers:
   packages/themes/stone:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../core
       lucide-react:
         specifier: ^1.18.0
@@ -1189,13 +1201,13 @@ importers:
         version: 19.2.7
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../cli
 
   packages/themes/y2k:
     dependencies:
       '@astryxdesign/core':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../core
       lucide-react:
         specifier: ^1.18.0
@@ -1205,7 +1217,7 @@ importers:
         version: 19.2.7
     devDependencies:
       '@astryxdesign/cli':
-        specifier: 0.7.8
+        specifier: 0.7.9
         version: link:../../cli
 
   packages/vega:
@@ -6660,6 +6672,15 @@ packages:
   tapable@2.3.3:
     resolution: {integrity: sha512-uxc/zpqFg6x7C8vOE7lh6Lbda8eEL9zmVm/PLeTPBRhh1xCgdWaQ+J1CUieGpIfm2HdtsUpRv+HshiasBMcc6A==}
     engines: {node: '>=6'}
+
+  temporal-polyfill@1.0.6:
+    resolution: {integrity: sha512-tYyEry1HLGUDbm2356W3iYD0OZdo7rlP7h98Zr/EnjqLZQwTAfcBDUvJnJbfA15v/vQad57hJZScG5O0W2oKEA==}
+
+  temporal-spec@1.0.1:
+    resolution: {integrity: sha512-wxVoanmDeavXie1vu2JaQ3WIc3JZnWAOYFBsJyATaVsXsycKYUflGsyBmrRSnoCpZJpwPyr38VpgSUlQ8CbFxg==}
+
+  temporal-utils@1.0.3:
+    resolution: {integrity: sha512-9jbTSX3HvkOWvDpNpFzwX/d1mkCrgQgwLmVTOEiuocZGKHsrQJtttGZFmybJ2zYP5zCSZuU5ZyeS8+eOEPABiQ==}
 
   term-size@2.2.1:
     resolution: {integrity: sha512-wK0Ri4fOGjv/XPy8SBHZChl8CM7uMc5VML7SqiQ0zG7+J5Vr+RMQDoHa2CNT6KHUnTGIXH34UDMkPzAUyapBZg==}
@@ -12761,6 +12782,15 @@ snapshots:
   tailwindcss@4.3.2: {}
 
   tapable@2.3.3: {}
+
+  temporal-polyfill@1.0.6:
+    dependencies:
+      temporal-spec: 1.0.1
+      temporal-utils: 1.0.3
+
+  temporal-spec@1.0.1: {}
+
+  temporal-utils@1.0.3: {}
 
   term-size@2.2.1: {}
 

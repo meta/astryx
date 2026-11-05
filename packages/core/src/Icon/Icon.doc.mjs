@@ -78,7 +78,7 @@ export const docs = {
     },
     {
       name: 'color',
-      type: "'primary' | 'secondary' | 'tertiary' | 'disabled' | 'accent' | 'info' | 'success' | 'error' | 'warning' | 'inherit'",
+      type: "'primary' | 'secondary' | 'tertiary' | 'disabled' | 'accent' | 'info' | 'success' | 'error' | 'warning' | 'inherit' | 'blue' | 'red' | 'green' | 'gray' | 'cyan' | 'teal' | 'yellow' | 'orange' | 'pink' | 'purple'",
       description:
         'Color variant mapped to Astryx icon color tokens. Semantic values (primary through warning) follow the role, and inherit uses the surrounding text color. On the web, Icon also accepts the palette values blue, red, green, gray, cyan, teal, yellow, orange, pink, and purple, which pick a non-semantic hue.',
       default: "'inherit'",
@@ -124,7 +124,7 @@ export const docs = {
       name: 'ref',
       type: 'Ref<SVGSVGElement>',
       description:
-        'Ref to the rendered SVG element when icon is an icon component. A semantic or namespaced name renders inside an internal wrapper, and the ref is not attached.',
+        'Ref to the rendered SVG element, for an icon component and for a semantic or namespaced name. For a name, it is the <svg> inside the wrapper, or null when the resolved glyph has no <svg>.',
     },
   ],
   theming: {
@@ -233,7 +233,7 @@ export const docsZh = {
     },
     {
       name: 'color',
-      type: "'primary' | 'secondary' | 'tertiary' | 'disabled' | 'accent' | 'info' | 'success' | 'error' | 'warning' | 'inherit'",
+      type: "'primary' | 'secondary' | 'tertiary' | 'disabled' | 'accent' | 'info' | 'success' | 'error' | 'warning' | 'inherit' | 'blue' | 'red' | 'green' | 'gray' | 'cyan' | 'teal' | 'yellow' | 'orange' | 'pink' | 'purple'",
       description:
         '映射到 Astryx 图标颜色令牌的颜色变体。语义值（primary 到 warning）跟随角色，inherit 使用周围文字的颜色。在 Web 上，Icon 还接受调色板值 blue、red、green、gray、cyan、teal、yellow、orange、pink 和 purple，它们选择非语义色相。',
       default: "'inherit'",
@@ -278,7 +278,7 @@ export const docsZh = {
       name: 'ref',
       type: 'Ref<SVGSVGElement>',
       description:
-        'icon 为图标组件时，指向渲染的 SVG 元素的 ref。语义名称或命名空间名称在内部包装元素中渲染，不会附加 ref。',
+        '指向渲染的 SVG 元素的 ref，适用于图标组件以及语义名称或命名空间名称。对于名称，它指向包装元素内的 <svg>；若解析出的图形没有 <svg>，则为 null。',
     },
   ],
   theming: {
@@ -439,6 +439,6 @@ export const docsDense = {
       'StyleX styles (color, size, opacity) via stylex.create(); composes with the base color/size styles.',
     className: 'Class added to the rendered glyph beside astryx-icon.',
     style: "Inline styles merged after Icon's size and color styles.",
-    ref: 'Reaches the SVG only when icon is a component; a semantic or namespaced name renders in a wrapper and gets no ref.',
+    ref: 'Reaches the rendered SVG for every icon value; null when a resolved glyph has no <svg>.',
   },
 };
