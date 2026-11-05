@@ -6,8 +6,8 @@
  * @file MediaPlayerControls.tsx
  * @input The nearest MediaPlayer's state and actions, plus per-part size,
  *   style, and DOM props
- * @output Exports the control parts: play, seek, mute, volume, timeline, time,
- *   captions, fullscreen, and the playback speed menu
+ * @output Exports the control parts: play, seek, volume, timeline, time,
+ *   captions, fullscreen, and playback speed
  * @position Lab media parts; VideoPlayer and AudioPlayer arrange them, and
  *   custom layouts can arrange them inside any MediaPlayer
  */
@@ -24,6 +24,7 @@ import {
   type Ref,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {Button} from '@astryxdesign/core/Button';
 import {
@@ -31,6 +32,7 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
 } from '@astryxdesign/core/DropdownMenu';
+import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {IconButton, type IconButtonProps} from '@astryxdesign/core/IconButton';
 import {Popover} from '@astryxdesign/core/Popover';
 import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
@@ -38,6 +40,8 @@ import {Slider} from '@astryxdesign/core/Slider';
 import {Theme, ThemeContext} from '@astryxdesign/core/theme';
 import {
   colorVars,
+  durationVars,
+  easeVars,
   radiusVars,
   spacingVars,
   typeScaleVars,
@@ -92,6 +96,10 @@ const MARKER_REACH = 6;
 const MARKER_HIT_SIZE = 24;
 /** Width of a marker's popover, which fits a comment thread. */
 const MARKER_POPOVER_WIDTH = 360;
+/** Width of the volume slider that opens beside Mute. */
+const VOLUME_SLIDER_WIDTH = 72;
+/** Width of the speed slider that opens beside the speed button. */
+const RATE_SLIDER_WIDTH = 88;
 
 const styles = stylex.create({
   timeline: {
@@ -168,7 +176,9 @@ const styles = stylex.create({
     insetInlineStart: x,
     display: 'flex',
     transform: 'translate(-50%, -50%)',
-    pointerEvents: 'auto',
+    // A surface that hides the timeline, such as the video control bar,
+    // sets this to none, so a hidden marker never catches a click.
+    pointerEvents: 'var(--_media-controls-pointer-events, auto)',
     // The popover below renders in the page's theme; the dot keeps the
     // colors of the surface the timeline sits on.
     '--_media-marker-fill': colorVars['--color-text-primary'],
@@ -239,6 +249,67 @@ const styles = stylex.create({
     maxWidth: '100%',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+  },
+  // A button with a slider that opens beside it. The slider's column opens
+  // while the button is hovered or holds focus, and stays open on touch, in
+  // step with the container reveal.
+  revealGroup: {
+    display: 'grid',
+    alignItems: 'center',
+    // In a flex row the timeline gives up the space, so the open slider is
+    // never cut.
+    flexShrink: 0,
+    transitionProperty: 'grid-template-columns',
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
+    transitionTimingFunction: easeVars['--ease-standard'],
+  },
+  revealNone: {
+    gridTemplateColumns: 'auto',
+  },
+  // The slider opens before the button. While the column animates, the
+  // tracks hug the end, so the button holds still under the pointer.
+  revealBefore: {
+    justifyContent: 'end',
+    gridTemplateColumns: {
+      default: '0fr auto',
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
+        '@media (hover: hover)': '1fr auto',
+      },
+      ':focus-within': '1fr auto',
+      '@media (any-pointer: coarse)': '1fr auto',
+    },
+  },
+  // The slider opens after the button; the tracks hug the start.
+  revealAfter: {
+    justifyContent: 'start',
+    gridTemplateColumns: {
+      default: 'auto 0fr',
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
+        '@media (hover: hover)': 'auto 1fr',
+      },
+      ':focus-within': 'auto 1fr',
+      '@media (any-pointer: coarse)': 'auto 1fr',
+    },
+  },
+  revealSlot: {
+    minWidth: 0,
+    overflow: 'clip',
+    overflowClipMargin: spacingVars['--spacing-1'],
+    // A narrow player keeps the button and drops the slider.
+    display: {
+      default: 'block',
+      '@container (max-width: 480px)': 'none',
+    },
+  },
+  // The gap sits inside the opening column, so it closes with the slider.
+  sliderGapBefore: {
+    paddingInlineEnd: spacingVars['--spacing-2'],
+  },
+  sliderGapAfter: {
+    paddingInlineStart: spacingVars['--spacing-2'],
   },
   time: {
     flexShrink: 0,
@@ -357,25 +428,11 @@ export function MediaSeekButton({
 
 MediaSeekButton.displayName = 'MediaSeekButton';
 
-/**
- * Mutes and unmutes the media. Its icon follows the volume.
- *
- * @example
- * ```
- * <MediaMuteButton />
- * ```
- */
-export function MediaMuteButton({
-  size,
-  onClick,
-  xstyle,
-  className,
-  style,
-  ...rest
-}: MediaButtonPartProps) {
-  const {store} = useMediaPlayerContext('MediaMuteButton');
-  const isMuted = useMediaSelector('MediaMuteButton', state => state.isMuted);
-  const volume = useMediaSelector('MediaMuteButton', state => state.volume);
+/** Mutes and unmutes the media. Its icon follows the volume. */
+function MuteButton({size}: {size?: MediaControlSize}) {
+  const {store} = useMediaPlayerContext('MediaVolume');
+  const isMuted = useMediaSelector('MediaVolume', state => state.isMuted);
+  const volume = useMediaSelector('MediaVolume', state => state.volume);
   const t = useTranslator();
   const isSilent = isMuted || volume === 0;
   const label = isSilent
@@ -386,55 +443,21 @@ export function MediaMuteButton({
   );
   return (
     <IconButton
-      {...rest}
       label={label}
       tooltip={label}
       icon={icon}
       variant="ghost"
       size={size}
-      onClick={composeEventHandlers(onClick, () => store.actions.toggleMuted())}
-      {...mergeProps(themeProps('media-mute-button'), {className, style})}
-      xstyle={xstyle}
+      onClick={() => store.actions.toggleMuted()}
+      {...themeProps('media-volume-button')}
     />
   );
 }
 
-MediaMuteButton.displayName = 'MediaMuteButton';
-
-export interface MediaVolumeSliderProps extends Omit<
-  BaseProps<HTMLDivElement>,
-  'onChange' | 'children'
-> {
-  /** Slider width. Defaults to 88px. */
-  width?: number | string;
-  /** Ref to the slider thumb. */
-  ref?: Ref<HTMLDivElement>;
-}
-
-/**
- * Sets the volume and shows it as a percentage in a tooltip while it is
- * hovered, dragged, or focused. It renders nothing where script cannot set
- * the volume, such as iOS Safari; MediaMuteButton still works there.
- *
- * @example
- * ```
- * <MediaMuteButton />
- * <MediaVolumeSlider width={72} />
- * ```
- */
-export function MediaVolumeSlider({
-  width = 88,
-  xstyle,
-  className,
-  style,
-  ...rest
-}: MediaVolumeSliderProps) {
-  const {store} = useMediaPlayerContext('MediaVolumeSlider');
-  const canSetVolume = useMediaSelector(
-    'MediaVolumeSlider',
-    state => state.canSetVolume,
-  );
-  const volume = useMediaSelector('MediaVolumeSlider', state =>
+/** Sets the volume and shows it as a percentage in a tooltip. */
+function VolumeSlider({xstyle}: {xstyle: StyleXStyles}) {
+  const {store} = useMediaPlayerContext('MediaVolume');
+  const volume = useMediaSelector('MediaVolume', state =>
     state.isMuted ? 0 : state.volume,
   );
   const t = useTranslator();
@@ -443,12 +466,8 @@ export function MediaVolumeSlider({
     () => new Intl.NumberFormat(locale, {style: 'percent'}),
     [locale],
   );
-  if (!canSetVolume) {
-    return null;
-  }
   return (
     <Slider
-      {...rest}
       label={t('@astryx.mediaPlayer.volume')}
       isLabelHidden
       min={0}
@@ -458,14 +477,119 @@ export function MediaVolumeSlider({
       valueDisplay="tooltip"
       formatValue={value => percent.format(value / 100)}
       onChange={(value: number) => store.actions.setVolume(value / 100)}
-      width={width}
-      {...mergeProps(themeProps('media-volume-slider'), {className, style})}
+      width={VOLUME_SLIDER_WIDTH}
+      containerClassName={themeProps('media-volume-slider').className}
       containerXstyle={xstyle}
     />
   );
 }
 
-MediaVolumeSlider.displayName = 'MediaVolumeSlider';
+/** Which side of its button a revealed slider opens on. */
+export type MediaSliderPlacement = 'start' | 'end';
+
+/**
+ * The props of a control that reveals a slider beside its button, and the
+ * reveal's container and slot props.
+ */
+function useSliderReveal(hasSlider: boolean, placement: MediaSliderPlacement) {
+  const reveal = useContainerReveal();
+  const isBefore = placement === 'start';
+  return {
+    isBefore,
+    groupProps: (xstyle: StyleXStyles | undefined) =>
+      mergeProps(
+        hasSlider ? reveal.getContainerProps() : {},
+        stylex.props(
+          styles.revealGroup,
+          !hasSlider
+            ? styles.revealNone
+            : isBefore
+              ? styles.revealBefore
+              : styles.revealAfter,
+          xstyle,
+        ),
+      ),
+    slotProps: () =>
+      mergeProps(
+        reveal.getContentRevealProps({isLayoutPreserved: true}),
+        stylex.props(styles.revealSlot),
+      ),
+    gap: isBefore ? styles.sliderGapBefore : styles.sliderGapAfter,
+  };
+}
+
+export interface MediaVolumeProps extends Omit<
+  BaseProps<HTMLDivElement>,
+  'children'
+> {
+  /** Control height. Follows the surrounding size, else `'md'`. */
+  size?: MediaControlSize;
+  /**
+   * Shows a volume slider beside Mute while Mute is hovered or holds focus,
+   * and always on touch. Defaults to `true`. The slider never renders where
+   * script cannot set the volume, such as iOS Safari.
+   */
+  hasSlider?: boolean;
+  /**
+   * The side of Mute the slider opens on, in a row that runs left to right.
+   * Defaults to `'start'`, so Mute at the end of a row stays under the
+   * pointer while the slider opens.
+   */
+  sliderPlacement?: MediaSliderPlacement;
+  /** Ref to the group element. */
+  ref?: Ref<HTMLDivElement>;
+}
+
+/**
+ * Mute and volume. Mute switches the sound off and on, and its icon follows
+ * the volume. The volume slider opens beside Mute while Mute is hovered or
+ * holds focus, stays open on touch, and shows the volume in a tooltip. In a
+ * container narrower than 480px the slider stays closed.
+ *
+ * @example
+ * ```
+ * <HStack gap={2} vAlign="center">
+ *   <MediaPlayButton />
+ *   <MediaTimeSlider />
+ *   <MediaVolume />
+ * </HStack>
+ * ```
+ */
+export function MediaVolume({
+  size,
+  hasSlider = true,
+  sliderPlacement = 'start',
+  xstyle,
+  className,
+  style,
+  ...rest
+}: MediaVolumeProps) {
+  const canSetVolume = useMediaSelector(
+    'MediaVolume',
+    state => state.canSetVolume,
+  );
+  const showsSlider = hasSlider && canSetVolume;
+  const reveal = useSliderReveal(showsSlider, sliderPlacement);
+  const slider = showsSlider ? (
+    <span {...reveal.slotProps()}>
+      <VolumeSlider xstyle={reveal.gap} />
+    </span>
+  ) : null;
+  return (
+    <div
+      {...rest}
+      {...mergeProps(
+        mergeProps(themeProps('media-volume'), reveal.groupProps(xstyle)),
+        {className, style},
+      )}>
+      {reveal.isBefore ? slider : null}
+      <MuteButton size={size} />
+      {reveal.isBefore ? null : slider}
+    </div>
+  );
+}
+
+MediaVolume.displayName = 'MediaVolume';
 
 /** A chapter of the media, shown as a segment of the timeline. */
 export interface MediaTimelineChapter {
@@ -718,8 +842,14 @@ export function MediaTimeSlider({
 
   const handleKeyDownCapture = (event: KeyboardEvent<HTMLDivElement>) => {
     const offset = TIMELINE_KEY_OFFSETS[event.key];
+    // Keys typed in a marker's popover, such as a comment reply, reach this
+    // wrapper through the React tree. Only the slider's own keys seek.
+    const isSliderKey =
+      event.target instanceof Element &&
+      event.target.getAttribute('role') === 'slider';
     if (
       offset == null ||
+      !isSliderKey ||
       !isSeekable ||
       event.altKey ||
       event.ctrlKey ||
@@ -859,7 +989,13 @@ export function MediaTimeSlider({
             }
           }}
           width="100%"
-          {...mergeProps(themeProps('media-time-slider'), {className, style})}
+          containerClassName={[
+            themeProps('media-time-slider').className,
+            className,
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          containerStyle={style}
           containerXstyle={xstyle}
         />
       </div>
@@ -1054,115 +1190,44 @@ export function MediaFullscreenButton({
 
 MediaFullscreenButton.displayName = 'MediaFullscreenButton';
 
-export interface MediaPlaybackRateMenuProps extends Omit<
-  MediaButtonPartProps,
-  'onClick' | 'ref'
-> {
-  /**
-   * Speeds the menu offers, in order. Defaults to 0.5, 0.75, 1, 1.25, 1.5,
-   * 1.75, and 2, the same speeds the `<` and `>` shortcuts step through.
-   */
-  rates?: readonly number[];
-}
-
-/**
- * Shows the playback speed and opens a menu of speeds, with the current one
- * checked. The menu keeps the controls visible while it is open.
- *
- * @example
- * ```
- * <MediaPlaybackRateMenu rates={[0.75, 1, 1.25, 1.5, 2]} />
- * ```
- */
-export function MediaPlaybackRateMenu({
-  rates = DEFAULT_PLAYBACK_RATES,
-  size,
-  xstyle,
-  className,
-  style,
-  ...rest
-}: MediaPlaybackRateMenuProps) {
-  const {store, holdControls} = useMediaPlayerContext('MediaPlaybackRateMenu');
-  const rate = useMediaSelector(
-    'MediaPlaybackRateMenu',
-    state => state.playbackRate,
-  );
+/** Formats a playback speed as a short label, such as "1.5×". */
+function useRateLabel() {
   const t = useTranslator();
   const locale = useLocale();
   const numberFormat = useMemo(
     () => new Intl.NumberFormat(locale, {maximumFractionDigits: 2}),
     [locale],
   );
-  const formatRate = (value: number) =>
-    t('@astryx.mediaPlayer.playbackRate', {rate: numberFormat.format(value)});
-  return (
-    <DropdownMenu
-      button={{
-        ...rest,
-        label: formatRate(rate),
-        'aria-label': t('@astryx.mediaPlayer.playbackSpeedValue', {
-          rate: numberFormat.format(rate),
-        }),
-        tooltip: t('@astryx.mediaPlayer.playbackSpeed'),
-        variant: 'ghost',
-        size,
-        xstyle: [styles.rateLabel, xstyle],
-        ...mergeProps(themeProps('media-playback-rate-menu'), {
-          className,
-          style,
-        }),
-      }}
-      onOpenChange={isOpen => holdControls('menu', isOpen)}>
-      <DropdownMenuRadioGroup
-        label={t('@astryx.mediaPlayer.playbackSpeed')}
-        value={String(rate)}
-        onChange={value => store.actions.setPlaybackRate(Number(value))}>
-        {rates.map(option => (
-          <DropdownMenuRadioItem
-            key={option}
-            value={String(option)}
-            label={formatRate(option)}
-          />
-        ))}
-      </DropdownMenuRadioGroup>
-    </DropdownMenu>
-  );
+  return {
+    label: (rate: number) =>
+      t('@astryx.mediaPlayer.playbackRate', {rate: numberFormat.format(rate)}),
+    name: (rate: number) =>
+      t('@astryx.mediaPlayer.playbackSpeedValue', {
+        rate: numberFormat.format(rate),
+      }),
+    tooltip: t('@astryx.mediaPlayer.playbackSpeed'),
+  };
 }
-
-MediaPlaybackRateMenu.displayName = 'MediaPlaybackRateMenu';
-
-export type MediaPlaybackRateButtonProps = MediaButtonPartProps;
 
 /**
  * Shows the playback speed. A press switches between normal speed and the
- * last other speed, the way MediaMuteButton switches the sound off and on.
- * From normal speed with no other speed yet, it steps up one speed.
- *
- * @example
- * ```
- * <MediaPlaybackRateButton />
- * <MediaPlaybackRateSlider />
- * ```
+ * last other speed, the way Mute switches the sound off and on. From normal
+ * speed with no other speed yet, it steps up one speed.
  */
-export function MediaPlaybackRateButton({
+function RateToggleButton({
+  rates,
   size,
-  onClick,
-  xstyle,
-  className,
-  style,
-  ...rest
-}: MediaPlaybackRateButtonProps) {
-  const {store} = useMediaPlayerContext('MediaPlaybackRateButton');
+}: {
+  rates: readonly number[];
+  size?: MediaControlSize;
+}) {
+  const {store} = useMediaPlayerContext('MediaPlaybackRate');
   const rate = useMediaSelector(
-    'MediaPlaybackRateButton',
+    'MediaPlaybackRate',
     state => state.playbackRate,
   );
   const lastRateRef = useRef<number | null>(null);
-  const t = useTranslator();
-  const locale = useLocale();
-  const formatted = new Intl.NumberFormat(locale, {
-    maximumFractionDigits: 2,
-  }).format(rate);
+  const text = useRateLabel();
   const handleClick = () => {
     const current = store.getState().playbackRate;
     if (current !== 1) {
@@ -1170,77 +1235,39 @@ export function MediaPlaybackRateButton({
       store.actions.setPlaybackRate(1);
       return;
     }
-    const next =
-      lastRateRef.current ??
-      DEFAULT_PLAYBACK_RATES.find(option => option > 1) ??
-      1;
-    store.actions.setPlaybackRate(next);
+    store.actions.setPlaybackRate(
+      lastRateRef.current ?? rates.find(option => option > 1) ?? 1,
+    );
   };
   return (
     <Button
-      {...rest}
-      label={t('@astryx.mediaPlayer.playbackRate', {rate: formatted})}
-      aria-label={t('@astryx.mediaPlayer.playbackSpeedValue', {
-        rate: formatted,
-      })}
-      tooltip={t('@astryx.mediaPlayer.playbackSpeed')}
+      label={text.label(rate)}
+      aria-label={text.name(rate)}
+      tooltip={text.tooltip}
       variant="ghost"
       size={size}
-      onClick={composeEventHandlers(onClick, handleClick)}
-      {...mergeProps(themeProps('media-playback-rate-button'), {
-        className,
-        style,
-      })}
-      xstyle={[styles.rateLabel, xstyle]}
+      onClick={handleClick}
+      {...themeProps('media-playback-rate-button')}
+      xstyle={styles.rateLabel}
     />
   );
 }
 
-MediaPlaybackRateButton.displayName = 'MediaPlaybackRateButton';
-
-export interface MediaPlaybackRateSliderProps extends Omit<
-  BaseProps<HTMLDivElement>,
-  'onChange' | 'children'
-> {
-  /**
-   * Speeds the slider steps through, in order. Defaults to 0.5, 0.75, 1,
-   * 1.25, 1.5, 1.75, and 2, the same speeds the `<` and `>` shortcuts use.
-   */
-  rates?: readonly number[];
-  /** Slider width. Defaults to 88px. */
-  width?: number | string;
-  /** Ref to the slider thumb. */
-  ref?: Ref<HTMLDivElement>;
-}
-
-/**
- * Sets the playback speed in steps and shows the speed in a tooltip while it
- * is hovered, dragged, or focused.
- *
- * @example
- * ```
- * <MediaPlaybackRateSlider rates={[0.75, 1, 1.25, 1.5, 2]} />
- * ```
- */
-export function MediaPlaybackRateSlider({
-  rates = DEFAULT_PLAYBACK_RATES,
-  width = 88,
+/** Sets the playback speed in steps and shows it in a tooltip. */
+function RateSlider({
+  rates,
   xstyle,
-  className,
-  style,
-  ...rest
-}: MediaPlaybackRateSliderProps) {
-  const {store} = useMediaPlayerContext('MediaPlaybackRateSlider');
+}: {
+  rates: readonly number[];
+  xstyle: StyleXStyles;
+}) {
+  const {store} = useMediaPlayerContext('MediaPlaybackRate');
   const rate = useMediaSelector(
-    'MediaPlaybackRateSlider',
+    'MediaPlaybackRate',
     state => state.playbackRate,
   );
   const t = useTranslator();
-  const locale = useLocale();
-  const numberFormat = useMemo(
-    () => new Intl.NumberFormat(locale, {maximumFractionDigits: 2}),
-    [locale],
-  );
+  const text = useRateLabel();
   // The nearest listed speed, so a speed set elsewhere still places the thumb.
   const index = rates.reduce(
     (best, option, candidate) =>
@@ -1251,7 +1278,6 @@ export function MediaPlaybackRateSlider({
   );
   return (
     <Slider
-      {...rest}
       label={t('@astryx.mediaPlayer.playbackSpeed')}
       isLabelHidden
       min={0}
@@ -1259,22 +1285,140 @@ export function MediaPlaybackRateSlider({
       step={1}
       value={index}
       valueDisplay="tooltip"
-      formatValue={value =>
-        t('@astryx.mediaPlayer.playbackRate', {
-          rate: numberFormat.format(rates[value] ?? 1),
-        })
-      }
+      formatValue={value => text.label(rates[value] ?? 1)}
       onChange={(value: number) =>
         store.actions.setPlaybackRate(rates[value] ?? 1)
       }
-      width={width}
-      {...mergeProps(themeProps('media-playback-rate-slider'), {
-        className,
-        style,
-      })}
+      width={RATE_SLIDER_WIDTH}
+      containerClassName={themeProps('media-playback-rate-slider').className}
       containerXstyle={xstyle}
     />
   );
 }
 
-MediaPlaybackRateSlider.displayName = 'MediaPlaybackRateSlider';
+/**
+ * Shows the playback speed and opens a menu of speeds, with the current one
+ * checked. The menu keeps the controls visible while it is open.
+ */
+function RateMenu({
+  rates,
+  size,
+}: {
+  rates: readonly number[];
+  size?: MediaControlSize;
+}) {
+  const {store, holdControls} = useMediaPlayerContext('MediaPlaybackRate');
+  const rate = useMediaSelector(
+    'MediaPlaybackRate',
+    state => state.playbackRate,
+  );
+  const text = useRateLabel();
+  return (
+    <DropdownMenu
+      button={{
+        label: text.label(rate),
+        'aria-label': text.name(rate),
+        tooltip: text.tooltip,
+        variant: 'ghost',
+        size,
+        xstyle: styles.rateLabel,
+        ...themeProps('media-playback-rate-button'),
+      }}
+      onOpenChange={isOpen => holdControls('menu', isOpen)}>
+      <DropdownMenuRadioGroup
+        label={text.tooltip}
+        value={String(rate)}
+        onChange={value => store.actions.setPlaybackRate(Number(value))}>
+        {rates.map(option => (
+          <DropdownMenuRadioItem
+            key={option}
+            value={String(option)}
+            label={text.label(option)}
+          />
+        ))}
+      </DropdownMenuRadioGroup>
+    </DropdownMenu>
+  );
+}
+
+export interface MediaPlaybackRateProps extends Omit<
+  BaseProps<HTMLDivElement>,
+  'children'
+> {
+  /**
+   * How the speed changes. `'slider'`: a button that switches between normal
+   * speed and the last other speed, with a slider of speeds beside it while
+   * it is hovered or holds focus, and always on touch. `'menu'`: a button
+   * that opens a menu of speeds, with the current one checked. Defaults to
+   * `'slider'`.
+   */
+  variant?: 'slider' | 'menu';
+  /**
+   * Speeds offered, in order. Defaults to 0.5, 0.75, 1, 1.25, 1.5, 1.75, and
+   * 2, the same speeds the `<` and `>` shortcuts step through.
+   */
+  rates?: readonly number[];
+  /** Control height. Follows the surrounding size, else `'md'`. */
+  size?: MediaControlSize;
+  /**
+   * For the slider variant, the side of the button the slider opens on, in a
+   * row that runs left to right. Defaults to `'end'`, so a button at the
+   * start of a row stays under the pointer while the slider opens.
+   */
+  sliderPlacement?: MediaSliderPlacement;
+  /** Ref to the group element. */
+  ref?: Ref<HTMLDivElement>;
+}
+
+/**
+ * Playback speed. The button names the current speed and keeps one width at
+ * every speed. The slider variant switches between normal speed and the last
+ * other speed, and opens a slider of speeds beside the button; the menu
+ * variant opens a menu of speeds. In a container narrower than 480px the
+ * slider stays closed.
+ *
+ * @example
+ * ```
+ * <MediaPlaybackRate />
+ * <MediaPlaybackRate variant="menu" rates={[0.75, 1, 1.25, 1.5, 2]} />
+ * ```
+ */
+export function MediaPlaybackRate({
+  variant = 'slider',
+  rates = DEFAULT_PLAYBACK_RATES,
+  size,
+  sliderPlacement = 'end',
+  xstyle,
+  className,
+  style,
+  ...rest
+}: MediaPlaybackRateProps) {
+  const hasSlider = variant === 'slider';
+  const reveal = useSliderReveal(hasSlider, sliderPlacement);
+  const slider = hasSlider ? (
+    <span {...reveal.slotProps()}>
+      <RateSlider rates={rates} xstyle={reveal.gap} />
+    </span>
+  ) : null;
+  return (
+    <div
+      {...rest}
+      {...mergeProps(
+        mergeProps(
+          themeProps('media-playback-rate', {variant}),
+          reveal.groupProps(xstyle),
+        ),
+        {className, style},
+      )}>
+      {reveal.isBefore ? slider : null}
+      {hasSlider ? (
+        <RateToggleButton rates={rates} size={size} />
+      ) : (
+        <RateMenu rates={rates} size={size} />
+      )}
+      {reveal.isBefore ? null : slider}
+    </div>
+  );
+}
+
+MediaPlaybackRate.displayName = 'MediaPlaybackRate';

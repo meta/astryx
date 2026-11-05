@@ -231,7 +231,7 @@ function useControlsVisibility(store: MediaStore) {
  * @example
  * ```
  * <MediaPlayer label="Voice memo">
- *   <MediaPlayerAudio src="/media/memo.m4a" />
+ *   <MediaPlayerElement kind="audio" src="/media/memo.m4a" />
  *   <HStack gap={2} vAlign="center">
  *     <MediaPlayButton />
  *     <MediaTimeSlider />

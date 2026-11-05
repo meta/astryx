@@ -15,12 +15,11 @@
 import {useEffect, useRef, type RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
-import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {Text} from '@astryxdesign/core/Text';
 import {MediaTheme} from '@astryxdesign/core/theme';
-import {mergeProps, observeResize} from '@astryxdesign/core/utils';
+import {observeResize} from '@astryxdesign/core/utils';
 import {
   colorVars,
   durationVars,
@@ -33,15 +32,14 @@ import {useMediaPlayerContext, useMediaSelector} from './MediaPlayerContext';
 import {
   MediaCaptionsButton,
   MediaFullscreenButton,
-  MediaMuteButton,
   MediaPlayButton,
   MediaTime,
   MediaTimeSlider,
-  MediaVolumeSlider,
+  MediaVolume,
   type MediaTimelineChapter,
   type MediaTimelineMarker,
 } from './MediaPlayerControls';
-import {MediaPlayerVideo} from './MediaPlayerMedia';
+import {MediaPlayerElement} from './MediaPlayerElement';
 
 const FROSTED_SURFACE = `color-mix(in srgb, ${colorVars['--color-background-surface']} 80%, transparent)`;
 const FROSTED_SURFACE_HIGH_CONTRAST = `color-mix(in srgb, ${colorVars['--color-background-surface']} 95%, transparent)`;
@@ -119,10 +117,13 @@ const styles = stylex.create({
     },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
+  // The private variable carries the bar's pointer state to the timeline's
+  // marker buttons, which set their own pointer events.
   barHidden: {
     opacity: 0,
     translate: `0 ${spacingVars['--spacing-2']}`,
     pointerEvents: 'none',
+    '--_media-controls-pointer-events': 'none',
   },
   // Before playback, the large play control takes the bar's place. The bar
   // stays in the tab order, because the large control is pointer-only, so
@@ -140,42 +141,17 @@ const styles = stylex.create({
       default: 'none',
       ':focus-within': 'auto',
     },
+    '--_media-controls-pointer-events': {
+      default: 'none',
+      ':focus-within': 'auto',
+    },
   },
+  // A narrow player drops the volume control from the bar.
   volume: {
     display: {
       default: 'grid',
       '@container (max-width: 480px)': 'none',
     },
-    // The timeline gives up the space, so the open slider is never cut.
-    flexShrink: 0,
-    alignItems: 'center',
-    // While the column animates, the tracks hug the end, so Mute holds still.
-    justifyContent: 'end',
-    // The slider's column opens while the volume control is hovered or holds
-    // focus, and stays open on touch, matching the container reveal.
-    gridTemplateColumns: {
-      default: '0fr auto',
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-        '@media (hover: hover)': '1fr auto',
-      },
-      ':focus-within': '1fr auto',
-      '@media (any-pointer: coarse)': '1fr auto',
-    },
-    transitionProperty: 'grid-template-columns',
-    transitionDuration: {
-      default: durationVars['--duration-fast'],
-      '@media (prefers-reduced-motion: reduce)': '0s',
-    },
-    transitionTimingFunction: easeVars['--ease-standard'],
-  },
-  volumeSlot: {
-    minWidth: 0,
-    overflow: 'clip',
-    overflowClipMargin: spacingVars['--spacing-1'],
-  },
-  // The gap sits inside the opening column, so it closes with the slider.
-  volumeGap: {
-    paddingInlineEnd: spacingVars['--spacing-2'],
   },
   time: {
     display: {
@@ -435,7 +411,6 @@ function VideoControlBar({
     state => state.error == null && !state.hasStarted,
   );
   const barRef = useRef<HTMLDivElement | null>(null);
-  const volumeReveal = useContainerReveal();
   useCueLayout(videoRef, barRef);
   return (
     <MediaTheme mode="dark">
@@ -452,21 +427,7 @@ function VideoControlBar({
         <MediaPlayButton />
         <MediaTimeSlider chapters={chapters} markers={markers} />
         <MediaTime xstyle={styles.time} />
-        <div
-          {...mergeProps(
-            volumeReveal.getContainerProps(),
-            stylex.props(styles.volume),
-          )}>
-          {/* The slider opens to the left, so Mute stays under the pointer. */}
-          <span
-            {...mergeProps(
-              volumeReveal.getContentRevealProps({isLayoutPreserved: true}),
-              stylex.props(styles.volumeSlot),
-            )}>
-            <MediaVolumeSlider width={72} xstyle={styles.volumeGap} />
-          </span>
-          <MediaMuteButton />
-        </div>
+        <MediaVolume xstyle={styles.volume} />
         <MediaCaptionsButton />
         <MediaFullscreenButton />
       </div>
@@ -510,7 +471,8 @@ export function VideoPlayer({
       {...rest}
       label={label}
       xstyle={[styles.root, styles.aspectRatio(aspectRatio), xstyle]}>
-      <MediaPlayerVideo
+      <MediaPlayerElement
+        kind="video"
         ref={videoRef}
         src={src}
         poster={poster}
@@ -529,7 +491,7 @@ export function VideoPlayer({
             default={track.isDefault}
           />
         ))}
-      </MediaPlayerVideo>
+      </MediaPlayerElement>
       <VideoStatusLayer />
       <VideoControlBar
         videoRef={videoRef}

@@ -6,19 +6,20 @@ import {useEffect, useState} from 'react';
 import {
   AudioPlayer,
   CommentThread,
-  MediaMuteButton,
   MediaPlayButton,
   MediaPlayer,
-  MediaPlayerAudio,
-  MediaPlayerVideo,
+  MediaPlaybackRate,
+  MediaPlayerElement,
   MediaTime,
   MediaTimeSlider,
+  MediaVolume,
   VideoPlayer,
   useMediaPlaybackTime,
   useMediaPlayer,
 } from '@astryxdesign/lab';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {MediaTheme} from '@astryxdesign/core/theme';
 import {
   durationVars,
   radiusVars,
@@ -188,7 +189,6 @@ const styles = stylex.create({
     position: 'absolute',
     insetBlockStart: spacingVars['--spacing-4'],
     insetInlineEnd: spacingVars['--spacing-2'],
-    color: 'white',
     backgroundColor: 'oklch(0 0 0 / 0.45)',
     borderRadius: radiusVars['--radius-full'],
   },
@@ -239,7 +239,8 @@ function FeedStories() {
       label={FEED_CLIPS[index] ?? 'Clip'}
       onEnded={() => setIndex(current => (current + 1) % FEED_CLIPS.length)}
       xstyle={styles.feed}>
-      <MediaPlayerVideo
+      <MediaPlayerElement
+        kind="video"
         src={VIDEO_SRC}
         autoPlay
         muted
@@ -247,7 +248,10 @@ function FeedStories() {
         xstyle={styles.feedVideo}
       />
       <FeedStepper count={FEED_CLIPS.length} index={index} />
-      <MediaMuteButton xstyle={styles.feedMute} />
+      {/* Controls over the video take the dark media colors. */}
+      <MediaTheme mode="dark">
+        <MediaVolume hasSlider={false} xstyle={styles.feedMute} />
+      </MediaTheme>
     </MediaPlayer>
   );
 }
@@ -367,12 +371,14 @@ function ElapsedPercent() {
 export const CustomLayout: Story = {
   render: () => (
     <MediaPlayer label="Voice memo">
-      <MediaPlayerAudio src={AUDIO_SRC} />
+      <MediaPlayerElement kind="audio" src={AUDIO_SRC} />
       <HStack gap={2} vAlign="center">
         <MediaPlayButton />
         <MediaTimeSlider />
         <MediaTime display="remaining" />
         <ElapsedPercent />
+        <MediaPlaybackRate variant="menu" />
+        <MediaVolume />
       </HStack>
     </MediaPlayer>
   ),
@@ -419,7 +425,8 @@ export const ProgressTicker: Story = {
   render: () => (
     <div {...stylex.props(stylex.defaultMarker())}>
       <MediaPlayer label="Bee on a flower" xstyle={styles.controlless}>
-        <MediaPlayerVideo
+        <MediaPlayerElement
+          kind="video"
           src={VIDEO_SRC}
           autoPlay
           muted

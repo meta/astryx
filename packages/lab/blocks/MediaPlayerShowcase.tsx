@@ -12,13 +12,13 @@
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {
-  MediaMuteButton,
   MediaPlayButton,
   MediaPlayer,
-  MediaPlaybackRateMenu,
-  MediaPlayerAudio,
+  MediaPlaybackRate,
+  MediaPlayerElement,
   MediaTime,
   MediaTimeSlider,
+  MediaVolume,
   useMediaPlayer,
 } from '@astryxdesign/lab';
 
@@ -36,14 +36,17 @@ export default function MediaPlayerShowcase() {
   return (
     <VStack width={560} maxWidth="100%">
       <MediaPlayer label="Recording">
-        <MediaPlayerAudio src="https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3" />
+        <MediaPlayerElement
+          kind="audio"
+          src="https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3"
+        />
         <HStack gap={2} vAlign="center">
           <MediaPlayButton variant="primary" />
           <MediaTimeSlider />
           <MediaTime display="remaining" />
           <ElapsedPercent />
-          <MediaPlaybackRateMenu />
-          <MediaMuteButton />
+          <MediaPlaybackRate variant="menu" />
+          <MediaVolume />
         </HStack>
       </MediaPlayer>
     </VStack>

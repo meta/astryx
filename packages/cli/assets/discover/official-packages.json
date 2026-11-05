@@ -158,19 +158,7 @@
         },
         {
           "kind": "component",
-          "name": "MediaMuteButton"
-        },
-        {
-          "kind": "component",
-          "name": "MediaPlaybackRateButton"
-        },
-        {
-          "kind": "component",
-          "name": "MediaPlaybackRateMenu"
-        },
-        {
-          "kind": "component",
-          "name": "MediaPlaybackRateSlider"
+          "name": "MediaPlaybackRate"
         },
         {
           "kind": "component",
@@ -182,11 +170,7 @@
         },
         {
           "kind": "component",
-          "name": "MediaPlayerAudio"
-        },
-        {
-          "kind": "component",
-          "name": "MediaPlayerVideo"
+          "name": "MediaPlayerElement"
         },
         {
           "kind": "component",
@@ -202,7 +186,7 @@
         },
         {
           "kind": "component",
-          "name": "MediaVolumeSlider"
+          "name": "MediaVolume"
         },
         {
           "kind": "component",

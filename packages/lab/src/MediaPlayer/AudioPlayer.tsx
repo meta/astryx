@@ -15,35 +15,30 @@
 import {useEffect, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {AspectRatio} from '@astryxdesign/core/AspectRatio';
-import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {Section} from '@astryxdesign/core/Section';
 import {
   colorVars,
-  durationVars,
-  easeVars,
   fontWeightVars,
   radiusVars,
   spacingVars,
   typeScaleVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {mergeProps, themeProps} from '@astryxdesign/core/utils';
+import {themeProps} from '@astryxdesign/core/utils';
 import {MediaPlayer, type MediaPlayerProps} from './MediaPlayer';
 import {useMediaPlayerContext} from './MediaPlayerContext';
 import {
-  MediaMuteButton,
+  MediaPlaybackRate,
   MediaPlayButton,
-  MediaPlaybackRateButton,
-  MediaPlaybackRateSlider,
   MediaSeekButton,
   MediaTime,
   MediaTimeSlider,
-  MediaVolumeSlider,
+  MediaVolume,
   type MediaTimelineChapter,
   type MediaTimelineMarker,
 } from './MediaPlayerControls';
-import {MediaPlayerAudio} from './MediaPlayerMedia';
+import {MediaPlayerElement} from './MediaPlayerElement';
 import {useMediaIcon} from './mediaIcons';
 
 /** Height of the artwork, the same as the title and subtitle lines. */
@@ -120,67 +115,9 @@ const styles = stylex.create({
   },
   speed: {
     justifySelf: 'start',
-    display: 'grid',
-    alignItems: 'center',
-    // While the column animates, the tracks hug the start, so the button holds
-    // still.
-    justifyContent: 'start',
-    // The slider's column opens while the speed control is hovered or holds
-    // focus, and stays open on touch, matching the container reveal.
-    gridTemplateColumns: {
-      default: 'auto 0fr',
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-        '@media (hover: hover)': 'auto 1fr',
-      },
-      ':focus-within': 'auto 1fr',
-      '@media (any-pointer: coarse)': 'auto 1fr',
-    },
-    transitionProperty: 'grid-template-columns',
-    transitionDuration: {
-      default: durationVars['--duration-fast'],
-      '@media (prefers-reduced-motion: reduce)': '0s',
-    },
-    transitionTimingFunction: easeVars['--ease-standard'],
   },
   volume: {
     justifySelf: 'end',
-    display: 'grid',
-    alignItems: 'center',
-    // While the column animates, the tracks hug the end, so Mute holds still.
-    justifyContent: 'end',
-    // The slider's column opens while the volume control is hovered or holds
-    // focus, and stays open on touch, matching the container reveal.
-    gridTemplateColumns: {
-      default: '0fr auto',
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
-        '@media (hover: hover)': '1fr auto',
-      },
-      ':focus-within': '1fr auto',
-      '@media (any-pointer: coarse)': '1fr auto',
-    },
-    transitionProperty: 'grid-template-columns',
-    transitionDuration: {
-      default: durationVars['--duration-fast'],
-      '@media (prefers-reduced-motion: reduce)': '0s',
-    },
-    transitionTimingFunction: easeVars['--ease-standard'],
-  },
-  revealSlot: {
-    minWidth: 0,
-    overflow: 'clip',
-    overflowClipMargin: spacingVars['--spacing-1'],
-    // Narrow players keep the buttons and drop the sliders.
-    display: {
-      default: 'block',
-      '@container (max-width: 480px)': 'none',
-    },
-  },
-  speedGap: {
-    paddingInlineStart: spacingVars['--spacing-2'],
-  },
-  // The gap sits inside the opening column, so it closes with the slider.
-  volumeGap: {
-    paddingInlineEnd: spacingVars['--spacing-2'],
   },
 });
 
@@ -458,7 +395,6 @@ function AudioPlayerLayout({
     onPreviousTrack,
     onNextTrack,
   });
-  const reveal = useContainerReveal();
   return (
     <>
       <div {...stylex.props(styles.header)}>
@@ -480,21 +416,7 @@ function AudioPlayerLayout({
         <MediaTime display="remaining" xstyle={styles.secondaryTime} />
       </div>
       <div dir="ltr" {...stylex.props(styles.controls)}>
-        {/* The slider opens to the right, so the speed button stays put. */}
-        <div
-          {...mergeProps(
-            reveal.getContainerProps(),
-            stylex.props(styles.speed),
-          )}>
-          <MediaPlaybackRateButton />
-          <span
-            {...mergeProps(
-              reveal.getContentRevealProps({isLayoutPreserved: true}),
-              stylex.props(styles.revealSlot),
-            )}>
-            <MediaPlaybackRateSlider xstyle={styles.speedGap} />
-          </span>
-        </div>
+        <MediaPlaybackRate xstyle={styles.speed} />
         <div {...stylex.props(styles.transport)}>
           {onPreviousTrack != null ? (
             <TrackButton direction="previous" onClick={onPreviousTrack} />
@@ -506,21 +428,7 @@ function AudioPlayerLayout({
             <TrackButton direction="next" onClick={onNextTrack} />
           ) : null}
         </div>
-        {/* The slider opens toward the center, so Mute keeps its place. */}
-        <div
-          {...mergeProps(
-            reveal.getContainerProps(),
-            stylex.props(styles.volume),
-          )}>
-          <span
-            {...mergeProps(
-              reveal.getContentRevealProps({isLayoutPreserved: true}),
-              stylex.props(styles.revealSlot),
-            )}>
-            <MediaVolumeSlider width={72} xstyle={styles.volumeGap} />
-          </span>
-          <MediaMuteButton />
-        </div>
+        <MediaVolume xstyle={styles.volume} />
       </div>
     </>
   );
@@ -565,7 +473,8 @@ export function AudioPlayer({
   return (
     <Section xstyle={xstyle} className={className} style={style}>
       <MediaPlayer {...rest} label={label ?? title} xstyle={styles.player}>
-        <MediaPlayerAudio
+        <MediaPlayerElement
+          kind="audio"
           src={src}
           preload={preload}
           crossOrigin={crossOrigin}

@@ -100,7 +100,7 @@ export const docs = {
     'Video and audio players with themed controls over the browser’s native media element. VideoPlayer and AudioPlayer are ready-made layouts; MediaPlayer, its parts, and useMediaPlayer build custom ones. The native element plays the media, so formats the browser plays need no extra library.',
   usage: {
     description:
-      'Use VideoPlayer for a video with controls, and AudioPlayer for an episode, recording, or track. For a different layout, put a MediaPlayerVideo or MediaPlayerAudio and the control parts you need inside a MediaPlayer; every part reads the player around it. Keyboard shortcuts work while focus is inside the player: Space or K plays and pauses, M mutes, F toggles fullscreen, C toggles captions, the arrow keys skip 5 seconds and change the volume, J and L skip 10 seconds, 0 to 9 jump to that tenth of the media, and < and > change the speed. Shortcut changes are announced to screen readers. The timeline and volume follow the WAI-ARIA Slider pattern and its Media Seek Slider example; the buttons follow the Button pattern, Captions is a toggle button, and the speed control follows the Menu Button pattern. Streaming formats the browser cannot play, such as DASH, need a streaming library; that library is not part of Lab.',
+      'Use VideoPlayer for a video with controls, and AudioPlayer for an episode, recording, or track. For a different layout, put a MediaPlayerElement and the control parts you need inside a MediaPlayer; every part reads the player around it. Keyboard shortcuts work while focus is inside the player: Space or K plays and pauses, M mutes, F toggles fullscreen, C toggles captions, the arrow keys skip 5 seconds and change the volume, J and L skip 10 seconds, 0 to 9 jump to that tenth of the media, and < and > change the speed. Shortcut changes are announced to screen readers. The timeline and volume follow the WAI-ARIA Slider pattern and its Media Seek Slider example; the buttons follow the Button pattern, Captions is a toggle button, and the speed control’s menu variant follows the Menu Button pattern. Streaming formats the browser cannot play, such as DASH, need a streaming library; that library is not part of Lab.',
     bestPractices: [
       {
         guidance: true,
@@ -150,7 +150,7 @@ export const docs = {
         name: 'Control bar',
         required: false,
         description:
-          'In VideoPlayer, a frosted bar 8px from the edges of the video that holds play, the timeline, time, volume, captions, and fullscreen. It shows on hover, pointer movement, and keyboard focus, and hides after two idle seconds while the video plays. On touch, a tap shows it and the next tap hides it. The volume slider appears while the volume control is hovered or focused, and always on touch.',
+          'In VideoPlayer, a frosted bar 8px from the edges of the video that holds play, the timeline, time, volume, captions, and fullscreen. It shows on hover, pointer movement, and keyboard focus, and hides after two idle seconds while the video plays. On touch, a tap shows it and the next tap hides it. The volume slider opens beside Mute while Mute is hovered or focused, and always on touch.',
       },
       {
         name: 'Timeline',
@@ -162,26 +162,26 @@ export const docs = {
         name: 'Status layer',
         required: false,
         description:
-          'In VideoPlayer, the large play button before playback and after the end, a spinner while playback waits for data, and an error message with Try again.',
+          'In VideoPlayer, the large play button before playback, with the control bar hidden, and a replay button after the end, with the control bar shown; a spinner while playback waits for data; and an error message with Try again.',
       },
     ],
   },
   theming: {
     targets: [
       {className: 'astryx-media-player', visualProps: ['controls']},
-      {className: 'astryx-media-player-video'},
-      {className: 'astryx-media-player-audio'},
+      {className: 'astryx-media-player-element', visualProps: ['kind']},
       {className: 'astryx-media-play-button'},
       {className: 'astryx-media-seek-button'},
-      {className: 'astryx-media-mute-button'},
+      {className: 'astryx-media-volume'},
+      {className: 'astryx-media-volume-button'},
       {className: 'astryx-media-volume-slider'},
       {className: 'astryx-media-time-slider'},
       {className: 'astryx-media-time', visualProps: ['display']},
       {className: 'astryx-media-captions-button'},
       {className: 'astryx-media-fullscreen-button'},
+      {className: 'astryx-media-playback-rate', visualProps: ['variant']},
       {className: 'astryx-media-playback-rate-button'},
       {className: 'astryx-media-playback-rate-slider'},
-      {className: 'astryx-media-playback-rate-menu'},
       {className: 'astryx-media-track-button'},
       {className: 'astryx-media-artwork'},
     ],
@@ -362,35 +362,34 @@ export const docs = {
       ],
     },
     {
-      name: 'MediaPlayerVideo',
-      displayName: 'Media Player Video',
+      name: 'MediaPlayerElement',
+      displayName: 'Media Player Element',
       isHiddenFromOverview: true,
       description:
-        'The native video element of a MediaPlayer. It takes the native video attributes except `controls`; pass `<track>` elements as children.',
+        'The native media element of a MediaPlayer: a video or an audio element, by `kind`. It takes the native attributes of that element except `controls`. A video fills its box and takes `<track>` caption elements as children; an audio element renders nothing visible.',
       props: [
-        {name: 'src', type: 'string', description: 'URL of the video.'},
+        {
+          name: 'kind',
+          type: "'video' | 'audio'",
+          description:
+            'The element to render. Video-only attributes, such as `poster` and `playsInline`, apply when it is `video`.',
+          required: true,
+        },
+        {name: 'src', type: 'string', description: 'URL of the media.'},
         {
           name: 'poster',
           type: 'string',
-          description: 'Image shown before playback starts.',
+          description: 'For video, the image shown before playback starts.',
         },
         {
           name: 'playsInline',
           type: 'boolean',
           description:
-            'Plays inside the page on iPhone instead of opening the system player.',
+            'For video, plays inside the page on iPhone instead of opening the system player.',
           default: 'true',
         },
         ...styleProps,
       ],
-    },
-    {
-      name: 'MediaPlayerAudio',
-      displayName: 'Media Player Audio',
-      isHiddenFromOverview: true,
-      description:
-        'The native audio element of a MediaPlayer. It renders nothing visible and takes the native audio attributes except `controls`.',
-      props: [{name: 'src', type: 'string', description: 'URL of the audio.'}],
     },
     {
       name: 'MediaPlayButton',
@@ -414,7 +413,7 @@ export const docs = {
       displayName: 'Media Seek Button',
       isHiddenFromOverview: true,
       description:
-        'Skips back or forward by a fixed number of seconds, shown on its icon.',
+        'Skips back or forward by a fixed number of seconds. Its name and tooltip state the seconds.',
       props: [
         {
           name: 'offset',
@@ -428,24 +427,25 @@ export const docs = {
       ],
     },
     {
-      name: 'MediaMuteButton',
-      displayName: 'Media Mute Button',
-      isHiddenFromOverview: true,
-      description: 'Mutes and unmutes. Its icon follows the volume.',
-      props: [sizeProp, ...styleProps],
-    },
-    {
-      name: 'MediaVolumeSlider',
-      displayName: 'Media Volume Slider',
+      name: 'MediaVolume',
+      displayName: 'Media Volume',
       isHiddenFromOverview: true,
       description:
-        'Sets the volume. It renders nothing where script cannot set the volume, such as iOS Safari, where the hardware buttons own it.',
+        'Mute and volume. Mute switches the sound off and on, and its icon follows the volume. The volume slider opens beside Mute while Mute is hovered or focused, stays open on touch, and shows the volume in a tooltip. It never renders where script cannot set the volume, such as iOS Safari, where the hardware buttons own it. In a container narrower than 480px the slider stays closed.',
       props: [
+        sizeProp,
         {
-          name: 'width',
-          type: 'number | string',
-          description: 'Slider width.',
-          default: '88',
+          name: 'hasSlider',
+          type: 'boolean',
+          description: 'Shows the volume slider beside Mute.',
+          default: 'true',
+        },
+        {
+          name: 'sliderPlacement',
+          type: "'start' | 'end'",
+          description:
+            'The side of Mute the slider opens on, in a row that runs left to right. `start` keeps Mute at the end of a row under the pointer.',
+          default: "'start'",
         },
         ...styleProps,
       ],
@@ -491,51 +491,34 @@ export const docs = {
       props: [sizeProp, ...styleProps],
     },
     {
-      name: 'MediaPlaybackRateButton',
-      displayName: 'Media Playback Rate Button',
+      name: 'MediaPlaybackRate',
+      displayName: 'Media Playback Rate',
       isHiddenFromOverview: true,
       description:
-        'Shows the playback speed. A press switches between normal speed and the last other speed, the way the mute button switches the sound off and on; from normal speed with no other speed yet, it steps up one speed.',
-      props: [sizeProp, ...styleProps],
-    },
-    {
-      name: 'MediaPlaybackRateSlider',
-      displayName: 'Media Playback Rate Slider',
-      isHiddenFromOverview: true,
-      description:
-        'Sets the playback speed in steps and shows the speed in a tooltip while it is hovered, dragged, or focused. AudioPlayer reveals it beside the speed button.',
+        'Playback speed. The button names the current speed and keeps one width at every speed. The slider variant switches between normal speed and the last other speed, the way Mute switches the sound, and opens a slider of speeds beside the button while it is hovered or focused, and always on touch. The menu variant opens a menu of speeds with the current one checked, and keeps the controls visible while it is open.',
       props: [
+        {
+          name: 'variant',
+          type: "'slider' | 'menu'",
+          description:
+            'How the speed changes: a slider beside the button, or a menu.',
+          default: "'slider'",
+        },
         {
           name: 'rates',
           type: 'readonly number[]',
           description:
-            'Speeds the slider steps through, in order. The `<` and `>` shortcuts step through the default list.',
-          default: '[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]',
-        },
-        {
-          name: 'width',
-          type: 'number | string',
-          description: 'Slider width.',
-          default: '88',
-        },
-        ...styleProps,
-      ],
-    },
-    {
-      name: 'MediaPlaybackRateMenu',
-      displayName: 'Media Playback Rate Menu',
-      isHiddenFromOverview: true,
-      description:
-        'Shows the playback speed and opens a menu of speeds with the current one checked. It keeps the controls visible while the menu is open.',
-      props: [
-        {
-          name: 'rates',
-          type: 'readonly number[]',
-          description:
-            'Speeds the menu offers, in order. The `<` and `>` shortcuts step through the default list.',
+            'Speeds offered, in order. The `<` and `>` shortcuts step through the default list.',
           default: '[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]',
         },
         sizeProp,
+        {
+          name: 'sliderPlacement',
+          type: "'start' | 'end'",
+          description:
+            'For the slider variant, the side of the button the slider opens on, in a row that runs left to right. `end` keeps a button at the start of a row under the pointer.',
+          default: "'end'",
+        },
         ...styleProps,
       ],
     },
@@ -646,7 +629,7 @@ export const docs = {
     {
       label: 'Inline voice note',
       code: `<MediaPlayer label="Voice note">
-  <MediaPlayerAudio src="/media/note.mp3" />
+  <MediaPlayerElement kind="audio" src="/media/note.mp3" />
   <HStack gap={1} vAlign="center">
     <MediaPlayButton size="sm" />
     <MediaTime display="remaining" />
@@ -658,12 +641,14 @@ export const docs = {
       code: `function CompactPlayer({src}: {src: string}) {
   return (
     <MediaPlayer label="Voice memo">
-      <MediaPlayerAudio src={src} />
+      <MediaPlayerElement kind="audio" src={src} />
       <HStack gap={2} vAlign="center">
         <MediaPlayButton />
         <MediaTimeSlider />
         <MediaTime display="remaining" />
         <ElapsedPercent />
+        <MediaPlaybackRate variant="menu" />
+        <MediaVolume />
       </HStack>
     </MediaPlayer>
   );

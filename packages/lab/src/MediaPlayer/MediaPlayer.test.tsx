@@ -8,8 +8,12 @@ import type * as CoreHooks from '@astryxdesign/core/hooks';
 import {AudioPlayer} from './AudioPlayer';
 import {MediaPlayer} from './MediaPlayer';
 import {useMediaPlaybackTime, useMediaPlayer} from './MediaPlayerContext';
-import {MediaPlaybackRateMenu, MediaTimeSlider} from './MediaPlayerControls';
-import {MediaPlayerAudio, MediaPlayerVideo} from './MediaPlayerMedia';
+import {
+  MediaPlaybackRate,
+  MediaTimeSlider,
+  MediaVolume,
+} from './MediaPlayerControls';
+import {MediaPlayerElement} from './MediaPlayerElement';
 import {VideoPlayer} from './VideoPlayer';
 
 const announce = vi.hoisted(() => vi.fn());
@@ -196,7 +200,7 @@ describe('VideoPlayer', () => {
     const user = userEvent.setup();
     const {container} = render(
       <MediaPlayer label="Annotated clip">
-        <MediaPlayerVideo src="/clip.mp4" />
+        <MediaPlayerElement kind="video" src="/clip.mp4" />
         <input aria-label="Note" />
       </MediaPlayer>,
     );
@@ -277,17 +281,20 @@ describe('VideoPlayer', () => {
   });
 
   it('keeps the loading spinner out of the accessibility tree', () => {
-    const {video} = renderVideoPlayer();
+    const {video, container} = renderVideoPlayer();
     fakePlayback(video);
-    const statusCount = screen.queryAllByRole('status').length;
+    const announcedCount = () =>
+      screen.queryAllByRole('status').length +
+      screen.queryAllByRole('progressbar').length;
+    const countBefore = announcedCount();
     act(() => {
       void video.play();
       video.dispatchEvent(new Event('waiting'));
     });
-    expect(screen.queryAllByRole('status')).toHaveLength(statusCount);
-    expect(screen.queryAllByRole('status', {hidden: true}).length).toBe(
-      statusCount + 1,
-    );
+    const spinner = container.querySelector('.astryx-spinner');
+    expect(spinner).not.toBeNull();
+    expect(spinner?.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(announcedCount()).toBe(countBefore);
   });
 
   it('hides the controls after two idle seconds of playback and shows them on pointer movement', () => {
@@ -392,7 +399,7 @@ describe('MediaTimeSlider', () => {
     const {container} = render(
       <div dir="rtl">
         <MediaPlayer label="Clip">
-          <MediaPlayerVideo src="/clip.mp4" />
+          <MediaPlayerElement kind="video" src="/clip.mp4" />
           <MediaTimeSlider />
         </MediaPlayer>
       </div>,
@@ -446,7 +453,7 @@ describe('MediaTimeSlider', () => {
   it('speaks the chapter and the marker at the position with the time', () => {
     const {container} = render(
       <MediaPlayer label="Clip">
-        <MediaPlayerVideo src="/clip.mp4" />
+        <MediaPlayerElement kind="video" src="/clip.mp4" />
         <MediaTimeSlider
           chapters={[
             {start: 0, title: 'Intro'},
@@ -469,6 +476,36 @@ describe('MediaTimeSlider', () => {
       video.currentTime = 5;
     });
     expect(slider.getAttribute('aria-valuetext')).toMatch(/, Intro$/);
+  });
+
+  it('leaves arrow keys typed in a marker popover to the popover', async () => {
+    // jsdom has no popover API.
+    vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, 'hidePopover').mockImplementation(() => {});
+    const user = userEvent.setup();
+    const {container} = render(
+      <MediaPlayer label="Clip">
+        <MediaPlayerElement kind="video" src="/clip.mp4" />
+        <MediaTimeSlider
+          markers={[
+            {
+              time: 20,
+              label: 'Lin: hold on this',
+              content: <input aria-label="Reply" />,
+            },
+          ]}
+        />
+      </MediaPlayer>,
+    );
+    const playback = fakePlayback(container.querySelector('video')!, {
+      duration: 60,
+    });
+    await user.click(screen.getByRole('button', {name: 'Lin: hold on this'}));
+    expect(playback.getCurrentTime()).toBe(20);
+    const reply = screen.getByRole('textbox', {name: 'Reply', hidden: true});
+    act(() => reply.focus());
+    await user.keyboard('{ArrowRight}{PageUp}');
+    expect(playback.getCurrentTime()).toBe(20);
   });
 
   it('draws a dot for each marker once the duration is known', () => {
@@ -627,7 +664,7 @@ describe('AudioPlayer', () => {
   });
 });
 
-describe('MediaPlaybackRateMenu', () => {
+describe('MediaPlaybackRate', () => {
   it('sets the playback speed from a menu that checks the current speed', async () => {
     // jsdom has no popover API.
     vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(() => {});
@@ -635,8 +672,8 @@ describe('MediaPlaybackRateMenu', () => {
     const user = userEvent.setup();
     const {container} = render(
       <MediaPlayer label="Episode">
-        <MediaPlayerAudio src="/episode.mp3" />
-        <MediaPlaybackRateMenu />
+        <MediaPlayerElement kind="audio" src="/episode.mp3" />
+        <MediaPlaybackRate variant="menu" />
       </MediaPlayer>,
     );
     const playback = fakePlayback(container.querySelector('audio')!, {
@@ -653,6 +690,84 @@ describe('MediaPlaybackRateMenu', () => {
     expect(
       screen.getByRole('button', {name: 'Playback speed, 1.5×'}),
     ).toBeInTheDocument();
+  });
+
+  it('reflects its variant and keeps the slider out of the menu variant', () => {
+    const {container} = render(
+      <MediaPlayer label="Episode">
+        <MediaPlayerElement kind="audio" src="/episode.mp3" />
+        <MediaPlaybackRate variant="menu" />
+      </MediaPlayer>,
+    );
+    expect(
+      container.querySelector('.astryx-media-playback-rate'),
+    ).toHaveAttribute('data-variant', 'menu');
+    expect(
+      screen.queryByRole('slider', {name: 'Playback speed'}),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('MediaVolume', () => {
+  it('pairs Mute with a volume slider before it by default', async () => {
+    const user = userEvent.setup();
+    const {container} = render(
+      <MediaPlayer label="Episode">
+        <MediaPlayerElement kind="audio" src="/episode.mp3" />
+        <MediaVolume />
+      </MediaPlayer>,
+    );
+    fakePlayback(container.querySelector('audio')!);
+    const group = container.querySelector('.astryx-media-volume')!;
+    const slider = within(group as HTMLElement).getByRole('slider', {
+      name: 'Volume',
+    });
+    const mute = within(group as HTMLElement).getByRole('button', {
+      name: 'Mute',
+    });
+    expect(
+      slider.compareDocumentPosition(mute) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    await user.click(mute);
+    expect(
+      within(group as HTMLElement).getByRole('button', {name: 'Unmute'}),
+    ).toBeInTheDocument();
+  });
+
+  it('renders Mute alone without its slider', () => {
+    render(
+      <MediaPlayer label="Episode">
+        <MediaPlayerElement kind="audio" src="/episode.mp3" />
+        <MediaVolume hasSlider={false} />
+      </MediaPlayer>,
+    );
+    expect(screen.getByRole('button', {name: 'Mute'})).toBeInTheDocument();
+    expect(
+      screen.queryByRole('slider', {name: 'Volume'}),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('MediaPlayerElement', () => {
+  it('renders the native element for its kind without the browser controls', () => {
+    const {container, rerender} = render(
+      <MediaPlayer label="Episode">
+        <MediaPlayerElement kind="audio" src="/episode.mp3" />
+      </MediaPlayer>,
+    );
+    const audio = container.querySelector('audio');
+    expect(audio).toHaveAttribute('src', '/episode.mp3');
+    expect(audio).not.toHaveAttribute('controls');
+    expect(audio).toHaveAttribute('data-kind', 'audio');
+    rerender(
+      <MediaPlayer label="Clip">
+        <MediaPlayerElement kind="video" src="/clip.mp4" poster="/clip.jpg" />
+      </MediaPlayer>,
+    );
+    const video = container.querySelector('video');
+    expect(video).toHaveAttribute('poster', '/clip.jpg');
+    expect(video).toHaveAttribute('playsinline');
+    expect(video).not.toHaveAttribute('controls');
   });
 });
 
@@ -683,7 +798,7 @@ describe('useMediaPlayer', () => {
     const user = userEvent.setup();
     const {container} = render(
       <MediaPlayer label="Memo">
-        <MediaPlayerAudio src="/memo.m4a" />
+        <MediaPlayerElement kind="audio" src="/memo.m4a" />
         <Readout />
       </MediaPlayer>,
     );
@@ -703,7 +818,7 @@ describe('useMediaPlayer', () => {
     }
     const {container} = render(
       <MediaPlayer label="Clip">
-        <MediaPlayerVideo src="/clip.mp4" />
+        <MediaPlayerElement kind="video" src="/clip.mp4" />
         <Readout />
       </MediaPlayer>,
     );

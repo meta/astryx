@@ -638,28 +638,13 @@
       "aliases": []
     },
     {
-      "name": "component-lab-media-mute-button",
-      "path": "components/lab/media-mute-button",
-      "aliases": []
-    },
-    {
       "name": "component-lab-media-play-button",
       "path": "components/lab/media-play-button",
       "aliases": []
     },
     {
-      "name": "component-lab-media-playback-rate-button",
-      "path": "components/lab/media-playback-rate-button",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-media-playback-rate-menu",
-      "path": "components/lab/media-playback-rate-menu",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-media-playback-rate-slider",
-      "path": "components/lab/media-playback-rate-slider",
+      "name": "component-lab-media-playback-rate",
+      "path": "components/lab/media-playback-rate",
       "aliases": []
     },
     {
@@ -668,13 +653,8 @@
       "aliases": []
     },
     {
-      "name": "component-lab-media-player-audio",
-      "path": "components/lab/media-player-audio",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-media-player-video",
-      "path": "components/lab/media-player-video",
+      "name": "component-lab-media-player-element",
+      "path": "components/lab/media-player-element",
       "aliases": []
     },
     {
@@ -693,8 +673,8 @@
       "aliases": []
     },
     {
-      "name": "component-lab-media-volume-slider",
-      "path": "components/lab/media-volume-slider",
+      "name": "component-lab-media-volume",
+      "path": "components/lab/media-volume",
       "aliases": []
     },
     {

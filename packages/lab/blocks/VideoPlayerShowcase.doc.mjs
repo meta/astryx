@@ -9,12 +9,10 @@ export default {
     'A video with themed controls in a frosted bar that floats 8px inside the video. The bar shows on hover, pointer movement, and keyboard focus, hides after two idle seconds while the video plays, and on touch shows and hides with a tap.',
   exampleFor: 'VideoPlayer',
   alsoExampleFor: [
-    'MediaPlayerVideo',
     'MediaPlayButton',
     'MediaTimeSlider',
     'MediaTime',
-    'MediaMuteButton',
-    'MediaVolumeSlider',
+    'MediaVolume',
     'MediaFullscreenButton',
   ],
   isReady: true,

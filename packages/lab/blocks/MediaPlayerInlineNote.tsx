@@ -12,14 +12,17 @@ import {HStack} from '@astryxdesign/core/Layout';
 import {
   MediaPlayButton,
   MediaPlayer,
-  MediaPlayerAudio,
+  MediaPlayerElement,
   MediaTime,
 } from '@astryxdesign/lab';
 
 export default function MediaPlayerInlineNote() {
   return (
     <MediaPlayer label="Voice note">
-      <MediaPlayerAudio src="https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3" />
+      <MediaPlayerElement
+        kind="audio"
+        src="https://interactive-examples.mdn.mozilla.net/media/cc0-audio/t-rex-roar.mp3"
+      />
       <HStack gap={1} vAlign="center">
         <MediaPlayButton size="sm" />
         <MediaTime display="remaining" />

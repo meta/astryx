@@ -13,7 +13,7 @@ export default {
   aspectRatio: 16 / 9,
   componentsUsed: [
     'MediaPlayer',
-    'MediaPlayerAudio',
+    'MediaPlayerElement',
     'MediaPlayButton',
     'MediaTime',
     'HStack',

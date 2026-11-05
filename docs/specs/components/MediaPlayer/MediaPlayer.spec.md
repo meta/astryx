@@ -48,7 +48,7 @@ system_specs: [spec:AST-002, spec:AST-082, spec:AST-086]
 
 | Area                    | Contract                                                                                                                                                                                                                                                                                                             |
 | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `@astryxdesign/lab` exports two presets (`VideoPlayer`, `AudioPlayer`), a root (`MediaPlayer`), two media parts (`MediaPlayerVideo`, `MediaPlayerAudio`), nine control parts, the `useMediaPlayer` hook, and their types.                                                                                            |
+| Public contract         | `@astryxdesign/lab` exports two presets (`VideoPlayer`, `AudioPlayer`), a root (`MediaPlayer`), one media part (`MediaPlayerElement`, a video or audio element by `kind`), eight control parts, the `useMediaPlayer` and `useMediaPlaybackTime` hooks, and their types.                                              |
 | Behavior                | The browser's native media element plays the media with its own controls off. The root owns playback state, scopes keyboard shortcuts, announces the changes they make, and decides when video controls show. The timeline runs left to right in every direction. Controls a platform cannot honor are not rendered. |
 | End-user impact         | People get themed controls that work with a mouse, touch, keyboard, and screen reader, captions styled by their own system preferences, and the same shortcuts as common web players.                                                                                                                                |
 | Builder impact          | Callers pass a source and a label to a preset, or compose the root, one media part, and the control parts they need. Streaming formats the browser cannot play need an engine the product brings.                                                                                                                    |
@@ -101,13 +101,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept            | Closed values or states                                | Meaning                                                                                            | Availability by variant/orientation/state   | Default                          | Owner                   | Stability    | Invalid-value behavior            |
-| ------------------ | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | ------------------------------------------- | -------------------------------- | ----------------------- | ------------ | --------------------------------- |
-| Control visibility | `visible`, `hidden`                                    | Whether video controls show over the media                                                         | Root `data-controls`; VideoPlayer bar       | `visible`                        | `component:MediaPlayer` | experimental | Not caller-settable               |
-| Playback state     | `MediaPlayerState` fields                              | Read-only state the media element reports                                                          | `useMediaPlayer().state`                    | Initial paused state             | `component:MediaPlayer` | experimental | Not caller-settable               |
-| Time display       | `current`, `duration`, `remaining`, `current-duration` | Which time `MediaTime` shows                                                                       | Every `MediaTime`; live streams show "Live" | `current-duration`               | `component:MediaPlayer` | experimental | TypeScript rejects other values   |
-| Seek offset        | Signed number of seconds                               | Direction and distance of `MediaSeekButton`                                                        | Every `MediaSeekButton`                     | Required                         | `component:MediaPlayer` | experimental | Clamped to the media at seek time |
-| Playback rates     | Ordered list of positive numbers                       | The speeds `MediaPlaybackRateMenu` offers; the `<` and `>` shortcuts step through the default list | Every `MediaPlaybackRateMenu`               | 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2 | `component:MediaPlayer` | experimental | A non-positive rate is ignored    |
+| Concept            | Closed values or states                                | Meaning                                                                                        | Availability by variant/orientation/state   | Default                          | Owner                   | Stability    | Invalid-value behavior            |
+| ------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------- | -------------------------------- | ----------------------- | ------------ | --------------------------------- |
+| Control visibility | `visible`, `hidden`                                    | Whether video controls show over the media                                                     | Root `data-controls`; VideoPlayer bar       | `visible`                        | `component:MediaPlayer` | experimental | Not caller-settable               |
+| Playback state     | `MediaPlayerState` fields                              | Read-only state the media element reports                                                      | `useMediaPlayer().state`                    | Initial paused state             | `component:MediaPlayer` | experimental | Not caller-settable               |
+| Time display       | `current`, `duration`, `remaining`, `current-duration` | Which time `MediaTime` shows                                                                   | Every `MediaTime`; live streams show "Live" | `current-duration`               | `component:MediaPlayer` | experimental | TypeScript rejects other values   |
+| Seek offset        | Signed number of seconds                               | Direction and distance of `MediaSeekButton`                                                    | Every `MediaSeekButton`                     | Required                         | `component:MediaPlayer` | experimental | Clamped to the media at seek time |
+| Playback rates     | Ordered list of positive numbers                       | The speeds `MediaPlaybackRate` offers; the `<` and `>` shortcuts step through the default list | Every `MediaPlaybackRate`                   | 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2 | `component:MediaPlayer` | experimental | A non-positive rate is ignored    |
 
 ## Behavioral and layout contract
 
@@ -127,7 +127,7 @@ intentional decision. A `current` contract contains no unresolved rows.
 | FR9  | AudioPlayer MUST sit in a Section container instead of a card of its own, show artwork in front of the title (square by default, with a generic audio file icon when there is none), offer previous-track and next-track controls only when the product handles them, skip back 15 and forward 30 seconds by default, offer a speed button and volume button whose sliders open through the shared container reveal, and hand its title, subtitle, artwork, and transport actions to the system media controls on its first playback. It MUST release the system media controls on unmount only while it still owns them.                                                                                                          | `component:MediaPlayer/DEC-6`, `component:MediaPlayer/DEC-9`, `component:MediaPlayer/DEC-10`, `component:MediaPlayer/DEC-11`, `component:MediaPlayer/DEC-14`, `component:MediaPlayer/DEC-15` | candidate implementation                             |
 | FR10 | The root MUST combine `xstyle`, `className`, and `style`, forward neutral DOM props and its ref, compose its own handlers after the caller's, and keep its role, label, tab stop, and reflected state authoritative. Every part MUST extend the base props and forward neutral DOM props to the element that carries its theme target. VideoPlayer MUST fill the width of its container.                                                                                                                                                                                                                                                                                                                                           | `architecture:public-component-api`                                                                                                                                                          | candidate implementation                             |
 | FR11 | Every media glyph MUST resolve through the icon registry under a `media:*` key, then fall back to a bundled glyph drawn from Lucide. The skip controls MUST use the rewind and fast-forward glyphs, and their names and tooltips MUST state the number of seconds.                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `component:MediaPlayer/DEC-12`                                                                                                                                                               | decided; pending owner approval                      |
-| FR12 | The timeline MUST show the buffered range, chapters as segments with a small gap, and markers as dots, on its own track. A pointer over it MUST preview the time, the chapter title, and the nearest marker label, and its spoken value MUST add the chapter title and the label of a marker it reaches.                                                                                                                                                                                                                                                                                                                                                                                                                           | `component:MediaPlayer/DEC-13`                                                                                                                                                               | decided; pending owner approval                      |
+| FR12 | The timeline MUST show the buffered range, chapters as segments with a small gap, and markers as dots, on its own track. A pointer over it MUST preview the time, the chapter title, and the nearest marker label, and its spoken value MUST add the chapter title and the label of a marker it reaches. A marker with content MUST be a button that jumps to its time and opens the content in a popover in the page's theme. A marker MUST NOT catch a pointer while the control bar around it is hidden, and keys typed in its popover MUST NOT seek.                                                                                                                                                                           | `component:MediaPlayer/DEC-13`                                                                                                                                                               | decided; pending owner approval                      |
 
 ### Allowed variation
 
@@ -139,16 +139,16 @@ intentional decision. A `current` contract contains no unresolved rows.
 
 ### Representative states
 
-| State              | Required invariant                                     | Allowed variation          |
-| ------------------ | ------------------------------------------------------ | -------------------------- |
-| Before playback    | Large play control and poster; bar visible             | Poster absent              |
-| Playing, active    | Bar visible; Pause offered                             | —                          |
-| Playing, idle      | Bar hidden; pointer cursor hidden over the player      | —                          |
-| Paused or ended    | Bar visible; Replay offered after the end              | —                          |
-| Waiting for data   | Spinner over the video                                 | —                          |
-| Error              | Alert with retry; other status layers absent           | —                          |
-| Live stream        | Time readout shows "Live"; timeline disabled           | —                          |
-| Right-to-left page | Timeline and playback buttons keep left-to-right order | Surrounding layout mirrors |
+| State              | Required invariant                                             | Allowed variation          |
+| ------------------ | -------------------------------------------------------------- | -------------------------- |
+| Before playback    | Large play control and poster; bar hidden until keyboard focus | Poster absent              |
+| Playing, active    | Bar visible; Pause offered                                     | —                          |
+| Playing, idle      | Bar hidden; pointer cursor hidden over the player              | —                          |
+| Paused or ended    | Bar visible; Replay offered after the end                      | —                          |
+| Waiting for data   | Spinner over the video                                         | —                          |
+| Error              | Alert with retry; other status layers absent                   | —                          |
+| Live stream        | Time readout shows "Live"; timeline disabled                   | —                          |
+| Right-to-left page | Timeline and playback buttons keep left-to-right order         | Surrounding layout mirrors |
 
 ### Performance and resources
 
@@ -304,15 +304,16 @@ AudioPlayer paints no card of its own. A Section container gives it the
 theme's section background and padding, and its style props style that
 container.
 
-### DEC-10 — The playback speed has a button, a slider, and a menu
+### DEC-10 — The playback speed is one control with a slider or a menu
 
 **Reference:** `component:MediaPlayer/DEC-10`
-**Decider:** ernestt, 2026-11-04
+**Decider:** ernestt, 2026-11-05
 
-AudioPlayer pairs a speed button with a speed slider, revealed like volume.
-The button switches between normal speed and the last other speed, the way
-Mute switches the sound. A speed menu stays available as a part. The slider,
-the menu, and the `<` and `>` shortcuts share one default list of speeds.
+The speed control has two variants. The slider variant, which AudioPlayer
+uses, pairs a speed button with a speed slider, revealed like volume; the
+button switches between normal speed and the last other speed, the way Mute
+switches the sound. The menu variant opens a menu of speeds. Both variants
+and the `<` and `>` shortcuts share one default list of speeds.
 
 ### DEC-11 — Volume sliders appear through the container reveal
 
@@ -332,9 +333,9 @@ user-started change. It does not move under reduced motion.
 **Reference:** `component:MediaPlayer/DEC-12`
 **Decider:** ernestt, 2026-11-04
 
-The parts ask the icon registry for `media:*` keys, so a theme supplies the
-glyphs; the neutral theme maps them to Lucide icons. Bundled glyphs drawn
-from Lucide cover themes that map no media keys.
+The parts ask the icon registry for `media:*` keys, so a theme can supply the
+glyphs. Without a theme entry, the parts draw bundled glyphs drawn from
+Lucide.
 
 Rejected: copied glyphs without registry keys, which no theme can restyle.
 
@@ -368,6 +369,20 @@ fast-forward when the product passes handlers for them, and hands the same
 actions to the system media controls. The player keeps no queue, so
 `component:MediaPlayer/DEC-6` stands.
 
+### DEC-16 — Paired controls are one part each
+
+**Reference:** `component:MediaPlayer/DEC-16`
+**Decider:** ernestt, 2026-11-05
+
+Mute and the volume slider are one part, `MediaVolume`. The speed button,
+slider, and menu are one part, `MediaPlaybackRate`, with a slider or menu
+variant. The video and audio elements are one part, `MediaPlayerElement`,
+chosen by `kind`. Play, seek, the timeline, time, captions, and fullscreen
+stay separate parts, because each does one job.
+
+Rejected: a root that renders its own media element, which moves the
+element's ref, style, and children onto the root.
+
 ## Open questions
 
 - **OQ1 — How does the media timeline share Slider's behavior?** The
@@ -384,13 +399,15 @@ actions to the system media controls. The player keeps no queue, so
   theme turn frost off everywhere; a component-owned recipe keeps the theme
   contract smaller. (`human-api`)
 - **OQ3 — Do the media keys become core icon names?** The glyphs resolve
-  through namespaced `media:*` registry keys that the neutral theme maps to
-  Lucide. Core icon names would make every icon set define them; namespaced
-  keys keep them optional for themes. (`human-api`)
+  through namespaced `media:*` registry keys, with bundled Lucide drawings
+  when a theme maps none. Core icon names would make every icon set define
+  them and would let component icon slots map them; namespaced keys keep them
+  optional for themes. (`human-api`)
 - **OQ4 — Are the public names and the part set right?** The family exports
-  `VideoPlayer`, `AudioPlayer`, `MediaPlayer`, `MediaPlayerVideo`,
-  `MediaPlayerAudio`, nine `Media*` control parts, and `useMediaPlayer`.
-  (`human-api`)
+  `VideoPlayer`, `AudioPlayer`, `MediaPlayer`, `MediaPlayerElement`, eight
+  `Media*` control parts (play, seek, volume, timeline, time, captions,
+  fullscreen, and playback speed), and the `useMediaPlayer` and
+  `useMediaPlaybackTime` hooks. (`human-api`)
 - **OQ5 — Where does the timeline's direction rule live?** It can stay a
   component exception to `design:bidirectionality` DR6, or the design record can
   state the media rule for every component. (`human-design`)
@@ -405,10 +422,10 @@ actions to the system media controls. The player keeps no queue, so
   sliders and the player's seek and volume shortcuts also use the arrow keys.
   Adopting Toolbar means arrow keys move focus while a control has focus;
   keeping the row keeps the shortcuts and the extra tab stops. (`human-api`)
-- **OQ9 — Which speed control is the default?** AudioPlayer uses the speed
-  button and slider. The menu shows every speed at once and costs one more
-  press; the slider changes speed in one gesture but hides its stops until it
-  opens. The family can keep both parts or retire one. (`human-design`)
+- **OQ9 — Which speed variant is the default?** AudioPlayer uses the slider
+  variant. The menu shows every speed at once and costs one more press; the
+  slider changes speed in one gesture but hides its stops until it opens.
+  (`human-design`)
 
 ## Content boundary
 
