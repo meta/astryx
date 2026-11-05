@@ -245,7 +245,9 @@ guidance owns the process used to propose and test APIs.
   output feeds one Astryx component prop, or `useAnimatedLayout`,
   `useEntryAnimation`, `useContainerReveal`, `useTouchTrigger`,
   `useTableRowExpansion`, `useTableColumnResize`) has none by default; the owner
-  may add one (owner decision, 2026-11-04).
+  may add one (owner decision, 2026-11-04). `useMenuPress` has no non-React
+  equivalent by owner decision (2026-11-04); one may be added when a caller
+  needs it.
 - **INV23 — Each private data attribute has one owner module.** A
   `data-astryx-*` attribute is private unless this invariant names it public.
   Each private attribute has one internal owner module in the package that
@@ -442,7 +444,7 @@ Known verification gaps:
   another keeps its name until a minor renames it under INV9. Outline's
   `offset` is the distance below the top of its scroll root
   (`component:Outline` FR4), not a gap from an anchor.
-- INV22: known gaps include `useLongPress`, `useMenuPress`, `usePressFeedback`,
+- INV22: known gaps include `useLongPress`, `usePressFeedback`,
   `useClickableContainer`, `useInputContainer`, `useOverlay`, `useCombobox`,
   `useMultiCombobox`, `useResizable`, `useTooltip`, `useHoverCard`, and
   `useChatStreamScroll`: each attaches gesture, press, drag, or motion behavior
