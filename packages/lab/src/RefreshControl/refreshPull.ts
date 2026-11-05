@@ -27,10 +27,7 @@ import {
   rubberBandInverse,
   rubberBandSlope,
 } from '@astryxdesign/core/internal/touch';
-import {
-  parseCssEasing,
-  parseMotionRoleValue,
-} from '@astryxdesign/core/internal/touch';
+import {resolveTiming} from '@astryxdesign/core/internal/touch';
 import {refreshControl} from './refreshValues';
 
 /** The refreshing inset and one-to-one stretch, pt. */
@@ -169,18 +166,19 @@ export function endMotion(scrolled: number): {
 
 /**
  * The end's duration and curve: the theme tokens that `refreshControl` names,
- * as the end's element computes them. Null when either token is missing or
- * in a form it cannot read, such as `calc()`, `var()` or `steps()`.
+ * resolved as a transition on `element` resolves them. Null when either token
+ * has no value there, or is not a time or a cubic Bézier, such as `steps()`.
  */
 export function endTiming(
-  style: Pick<CSSStyleDeclaration, 'getPropertyValue'>,
+  element: Element,
 ): {ms: number; points: readonly [number, number, number, number]} | null {
-  const ms = parseMotionRoleValue(
-    'duration',
-    style.getPropertyValue(refreshControl.endDurationToken),
-  );
-  const points = parseCssEasing(
-    style.getPropertyValue(refreshControl.endEasingToken),
-  );
+  const style = getComputedStyle(element);
+  const duration = style.getPropertyValue(refreshControl.endDurationToken);
+  const easing = style.getPropertyValue(refreshControl.endEasingToken);
+  // With no theme tokens here, the end has no slide.
+  if (duration.trim() === '' || easing.trim() === '') {
+    return null;
+  }
+  const {ms, points} = resolveTiming(element, {duration, easing});
   return ms == null || points == null ? null : {ms, points};
 }

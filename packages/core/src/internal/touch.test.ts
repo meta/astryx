@@ -40,7 +40,7 @@ describe('internal/touch', () => {
     const animator = await import('../motion/animator');
     const bezier = await import('../motion/bezier');
     const progress = await import('../motion/progress');
-    const roles = await import('../motion/roles');
+    const timing = await import('../motion/themeTiming');
     const band = await import('../motion/rubberBand');
     const scroll = await import('../motion/uikit/scroll');
     expect(entry.PanGestureRecognizer).toBe(pan.PanGestureRecognizer);
@@ -48,8 +48,7 @@ describe('internal/touch', () => {
     expect(entry.createMotionEngine).toBe(animator.createMotionEngine);
     expect(entry.cubicBezier).toBe(bezier.cubicBezier);
     expect(entry.mapProgress).toBe(progress.mapProgress);
-    expect(entry.parseCssEasing).toBe(roles.parseCssEasing);
-    expect(entry.parseMotionRoleValue).toBe(roles.parseMotionRoleValue);
+    expect(entry.resolveTiming).toBe(timing.resolveTiming);
     expect(entry.rubberBand).toBe(band.rubberBand);
     expect(entry.rubberBandInverse).toBe(band.rubberBandInverse);
     expect(entry.rubberBandSlope).toBe(band.rubberBandSlope);

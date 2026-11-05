@@ -1031,6 +1031,30 @@ test('a theme’s duration token retimes the end, and a `--motion-…` variable 
   expect(Math.abs((slide?.movingMs ?? 0) - 600)).toBeLessThan(20);
 });
 
+test('a `calc()` duration token retimes the end as the browser resolves it (spec:AST-094 FR45)', async ({
+  page,
+}) => {
+  const {driver, content, start} = await openRefresh(page, undefined, {
+    refreshMs: '-1',
+  });
+  await content.evaluate(element => {
+    element.style.setProperty('--duration-medium', 'calc(0.3s * 2)');
+  });
+  await recordAnimations(page);
+  await driver.play(slowPull(start, 300, 200));
+  await waitForContentRest(content);
+  await endRefresh(page);
+  await expect.poll(() => isBusy(content), {timeout: 8000}).toBe(false);
+  await page.waitForTimeout(100);
+  await waitForContentRest(content);
+  const log = await recordedEnd(page);
+  const slide = log.find(
+    a => a.part === 'content' && a.properties.includes('translate'),
+  );
+  expect(slide, JSON.stringify(log)).toBeDefined();
+  expect(Math.abs((slide?.movingMs ?? 0) - 600)).toBeLessThan(20);
+});
+
 /** A desktop context: no touch screen, so CSS and script read a fine pointer. */
 async function desktopPage(
   browser: Browser,
