@@ -30,7 +30,7 @@ import {
   spacingVars,
 } from '../theme/tokens.stylex';
 import {
-  createMotionAnimator,
+  createMotionEngine,
   defaultPrefersReducedMotion,
 } from '../motion/animator';
 import {isIosWebKit} from '../utils/touchQueries';
@@ -50,7 +50,7 @@ const LOG_LENGTH = 3;
 /** Rows behind the scrim, so the page can scroll. */
 const ROWS = Array.from({length: 40}, (_, index) => index + 1);
 
-type Animator = ReturnType<typeof createMotionAnimator>;
+type Animator = ReturnType<typeof createMotionEngine>;
 
 const s = stylex.create({
   page: {
@@ -143,7 +143,7 @@ export function PresentedHitTestingLab() {
       return undefined;
     }
     sheetRef.current = sheet;
-    const animator = createMotionAnimator(sheet);
+    const animator = createMotionEngine(sheet);
     animatorRef.current = animator;
     return () => {
       animator.dispose();
