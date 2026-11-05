@@ -3,10 +3,10 @@
 /**
  * @file FieldLabelTap.a11y.chromium.spec.ts
  * @input The `Core/FieldLabel` States story in a built Storybook, in Chromium:
- *   the Nickname field, whose label carries a `labelTooltip` info icon.
- * @output Real-browser proof of FieldLabel FR9: a touch tap on the info icon
- *   shows its help and leaves the text field unfocused, while a mouse click on
- *   the icon focuses the field like a click anywhere else on the label.
+ *   the Nickname field, whose label has a `labelTooltip` info button after it.
+ * @output Real-browser proof of FieldLabel FR9: a touch tap, a mouse click, and
+ *   Enter on the info button show its help and leave the text field
+ *   unfocused.
  * @position Run with `pnpm test:a11y-contract`. Focus from label activation
  *   needs a real browser: jsdom's label activation never focuses a text input.
  */
@@ -37,10 +37,10 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-/** Opens the story and returns the Nickname label's info icon. */
+/** Opens the story and returns the info button after the Nickname label. */
 async function openInfoIcon(page: Page): Promise<Locator> {
   await page.goto(`${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`);
-  const icon = page.locator(`label[for="${FIELD_ID}"] [aria-describedby]`);
+  const icon = page.locator(`label[for="${FIELD_ID}"] + button`);
   await icon.waitFor();
   return icon;
 }
@@ -49,7 +49,7 @@ async function focusedId(page: Page): Promise<string> {
   return page.evaluate(() => document.activeElement?.id ?? '');
 }
 
-test.describe('a touch tap on the info icon', () => {
+test.describe('a touch tap on the info button', () => {
   test.use({
     hasTouch: true,
     isMobile: true,
@@ -60,7 +60,7 @@ test.describe('a touch tap on the info icon', () => {
     const icon = await openInfoIcon(page);
     const box = await icon.boundingBox();
     if (box == null) {
-      throw new Error('the info icon has no layout box');
+      throw new Error('the info button has no layout box');
     }
     await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
 
@@ -73,13 +73,28 @@ test.describe('a touch tap on the info icon', () => {
   });
 });
 
-test.describe('a mouse click on the info icon', () => {
-  test('focuses the field, like a click anywhere else on the label', async ({
+test.describe('a mouse click or a key on the info button', () => {
+  test('a click shows the help and leaves the field unfocused', async ({
     page,
   }) => {
     const icon = await openInfoIcon(page);
     await icon.click();
 
-    await expect.poll(async () => focusedId(page)).toBe(FIELD_ID);
+    await expect(
+      page.getByRole('tooltip').filter({hasText: HELP}),
+    ).toBeVisible();
+    // The button sits outside the label, so the click is for its help only.
+    expect(await focusedId(page)).not.toBe(FIELD_ID);
+  });
+
+  test('Enter shows the help and leaves the field unfocused', async ({
+    page,
+  }) => {
+    const icon = await openInfoIcon(page);
+    await icon.focus();
+    await page.keyboard.press('Enter');
+
+    await expect(icon).toHaveAttribute('aria-expanded', 'true');
+    expect(await focusedId(page)).not.toBe(FIELD_ID);
   });
 });

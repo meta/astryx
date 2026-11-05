@@ -105,7 +105,7 @@ describe('FieldLabel', () => {
     expect(container.firstElementChild).toBe(label);
   });
 
-  it('renders tooltip info icon when labelTooltip prop is provided', () => {
+  it('renders an info button named after the label, after the label element and outside it', () => {
     render(
       <>
         <FieldLabel
@@ -116,12 +116,32 @@ describe('FieldLabel', () => {
         <input id="help-input" type="text" />
       </>,
     );
-    // Two SVGs: the info icon is wrapped in tooltip
-    const svgs = document.querySelectorAll('svg');
-    expect(svgs.length).toBeGreaterThan(0);
+    const button = screen.getByRole('button', {name: 'About Help'});
+    const label = screen.getByText('Help').closest('label');
+    // No button inside a label: a press on it would also activate the control.
+    expect(button.closest('label')).toBeNull();
+    expect(label?.nextElementSibling).toBe(button);
+    expect(button).toHaveAccessibleDescription('This is helpful information');
+    // The field's name stays the label alone.
+    expect(screen.getByRole('textbox')).toHaveAccessibleName('Help');
+  });
 
-    const input = document.querySelector('input');
-    expect(input).toHaveAccessibleName('Help This is helpful information');
+  it('keeps a hidden label’s info button reachable by keyboard', () => {
+    render(
+      <>
+        <FieldLabel
+          label="Search"
+          inputID="search-input"
+          isLabelHidden
+          labelTooltip="Searches titles only"
+        />
+        <input id="search-input" type="text" />
+      </>,
+    );
+    expect(screen.getByRole('button', {name: 'About Search'})).toHaveProperty(
+      'tabIndex',
+      0,
+    );
   });
 
   it('does not render extra icon when labelTooltip is not provided', () => {
@@ -140,8 +160,9 @@ describe('FieldLabel', () => {
       />,
     );
     expect(screen.getByText(/Optional/)).toBeInTheDocument();
-    // Info icon should be present
-    expect(document.querySelector('svg')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {name: 'About Field'}),
+    ).toBeInTheDocument();
   });
 
   describe('labelTooltip under each pointer', () => {
@@ -182,12 +203,9 @@ describe('FieldLabel', () => {
       fireEvent.click(element);
     };
 
-    /** The info icon the help tooltip is attached to, inside the label. */
+    /** The info button after the label. */
     const infoIcon = (labelText: string) =>
-      screen
-        .getByText(labelText)
-        .closest('label')
-        ?.querySelector('[aria-describedby]') as HTMLElement;
+      screen.getByRole('button', {name: `About ${labelText}`});
 
     it('opens the help on a tap of its icon and leaves a checkbox alone', async () => {
       render(
@@ -234,7 +252,7 @@ describe('FieldLabel', () => {
       expect(screen.getByRole('checkbox')).not.toBeChecked();
     });
 
-    it('leaves a mouse click on its icon to the label, which toggles a checkbox', () => {
+    it('opens the help on a mouse click of its button and leaves a checkbox alone', async () => {
       render(
         <>
           <FieldLabel
@@ -251,9 +269,13 @@ describe('FieldLabel', () => {
       fireEvent.pointerUp(icon, {pointerType: 'mouse'});
       fireEvent.click(icon);
 
-      // A mouse click anywhere on a native label, its info icon included,
-      // activates the label's control.
-      expect(screen.getByRole('checkbox')).toBeChecked();
+      await waitFor(() => {
+        expect(screen.getByRole('tooltip', {hidden: true})).toHaveAttribute(
+          'popover-open',
+        );
+      });
+      // The button sits outside the label, so a click is for its help only.
+      expect(screen.getByRole('checkbox')).not.toBeChecked();
     });
   });
 

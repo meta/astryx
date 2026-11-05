@@ -1431,6 +1431,10 @@
     "defaultMessage": "Optional",
     "description": "Visible indicator shown next to a form field's label when the field is optional (isOptional). Mutually exclusive with the required indicator. Very short — appears inline after the label text."
   },
+  "@astryx.field.labelTooltip": {
+    "defaultMessage": "About {label}",
+    "description": "Screen-reader name of the small info button after a form field's label; the button shows help about the field. {label} is the field's visible label. Example: `About Auto-save`."
+  },
   "@astryx.field.required": {
     "defaultMessage": "Required",
     "description": "Visible indicator shown next to a form field's label when the field must be filled in (isRequired). Mutually exclusive with the optional indicator. Very short — appears inline after the label text."

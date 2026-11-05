@@ -4,7 +4,7 @@
 
 /**
  * @file FieldLabel.tsx
- * @input Uses React, Icon, IconType, useComponentTranslator, FormLayoutContext
+ * @input Uses React, Icon, IconType, InfoTip, useComponentTranslator, FormLayoutContext
  * @output Exports FieldLabel component, FieldLabelProps
  * @position Core label implementation; used by Field, CheckboxInput, Switch
  *
@@ -13,7 +13,7 @@
  * - /packages/core/src/Field/index.ts (exports if types change)
  * - /packages/core/src/FormLayout/FormLayoutContext.ts (defaultOptionality drives the indicator)
  * - /packages/cli/assets/templates/blocks/components/Field/ (showcase blocks)
- * - /packages/core/locales/en.json (@astryx.field.required / @astryx.field.optional)
+ * - /packages/core/locales/en.json (@astryx.field.required / @astryx.field.optional / @astryx.field.labelTooltip)
  */
 
 import {use, useMemo, useRef, type ReactNode, type RefObject} from 'react';
@@ -28,10 +28,9 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import {Icon, renderIconSlot} from '../Icon/Icon';
+import {renderIconSlot} from '../Icon/Icon';
 import type {IconType} from '../Icon';
-import {Tooltip} from '../Tooltip/Tooltip';
-import {useTapStop} from '../Layer/useTouchTrigger';
+import {InfoTip} from '../InfoTip/InfoTip';
 import {themeProps} from '../utils/themeProps';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
@@ -77,6 +76,26 @@ const styles = stylex.create({
   labelDisabled: {
     color: colorVars['--color-text-disabled'],
     cursor: 'default',
+  },
+  // The label and the info button after it share one row. The button sits
+  // outside the label, because a button inside a label would also activate
+  // the label's control.
+  labelRow: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: spacingVars['--spacing-1'],
+  },
+  // With a hidden label the row takes no slot in the caller's layout.
+  labelRowHidden: {
+    display: 'contents',
+  },
+  // A hidden label's info button takes no layout slot, and it shows while it
+  // has keyboard focus, so a keyboard user can see where focus is.
+  infoTipHidden: {
+    position: 'absolute',
+    clip: {default: 'rect(0, 0, 0, 0)', ':focus-visible': 'auto'},
+    overflow: {default: 'hidden', ':focus-visible': 'visible'},
+    whiteSpace: 'nowrap',
   },
   srOnly: {
     borderStyle: 'none',
@@ -263,12 +282,6 @@ export function FieldLabel({
   // a ref-shaped object, since FieldLabel points at the control by id rather
   // than holding a ref to it.
   const descriptionRef = useRef<HTMLSpanElement>(null);
-  // A tap on the info icon asks for the help, so it stops there: it does not
-  // go on to activate the label's control, as a press anywhere else on the
-  // label would (focus the field, toggle a switch). A mouse click on the icon
-  // keeps that native activation, and hover shows the help.
-  const {onPointerDown: handleIconPointerDown, onClick: handleIconClick} =
-    useTapStop('click');
   const controlRef = useMemo<RefObject<HTMLElement | null>>(
     () => ({
       get current() {
@@ -296,20 +309,6 @@ export function FieldLabel({
           <span aria-hidden="true"> ∙ </span>
           {statusText}
         </span>
-      )}
-      {labelTooltip && (
-        // The icon's one job is to reveal the help, so a tap on it opens or
-        // closes the help (`touchTrigger="tap"`), although it sits inside a
-        // `<label>`.
-        <Tooltip content={labelTooltip} placement="above" touchTrigger="tap">
-          <Icon
-            icon="info"
-            size="sm"
-            color="inherit"
-            onPointerDown={handleIconPointerDown}
-            onClick={handleIconClick}
-          />
-        </Tooltip>
       )}
     </>
   );
@@ -344,10 +343,27 @@ export function FieldLabel({
     </LabelElement>
   );
 
+  const labelWithHelp = labelTooltip ? (
+    <span
+      {...stylex.props(
+        styles.labelRow,
+        isLabelHidden && styles.labelRowHidden,
+      )}>
+      {labelElement}
+      <InfoTip
+        content={labelTooltip}
+        label={t('@astryx.field.labelTooltip', {label})}
+        xstyle={isLabelHidden ? styles.infoTipHidden : undefined}
+      />
+    </span>
+  ) : (
+    labelElement
+  );
+
   // Without a description, preserve the original public DOM: the label itself
   // remains the caller's flex/grid item and its layout overrides apply there.
   if (!description) {
-    return labelElement;
+    return labelWithHelp;
   }
 
   return (
@@ -356,7 +372,7 @@ export function FieldLabel({
         styles.labelGroup,
         isLabelHidden && styles.labelGroupHidden,
       )}>
-      {labelElement}
+      {labelWithHelp}
       <span
         ref={forwardsDescriptionClick ? descriptionRef : undefined}
         id={descriptionID}
