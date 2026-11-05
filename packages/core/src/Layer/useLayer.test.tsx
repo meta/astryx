@@ -2689,6 +2689,13 @@ describe('a light-dismiss layer opened by a context-menu press', () => {
     };
   });
   afterEach(() => {
+    // The press ends, so no claim outlives its test.
+    fireEvent(
+      document,
+      Object.assign(new MouseEvent('pointerup', {bubbles: true}), {
+        pointerId: 7,
+      }),
+    );
     delete (HTMLElement.prototype as Partial<HTMLElement>).setPointerCapture;
   });
 
