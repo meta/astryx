@@ -12,10 +12,10 @@
  *   layer's drawn box mid-entrance, within half a px. A second copy for the
  *   same layer replaces the first, while another layer's copy stays.
  * @position Browser proof for layerExitCopy.ts, run by `pnpm
- *   test:interaction`; jsdom has no layout and no top layer. Android
- *   Chromium 158 refuses a show during another popover's toggle. These
- *   engines do not refuse, so the refusal path is proven on an Android
- *   emulator instead.
+ *   test:interaction`; jsdom has no layout and no top layer. Chromium 150
+ *   and later refuse a show during another popover's toggle. There the copy
+ *   opens after the closing script, or in the next frame. So a case that
+ *   closes a layer reads the copy after a frame.
  */
 
 import {fileURLToPath} from 'node:url';
@@ -146,7 +146,10 @@ test('the browser\u2019s own light dismiss gets the copy too, uncut by the clipp
   }, ATTRIBUTE);
   // A press outside: the browser closes the layer by itself.
   await page.mouse.click(360, 700);
-  const result = await page.evaluate(attribute => {
+  const result = await page.evaluate(async attribute => {
+    // A refused show during the light dismiss opens the copy in the next
+    // frame.
+    await new Promise(resolve => requestAnimationFrame(resolve));
     const copy = document.querySelector<HTMLElement>(`[${attribute}]`);
     if (copy == null) {
       return null;
