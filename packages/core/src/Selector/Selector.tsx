@@ -53,6 +53,7 @@ import {useKeepLayerOpenProps, type LayerPlacement} from '../Layer/useLayer';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Spinner} from '../Spinner';
 import {PanelSearchInput} from '../Field/PanelSearchInput';
+import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {
@@ -1518,34 +1519,22 @@ export function Selector<T extends SelectorOptionType>(
     listboxId,
   });
 
-  // Whether the last highlight change came from keyboard input, read from the
-  // shared modality when the highlight moves. Only then does the active option
-  // draw the focus ring; a pointer highlight keeps the fill alone, as a
-  // focused menu row does.
-  const [isHighlightFromKeyboard, setIsHighlightFromKeyboard] = useState(false);
-  const {readModality} = triggerModality;
-  const readHighlightModality = useCallback(
-    () => setIsHighlightFromKeyboard(readModality() === 'keyboard'),
-    [readModality],
-  );
-  const onKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      readHighlightModality();
-      comboboxKeyDown(e);
-    },
-    [comboboxKeyDown, readHighlightModality],
-  );
-  const onItemMouseEnter = useCallback(
-    (item: SelectorOptionData, index: number) => {
-      readHighlightModality();
-      comboboxItemMouseEnter(item, index);
-    },
-    [comboboxItemMouseEnter, readHighlightModality],
+  // Only after keyboard input does the active option draw the focus ring; a
+  // pointer highlight keeps the fill alone, as a focused menu row does.
+  const {
+    isKeyboardHighlight: isHighlightFromKeyboard,
+    noteHighlightMove,
+    onKeyDown,
+    onItemMouseEnter,
+  } = useKeyboardHighlight(
+    triggerModality.readModality,
+    comboboxKeyDown,
+    comboboxItemMouseEnter,
   );
   const onTriggerClick = useCallback(() => {
-    readHighlightModality();
     comboboxTriggerClick();
-  }, [comboboxTriggerClick, readHighlightModality]);
+    noteHighlightMove();
+  }, [comboboxTriggerClick, noteHighlightMove]);
 
   // Type-to-select, shared with the other collections (menus, listboxes).
   // Open, it walks the highlight — aria-activedescendant announces each match.
@@ -1623,7 +1612,7 @@ export function Selector<T extends SelectorOptionType>(
       if (isDisabled || isEffectivelyReadOnly) {
         return;
       }
-      readHighlightModality();
+      noteHighlightMove();
       // With hasSearch the query input owns typing, so type-to-select is off.
       if (!hasSearch && typeahead.onKeyDown(e)) {
         e.preventDefault();
@@ -1637,7 +1626,7 @@ export function Selector<T extends SelectorOptionType>(
       hasSearch,
       typeahead,
       onKeyDown,
-      readHighlightModality,
+      noteHighlightMove,
     ],
   );
 
