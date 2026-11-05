@@ -754,12 +754,17 @@ test('an arrow key and a programmatic change slide the selection too', async ({
   );
   // An arrow key on the focused segment: selection follows focus.
   await control.segment('day').focus();
+  // Each slide is held at its birth. A read that the test sends after the
+  // change reaches a busy page late, and the slide can end before it.
+  await holdLensAnimationsAtBirth(page);
   await page.keyboard.press('ArrowRight');
   await expect(control.segment('week')).toHaveAttribute('aria-checked', 'true');
-  const [keyed] = await waitForLens(control);
-  expect(keyed.easing).toBe('linear');
+  const keyed = await takeHeldSlideEasings(control);
+  expect(keyed.length).toBeGreaterThan(0);
+  expect(keyed.every(easing => easing === 'linear')).toBe(true);
   await releaseAnimations(page, {finish: true});
   // A change made by the app (the button sets the value from outside).
+  await holdLensAnimationsAtBirth(page);
   const button = page.getByRole('button', {name: 'Next period'});
   const box = await button.boundingBox();
   if (box == null) {
@@ -773,8 +778,8 @@ test('an arrow key and a programmatic change slide the selection too', async ({
     'aria-checked',
     'true',
   );
-  const animations = await waitForLens(control);
-  expect(animations.length).toBeGreaterThan(0);
+  expect((await takeHeldSlideEasings(control)).length).toBeGreaterThan(0);
+  await releaseAnimations(page, {finish: true});
 });
 
 test('Reduce Motion (design:reduced-motion): no travel or scale; the old surface fades out where it is as the new one fades in, opacity only, in 200 ms or less', async ({
@@ -1018,6 +1023,31 @@ async function holdLensAnimationsAtBirth(page: Page): Promise<void> {
   });
 }
 
+/**
+ * The easings of the slides that `holdLensAnimationsAtBirth` held on this
+ * control's lens (its radiogroup's ::before). `Element.animate` is put back
+ * first. A resting-value hold lasts 1 ms and is not a slide, and another
+ * control's slides are not this one's.
+ */
+async function takeHeldSlideEasings(control: Control): Promise<string[]> {
+  return control.group.evaluate(group => {
+    const w = window as unknown as {
+      __harnessHeld: Animation[];
+      __restoreAnimate: () => void;
+    };
+    w.__restoreAnimate();
+    return w.__harnessHeld.flatMap(animation => {
+      const effect = animation.effect as KeyframeEffect;
+      const timing = effect.getComputedTiming();
+      return effect.target === group &&
+        effect.pseudoElement === '::before' &&
+        Number(timing.duration) > 1
+        ? [timing.easing ?? '']
+        : [];
+    });
+  });
+}
+
 test('with a mouse a click slides the selection from the old segment to the new one, on the theme’s duration, as every change does', async ({
   browser,
 }) => {
@@ -1028,80 +1058,7 @@ test('with a mouse a click slides the selection from the old segment to the new 
       'transition-property',
       'color, background-color, box-shadow',
     );
-    // From the click on, the page reads the lens's first running translate
-    // animation on each frame. It notes where the animation starts and ends,
-    // and how long it runs.
-    await group.evaluate(element => {
-      const w = window as unknown as {
-        __slide: {from: number; to: number; durationMs: number} | null;
-      };
-      w.__slide = null;
-      const read = () => {
-        for (const animation of element.getAnimations({subtree: true})) {
-          const effect = animation.effect as KeyframeEffect | null;
-          if (
-            effect?.target !== element ||
-            effect.pseudoElement !== '::before'
-          ) {
-            continue;
-          }
-          const frames = effect
-            .getKeyframes()
-            .filter(frame => typeof frame.translate === 'string');
-          if (frames.length < 2) {
-            continue;
-          }
-          // The animator holds the last value after the curve ends: the
-          // curve's own length runs to the first frame at the end value.
-          const values = frames.map(frame =>
-            parseFloat(String(frame.translate)),
-          );
-          const to = values[values.length - 1];
-          const firstAtEnd = frames.find(
-            (frame, i) => Math.abs(values[i] - to) < 0.01,
-          );
-          w.__slide = {
-            from: values[0],
-            to,
-            durationMs:
-              (firstAtEnd?.computedOffset ?? 1) *
-              Number(effect.getComputedTiming().duration ?? 0),
-          };
-          return;
-        }
-        requestAnimationFrame(read);
-      };
-      element.addEventListener('click', () => requestAnimationFrame(read), {
-        capture: true,
-        once: true,
-      });
-    });
-    const themeMs = await group
-      .locator('[data-value="table"]')
-      .evaluate(
-        segment =>
-          parseFloat(getComputedStyle(segment).transitionDuration) * 1000,
-      );
-    await group.locator('[data-value="table"]').click();
-    await expect(group.locator('[data-value="table"]')).toHaveAttribute(
-      'aria-checked',
-      'true',
-    );
-    const slide = await group.page().waitForFunction(
-      () =>
-        (
-          window as unknown as {
-            __slide: {from: number; to: number; durationMs: number} | null;
-          }
-        ).__slide,
-      undefined,
-      {timeout: 3000},
-    );
-    const {from, to, durationMs} = (await slide.jsonValue()) as {
-      from: number;
-      to: number;
-      durationMs: number;
-    };
+    const {from, to, durationMs, themeMs} = await clickSlide(group, 'table');
     // Where the segments sit. A title's weight change moves them by a pixel
     // or so, so the start is checked to within 3 px.
     const centers = await group.evaluate(element => {
@@ -1124,6 +1081,24 @@ test('with a mouse a click slides the selection from the old segment to the new 
     expect(Math.abs(durationMs - themeMs), String(durationMs)).toBeLessThan(25);
     // The lens hands the surface back once it settles.
     await expect.poll(lensShown, {timeout: 3000}).toBe(false);
+  } finally {
+    await context.close();
+  }
+});
+
+test('a hand-written calc() duration token times a click’s slide as the segments’ own transition resolves it', async ({
+  browser,
+}) => {
+  const {context, group} = await openWithMouse(browser);
+  try {
+    await group.evaluate(element => {
+      element.style.setProperty('--duration-fast', 'calc(0.1s * 2)');
+    });
+    const {durationMs, themeMs} = await clickSlide(group, 'table');
+    // The segments' transition resolves the token to 200 ms, and the slide
+    // plays that length.
+    expect(themeMs).toBe(200);
+    expect(Math.abs(durationMs - themeMs), String(durationMs)).toBeLessThan(25);
   } finally {
     await context.close();
   }
@@ -2365,6 +2340,87 @@ test('a drag commits through the destination item’s click too: its onClick run
   await expect(control.segment('grid')).toHaveAttribute('aria-checked', 'true');
   await expectLensHidden(control);
 });
+
+/**
+ * Clicks the segment `value` and reads the lens's slide: where its first
+ * running translate starts and ends, and how long it runs. Also reads the
+ * duration that the segments' own transition resolves.
+ */
+async function clickSlide(
+  group: Locator,
+  value: string,
+): Promise<{from: number; to: number; durationMs: number; themeMs: number}> {
+  // From the click on, the page reads the lens's first running translate
+  // animation on each frame. It notes where the animation starts and ends,
+  // and how long it runs.
+  await group.evaluate(element => {
+    const w = window as unknown as {
+      __slide: {from: number; to: number; durationMs: number} | null;
+    };
+    w.__slide = null;
+    const read = () => {
+      for (const animation of element.getAnimations({subtree: true})) {
+        const effect = animation.effect as KeyframeEffect | null;
+        if (effect?.target !== element || effect.pseudoElement !== '::before') {
+          continue;
+        }
+        const frames = effect
+          .getKeyframes()
+          .filter(frame => typeof frame.translate === 'string');
+        if (frames.length < 2) {
+          continue;
+        }
+        // The animator holds the last value after the curve ends: the
+        // curve's own length runs to the first frame at the end value.
+        const values = frames.map(frame => parseFloat(String(frame.translate)));
+        const to = values[values.length - 1];
+        const firstAtEnd = frames.find(
+          (frame, i) => Math.abs(values[i] - to) < 0.01,
+        );
+        w.__slide = {
+          from: values[0],
+          to,
+          durationMs:
+            (firstAtEnd?.computedOffset ?? 1) *
+            Number(effect.getComputedTiming().duration ?? 0),
+        };
+        return;
+      }
+      requestAnimationFrame(read);
+    };
+    element.addEventListener('click', () => requestAnimationFrame(read), {
+      capture: true,
+      once: true,
+    });
+  });
+  const themeMs = await group
+    .locator(`[data-value="${value}"]`)
+    .evaluate(
+      segment =>
+        parseFloat(getComputedStyle(segment).transitionDuration) * 1000,
+    );
+  await group.locator(`[data-value="${value}"]`).click();
+  await expect(group.locator(`[data-value="${value}"]`)).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  const slide = await group.page().waitForFunction(
+    () =>
+      (
+        window as unknown as {
+          __slide: {from: number; to: number; durationMs: number} | null;
+        }
+      ).__slide,
+    undefined,
+    {timeout: 3000},
+  );
+  const {from, to, durationMs} = (await slide.jsonValue()) as {
+    from: number;
+    to: number;
+    durationMs: number;
+  };
+  return {from, to, durationMs, themeMs};
+}
 
 /** A desktop context: a mouse, no touch, a fine primary pointer. */
 async function openWithMouse(browser: Browser): Promise<{
