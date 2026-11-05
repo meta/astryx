@@ -1885,14 +1885,40 @@ export function getBottomSheetBeneath(
 // keyboard's, and it moves the document under a fixed sheet. useMobileKeyboard
 // brings the field into view within the sheet instead.
 /**
- * Move focus into a sheet panel. Focus already inside the sheet stays put:
- * on `open` the native host has normally run its own focusing steps, which
- * land on the panel (`tabindex="-1"`), so a `data-autofocus` descendant is
- * reached only where the host moved nothing (a stubbed host, or a browser
- * whose focusing steps skipped the sheet) — the released behavior. On
- * `replace` the entering step takes focus whatever its modality and whatever
- * the host did, a `data-autofocus` descendant first; on `reveal` the panel
- * itself takes focus, with a ring only after keyboard input.
+ * Focus the first `data-autofocus` descendant that can take focus: inside this
+ * sheet's own dialog (not a sheet nested in its content), not inert, rendered,
+ * and focused once asked. Returns whether one took focus.
+ */
+function focusFirstEligibleAutofocus(panel: HTMLElement): boolean {
+  const dialog = panel.closest('dialog');
+  for (const candidate of panel.querySelectorAll<HTMLElement>(
+    '[data-autofocus]',
+  )) {
+    if (
+      candidate.closest('dialog') !== dialog ||
+      candidate.closest('[inert]') != null ||
+      (typeof candidate.checkVisibility === 'function' &&
+        !candidate.checkVisibility())
+    ) {
+      continue;
+    }
+    candidate.focus({preventScroll: true});
+    if (candidate.ownerDocument.activeElement === candidate) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Move focus into a sheet panel. Focus the person or this placement already
+ * put on a control inside the sheet stays put. On `open` and on `replace` the
+ * native host has run its own focusing steps, which may land on the panel
+ * (`tabindex="-1"`, as Chromium's do) or on the first control (Firefox); an
+ * eligible `data-autofocus` descendant then takes focus first, modal or not.
+ * Without one, an `open` keeps the native landing and a `replace` focuses the
+ * entering panel. On `reveal` the panel itself takes focus, with a ring only
+ * after keyboard input.
  */
 export function focusSheetPanel(
   panel: HTMLElement | null,
@@ -1916,26 +1942,34 @@ export function focusSheetPanel(
   // Focus already inside this sheet's own content stays put. Focus inside a
   // sheet rendered within this content (a closing nested sheet) does not
   // count: that sheet's dialog is leaving, and this one is being revealed.
-  // On a replace entry the native focusing steps have just run and may have
-  // put focus on the panel itself; that is not a placement, so only focus on
-  // a control inside the panel (the person's, or the field this placement
-  // chose) stays put.
+  // On an open the native focusing steps have just run, and whatever they
+  // focused inside the sheet (the panel in Chromium, the first control in
+  // Firefox) is theirs, not the person's: an eligible `data-autofocus`
+  // descendant still wins over it. On a replace they may have put focus on
+  // the entering panel, which is not a placement either; focus on a control
+  // inside it (the person's, or the field this placement chose) stays put.
   const activeElement = panel.ownerDocument.activeElement;
   const isInsidePanel =
     activeElement != null &&
     panel.contains(activeElement) &&
     activeElement.closest('dialog') === panel.closest('dialog');
-  if (isInsidePanel && (reason !== 'replace' || activeElement !== panel)) {
+  if (
+    isInsidePanel &&
+    (reason === 'reveal' || (reason === 'replace' && activeElement !== panel))
+  ) {
     return;
   }
   if (reason === 'reveal') {
     focusForLastInput(panel);
     return;
   }
-  const autofocus = panel.querySelector<HTMLElement>('[data-autofocus]');
-  if (autofocus != null) {
-    autofocus.focus({preventScroll: true});
-  } else if (!isInsidePanel && (isModal || reason === 'replace')) {
+  if (
+    (isInsidePanel && activeElement?.hasAttribute('data-autofocus') === true) ||
+    focusFirstEligibleAutofocus(panel)
+  ) {
+    return;
+  }
+  if (!isInsidePanel && (isModal || reason === 'replace')) {
     // A lone non-modal sheet takes no focus on open; the step replacing the
     // one the person was in does, so the keyboard stays in the flow. Focus
     // the native steps already put on the panel needs no second focus().
