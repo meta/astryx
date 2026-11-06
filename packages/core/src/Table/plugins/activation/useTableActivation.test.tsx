@@ -1172,6 +1172,105 @@ describe('review follow-ups', () => {
     }
   });
 
+  it('ignores an onActivate-only identity change without touching rows', () => {
+    // Documented usage passes an inline `onActivate`, so every render
+    // hands the hook a new callback identity (module FR12, PR1).
+    const getIsItemActivatable = vi.fn((_item: Member) => true);
+    function Harness({activeKey}: {activeKey: string | null}) {
+      const plugin = useTableActivation<Member>({
+        activeKey,
+        onActivate: () => {},
+        getIsItemActivatable,
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    const {rerender} = render(<Harness activeKey="1" />);
+    const rows = bodyRows();
+    const predicateCalls = getIsItemActivatable.mock.calls.length;
+    expect(predicateCalls).toBeGreaterThan(0);
+    const setSpies = rows.map(row => vi.spyOn(row, 'setAttribute'));
+    const removeSpies = rows.map(row => vi.spyOn(row, 'removeAttribute'));
+    const addSpies = rows.map(row => vi.spyOn(row.classList, 'add'));
+    const removeClassSpies = rows.map(row => vi.spyOn(row.classList, 'remove'));
+    const toggleSpies = rows.map(row => vi.spyOn(row.classList, 'toggle'));
+    const spies = [
+      ...setSpies,
+      ...removeSpies,
+      ...addSpies,
+      ...removeClassSpies,
+      ...toggleSpies,
+    ];
+    try {
+      // Same key, new `onActivate` identity: only the active bucket is
+      // notified, so the predicate re-runs for the active row alone and
+      // no row is rewritten.
+      rerender(<Harness activeKey="1" />);
+      const newCalls = getIsItemActivatable.mock.calls.slice(predicateCalls);
+      expect(newCalls.length).toBeGreaterThan(0);
+      for (const [item] of newCalls) {
+        expect((item as Member).id).toBe('1');
+      }
+      for (const spy of spies) {
+        expect(spy).not.toHaveBeenCalled();
+      }
+      // Convergence is intact: the active row still reflects the key.
+      expect(rows[0].getAttribute('data-active')).toBe('true');
+    } finally {
+      for (const spy of spies) {
+        spy.mockRestore();
+      }
+    }
+  });
+
+  it('paints the pointer cursor only on eligible rows and flips it live', () => {
+    function Harness({
+      getIsItemActivatable,
+    }: {
+      getIsItemActivatable: (item: Member) => boolean;
+    }) {
+      const plugin = useTableActivation<Member>({
+        activeKey: null,
+        onActivate: () => {},
+        getIsItemActivatable,
+      });
+      return (
+        <Table
+          data={members}
+          columns={memberColumns}
+          idKey="id"
+          plugins={{activation: plugin}}
+        />
+      );
+    }
+    const {rerender} = render(
+      <Harness getIsItemActivatable={item => item.id !== '2'} />,
+    );
+    const rows = bodyRows();
+    // The pointer class is whatever distinguishes the eligible rows here:
+    // with no active row, only eligibility differs between them.
+    const pointerClasses = new Set(rows[0].className.split(/\s+/));
+    for (const cls of rows[1].className.split(/\s+/)) {
+      if (cls !== '') {
+        pointerClasses.delete(cls);
+      }
+    }
+    expect(pointerClasses.size).toBeGreaterThan(0);
+    // A later flip converges through the same live update as the tab stop.
+    rerender(<Harness getIsItemActivatable={() => true} />);
+    const flipped = bodyRows();
+    for (const cls of pointerClasses) {
+      expect(flipped[1].classList.contains(cls)).toBe(true);
+    }
+    expect(flipped[1].getAttribute('tabindex')).toBe('0');
+  });
+
   it('leaves a later current-state owner in place without affordances', () => {
     const onActivate = vi.fn();
     function laterOwnerPlugin(): TablePlugin<Member> {

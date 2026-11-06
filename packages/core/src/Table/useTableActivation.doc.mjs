@@ -27,7 +27,7 @@ export const docs = {
       name: 'getIsItemActivatable',
       type: '(item: T) => boolean',
       description:
-        'Control which rows are activatable. Ineligible rows get no activation handler, no keyboard affordance, and no active presentation, even when their key equals activeKey. Defaults to all rows activatable.',
+        'Control which rows are activatable. Ineligible rows get no keyboard affordance, no pointer cursor, and no active presentation, even when their key equals activeKey; their press handlers stay attached but ignore the press, so a later flip needs no row update. Defaults to all rows activatable.',
     },
   ],
   examples: [

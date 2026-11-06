@@ -50,9 +50,10 @@ export interface UseTableActivationConfig<T extends Record<string, unknown>> {
    */
   onActivate: (item: T, key: string | number) => void;
   /**
-   * Control which rows are activatable. Ineligible rows get no activation
-   * handler, no keyboard affordance, and no active presentation, even when
-   * their key equals `activeKey`. @default all rows activatable
+   * Control which rows are activatable. Ineligible rows get no keyboard
+   * affordance, no pointer cursor, and no active presentation, even when
+   * their key equals `activeKey`; their press handlers stay attached but
+   * ignore the press, so a later flip needs no row update. @default all rows activatable
    */
   getIsItemActivatable?: (item: T) => boolean;
 }
@@ -70,10 +71,11 @@ export interface UseTableActivationConfig<T extends Record<string, unknown>> {
  *
  * Subscriptions are bucketed by canonical row key. A key-only update
  * notifies only the buckets for the previous and current active keys; a
- * predicate or callback change notifies every bucket, because any row may
- * have flipped eligibility. Anything else notifies only the current active
- * bucket, which keeps the visible current row converged without rewriting
- * every mounted row.
+ * predicate change notifies every bucket, because any row may have flipped
+ * eligibility. Anything else notifies only the current active bucket — a
+ * new `onActivate` identity included, since it changes no row state — and
+ * the subscriber writes only where its snapshot changed, which keeps the
+ * bound for the documented inline-callback usage.
  */
 interface ActivationStore<T extends Record<string, unknown>> {
   subscribe: (key: string | number, listener: () => void) => () => void;
@@ -117,10 +119,7 @@ function createActivationStore<T extends Record<string, unknown>>(
     },
     notify() {
       const current = configRef.current;
-      if (
-        current.getIsItemActivatable !== previous.getIsItemActivatable ||
-        current.onActivate !== previous.onActivate
-      ) {
+      if (current.getIsItemActivatable !== previous.getIsItemActivatable) {
         for (const bucket of buckets.values()) {
           for (const listener of bucket) {
             listener();
@@ -131,6 +130,9 @@ function createActivationStore<T extends Record<string, unknown>>(
       } else {
         notifyBuckets([current.activeKey]);
       }
+      // A new `onActivate` identity alone changes no row state: presses
+      // read the live config at press time, and the subscriber below skips
+      // rows whose snapshot did not change.
       previous = current;
     },
     getConfig() {
@@ -250,6 +252,9 @@ function clearRowActivationStyle(row: HTMLTableRowElement): void {
   }
   if (activeWashClassNames != null && activeWashClassNames.length > 0) {
     row.classList.remove(...activeWashClassNames);
+  }
+  if (clickableRowClassNames != null && clickableRowClassNames.length > 0) {
+    row.classList.remove(...clickableRowClassNames);
   }
   const barCell = row.querySelector<HTMLTableCellElement>(
     '[data-activation-bar="true"]',
@@ -430,6 +435,20 @@ function getActiveWashClassNames(): ReadonlyArray<string> {
   return activeWashClassNames;
 }
 
+/** Stylesheet classes for the pointer cursor, resolved once and toggled imperatively. */
+let clickableRowClassNames: ReadonlyArray<string> | null = null;
+
+function getClickableRowClassNames(): ReadonlyArray<string> {
+  if (clickableRowClassNames == null) {
+    clickableRowClassNames = Object.freeze(
+      (stylex.props(activationStyles.clickableRow).className ?? '')
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+  }
+  return clickableRowClassNames;
+}
+
 // =============================================================================
 // Hook
 // =============================================================================
@@ -481,10 +500,8 @@ export function useTableActivation<T extends Record<string, unknown>>(
 
   return useMemo(
     (): TablePlugin<T> => ({
-      // Canonical identity opt-in: Table computes resolved keys and hands
-      // this transform the internal fourth argument. Kept on the plugin
-      // object (not the transform's arity) so wrapping the transform keeps
-      // the opt-in; absorbed by the parent row-context protocol when it lands.
+      // Canonical identity opt-in: Table hands this transform the resolved
+      // key as its fourth argument (see `usesCanonicalRowKey`).
       usesCanonicalRowKey: true,
       transformBodyRow(
         props: BodyRowRenderProps,
@@ -509,8 +526,6 @@ export function useTableActivation<T extends Record<string, unknown>>(
         // stop and key affordances that would do nothing. Presses and paint
         // shed competing owners independently of plugin order.
         if (props.htmlProps['aria-current'] != null) {
-          // The module stays off rows another owner marked current, so it
-          // says so out loud instead of returning the row back silently.
           warnOnce(
             'table-activation-current-owner-early',
             'useTableActivation',
@@ -552,25 +567,42 @@ export function useTableActivation<T extends Record<string, unknown>>(
           if (!row) {
             return;
           }
+          // Last applied reflection for this row: a store broadcast over
+          // an unchanged row stays a DOM no-op, so key-only updates keep
+          // the at-most-two-rows bound even with an inline `onActivate`.
+          let lastInteractive: boolean | null = null;
+          let lastActive = false;
           const applyStyle = (eligibleNow: boolean) => {
-            // Keyboard affordances follow the same liveness as paint and
-            // presses: a row a later plugin marked current, or one the
-            // caller predicate now excludes, is not a tab stop and
-            // announces no key affordances. The transform runs before later
-            // plugins, so this converges imperatively wherever the store
-            // reaches the row; full order-independence waits on the parent
-            // admission protocol.
-            if (!eligibleNow || hasCompetingCurrentOwner(row)) {
+            // Keyboard affordances and the pointer cursor follow the same
+            // liveness as paint and presses: a row a later plugin marked
+            // current, or one the caller predicate now excludes, is not a
+            // tab stop, shows no pointer, and announces no key affordances.
+            // The transform runs before later plugins, so this converges
+            // imperatively wherever the store reaches the row; full
+            // order-independence waits on the parent admission protocol.
+            const interactive = eligibleNow && !hasCompetingCurrentOwner(row);
+            const active = eligibleNow && key === store.getConfig().activeKey;
+            if (interactive === lastInteractive && active === lastActive) {
+              return;
+            }
+            lastInteractive = interactive;
+            lastActive = active;
+            if (!interactive) {
               row.removeAttribute('tabindex');
               row.removeAttribute('aria-keyshortcuts');
             } else {
               row.setAttribute('tabindex', String(tabIndex));
               row.setAttribute('aria-keyshortcuts', keyShortcuts);
             }
-            applyRowActivationStyle(
-              row,
-              eligibleNow && key === store.getConfig().activeKey,
-            );
+            for (const className of getClickableRowClassNames()) {
+              row.classList.toggle(className, interactive);
+            }
+            // Paint first: clearing inactive paint must not strip the
+            // cursor this row keeps while eligible.
+            applyRowActivationStyle(row, active);
+            for (const className of getClickableRowClassNames()) {
+              row.classList.toggle(className, interactive);
+            }
           };
           // The first apply reuses the render-time eligibility above, so the
           // caller predicate runs once per row on mount; later notifies
@@ -590,12 +622,10 @@ export function useTableActivation<T extends Record<string, unknown>>(
           };
         };
 
-        // Declarative snapshot of the active state for this render; the
-        // imperative applies above keep it fresh between renders. Rows the
-        // predicate excludes keep the press handlers — inert through the
-        // live eligibility check — so a later flip converges on store
-        // notify without waiting for a row update; only the static
-        // affordances stay gated on the render-time value.
+        // Declarative snapshot for this render; the subscriber above keeps
+        // it fresh between renders. Ineligible rows keep the press handlers.
+        // The handlers check eligibility live, so a later flip needs no
+        // row update.
         const activeNow = eligible && key === store.getConfig().activeKey;
 
         return {
@@ -605,16 +635,18 @@ export function useTableActivation<T extends Record<string, unknown>>(
             // Declarative reflection alongside the imperative applies above:
             // a row re-render (a TableContext change rewrites the className
             // React owns) recomputes these from the live key, so the wash
-            // never goes stale between store notifications.
-            ...(activeNow
+            // and the pointer cursor never go stale between store
+            // notifications.
+            ...(activeNow || eligible
               ? {
                   className: [
                     props.htmlProps.className,
-                    ...getActiveWashClassNames(),
+                    ...(activeNow ? getActiveWashClassNames() : []),
+                    ...(eligible ? getClickableRowClassNames() : []),
                   ]
                     .filter(Boolean)
                     .join(' '),
-                  'data-active': 'true' as const,
+                  ...(activeNow ? {'data-active': 'true' as const} : null),
                 }
               : null),
             // Ineligible rows are no tab stop and announce no keys until
@@ -681,11 +713,7 @@ export function useTableActivation<T extends Record<string, unknown>>(
               store.getConfig().onActivate(item, key);
             },
           },
-          xstyle: [
-            ...props.xstyle,
-            activationStyles.clickableRow,
-            focusOutlineStyles.focusVisible,
-          ],
+          xstyle: [...props.xstyle, focusOutlineStyles.focusVisible],
           ref: props.ref ? mergeRefs(props.ref, activationRef) : activationRef,
         };
       },
