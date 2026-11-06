@@ -25,14 +25,18 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
-import {
+import {requireNatively} from '../test-utils/native-require.mjs';
+
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('../api/integration/check/check.mjs')} */
+const {
   CONFLICT_CODES,
   INTEGRATION_CHECKS,
   NO_MANIFEST_CODE,
   integrationCheck,
   isCheckReport,
   skippedCode,
-} from '../api/integration/check/check.mjs';
+} = require('../api/integration/check/check.mjs');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(HERE, '..');

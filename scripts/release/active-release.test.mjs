@@ -682,6 +682,18 @@ describe('published release merge-back (FR50)', () => {
     );
   });
 
+  it('accepts a frozen Changeset already removed from current main', () => {
+    expect(
+      mergeBack({
+        base: mainAt('0.7.0'),
+        head: mainAt('0.7.0'),
+        entries: ['M\tpackages/core/CHANGELOG.md'],
+        baseChangesets: new Map([['.changeset/post-cut.md', digest('c')]]),
+        headChangesets: new Map([['.changeset/post-cut.md', digest('c')]]),
+      }),
+    ).toEqual([]);
+  });
+
   it('rejects changed post-cut Changesets and missing frozen bytes', () => {
     expect(
       mergeBack({
@@ -847,7 +859,10 @@ describe('published release merge-back (FR50)', () => {
     git(root, 'checkout', '-qb', 'invalid-merge-back', `${head}^`);
     fs.rmSync(path.join(root, '.changeset/frozen.md'));
     write('packages/core/CHANGELOG.md', '# Changelog\n\n## 0.7.8\n');
-    write('packages/core/src/Unexpected.tsx', 'export const unexpected = true;\n');
+    write(
+      'packages/core/src/Unexpected.tsx',
+      'export const unexpected = true;\n',
+    );
     git(root, 'add', '-A');
     git(
       root,

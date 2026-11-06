@@ -313,9 +313,8 @@ linked above.
 
 ## Open questions
 
-- **OQ1 — Does VoiceOver on macOS 14 WebKit compute the visible label as the
-  Button's name?** (`checkable`) The label sits inside a `display: contents`
-  content wrapper. A real-AT receipt under `spec:AST-009` would settle it.
+None. The content wrapper is a real box, so no `display: contents` element
+stands between the Button and its label for WebKit to drop the name through.
 
 ## Content boundary
 

@@ -21,7 +21,11 @@ import path from 'node:path';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {getGestureHost} from '../gestures/GestureHost';
-import {getLastPointerType, subscribeInput} from './inputStream';
+import {
+  getLastMousePoint,
+  getLastPointerType,
+  subscribeInput,
+} from './inputStream';
 import {installPressFeedback} from './pressFeedback';
 
 type Registration = {
@@ -253,6 +257,30 @@ describe('inputStream', () => {
       new PointerEvent('pointermove', {bubbles: true, pointerType: 'pen'}),
     );
     expect(getLastPointerType(view)).toBe('touch');
+  });
+
+  it("records where the latest delivered mouse pointer event was, and keeps it through a finger's events", () => {
+    const view = document.defaultView as Window;
+    const stop = subscribeInput(view, 'pointermove', () => {});
+    document.body.dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        pointerType: 'mouse',
+        clientX: 40,
+        clientY: 60,
+      }),
+    );
+    expect(getLastMousePoint(view)).toEqual({x: 40, y: 60});
+    document.body.dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        pointerType: 'touch',
+        clientX: 200,
+        clientY: 10,
+      }),
+    );
+    expect(getLastMousePoint(view)).toEqual({x: 40, y: 60});
+    stop();
   });
 
   it('keeps the press feedback controller free of the gesture system', () => {

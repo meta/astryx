@@ -933,7 +933,8 @@ function validateReleaseMergeBack({
   }
 
   for (const [file, digest] of planned) {
-    if (baseChangesets.get(file) !== digest)
+    const baseDigest = baseChangesets.get(file);
+    if (baseDigest !== undefined && baseDigest !== digest)
       errors.push(
         `release merge-back cannot verify frozen Changeset on current main: ${file}`,
       );

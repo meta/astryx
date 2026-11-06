@@ -99,14 +99,20 @@ const GENERATED_HEADER_LINE =
 const SOURCE_LINE = /^( \* Source: )(\S(?:.*\S)?)(\s*)$/u;
 const CLI_VERSION_LINE = /^( \* CLI: @astryxdesign\/cli@)(\S+)(\s*)$/u;
 const CORE_VERSION_LINE = /^( \* Core: @astryxdesign\/core@)(\S+)(\s*)$/u;
+// The built module's own doc comment names the command that built it, which
+// depends on the package manager and host that ran the build.
+const BUILT_BY_LINE =
+  /^( \* \S(?:.*\S)? theme — built by `)(\S(?:.*\S)?)( theme build`)(\s*)$/u;
 
 /**
- * Compare generated theme outputs without making their build directory or
- * CLI/Core version look like source drift. Normalization applies only to the
- * first generated JS or CSS comment and only when it contains exactly one
- * well-formed Source, CLI, and Core line. Missing, duplicate, malformed,
- * reordered, or any other bytes stay significant. `theme build --check`
- * deliberately stays strict.
+ * Compare generated theme outputs without making their build directory,
+ * CLI/Core version, or build command look like source drift. Normalization
+ * applies only to a file whose first comment is the generated header with
+ * exactly one well-formed Source, CLI, and Core line; it covers those lines
+ * and, in a built module, the one `built by` line that names the command
+ * (`yarn astryx`, `pnpm exec astryx`, or a host's own). Missing, duplicate,
+ * malformed, reordered, or any other bytes stay significant. `theme build
+ * --check` deliberately stays strict.
  * @param {string} content
  */
 export function normalizeThemeVerifyForCompare(content) {
@@ -125,8 +131,12 @@ export function normalizeThemeVerifyForCompare(content) {
   if (source.length !== 1 || cli.length !== 1 || core.length !== 1) {
     return normalized;
   }
+  const builtBy = lines.filter(line => BUILT_BY_LINE.test(line)).length;
   return lines
     .map((line, index) => {
+      if (builtBy === 1 && BUILT_BY_LINE.test(line)) {
+        return line.replace(BUILT_BY_LINE, '$1<command>$3$4');
+      }
       if (index >= close) return line;
       if (SOURCE_LINE.test(line)) {
         return line.replace(SOURCE_LINE, '$1<source>$3');
