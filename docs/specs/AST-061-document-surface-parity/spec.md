@@ -92,11 +92,21 @@ reflows no line; only editing affordances appear or disappear.
   character takes the direction of the surrounding Internationalization
   provider, which covers an empty block, digits, punctuation, and an image.
 
+  A prose block that holds several blocks — a quote, or a list item with
+  more than one paragraph — takes its direction from the first strongly
+  directional character of all the text under it, and each block inside it
+  takes its own the same way.
+
   A container is not prose and takes its parent's direction whatever it
   holds: the provider's at the top level, its wrapper item's when nested. A
   list orders its markers and insets that way, a table reads its columns that
   way, and a fenced code block frames its lines that way, giving each line
   its own direction from that line's first strong character.
+
+  A table cell is a container and orders with its table, and the cell's text
+  reads in its own direction on every surface. Where a surface wraps that
+  text in a block the block carries the direction, and where it does not the
+  cell carries it, so the same cell reads the same way on all three.
 
   Direction decides a block's alignment, its logical insets, and the
   direction its caret moves. A surface that takes those from the provider
@@ -135,7 +145,7 @@ reflows no line; only editing affordances appear or disappear.
   whole on one line without clipping, truncation, or overlap with item text.
   Separate lists at the same depth MAY have different insets when their
   widest counters differ; each nested list resolves its own inset from its
-  parent item's shared text start. This permission changes neither source
+  parent item's text start. This permission changes neither source
   nesting nor DEC-6's numbering and marker styles. It does not exempt
   renderer parity: for the same list, theme, density, and available measure,
   Markdown and the RichText surfaces retain matching text starts and nested
@@ -160,8 +170,11 @@ constructs they render; their default editor theme follows FR2 and FR3.
 Implementation gap: `Markdown` and RichText lay every block out in the
 provider's direction (FR6); RichText's `direction: inherit` override in
 `editorTheme.ts` is part of that gap.
-Fenced code lines on `Markdown` still take the frame's direction; per-line
-direction belongs to `component:CodeBlock`.
+Fenced code lines take the frame's direction on both surfaces, so neither
+meets FR6's per-line rule yet. `component:CodeBlock` keeps a code block's
+direction unchanged (FR9) and leaves the ordering inside a line to the
+platform text engine, so closing this gap changes that record as well as the
+surfaces.
 `@astryxdesign/core/Markdown/parser` and `@astryxdesign/core/Markdown` export
 `decodeMarkdownCharacterReferences`, the DEC-5 decoder the RichText surfaces
 import with.

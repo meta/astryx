@@ -51,6 +51,7 @@ system_specs:
     spec:AST-061/DEC-5,
     spec:AST-061/DEC-6,
     spec:AST-061/DEC-9,
+    spec:AST-061/FR6,
     spec:AST-064/DEC-6,
     spec:AST-036/DEC-12,
   ]
@@ -69,17 +70,18 @@ explicit options. They may also list CodeBlock language values in
 `codeLanguages` so fences in those languages paint with them (FR30). Plugins,
 math, and `codeLanguages` change nothing when absent; the default Code
 block path renders `diff` and `diff-<language>` fences as CodeBlock's diff layer
-(FR29), wraps every fence's long lines (`spec:AST-061` FR5, DEC-9), and lays
+(FR29), wraps every fence's long lines (`spec:AST-061` FR5, DEC-9), lays
 out a fence with no header the way CodeBlock does (`component:CodeBlock` FR11),
-and every other parsing, rendering, styling, and streaming behavior is the
-released one.
+and lays each prose block out in the direction of its own text
+(`spec:AST-061` FR6), and every other parsing, rendering, styling, and
+streaming behavior is the released one.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`, except the default Code block path for `diff` fences (FR29, below), its long-line wrap (below), and its headerless layout (below)
-- Compatibility class: additive, opt-in public API, with three visible
-  default-path rendering changes (the FR29 diff layer, the fenced-code wrap, and
-  the headerless layout, below); existing parser nodes, DOM, styling, targets,
+- Released default preserved: `yes`, except the default Code block path for `diff` fences (FR29, below), its long-line wrap (below), its headerless layout (below), and per-block text direction (below)
+- Compatibility class: additive, opt-in public API, with four visible
+  default-path rendering changes (the FR29 diff layer, the fenced-code wrap,
+  the headerless layout, and per-block text direction, below); existing parser nodes, DOM, styling, targets,
   dollar-delimited text, `components`, and `inlinePlugins` remain unchanged unless
   the caller supplies `plugins`, supplies `components.math`, supplies
   `codeLanguages`, or passes the matching explicit parser option.
@@ -101,6 +103,15 @@ released one.
   scroll-region tab stop. Text, line numbers, syntax colours, copy output, and a
   supplied `code` renderer's contract are unchanged. The way back to sideways
   scrolling is a custom `code` renderer.
+- Default-path direction change (`spec:AST-061` FR6), visual and not breaking:
+  a prose block — a paragraph, heading, quote, or list item — lays out in the
+  direction of its own text rather than the Internationalization provider's,
+  so a Hebrew paragraph in a left-to-right document starts at the right edge.
+  A block whose text carries no strongly directional character keeps the
+  provider's direction, and a list, table, or fence orders its contents in
+  the provider's as before. Parsing, DOM, styling targets, and a supplied
+  renderer's contract are unchanged. Fenced code lines keep the frame's
+  direction; FR6's per-line rule is a gap this record does not yet close.
 - Default-path headerless layout (`component:CodeBlock` FR11), visual and not
   breaking: a fence with no language label shows Copy in its own column beside
   the code, so long lines wrap before it. A fence that names a language other than
