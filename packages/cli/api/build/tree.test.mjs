@@ -18,7 +18,17 @@ import {
 } from '../../test-utils/native-require.mjs';
 
 /** The built-ins build must not reach: the network and subprocesses. */
-const OFFLINE = ['http', 'https', 'net', 'dns', 'child_process'];
+const OFFLINE = [
+  'http',
+  'https',
+  'http2',
+  'net',
+  'tls',
+  'dgram',
+  'dns',
+  'dns/promises',
+  'child_process',
+];
 
 /** @param {string} what */
 const reached = what => () => {
@@ -27,8 +37,8 @@ const reached = what => () => {
 
 // From before build loads, every function they export throws, so a function
 // build keeps from its first load throws too. Their classes stay, because
-// Node builds on them, but each class's connect, listen, spawn and query
-// throws.
+// Node builds on them, but each class's connect, listen, bind, send, spawn
+// and query throws.
 const restoreOffline = OFFLINE.map(name =>
   stubBuiltin(`node:${name}`, real =>
     Object.fromEntries(
@@ -43,27 +53,43 @@ const restoreOffline = OFFLINE.map(name =>
 
 const require = requireNatively(import.meta.url);
 const {Socket, Server} = require('node:net');
+const {Socket: UdpSocket} = require('node:dgram');
 const {ChildProcess} = require('node:child_process');
 const {Resolver} = require('node:dns');
+const {Resolver: AsyncResolver} = require('node:dns/promises');
+
+/**
+ * Each query method of a DNS resolver class, named as `label` names it.
+ * @param {string} label
+ * @param {{prototype: any}} resolver
+ * @returns {[string, any, string][]}
+ */
+const queries = (label, resolver) =>
+  Object.getOwnPropertyNames(resolver.prototype)
+    .filter(key => /^(?:resolve|reverse)/u.test(key))
+    .map(
+      key =>
+        /** @type {[string, any, string]} */ ([
+          `${label}.prototype.${key}`,
+          resolver.prototype,
+          key,
+        ]),
+    );
+
 /** @type {[string, any, string][]} */
 const STARTS = [
   ['net.Socket.prototype.connect', Socket.prototype, 'connect'],
   ['net.Server.prototype.listen', Server.prototype, 'listen'],
+  ['dgram.Socket.prototype.bind', UdpSocket.prototype, 'bind'],
+  ['dgram.Socket.prototype.connect', UdpSocket.prototype, 'connect'],
+  ['dgram.Socket.prototype.send', UdpSocket.prototype, 'send'],
   [
     'child_process.ChildProcess.prototype.spawn',
     ChildProcess.prototype,
     'spawn',
   ],
-  ...Object.getOwnPropertyNames(Resolver.prototype)
-    .filter(key => /^(?:resolve|reverse)/u.test(key))
-    .map(
-      key =>
-        /** @type {[string, any, string]} */ ([
-          `dns.Resolver.prototype.${key}`,
-          Resolver.prototype,
-          key,
-        ]),
-    ),
+  ...queries('dns.Resolver', Resolver),
+  ...queries('dns/promises.Resolver', AsyncResolver),
 ];
 const ownStarts = STARTS.map(([, target, key]) => target[key]);
 for (const [what, target, key] of STARTS) target[key] = reached(what);
@@ -169,18 +195,33 @@ describe('the offline guard', () => {
         [
           "import {request} from 'node:http';",
           "import {get} from 'node:https';",
+          "import {connect as connectHttp2} from 'node:http2';",
           "import {connect} from 'node:net';",
+          "import {connect as connectTls} from 'node:tls';",
+          "import {Socket as UdpSocket, createSocket} from 'node:dgram';",
           "import {lookup} from 'node:dns';",
+          "import {Resolver, lookup as lookupAsync} from 'node:dns/promises';",
           "import {ChildProcess, spawnSync} from 'node:child_process';",
           "import {Socket} from 'node:net';",
           'export const calls = {',
           "  'http.request': () => request('http://127.0.0.1:9'),",
           "  'https.get': () => get('https://127.0.0.1:9'),",
+          "  'http2.connect': () => connectHttp2('http://127.0.0.1:9').destroy(),",
           "  'net.connect': () => connect(9, '127.0.0.1'),",
+          "  'tls.connect': () => connectTls(9, '127.0.0.1').destroy(),",
+          "  'dgram.createSocket': () => createSocket('udp4').close(),",
           "  'dns.lookup': () => lookup('localhost', () => {}),",
+          "  'dns/promises.lookup': () => lookupAsync('localhost').catch(() => {}),",
           "  'child_process.spawnSync': () => spawnSync('true'),",
           "  'net.Socket.prototype.connect': () =>",
           "    new Socket().connect(9, '127.0.0.1'),",
+          "  'dgram.Socket.prototype.send': () =>",
+          "    new UdpSocket('udp4').send('x', 9, '127.0.0.1'),",
+          "  'dns/promises.Resolver.prototype.resolve4': () => {",
+          '    const resolver = new Resolver();',
+          "    resolver.setServers(['127.0.0.1']);",
+          "    return resolver.resolve4('localhost').catch(() => {});",
+          '  },',
           "  'child_process.ChildProcess.prototype.spawn': () =>",
           "    new ChildProcess().spawn({file: 'true', args: ['true']}),",
           '};',
