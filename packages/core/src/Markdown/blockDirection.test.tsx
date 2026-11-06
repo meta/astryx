@@ -4,12 +4,21 @@ import {describe, expect, it} from 'vitest';
 import {render} from '@testing-library/react';
 import {Markdown} from './Markdown';
 import {firstStrongDirection} from '../i18n/firstStrongDirection';
+import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 
 function renderIn(dir: 'ltr' | 'rtl', markdown: string) {
   return render(
     <div dir={dir}>
       <Markdown>{markdown}</Markdown>
     </div>,
+  );
+}
+
+function renderInProvider(dir: 'ltr' | 'rtl', markdown: string) {
+  return render(
+    <InternationalizationProvider locale="en" dir={dir}>
+      <Markdown>{markdown}</Markdown>
+    </InternationalizationProvider>,
   );
 }
 
@@ -147,5 +156,57 @@ describe('Markdown block direction', () => {
     expect(
       container.querySelector('table')?.closest('[dir]')?.getAttribute('dir'),
     ).not.toBe('ltr');
+  });
+
+  it('gives a neutral paragraph inside a Hebrew list item the provider direction', () => {
+    const {container} = renderInProvider(
+      'ltr',
+      '- פריט ראשון\n\n  2026\n- Second item',
+    );
+    expect(blockContaining(container, 'li', 'פריט').getAttribute('dir')).toBe(
+      'rtl',
+    );
+    expect(
+      blockContaining(container, '[role="paragraph"]', '2026').getAttribute(
+        'dir',
+      ),
+    ).toBe('ltr');
+  });
+
+  it('gives a neutral paragraph inside an English quote the provider direction', () => {
+    const {container} = renderInProvider(
+      'rtl',
+      '> An English quote.\n>\n> 42 — 7%',
+    );
+    expect(container.querySelector('blockquote')?.getAttribute('dir')).toBe(
+      'ltr',
+    );
+    expect(
+      blockContaining(container, '[role="paragraph"]', '42').getAttribute(
+        'dir',
+      ),
+    ).toBe('rtl');
+  });
+
+  it('gives a neutral cell in a table under a Hebrew item the provider direction', () => {
+    const {container} = renderInProvider(
+      'ltr',
+      '- פריט עם טבלה\n\n  | שם | 2026 |\n  | - | - |\n  | אליס | 42 |',
+    );
+    expect(blockContaining(container, 'td', 'אליס').getAttribute('dir')).toBe(
+      'rtl',
+    );
+    expect(blockContaining(container, 'td', '42').getAttribute('dir')).toBe(
+      'ltr',
+    );
+  });
+
+  it('leaves a neutral block with no attribute where the block around it already reads the provider direction', () => {
+    const {container} = renderInProvider('ltr', '- English item\n\n  2026');
+    expect(
+      blockContaining(container, '[role="paragraph"]', '2026').hasAttribute(
+        'dir',
+      ),
+    ).toBe(false);
   });
 });
