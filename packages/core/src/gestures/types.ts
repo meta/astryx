@@ -10,6 +10,7 @@
  */
 
 import type {SelectionLock} from './GestureRecognizer';
+import {isElement} from '../utils/nodeType';
 
 /**
  * UIGestureRecognizer.State. A discrete recognizer goes straight from
@@ -155,13 +156,16 @@ export const DEFAULT_ENVIRONMENT: GestureEnvironment = {
     return {width: window.innerWidth, height: window.innerHeight};
   },
   isRtl(view) {
-    if (typeof window === 'undefined' || !(view instanceof Element)) {
+    if (typeof window === 'undefined' || !isElement(view)) {
       return false;
     }
-    return window.getComputedStyle(view).direction === 'rtl';
+    return (
+      (view.ownerDocument.defaultView ?? window).getComputedStyle(view)
+        .direction === 'rtl'
+    );
   },
   viewRect(view) {
-    if (typeof Element === 'undefined' || !(view instanceof Element)) {
+    if (!isElement(view)) {
       return null;
     }
     const {left, top, width, height} = view.getBoundingClientRect();
