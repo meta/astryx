@@ -109,7 +109,10 @@ test("the leaving copy paints at the rail's level: a later positioned sibling co
   // Early in the collapse the copy still covers most of the expanded rail.
   const {timings} = await collapseAndHold(page, 0.15);
   expect(timings.length).toBeGreaterThan(0);
-  const collapsed = await page.locator('nav').first().boundingBox();
+  // The real rail: the copy, placed just before it, is inert.
+  const collapsed = await page
+    .locator('nav:not([inert]):not([inert] nav)')
+    .boundingBox();
   // Just past the collapsed rail, inside the header's band.
   const x = Math.round(collapsed!.x + collapsed!.width + 10);
   await page.screenshot({

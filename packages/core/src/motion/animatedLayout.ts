@@ -2228,7 +2228,10 @@ export interface LayoutSwapMotion {
   readonly copy: (p: number, ride: LayoutRide) => Keyframe;
   /** Its text's opacity, on its own curve, when that differs from the copy's. */
   readonly copyText?: (p: number) => number;
-  /** The copy paints above its neighbours, in the background it shows. */
+  /**
+   * The copy paints in the background it shows, above its neighbours: at
+   * `z-index: 1` as the host's last child, or at `copyBefore`'s level.
+   */
   readonly isOpaque?: boolean;
   /**
    * Place the copy just before this child of the host, at that child's
