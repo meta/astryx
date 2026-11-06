@@ -298,6 +298,67 @@ const crit = (response: number, ms: number) => {
   return 1 - (1 + u) * Math.exp(-u);
 };
 
+/** The incoming card's, the covered bar's and its cut box's x and boxes. */
+interface CutLayers {
+  card: number;
+  bar: number;
+  cut: number;
+  cardBox: {left: number; right: number};
+  cutBox: {left: number; right: number};
+}
+
+const cutLayers = (page: Page, covered: string, incoming: string) =>
+  page.evaluate(
+    ([coveredKey, incomingKey]): CutLayers | null => {
+      const x = (element: Element) => {
+        const value = getComputedStyle(element).translate;
+        return value === 'none' ? 0 : parseFloat(value);
+      };
+      const cardElement = document.querySelector(
+        `[data-navigation-screen="${incomingKey}"]`,
+      );
+      const barElement = document.querySelector(
+        `[data-navigation-bar="${coveredKey}"]`,
+      );
+      const cutElement = barElement?.firstElementChild;
+      if (cardElement == null || barElement == null || cutElement == null) {
+        return null;
+      }
+      const cardBox = cardElement.getBoundingClientRect();
+      const cutBox = cutElement.getBoundingClientRect();
+      return {
+        card: x(cardElement),
+        bar: x(barElement),
+        cut: x(cutElement),
+        cardBox: {left: cardBox.left, right: cardBox.right},
+        cutBox: {left: cutBox.left, right: cutBox.right},
+      };
+    },
+    [covered, incoming] as const,
+  );
+
+/**
+ * How far the covered bar's cut is from the incoming card's leading edge at
+ * `mid`. It reads the layers' animated `translate`, and each edge's static
+ * part at `rest`, where box and translate agree. Mid-animation, WebKit can
+ * report one layer's box a frame late and not the other's. The boxes alone
+ * can then disagree by a pixel or two while the layers move as one.
+ */
+const cutGap = (
+  mid: CutLayers | null,
+  rest: CutLayers | null,
+  direction: 'ltr' | 'rtl',
+): number => {
+  if (mid == null || rest == null) {
+    return Infinity;
+  }
+  const cardEdge = direction === 'rtl' ? 'right' : 'left';
+  const cutEdge = direction === 'rtl' ? 'left' : 'right';
+  const cardStatic = rest.cardBox[cardEdge] - rest.card;
+  const cutStatic = rest.cutBox[cutEdge] - rest.bar - rest.cut;
+  return Math.abs(cutStatic + mid.bar + mid.cut - (cardStatic + mid.card));
+};
+
 const rowCenter = async (page: Page, name: string) => {
   const box = await page.getByRole('button', {name}).first().boundingBox();
   if (box == null) {
@@ -880,7 +941,85 @@ test('a push keeps advancing every frame while the main thread is blocked', asyn
   expect(proof.verdict.failures, proof.summary).toEqual([]);
 });
 
-test('the incoming bar covers the old title while the main thread is blocked', async ({
+// With a mouse the bars are opaque: the incoming one covers the old title.
+// Under a finger iOS 26's bars are clear (NavigationStackScrollEdge's proofs)
+// and the incoming screen cuts the old title instead (the next test).
+test('with a mouse, the incoming bar covers the old title while the main thread is blocked', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'screencast frame evidence is Chromium-only in Playwright (WebKit: the iOS simulator rig)',
+  );
+  const {context, page} = await newFinePage(browser);
+  try {
+    await openStack(page, 'settings', {pointer: 'mouse'});
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(false);
+    // A marker at the trailing end of the root's title: the pushed screen's
+    // opaque bar slides over it on the compositor.
+    await page.locator('[data-navigation-bar="root"] h2').evaluate(title => {
+      const element = title as HTMLElement;
+      element.style.position = 'relative';
+      const chip = document.createElement('div');
+      chip.setAttribute('aria-hidden', 'true');
+      chip.style.cssText =
+        'position:absolute;top:4px;right:0;width:10px;height:10px;background:rgb(255,0,255);pointer-events:none;';
+      element.append(chip);
+    });
+    const cast = await startScreencast(page);
+    const row = await rowCenter(page, 'General');
+    await page.mouse.click(row.x, row.y);
+    await waitForAnimation(card(page, 'screen-General'), {minProgressMs: 16});
+    const block = await blockMainThread(page, 900);
+    await page.waitForTimeout(150);
+    const frames = await cast.stop();
+    const tracked = await trackMarker(page, frames);
+    const trace = JSON.stringify(
+      tracked.map(f => [Math.round(f.t - block.from), f.box?.x ?? null]),
+    );
+    const during = tracked.filter(f => f.t > block.from && f.t < block.to - 20);
+    // Seen while blocked, then covered before the block ends.
+    expect(
+      during.some(f => f.box != null),
+      trace,
+    ).toBe(true);
+    expect(during.at(-1)?.box ?? null, trace).toBeNull();
+  } finally {
+    await context.close();
+  }
+});
+
+/**
+ * How much of bar `key` its clip box shows inside the stack. It is a
+ * fraction of the stack's width, rounded to 0.01: 0 cut away, 1 whole.
+ */
+async function readCut(page: Page, key: string) {
+  return page.evaluate(k => {
+    const stack = document
+      .querySelector('[data-testid="navigation-stack"]')
+      ?.getBoundingClientRect();
+    const box = document
+      .querySelector(`[data-navigation-bar="${k}"]`)
+      ?.firstElementChild?.getBoundingClientRect();
+    if (stack == null || box == null) {
+      return {shown: -1};
+    }
+    const shown =
+      Math.max(
+        0,
+        Math.min(box.right, stack.right) - Math.max(box.left, stack.left),
+      ) / stack.width;
+    return {shown: Math.round(shown * 100) / 100};
+  }, key);
+}
+
+// Under a finger iOS 26's bars are clear, and the bar a card covers is cut
+// at that card's leading edge. So the incoming screen still hides the title
+// it slides over, even while the main thread is blocked.
+test('under a finger, the incoming screen cuts the old title while the main thread is blocked', async ({
   page,
   browserName,
 }) => {
@@ -889,8 +1028,9 @@ test('the incoming bar covers the old title while the main thread is blocked', a
     'screencast frame evidence is Chromium-only in Playwright (WebKit: the iOS simulator)',
   );
   const {driver} = await openStack(page, 'settings');
-  // A marker at the trailing end of the root's title: the pushed screen's
-  // opaque bar slides over it on the compositor.
+  expect(
+    await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+  ).toBe(true);
   await page.locator('[data-navigation-bar="root"] h2').evaluate(title => {
     const element = title as HTMLElement;
     element.style.position = 'relative';
@@ -916,12 +1056,146 @@ test('the incoming bar covers the old title while the main thread is blocked', a
     tracked.map(f => [Math.round(f.t - block.from), f.box?.x ?? null]),
   );
   const during = tracked.filter(f => f.t > block.from && f.t < block.to - 20);
-  // Seen while blocked, then covered before the block ends.
+  // Seen while blocked, then cut before the block ends.
   expect(
     during.some(f => f.box != null),
     trace,
   ).toBe(true);
   expect(during.at(-1)?.box ?? null, trace).toBeNull();
+});
+
+test('under a finger the cut rides the incoming card’s leading edge', async ({
+  page,
+}) => {
+  const {driver} = await openStack(page, 'settings');
+  await driver.tap(await rowCenter(page, 'General'));
+  await waitForAnimation(card(page, 'screen-General'), {minProgressMs: 16});
+  // Mid-push the root's bar shows only left of the incoming card: the cut
+  // and the card's edge move on one spring.
+  const mid = await cutLayers(page, 'root', 'screen-General');
+  await waitForRest(card(page, 'screen-General'));
+  const rest = await cutLayers(page, 'root', 'screen-General');
+  expect(mid).not.toBeNull();
+  expect(rest).not.toBeNull();
+  expect(cutGap(mid, rest, 'ltr')).toBeLessThan(2);
+  expect(await readCut(page, 'root')).toEqual({shown: 0});
+  expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
+});
+
+test('under a finger in a right-to-left stack, the cut mirrors', async ({
+  page,
+}) => {
+  const {driver} = await openStack(page, 'settings');
+  await page
+    .getByTestId('navigation-stack')
+    .evaluate(element => element.setAttribute('dir', 'rtl'));
+  await driver.tap(await rowCenter(page, 'General'));
+  await waitForAnimation(card(page, 'screen-General'), {minProgressMs: 16});
+  // The incoming card enters from the left: the root's bar shows only right
+  // of its trailing edge.
+  const mid = await cutLayers(page, 'root', 'screen-General');
+  await waitForRest(card(page, 'screen-General'));
+  const rest = await cutLayers(page, 'root', 'screen-General');
+  expect(mid).not.toBeNull();
+  expect(rest).not.toBeNull();
+  expect(cutGap(mid, rest, 'rtl')).toBeLessThan(2);
+  expect(await readCut(page, 'root')).toEqual({shown: 0});
+  expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
+});
+
+test('a pointer that turns fine after a push leaves the revealed bar whole', async ({
+  page,
+}) => {
+  // A tablet that picks up a trackpad. The push runs under a finger, which
+  // cuts the root's bar away. Then the pointer is fine and Back pops at once.
+  const {driver} = await openStack(page, 'settings');
+  await driver.tap(await rowCenter(page, 'General'));
+  await waitForRest(card(page, 'screen-General'));
+  expect(await readCut(page, 'root')).toEqual({shown: 0});
+  await page.evaluate(() => {
+    const matchMedia = window.matchMedia.bind(window);
+    window.matchMedia = (query: string) =>
+      query.replace(/\s/g, '') === '(pointer:coarse)'
+        ? matchMedia('(max-width: 0px)')
+        : matchMedia(query);
+  });
+  expect(
+    await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+  ).toBe(false);
+  await page.locator('[data-navigation-back]').click();
+  await expect(card(page, 'screen-General')).toHaveCount(0);
+  await waitForRest(card(page, 'root'));
+  expect(await readCut(page, 'root')).toEqual({shown: 1});
+});
+
+test('a pointer that turns coarse while a screen is covered cuts the covered bar away', async ({
+  browser,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'Only Chromium turns the primary pointer coarse mid-test (touch emulation).',
+  );
+  // A tablet that loses its mouse. The push runs under a mouse, so the root's
+  // bar stays whole under the opaque top bar. Then the pointer turns coarse:
+  // the bars clear, and the covered bar is cut away at once.
+  const {context, page} = await newFinePage(browser);
+  try {
+    await openStack(page, 'settings', {pointer: 'mouse'});
+    const row = await rowCenter(page, 'General');
+    await page.mouse.click(row.x, row.y);
+    await waitForRest(card(page, 'screen-General'));
+    // The root's bar is there and laid out, and whole at the parallax.
+    const title = page.locator('[data-navigation-bar="root"] h2');
+    expect((await title.boundingBox())?.width ?? 0).toBeGreaterThan(0);
+    expect((await readCut(page, 'root')).shown).toBeGreaterThan(0.5);
+    const cdp = await context.newCDPSession(page);
+    await cdp.send('Emulation.setTouchEmulationEnabled', {
+      enabled: true,
+      maxTouchPoints: 1,
+    });
+    await expect
+      .poll(() => page.evaluate(() => matchMedia('(pointer: coarse)').matches))
+      .toBe(true);
+    await expect.poll(() => readCut(page, 'root')).toEqual({shown: 0});
+    expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
+  } finally {
+    await context.close();
+  }
+});
+
+test('under a finger, a pop that reveals a screen two levels down leaves its bar cut away', async ({
+  page,
+}) => {
+  // The story opens two screens deep, so the root's bar mounts under General
+  // only once the pop is over.
+  await openStack(page, 'pushed');
+  await page.locator('[data-navigation-back]').click();
+  await expect(card(page, 'screen-About')).toHaveCount(0);
+  await waitForRest(card(page, 'screen-General'));
+  // The root's bar is there and laid out, so its cut is a real reading.
+  await expect(page.locator('[data-navigation-bar="root"]')).toHaveCount(1);
+  const box = await page
+    .locator('[data-navigation-bar="root"] h2')
+    .boundingBox();
+  expect(box?.width ?? 0).toBeGreaterThan(0);
+  expect(await readCut(page, 'root')).toEqual({shown: 0});
+  expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
+});
+
+test('under a finger, Back reveals the covered bar whole', async ({page}) => {
+  const {driver} = await openStack(page, 'settings');
+  await driver.tap(await rowCenter(page, 'General'));
+  await waitForRest(card(page, 'screen-General'));
+  expect(await readCut(page, 'root')).toEqual({shown: 0});
+  const back = await page.locator('[data-navigation-back]').boundingBox();
+  if (back == null) {
+    throw new Error('no back button');
+  }
+  await driver.tap({x: back.x + back.width / 2, y: back.y + back.height / 2});
+  await expect(card(page, 'screen-General')).toHaveCount(0);
+  await waitForRest(card(page, 'root'));
+  expect(await readCut(page, 'root')).toEqual({shown: 1});
 });
 
 test('under a mouse a drag across the content pops, as a finger’s does', async ({
@@ -1040,25 +1314,53 @@ test.describe('the bars ride with their screens, as UIKit’s', () => {
     }
   });
 
-  test('each bar is opaque and stacks over the one it covers', async ({
+  test('with a mouse, each bar is opaque and stacks over the one it covers', async ({
+    browser,
+  }) => {
+    const {context, page} = await newFinePage(browser);
+    try {
+      await openStack(page, 'settings', {pointer: 'mouse'});
+      expect(
+        await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+      ).toBe(false);
+      const row = await rowCenter(page, 'General');
+      await page.mouse.click(row.x, row.y);
+      await waitForRest(card(page, 'screen-General'));
+      const bars = await page.evaluate(() =>
+        [...document.querySelectorAll('[data-navigation-bar]')].map(bar => ({
+          key: bar.getAttribute('data-navigation-bar'),
+          // Each layer paints its opaque background on its own element.
+          background: getComputedStyle(
+            bar.querySelector('[data-navigation-bar-background]') ?? bar,
+          ).backgroundColor,
+        })),
+      );
+      expect(bars.map(bar => bar.key)).toEqual(['root', 'screen-General']);
+      for (const bar of bars) {
+        // An rgb() colour has no alpha; rgba(…, 0) would let the title show.
+        expect(bar.background, JSON.stringify(bar)).toMatch(/^rgb\(/);
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('under a finger each bar is clear, and the covered one cut away at rest', async ({
     page,
   }) => {
     const {driver} = await openStack(page, 'settings');
     await driver.tap(await rowCenter(page, 'General'));
     await waitForRest(card(page, 'screen-General'));
     const bars = await page.evaluate(() =>
-      [...document.querySelectorAll('[data-navigation-bar]')].map(bar => ({
-        key: bar.getAttribute('data-navigation-bar'),
-        // Each layer paints its opaque background on its first child.
-        background: getComputedStyle(bar.firstElementChild ?? bar)
-          .backgroundColor,
-      })),
+      [...document.querySelectorAll('[data-navigation-bar-background]')].map(
+        background => getComputedStyle(background).backgroundColor,
+      ),
     );
-    expect(bars.map(bar => bar.key)).toEqual(['root', 'screen-General']);
-    for (const bar of bars) {
-      // An rgb() colour has no alpha; rgba(…, 0) would let the title show.
-      expect(bar.background, JSON.stringify(bar)).toMatch(/^rgb\(/);
-    }
+    expect(bars).toEqual(['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0)']);
+    // iOS 26 cuts the covered screen's bar at the top card's leading edge.
+    // At rest nothing of it shows, and the top bar is whole.
+    expect(await readCut(page, 'root')).toEqual({shown: 0});
+    expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
   });
 
   test('the covered bar’s dimming ends above the bar’s hairline', async ({
@@ -1067,13 +1369,16 @@ test.describe('the bars ride with their screens, as UIKit’s', () => {
     const {driver} = await openStack(page, 'settings');
     await driver.tap(await rowCenter(page, 'General'));
     await waitForRest(card(page, 'screen-General'));
-    // Each layer's dimming is its last child; the hairline is the bar's
-    // bottom pixel, which the layers' backgrounds leave uncovered.
+    // The hairline is the bar's bottom pixel, which the layers' backgrounds
+    // leave uncovered. Each layer's dimming sits in its cut row.
     const layers = await page.evaluate(() =>
       [...document.querySelectorAll('[data-navigation-bar]')].map(bar => ({
         key: bar.getAttribute('data-navigation-bar'),
         bottom: bar.getBoundingClientRect().bottom,
-        dimBottom: bar.lastElementChild?.getBoundingClientRect().bottom ?? NaN,
+        dimBottom:
+          bar
+            .querySelector('[data-navigation-bar-dim]')
+            ?.getBoundingClientRect().bottom ?? NaN,
       })),
     );
     expect(layers.map(layer => layer.key)).toEqual(['root', 'screen-General']);
@@ -1314,6 +1619,12 @@ test.describe('edge cases', () => {
       first?.cards['screen-About'] ?? 0,
       JSON.stringify(first),
     ).toBeGreaterThan(width * 0.5);
+    // Under a finger both end at rest. The screen below is cut away, so the
+    // root's bar is no longer rendered, and the top bar is whole.
+    await waitForRest(card(page, 'screen-About'));
+    expect(await page.locator('[data-navigation-bar="root"]').count()).toBe(0);
+    expect(await readCut(page, 'screen-General')).toEqual({shown: 0});
+    expect(await readCut(page, 'screen-About')).toEqual({shown: 1});
   });
 
   test('a sideways drag on a strip that can still scroll scrolls it instead of popping', async ({
