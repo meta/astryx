@@ -5,7 +5,7 @@
 /**
  * @file TableCellContextMenu.tsx
  * @input React (lazy, Suspense), ContextMenuTrigger, useLongPress,
- *   useIsHydrating
+ *   useIsHydrating, useInteractionModalityTracking
  * @output TableCellContextMenu, loadTableContextMenu
  * @position Renders a cell's `contextMenuActions` for TableCell and
  * TableHeaderCell. The menu code loads only for cells that have actions. The
@@ -22,7 +22,9 @@ import type {
 import {ContextMenuTrigger} from '../ContextMenu/ContextMenuTrigger';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useLongPress} from '../hooks/useLongPress';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {currentGesture} from '../Layer/gestureCounter';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import type {StyleXStyles} from '../theme/types';
 import type {TableContextActions} from './types';
 import type {TableContextMenuForTrigger} from './tableContextMenu';
@@ -157,6 +159,10 @@ function CellTrigger({
   // component that has not loaded would abort hydration. The trigger holds
   // an invocation until the menu renders right after hydration.
   const isHydrating = useIsHydrating();
+  // The menu reads how the user last interacted when it opens. Tracking
+  // starts here, so a press held before the menu mounts is recorded.
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  const mergedTriggerRef = useMergedRefs(triggerRef, modalityRef);
 
   // Syncs the shared hold with this cell's lifetime: a cell that unmounts
   // before its menu loads drops its own hold, and keeps another cell's.
@@ -183,7 +189,7 @@ function CellTrigger({
   return (
     <>
       <ContextMenuTrigger
-        ref={triggerRef}
+        ref={mergedTriggerRef}
         anchorRef={anchorRef}
         xstyle={triggerXstyle}
         onContextMenu={event => {
