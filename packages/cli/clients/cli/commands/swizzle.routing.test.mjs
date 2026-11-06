@@ -9,15 +9,21 @@
  * integration cases, a configured integration package (astryx.config.mjs +
  * astryx.integration.mjs + a `components` dir) — all under node_modules so the
  * config/manifest loaders resolve normally.
- * Shared integration directories keep their flat copy boundary; core's recursive
- * copy must not start including unrelated integration subtrees.
  */
 
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+
+/** The StyleX runtime that Core ships with, resolved the way Core resolves it. */
+const CORE_PACKAGE = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../../core/package.json',
+);
 
 /**
  * Build a fake @astryxdesign/core under <project>/node_modules with a single
@@ -149,32 +155,12 @@ describe('swizzle — core feedback routing via config', () => {
     expect(result.code).toBe(0);
     const env = JSON.parse(result.stdout);
     expect(env.data.feedback.issuesUrl).toBe(
-      'https://github.com/facebook/astryx/issues/new',
+      'https://github.com/meta/astryx/issues/new',
     );
   });
 });
 
 describe('swizzle — integration-owned components', () => {
-  it('preserves the flat copy boundary when integration components share a directory', async () => {
-    buildFakeCore(project);
-    writeProjectPackageJson(project);
-    const {compDir} = buildIntegration(project, {componentName: 'Alpha'});
-    fs.writeFileSync(path.join(compDir, 'Beta.tsx'), 'export const Beta = () => null;');
-    fs.writeFileSync(path.join(compDir, 'Beta.doc.mjs'), "export const docs = {name: 'Beta'};");
-    fs.mkdirSync(path.join(compDir, 'unrelated'));
-    fs.writeFileSync(path.join(compDir, 'unrelated/Other.tsx'), 'export const Other = () => null;');
-    const outDir = path.join(project, 'components/astryx/Alpha');
-    fs.mkdirSync(path.join(outDir, 'unrelated'), {recursive: true});
-    fs.writeFileSync(path.join(outDir, 'unrelated/Other.tsx'), '// consumer edit');
-
-    const result = await runCli(['--json', 'swizzle', 'Alpha'], project);
-    expect(result.code).toBe(0);
-    const env = JSON.parse(result.stdout);
-    // Sibling top-level files were already copied before recursive core support.
-    expect(env.data.files).toEqual(['Alpha.tsx', 'Beta.tsx', 'sibling.ts']);
-    expect(fs.readFileSync(path.join(outDir, 'unrelated/Other.tsx'), 'utf8')).toBe('// consumer edit');
-  });
-
   it('copies the component dir (excluding test/doc), rewrites escaping imports to the owner package, routes feedback to the integration issuesUrl', async () => {
     buildFakeCore(project);
     writeProjectPackageJson(project);
@@ -325,10 +311,19 @@ describe('swizzle — StyleX build setup note (#3373)', () => {
     const humanResult = await runCli(['swizzle', 'Styled', '-f'], project);
     expect(humanResult.code).toBe(0);
     expect(humanResult.stdout).toMatch(/StyleX compiler/i);
-    expect(humanResult.stdout).toMatch(/unstyled/i);
+    expect(humanResult.stdout).toMatch(/importing them throws "Unexpected 'stylex\.create' call at runtime"/);
+    expect(humanResult.stdout).not.toMatch(/unstyled/i);
     expect(humanResult.stdout).toMatch(/next\/font/i);
     // The fixture has no `astryx` bin installed, so the note names the scoped package.
-    expect(humanResult.stdout).toMatch(/@astryxdesign\/cli docs styling/);
+    expect(humanResult.stdout).toMatch(/@astryxdesign\/cli@\S+ docs styling/);
+  });
+
+  // The note quotes what StyleX does without a compiler; this keeps it true.
+  it('matches what the StyleX runtime does when styles are not compiled', () => {
+    const stylex = createRequire(CORE_PACKAGE)('@stylexjs/stylex');
+    expect(() => stylex.create({root: {color: 'red'}})).toThrow(
+      /Unexpected 'stylex\.create' call at runtime/,
+    );
   });
 
   it('does not print the StyleX note for components without StyleX', async () => {
@@ -343,5 +338,58 @@ describe('swizzle — StyleX build setup note (#3373)', () => {
     const humanResult = await runCli(['swizzle', 'Plain', '-f'], project);
     expect(humanResult.code).toBe(0);
     expect(humanResult.stdout).not.toMatch(/StyleX compiler/i);
+  });
+});
+
+describe('swizzle — shared modules outside the component folder (spec:AST-110 FR4)', () => {
+  it('names the owner modules it copied beside the component', async () => {
+    const core = path.join(project, 'node_modules', '@astryxdesign', 'core');
+    const rowDir = path.join(core, 'src', 'Row');
+    fs.mkdirSync(rowDir, {recursive: true});
+    fs.mkdirSync(path.join(core, 'src', 'privateAttributes'), {recursive: true});
+    fs.mkdirSync(path.join(core, 'src', 'motion'), {recursive: true});
+    fs.writeFileSync(
+      path.join(core, 'package.json'),
+      '{"name":"@astryxdesign/core","version":"0.0.13"}',
+    );
+    fs.writeFileSync(
+      path.join(rowDir, 'Row.tsx'),
+      `import {rowStyles} from '../privateAttributes/row.stylex';\nexport const Row = () => null;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'privateAttributes', 'row.stylex.ts'),
+      `import {fade} from '../motion/fade.stylex';\nexport const rowStyles = fade;\n`,
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'motion', 'fade.stylex.ts'),
+      `export const fade = 1;\n`,
+    );
+    writeProjectPackageJson(project);
+
+    const humanResult = await runCli(['swizzle', 'Row', '-f'], project);
+    expect(humanResult.code).toBe(0);
+    expect(humanResult.stdout).toContain(
+      'Shared modules: ../privateAttributes/row.stylex.ts, ../motion/fade.stylex.ts (copied whole; their imports between each other stay relative)',
+    );
+  });
+
+  it('preserves the flat copy boundary when integration components share a directory', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    const {compDir} = buildIntegration(project, {componentName: 'Alpha'});
+    fs.writeFileSync(path.join(compDir, 'Beta.tsx'), 'export const Beta = () => null;');
+    fs.writeFileSync(path.join(compDir, 'Beta.doc.mjs'), "export const docs = {name: 'Beta'};");
+    fs.mkdirSync(path.join(compDir, 'unrelated'));
+    fs.writeFileSync(path.join(compDir, 'unrelated/Other.tsx'), 'export const Other = () => null;');
+    const outDir = path.join(project, 'components/astryx/Alpha');
+    fs.mkdirSync(path.join(outDir, 'unrelated'), {recursive: true});
+    fs.writeFileSync(path.join(outDir, 'unrelated/Other.tsx'), '// consumer edit');
+
+    const result = await runCli(['--json', 'swizzle', 'Alpha'], project);
+    expect(result.code).toBe(0);
+    const env = JSON.parse(result.stdout);
+    // Sibling top-level files were already copied before recursive core support.
+    expect(env.data.files).toEqual(['Alpha.tsx', 'Beta.tsx', 'sibling.ts']);
+    expect(fs.readFileSync(path.join(outDir, 'unrelated/Other.tsx'), 'utf8')).toBe('// consumer edit');
   });
 });

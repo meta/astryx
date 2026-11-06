@@ -12,7 +12,7 @@
 import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 
 export interface MetadataListLabelConfig {
-  position: 'start' | 'top';
+  position?: 'start' | 'top';
   width?: number | string;
 }
 

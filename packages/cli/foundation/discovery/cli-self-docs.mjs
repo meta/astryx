@@ -25,6 +25,7 @@ import {
   oversizedDocSections,
 } from './docs-output-budget.mjs';
 import {routeSegment} from './docs-section-key.mjs';
+import {formatCliCommand} from '../env/package-manager.mjs';
 
 /** The directories, relative to the CLI root, that hold the CLI's own docs. */
 export const CLI_SELF_DOC_DIRS = [
@@ -40,7 +41,8 @@ const NAMESPACED_KINDS = new Set(['command', 'function', 'schema', 'enum']);
 /**
  * Every namespace a CLI doc may declare, and what reads it. The docs tree
  * adopts `cli/commands` (under `cli/commands`) and `cli/api` (under
- * `cli/api/<kind>s`); `astryx docs authoring` reads `authoring` from its list.
+ * `cli/api/<kind>s`); the field reference (`astryx docs authoring/field-reference`)
+ * reads `authoring` from its list.
  * @type {Record<string, {reader: 'tree' | 'authoring'}>}
  */
 export const CLI_DOC_NAMESPACES = {
@@ -187,6 +189,19 @@ function sentence(text, more) {
   return more && text !== '' && !/[.!?:]$/.test(text) ? `${text}.` : text;
 }
 
+/**
+ * The line a command doc prints for what it does outside a project (spec
+ * AST-081 FR4). A group that only holds subcommands declares nothing and
+ * prints nothing.
+ * @type {Record<string, string>}
+ */
+const OUTSIDE_PROJECT_TEXT = {
+  same: "Outside a project (`same`): it answers as it would in a new project on this release, reading this release's Core, as it does in a project with nothing installed: the one installed beside the CLI, else one in the per-user cache, which a global install downloads in the background after a command run online (in CI, the first command that needs it downloads it).",
+  refuse:
+    'Outside a project (`refuse`): it writes nothing and fails, naming the app project or integration package it needs.',
+  own: 'Outside a project (`own`): it does what the description above says it does outside a project.',
+};
+
 /** @param {any[]} notes */
 function noteBlocks(notes) {
   return (notes ?? []).filter(note => TOPIC_BLOCKS.has(note?.type));
@@ -251,6 +266,8 @@ function commandSection(cmd, index) {
       rows: exitCodes.map((/** @type {any} */ e) => [String(e.code), e.when]),
     });
   }
+  const outside = OUTSIDE_PROJECT_TEXT[cmd.outsideProject];
+  if (outside) content.push({type: 'prose', text: outside});
   // Links name docs by identity; the route in each command is derived when
   // the doc is read (spec:AST-047 FR9).
   const subcommands = (cmd.subcommands ?? []).filter(
@@ -318,7 +335,8 @@ function functionSection(fn, index) {
     // A Default column only when some parameter declares a default, so a
     // function with none keeps a three-column table.
     const defaults = params.some(
-      (/** @type {any} */ p) => typeof p.default === 'string' && p.default !== '',
+      (/** @type {any} */ p) =>
+        typeof p.default === 'string' && p.default !== '',
     );
     content.push({
       type: 'table',
@@ -391,15 +409,54 @@ function enumSection(doc) {
       {
         type: 'table',
         headers: ['Value', 'Meaning'],
-        rows: (doc.members ?? []).map((/** @type {any} */ m) => [
-          `\`${m.value}\``,
-          m.deprecated
-            ? `${m.description} Deprecated: ${m.deprecated}`
-            : m.description,
-        ]),
+        // An experimental value is documented on its feature's experimental
+        // route, never in the stable enum's table (spec:AST-017 FR27).
+        rows: (doc.members ?? [])
+          .filter((/** @type {any} */ m) => m.stability !== 'experimental')
+          .map((/** @type {any} */ m) => [
+            `\`${m.value}\``,
+            m.deprecated
+              ? `${m.description} Deprecated: ${m.deprecated}`
+              : m.description,
+          ]),
       },
     ],
   };
+}
+
+/**
+ * What `astryx docs <route>` prints for one icon definition: its description,
+ * its words, whether it is built in, and the command
+ * that finds the icon each installed set draws for it.
+ * @param {any} doc
+ */
+function iconDefinitionSection(doc) {
+  /** @type {string[][]} */
+  const rows = [
+    [
+      'Words',
+      doc.words.map((/** @type {string} */ w) => `\`${w}\``).join(', '),
+    ],
+  ];
+  if (doc.builtIn) {
+    rows.push([
+      'Built in',
+      'Yes: every icon set maps it, and Core renders it.',
+    ]);
+  }
+  const content = [
+    {type: 'prose', text: doc.description},
+    {type: 'table', headers: ['Field', 'Value'], rows},
+    {
+      type: 'prose',
+      text: `An icon set registers the icon that draws this definition in its data file: \`"map": {"${doc.name}": "<icon id>"}\`. Find it in each installed set: \`astryx experimental icon ${doc.name}\`.`,
+    },
+    {
+      type: 'prose',
+      text: 'Icon definitions are experimental: they may change or be removed in a patch release.',
+    },
+  ];
+  return {id: routeSegment(doc.name), title: doc.name, content};
 }
 
 /**
@@ -411,6 +468,7 @@ function enumSection(doc) {
  */
 export function cliDocSection(doc, index) {
   if (doc.type === 'command') return commandSection(doc, index);
+  if (doc.type === 'icon-definition') return iconDefinitionSection(doc);
   if (doc.type === 'function') return functionSection(doc, index);
   if (doc.type === 'enum') return enumSection(doc);
   if (doc.type === 'namespace')
@@ -432,6 +490,7 @@ export function cliDocSection(doc, index) {
  *   docs: number,
  *   tree: number,
  *   authoring: number,
+ *   experimental: {docs: number, tree: number, authoring: number},
  *   missing: string[],
  *   unknown: {source: string, namespace: string}[],
  *   misfiled: {source: string, message: string}[],
@@ -475,23 +534,34 @@ export async function auditCliSelfDocs({
       else {
         misfiled.push({
           source,
-          message: `${source} has namespace "authoring", but \`astryx docs authoring\` does not list it`,
+          message: `${source} has namespace "authoring", but \`${formatCliCommand('docs authoring/field-reference')}\` does not list it`,
         });
       }
     } else if (inAuthoring) {
       misfiled.push({
         source,
-        message: `${source} is read in \`astryx docs authoring\`, but its namespace is "${namespace}"`,
+        message: `${source} is read in \`${formatCliCommand('docs authoring/field-reference')}\`, but its namespace is "${namespace}"`,
       });
     } else {
       treeDocs.push(doc);
     }
   }
   const index = cliDocIndex(loaded.map(entry => entry.doc));
+  // Experimental docs (spec:AST-017 FR27) are audited like every other, and
+  // counted apart, so the stable counts stay what they were.
+  const experimental = (/** @type {any} */ doc) =>
+    doc?.stability === 'experimental';
   return {
     docs: loaded.length,
     tree: treeDocs.length,
     authoring,
+    experimental: {
+      docs: loaded.filter(entry => experimental(entry.doc)).length,
+      tree: treeDocs.filter(experimental).length,
+      authoring: loaded.filter(
+        entry => listed.has(entry.source) && experimental(entry.doc),
+      ).length,
+    },
     missing,
     unknown,
     misfiled,

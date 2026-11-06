@@ -10,6 +10,9 @@
  * contract: a topic returns its whole doc, and `--index` its sections.
  * Supports --detail (full|compact|brief) and --lang (en|zh|dense). A code
  * block's label prints above its fence, and table cells escape their pipes.
+ * Docs write commands as bare `astryx ...`; text output prefixes them with the
+ * project's invocation (prefixCliCommands, in formatBlock and the summaries),
+ * and JSON keeps them bare.
  *
  * Usage:
  *   astryx docs                          List available topics
@@ -25,6 +28,7 @@
 import {
   formatCliCommand,
   getCliInvocation,
+  prefixCliCommands,
 } from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {
@@ -96,12 +100,17 @@ function formatTableCompact(headers, rows) {
  * @returns {string | null}
  */
 export function formatBlock(block, detail) {
+  // Docs write commands as bare `astryx ...`; show them the way this project
+  // runs the CLI.
+  const stem = getCliInvocation();
+  /** @param {string} value */
+  const shown = value => prefixCliCommands(value, stem);
   switch (block.type) {
     case 'prose':
-      return block.text;
+      return shown(block.text);
 
     case 'heading':
-      return `${'#'.repeat(block.level || 3)} ${block.text}`;
+      return `${'#'.repeat(block.level || 3)} ${shown(block.text)}`;
 
     case 'code':
       if (detail === 'compact' || detail === 'brief') return null;
@@ -112,19 +121,29 @@ export function formatBlock(block, detail) {
         const label = block.label
           ? `${block.label.replace(/:\s*$/, '')}:\n`
           : '';
-        return `${label}\`\`\`${block.lang}\n${block.code}\n\`\`\``;
+        const body = prefixCliCommands(block.code, stem, block.lang);
+        return `${label}\`\`\`${block.lang}\n${body}\n\`\`\``;
       }
 
-    case 'table':
+    case 'table': {
+      // A cell that is a whole command, such as `astryx theme add neutral`
+      // written without backticks, is prefixed too.
+      /** @param {string} cell */
+      const shownCell = cell =>
+        /^astryx(\s|$)/.test(cell ?? '')
+          ? `${stem}${cell.slice('astryx'.length)}`
+          : shown(cell ?? '');
+      const rows = block.rows.map(row => row.map(shownCell));
       if (detail === 'brief') {
-        return block.rows
+        return rows
           .map(r => r.slice(0, 2).map(tableCell).join('='))
           .join(' | ');
       }
       if (detail === 'compact') {
-        return formatTableCompact(block.headers, block.rows);
+        return formatTableCompact(block.headers, rows);
       }
-      return formatTable(block.headers, block.rows);
+      return formatTable(block.headers, rows);
+    }
 
     case 'list': {
       const prefix =
@@ -135,7 +154,9 @@ export function formatBlock(block, detail) {
             : block.style === 'do'
               ? () => '+ '
               : () => '- ';
-      return block.items.map((item, i) => `${prefix(i)}${item}`).join('\n');
+      return block.items
+        .map((item, i) => `${prefix(i)}${shown(item)}`)
+        .join('\n');
     }
 
     default:
@@ -289,7 +310,7 @@ function formatTreeChild(child, detail, level, root, run, owner) {
     child.summary &&
     (child.kind === 'namespace' || child.kind === 'generic')
   ) {
-    parts.push(child.summary);
+    parts.push(prefixCliCommands(child.summary, run));
   }
   const content = formatTreeBlocks(child.content ?? [], detail, level - 2);
   if (content.length > 0) parts.push(content.join('\n\n'));
@@ -341,7 +362,7 @@ function emitTree(node, detail, childDetail, run) {
     .every(route => route.startsWith(`${node.route}/`));
   const root = allBelow ? node.route : '';
   emit(
-    section(node.title, wrapText(node.summary)),
+    section(node.title, wrapText(prefixCliCommands(node.summary, run))),
     record({package: node.package}),
     ...(node.content?.length
       ? [
@@ -411,6 +432,29 @@ function linkLines(links) {
 }
 
 /**
+ * A section title naming the package that wrote it, once: a title an author
+ * already ended with that package keeps its own.
+ * @param {string} title
+ * @param {string} pkg
+ * @returns {string}
+ */
+function titledWithPackage(title, pkg) {
+  const label = `(${pkg})`;
+  return title.endsWith(label) ? title : `${title} ${label}`;
+}
+
+/**
+ * What a topic or guide took the place of, and whose it was, as the line
+ * read right after its `package:` line (INV28); nothing for any other read.
+ * @param {{replaces?: string, replacedPackage?: string}} data
+ * @returns {ReturnType<typeof text>[]}
+ */
+function replacedLine(data) {
+  if (data.replaces == null || data.replacedPackage == null) return [];
+  return [text(`replaces ${data.replacedPackage}'s ${data.replaces}`)];
+}
+
+/**
  * A topic's section index: what the topic is, one line per section with the
  * key to read it by, and how to read further.
  * @param {import('../../../api/docs/docs.type.mjs').DocsIndex} index
@@ -424,12 +468,16 @@ function emitIndex(index, owner, run) {
       index.description ? wrapText(index.description) : undefined,
     ),
     record({package: owner}),
+    ...replacedLine(index),
     // Summaries wrap rather than being cut: the summary is how a reader picks
     // the one section to open. A section another package wrote says which one.
     records(
-      index.sections.map(s =>
-        s.package === owner ? s : {...s, title: `${s.title} (${s.package})`},
-      ),
+      index.sections.map(s => {
+        const shown = {...s, summary: prefixCliCommands(s.summary ?? '', run)};
+        return s.package === owner
+          ? shown
+          : {...shown, title: titledWithPackage(s.title, s.package)};
+      }),
       {
         fields: ['id', 'title', 'summary'],
         layout: 'inline',
@@ -452,7 +500,7 @@ function emitIndex(index, owner, run) {
  * name (`assert-response  assertResponse()`).
  * @param {import('../../../api/docs/docs.type.mjs').DocsNodeChild} child
  * @param {string} owner the package that owns the namespace
- * @returns {{name: string, summary: string}}
+ * @returns {{name: string, summary: string, experimental: boolean}}
  */
 function childRow(child, owner) {
   const titleAddsIdentity =
@@ -462,9 +510,18 @@ function childRow(child, owner) {
   return {
     // A child another package owns says which one.
     name: child.package === owner ? child.name : `${child.name} (${child.package})`,
-    summary: titleAddsIdentity
-      ? `${child.title}: ${child.summary}`
-      : child.summary,
+    // An experimental child is marked as help marks an experimental command,
+    // unless its own summary already opens by saying so.
+    summary: prefixCliCommands(
+      `${
+        child.stability === 'experimental' &&
+        !/^experimental\b/iu.test(child.summary)
+          ? '[experimental] '
+          : ''
+      }${titleAddsIdentity ? `${child.title}: ${child.summary}` : child.summary}`,
+      getCliInvocation(),
+    ),
+    experimental: child.stability === 'experimental',
   };
 }
 
@@ -479,14 +536,19 @@ function childRow(child, owner) {
 function emitNode(node, detail, run) {
   if (node.kind === 'namespace') {
     emit(
-      section(node.title, wrapText(node.summary)),
+      section(node.title, wrapText(prefixCliCommands(node.summary, run))),
       record({package: node.package}),
-      // A namespace may author intro `blocks`; they render above its children.
+      // A namespace may author intro `blocks`; they render above its children,
+      // prose wrapped like the summary.
       ...(node.content?.length
         ? [
             text(
               node.content
-                .map(b => formatBlock(b, detail))
+                .map(b =>
+                  b.type === 'prose'
+                    ? wrapText(formatBlock(b, detail) ?? '')
+                    : formatBlock(b, detail),
+                )
                 .filter(Boolean)
                 .join('\n\n'),
             ),
@@ -497,15 +559,24 @@ function emitNode(node, detail, run) {
         ...(node.slots.length === 1 && slot.title === node.title
           ? []
           : [section(slot.title)]),
-        records(slot.children.map(child => childRow(child, node.package)), {
-          fields: ['name', 'summary'],
-          layout: 'inline',
-        }),
+        records(
+          slot.children.map(child => childRow(child, node.package)),
+          {
+            fields: ['name', 'summary'],
+            layout: 'inline',
+            // Stable rows set the column, so an experimental entry changes no
+            // stable line (spec:AST-017 FR27); a long experimental name
+            // overhangs. A slot of experimental entries only sizes from them.
+            sizesColumn: row =>
+              !row.experimental ||
+              slot.children.every(child => child.stability === 'experimental'),
+          },
+        ),
       ]),
       text(
         [
           // A child's route is its parent's route and its name, except a flat
-          // topic in the Unorganized level, which keeps its own name.
+          // topic in a topic level, which keeps its own name.
           node.slots.every(slot =>
             slot.children.every(child => child.route.startsWith(`${node.route}/`)),
           )
@@ -687,6 +758,7 @@ export function registerDocs(program) {
           const owner = result.package;
           emit(
             record({package: owner}),
+            ...replacedLine(result.data),
             code(
               formatReferenceFull(
                 {
@@ -695,7 +767,7 @@ export function registerDocs(program) {
                   sections: result.data.sections.map(s =>
                     s.package === owner
                       ? s
-                      : {...s, title: `${s.title} (${s.package})`},
+                      : {...s, title: titledWithPackage(s.title, s.package)},
                   ),
                 },
                 detail,

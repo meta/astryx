@@ -4,6 +4,7 @@
  * @file RichTextEditor.playground.tsx
  * @input Uses RichTextEditor with its toolbar, autolink plugin, Markdown
  *   serializers and plugin adapter; the Storybook demo Markdown plugins; the
+ *   playground image plugin (RichTextEditor.imagePlugin.tsx); the
  *   Markdown parity fixture; Lexical's table and horizontal-rule commands; and
  *   Astryx primitives for the settings, actions, and output panels.
  * @output `RichTextEditorPlayground`: ONE editor with every RichText feature
@@ -71,6 +72,14 @@ import {INSERT_HORIZONTAL_RULE_COMMAND} from '@lexical/extension';
 import {INSERT_TABLE_COMMAND} from '@lexical/table';
 import {$getSelection, $isRangeSelection, type EditorState} from 'lexical';
 import {markdownDemoPlugins} from './Markdown.demoPlugins';
+import {
+  IMAGE_NODE_TYPE,
+  ImageNode,
+  InsertImageButton,
+  InsertImageDialog,
+  InsertImageProvider,
+  RichTextImagesPlugin,
+} from './RichTextEditor.imagePlugin';
 import {MARKDOWN_PARITY_SOURCE} from './RichTextEditor.markdownParityFixture';
 
 /* ------------------------------------------------------------------ *
@@ -270,7 +279,7 @@ const styles = stylex.create({
  * on the toolbar's public `endContent` slot: it reaches the editor through
  * `useLexicalComposerContext()`, like any consumer-authored control would.
  */
-function InsertControls() {
+function InsertControls({hasImages}: {readonly hasImages: boolean}) {
   const [editor] = useLexicalComposerContext();
   // Read-only and disabled editors take no edits, so these controls disable
   // with the editor, as RichTextEditorToolbar's own controls do.
@@ -320,6 +329,7 @@ function InsertControls() {
           })
         }
       />
+      {hasImages && <InsertImageButton />}
     </>
   );
 }
@@ -338,6 +348,8 @@ interface SerializedNodeLike {
   readonly language?: string;
   readonly url?: string;
   readonly checked?: boolean;
+  readonly altText?: string;
+  readonly width?: number | null;
 }
 
 const TEXT_FORMATS: ReadonlyArray<readonly [number, string]> = [
@@ -367,6 +379,12 @@ function describeNode(node: SerializedNodeLike): string {
   }
   if (node.checked != null) {
     parts.push(node.checked ? 'checked' : 'unchecked');
+  }
+  if (node.altText != null) {
+    parts.push(`alt=${JSON.stringify(node.altText)}`);
+  }
+  if (node.width != null) {
+    parts.push(`width=${node.width}`);
   }
   if (typeof node.format === 'number' && node.format > 0) {
     const flags = TEXT_FORMATS.filter(
@@ -408,6 +426,7 @@ interface ContentStats {
   readonly words: number;
   readonly nodes: number;
   readonly blocks: number;
+  readonly images: number;
 }
 
 function toStats(stateJSON: string): ContentStats {
@@ -415,13 +434,17 @@ function toStats(stateJSON: string): ContentStats {
   try {
     root = (JSON.parse(stateJSON) as {root: SerializedNodeLike}).root;
   } catch {
-    return {characters: 0, words: 0, nodes: 0, blocks: 0};
+    return {characters: 0, words: 0, nodes: 0, blocks: 0, images: 0};
   }
   let characters = 0;
   let nodes = 0;
+  let images = 0;
   const words: string[] = [];
   const walk = (node: SerializedNodeLike) => {
     nodes += 1;
+    if (node.type === IMAGE_NODE_TYPE) {
+      images += 1;
+    }
     if (node.text != null) {
       characters += node.text.length;
       words.push(node.text);
@@ -433,6 +456,7 @@ function toStats(stateJSON: string): ContentStats {
   walk(root);
   return {
     characters,
+    images,
     words: words
       .join(' ')
       .split(/\s+/)
@@ -469,6 +493,7 @@ const SHORTCUTS: ReadonlyArray<{
   keys: string;
   action: string;
   needsLinkButton?: boolean;
+  needsImages?: boolean;
 }> = [
   {keys: 'mod+b', action: 'Bold'},
   {keys: 'mod+i', action: 'Italic'},
@@ -477,6 +502,11 @@ const SHORTCUTS: ReadonlyArray<{
   {keys: 'mod+z', action: 'Undo'},
   {keys: 'mod+shift+z', action: 'Redo'},
   {keys: 'mod+enter', action: 'Check the task item holding the caret'},
+  {
+    keys: 'enter',
+    action: "Open a selected image's controls",
+    needsImages: true,
+  },
   {keys: 'tab', action: 'Indent (Escape, then Tab, leaves the editor)'},
 ];
 
@@ -492,6 +522,7 @@ export function RichTextEditorPlayground() {
   const [hasAutoLink, setHasAutoLink] = useState(true);
   const [hasMarkdownShortcuts, setHasMarkdownShortcuts] = useState(true);
   const [hasMarkdownPlugins, setHasMarkdownPlugins] = useState(true);
+  const [hasImages, setHasImages] = useState(true);
   const [isRestricted, setIsRestricted] = useState(false);
 
   // Field
@@ -520,13 +551,21 @@ export function RichTextEditorPlayground() {
 
   const extensions = hasMarkdownPlugins ? DEMO_PLUGINS.extensions : undefined;
   const transformers = isRestricted ? RESTRICTED_TRANSFORMERS : undefined;
+  // The image plugin's node, registered through the editor's `nodes` prop. The
+  // serializers and RichTextView need the same list, or state holding an image
+  // will not parse.
+  const nodes = useMemo(
+    () => (hasImages ? [ImageNode] : undefined),
+    [hasImages],
+  );
 
   const serializerOptions = useMemo(
     () => ({
       ...(extensions ? {extensions} : {}),
       ...(transformers ? {transformers} : {}),
+      ...(nodes ? {nodes} : {}),
     }),
-    [extensions, transformers],
+    [extensions, nodes, transformers],
   );
 
   // `defaultValue` is read once per mount, so loading a document — or changing
@@ -588,6 +627,32 @@ export function RichTextEditorPlayground() {
     setStateJSON(JSON.stringify(editorState.toJSON()));
   }, []);
 
+  /**
+   * The image node is registered at construction, like `hasAutoFocus`, so the
+   * switch rebuilds the editor. Turning images ON keeps the content exactly as
+   * it stands; turning them OFF cannot, because state holding an image does
+   * not parse without the node registered — so the document goes out through
+   * Markdown and back, where images do not survive.
+   */
+  const toggleImages = useCallback(
+    (next: boolean) => {
+      setHasImages(next);
+      if (next) {
+        setSeed(stateJSON);
+        setMountKey(key => key + 1);
+        return;
+      }
+      const markdown =
+        editorRef.current?.getMarkdown() ??
+        editorStateJSONToMarkdown(stateJSON, serializerOptions);
+      reseed(markdown, {
+        ...(extensions ? {extensions} : {}),
+        ...(transformers ? {transformers} : {}),
+      });
+    },
+    [extensions, reseed, serializerOptions, stateJSON, transformers],
+  );
+
   const markdown = useMemo(() => {
     if (tab !== 'markdown') {
       return '';
@@ -642,44 +707,69 @@ export function RichTextEditorPlayground() {
         {/* ---------------------------------------------------------- */}
         <VStack gap={3}>
           <div data-playground-editor="">
-            <RichTextEditor
-              key={mountKey}
-              ref={editorRef}
-              label="Playground"
-              isLabelHidden={isLabelHidden}
-              description={
-                hasDescription
-                  ? 'Bold, italic, lists, task lists, quotes, links, code blocks and tables.'
-                  : undefined
-              }
-              placeholder="Write something, or load a document below…"
-              defaultValue={seed}
-              onChange={handleChange}
-              size={size}
-              minHeight="12rem"
-              isReadOnly={isReadOnly}
-              isDisabled={isDisabled}
-              isRequired={isRequired}
-              isOptional={isOptional}
-              hasAutoFocus={hasAutoFocus}
-              status={status}
-              statusVariant={statusVariant}
-              maxLength={hasCharacterLimit ? 500 : undefined}
-              hasMarkdownShortcuts={hasMarkdownShortcuts}
-              {...(transformers ? {transformers} : {})}
-              {...(extensions ? {markdownExtensions: extensions} : {})}
-              toolbar={
-                hasToolbar ? (
-                  <RichTextEditorToolbar
-                    size={toolbarSize}
-                    hasLink={hasLink}
-                    hasNewTabLinks={hasNewTabLinks}
-                    endContent={hasInsertControls ? <InsertControls /> : null}
-                  />
-                ) : undefined
-              }
-              plugins={hasAutoLink ? <RichTextEditorAutoLinkPlugin /> : null}
-            />
+            {/* The image button renders in the toolbar's endContent and its
+                dialog in the plugins slot — two places the editor renders
+                separately — so their shared open state comes from a provider
+                around the editor that holds both. */}
+            <InsertImageProvider>
+              <RichTextEditor
+                key={mountKey}
+                ref={editorRef}
+                label="Playground"
+                isLabelHidden={isLabelHidden}
+                description={
+                  hasDescription
+                    ? 'Bold, italic, lists, task lists, quotes, links, code blocks and tables.'
+                    : undefined
+                }
+                placeholder="Write something, or load a document below…"
+                defaultValue={seed}
+                onChange={handleChange}
+                size={size}
+                minHeight="12rem"
+                isReadOnly={isReadOnly}
+                isDisabled={isDisabled}
+                isRequired={isRequired}
+                isOptional={isOptional}
+                hasAutoFocus={hasAutoFocus}
+                status={status}
+                statusVariant={statusVariant}
+                maxLength={hasCharacterLimit ? 500 : undefined}
+                hasMarkdownShortcuts={hasMarkdownShortcuts}
+                {...(transformers ? {transformers} : {})}
+                {...(extensions ? {markdownExtensions: extensions} : {})}
+                {...(nodes ? {nodes} : {})}
+                toolbar={
+                  hasToolbar ? (
+                    <RichTextEditorToolbar
+                      size={toolbarSize}
+                      hasLink={hasLink}
+                      hasNewTabLinks={hasNewTabLinks}
+                      endContent={
+                        hasInsertControls ? (
+                          <InsertControls hasImages={hasImages} />
+                        ) : null
+                      }
+                    />
+                  ) : undefined
+                }
+                plugins={
+                  <>
+                    {hasAutoLink && <RichTextEditorAutoLinkPlugin />}
+                    {hasImages && (
+                      <>
+                        <RichTextImagesPlugin />
+                        {/* Outside the toolbar: a Toolbar is a roving tab stop,
+                          so a dialog rendered in its endContent cannot be
+                          tabbed through. RichTextEditorToolbar puts its own
+                          link dialog beside the toolbar for the same reason. */}
+                        <InsertImageDialog />
+                      </>
+                    )}
+                  </>
+                }
+              />
+            </InsertImageProvider>
           </div>
 
           <div data-playground-stats="" {...stylex.props(styles.stats)}>
@@ -687,6 +777,11 @@ export function RichTextEditorPlayground() {
             <Text type="supporting">{stats.words} words</Text>
             <Text type="supporting">{stats.blocks} top-level blocks</Text>
             <Text type="supporting">{stats.nodes} nodes</Text>
+            {stats.images > 0 && (
+              <Text type="supporting">
+                {stats.images === 1 ? '1 image' : `${stats.images} images`}
+              </Text>
+            )}
           </div>
 
           <div {...stylex.props(styles.actions)}>
@@ -747,20 +842,43 @@ export function RichTextEditorPlayground() {
               {tab === 'view' ? (
                 <div {...stylex.props(styles.viewSurface)}>
                   <RichTextView
+                    // RichTextView reads `nodes` once, when it builds its own
+                    // editor. A view mounted while images were off cannot
+                    // parse state holding one, and renders its empty fallback
+                    // — the whole document gone — so it is rebuilt with the
+                    // node list, as the editor is.
+                    key={hasImages ? 'with-images' : 'without-images'}
                     value={stateJSON}
                     {...(extensions ? {markdownExtensions: extensions} : {})}
+                    {...(nodes ? {nodes} : {})}
                   />
                 </div>
               ) : (
-                <pre {...stylex.props(styles.output)}>
-                  {tab === 'markdown'
-                    ? markdown
-                    : tab === 'html'
-                      ? html
-                      : tab === 'tree'
-                        ? tree
-                        : stateJSON}
-                </pre>
+                <>
+                  {tab === 'markdown' && stats.images > 0 && (
+                    <Text type="supporting">
+                      {stats.images === 1
+                        ? 'One image is'
+                        : `${stats.images} images are`}{' '}
+                      missing from this Markdown. RichText&apos;s default
+                      transformer array is internal, and the transformers prop
+                      replaces it whole rather than extending it, so a caller
+                      cannot add an image transformer without giving up tables,
+                      task lists and the rest of the dialect. An image still
+                      reaches the editor state, the HTML export and
+                      RichTextView.
+                    </Text>
+                  )}
+                  <pre {...stylex.props(styles.output)}>
+                    {tab === 'markdown'
+                      ? markdown
+                      : tab === 'html'
+                        ? html
+                        : tab === 'tree'
+                          ? tree
+                          : stateJSON}
+                  </pre>
+                </>
               )}
             </div>
           </div>
@@ -782,7 +900,7 @@ export function RichTextEditorPlayground() {
             <Switch
               size="sm"
               label="Insert controls"
-              description="Table, rule and mention, in the toolbar's endContent slot"
+              description="Table, rule, mention and image, in the toolbar's endContent slot"
               value={hasInsertControls}
               onChange={setHasInsertControls}
               isDisabled={!hasToolbar}
@@ -826,9 +944,16 @@ export function RichTextEditorPlayground() {
             <Switch
               size="sm"
               label="Markdown plugins"
-              description="The demo mention and callout plugins, adopted with createRichTextExtension"
+              description="The demo mention and callout plugins, adopted with createRichTextExtension. Switching re-imports the document from Markdown, where images do not survive."
               value={hasMarkdownPlugins}
               onChange={toggleMarkdownPlugins}
+            />
+            <Switch
+              size="sm"
+              label="Images"
+              description="A custom ImageNode through the nodes prop: insert from the toolbar, drop or paste an image file, drag the handle to resize"
+              value={hasImages}
+              onChange={toggleImages}
             />
             <Switch
               size="sm"
@@ -1006,7 +1131,9 @@ export function RichTextEditorPlayground() {
           <div {...stylex.props(styles.group)}>
             {SHORTCUTS.filter(
               shortcut =>
-                shortcut.needsLinkButton !== true || (hasToolbar && hasLink),
+                (shortcut.needsLinkButton !== true ||
+                  (hasToolbar && hasLink)) &&
+                (shortcut.needsImages !== true || hasImages),
             ).map(shortcut => (
               <div key={shortcut.keys} {...stylex.props(styles.shortcutRow)}>
                 <Text type="supporting">{shortcut.action}</Text>

@@ -12,9 +12,8 @@ import {Center} from '@astryxdesign/core/Center';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {SharedTopNav} from '../components/SharedTopNav';
-import {CanaryBanner} from '../components/CanaryBanner';
+import {DocsBanner} from '../components/InternalDocsPrompt';
 import {DidYouMean} from '../components/DidYouMean';
-import {CURRENT_TARGET} from '../lib/docsVersions';
 import {SiteFooter} from '../components/SiteFooter';
 import {getCopyrightYear} from '../lib/copyrightYear';
 import {getSitemapPages} from './sitemap';
@@ -33,7 +32,7 @@ export default async function NotFound() {
       variant="surface"
       height="fill"
       mobileNav={false}
-      banner={CURRENT_TARGET === 'canary' ? <CanaryBanner /> : undefined}
+      banner={<DocsBanner />}
       topNav={<SharedTopNav />}>
       <div className={styles.shell}>
         <div className={styles.content}>

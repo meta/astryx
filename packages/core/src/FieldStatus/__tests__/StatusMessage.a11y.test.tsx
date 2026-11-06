@@ -46,6 +46,7 @@ async function renderState(
   await waitFor(() =>
     expect(document.querySelector('[data-a11y-ready="true"]')).not.toBeNull(),
   );
+  await waitFor(() => expect(subjectFor(state)).toBeInTheDocument());
 }
 
 function subjectFor(state: CoreStatusMessageBindingState): Element {
@@ -128,10 +129,9 @@ describe('Core status-message binding inventory', () => {
         ),
       ].sort(),
     ).toEqual([
-      'ChatSystemMessage',
       'FieldStatus announcement channel',
       'ProgressBar',
-      'Spinner',
+      'Spinner announcement channel',
       'Toast announcement channel',
       'Toast card',
     ]);
@@ -141,7 +141,7 @@ describe('Core status-message binding inventory', () => {
     expect(CORE_STATUS_MESSAGE_EXCLUSIONS.map(entry => entry.part)).toEqual([
       'visible validation text',
       'aria-hidden decorative spinner',
-      'date or section separator',
+      'chat notice or date separator',
       'role=log transcript updates',
       'composer errors and tool-run states',
       'busy announcement',

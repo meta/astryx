@@ -26,6 +26,10 @@ import React, {
 import * as stylex from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
 import {useMenuHover} from '../hooks/useMenuHover';
+import {useMenuPress} from '../hooks/useMenuPress';
+import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
+import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
+import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useListFocus} from '../hooks/useListFocus';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {Icon} from '../Icon';
@@ -35,7 +39,7 @@ import type {BaseProps} from '../BaseProps';
 import {navItemStyles} from '../NavItem/navItemStyles.stylex';
 import {useTopNavSlot} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {isSafeUrl} from '../utils/safeUrl';
 import {themeProps} from '../utils/themeProps';
@@ -51,6 +55,7 @@ import {
   fontWeightVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {isRenderable} from '../utils/isRenderable';
 
 // =============================================================================
 // Styles
@@ -109,6 +114,8 @@ const styles = stylex.create({
     transform: 'rotate(180deg)',
   },
   menuContainer: {
+    // A held pointer slides across the items; it selects no text.
+    userSelect: 'none',
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-1'],
@@ -194,18 +201,26 @@ const drawerStyles = stylex.create({
   chevronExpanded: {
     transform: 'rotate(180deg)',
   },
+  // The section clips its items only for the 0fr collapse animation: a
+  // permanent clip cuts off the focus ring, which paints outside the item.
+  // `overflow` is discrete, so it rides the transition with `allow-discrete`
+  // and switches to `visible` only after the open has finished. Collapsing
+  // clips again at once.
   items: {
     display: 'grid',
     gridTemplateRows: '0fr',
-    transitionProperty: 'grid-template-rows',
-    transitionDuration: durationVars['--duration-medium'],
+    overflow: 'hidden',
+    transitionProperty: 'grid-template-rows, overflow',
+    transitionBehavior: 'allow-discrete',
+    transitionDuration: `${durationVars['--duration-medium']}, 0s`,
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   itemsExpanded: {
     gridTemplateRows: '1fr',
+    overflow: 'visible',
+    transitionDelay: `0s, ${durationVars['--duration-medium']}`,
   },
   itemsInner: {
-    overflow: 'hidden',
     minHeight: 0,
   },
   item: {
@@ -348,7 +363,9 @@ export function TopNavMenu({
 }: TopNavMenuProps) {
   const pressable = usePressFeedback();
   const renderMode = useTopNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(
+    renderMode === 'drawer',
+  );
   const LinkComponent = useLinkComponent();
   const [drawerExpanded, setDrawerExpanded] = useState(false);
   const menuId = useId();
@@ -443,6 +460,16 @@ export function TopNavMenu({
   // focus management) and the list-focus ref (for roving tabindex/typeahead).
   const setMenuRef = useMergedRefs<HTMLDivElement>(menuRef, listRef);
 
+  // A press that slides across the items acts on the item it lifts on, the
+  // highlight following the pointer, as every menu does
+  // (`family:action-groups` FR1-FR3); a mouse released outside closes it.
+  const menuPress = useMenuPress({
+    menuRef: listRef,
+    itemSelector: '[role="menuitem"]',
+    onDismiss: close,
+  });
+  const hasOverflow = useMenuOverflow(listRef, items.length, popover.isOpen);
+
   // Mobile bar: hide menus entirely
   if (renderMode === 'mobile-bar') {
     return null;
@@ -453,6 +480,7 @@ export function TopNavMenu({
     return (
       <div {...stylex.props(drawerStyles.section)}>
         <button
+          ref={ref}
           type="button"
           {...rest}
           onMouseEnter={onMouseEnterProp}
@@ -486,6 +514,8 @@ export function TopNavMenu({
         </button>
         <div
           id={`${menuId}-items`}
+          aria-hidden={!drawerExpanded}
+          inert={!drawerExpanded ? true : undefined}
           {...stylex.props(
             drawerStyles.items,
             drawerExpanded && drawerStyles.itemsExpanded,
@@ -496,16 +526,15 @@ export function TopNavMenu({
                 key={getMenuItemKey(item)}
                 href={item.href}
                 {...pressable}
-                onClick={(_e: React.MouseEvent) => {
+                onClick={closeDrawerAfter((_e: React.MouseEvent) => {
                   item.onClick?.();
-                  closeMobileNav();
-                }}
+                })}
                 {...focusOutlineProps.focusVisible(
                   navItemStyles.item,
                   interactionOverlayStyles.backgroundColor,
                   drawerStyles.item,
                 )}>
-                {item.icon && (
+                {isRenderable(item.icon) && (
                   <span {...stylex.props(drawerStyles.itemIcon)}>
                     {item.icon}
                   </span>
@@ -568,12 +597,22 @@ export function TopNavMenu({
           role="menu"
           aria-label={label}
           {...contentProps}
+          {...menuPress.menuProps}
+          onPointerDown={pressOnItemsOnly(
+            menuPress.menuProps.onPointerDown,
+            '[role="menuitem"]',
+          )}
           // After the contentProps spread so the full APG composition (roving
           // tabindex + typeahead + Enter/Space activation) replaces the hover
           // hook's basic arrow-key handler.
           onKeyDown={menuKeyDown}
           onFocus={handleFocus}
-          {...stylex.props(styles.menuContainer)}>
+          {...stylex.props(
+            styles.menuContainer,
+            hasOverflow
+              ? menuTouchActionStyles.scrolls
+              : menuTouchActionStyles.fits,
+          )}>
           {items.map(item => {
             const Element = item.href ? 'a' : 'div';
             return (
@@ -588,6 +627,9 @@ export function TopNavMenu({
                     ? item.href
                     : undefined
                 }
+                // A menu row is never a draggable link: a mouse press that
+                // slides to another item would start a drag instead.
+                draggable={item.href != null ? false : undefined}
                 onClick={item.onClick}
                 {...focusOutlineProps.focusVisible(styles.menuItem)}>
                 <div {...stylex.props(styles.menuItemIcon)}>{item.icon}</div>

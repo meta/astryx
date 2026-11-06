@@ -14,7 +14,15 @@
  * self-sufficient regardless of CI job ordering.
  */
 
-import {describe, it, expect, beforeAll, beforeEach, afterEach} from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from 'vitest';
 import {execFileSync, spawn} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -43,14 +51,61 @@ function runCli(args, cwd) {
   }
 }
 
-/** Poll until `predicate()` is true or the timeout elapses. */
-async function waitFor(predicate, {timeout = 8000, interval = 50} = {}) {
-  const start = Date.now();
-  for (;;) {
-    if (predicate()) return true;
-    if (Date.now() - start > timeout) return false;
-    await new Promise(r => setTimeout(r, interval));
-  }
+/**
+ * Resolves once the child's output holds `count` matches of `pattern`, and
+ * rejects if the child exits first. It waits on the watcher's own output, not
+ * on a clock: only the test's timeout bounds it. `onPoll`, if given, runs
+ * every `interval` ms while it waits.
+ */
+function waitForOutput(
+  child,
+  read,
+  pattern,
+  {count = 1, onPoll, interval = 250} = {},
+) {
+  const matches = () => (read().match(new RegExp(pattern, 'g')) ?? []).length;
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (matches() >= count) {
+        cleanup();
+        resolve();
+      }
+    };
+    const exited = code => {
+      cleanup();
+      reject(
+        new Error(
+          `the watcher exited (${code}) before ${pattern} x${count}:\n${read()}`,
+        ),
+      );
+    };
+    const timer = setInterval(() => {
+      onPoll?.();
+      check();
+    }, interval);
+    const cleanup = () => {
+      clearInterval(timer);
+      child.stdout.off('data', check);
+      child.stderr.off('data', check);
+      child.off('exit', exited);
+    };
+    child.stdout.on('data', check);
+    child.stderr.on('data', check);
+    child.once('exit', exited);
+    check();
+  });
+}
+
+/**
+ * Resolves with the child's exit code once it exits and its output is read.
+ * Only the test's timeout bounds the wait, and each test kills its watcher
+ * when it finishes.
+ */
+function waitForExit(child) {
+  // `close` comes after the output streams end, so the last output is read.
+  if (child.stdout?.readableEnded && child.exitCode != null)
+    return Promise.resolve(child.exitCode);
+  return new Promise(resolve => child.once('close', code => resolve(code)));
 }
 
 beforeAll(() => {
@@ -99,62 +154,45 @@ describe('theme build --watch', () => {
       [CLI_BIN, 'theme', 'build', 'wt.mjs', '--watch'],
       {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
     );
+    // Vitest runs this even when the test times out mid-wait, which skips the
+    // `finally` below, so the watcher never outlives the test.
+    onTestFinished(() => {
+      child.kill('SIGKILL');
+    });
     let stdout = '';
     child.stdout.on('data', d => (stdout += d.toString()));
     child.stderr.on('data', d => (stdout += d.toString()));
 
+    const read = () => stdout;
     try {
-      // Initial build produces the CSS.
-      const built = await waitFor(() => fs.existsSync(cssFile));
-      expect(built).toBe(true);
-      const firstCss = fs.readFileSync(cssFile, 'utf-8');
-      expect(firstCss).toMatch(/#ffffff/);
+      // The watcher prints "Watching" once its initial build has finished and
+      // fs.watch is armed, and again after each rebuild finishes.
+      await waitForOutput(child, read, 'Watching');
+      expect(fs.readFileSync(cssFile, 'utf-8')).toMatch(/#ffffff/);
 
-      // Wait until the watcher is actually watching before editing, so the
-      // change isn't missed. The "Watching" line is printed only after fs.watch
-      // is armed, so it's a truthful "safe to edit now" signal.
-      await waitFor(() => /Watching/i.test(stdout));
-
-      // Change the theme — the token value changes so the CSS must change.
-      // fs.watch event delivery is best-effort on some platforms/under load, so
-      // re-touch the file until the rebuild is observed (idempotent write).
+      // Change the theme: the token value changes, so the CSS must change.
+      // fs.watch can drop an event under load, so the write repeats until the
+      // watcher reports the change (an idempotent write).
       const changed = `export default { name: 'wt', tokens: { '--color-bg': '#010203' } };\n`;
       fs.writeFileSync(themeFile, changed);
-
-      const rebuilt = await waitFor(
-        () => {
-          try {
-            if (fs.readFileSync(cssFile, 'utf-8').includes('#010203'))
-              return true;
-          } catch {
-            // CSS mid-write; fall through to re-touch.
-          }
-          // Re-touch to recover a dropped watch event under load.
+      await waitForOutput(child, read, 'rebuilding wt\\.mjs', {
+        onPoll: () => {
           try {
             fs.writeFileSync(themeFile, changed);
           } catch {
-            // Re-touch failed (e.g. dir mid-teardown); the next poll retries.
+            // The temporary folder is gone at teardown.
           }
-          return false;
         },
-        {timeout: 20000, interval: 200},
-      );
-      expect(rebuilt).toBe(true);
-      expect(stdout).toMatch(/rebuild/i);
+      });
+      // The second "Watching" line follows the finished rebuild.
+      await waitForOutput(child, read, 'Watching', {count: 2});
+      expect(fs.readFileSync(cssFile, 'utf-8')).toContain('#010203');
     } finally {
       // SIGINT must stop the watcher and exit cleanly.
       child.kill('SIGINT');
     }
 
-    const exited = await new Promise(resolve => {
-      let done = false;
-      child.on('exit', () => {
-        done = true;
-        resolve(true);
-      });
-      setTimeout(() => resolve(done), 4000);
-    });
-    expect(exited).toBe(true);
+    await waitForExit(child);
     expect(stdout).toMatch(/Stopped watching/);
   }, 30_000);
 
@@ -165,9 +203,13 @@ describe('theme build --watch', () => {
       `export default { name: 'ws', tokens: { '--color-bg': '#ffffff' } };\n`,
     );
     // Top-level await holds every rebuild of this version in progress for 20 s,
-    // far longer than a stop may take.
+    // then writes a marker. A stop that waited for the rebuild would let the
+    // marker appear before the watcher exits.
+    const finished = path.join(tmpDir, 'rebuild-finished');
     const slow =
+      `import fs from 'node:fs';\n` +
       `await new Promise(resolve => setTimeout(resolve, 20000));\n` +
+      `fs.writeFileSync(${JSON.stringify(finished)}, '');\n` +
       `export default { name: 'ws', tokens: { '--color-bg': '#010203' } };\n`;
 
     const child = spawn(
@@ -175,42 +217,39 @@ describe('theme build --watch', () => {
       [CLI_BIN, 'theme', 'build', 'ws.mjs', '--watch'],
       {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
     );
+    onTestFinished(() => {
+      child.kill('SIGKILL');
+    });
     let stdout = '';
+    const read = () => stdout;
     child.stdout.on('data', d => (stdout += d.toString()));
     child.stderr.on('data', d => (stdout += d.toString()));
-    const exited = new Promise(resolve =>
-      child.once('exit', () => resolve(Date.now())),
-    );
 
-    let stoppedAt;
     try {
-      expect(await waitFor(() => /Watching/i.test(stdout))).toBe(true);
+      await waitForOutput(child, read, 'Watching');
       // Start the slow rebuild, re-touching in case a watch event is dropped.
-      const started = await waitFor(
-        () => {
-          if (/rebuilding ws\.mjs/.test(stdout)) return true;
-          fs.writeFileSync(themeFile, slow);
-          return false;
+      await waitForOutput(child, read, 'rebuilding ws\\.mjs', {
+        onPoll: () => {
+          try {
+            fs.writeFileSync(themeFile, slow);
+          } catch {
+            // The temporary folder is gone at teardown.
+          }
         },
-        {timeout: 20000, interval: 200},
-      );
-      expect(started).toBe(true);
+      });
       // Queue a change behind the rebuild in progress (debounce is 100 ms).
       fs.writeFileSync(themeFile, `${slow}// queued\n`);
+      // Let the 100 ms debounce queue the change. This is not a deadline: a slow
+      // runner can only leave the change unqueued, never fail the test.
       await new Promise(resolve => setTimeout(resolve, 500));
     } finally {
-      stoppedAt = Date.now();
       child.kill('SIGINT');
     }
 
-    const exitedAt = await Promise.race([
-      exited,
-      new Promise(resolve => setTimeout(() => resolve(null), 15000)),
-    ]);
-    if (exitedAt === null) child.kill('SIGKILL');
-    // Finishing the interrupted rebuild, or starting the queued one, takes 20 s.
-    expect(exitedAt).not.toBeNull();
-    expect(exitedAt - stoppedAt).toBeLessThan(10000);
+    await waitForExit(child);
+    // The stop ended the rebuild in progress instead of waiting for it, and
+    // started no queued one.
+    expect(fs.existsSync(finished)).toBe(false);
     expect(stdout.match(/rebuilding/g)).toHaveLength(1);
     expect(stdout.trimEnd().endsWith('Stopped watching.')).toBe(true);
   }, 60_000);
@@ -230,18 +269,18 @@ describe('theme build --watch', () => {
         [CLI_BIN, ...detail, 'theme', 'build', 'wd.mjs', '--watch'],
         {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
       );
+      onTestFinished(() => {
+        child.kill('SIGKILL');
+      });
       let stdout = '';
       child.stdout.on('data', d => (stdout += d.toString()));
       child.stderr.on('data', d => (stdout += d.toString()));
       try {
-        expect(await waitFor(() => /Watching/i.test(stdout))).toBe(true);
+        await waitForOutput(child, () => stdout, 'Watching');
       } finally {
         child.kill('SIGINT');
       }
-      await new Promise(resolve => {
-        child.on('exit', resolve);
-        setTimeout(resolve, 4000);
-      });
+      await waitForExit(child);
       expect(stdout.includes('Install in your app')).toBe(full);
       expect(/\[ok\] wd\.css \(/.test(stdout)).toBe(!full);
     },
@@ -265,18 +304,24 @@ describe('theme build --watch', () => {
       [CLI_BIN, 'theme', 'build', 'w1.mjs', 'w2.mjs', '--watch'],
       {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
     );
+    // Vitest runs this even when the test times out mid-wait, which skips the
+    // `finally` below, so the watcher never outlives the test.
+    onTestFinished(() => {
+      child.kill('SIGKILL');
+    });
     let stdout = '';
     child.stdout.on('data', d => (stdout += d.toString()));
     child.stderr.on('data', d => (stdout += d.toString()));
 
     try {
-      const built = await waitFor(
-        () =>
-          fs.existsSync(path.join(tmpDir, 'w1.css')) &&
-          fs.existsSync(path.join(tmpDir, 'w2.css')),
-      );
-      expect(built).toBe(true);
-      await waitFor(() => /Watching w1\.mjs, w2\.mjs/.test(stdout));
+      // The watcher prints its "Watching" line once every initial build has
+      // finished, and those builds run one after another, each in its own
+      // child process. Wait for that line instead of polling for the files
+      // under the 8 s deadline: on a loaded runner two builds can outlast it.
+      // If the line never comes, the test fails at its own time limit.
+      await waitForOutput(child, () => stdout, 'Watching w1\\.mjs, w2\\.mjs');
+      expect(fs.existsSync(path.join(tmpDir, 'w1.css'))).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, 'w2.css'))).toBe(true);
       const firstCssBefore = fs.readFileSync(
         path.join(tmpDir, 'w1.css'),
         'utf-8',
@@ -285,29 +330,24 @@ describe('theme build --watch', () => {
       const changed = `export default { name: 'w2', tokens: { '--color-bg': '#010203' } };\n`;
       fs.writeFileSync(second, changed);
 
-      const rebuilt = await waitFor(
-        () => {
-          try {
-            if (
-              fs
-                .readFileSync(path.join(tmpDir, 'w2.css'), 'utf-8')
-                .includes('#010203')
-            ) {
-              return true;
-            }
-          } catch {
-            // CSS mid-write; fall through to re-touch.
-          }
+      // fs.watch can drop an event under load, so the write repeats until the
+      // watcher reports the change; the next "Watching" line follows the
+      // finished rebuild.
+      await waitForOutput(child, () => stdout, 'rebuilding w2\\.mjs', {
+        onPoll: () => {
           try {
             fs.writeFileSync(second, changed);
           } catch {
-            // Re-touch failed (e.g. dir mid-teardown); the next poll retries.
+            // The temporary folder is gone at teardown.
           }
-          return false;
         },
-        {timeout: 20000, interval: 200},
+      });
+      await waitForOutput(child, () => stdout, 'Watching w1\\.mjs, w2\\.mjs', {
+        count: 2,
+      });
+      expect(fs.readFileSync(path.join(tmpDir, 'w2.css'), 'utf-8')).toContain(
+        '#010203',
       );
-      expect(rebuilt).toBe(true);
       expect(stdout).toMatch(/rebuilding w2\.mjs/);
       expect(stdout).not.toMatch(/rebuilding w1\.mjs/);
       expect(fs.readFileSync(path.join(tmpDir, 'w1.css'), 'utf-8')).toBe(

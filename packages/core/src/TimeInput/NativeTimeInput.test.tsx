@@ -10,6 +10,7 @@
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {TimeInput} from './TimeInput';
+import {InternationalizationProvider} from '../i18n';
 import {InputGroup, InputGroupText} from '../InputGroup';
 import {resetDateSegmentProbe} from '../DateInput/nativeDateSegments';
 import type {ISOTimeString} from '../utils';
@@ -48,6 +49,22 @@ afterEach(() => {
 });
 
 describe('TimeInput nativePicker', () => {
+  it("shows the resting value in the locale's hour cycle", () => {
+    stubPointer(true);
+    render(
+      <InternationalizationProvider locale="de-DE">
+        <TimeInput
+          label="Start time"
+          value={'14:30' as ISOTimeString}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(getNativeTimeInput()).toHaveValue('14:30');
+    expect(screen.getByText('14:30')).toBeInTheDocument();
+    expect(screen.queryByText('2:30 PM')).toBeNull();
+  });
+
   it('uses the browser/OS picker on a coarse pointer by default', () => {
     stubPointer(true);
     render(
@@ -231,12 +248,36 @@ describe('TimeInput nativePicker', () => {
     expect(input).not.toBeDisabled();
     expect(input).toHaveAttribute('aria-disabled', 'true');
     expect(input).toHaveAttribute('readonly');
+    // The shared native time segment's picker button is focusable-disabled
+    // (spec:AST-085 FR1) and still blocks opening.
     expect(
       screen.getByRole('button', {name: 'Open Start time'}),
-    ).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
     const tooltip = document.querySelector<HTMLElement>('[role="tooltip"]');
     expect(tooltip).not.toBeNull();
     expect(input.getAttribute('aria-describedby')).toContain(tooltip?.id);
+  });
+
+  it('keeps a disabled native field focusable without native disabled (AST-085 FR1, FR2)', () => {
+    stubPointer(true);
+    const onClick = vi.fn();
+    render(
+      <TimeInput
+        label="Start time"
+        nativePicker="always"
+        isDisabled
+        onClick={onClick}
+        onChange={() => {}}
+      />,
+    );
+    const input = getNativeTimeInput();
+    expect(input).not.toHaveAttribute('disabled');
+    expect(input).toHaveAttribute('aria-disabled', 'true');
+    expect(input).toHaveAttribute('readonly');
+    input.focus();
+    expect(input).toHaveFocus();
+    fireEvent.click(input);
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it('forwards refs and autofocus to the native input', () => {

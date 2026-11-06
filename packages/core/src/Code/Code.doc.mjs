@@ -4,6 +4,7 @@
 export const docs = {
   name: 'Code',
   displayName: 'Code',
+  keywords: ['inlinecode', 'monospace'],
   group: 'Code',
   category: 'Content',
   description:

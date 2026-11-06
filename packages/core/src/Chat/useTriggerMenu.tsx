@@ -4,7 +4,7 @@
 
 /**
  * @file useTriggerMenu.tsx
- * @input Uses React, usePopover, SearchSource
+ * @input Uses React, usePopover, SearchSource, useBusyAnnouncement
  * @output Exports useTriggerMenu hook for trigger-based menus in contentEditable
  * @position Internal hook; consumed by ChatComposerInput
  *
@@ -32,6 +32,8 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
+import {isPressInsideOwnedLayer, useOutsidePress} from '../Layer/outsidePress';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {
   colorVars,
@@ -43,8 +45,14 @@ import {
 import {mergeProps, groupItems, isImeKeyEvent} from '../utils';
 import type {SearchableItem} from '../Typeahead/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import type {ChatComposerTrigger, ChatComposerToken} from './ChatComposerInput';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/useTriggerMenu.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -332,7 +340,7 @@ function deleteTriggerText(
 export function useTriggerMenu(
   options: UseTriggerMenuOptions,
 ): UseTriggerMenuReturn {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {
     triggers,
     editableRef,
@@ -352,6 +360,24 @@ export function useTriggerMenu(
     isLoading: false,
     isHidden: false,
   });
+
+  // The loading row carries no live role: it mounts already holding its text
+  // and is removed when results arrive, so it would be skipped. "Searching…"
+  // is the menu's busy state, so the shared busy path announces each loading
+  // episode once (spec:AST-086 FR6, FR8): rerenders and further keystrokes
+  // while loading do not repeat it, results arriving re-arm it, and a search
+  // that settles before the announcement goes out announces nothing.
+  // Mirrors renderMenu: no row exists without an active trigger or while hidden.
+  const isLoadingRowShown =
+    state.isLoading && !state.isHidden && state.activeTrigger !== null;
+  // One catalog string serves the row and the announcement (FR7).
+  const loadingText =
+    state.activeTrigger?.loadingText ?? t('@astryx.chatTriggerMenu.searching');
+  const settleBusyAnnouncement = useBusyAnnouncement(
+    isLoadingRowShown,
+    loadingText,
+    editableRef,
+  );
 
   const triggerStartRef = useRef<number>(-1);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -377,10 +403,32 @@ export function useTriggerMenu(
     }
   }, []);
 
+  const outsidePress = useOutsidePress();
   const popover = usePopover({
+    // A text input cannot be an invoker, so native light dismiss would count
+    // a press in the editor as outside and close the menu.
+    onShow: () => {
+      const editable = editableRef.current;
+      if (editable == null) {
+        return;
+      }
+      outsidePress.start(
+        editable,
+        path => isPressInsideOwnedLayer(path, editable, popover.id),
+        // Called after usePopover has returned, so `popover` is assigned.
+        () => popover.hide(),
+      );
+    },
     onHide: useCallback(() => {
+      outsidePress.stop();
       if (isMenuSuppressedRef.current) {
         return;
+      }
+      // A search still waiting out its debounce must not start for a menu
+      // that is gone.
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = null;
       }
       searchRequestIdRef.current++;
       removeAnchorSpan();
@@ -394,8 +442,8 @@ export function useTriggerMenu(
         isLoading: false,
         isHidden: false,
       }));
-    }, [removeAnchorSpan]),
-    hasLightDismiss: true,
+    }, [outsidePress, removeAnchorSpan]),
+    hasLightDismiss: false,
     hasCloseButton: false,
     hasAutoFocus: false,
     // The popup's own role="listbox" is the exposed semantics; focus stays in
@@ -404,7 +452,7 @@ export function useTriggerMenu(
   });
   const {show: showPopover, hide: hidePopover} = popover;
 
-  // Cleanup on unmount
+  // Releases the search timer and the anchor span on unmount.
   useEffect(() => {
     return () => {
       if (searchTimeoutRef.current) {
@@ -531,6 +579,9 @@ export function useTriggerMenu(
       };
 
       const applyResults = (items: SearchableItem[]) => {
+        // Results that arrive before the busy start is heard withdraw it, so a
+        // search that settles on its first frame announces nothing (FR8).
+        settleBusyAnnouncement();
         const isHidden = isUnmatchedMultiWordQuery(trigger, items, false);
         setState(prev => ({
           ...prev,
@@ -539,8 +590,8 @@ export function useTriggerMenu(
           isLoading: false,
           isHidden,
         }));
-        // A hidden menu closes its popover, which also releases the popover's
-        // Escape and light-dismiss handling; matches reopen it at the caret.
+        // A hidden menu closes its popover. That also stops its Escape and
+        // outside-press handling. Matches reopen it at the caret.
         if (isHidden && !isMenuSuppressedRef.current) {
           isMenuSuppressedRef.current = true;
           hidePopover();
@@ -555,8 +606,12 @@ export function useTriggerMenu(
         if (trigger.searchSource) {
           // Use SearchSource — cancel previous, then search
           trigger.searchSource.cancel?.();
-          setState(prev => ({...prev, isLoading: true}));
           const result = trigger.searchSource.search(query);
+          // A synchronous source already has its results, so it never shows
+          // or announces the loading row.
+          if (!Array.isArray(result)) {
+            setState(prev => ({...prev, isLoading: true}));
+          }
           Promise.resolve(result).then(
             items => {
               if (!isCurrent()) {
@@ -595,6 +650,7 @@ export function useTriggerMenu(
       setAnchor,
       hidePopover,
       showPopover,
+      settleBusyAnnouncement,
     ],
   );
 
@@ -873,14 +929,11 @@ export function useTriggerMenu(
     }
 
     const emptyText = activeTrigger.emptySearchText ?? 'No results';
-    const loadingText = activeTrigger.loadingText ?? 'Searching\u2026';
 
     let listContent: ReactNode;
     if (state.isLoading) {
       listContent = (
-        <div role="status" {...stylex.props(styles.loadingState)}>
-          {loadingText}
-        </div>
+        <div {...stylex.props(styles.loadingState)}>{loadingText}</div>
       );
     } else if (state.items.length === 0 && state.isActive) {
       listContent = <div {...stylex.props(styles.emptyState)}>{emptyText}</div>;
@@ -951,7 +1004,16 @@ export function useTriggerMenu(
         xstyle: styles.popoverSurface,
       },
     );
-  }, [popover, listboxId, state, selectItem, getItemId, highlightOnHover, t]);
+  }, [
+    popover,
+    listboxId,
+    state,
+    selectItem,
+    getItemId,
+    highlightOnHover,
+    t,
+    loadingText,
+  ]);
 
   return {
     state,

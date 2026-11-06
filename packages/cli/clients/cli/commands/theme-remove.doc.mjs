@@ -14,9 +14,16 @@ export const doc = {
   fn: 'themeRemove',
   args: [{name: 'slug', param: 'slug', required: true}],
   examples: [{label: 'Remove an added theme', cli: 'astryx theme remove ocean'}],
+  outsideProject: 'refuse',
   exitCodes: [
     {code: 0, when: 'the module is regenerated without the theme'},
     {code: 1, when: 'the theme is not added, is the default, or state is invalid'},
   ],
   related: ['theme add', 'theme use', 'theme list'],
+  notes: [
+    {
+      type: 'prose',
+      text: "In global mode: outside a project, theme remove writes nothing and stops with `ERR_THEME_INVALID`: \"No package.json found. Run this command inside an app project.\" In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:problems}.",
+    },
+  ],
 };

@@ -21,6 +21,7 @@
  */
 
 import {validateLoadedIntegration} from './validate-contributions.mjs';
+import {formatCliCommand} from '../env/package-manager.mjs';
 
 /**
  * For each configured (already-loaded) integration, compute its issues using
@@ -81,8 +82,8 @@ export async function warnOnIntegrationIssues(source, {json = false} = {}) {
 
     for (const [pkg, count] of issueCounts) {
       const command = fromProject
-        ? 'astryx doctor'
-        : `astryx doctor integration validate ${pkg}`;
+        ? formatCliCommand('doctor')
+        : formatCliCommand(`doctor integration validate ${pkg}`);
       console.error(
         `Warning: ${pkg} has ${count} integration issue(s). Run: ${command}`,
       );

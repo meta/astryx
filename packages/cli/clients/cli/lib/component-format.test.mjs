@@ -67,7 +67,7 @@ describe('formatFull sub-component rendering', () => {
     expect(out).not.toContain('undefined');
     // Points the reader at the sub-component's own docs instead of a blank.
     expect(out).toMatch(
-      /(?:astryx|@astryxdesign\/cli) component XDSRadioListItem/,
+      /(?:astryx|@astryxdesign\/cli(?:@\S+)?) component XDSRadioListItem/,
     );
   });
 
@@ -242,5 +242,64 @@ describe('formatBrief signature stays terse', () => {
     expect(signature).not.toContain('0|0.5|1|1.5|2|3|4|5|6|8|10');
     // But the prop is still named, so it is not lost.
     expect(formatBrief(docs, 'HStack', '')).toContain('gap');
+  });
+});
+
+describe('component icon slots', () => {
+  const docs = {
+    name: 'CodeBlock',
+    description: 'Code.',
+    props: [],
+    theming: {
+      targets: [{className: 'astryx-code-block'}],
+      componentIcons: [
+        {
+          slot: 'code-block-copy',
+          description: 'The copy button icon.',
+          fallback: '`copy`; `check` while copied',
+          state: [
+            {
+              name: 'copied',
+              type: 'boolean',
+              description: 'True while copied.',
+            },
+          ],
+          whenNull: 'Hides the glyph.',
+        },
+        {
+          slot: 'code-block-example',
+          description: 'A stateless slot.',
+          fallback: '`info`',
+          whenNull: 'Hides the icon.',
+        },
+      ],
+    },
+  };
+
+  it('lists each slot with its state, fallback, role, and null behavior in full output', () => {
+    const out = formatFull(docs);
+    expect(out).toContain('**Component icon slots**');
+    expect(out).toContain(
+      '| `code-block-copy` | `copied: boolean` True while copied. | `copy`; `check` while copied | The copy button icon. | Hides the glyph. |',
+    );
+    expect(out).toContain(
+      '| `code-block-example` | none | `info` | A stateless slot. | Hides the icon. |',
+    );
+  });
+
+  it('keeps the slots in compact and brief output', () => {
+    expect(formatCompact(docs, 'CodeBlock')).toContain(
+      '## Component Icon Slots',
+    );
+    expect(formatBrief(docs, 'CodeBlock')).toContain(
+      'Icon slots: code-block-copy {copied: boolean}; code-block-example',
+    );
+  });
+
+  it('prints no slot section for a component without slots', () => {
+    const {componentIcons: _omitted, ...theming} = docs.theming;
+    expect(formatFull({...docs, theming})).not.toContain(
+      'Component icon slots',
+    );
   });
 });

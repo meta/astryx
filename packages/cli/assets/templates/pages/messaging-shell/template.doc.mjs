@@ -18,4 +18,17 @@ export const doc = {
   ],
   isReady: false,
   category: 'Shell - Messaging',
+  icons: {
+    BellIcon: 'notification',
+    BookmarkIcon: 'bookmark',
+    ChatBubbleLeftRightIcon: 'conversation',
+    Cog6ToothIcon: 'settings',
+    HashtagIcon: 'tag',
+    HomeIcon: 'home',
+    InboxIcon: 'inbox',
+    MagnifyingGlassIcon: 'search',
+    PencilSquareIcon: 'compose',
+    UserGroupIcon: 'users',
+    XMarkIcon: 'close',
+  },
 };

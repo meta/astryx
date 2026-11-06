@@ -40,6 +40,15 @@ export const TitleOnly: Story = {
   },
 };
 
+export const NonRenderingOptionalSlots: Story = {
+  args: {
+    title: 'Nothing here yet',
+    description: '',
+    icon: false,
+    actions: '',
+  },
+};
+
 export const WithIcon: Story = {
   args: {
     icon: <span style={{fontSize: '48px'}}>📭</span>,

@@ -3,8 +3,8 @@
 /**
  * @file init command — thin wrapper around the init API.
  *
- * `astryx init` is non-interactive by default: it installs the AGENTS.md/
- * CLAUDE.md cheat sheet with NO prompts, so it behaves identically for humans,
+ * `astryx init` is non-interactive by default: it installs the agent-docs
+ * cheat sheet with NO prompts, so it behaves identically for humans,
  * AI agents, CI, and piped I/O — it never hangs or errors on a missing TTY.
  * Non-interactive feature install: `astryx init --features agents,theme,template`
  * Re-runnable: safe to run multiple times, idempotent.

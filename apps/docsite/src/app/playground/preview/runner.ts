@@ -59,11 +59,22 @@ function warnUnresolved(id: string): void {
   );
 }
 
+/**
+ * Modules a blog post's live example may import by relative path (`./Name`):
+ * the post-local example assets beside that post's Markdown file
+ * (spec:AST-033 FR22). Only the post's own frame receives them.
+ */
+export type LocalModules = Readonly<Record<string, Record<string, unknown>>>;
+
 /** A CommonJS-style require resolving against the preview scope. */
-function makeRequire(): (id: string) => unknown {
+function makeRequire(localModules?: LocalModules): (id: string) => unknown {
   return (id: string) => {
     if (ASSET_RE.test(id)) {
       return {default: '', __esModule: true};
+    }
+    const local = localModules?.[id];
+    if (local) {
+      return local.__esModule ? local : {...local, __esModule: true};
     }
     const mod = scopeLookup.get(id.toLowerCase());
     if (mod) {
@@ -205,7 +216,10 @@ function findDeclaredIdentifiers(compiled: string): Set<string> {
   return names;
 }
 
-function evaluate(compiled: string): React.ComponentType {
+function evaluate(
+  compiled: string,
+  localModules?: LocalModules,
+): React.ComponentType {
   const exportsObj: Record<string, unknown> = {};
   const moduleObj = {exports: exportsObj};
   const globals = getGlobalScope();
@@ -225,7 +239,7 @@ function evaluate(compiled: string): React.ComponentType {
   const values = [
     moduleObj,
     exportsObj,
-    sharedRequire,
+    localModules == null ? sharedRequire : makeRequire(localModules),
     ...globalNames.map(name => globals[name]),
   ];
 
@@ -245,7 +259,7 @@ function evaluate(compiled: string): React.ComponentType {
   return defaultExport as React.ComponentType;
 }
 
-export function runCode(code: string): RunResult {
+export function runCode(code: string, localModules?: LocalModules): RunResult {
   if (!ts) {
     return {error: 'TypeScript compiler not loaded yet', phase: 'compile'};
   }
@@ -261,7 +275,7 @@ export function runCode(code: string): RunResult {
   }
 
   try {
-    const Component = evaluate(compiled);
+    const Component = evaluate(compiled, localModules);
     return {Component};
   } catch (e: unknown) {
     return {
