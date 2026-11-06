@@ -681,6 +681,61 @@ function median(values) {
     : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+/** The longest one opt-in accessibility leg should take. */
+export const LEG_BUDGET_MS = 10 * 60 * 1000;
+
+/**
+ * Split files into `count` legs of about the same recorded time: the longest
+ * file first, each onto the leg with the least time so far. Each leg lists its
+ * files in path order, the order Playwright runs them.
+ * @param {string[]} files
+ * @param {(file: string) => number} secondsOf
+ * @param {number} count
+ */
+export function legShares(files, secondsOf, count) {
+  const legs = Array.from({length: Math.max(1, count)}, () => ({
+    seconds: 0,
+    files: [],
+  }));
+  const longestFirst = [...files].sort(
+    (a, b) => secondsOf(b) - secondsOf(a) || a.localeCompare(b),
+  );
+  for (const file of longestFirst) {
+    const leg = legs.reduce((least, next) =>
+      next.seconds < least.seconds ? next : least,
+    );
+    leg.seconds += secondsOf(file);
+    leg.files.push(file);
+  }
+  return legs.map(leg => leg.files.sort((a, b) => a.localeCompare(b)));
+}
+
+/**
+ * The legs an opt-in run needs: enough that each leg's recorded time fits
+ * LEG_BUDGET_MS, at most `maxLegs`. The recorded times come from release legs
+ * that run four files at once on four cores; one file alone on a
+ * pull-request runner runs faster, so a leg sums them without the default
+ * check's margin. A file with no recorded time counts the median.
+ * @param {string[]} files
+ * @param {Record<string, number>} seconds
+ * @param {number} maxLegs
+ */
+export function planLegs(files, seconds, maxLegs) {
+  const fallback = median(Object.values(seconds));
+  const secondsOf = file => seconds[file] ?? fallback;
+  const sum = list => list.reduce((total, file) => total + secondsOf(file), 0);
+  const count = Math.min(
+    Math.max(1, maxLegs),
+    Math.max(1, Math.ceil((sum(files) * 1000) / LEG_BUDGET_MS)),
+  );
+  const shares = legShares(files, secondsOf, count);
+  return {
+    count,
+    shares,
+    longestMs: Math.max(...shares.map(share => sum(share) * 1000)),
+  };
+}
+
 /**
  * The default check's run. First the changed specs, at most the limit, in path
  * order. Then the owned specs, in path order. Then the dependents' specs, in
@@ -1027,6 +1082,12 @@ function main() {
   const ownedBy = (ownedByValue ?? '').split(',').filter(Boolean);
   const dependentsOfValue = flagValue(argv, '--dependents-of');
   const dependentsOf = (dependentsOfValue ?? '').split(',').filter(Boolean);
+  const countLegsValue = flagValue(argv, '--count-legs');
+  const legValue = flagValue(argv, '--leg');
+  const ofValue = flagValue(argv, '--of');
+  if ((countLegsValue != null || legValue != null) && changedOnlyFile != null) {
+    throw new Error('--count-legs and --leg split the opt-in run only');
+  }
   if (
     (ownedByValue != null ||
       changedFilesFile != null ||
@@ -1049,6 +1110,9 @@ function main() {
     changedFilesFile,
     ownedByValue,
     dependentsOfValue,
+    countLegsValue,
+    legValue,
+    ofValue,
   ]);
   // Outside CI, a run with no base compares with origin/main.
   const base =
@@ -1101,8 +1165,41 @@ function main() {
       workers: contractWorkers(),
     });
   })();
-  const selected = budgeted.run;
   const notRun = budgeted.notRun;
+  // The opt-in run splits into legs by recorded time. The count step plans
+  // them before any install; each leg then runs only its share.
+  const legs =
+    countLegsValue != null || legValue != null
+      ? planLegs(
+          budgeted.run.map(({file}) => file),
+          readDurations(root, policySha),
+          Number(countLegsValue ?? ofValue ?? 1),
+        )
+      : null;
+  if (countLegsValue != null) {
+    const leg = Number(legValue ?? 1);
+    const minutes = (legs.longestMs / 60000).toFixed(1);
+    console.log(
+      `Accessibility legs: ${legs.count} for ${budgeted.run.length} spec files (the longest leg's recorded time ${minutes} min).`,
+    );
+    if (legs.longestMs > LEG_BUDGET_MS) {
+      console.log(
+        `::warning title=Accessibility specs over ten minutes::${legs.count} legs still leave ${minutes} min of recorded time in one leg. The selection needs more legs.`,
+      );
+    }
+    if (process.env.GITHUB_OUTPUT) {
+      fs.appendFileSync(
+        process.env.GITHUB_OUTPUT,
+        `count=${legs.count}\nruns=${leg <= legs.count}\nleg=${leg}\n`,
+      );
+    }
+    return 0;
+  }
+  const legIndex = legValue != null ? Number(legValue) : 1;
+  const share = legs && new Set(legs.shares[legIndex - 1] ?? []);
+  const selected = share
+    ? budgeted.run.filter(({file}) => share.has(file))
+    : budgeted.run;
   const [audited] = auditedComponents(title);
   const auditConfigFile = '.github/a11y-audit-axe.json';
   const plan = planFor(
@@ -1135,7 +1232,9 @@ function main() {
     )}\n`,
   );
   console.log(
-    `PR accessibility specs: ${selected.length} of ${specs.length} discovered.`,
+    legs
+      ? `PR accessibility specs, leg ${legIndex} of ${legs.count}: ${selected.length} of the ${budgeted.run.length} selected (${specs.length} discovered).`
+      : `PR accessibility specs: ${selected.length} of ${specs.length} discovered.`,
   );
   for (const {file, reason} of selected) console.log(`  ${file}  (${reason})`);
   for (const {file, reason} of notRun) {
@@ -1151,7 +1250,9 @@ function main() {
 
   let status = 0;
   // A component audit's own axe pass, held until its open state is ready.
-  if (plan) {
+  // It runs once, on the first leg; every leg keeps the audit's environment
+  // for the audit specs in its share.
+  if (plan && legIndex === 1) {
     const axe = spawnSync(process.execPath, auditArgs(plan), {
       cwd: root,
       stdio: 'inherit',

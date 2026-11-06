@@ -423,7 +423,7 @@ describe('ci.yml pr-a11y browser specs', () => {
 
   it("runs the merge commit's runner against the PR head", () => {
     expect(run.if).toBe(
-      "(!cancelled()) && steps.scope.outputs.has_components == 'true'",
+      "(!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'",
     );
     // The merge commit the steps come from, not the PR's recorded base, which
     // can lag main and predate the runner.
@@ -441,12 +441,12 @@ describe('ci.yml pr-a11y browser specs', () => {
     ).toBe('node .github/scripts/a11y-pr-contracts.mjs');
   });
 
-  it('uploads every spec receipt in one head-bound artifact', () => {
+  it('uploads every spec receipt in one head-bound artifact per leg', () => {
     expect(upload.if).toBe(
-      "(!cancelled()) && steps.scope.outputs.has_components == 'true'",
+      "(!cancelled()) && steps.scope.outputs.has_components == 'true' && steps.legs.outputs.runs == 'true'",
     );
     expect(upload.with.name).toBe(
-      'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}',
+      'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}-${{ matrix.leg }}',
     );
     for (const dir of [
       'pr-a11y-evidence/',
