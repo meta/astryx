@@ -13,15 +13,17 @@
  *   carries only the gesture code its touch components import; two components
  *   that import the touch module share one copy per page; only the internal
  *   `internal/touch` entry reaches it, and no consumer doc or component
- *   `import()` does
- * @position Node test over source, so it needs no build
+ *   `import()` does; the names that entry gives Lab are not in the root
+ *   entry
+ * @position Node test over source, so it needs no build. Its build files
+ *   live under the repository's `node_modules/.cache`, never the system temp
+ *   directory, whose listing esbuild would read for every build
  */
 
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
-import os from 'node:os';
 import path from 'node:path';
-import {afterAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 
 const REPO = path.resolve(import.meta.dirname, '..');
 const CORE_SRC = path.join(REPO, 'packages/core/src');
@@ -31,7 +33,24 @@ const esbuild = require('esbuild');
 /** The gesture core the internal entry re-exports. */
 const PRIMITIVE_INPUT = /^packages\/core\/src\/gestures\//;
 
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-touch-module-'));
+/**
+ * Where the builds' entry files live: under the repository's
+ * `node_modules/.cache`, not the system temp directory. esbuild reads the
+ * listing of every directory above each file it bundles, and on a shared
+ * machine the temp directory can hold hundreds of thousands of entries, so
+ * each build there read that listing first. The run's folder is made in
+ * beforeAll, not when the module loads: Vitest skips both hooks when a run
+ * filters out every test here.
+ */
+const CACHE = path.join(
+  REPO,
+  'node_modules/.cache/astryx-touch-support-bundle',
+);
+let scratch = '';
+beforeAll(() => {
+  fs.mkdirSync(CACHE, {recursive: true});
+  scratch = fs.mkdtempSync(path.join(CACHE, 'run-'));
+});
 afterAll(() => {
   fs.rmSync(scratch, {recursive: true, force: true});
 });
@@ -42,7 +61,8 @@ afterAll(() => {
  */
 const BUILD_OPTIONS = {
   absWorkingDir: REPO,
-  outdir: path.join(scratch, 'out'),
+  // Never written (`write: false`): it only names the outputs.
+  outdir: path.join(CACHE, 'out'),
   bundle: true,
   minify: true,
   format: 'esm',
@@ -81,6 +101,54 @@ function outputsOf(entries) {
   );
 }
 
+/** The names a build of `entry` exports, read from esbuild's metafile. */
+function exportsOf(entry) {
+  const result = esbuild.buildSync({...BUILD_OPTIONS, entryPoints: [entry]});
+  return Object.values(result.metafile.outputs).flatMap(
+    output => output.exports ?? [],
+  );
+}
+
+/**
+ * What the internal entry gives Lab components, none of it public API. Lab's
+ * refresh pull reads the pan, its hook, the motion engine, its motion math and
+ * companion curves, the scroll view's spring and the motion-role parsers.
+ * Other Lab components read the UIKit gesture table, the touch presentation
+ * and its query, and an element's direction. Lab's NavigationStack reads the
+ * screen-edge pan, the spring solver, the motion resolver, UIKit's
+ * navigation table and its four navigation springs. It also reads the focus
+ * helpers that follow the last input.
+ */
+const LAB_ONLY_NAMES = [
+  'PanGestureRecognizer',
+  'useGestureRecognizer',
+  'createMotionEngine',
+  'cubicBezier',
+  'mapProgress',
+  'parseCssEasing',
+  'parseMotionRoleValue',
+  'rubberBand',
+  'rubberBandInverse',
+  'rubberBandSlope',
+  'scroll',
+  'isRtlElement',
+  'UIKIT_GESTURES',
+  'useTouchPresentation',
+  'TOUCH_QUERY',
+  'ScreenEdgePanGestureRecognizer',
+  'resolveMotion',
+  'solveSpring',
+  'toSpring',
+  'navigation',
+  'NAVIGATION_PUSH_SPRING',
+  'NAVIGATION_POP_SPRING',
+  'NAVIGATION_INTERACTIVE_POP_FINISH_SPRING',
+  'NAVIGATION_BAR_ELEMENTS_SPRING',
+  'focusForLastInput',
+  'isFocusLost',
+  'useInteractionModalityTracking',
+];
+
 /** The inputs matching `pattern` that put bytes in `bytes`. */
 function bytesOf(bytes, pattern = PRIMITIVE_INPUT) {
   return Object.entries(bytes).filter(
@@ -118,7 +186,54 @@ function filesUnder(dir, pattern) {
  * gives a component its gesture adds that component's import, and each import
  * that reaches it, with a comment naming the gesture.
  */
-const GESTURE_USERS = new Set([]);
+const GESTURE_USERS = new Set([
+  // AlertDialog: its actions' press, tracked across both for a finger and a
+  // pen under the touch presentation.
+  'AlertDialog',
+  // ButtonGroup: a finger's or a pen's press, tracked across its buttons
+  // under the touch presentation.
+  'ButtonGroup',
+  // Through AlertDialog: Tokenizer's bottom sheet confirms with an alert, and
+  // PowerSearch and Table's filtering render a Tokenizer. Both also reach
+  // TimeInput's wheels: PowerSearch's edit popover and Table's filtering.
+  'PowerSearch',
+  'Table',
+  'Tokenizer',
+  // Slider's thumb.
+  'Slider',
+  // Switch: its press tracking and its drag, for every pointer.
+  'Switch',
+  // SegmentedControl: its press tracking and its drag, for every pointer.
+  'SegmentedControl',
+  // DateTimeInput: through the SegmentedControl its touch field renders.
+  'DateTimeInput',
+  // useScrollLock's page hold, and the imports that reach it. The sheet
+  // wheels of DateInput, TimeInput and DateTimeInput also drag and tap
+  // through the gesture system's pan and tap (DateInput/PickerWheel.tsx).
+  'hooks: useScrollLock',
+  'AppShell',
+  'BottomSheet',
+  'CommandPalette',
+  'ContextMenu',
+  'DateInput',
+  'Dialog',
+  'Drawer',
+  'DropdownMenu',
+  'Layer',
+  'Lightbox',
+  'Markdown',
+  'MobileNav',
+  'MoreMenu',
+  'MultiSelector',
+  'Pagination',
+  'Popover',
+  'Selector',
+  'SideNav',
+  'TimeInput',
+  'TopNav',
+  // The public pan, which the root's createPanGesture shares.
+  'hooks: usePanGesture',
+]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
 const NEVER_GESTURE_USERS = ['Button', 'TextInput'];
@@ -299,6 +414,22 @@ describe('the touch module in bundles', () => {
     }
   });
 
+  it('is absent from a component that holds its layer (Layer/inputHold)', () => {
+    // A component in the root entry may hold its layer's input statically
+    // (a popover's presentation): the hold brings no gesture code with it.
+    const holder = entryWith(
+      'Holder.ts',
+      `import {holdInput} from ${JSON.stringify(
+        path.join(CORE_SRC, 'Layer/inputHold.ts'),
+      )};
+export const Holder = holdInput;
+`,
+    );
+    for (const bytes of outputsOf([holder])) {
+      expect(bytesOf(bytes)).toEqual([]);
+    }
+  });
+
   it('is one copy that two components importing it share', () => {
     const component = name =>
       entryWith(
@@ -321,6 +452,23 @@ export const ${name} = () => new GestureArena();
 });
 
 describe('the touch module internals', () => {
+  it('are built from files under the repository, not the system temp directory', () => {
+    expect(path.relative(REPO, scratch).split(path.sep)[0]).toBe(
+      'node_modules',
+    );
+  });
+
+  it('give Lab names that the public entry does not export', () => {
+    const internal = new Set(
+      exportsOf(path.join(CORE_SRC, 'internal/touch.ts')),
+    );
+    const root = new Set(exportsOf(path.join(CORE_SRC, 'index.ts')));
+    // The root build reads its exports: a public component is among them.
+    expect(root.has('Button')).toBe(true);
+    expect(LAB_ONLY_NAMES.filter(name => !internal.has(name))).toEqual([]);
+    expect(LAB_ONLY_NAMES.filter(name => root.has(name))).toEqual([]);
+  }, 120_000);
+
   it('have no entry in the exports map beside the internal touch entry', () => {
     const {exports} = JSON.parse(
       fs.readFileSync(path.join(REPO, 'packages/core/package.json'), 'utf8'),

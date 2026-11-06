@@ -165,7 +165,7 @@ export const RESIZE_HANDLE_BINDING_STATES = [
   },
   {
     id: 'bare-disabled',
-    summary: 'a disabled ResizeHandle: out of the Tab order and unmoving',
+    summary: 'a disabled ResizeHandle: in the Tab order and unmoving',
     storyId: story('bare-disabled'),
     component: 'ResizeHandle',
     label: 'Resize details pane',

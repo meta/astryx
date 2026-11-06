@@ -244,7 +244,7 @@ export function useKeyboardHint(
     [clearDismissTimeout, dismiss, dismissAfterMs, isEnabled, layer],
   );
 
-  // Cleanup on unmount
+  // Releases the dismiss timer and the layer anchor on unmount.
   useEffect(
     () => () => {
       clearDismissTimeout();

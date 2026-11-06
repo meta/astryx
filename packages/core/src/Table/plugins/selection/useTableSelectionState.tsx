@@ -19,6 +19,7 @@
  */
 
 import {useCallback, useMemo, useRef} from 'react';
+import {useIsomorphicLayoutEffect} from '../../../hooks/useIsomorphicLayoutEffect';
 import type {UseTableSelectionConfig} from './useTableSelection';
 
 // =============================================================================
@@ -152,10 +153,13 @@ export function useTableSelectionState<T extends Record<string, unknown>>(
 
   // Use refs to keep onSelectAll stable
   const frozenSelectedIDsRef = useRef(frozenSelectedIDs);
-  frozenSelectedIDsRef.current = frozenSelectedIDs;
-
   const allSelectableIDsRef = useRef(allSelectableIDs);
-  allSelectableIDsRef.current = allSelectableIDs;
+  // Syncs the select-all refs with the committed render. A render that React
+  // discards, as a suspended transition does, must not leave its rows behind.
+  useIsomorphicLayoutEffect(() => {
+    frozenSelectedIDsRef.current = frozenSelectedIDs;
+    allSelectableIDsRef.current = allSelectableIDs;
+  });
 
   const onSelectAll = useCallback(
     ({isAllSelected}: {isAllSelected: boolean}) => {

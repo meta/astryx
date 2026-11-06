@@ -69,9 +69,13 @@ describe('splitting test files by recorded time', () => {
     expect(read('.github/scripts/a11y-contract-shard.mjs')).toMatch(
       /import \{medianOf\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
     );
+    expect(read('.github/scripts/playwright-legs.mjs')).toMatch(
+      /import \{[^}]*costOf[^}]*splitByDuration[^}]*\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
+    );
     for (const file of [
       'scripts/vitest-shard-sequencer.mjs',
       '.github/scripts/a11y-contract-shard.mjs',
+      '.github/scripts/playwright-legs.mjs',
     ])
       expect(read(file), file).not.toMatch(/known\[Math\.floor/);
   });

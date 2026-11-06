@@ -110,6 +110,29 @@ const STRUCTURAL_VARS = new Set([
   // every render and read by the fill's transform. Runtime state, never
   // authored by a theme.
   '--_progress-bar-fill',
+  // ProgressBar's touch layer (ProgressBarTouch) writes these inline on every
+  // render: the touch move's duration and curve, the three-step return offset
+  // and the touch minimum. The duration and curve are the progress table's
+  // motion roles, which no theme sets. Runtime state, never authored by a
+  // theme.
+  '--_progress-bar-move',
+  '--_progress-bar-curve',
+  '--_progress-bar-flip',
+  '--_progress-bar-min',
+  // The reduced-motion pulse's duration, curve and floor, written inline from
+  // the progress table on the indeterminate fill. Runtime state, never
+  // authored by a theme.
+  '--_progress-bar-pulse',
+  '--_progress-bar-pulse-curve',
+  '--_progress-bar-pulse-floor',
+  // The room a layer has above the software keyboard. The layer runtime
+  // writes it on each open layer from the keyboard's measured height
+  // (Layer/useLayerKeyboardClearance.ts). Runtime geometry, never authored by
+  // a theme.
+  '--_layer-keyboard-max-block-size',
+  // Written beside it: `auto` while the keyboard caps the layer, so the
+  // surface scrolls from that commit. Runtime state, never authored by a theme.
+  '--_layer-keyboard-overflow',
 ]);
 
 /**
@@ -325,6 +348,13 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // properties a theme author sets on the component.
   '--_thumbnail-hit-inset',
   '--_input-clear-hit-inset',
+  '--_power-search-sheet-hit-inset',
+  // The border width a host draws where its touch hit layer reaches past,
+  // such as a divided ListItem's divider (0 on the last row).
+  // The ::after layer adds it to its offset, so the band starts past the
+  // border. It is the layer's geometry, not a property a theme author sets. A
+  // theme changes the divider through `--border-width`, which this follows.
+  '--_hit-border-bottom',
   // The interaction overlay's colour on the ::after layer of the cards:
   // written by the component's own hover and mouse `:active` arms, never a
   // value a theme author sets; the overlay colours themselves are the shared
@@ -335,7 +365,14 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // by whatever paints it. A theme sets `--color-overlay-pressed`, not this.
   '--_press-paint',
   '--_press-paint-image',
+  // A checkbox row's touch press image, which an indicator that paints its
+  // own press inherits. The row writes it from the press paint above.
+  '--_indicator-press-image',
+  // A CheckboxList row's own press paint, handed to its checkbox's box:
+  // written by the row's own press arms, never a value a theme author sets.
+  '--_checkbox-row-press-paint',
   '--_input-clear-hit-content',
+  '--_power-search-sheet-hit-content',
   // Placement and swipe lifecycle values are private Toast behavior. A theme
   // author controls the surface transform/opacity as a whole, not these values.
   '--_toast-slide-y',
@@ -343,6 +380,12 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--_toast-swipe-exit-y',
   '--_toast-swipe-opacity',
   '--_toast-swipe-scale',
+  '--_toast-start-opacity',
+  '--_toast-start-slide',
+  // Set by each ChatMessage article from its own content and read as its
+  // avatar's top margin, so the avatar lines up with a name row. Content
+  // state, not a value a theme author sets.
+  '--_chat-avatar-offset',
   // Indentation and row-spacing metrics: --tree-list-indent is the authorable
   // step, --_tree-indent the per-row distance TreeListItem computes from it.
   // --tree-list-row-gap is applied as half a padding-block on each row wrapper,

@@ -4,7 +4,8 @@
 
 /**
  * @file useTableRowExpansion.tsx
- * @input React, StyleX, Icon, Table types, table context (density), i18n
+ * @input React, StyleX, Icon, the theme's `table-row-expand` icon slot, Table
+ *   types, table context (density), i18n
  *   (useComponentTranslator)
  * @output Exports useTableRowExpansion hook + config type
  * @position Row-expansion plugin (detail panel); consumed by Table via plugins prop
@@ -39,6 +40,8 @@ import {tableRowMarker} from '../../table.stylex';
 import {panelDividerFor} from '../../rowDivider';
 import {useTheme, useThemeName} from '../../../theme/useTheme';
 import {Icon} from '../../../Icon';
+import {ComponentIcon} from '../../../Icon/ComponentIcon';
+import {iconBoxSizeStyles} from '../../../Icon/IconSize.stylex';
 import {VisuallyHidden} from '../../../VisuallyHidden';
 import {resolveContextActions} from '../../tableContextMenu';
 import {useTableContext} from '../../useTableCellStyles';
@@ -102,6 +105,17 @@ export interface UseTableRowExpansionConfig<T extends Record<string, unknown>> {
    * it is expanded. Receives the row's item.
    */
   renderExpanded: (item: T) => ReactNode;
+  /**
+   * Derive a human-readable row identity for the expansion control's accessible
+   * name. The plugin combines it with localized expand/collapse wording. Blank
+   * labels fall back to the generic row label.
+   *
+   * @example
+   * ```
+   * getRowLabel: item => item.name
+   * ```
+   */
+  getRowLabel?: (item: T) => string;
   /**
    * Control which rows are expandable. Non-expandable rows show no chevron, no
    * context-menu action, and never render a panel. @default all rows expandable
@@ -204,6 +218,21 @@ const expansionStyles = stylex.create({
     ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
       color: colorVars['--color-icon-primary'],
     },
+  },
+  // The button takes its baseline from this fixed box. A theme's glyph size
+  // or a hidden glyph then keeps the row height. The box is the toggle's
+  // first child, which the glide gives its spring, so it carries the turn.
+  glyphBox: {
+    display: 'inline-block',
+    position: 'relative',
+    flexShrink: 0,
+  },
+  glyphCenter: {
+    position: 'absolute',
+    inset: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   chevron: {
     transitionProperty: 'transform',
@@ -345,13 +374,22 @@ const chevronOffsetStyles = stylex.create({
 // =============================================================================
 
 function ExpansionChevron({
+  rowLabel,
   isExpanded,
   onToggle,
 }: {
+  rowLabel?: string;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
   const t = useComponentTranslator();
+  const ariaLabel = rowLabel
+    ? isExpanded
+      ? t('@astryx.tableRowExpansion.collapseRowNamed', {label: rowLabel})
+      : t('@astryx.tableRowExpansion.expandRowNamed', {label: rowLabel})
+    : isExpanded
+      ? t('@astryx.tableRowExpansion.collapseRow')
+      : t('@astryx.tableRowExpansion.expandRow');
   const ctx = useTableContext();
   return (
     <button
@@ -365,22 +403,25 @@ function ExpansionChevron({
         e.stopPropagation();
         onToggle();
       }}
-      aria-label={
-        isExpanded
-          ? t('@astryx.tableRowExpansion.collapseRow')
-          : t('@astryx.tableRowExpansion.expandRow')
-      }
+      aria-label={ariaLabel}
       aria-expanded={isExpanded}>
-      <Icon
-        icon="chevronRight"
-        size="xsm"
-        xstyle={[
+      <span
+        {...stylex.props(
+          expansionStyles.glyphBox,
+          iconBoxSizeStyles.xsm,
           expansionStyles.chevron,
           isExpanded
             ? expansionStyles.chevronExpanded
             : expansionStyles.chevronCollapsed,
-        ]}
-      />
+        )}>
+        <span {...stylex.props(expansionStyles.glyphCenter)}>
+          <ComponentIcon
+            slot="table-row-expand"
+            state={{expanded: isExpanded}}
+            fallback={{icon: 'chevronRight', size: 'xsm'}}
+          />
+        </span>
+      </span>
     </button>
   );
 }
@@ -439,6 +480,8 @@ function PanelDividerModeWatch({
   const {mode} = useTheme();
   const themeName = useThemeName();
   const lastRef = useRef({mode, themeName});
+  // Syncs the panel dividers with the computed theme CSS after a color mode or
+  // theme change.
   useLayoutEffect(() => {
     const last = lastRef.current;
     if (last.mode === mode && last.themeName === themeName) {
@@ -582,6 +625,7 @@ function ExpansionSnapshot({
  *       return next;
  *     }),
  *   getRowKey: item => item.id,
+ *   getRowLabel: item => item.name,
  *   renderExpanded: item => <OrderDetails order={item} />,
  * });
  * <Table data={data} columns={columns} idKey="id" plugins={{expansion}} />;
@@ -595,6 +639,7 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
     onToggle,
     getRowKey,
     renderExpanded,
+    getRowLabel,
     getIsItemExpandable,
     hasRowClickExpansion,
     panelVariant = 'transparent',
@@ -703,6 +748,8 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
       }
     }
   }, []);
+  // Syncs the chevron transitions with the `animatedLayout` handle. Without a
+  // handle, the chevrons use the theme's turn.
   useLayoutEffect(() => {
     if (animatedLayout == null) {
       resetChevrons();
@@ -837,15 +884,17 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
           return null;
         }
         const key = getRowKey(item);
+        const isExpanded = expandedKeys.has(key);
         return (
           <ExpansionChevron
-            isExpanded={expandedKeys.has(key)}
+            rowLabel={getRowLabel?.(item)?.trim() || undefined}
+            isExpanded={isExpanded}
             onToggle={() => onToggle(key)}
           />
         );
       },
     }),
-    [expandedKeys, onToggle, getRowKey, getIsItemExpandable, t],
+    [expandedKeys, onToggle, getRowKey, getIsItemExpandable, getRowLabel, t],
   );
 
   return useMemo(

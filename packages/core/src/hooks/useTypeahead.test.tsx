@@ -420,6 +420,9 @@ describe('useTypeahead', () => {
         expect(reach(['Ana', 'Đào'], 'd')).toBe(1);
         expect(reach(['Ana', 'Łódź'], 'l')).toBe(1);
         expect(reach(['Ana', 'Ŧara'], 't')).toBe(1);
+        expect(reach(['Ana', 'Øystein'], 'o')).toBe(1);
+        expect(reach(['Ana', 'Ħamrun'], 'h')).toBe(1);
+        expect(reach(['Ana', 'Ƀorg'], 'b')).toBe(1);
         expect(reach(['Ana', 'Isparta'], 'ı')).toBe(1);
         expect(reach(['Ana', 'İzmir'], 'i')).toBe(1);
         expect(reach(['Dung', 'Đào'], 'đ')).toBe(1);

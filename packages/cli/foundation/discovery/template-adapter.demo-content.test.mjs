@@ -169,6 +169,88 @@ describe('replaceDemoContent', () => {
     });
   });
 
+  it('removes a wrapper, keeping the element it wraps at the indentation it would have without it', () => {
+    const source =
+      CARD +
+      `import {DemoHint, PlayingCardContents} from '${DEMO_CONTENT_MODULE}';\n` +
+      'export default function Example() {\n' +
+      '  return (\n' +
+      '    <DemoHint text="Press the card.">\n' +
+      '      <Card\n' +
+      '        width={120}>\n' +
+      '        <PlayingCardContents rank="Q" suit="hearts" />\n' +
+      '      </Card>\n' +
+      '    </DemoHint>\n' +
+      '  );\n' +
+      '}\n';
+    expect(replaceDemoContent(source)).toEqual({
+      source:
+        CARD +
+        "import {Text} from '@astryxdesign/core/Text';\n" +
+        'export default function Example() {\n' +
+        '  return (\n' +
+        '    <Card\n' +
+        '      width={120}>\n' +
+        '      <Text>Card content</Text>\n' +
+        '    </Card>\n' +
+        '  );\n' +
+        '}\n',
+      demoContentReplaced: 1,
+    });
+  });
+
+  it('removes a wrapper with no placeholder and no Text import when it wraps no demo element', () => {
+    const source =
+      CARD +
+      `import {DemoHint} from '${DEMO_CONTENT_MODULE}';\n` +
+      'export const a = <DemoHint text="Hover it."><Card /></DemoHint>;\n';
+    expect(replaceDemoContent(source)).toEqual({
+      source: CARD + 'export const a = <Card />;\n',
+      demoContentReplaced: 0,
+    });
+  });
+
+  it('keeps the whitespace of a multiline string inside the element a wrapper holds', () => {
+    const source =
+      `import {DemoHint} from '${DEMO_CONTENT_MODULE}';\n` +
+      'const a = (\n' +
+      '  <DemoHint text="Read it.">\n' +
+      '    <pre>\n' +
+      '      {`one\n' +
+      '    two`}\n' +
+      '    </pre>\n' +
+      '  </DemoHint>\n' +
+      ');\n';
+    expect(replaceDemoContent(source).source).toBe(
+      'const a = (\n' +
+        '  <pre>\n' +
+        '    {`one\n' +
+        '    two`}\n' +
+        '  </pre>\n' +
+        ');\n',
+    );
+  });
+
+  it.each([
+    [
+      'a wrapper with two elements',
+      `import {DemoHint} from '${DEMO_CONTENT_MODULE}';\nconst a = <DemoHint text="x"><b /><i /></DemoHint>;\n`,
+      /has children other than one element/u,
+    ],
+    [
+      'a wrapper with text beside its element',
+      `import {DemoHint} from '${DEMO_CONTENT_MODULE}';\nconst a = <DemoHint text="x">Try it <b /></DemoHint>;\n`,
+      /has children other than one element/u,
+    ],
+    [
+      'a wrapper prop whose variable nothing else reads',
+      `import {DemoHint} from '${DEMO_CONTENT_MODULE}';\nconst hint = 'Press it.';\nconst a = <DemoHint text={hint}><b /></DemoHint>;\n`,
+      /<DemoHint> reads hint, and nothing else in the file reads it/u,
+    ],
+  ])('fails closed on %s', (_label, source, reason) => {
+    expect(() => replaceDemoContent(source)).toThrow(reason);
+  });
+
   it.each([
     [
       'a spread prop',
@@ -281,6 +363,23 @@ describe('catalog blocks', () => {
 
   it('finds the catalog', () => {
     expect(files.length).toBeGreaterThan(100);
+  });
+
+  it('copies the usePressFeedback block as its Card with one Text placeholder, no hint and no branch on the face', () => {
+    const file = files.find(f => f.endsWith('/usePressFeedbackHookUsage.tsx'));
+    expect(file).toBeDefined();
+    const original = fs.readFileSync(/** @type {string} */ (file), 'utf8');
+    const hint = /<DemoHint text="([^"]+)">/u.exec(original)?.[1];
+    expect(hint).toBeDefined();
+    const {source, demoContentReplaced} = replaceTemplateDemos(original);
+    expect(demoContentReplaced).toBe(1);
+    expect(source).toContain('  return (\n    <Card\n      {...pressable}');
+    expect(source).toContain(
+      '      }}>\n      <Text>Card content</Text>\n    </Card>\n  );',
+    );
+    expect(source).not.toContain('DemoHint');
+    expect(source).not.toContain(/** @type {string} */ (hint));
+    expect(source).not.toMatch(/\?\s*\(/u);
   });
 
   it('leaves no demo-content reference in any block as a copy writes it', () => {

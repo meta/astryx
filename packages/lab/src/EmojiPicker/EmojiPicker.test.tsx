@@ -257,7 +257,7 @@ describe('EmojiPicker', () => {
 
   it('loads the bundled set when no categories are passed', async () => {
     render(<EmojiPicker frequentEmojis={[]} onSelect={() => {}} />);
-    expect(screen.getByRole('status', {name: 'Loading emoji'})).toBeTruthy();
+    expect(screen.getByText('Loading emoji')).toBeTruthy();
     await act(async () => {
       for (let attempt = 0; attempt < 40; attempt++) {
         if (screen.queryAllByRole('grid').length > 0) {

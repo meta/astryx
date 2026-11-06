@@ -824,7 +824,9 @@ export function Avatar({
           </div>
         )}
       </div>
-      {status && (
+      {/* The status slot renders for a truthy value only. A falsy one, 0
+          included, renders nothing, not a stray "0". */}
+      {Boolean(status) && (
         <div
           {...stylex.props(
             styles.status,

@@ -4,8 +4,9 @@
 
 /**
  * @file TextInput.tsx
- * @input Uses React, useId, ChangeEvent, Field, Icon, InputGroupContext
- * @output Exports TextInput component, TextInputProps
+ * @input Uses React, useId, ChangeEvent, Field, Icon, InputGroupContext,
+ *   textEntryTraits (the touch-keyboard trait props)
+ * @output Exports TextInput component, TextInputProps, TextInputType
  * @position Core implementation; consumed by index.ts, tested by TextInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -34,21 +35,27 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {Field} from '../Field/Field';
+import {InputClearButton} from '../Field/InputClearButton';
 import {
-  Field,
-  InputClearButton,
-  type InputStatus,
   inputWrapperStyles,
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-} from '../Field';
-import {renderIconSlot, type IconType} from '../Icon';
+} from '../Field/inputStyles.stylex';
+import type {InputStatus} from '../Field/types';
+import {renderIconSlot, type IconType} from '../Icon/Icon';
 import {isRenderable} from '../utils/isRenderable';
-import {Spinner} from '../Spinner';
-import {useTooltip} from '../Tooltip';
-import {VisuallyHidden} from '../VisuallyHidden';
-import {getInputARIA, isImeKeyEvent} from '../utils';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
+import {Spinner} from '../Spinner/Spinner';
+import {useTooltip} from '../Tooltip/useTooltip';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
+import {getInputARIA} from '../utils/inputAria';
+import {isImeKeyEvent} from '../utils/ime';
+import {
+  textEntryTraitAttributes,
+  type TextEntryTraitProps,
+} from '../Field/textEntryTraits';
 import {joinAriaIDs} from '../utils/inputAria';
 
 const styles = stylex.create({
@@ -104,7 +111,7 @@ export type {
   InputStatus as TextInputStatus,
   InputStatusType as TextInputStatusType,
 } from '../Field';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
@@ -130,16 +137,24 @@ import {
 import english from '../i18n/generated-english/TextInput/TextInput.generated';
 
 registerEnglishFallback(english);
-export type TextInputType = 'text' | 'password' | 'email';
+/**
+ * The HTML input type. Beyond their meaning, `email`, `tel`, `url` and
+ * `password` choose a touch keyboard (email, phone pad, URL) and its
+ * capitalization; `search` makes the field a search box.
+ */
+export type TextInputType =
+  'text' | 'password' | 'email' | 'search' | 'tel' | 'url';
 
-export interface TextInputProps extends Omit<
-  FieldInputBaseProps,
-  'onChange' | 'defaultValue'
-> {
+export interface TextInputProps
+  extends
+    Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>,
+    TextEntryTraitProps {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLInputElement>;
   /**
-   * The HTML input type.
+   * The HTML input type. `email`, `tel` and `url` also bring up the matching
+   * touch keyboard (email, phone pad, URL); `search` makes the field a search
+   * box (pair it with `enterKeyHint="search"` for a Search key).
    * @default 'text'
    */
   type?: TextInputType;
@@ -289,6 +304,11 @@ export interface TextInputProps extends Omit<
    * session-scoped field that must not reuse a prior value).
    */
   autoComplete?: React.InputHTMLAttributes<HTMLInputElement>['autoComplete'];
+  /**
+   * Whether misspelled words are underlined (the native `spellcheck`).
+   * Unset, the browser decides.
+   */
+  hasSpellCheck?: boolean;
 }
 
 /**
@@ -325,6 +345,11 @@ export function TextInput({
   htmlName,
   onEnter,
   onKeyDown,
+  enterKeyHint,
+  inputMode,
+  autoCapitalize,
+  hasAutoCorrect,
+  hasSpellCheck,
   width,
   containerXstyle,
   containerClassName,
@@ -350,13 +375,7 @@ export function TextInput({
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   // A disabled field keeps its tab stop but, like a natively disabled one,
   // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
-  const fieldProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const fieldProps = withholdCallerHandlers(rest, isDisabled);
   const size = useSize(sizeProp, 'md');
 
   const generatedID = useId();
@@ -506,6 +525,14 @@ export function TextInput({
         id={id}
         name={isDisabled ? undefined : htmlName}
         type={type}
+        {...textEntryTraitAttributes({
+          enterKeyHint,
+          inputMode,
+          autoCapitalize,
+          hasAutoCorrect,
+        })}
+        // Only when set, so an untyped `spellCheck` passed through still applies.
+        {...(hasSpellCheck != null ? {spellCheck: hasSpellCheck} : {})}
         value={optimisticValue}
         onChange={handleChange}
         onKeyDown={
