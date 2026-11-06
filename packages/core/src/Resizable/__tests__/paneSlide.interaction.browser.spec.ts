@@ -744,6 +744,61 @@ test('past the maximum the edge follows with resistance, and springs back after 
   ).toHaveAttribute('aria-valuenow', '320');
 });
 
+test('a spring-back past a limit lays out no frame: the edge glides back over the held pane', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const at = await pressHandle(page);
+  await page.mouse.move(at.x + 260, at.y, {steps: 6});
+  // Each frame from here on: the pane's laid-out width and the handle's
+  // drawn middle.
+  await page.evaluate(() => {
+    const pane = document.querySelector<HTMLElement>(
+      '[data-testid="sliding-panel"]',
+    );
+    const handle = document.querySelector(
+      '[role="separator"][aria-label="Resize panel"]',
+    );
+    const trace: {laidOut: number; drawn: number}[] = [];
+    (window as unknown as {springTrace: typeof trace}).springTrace = trace;
+    const startedAt = performance.now();
+    const step = () => {
+      if (pane == null || handle == null) {
+        return;
+      }
+      const box = handle.getBoundingClientRect();
+      trace.push({laidOut: pane.offsetWidth, drawn: box.x + box.width / 2});
+      if (performance.now() - startedAt < 1200) {
+        requestAnimationFrame(step);
+      }
+    };
+    requestAnimationFrame(step);
+  });
+  await page.mouse.up();
+  await page.waitForTimeout(1300);
+  const trace = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          springTrace: {laidOut: number; drawn: number}[];
+        }
+      ).springTrace,
+  );
+  // The pane keeps the width it was pulled to until it takes the maximum,
+  // once: no frame in between lays the row out.
+  const widths = [...new Set(trace.map(frame => frame.laidOut))];
+  expect(widths.length).toBeLessThanOrEqual(2);
+  expect(widths.at(-1)).toBe(320);
+  // The edge still passes through the places in between.
+  const first = trace[0]?.drawn ?? 0;
+  const last = trace.at(-1)?.drawn ?? 0;
+  const between = trace.filter(
+    frame => frame.drawn < first - 1 && frame.drawn > last + 1,
+  );
+  expect(between.length).toBeGreaterThanOrEqual(3);
+});
+
 test('below the minimum the pane resists, and a slow lift above the threshold springs it back to the minimum', async ({
   page,
 }) => {
