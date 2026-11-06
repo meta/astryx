@@ -3852,6 +3852,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-snap-paging-onboarding-pages",
+      "path": "examples/use-snap-paging/onboarding-pages",
+      "aliases": []
+    },
+    {
       "name": "example-use-streaming-text-streaming-response",
       "path": "examples/use-streaming-text/streaming-response",
       "aliases": []
@@ -4199,6 +4204,11 @@
     {
       "name": "hook-use-scrollable-area",
       "path": "hooks/use-scrollable-area",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-snap-paging",
+      "path": "hooks/use-snap-paging",
       "aliases": []
     },
     {
