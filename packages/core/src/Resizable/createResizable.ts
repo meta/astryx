@@ -46,14 +46,18 @@ import {
   type ResizeGestureState,
 } from './resizeGesture';
 import {
+  createOvershootDrawing,
   createPaneReveal,
   handOverPane,
+  type OvershootDrawing,
   type PaneListener,
   type RegionPaneSlot,
   type ResizablePane,
   slideNextOnRelease,
 } from './resizablePane';
 import {separatorAttributes} from './separatorAttributes';
+import {resolveMotion} from '../motion/resolveMotion';
+import {springs} from '../motion/uikit/springs';
 import type {ResizableSize} from './utils';
 
 // The English for the two messages it names, and nothing more of the catalog.
@@ -178,6 +182,9 @@ function readWindowExtent(direction: ResizableDirection): number | null {
 
 /** Starts as warned: the factory warns, and this first-render read does not. */
 const QUIET = {current: true};
+
+/** How far a pull past a size bound can move a pane's edge, in px. */
+const RUBBER_BAND_TRAVEL_PX = 8;
 
 /**
  * The state a region with `options` starts in, before its handle exists: the
@@ -446,9 +453,10 @@ export function createResizableAs(
   let pointerSize = 0;
   // The open size a drag started from, which a close on its lift keeps.
   let sizeBeforeDrag: number | null = null;
-  // Past a bound the shown size runs past the region's by this much, which
-  // springs back to 0 after the lift.
+  // Past a bound the pane's edge is drawn this far past it, with no layout
+  // change. It springs back to 0 after the lift.
   let overshoot = 0;
+  let drawing: OvershootDrawing | null = null;
   // A spring-back the pane's edge is playing: what it started from, when, and
   // the share of it still to go by ms since then.
   let springBack: {
@@ -456,8 +464,6 @@ export function createResizableAs(
     startedAt: number;
     remaining: (elapsedMs: number) => number;
   } | null = null;
-  // The commit that lands a spring-back plays it rather than landing it.
-  let isSpringingBack = false;
 
   let initialDefault: {px: number; isFinal: boolean} | null = null;
   let chosenSize: number | null | undefined;
@@ -696,7 +702,7 @@ export function createResizableAs(
     }
     persist();
     const reported = {
-      size: derived.isCollapsed ? 0 : derived.size + overshoot,
+      size: derived.isCollapsed ? 0 : derived.size,
       isCollapsed: derived.isCollapsed,
     };
     if (notified != null) {
@@ -715,7 +721,7 @@ export function createResizableAs(
             paneReveal.land();
           }
         }
-      } else if (notified.size !== reported.size && !isSpringingBack) {
+      } else if (notified.size !== reported.size) {
         // A resize that neither collapses nor opens lands a running motion.
         paneReveal.land();
       }
@@ -799,6 +805,8 @@ export function createResizableAs(
     paneReveal.land();
     pendingFlip = null;
     expectedFlip = null;
+    drawing?.clear();
+    drawing = next == null ? null : createOvershootDrawing(next);
     pane = handOverPane(pane, next, paneListener, derived.isCollapsed, handle);
   }
 
@@ -954,6 +962,8 @@ export function createResizableAs(
       const shown =
         springBack == null ? overshoot : springBackShown(springBack);
       springBack = null;
+      overshoot = shown;
+      drawing?.draw(shown);
       dragStartSize =
         (derived.isCollapsed ? 0 : derived.size) +
         rubberBandInverse(shown, rubberDimension());
@@ -978,6 +988,7 @@ export function createResizableAs(
       // Only a pane a LayoutPanel lends shows the rubber band. A panel at the
       // hook's size alone stops at the limit.
       overshoot = pane == null ? 0 : overshootPast(raw);
+      drawing?.draw(overshoot);
       // Only a pointer reopens without a reveal; a key's step plays one.
       isPointerReopening = reopens && regionSlot?.isPointerDragging() === true;
       commit();
@@ -1012,9 +1023,9 @@ export function createResizableAs(
     expand,
   };
 
-  /** The extent a pull past a bound resists over: the region's basis. */
+  /** How far a pull past a bound can move the edge: the band's extent. */
   function rubberDimension(): number {
-    return gestureBasis ?? readLiveBasis();
+    return RUBBER_BAND_TRAVEL_PX;
   }
 
   /** How far the shown size runs past the bound `raw` is beyond. */
@@ -1024,49 +1035,45 @@ export function createResizableAs(
       return 0;
     }
     const shown = rubberBandClamp(raw, min, max, rubberDimension());
-    // Below the minimum the pane shrinks toward 0, never past it.
+    // Below the minimum the drawn edge stops at 0, never past it.
     return Math.max(shown, 0) - (raw > max ? max : min);
   }
 
   /**
-   * The shown size springs back to the bound in one commit. The pane's edge
-   * glides there on the settle spring from the release velocity, on the
-   * shared layout glide, so no frame lays the row out.
+   * The drawn edge springs back to the bound on the settle spring from the
+   * release velocity, on the compositor. The size never left the bound, so
+   * nothing is laid out.
    */
   function settleOvershoot(velocity: number): void {
     const from = overshoot;
     springBack = null;
-    if (from === 0) {
-      return;
-    }
     overshoot = 0;
-    const current = pane;
-    const row = current?.element.parentElement;
-    const view = current?.element.ownerDocument.defaultView;
-    if (current == null || row == null || view == null) {
-      commit();
+    if (from === 0 || drawing == null || pane == null) {
+      drawing?.clear();
       return;
     }
-    // The shown edge moved at the pointer's speed times the band's slope.
+    const element = pane.element;
+    const view = element.ownerDocument.defaultView;
+    if (
+      view == null ||
+      view.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
+    ) {
+      drawing.clear();
+      return;
+    }
+    // The drawn edge moved at the pointer's speed times the band's slope.
     const dimension = rubberDimension();
     const slope = rubberBandSlope(
       rubberBandInverse(from, dimension),
       dimension,
     );
-    paneReveal.measure(current, current.contentFacingEdge());
-    const remaining = slideNextOnRelease(
-      row,
+    const remaining = drawing.springBack(
+      resolveMotion(element, springs.settle),
       -Math.sign(from) * velocity * slope,
-      Math.abs(from),
     );
-    const isReduced =
-      view.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
-    if (remaining != null && !isReduced) {
+    if (remaining != null) {
       springBack = {from, startedAt: view.performance.now(), remaining};
     }
-    isSpringingBack = true;
-    commit();
-    isSpringingBack = false;
   }
 
   /** How far past the bound a playing spring-back shows the edge now. */
@@ -1085,6 +1092,7 @@ export function createResizableAs(
     springBack = null;
     const shown = derived.size + overshoot;
     overshoot = 0;
+    drawing?.clear();
     // An open restores the size the drag started from.
     if (sizeBeforeDrag != null) {
       chosenSize = sizeBeforeDrag;
@@ -1228,6 +1236,8 @@ export function createResizableAs(
       endGesture();
       springBack = null;
       overshoot = 0;
+      drawing?.clear();
+      drawing = null;
       isDestroyed = true;
       stopFollowingRegion?.();
       stopFollowingRegion = null;
