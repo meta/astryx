@@ -24,7 +24,7 @@ function renderList(
   return render(
     <ChatVirtualizer<Row>
       data={data}
-      keyExtractor={m => String(m.id)}
+      getRowKey={m => String(m.id)}
       renderItem={({item}) => <span>{item.text}</span>}
       estimatedItemSize={100}
       {...extra}
@@ -53,7 +53,7 @@ describe('ChatVirtualizer', () => {
       // Deliberately returns a number at runtime; the component must coerce
       // so the RO pipeline (which reads dataset.pkey strings) and the size
       // cache stay keyed consistently.
-      keyExtractor: (m: Row) => m.id as unknown as string,
+      getRowKey: (m: Row) => m.id as unknown as string,
     });
     const first = container.querySelector('[data-pkey]');
     expect(first?.getAttribute('data-pkey')).toBe('0');
@@ -98,7 +98,7 @@ describe('ChatVirtualizer', () => {
     const list = (data: Row[]) => (
       <ChatVirtualizer<Row>
         data={data}
-        keyExtractor={m => String(m.id)}
+        getRowKey={m => String(m.id)}
         renderItem={({item}) => <Probe item={item} />}
         estimatedItemSize={100}
       />
@@ -224,7 +224,7 @@ describe('ChatVirtualizer', () => {
   const attachedTo = (data: Row[], el: HTMLElement) => (
     <ChatVirtualizer<Row>
       data={data}
-      keyExtractor={m => String(m.id)}
+      getRowKey={m => String(m.id)}
       renderItem={({item}) => <span>{item.text}</span>}
       estimatedItemSize={100}
       scrollElement={el}
@@ -377,7 +377,7 @@ describe('ChatVirtualizer', () => {
     rerender(
       <ChatVirtualizer<Row>
         data={[...rows(3), {id: 3, text: 'message 3'}]}
-        keyExtractor={m => String(m.id)}
+        getRowKey={m => String(m.id)}
         renderItem={({item}) => <span>{item.text}</span>}
         estimatedItemSize={100}
       />,
@@ -397,7 +397,7 @@ describe('ChatVirtualizer', () => {
   const listOf = (data: Row[]) => (
     <ChatVirtualizer<Row>
       data={data}
-      keyExtractor={m => String(m.id)}
+      getRowKey={m => String(m.id)}
       renderItem={({item}) => <span>{item.text}</span>}
       estimatedItemSize={100}
     />
@@ -442,7 +442,7 @@ describe('ChatVirtualizer', () => {
     const list = (scrollElement?: HTMLElement) => (
       <ChatVirtualizer<Row>
         data={rows(50)}
-        keyExtractor={m => String(m.id)}
+        getRowKey={m => String(m.id)}
         renderItem={({item}) => <span>{item.text}</span>}
         estimatedItemSize={100}
         scrollElement={scrollElement}
@@ -474,7 +474,7 @@ describe('ChatVirtualizer', () => {
       rerender(
         <ChatVirtualizer<Row>
           data={[]}
-          keyExtractor={m => String(m.id)}
+          getRowKey={m => String(m.id)}
           renderItem={({item}) => <span>{item.text}</span>}
           estimatedItemSize={100}
           scrollElement={el}
@@ -502,7 +502,7 @@ describe('ChatVirtualizer', () => {
     rerender(
       <ChatVirtualizer<Row>
         data={rows(3)}
-        keyExtractor={m => String(m.id)}
+        getRowKey={m => String(m.id)}
         renderItem={({item}) => <span>{item.text}</span>}
         estimatedItemSize={100}
         label="Support thread"
@@ -516,7 +516,7 @@ describe('ChatVirtualizer', () => {
     const {container} = render(
       <ChatVirtualizer<Row>
         data={rows(60)}
-        keyExtractor={m => String(m.id)}
+        getRowKey={m => String(m.id)}
         renderItem={({item}) => <button type="button">{item.text}</button>}
         estimatedItemSize={100}
         scrollElement={el}
@@ -531,8 +531,19 @@ describe('ChatVirtualizer', () => {
     expect(button.isConnected).toBe(true);
     expect(document.activeElement).toBe(button);
     expect(screen.queryByRole('button', {name: 'message 50'})).toBeNull();
+    // A blur with no next target while the row still holds focus keeps it.
+    act(() => {
+      button.dispatchEvent(new FocusEvent('focusout', {bubbles: true}));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(button.isConnected).toBe(true);
     // Focus leaves the list: the row is no longer kept.
     act(() => button.blur());
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(button.isConnected).toBe(false);
     expect(container.querySelectorAll('[data-pkey]').length).toBeGreaterThan(0);
     el.remove();

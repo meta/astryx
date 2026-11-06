@@ -19,7 +19,7 @@ export const docs = {
       required: true,
     },
     {
-      name: 'keyExtractor',
+      name: 'getRowKey',
       type: '(item: T, index: number) => string',
       description:
         'Stable identity per row, coerced with String(). The size cache and the running size averages are keyed by it, so deriving a key from the index discards every measurement whenever the list shifts.',
@@ -113,7 +113,7 @@ export const docsZh = {
     '面向长会话的窗口化消息列表：只渲染视口附近的行，其余用两个占位元素表示，因此上千条消息的线程只消耗一个视口的 DOM。行保持在正常文档流中。手指滚动列表期间，位置修正写入占位高度而非跳写 scrollTop，所以手指下的内容不会移动；该次滚动结束后修正落定。触摸手势之外，列表直接写入 scrollTop。默认跟随最新消息，用户滚动落在距底部 endThreshold 以内时重新接管跟随。可自建滚动容器，也可嵌入调用方已有的容器（见 scrollElement）。',
   propDescriptions: {
     data: '要渲染的行，按时间正序。变更通过引用比较检测，所以请替换数组而不要原地修改。',
-    keyExtractor:
+    getRowKey:
       '每行的稳定标识（内部用 String() 转换）。尺寸缓存与运行时均值都以它为键，用下标派生会在列表位移时丢弃全部测量结果。',
     renderItem:
       '渲染单行。行间距必须放在返回内容内部（padding）——容器的 gap 和 margin 测量不到，会让几何每行漂移一个间距。',
@@ -146,7 +146,7 @@ export const docsDense = {
     'windowed msg list; rows near viewport + 2 spacers => viewport-sized DOM for 1000s of msgs; rows in document flow; during a finger scroll corrections go to spacer height not scrollTop (nothing moves under the finger, settled when the scroll ends), otherwise scrollTop; follows newest by default, re-engages within endThreshold of bottom; own scroller or attach to caller (scrollElement)',
   propDescriptions: {
     data: 'rows oldest-first; REFERENCE change detection — replace, never mutate',
-    keyExtractor:
+    getRowKey:
       'stable id per row; keys the size cache + running averages — never index-derived',
     renderItem:
       'renders one row; spacing MUST be padding inside the row, not container gap/margin',

@@ -116,7 +116,7 @@ export interface ChatVirtualizerProps<T> {
    * Never derive keys from indices: the size cache and the running size
    * averages are keyed by identity.
    */
-  keyExtractor: (item: T, index: number) => string;
+  getRowKey: (item: T, index: number) => string;
   renderItem: (info: {item: T; index: number}) => React.ReactNode;
   /**
    * Static estimate (px) for unmeasured rows, or a function — a function is
@@ -220,7 +220,7 @@ export function ChatVirtualizer<T>(
 ): React.ReactNode {
   const {
     data,
-    keyExtractor,
+    getRowKey,
     renderItem,
     estimatedItemSize = 120,
     measureMode = 'ro',
@@ -514,7 +514,7 @@ export function ChatVirtualizer<T>(
       // copy under the number — and every RO re-measure would feed the
       // averages as a fresh sample. Coercing at both derivation points keeps
       // every internal map keyed consistently.
-      keys[i] = String(keyExtractor(d[i], i));
+      keys[i] = String(getRowKey(d[i], i));
       index.set(keys[i], i);
       offsets[i] = y;
       y += sizes.current.get(keys[i]) ?? estOf(d[i], i);
@@ -920,7 +920,7 @@ export function ChatVirtualizer<T>(
     const previous = geo.current.index;
     newsKeysRef.current = new Set();
     for (let i = data.length - 1; i >= 0; i--) {
-      const key = String(keyExtractor(data[i], i));
+      const key = String(getRowKey(data[i], i));
       if (previous.has(key)) {
         break;
       }
@@ -933,7 +933,7 @@ export function ChatVirtualizer<T>(
     // re-deriving the anchor from a scrollTop still mid-flight — which
     // otherwise freezes the intermediate position as the new anchor, for good.
     // Cannot wedge: every gesture path already clears `converging`.
-    const head = data.length > 0 ? String(keyExtractor(data[0], 0)) : null;
+    const head = data.length > 0 ? String(getRowKey(data[0], 0)) : null;
     if (
       head !== null &&
       geo.current.keys.length > 0 &&
@@ -1311,7 +1311,7 @@ export function ChatVirtualizer<T>(
   let pinnedIndex = -1;
   if (focusedKey !== null && win.end >= win.start) {
     pinnedIndex = data.findIndex(
-      (item, i) => String(keyExtractor(item, i)) === focusedKey,
+      (item, i) => String(getRowKey(item, i)) === focusedKey,
     );
     if (pinnedIndex >= win.start && pinnedIndex <= win.end) {
       pinnedIndex = -1;
@@ -1319,7 +1319,7 @@ export function ChatVirtualizer<T>(
   }
   pinnedKeyRef.current = pinnedIndex < 0 ? null : focusedKey;
   const renderRow = (i: number): React.ReactNode => {
-    const key = String(keyExtractor(data[i], i));
+    const key = String(getRowKey(data[i], i));
     if (getItemType) {
       typeByKey.current.set(key, getItemType(data[i], i));
     }
@@ -1381,9 +1381,21 @@ export function ChatVirtualizer<T>(
   };
   const onContentBlur = (event: React.FocusEvent<HTMLDivElement>): void => {
     const next = event.relatedTarget as Node | null;
-    if (next == null || !event.currentTarget.contains(next)) {
-      setFocusedKey(null);
+    if (next != null) {
+      if (!event.currentTarget.contains(next)) {
+        setFocusedKey(null);
+      }
+      return;
     }
+    // A blur with no next target can come while the row still holds focus
+    // (the window switching around it): drop the pin only once focus has
+    // really left the list.
+    const block = event.currentTarget;
+    queueMicrotask(() => {
+      if (!block.contains(block.ownerDocument.activeElement)) {
+        setFocusedKey(null);
+      }
+    });
   };
 
   const contentProps = {
