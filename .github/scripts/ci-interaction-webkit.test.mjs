@@ -109,7 +109,7 @@ describe('WebKit interaction proof routing', () => {
       // A leg whose plan holds no spec file runs no proofs.
       expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
         new RegExp(
-          `^(always\\(\\) && )?${gate.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
+          `^((always|failure)\\(\\) && )?${gate.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
         ),
       );
     }
@@ -425,6 +425,9 @@ describe('WebKit interaction proof routing', () => {
       // brings the outlet into the gesture fixtures and the pager bundle; the
       // scope covers it before that import lands.
       'packages/core/src/Layer/modalOutlet.ts',
+      // The animated-layout glide reads its timing through the theme-timing
+      // reader, which resolves token references, so its bundle carries them.
+      'packages/core/src/theme/tokenReferences.ts',
       'packages/core/src/hooks/useMenuPress.ts',
       'packages/core/src/hooks/menuPressGesture.ts',
       'packages/core/src/hooks/useLongPress.ts',
@@ -434,6 +437,9 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/hooks/useAttachment.ts',
       'packages/core/src/utils/sharedResizeObserver.ts',
       'packages/core/src/utils/scrollView.ts',
+      // The gesture host reads how old an input is, so the gesture specs'
+      // fixture bundles it.
+      'packages/core/src/utils/inputAge.ts',
       'packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts',
       'packages/core/src/hooks/__tests__/pagerBundle.ts',
       'internal/interaction-harness/src/webInput.ts',

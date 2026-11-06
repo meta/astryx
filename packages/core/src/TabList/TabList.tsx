@@ -64,6 +64,10 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/TabList/TabList.generated';
 
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
 registerEnglishFallback(english);
 /**
  * Selector matching the focusable stops in the tab strip: every Tab

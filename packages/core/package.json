@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.9",
+  "version": "0.7.10",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -578,6 +578,11 @@
       "source": "./src/Slider/index.ts",
       "types": "./dist/Slider/index.d.ts",
       "default": "./dist/Slider/index.js"
+    },
+    "./SnapPaging": {
+      "source": "./src/SnapPaging/index.ts",
+      "types": "./dist/SnapPaging/index.d.ts",
+      "default": "./dist/SnapPaging/index.js"
     },
     "./Spinner": {
       "source": "./src/Spinner/index.ts",
