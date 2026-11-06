@@ -18,6 +18,7 @@ import {
   reportLayoutEdge,
   springGlide,
 } from '../motion/animatedLayout';
+import {resolveMotion} from '../motion/resolveMotion';
 import {springs} from '../motion/uikit/springs';
 import type {ResizableProps} from './useResizable';
 
@@ -380,7 +381,8 @@ export function createPaneReveal(getRow: () => Element | null): PaneReveal {
 }
 
 /**
- * The next slide in `row` plays the settle spring, not the theme's curve.
+ * The next slide in `row` plays the settle spring at the theme's tempo, not
+ * the theme's curve.
  * It starts from a release `velocity` (px per second toward the end) over
  * `distance` px. Returns the share of the distance still to go, by ms since
  * the slide began, or null when nothing slides.
@@ -393,7 +395,10 @@ export function slideNextOnRelease(
   if (!(distance > 0)) {
     return null;
   }
-  const progress = springGlide(springs.settle, velocity / distance);
+  const progress = springGlide(
+    resolveMotion(row, springs.settle),
+    velocity / distance,
+  );
   glideNextChange(row, progress);
   return elapsedMs =>
     elapsedMs >= progress.durationMs ? 0 : progress.remaining(elapsedMs);
