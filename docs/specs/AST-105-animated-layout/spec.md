@@ -89,7 +89,7 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   element plays its own animation, entering, exiting, or resizing, and the
   content after it moves with it. Both play the same motion, so the timing is
   governed centrally, never per component: the theme's move curve,
-  `--ease-move`, over `--duration-medium-min`, which follow the theme's
+  `--ease-move`, over `--duration-medium`, which follow the theme's
   `character` and `tempo` (`spec:AST-108` FR1, FR2). The glide is curve
   tokens, never a spring, and no character or option plays a
   platform-measured curve for it (`spec:AST-094` FR45). Both start on the same
@@ -269,6 +269,18 @@ collapses content carries no velocity, so the glide that follows plays curve
 tokens, never a spring (`spec:AST-094` FR45).
 
 Rejected: the measured spring as the glide; a platform-measured opt-in, such as a separate character.
+
+### DEC-3 — The glide takes the medium duration
+
+**Reference:** `spec:AST-105/DEC-3`
+**Decider:** `cixzhang`, `2026-11-06`
+
+The glide plays over `--duration-medium`, the middle of the theme's medium
+durations: 300 ms in the Neutral theme and 410 ms with no theme, both scaled
+by `tempo`. Collapsible, TreeList, Table's row expansion and AppShell's
+content area share it, as one motion.
+
+Rejected: `--duration-medium-min`.
 
 ## Open questions
 

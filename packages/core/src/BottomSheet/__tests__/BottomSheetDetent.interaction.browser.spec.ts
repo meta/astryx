@@ -188,6 +188,24 @@ test('a downward flick dismisses the sheet', async ({page}) => {
   await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeHidden();
 });
 
+test('a softer downward flick from the tall detent lands on the half detent', async ({
+  page,
+}) => {
+  const {driver, sheet, handle, halfTop} = await openSheet(page);
+  // 1,200 px/s: a flick, whose projection stops short of the half detent, so
+  // it goes one stop.
+  const script = flick(handle, {
+    velocity: {x: 0, y: 1200},
+    durationMs: 80,
+    hz: 120,
+  });
+  expect(releaseVelocity(script).y).toBeCloseTo(1200, -1);
+  await driver.play(script);
+  await waitForRest(sheet);
+  await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeVisible();
+  expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
+});
+
 test('the settle lands on the detent, its curve recorded frame by frame', async ({
   page,
 }, testInfo) => {
