@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/Toolbar/ (showcase blocks)
  */
 
-import {useCallback, type ReactNode} from 'react';
+import {useCallback, useMemo, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import type {SectionVariant} from '../Section/Section';
 import type {SpacingStep} from '../utils/types';
@@ -31,6 +31,7 @@ import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {edgeCompSlot} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
+import {ToolbarContext, type ToolbarContextValue} from './ToolbarContext';
 
 /**
  * Map SpacingStep values to spacingVars keys.
@@ -298,97 +299,107 @@ export function Toolbar({
     [onBlurProp, onHintBlur],
   );
 
+  const toolbarContextValue = useMemo<ToolbarContextValue>(
+    () => ({orientation}),
+    [orientation],
+  );
+
   return (
     <SizeProvider value={size}>
-      <Section
-        ref={ref}
-        variant={variant}
-        paddingBlock={defaultBlockPaddingForSize[size]}
-        dividers={dividers}
-        xstyle={xstyle}
-        className={className}
-        style={style}>
-        <div
-          ref={listRef}
-          role="toolbar"
-          aria-label={label}
-          aria-orientation={orientation}
-          onKeyDown={handleToolbarKeyDown}
-          onFocus={handleToolbarFocus}
-          onBlur={handleToolbarBlur}
-          {...mergeProps(
-            themeProps('toolbar', {size}),
-            stylex.props(
-              hasCenterContent ? styles.baseGrid : styles.baseFlex,
-              orientation === 'vertical' && styles.vertical,
-              sizeStyles.base,
-              dynamicStyles.gap(gapVar),
-              // Only drop the tab indicator through the toolbar's block padding
-              // onto the rail when a bottom divider is actually present.
-              // Without a divider, leave `--_tab-indicator-bottom` unset so a
-              // nested TabList's indicator keeps its own default (hugging the
-              // tab) instead of floating down into the toolbar's padding.
-              hasBottomDivider &&
-                dynamicStyles.tabIndicatorBottom(
-                  `calc(-1 * (${blockPaddingVarForSize[size]} + 1px))`,
-                ),
-            ),
-          )}
-          {...props}>
-          {hasCenterContent ? (
-            // Three-slot grid layout
-            <>
-              <div
-                {...stylex.props(
-                  styles.startSlot,
-                  edgeCompSlot.inset(edgeCompInsetForSize[size]),
-                  dynamicStyles.gap(gapVar),
-                )}>
-                {startContent}
-              </div>
-              <div
-                {...stylex.props(styles.centerSlot, dynamicStyles.gap(gapVar))}>
-                {centerContent}
-              </div>
-              <div
-                {...stylex.props(
-                  styles.endSlot,
-                  edgeCompSlot.inset(edgeCompInsetForSize[size]),
-                  dynamicStyles.gap(gapVar),
-                )}>
-                {endContent}
-              </div>
-            </>
-          ) : (
-            // Two-slot flex layout
-            <>
-              {hasStartContent && (
+      <ToolbarContext value={toolbarContextValue}>
+        <Section
+          ref={ref}
+          variant={variant}
+          paddingBlock={defaultBlockPaddingForSize[size]}
+          dividers={dividers}
+          xstyle={xstyle}
+          className={className}
+          style={style}>
+          <div
+            ref={listRef}
+            role="toolbar"
+            aria-label={label}
+            aria-orientation={orientation}
+            onKeyDown={handleToolbarKeyDown}
+            onFocus={handleToolbarFocus}
+            onBlur={handleToolbarBlur}
+            {...mergeProps(
+              themeProps('toolbar', {size}),
+              stylex.props(
+                hasCenterContent ? styles.baseGrid : styles.baseFlex,
+                orientation === 'vertical' && styles.vertical,
+                sizeStyles.base,
+                dynamicStyles.gap(gapVar),
+                // Only drop the tab indicator through the toolbar's block padding
+                // onto the rail when a bottom divider is actually present.
+                // Without a divider, leave `--_tab-indicator-bottom` unset so a
+                // nested TabList's indicator keeps its own default (hugging the
+                // tab) instead of floating down into the toolbar's padding.
+                hasBottomDivider &&
+                  dynamicStyles.tabIndicatorBottom(
+                    `calc(-1 * (${blockPaddingVarForSize[size]} + 1px))`,
+                  ),
+              ),
+            )}
+            {...props}>
+            {hasCenterContent ? (
+              // Three-slot grid layout
+              <>
                 <div
                   {...stylex.props(
                     styles.startSlot,
-                    !hasEndContent && styles.startOnly,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
                   )}>
                   {startContent}
                 </div>
-              )}
-              {hasEndContent && (
+                <div
+                  {...stylex.props(
+                    styles.centerSlot,
+                    dynamicStyles.gap(gapVar),
+                  )}>
+                  {centerContent}
+                </div>
                 <div
                   {...stylex.props(
                     styles.endSlot,
-                    !hasStartContent && styles.endOnly,
                     edgeCompSlot.inset(edgeCompInsetForSize[size]),
                     dynamicStyles.gap(gapVar),
                   )}>
                   {endContent}
                 </div>
-              )}
-            </>
-          )}
-          {hintElement}
-        </div>
-      </Section>
+              </>
+            ) : (
+              // Two-slot flex layout
+              <>
+                {hasStartContent && (
+                  <div
+                    {...stylex.props(
+                      styles.startSlot,
+                      !hasEndContent && styles.startOnly,
+                      edgeCompSlot.inset(edgeCompInsetForSize[size]),
+                      dynamicStyles.gap(gapVar),
+                    )}>
+                    {startContent}
+                  </div>
+                )}
+                {hasEndContent && (
+                  <div
+                    {...stylex.props(
+                      styles.endSlot,
+                      !hasStartContent && styles.endOnly,
+                      edgeCompSlot.inset(edgeCompInsetForSize[size]),
+                      dynamicStyles.gap(gapVar),
+                    )}>
+                    {endContent}
+                  </div>
+                )}
+              </>
+            )}
+            {hintElement}
+          </div>
+        </Section>
+      </ToolbarContext>
     </SizeProvider>
   );
 }

@@ -22,7 +22,7 @@
  * - /packages/cli/assets/templates/blocks/components/ButtonGroup/ (showcase blocks)
  */
 
-import {useMemo, useRef, type ReactNode} from 'react';
+import {useCallback, useMemo, useRef, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {ButtonSize} from '../Button';
 import {radiusVars, shadowVars} from '../theme/tokens.stylex';
@@ -36,13 +36,15 @@ import {
 } from '../hooks/useGroupPressTracking';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
-import {mergeProps, composeEventHandlers} from '../utils';
+import {mergeProps, composeEventHandlers, isRenderable} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {ButtonGroupContext} from './ButtonGroupContext';
 import type {ButtonGroupOrientation} from './ButtonGroupContext';
 import {themeProps} from '../utils/themeProps';
-
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useToolbar} from '../Toolbar/ToolbarContext';
+import {observeMutations} from '../utils/sharedMutationObserver';
 // =============================================================================
 // Props
 // =============================================================================
@@ -87,6 +89,17 @@ export interface ButtonGroupProps extends BaseProps<HTMLDivElement> {
    * @default false
    */
   isDisabled?: boolean;
+
+  /**
+   * Explicit role override for the group. Only `'toolbar'` and `'group'`
+   * take effect; any other role renders as group; and the prop is ignored
+   * when the ButtonGroup is inside a Toolbar.
+   *
+   * By default, ButtonGroup adapts: 3 or more members use role="toolbar"
+   * with aria-orientation and roving tabindex; 2 or fewer members use
+   * role="group" in standard Tab order.
+   */
+  role?: React.AriaRole;
 
   /**
    * Test ID for testing frameworks.
@@ -144,9 +157,14 @@ const elevationStyles = stylex.create({
  * Children automatically detect the group via context and apply position-aware
  * styles in pure CSS.
  *
- * The group is a single tab stop: arrow keys move between members along the
- * orientation, Home/End jump to the ends, and focus wraps (the APG roving
- * tabindex technique, via `useListFocus`).
+ * A group with 3 or more members exposes `role="toolbar"` with `aria-orientation`
+ * and acts as a composite widget with a single Tab stop and arrow-key roving focus
+ * (WAI-ARIA APG toolbar pattern).
+ *
+ * A group with 2 or fewer members (e.g. split button) exposes `role="group"` and
+ * keeps every member in the natural Tab order without roving tabindex.
+ *
+ * An explicit `role` override (`'toolbar'` or `'group'`) can be provided.
  *
  * Members that render their own layer — a Button with a `tooltip`, or a
  * DropdownMenu — compose correctly, including as the trailing member.
@@ -185,25 +203,109 @@ export function ButtonGroup({
   'data-testid': testId,
   onKeyDown,
   onFocus,
+  role: roleProp,
   ...props
 }: ButtonGroupProps): ReactNode {
   const size = useSize(sizeProp, 'md');
 
-  const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    // Roving rewrites `tabindex` on every item, so the selector cannot key off
-    // a value: `[tabindex="0"]` would drop each member the moment it is
-    // stamped -1. `a[href]` catches a Button rendered with `href`.
-    itemSelector: 'button, a[href], [tabindex]',
-    // A member's layer renders inline inside the group (useLayer does not
-    // portal it), so a key pressed in an open DropdownMenu bubbles here. The
-    // boundary is the group's own root or any layer, whichever is nearer to
-    // the target. Naming the group's own root is what keeps a group rendered
-    // inside a Popover or Toast working: bailing on any [popover] ancestor
-    // instead would swallow every arrow key it owns.
-    boundarySelector: '[role="group"], [popover]',
-    orientation,
-    hasRovingTabIndex: true,
+  const toolbarContext = useToolbar();
+  const isInsideToolbar = toolbarContext != null;
+
+  // Top-level children estimate the count until the first commit measures the DOM.
+  const estimatedCount = useMemo(() => {
+    let count = 0;
+    const countItems = (nodes: ReactNode) => {
+      if (Array.isArray(nodes)) {
+        nodes.forEach(countItems);
+      } else if (
+        nodes != null &&
+        typeof nodes === 'object' &&
+        'props' in nodes
+      ) {
+        if (
+          typeof (nodes as {type?: unknown}).type === 'symbol' &&
+          String((nodes as {type?: unknown}).type) === 'Symbol(react.fragment)'
+        ) {
+          countItems((nodes as {props: {children?: ReactNode}}).props.children);
+        } else if (isRenderable(nodes)) {
+          count += 1;
+        }
+      } else if (isRenderable(nodes)) {
+        count += 1;
+      }
+    };
+    countItems(children);
+    return count;
+  }, [children]);
+
+  const [renderedCount, setRenderedCount] = useState(estimatedCount);
+
+  // When nested inside a Toolbar, always use role="group" without aria-orientation
+  // and yield roving tabindex to the parent toolbar, preserving the Toolbar's
+  // single Tab stop.
+  // BaseProps already provides role?: AriaRole; act only on 'toolbar' and 'group',
+  // replacing any other role with 'group' to preserve base contract (spec:AST-017 FR53).
+  const resolvedRole = isInsideToolbar
+    ? 'group'
+    : roleProp === 'toolbar'
+      ? 'toolbar'
+      : roleProp != null
+        ? 'group'
+        : renderedCount >= 3
+          ? 'toolbar'
+          : 'group';
+  const isToolbar = resolvedRole === 'toolbar';
+
+  const {listRef, handleKeyDown, handleFocus, getItems} =
+    useListFocus<HTMLDivElement>({
+      // Roving rewrites `tabindex` on every item, so the selector cannot key off
+      // a value: `[tabindex="0"]` would drop each member the moment it is
+      // stamped -1. `a[href]` catches a Button rendered with `href`.
+      itemSelector: 'button, a[href], [tabindex]',
+      // A member's layer renders inline inside the group (useLayer does not
+      // portal it), so a key pressed in an open DropdownMenu bubbles here. The
+      // boundary is the group's own root or any layer, whichever is nearer to
+      // the target. Naming the group's own root is what keeps a group rendered
+      // inside a Popover or Toast working: bailing on any [popover] ancestor
+      // instead would swallow every arrow key it owns.
+      boundarySelector: '[role="group"], [role="toolbar"], [popover]',
+      orientation,
+      hasRovingTabIndex: isToolbar,
+    });
+
+  const syncCount = useCallback(() => {
+    const count = getItems().length;
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- rendered member count is derived from DOM layout
+    setRenderedCount(prev => (prev === count ? prev : count));
+  }, [getItems]);
+
+  const syncCountRef = useRef(syncCount);
+
+  // React runs the returned cleanup when the root detaches.
+  const observerRef = useCallback((node: HTMLDivElement | null) => {
+    if (!node) {
+      return;
+    }
+    return observeMutations(node, {childList: true, subtree: true}, () => {
+      syncCountRef.current();
+    });
+  }, []);
+
+  // Read the member count after each commit, before paint. The observer's update can land after paint.
+  useIsomorphicLayoutEffect(() => {
+    syncCountRef.current = syncCount;
+    syncCount();
   });
+
+  const handleContainerFocus = (e: React.FocusEvent) => {
+    const count = getItems().length;
+    if (count !== renderedCount) {
+      setRenderedCount(count);
+    }
+    if (isToolbar) {
+      handleFocus(e);
+    }
+  };
 
   const contextValue = useMemo(
     () => ({orientation, isDisabled}),
@@ -221,7 +323,7 @@ export function ButtonGroup({
     <ButtonGroupContext value={contextValue}>
       <SizeProvider value={size}>
         <div
-          ref={useMergedRefs(ref, listRef, groupRef, hitAreaRef)}
+          ref={useMergedRefs(ref, listRef, groupRef, hitAreaRef, observerRef)}
           {...props}
           {...mergeProps(
             themeProps('button-group', {size, orientation, elevation}),
@@ -236,10 +338,14 @@ export function ButtonGroup({
             className,
             style,
           )}
-          role="group"
+          role={resolvedRole}
           aria-label={label}
-          onKeyDown={composeEventHandlers(onKeyDown, handleKeyDown)}
-          onFocus={composeEventHandlers(onFocus, handleFocus)}
+          aria-orientation={isToolbar ? orientation : undefined}
+          onKeyDown={composeEventHandlers(
+            onKeyDown,
+            isToolbar ? handleKeyDown : undefined,
+          )}
+          onFocus={composeEventHandlers(onFocus, handleContainerFocus)}
           aria-disabled={isDisabled || undefined}
           data-testid={testId}>
           <PressGroupContext value={tracksPress ? GROUP_PRESS_POINTERS : null}>
