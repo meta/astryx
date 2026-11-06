@@ -26,25 +26,15 @@ import {parentPort, workerData} from 'node:worker_threads';
 import {transformSync} from '@babel/core';
 import {createJiti} from 'jiti';
 import {assetDataUri, isAssetPath} from './assets.mjs';
-import {SINGLE_COPY, isServedPackage, packageOf} from './served-packages.mjs';
+import {PROJECT_PACKAGES, installedFrom, isServedPackage, packageOf} from './served-packages.mjs';
 
 /** @typedef {{level: string, text: string}} PageLog */
 
 /** @type {{entry: string, root: string, served: {dir: string, integrations: string[]} | null}} */
 const {entry, root} = workerData;
 
-/** Whether the page's folder has a package of its own. @param {string} name */
-const pageHas = name => {
-  try {
-    createRequire(entry).resolve(name);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-/** The package set, only for a page whose folder has no Core: a page in a project uses the project's packages alone. */
-const served = workerData.served && !pageHas('@astryxdesign/core') ? workerData.served : null;
+/** The package set, only for a page outside a project: when its folder installs Core, React or StyleX, the project's packages serve it alone. */
+const served = workerData.served && !PROJECT_PACKAGES.some(name => installedFrom(path.dirname(entry), name)) ? workerData.served : null;
 const ROOT_PREFIX = root.endsWith(path.sep) ? root : root + path.sep;
 
 /** @type {PageLog[]} */
@@ -419,27 +409,6 @@ function serveFromSet() {
 }
 serveFromSet();
 
-/**
- * React and StyleX keep state per copy, and the packages from the set load
- * the set's copy. So the page's own modules load that copy too, even when
- * its folder holds another one.
- * @returns {Record<string, string>}
- */
-function singleCopyAliases() {
-  /** @type {Record<string, string>} */
-  const alias = {};
-  if (!servedParent) return alias;
-  for (const name of SINGLE_COPY) {
-    try {
-      alias[name] = path.dirname(moduleApi._resolveFilename(`${name}/package.json`, servedParent, false));
-    } catch {
-      // The set has no copy: the page's own copy, if any, serves.
-    }
-  }
-  return alias;
-}
-const SINGLE_COPY_ALIASES = singleCopyAliases();
-
 const plain = createJiti(entry, {fsCache: false, jsx: {runtime: 'automatic'}});
 
 const jiti = createJiti(entry, {
@@ -448,7 +417,7 @@ const jiti = createJiti(entry, {
   extensions: ['.js', '.mjs', '.cjs', '.jsx', '.ts', '.tsx', '.mts', '.cts', '.json'],
   moduleCache: true,
   interopDefault: true,
-  alias: {...SINGLE_COPY_ALIASES, ...ALIASES},
+  alias: ALIASES,
   jsx: {runtime: 'automatic'},
   transform(opts) {
     const filename = opts.filename ?? '';
@@ -586,10 +555,6 @@ try {
   } catch (e) {
     classify(e);
     throw null;
-  }
-  // The render always runs on React; StyleX only when the page uses it.
-  for (const [name, dir] of Object.entries(SINGLE_COPY_ALIASES)) {
-    if (name !== '@stylexjs/stylex' || packages.has(name)) fromSet.set(name, dir);
   }
   /** @type {string} */
   let css = '';

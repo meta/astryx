@@ -92,6 +92,7 @@ export const doc = {
     {code: 'ERR_RENDER_COMPILE', when: 'the page does not compile, or a stylesheet it imports is not valid CSS (the message names the file)'},
     {code: 'ERR_RENDER_NO_DEFAULT_EXPORT', when: 'the page has no default export'},
     {code: 'ERR_RENDER_MISSING_DEPENDENCY', when: 'the page imports a package that is not installed; the suggestion is its install line'},
+    {code: 'ERR_VERSIONS_UNAVAILABLE', when: 'outside a project, the page imports an Astryx package, React or StyleX, and the Core of the release that answers cannot be downloaded'},
     {code: 'ERR_RENDER_BROWSER_API', when: 'the page reads a browser-only API, such as window or document, while rendering'},
     {code: 'ERR_RENDER_ASSET_TOO_LARGE', when: 'a local file the page uses is over 8 MB'},
     {code: 'ERR_RENDER_TIMEOUT', when: 'the page does not finish rendering within 60 seconds'},

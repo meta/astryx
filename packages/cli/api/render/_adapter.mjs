@@ -26,7 +26,9 @@ import {isAstryxMarkup} from '../../foundation/render/html-reader.mjs';
 import {rebuildPage} from '../../foundation/render/rebuild.mjs';
 import {cliVersion} from '../../foundation/integrations/cli-peer-version.mjs';
 import {assertWithin, PathSafetyError} from '../../foundation/fs/path-safety.mjs';
-import {findCarriedCoreDir} from '../../foundation/fs/paths.mjs';
+import {requireCoreDir} from '../../foundation/fs/paths.mjs';
+import {runChoice} from '../../foundation/release/run-context.mjs';
+import {PROJECT_PACKAGES, installedFrom, isServedPackage} from '../../foundation/render/served-packages.mjs';
 import {hostedRun, recordResolved} from '../../foundation/runtime/package-root.mjs';
 
 export {PAGE_EXTENSIONS, embeddedPathProblem};
@@ -241,18 +243,25 @@ function asAstryxError(e) {
 }
 
 /**
- * The package set the CLI runs from, for a page whose folder has no Core
- * (architecture:cli-surface INV30): the Core it carries, by the same rule as
+ * The package set the CLI runs from, for a page outside a project
+ * (architecture:cli-surface INV30): the Core it carries, found by the rule of
  * every command that answers from Core outside a project. Inside a project
- * the page's own packages serve it, so this is null.
+ * (one the CLI counts as Astryx's, or a folder that installs Core, React or
+ * StyleX) the project's packages serve the page alone, so this is null.
+ * When the carried Core cannot be had, the reason is kept for the error a
+ * page that needs it gets (spec AST-081 FR3).
  * @param {string} input absolute path of the page
- * @returns {{dir: string, integrations: readonly string[]} | null}
+ * @returns {{dir: string, integrations: readonly string[]} | {unavailable: Error} | null}
  */
 function servedSet(input) {
   const dir = path.dirname(input);
-  if (resolvesCore(dir)) return null;
-  const core = findCarriedCoreDir(dir, {fetch: true});
-  return core ? {dir: core, integrations: hostedRun()?.integrations ?? []} : null;
+  if (runChoice(dir).inProject || PROJECT_PACKAGES.some(name => installedFrom(dir, name))) return null;
+  try {
+    return {dir: requireCoreDir(dir), integrations: hostedRun()?.integrations ?? []};
+  } catch (e) {
+    const err = /** @type {any} */ (e);
+    return err?.code === ERROR_CODES.ERR_VERSIONS_UNAVAILABLE ? {unavailable: err} : null;
+  }
 }
 
 /**
@@ -266,7 +275,17 @@ export async function renderToFile({cwd, input, output, title}) {
   /** @type {import('../../foundation/render/render-page.mjs').RenderedPage} */
   let page;
   try {
-    page = await renderPage(input, {title, version: cliVersion(), served: servedSet(input)});
+    const set = servedSet(input);
+    try {
+      page = await renderPage(input, {title, version: cliVersion(), served: set && 'dir' in set ? set : null});
+    } catch (e) {
+      // A page that needs the Core the CLI could not obtain says why.
+      const missing = /** @type {any} */ (e)?.code === 'ERR_RENDER_MISSING_DEPENDENCY' ? /** @type {any} */ (e).detail?.package : null;
+      if (set && 'unavailable' in set && typeof missing === 'string' && isServedPackage(missing, hostedRun()?.integrations ?? [])) {
+        throw new AstryxError(set.unavailable.message, [], ERROR_CODES.ERR_VERSIONS_UNAVAILABLE);
+      }
+      throw e;
+    }
   } catch (e) {
     throw asAstryxError(e);
   }

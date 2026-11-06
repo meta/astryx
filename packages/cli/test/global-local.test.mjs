@@ -448,6 +448,26 @@ describe.skipIf(!POSIX)(
       expect(filesIn(dir)).toEqual(before);
     });
 
+    it("outside a project, a render whose page needs Core says the answering release's Core could not be downloaded", () => {
+      const pc = computer();
+      const g = globalCli('npm', '9.0.0', {root: pc.home});
+      const dir = tempDir('page');
+      fs.writeFileSync(
+        path.join(dir, 'page.jsx'),
+        "import {Button} from '@astryxdesign/core';\nexport default () => <Button label=\"Go\" />;\n",
+      );
+      const r = run(g.bin, ['experimental', 'render', 'page.jsx', '--json'], {
+        cwd: dir,
+        pc,
+      });
+      const error = JSON.parse(r.stdout);
+      expect(error.code).toBe('ERR_VERSIONS_UNAVAILABLE');
+      expect(error.error).toMatch(
+        /^Core 9\.0\.0 could not be (?:installed|downloaded).*\. Outside a project, commands that read Core use the Core of the release that answers; run again when the package registry can be reached\.$/u,
+      );
+      expect(fs.existsSync(path.join(dir, 'page.html'))).toBe(false);
+    });
+
     it("in a fresh clone, doctor names the lockfile's Core as the daily hint and notice do", () => {
       const pc = computer();
       const g = globalCli('npm', '9.0.0', {root: pc.home});

@@ -14,6 +14,7 @@
 import {describe, it, expect, afterEach} from 'vitest';
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
+import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
@@ -414,6 +415,53 @@ export default function Page() {
       expect(sources[name]).toBe('package-set');
     }
     expect(installedARelease(run.cache)).toBe(false);
+  });
+
+  it("leaves a project's own React alone: a project that installs React but not Core gets no package from the set", () => {
+    const root = tempDir('react-project');
+    writeJson(path.join(root, 'package.json'), {
+      name: 'react-project',
+      private: true,
+      dependencies: {react: '*', 'react-dom': '*'},
+    });
+    const fromCore = createRequire(
+      fileURLToPath(new URL('../../../core/package.json', import.meta.url)),
+    );
+    for (const name of ['react', 'react-dom']) {
+      const link = path.join(root, 'node_modules', name);
+      fs.mkdirSync(path.dirname(link), {recursive: true});
+      fs.symlinkSync(
+        path.dirname(fromCore.resolve(`${name}/package.json`)),
+        link,
+        'dir',
+      );
+    }
+    fs.writeFileSync(
+      path.join(root, 'plain.jsx'),
+      "export default function Page() { return <p>project react</p>; }\n",
+    );
+    fs.writeFileSync(
+      path.join(root, 'page.jsx'),
+      "import {Button} from '@astryxdesign/core';\nexport default () => <Button label=\"Go\" />;\n",
+    );
+    const plain = host({
+      argv: ['--json', 'experimental', 'render', 'plain.jsx'],
+      cwd: root,
+    });
+    expect(plain.status).toBe(0);
+    const fromSet = plain
+      .result()
+      .packages.filter(
+        (/** @type {{source: string}} */ p) => p.source === 'package-set',
+      )
+      .map((/** @type {{name: string}} */ p) => p.name);
+    expect(fromSet).not.toContain('react');
+    expect(fromSet).not.toContain('react-dom');
+    const page = host({
+      argv: ['--json', 'experimental', 'render', 'page.jsx'],
+      cwd: root,
+    });
+    expect(JSON.parse(page.stdout).code).toBe('ERR_RENDER_MISSING_DEPENDENCY');
   });
 
   it("names a project's own integration as the project's", () => {
