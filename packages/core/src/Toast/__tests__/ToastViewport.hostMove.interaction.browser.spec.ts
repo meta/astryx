@@ -2,11 +2,13 @@
 
 /**
  * @file ToastViewport.hostMove.interaction.browser.spec.ts
- * @input The AppToastOverDialog and AppToastOverDrawer stories, recorded
- *   frame by frame
+ * @input The AppToastOverDialog, AppToastOverDialogClosedAfterSave and
+ *   AppToastOverDrawer stories, recorded frame by frame
  * @output Tests that a toast plays its entrance once. A Dialog or a modal
  *   Drawer that opens or closes over it moves the viewport. The toast does not
- *   enter again: its row and card start no transition
+ *   enter again: its row and card start no transition. A Dialog that closes
+ *   after a save does not hide the toast for a frame. A move before anything
+ *   has seen the entrance start shows one entrance
  * @position Testing; validates ToastViewport.tsx and Toast.tsx in a real
  *   browser
  */
@@ -22,6 +24,7 @@ const storybook = withStorybook(test);
 
 const STORY = 'core-toast--app-toast-over-dialog';
 const DRAWER_STORY = 'core-toast--app-toast-over-drawer';
+const SAVE_STORY = 'core-toast--app-toast-over-dialog-closed-after-save';
 const MESSAGE = 'Toast from inside the dialog!';
 
 /** The toast's card on one frame. */
@@ -29,6 +32,8 @@ interface Frame {
   opacity: number;
   /** Whether the card was inside a dialog, the viewport's modal outlet. */
   isInDialog: boolean;
+  /** Whether the card had a box. A dialog that no longer displays has none. */
+  hasBox: boolean;
 }
 
 /** What the recorder saw of the toast's card. */
@@ -91,6 +96,7 @@ async function startRecording(page: Page): Promise<void> {
         recorder.frames.push({
           opacity: Number(getComputedStyle(card).opacity),
           isInDialog: card.closest('dialog') != null,
+          hasBox: card.getClientRects().length > 0,
         });
         for (const animation of card.getAnimations()) {
           if (
@@ -120,6 +126,61 @@ async function stopRecording(page: Page): Promise<Recording> {
       starts: recorder.starts,
     };
   });
+}
+
+/**
+ * The starts the recorder has seen so far, such as `card opacity` and
+ * `row grid-template-rows`.
+ */
+async function startsSoFar(page: Page): Promise<string[]> {
+  return page.evaluate(() => [
+    ...(window as unknown as {__toastRecorder: Recorder}).__toastRecorder
+      .starts,
+  ]);
+}
+
+/**
+ * Closes the Dialog in the frame of the new toast's first style computation,
+ * which starts its entrance. A resize observer runs after that frame's layout.
+ * In Chromium, the row's `transitionrun` comes a frame later, so nothing has
+ * seen the entrance start when the Dialog closes. It records the recorder's
+ * starts then.
+ */
+async function closeBeforeEntranceIsSeen(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const target = window as unknown as {
+      __toastRecorder: Recorder;
+      __startsAtClose: string[] | null;
+    };
+    target.__startsAtClose = null;
+    const resizeObserver = new ResizeObserver(() => {
+      resizeObserver.disconnect();
+      target.__startsAtClose = [...target.__toastRecorder.starts];
+      const button = [...document.querySelectorAll('dialog button')].find(
+        candidate => candidate.textContent === 'Close',
+      );
+      if (button instanceof HTMLElement) {
+        button.click();
+      }
+    });
+    const observer = new MutationObserver(() => {
+      const row = document.querySelector('[data-toast-id]');
+      if (row == null) {
+        return;
+      }
+      observer.disconnect();
+      resizeObserver.observe(row);
+    });
+    observer.observe(document.body, {subtree: true, childList: true});
+  });
+}
+
+/** The starts the recorder had seen when the Dialog closed, or null. */
+async function startsAtClose(page: Page): Promise<string[] | null> {
+  return page.evaluate(
+    () =>
+      (window as unknown as {__startsAtClose: string[] | null}).__startsAtClose,
+  );
 }
 
 /** How many frames the recorder has seen the card in a dialog so far. */
@@ -164,6 +225,37 @@ function fadesBack(frames: Frame[]): boolean {
     }
   }
   return false;
+}
+
+/**
+ * Counts each DOM change after which the card sits in a dialog that no longer
+ * displays. A frame painted then shows no toast.
+ */
+async function watchHiddenCard(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const watch = {count: 0};
+    (window as unknown as {__hiddenCard: {count: number}}).__hiddenCard = watch;
+    new MutationObserver(() => {
+      const dialog = document
+        .querySelector('[data-toast-id] .astryx-toast')
+        ?.closest('dialog');
+      if (dialog != null && getComputedStyle(dialog).display === 'none') {
+        watch.count += 1;
+      }
+    }).observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['class', 'open'],
+    });
+  });
+}
+
+async function hiddenCardCount(page: Page): Promise<number> {
+  return page.evaluate(
+    () =>
+      (window as unknown as {__hiddenCard: {count: number}}).__hiddenCard.count,
+  );
 }
 
 async function openDialog(page: Page) {
@@ -219,6 +311,11 @@ const opacitiesOf = (frames: Frame[]) => frames.map(frame => frame.opacity);
 test.describe('a toast in a top-layer viewport', () => {
   test('a new toast plays its entrance once', async ({page}) => {
     await openStory(page, storybook(), STORY);
+    // A slow entrance, so the recorder sees its first frames on a busy runner.
+    await page.addStyleTag({
+      content:
+        '[data-toast-id], [data-toast-id] * { --duration-fast: 1500ms !important; }',
+    });
     const dialog = await openDialog(page);
     await startRecording(page);
     await dialog.getByRole('button', {name: 'Show toast'}).click();
@@ -250,6 +347,11 @@ test.describe('a toast in a top-layer viewport', () => {
     await startRecording(page);
     await dialog.getByRole('button', {name: 'Show toast'}).click();
     await expect.poll(async () => framesInDialog(page)).toBeGreaterThan(0);
+    // The row has seen its entrance start. A close before that is the next
+    // test's case.
+    await expect
+      .poll(async () => startsSoFar(page))
+      .toContain('row grid-template-rows');
     expect(await isEntering(page)).toBe(true);
     await dialog.getByRole('button', {name: 'Close'}).click();
     await expect(dialog).toBeHidden();
@@ -260,6 +362,46 @@ test.describe('a toast in a top-layer viewport', () => {
     expect(placesOf(frames)).toEqual(['dialog', 'page']);
     expect(fadesBack(frames)).toBe(false);
     expect(entrances).toBe(1);
+  });
+
+  test('a toast closed out of its Dialog before its entrance is seen enters once on the page', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      "In WebKit the row's transitionrun has already fired when the first resize observer callback runs, so this close cannot land before it.",
+    );
+    await openStory(page, storybook(), STORY);
+    // A slow entrance, so a second one would show on any runner.
+    await page.addStyleTag({
+      content:
+        '[data-toast-id], [data-toast-id] * { --duration-fast: 1500ms !important; }',
+    });
+    const dialog = await openDialog(page);
+    await closeBeforeEntranceIsSeen(page);
+    await startRecording(page);
+    await dialog.getByRole('button', {name: 'Show toast'}).click();
+    await expect(dialog).toBeHidden();
+    // The close came before the row saw its entrance start.
+    const startsWhenClosed = await startsAtClose(page);
+    expect(startsWhenClosed).not.toBeNull();
+    expect(startsWhenClosed).not.toContain('row grid-template-rows');
+    await expect(toastText(page)).toBeVisible();
+    await expect.poll(async () => rowOverflow(page)).toBe('visible');
+    await waitForRest(toastRow(page));
+    // The recorder sees the row's start after the close.
+    expect(await startsSoFar(page)).toContain('row grid-template-rows');
+    const {frames} = await stopRecording(page);
+    await expectRowShown(page);
+    expect(placesOf(frames)).toEqual(['dialog', 'page']);
+    // What a person sees: the card fades in once on the page and stays at
+    // full opacity. The frame recorded in the Dialog reads before paint.
+    expect(
+      Math.min(...opacitiesOf(frames.filter(frame => !frame.isInDialog))),
+    ).toBeLessThan(0.5);
+    expect(fadesBack(frames)).toBe(false);
+    expect(frames.at(-1)?.opacity).toBeGreaterThan(0.99);
   });
 
   test('a toast already shown stays still when the Dialog that hosts it closes', async ({
@@ -331,5 +473,33 @@ test.describe('a toast in a top-layer viewport', () => {
     expect(Math.min(...opacitiesOf(frames))).toBeGreaterThan(0.99);
     expect(entrances).toBe(0);
     expect(starts).toEqual([]);
+  });
+
+  test('a toast stays painted when the Dialog that hosts it closes after a save', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), SAVE_STORY);
+    const dialog = await openDialog(page);
+    await watchHiddenCard(page);
+    await startRecording(page);
+    // Save shows the toast, then closes the dialog when the save finishes.
+    // That close is outside a click, so the browser can paint before the
+    // passive effects run.
+    await dialog.getByRole('button', {name: 'Save'}).click();
+    await expect(dialog).toBeHidden();
+    await waitForRest(toastRow(page));
+    const {frames, starts} = await stopRecording(page);
+    await expect(toastRow(page).getByText('Saving the item.')).toBeVisible();
+    await expectRowShown(page);
+    expect(placesOf(frames)).toEqual(['dialog', 'page']);
+    // No DOM change left the card in a dialog that no longer displays.
+    expect(await hiddenCardCount(page)).toBe(0);
+    expect(frames.every(frame => frame.hasBox)).toBe(true);
+    // At 1×, the card's opacity and the row's grid each start once.
+    // Transition events arrive however late the frames are.
+    expect(starts.filter(start => start === 'card opacity')).toHaveLength(1);
+    expect(
+      starts.filter(start => start === 'row grid-template-rows'),
+    ).toHaveLength(1);
   });
 });

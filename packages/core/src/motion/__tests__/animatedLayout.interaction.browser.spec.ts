@@ -880,7 +880,7 @@ test.describe('spec:AST-105 Coverage', () => {
       page,
       `<div id="area" class="area"><div id="grow" class="grow"></div>
         <div id="second" class="grow"></div><div id="after" class="row"></div></div>`,
-      '#area { --duration-medium-min: 1000ms; }',
+      '#area { --duration-medium: 1000ms; }',
     );
     await change(page);
     await page.waitForTimeout(100);
@@ -1961,11 +1961,11 @@ test.describe('spec:AST-105 FR2–FR4', () => {
     expect(grow[0].startTime).toBe(follower[0].startTime);
     expect(grow[0].duration).toBeCloseTo(follower[0].duration, 3);
     // With no stylesheet, the tokens read core's declared values.
-    expect(follower[0].duration).toBeCloseTo(310, 3);
+    expect(follower[0].duration).toBeCloseTo(410, 3);
     expectOnCurve(
       await page.evaluate(() => window.curveOf('#a')),
       [0.24, 1, 0.4, 1],
-      310,
+      410,
     );
   });
 
@@ -2349,30 +2349,30 @@ test.describe('spec:AST-105 FR2–FR4', () => {
   for (const theme of [
     {
       name: 'at tempo 0.75',
-      style: '--duration-medium-min: 232.5ms',
-      ms: 232.5,
+      style: '--duration-medium: 307.5ms',
+      ms: 307.5,
       points: [0.24, 1, 0.4, 1],
     },
     {
       name: 'at tempo 1.5',
-      style: '--duration-medium-min: 465ms',
-      ms: 465,
+      style: '--duration-medium: 615ms',
+      ms: 615,
       points: [0.24, 1, 0.4, 1],
     },
     {
       name: "at character 'crisp'",
       style: '--ease-move: cubic-bezier(0, 0, 0.2, 1)',
-      ms: 310,
+      ms: 410,
       points: [0, 0, 0.2, 1],
     },
     {
       name: "at character 'expressive'",
       style: '--ease-move: cubic-bezier(0.3, 1.2, 0.5, 1)',
-      ms: 310,
+      ms: 410,
       points: [0.3, 1.2, 0.5, 1],
     },
   ] as const) {
-    test(`a theme ${theme.name}: the glide plays its --ease-move over its --duration-medium-min (FR4)`, async ({
+    test(`a theme ${theme.name}: the glide plays its --ease-move over its --duration-medium (FR4)`, async ({
       page,
     }) => {
       // The tokens a theme with that knob writes on its scope.
@@ -2407,11 +2407,11 @@ test.describe('spec:AST-105 FR2–FR4', () => {
       await change(page);
       const motions = await page.evaluate(() => window.motionOf('#a'));
       expect(motions, 'the content after the change glides').toHaveLength(1);
-      expect(motions[0].duration).toBeCloseTo(310, 3);
+      expect(motions[0].duration).toBeCloseTo(410, 3);
       expectOnEase(
         await page.evaluate(() => window.curveOf('#a')),
         theme.ease,
-        310,
+        410,
       );
     });
   }
@@ -2423,8 +2423,8 @@ test.describe('spec:AST-105 FR2–FR4', () => {
     await open(
       page,
       PAGE,
-      `#area { --duration-medium-min: 310ms; --ease-move: cubic-bezier(0.24, 1, 0.4, 1); }
-       #grow { --duration-medium-min: 620ms; --ease-move: cubic-bezier(0, 0, 0.2, 1); }`,
+      `#area { --duration-medium: 310ms; --ease-move: cubic-bezier(0.24, 1, 0.4, 1); }
+       #grow { --duration-medium: 620ms; --ease-move: cubic-bezier(0, 0, 0.2, 1); }`,
     );
     await change(page);
     const [motion] = await page.evaluate(() => window.motionOf('#a'));
@@ -2627,8 +2627,13 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       content.style.display = '';
       opening.animate();
       window.AnimatedLayout.playLayoutChange(layout, content);
-      for (let i = 0; i < 2; i++) {
-        await frame();
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      // Hold the reveal at fixed times on its own clock, once it rides. Late
+      // frames then cannot end it before these reads.
+      for (const ms of [20, 40, 60, 80, 100]) {
+        window.holdAt(ms);
         read('opening');
       }
       // Closed again 120 ms into the reveal, as the page shows it then.
@@ -2646,6 +2651,11 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       });
       // Where the conceal starts, on its own clock, before any frame.
       read('restart');
+      // Hold the conceal at fixed times too, so late frames cannot skip it.
+      for (const ms of [20, 40, 60, 80, 100]) {
+        window.holdAt(ms);
+        read('closing held');
+      }
       window.resumeAll();
       for (let i = 0; i < 60; i++) {
         await frame();
@@ -2718,8 +2728,13 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
         window.AnimatedLayout.playLayoutChange(layout, content, {
           edge: 'inline-end',
         });
-        for (let i = 0; i < 5; i++) {
-          await frame();
+        await new Promise<void>(resolve => {
+          queueMicrotask(resolve);
+        });
+        // Hold the reveal at fixed times on its own clock, once it rides.
+        // Late frames then cannot end it before these reads.
+        for (const ms of [20, 40, 60, 80, 100]) {
+          window.holdAt(ms);
           read('opening');
         }
         // Closed again 120 ms into the reveal, as the page shows it then:
@@ -2742,6 +2757,11 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
         });
         // Where the conceal starts, on its own clock, once it rides.
         read('restart');
+        // Hold the conceal at fixed times too, so late frames cannot skip it.
+        for (const ms of [20, 40, 60, 80, 100]) {
+          window.holdAt(ms);
+          read('closing held');
+        }
         window.resumeAll();
         for (let i = 0; i < 60; i++) {
           await frame();
