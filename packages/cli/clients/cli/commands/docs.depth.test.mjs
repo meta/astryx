@@ -216,4 +216,29 @@ describe('astryx docs --depth', () => {
     },
     SLOW,
   );
+
+  it(
+    'the topic list names the docs below each namespace with a depth',
+    async () => {
+      const plain = await runCli(['docs']);
+      expect(plain.stdout).toContain('tokens');
+      // Today's list names the namespace and stops there.
+      expect(plain.stdout).not.toContain('tokens/tokens-color');
+      const deep = await runCli(['docs', '--depth', '1']);
+      expect(deep.status).toBe(0);
+      expect(deep.stdout).toContain('tokens/tokens-color');
+      // Each row is the route that opens it, whatever its depth.
+      const json = await runCli(['--json', 'docs', '--depth', '1']);
+      const listed = JSON.parse(json.stdout);
+      const tokens = listed.meta.namespaces.find(
+        (/** @type {{topic: string}} */ one) => one.topic === 'tokens',
+      );
+      expect(tokens.children.map((/** @type {{topic: string}} */ c) => c.topic)).toContain(
+        'tokens/tokens-color',
+      );
+      const read = await runCli(['docs', 'tokens/tokens-color']);
+      expect(read.status).toBe(0);
+    },
+    SLOW,
+  );
 });

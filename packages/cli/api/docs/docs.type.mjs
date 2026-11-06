@@ -45,6 +45,9 @@
  * @property {string} topic its route, the argument that opens it
  * @property {string} description
  * @property {string} package the package that owns it
+ * @property {DocsListNamespace[]} [children] the docs below it, each listed
+ *   the same way, present only for a read that passed `depth` and only where
+ *   the namespace has children
  */
 
 /**
