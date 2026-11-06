@@ -117,6 +117,67 @@ test('a mouse drags a row from its handle at once, where the primary pointer is 
   }
 });
 
+for (const dir of ['ltr', 'rtl'] as const) {
+  test(`${dir}: the insertion line runs along the dragged row in a list set in from its container`, async ({
+    browser,
+  }) => {
+    const story = await openFinePointerStory(browser);
+    try {
+      const {page} = story;
+      // The list sits 40 px in from its container, which stays its offset
+      // parent until a drag positions the list.
+      await page.evaluate(direction => {
+        const list = document.querySelector<HTMLElement>('#storybook-root ul');
+        if (list != null) {
+          list.dir = direction;
+          list.style.marginInlineStart = '40px';
+        }
+      }, dir);
+      const before = await labels(page);
+      const {at, rowHeight} = await handleOf(page, before[0]);
+      await page.mouse.move(at.x, at.y);
+      await page.mouse.down();
+      await page.mouse.move(at.x, at.y + rowHeight * 1.5, {steps: 8});
+      const line = await page.evaluate(() => {
+        const list = document.querySelector<HTMLElement>('#storybook-root ul');
+        const row = document.querySelector<HTMLElement>(
+          '#storybook-root [data-astryx-reorder-source]',
+        );
+        if (list == null || row == null) {
+          return null;
+        }
+        const after = getComputedStyle(list, '::after');
+        const listBox = list.getBoundingClientRect();
+        const rowBox = row.getBoundingClientRect();
+        const start = parseFloat(after.insetInlineStart);
+        const width = parseFloat(after.width);
+        // The line's own edges in the viewport, from its inline start.
+        const left =
+          list.dir === 'rtl'
+            ? listBox.right - list.clientLeft - start - width
+            : listBox.left + list.clientLeft + start;
+        return {
+          left,
+          right: left + width,
+          rowLeft: rowBox.left,
+          rowRight: rowBox.right,
+        };
+      });
+      await page.keyboard.press('Escape');
+      await page.mouse.up();
+      expect(line).not.toBeNull();
+      expect(
+        Math.abs((line?.left ?? NaN) - (line?.rowLeft ?? NaN)),
+      ).toBeLessThan(1);
+      expect(
+        Math.abs((line?.right ?? NaN) - (line?.rowRight ?? NaN)),
+      ).toBeLessThan(1);
+    } finally {
+      await story.close();
+    }
+  });
+}
+
 test('a pen drags a row from its handle at once, as a mouse does, where the primary pointer is fine', async ({
   browser,
 }) => {

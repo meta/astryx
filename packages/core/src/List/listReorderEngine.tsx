@@ -290,13 +290,28 @@ const LINE_Y = '--astryx-reorder-line-y';
 const LINE_START = '--astryx-reorder-line-start';
 const LINE_SIZE = '--astryx-reorder-line-size';
 
+/** Where the insertion line runs across a row, in list coordinates. */
+interface LineSpan {
+  readonly start: number;
+  readonly size: number;
+}
+
+/**
+ * The span of `row` in `list`'s coordinates, read before anything in the
+ * frame writes a style. The list may not be the row's offset parent yet.
+ */
+function lineSpanOf(row: HTMLElement, list: HTMLElement): LineSpan {
+  return {start: layoutLeft(row, list), size: row.offsetWidth};
+}
+
 /**
  * Shows the list's insertion line (its pseudo-element, reorderListStyle)
- * across `row`'s width, centred on `center` in list coordinates.
+ * across `span`, centred on `center` in list coordinates. It only writes, so
+ * a crossing lays nothing out.
  */
-function showLine(list: HTMLElement, row: HTMLElement, center: number): void {
-  list.style.setProperty(LINE_START, `${row.offsetLeft}px`);
-  list.style.setProperty(LINE_SIZE, `${row.offsetWidth}px`);
+function showLine(list: HTMLElement, span: LineSpan, center: number): void {
+  list.style.setProperty(LINE_START, `${span.start}px`);
+  list.style.setProperty(LINE_SIZE, `${span.size}px`);
   list.style.setProperty(LINE_Y, `${center - INSERTION_LINE_THICKNESS / 2}px`);
   showReorderLine(list);
 }
@@ -332,6 +347,12 @@ function lineCenter(
 function layoutTop(row: HTMLElement, list: HTMLElement): number {
   const base = row.offsetParent === list ? 0 : list.offsetTop;
   return row.offsetTop - base;
+}
+
+/** A row's layout left inside the list (transforms ignored). */
+function layoutLeft(row: HTMLElement, list: HTMLElement): number {
+  const base = row.offsetParent === list ? 0 : list.offsetLeft;
+  return row.offsetLeft - base;
 }
 
 function isScrollContainer(element: HTMLElement): boolean {
@@ -417,6 +438,8 @@ interface DragSession {
   readonly tops: ReadonlyArray<number>;
   readonly geometry: ReorderGeometry;
   readonly dragged: number;
+  /** The dragged row's span, where the insertion line runs. */
+  readonly lineSpan: LineSpan;
   position: number;
   /** The offset each row is moving to. */
   readonly offsets: number[];
@@ -1090,6 +1113,7 @@ export class ListReorderController implements ListReorderSession {
     const at = motionNow();
     const tops = rows.map(element => layoutTop(element, list));
     const heights = rows.map(element => element.offsetHeight);
+    const lineSpan = lineSpanOf(row, list);
     const bounds = boundsOf(movable);
     const geometry: ReorderGeometry = {
       rows: rows.map((element, index) => ({
@@ -1147,6 +1171,7 @@ export class ListReorderController implements ListReorderSession {
       tops,
       geometry,
       dragged,
+      lineSpan,
       position: dragged,
       offsets: rows.map((element, index) =>
         index === dragged ? 0 : shownY(element, at),
@@ -1229,7 +1254,7 @@ export class ListReorderController implements ListReorderSession {
     if (center == null) {
       hideLine(session.list);
     } else {
-      showLine(session.list, session.rows[session.dragged], center);
+      showLine(session.list, session.lineSpan, center);
     }
     // A pointer drag announces its pick-up and its drop, not each place it
     // passes: announcing each crossed position is noisy.
@@ -1632,15 +1657,19 @@ export class ListReorderController implements ListReorderSession {
             )
           : Math.max(0, layoutTop(neighbour, list) - bottom);
     const center = step < 0 ? top - gap / 2 : bottom + gap / 2;
-    if (this.modeLine?.list !== list) {
+    const span = lineSpanOf(row, list);
+    // Every read comes before the first write, so a move lays out once.
+    const isNewList = this.modeLine?.list !== list;
+    const isStatic = isNewList && getComputedStyle(list).position === 'static';
+    if (isNewList) {
       this.clearModeLine();
       const listPosition = list.style.position;
-      if (getComputedStyle(list).position === 'static') {
+      if (isStatic) {
         list.style.position = 'relative';
       }
       this.modeLine = {list, listPosition};
     }
-    showLine(list, row, center);
+    showLine(list, span, center);
   }
 
   private clearModeLine(): void {
