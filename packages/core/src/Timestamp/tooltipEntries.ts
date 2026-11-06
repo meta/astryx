@@ -22,7 +22,7 @@
  */
 
 import {devWarn} from '../utils/devWarning';
-import {formatInstant} from './formatInstant';
+import {formatInstant, formatZoneName} from './formatInstant';
 import type {InstantFormat} from './formatInstant';
 import type {Locale} from '../i18n/types';
 import type {CalendarSystem} from '../utils/calendarSystem';
@@ -92,6 +92,8 @@ export interface TimestampTooltipEntry {
 /** A rendered tooltip line. */
 export interface TimestampTooltipLine {
   label?: string;
+  /** The long name of the line's zone; it names a line without a label. */
+  zoneName: string;
   value: string;
   isCopyable: boolean;
 }
@@ -220,6 +222,7 @@ export function formatTooltipLines(
     return {
       ...(entry.label === undefined ? {} : {label: entry.label}),
       isCopyable: entry.isCopyable ?? false,
+      zoneName: formatZoneName(date, locale, timeZone),
       value: formatInstant(date, format, locale, {
         timeZone,
         calendar,

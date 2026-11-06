@@ -104,6 +104,48 @@ export const WithZoom: Story = {
   },
 };
 
+/** Zoom on a photo with a caption, which sits under the fitted photo. */
+export const ZoomWithCaption: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>Open zoom with caption</button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={{
+            src: SAMPLE_IMAGE,
+            alt: 'Forest path',
+            caption: 'A winding path through the forest',
+          }}
+          hasZoom
+        />
+      </>
+    );
+  },
+};
+
+export const GalleryWithZoom: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [index, setIndex] = useState(0);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>Open gallery with zoom</button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={GALLERY_MEDIA}
+          index={index}
+          onIndexChange={setIndex}
+          hasZoom
+        />
+      </>
+    );
+  },
+};
+
 export const WithCaption: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);
