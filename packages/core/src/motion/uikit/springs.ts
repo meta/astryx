@@ -243,10 +243,13 @@ export const SHEET_RELEASE_FAST_SPRING = {
  *   iPhone 17 Pro, CASpringAnimation dump (300 pt swipe in 0.15 s:
  *   stiffness 333.333, damping 29.212), Oct 23 2026
  */
-export const SHEET_DISMISS_SWIPE_SPRING = {
-  response: 0.3441442326,
-  dampingRatio: 0.8,
-} as const;
+export const SHEET_DISMISS_SWIPE_SPRING = /* @__PURE__ */ springRole(
+  'sheetDismissSwipe',
+  {
+    response: 0.3441442326,
+    dampingRatio: 0.8,
+  } as const,
+);
 
 // ---------------------------------------------------------------------
 // Alerts, action sheets, menus
@@ -586,7 +589,7 @@ const SPRING_ROLES = {
  * (motion/roles.ts), by their row names (`springs.settle`). Every other
  * spring, UIKit's menu spring under Reduce Motion and the keyboard's
  * included, is not a role. Each role row registers itself when it loads, so
- * a call registers nothing new. A call still puts all 18 role rows in the
+ * a call registers nothing new. A call still puts all 19 role rows in the
  * caller's bundle.
  */
 export function registerSpringsTable(): void {

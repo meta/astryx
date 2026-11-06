@@ -13,7 +13,7 @@
  *   release keeps the sheet open. A quick short mouse drag keeps it open, and
  *   a mouse close under reduced motion moves no further. A drag's close and
  *   its scrim's running fade play on one clock and end together, at each
- *   tempo.
+ *   tempo and in a switcher flow.
  * @position Chromium proof for useSheetGestures' release. The page reads the
  *   events' timestamps, so load cannot change the release speed.
  */
@@ -52,13 +52,16 @@ async function openFilters(page: Page) {
 async function openSheet(
   page: Page,
   story: string,
-  opener: string,
+  opener: string | null,
   name: string,
+  component = 'bottomsheet',
 ) {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=core-bottomsheet--${story}&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-${component}--${story}&viewMode=story`,
   );
-  await page.getByRole('button', {name: opener}).click();
+  if (opener != null) {
+    await page.getByRole('button', {name: opener}).click();
+  }
   const dialog = page.getByRole('dialog', {name});
   await expect(dialog).toBeVisible();
   const sheet = dialog.locator('.astryx-bottom-sheet').first();
@@ -473,11 +476,31 @@ interface CloseWatch {
 }
 
 /**
- * A 3,000 px/s flick that closes Filters, at `tempo` or the theme's own. It
- * reads what runs: the backdrop's opacity transition and the close's curve.
+ * The first step of the deprecated switcher's flow, which a swipe closes. The
+ * story opens the flow itself.
  */
-async function dragClose(page: Page, tempo: number | null) {
-  const {dialog, sheet} = await openFilters(page);
+async function openFlow(page: Page) {
+  return openSheet(
+    page,
+    'capped',
+    null,
+    'Set up notifications',
+    'bottomsheetswitcher',
+  );
+}
+
+/**
+ * A flick that closes Filters, or `open`'s sheet, at `tempo` or the theme's
+ * own: 60 px in `dragMs`, 3,000 px/s by default. It reads what runs: the
+ * backdrop's opacity transition and the close's curve.
+ */
+async function dragClose(
+  page: Page,
+  tempo: number | null,
+  open: typeof openFilters = openFilters,
+  dragMs = 20,
+) {
+  const {dialog, sheet} = await open(page);
   if (tempo != null) {
     // The private property a theme that sets tempo writes, on the sheet
     // itself: the story's theme writes tempo 1 nearer the sheet than :root.
@@ -496,14 +519,15 @@ async function dragClose(page: Page, tempo: number | null) {
       closedAt: Number.NaN,
     };
     Object.assign(window, {closeWatch: watch});
-    element.addEventListener(
-      'close',
-      () => {
-        watch.closedAt = performance.now();
-      },
-      {once: true},
-    );
     const look = () => {
+      // A switcher step's dialog can hide without a close event.
+      if (
+        !(element as HTMLDialogElement).open ||
+        element.getClientRects().length === 0
+      ) {
+        watch.closedAt = performance.now();
+        return;
+      }
       const fades = document.getAnimations().filter(animation => {
         const effect = animation.effect as KeyframeEffect | null;
         return (
@@ -534,11 +558,30 @@ async function dragClose(page: Page, tempo: number | null) {
     requestAnimationFrame(look);
   }, END_HOLD_MS);
   const cdp = await page.context().newCDPSession(page);
-  await drag(cdp, sheet, 60, 20);
-  await expect(dialog).toBeHidden({timeout: 5_000});
-  return page.evaluate(
-    () => (window as unknown as {closeWatch: CloseWatch}).closeWatch,
-  );
+  await drag(cdp, sheet, 60, dragMs);
+  const read = async () =>
+    page.evaluate(
+      () => (window as unknown as {closeWatch: CloseWatch}).closeWatch,
+    );
+  // A switcher step leaves the accessibility tree at once, and its dialog
+  // closes once the close ends.
+  await expect
+    .poll(async () => Number.isFinite((await read()).closedAt), {
+      timeout: 5_000,
+    })
+    .toBe(true);
+  return read();
+}
+
+/** Expects the scrim's running fade to play on the close's own clock. */
+function expectFadeWithClose(watch: CloseWatch) {
+  const fadeEnd = watch.fadeStart + watch.fade;
+  expect(Math.abs(watch.fade - watch.close)).toBeLessThan(2);
+  // The two end within one frame of each other.
+  expect(Math.abs(fadeEnd - (watch.closeStart + watch.close))).toBeLessThan(17);
+  // The dialog closes a commit after the close ends. So the page is never
+  // clear for long while the dialog still takes taps.
+  expect(watch.closedAt - fadeEnd).toBeLessThan(150);
 }
 
 for (const tempo of [0.75, 1, 1.5]) {
@@ -547,16 +590,7 @@ for (const tempo of [0.75, 1, 1.5]) {
   }) => {
     const atOne = await dragClose(page, null);
     const atTempo = await dragClose(page, tempo);
-    const fadeEnd = atTempo.fadeStart + atTempo.fade;
-    // The fade that runs lasts the close's own curve. The close starts a
-    // commit after the fade, so the two end a frame or so apart.
-    expect(Math.abs(atTempo.fade - atTempo.close)).toBeLessThan(2);
-    expect(
-      Math.abs(fadeEnd - (atTempo.closeStart + atTempo.close)),
-    ).toBeLessThan(100);
-    // The dialog closes a commit after the close ends. So the page is never
-    // clear for long while the dialog still takes taps.
-    expect(atTempo.closedAt - fadeEnd).toBeLessThan(150);
+    expectFadeWithClose(atTempo);
     // The close's own curve scales with the tempo, within 5 %. The release
     // speed, the same for both closes, shapes it a little.
     const ratio = atTempo.close / atOne.close;
@@ -564,3 +598,24 @@ for (const tempo of [0.75, 1, 1.5]) {
     expect(ratio).toBeLessThan(tempo * 1.05);
   });
 }
+
+test("a switcher flow's drag close and its scrim's fade end together", async ({
+  page,
+}) => {
+  expectFadeWithClose(await dragClose(page, null, openFlow));
+});
+
+test("a hard flick's close from the top snap point and its scrim's fade end together", async ({
+  page,
+}) => {
+  // 4,000 px/s. Snap points styles its fade only on the next frame.
+  expectFadeWithClose(
+    await dragClose(
+      page,
+      null,
+      async p =>
+        openSheet(p, 'snap-points', 'Open nearby places', 'Nearby places'),
+      15,
+    ),
+  );
+});

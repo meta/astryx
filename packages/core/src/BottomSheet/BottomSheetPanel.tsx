@@ -70,7 +70,7 @@ import {
 } from './snapOffsets';
 import {animatorFor, SETTLE_THRESHOLD} from '../motion/animator';
 import {resolveSettleMs} from '../motion/resolveMotion';
-import {registerSpringsTable, springs} from '../motion/uikit/springs';
+import {springs} from '../motion/uikit/springs';
 import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
 import {
   scrollPreservationPadding,
@@ -103,6 +103,8 @@ function sheetReserve(viewportHeight: number): number {
   );
 }
 const MOBILE_KEYBOARD_BOTTOM_CLEARANCE = 48;
+// How many more frames a drag's close looks for its scrim's fade to adopt.
+const MAX_SCRIM_FADE_ADOPT_FRAMES = 3;
 const TRANSITION_BACKSTOP_BUFFER_MS = 50;
 // The floating handle bar's height. The bar is out of flow, so this is not
 // layout space the content pays for -- the pill (4px, centered) lands 10-14px
@@ -138,14 +140,40 @@ function supportsWebAnimations(): boolean {
  * where the finger left the sheet, timed as the shared animator times it.
  */
 function dragExitMs(element: Element, exit: SheetDragExit): number {
-  // The close spring is a motion role, so the theme's tempo scales it.
-  registerSpringsTable();
   return resolveSettleMs(element, springs.sheetDismissSwipe, {
     from: 0,
     to: exit.distance,
     velocity: exit.velocity,
     epsilon: SETTLE_THRESHOLD.y,
   });
+}
+
+/** The running fade that clears the scrim behind `panel`, if any. */
+function clearingScrimFade(panel: Element): Animation | undefined {
+  const dialog = panel.closest('dialog');
+  const doc = panel.ownerDocument;
+  if (dialog == null || typeof doc.getAnimations !== 'function') {
+    return undefined;
+  }
+  const fades = doc.getAnimations().filter(animation => {
+    const effect = animation.effect as KeyframeEffect | null;
+    return (
+      effect?.target === dialog &&
+      (animation as CSSTransition).transitionProperty === 'opacity' &&
+      // Skip a fade that the drag started. A style update replaces that fade.
+      Number(effect.getKeyframes().at(-1)?.opacity) === 0
+    );
+  });
+  const onBackdrop = fades.filter(
+    fade => (fade.effect as KeyframeEffect).pseudoElement === '::backdrop',
+  );
+  // An engine that reports no backdrop effect (WebKit) puts the backdrop's
+  // fade on the dialog itself, which runs no opacity transition of its own.
+  return (
+    onBackdrop.length > 0
+      ? onBackdrop
+      : fades.filter(fade => !(fade.effect as KeyframeEffect).pseudoElement)
+  ).at(-1);
 }
 
 // Measure the viewport that the height budgets use. They are `dvh`, which
@@ -888,8 +916,6 @@ export function BottomSheetPanel({
     const element = elementRef.current;
     if (motion === 'exiting' && playedDragExit != null && element != null) {
       dragExitElementRef.current = element;
-      // The close spring is a motion role, so the theme's tempo scales it.
-      registerSpringsTable();
       const exit = animatorFor(element).animate(
         {y: playedDragExit.distance},
         {
@@ -899,6 +925,25 @@ export function BottomSheetPanel({
       );
       let isCurrent = true;
       let isFinished = false;
+      let frame: number | null = null;
+      // The scrim's fade follows the close. Once the close starts, the fade
+      // takes its start time, so the two end together. If the fade has no
+      // style yet, look for it again on each of the next few frames.
+      void exit.started.then(start => {
+        const adopt = (framesLeft: number) => {
+          frame = null;
+          if (!isCurrent) {
+            return;
+          }
+          const fade = clearingScrimFade(element);
+          if (fade != null) {
+            fade.startTime = start;
+          } else if (framesLeft > 0) {
+            frame = requestAnimationFrame(() => adopt(framesLeft - 1));
+          }
+        };
+        adopt(MAX_SCRIM_FADE_ADOPT_FRAMES);
+      });
       void exit.finished.then(() => {
         isFinished = true;
         onScrimFadeDurationRef.current?.(element, null);
@@ -908,6 +953,9 @@ export function BottomSheetPanel({
       });
       return () => {
         isCurrent = false;
+        if (frame != null) {
+          cancelAnimationFrame(frame);
+        }
         // A reopen during the exit takes the sheet back from where it is.
         if (!isFinished) {
           exit.retarget({y: 0});

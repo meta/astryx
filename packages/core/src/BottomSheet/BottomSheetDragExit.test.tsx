@@ -6,7 +6,7 @@
  * @output Unit tests for the exit a drag's close plays. It starts the close
  *   spring from where the finger left the sheet, and a reopen takes it back.
  *   The scrim fades for as long as that close plays, decided before the
- *   scrim starts to clear
+ *   scrim starts to clear, on a standalone sheet and on a switcher flow
  * @position The jsdom side of the drag exit; the Chromium release spec reads
  *   the curve the browser plays.
  */
@@ -19,6 +19,7 @@ import type * as AnimatorModule from '../motion/animator';
 import {solveSpring, toSpring} from '../motion/spring';
 import {springs} from '../motion/uikit/springs';
 import {BottomSheet} from './BottomSheet';
+import {BottomSheetSwitcher} from './BottomSheetSwitcher';
 import {resetBottomSheetStackForTests} from './bottomSheetStack';
 
 interface RecordedExit {
@@ -53,9 +54,9 @@ class ResizeObserverMock {
 }
 
 /** Lays the sheet out 400 px tall, as the browser's resize observer would. */
-function layOutSheet() {
+function layOutSheet(label = 'Sheet') {
   const sheet = document.querySelector<HTMLElement>(
-    'dialog[aria-label="Sheet"] .astryx-bottom-sheet',
+    `dialog[aria-label="${label}"] .astryx-bottom-sheet`,
   );
   const observer = observers.find(
     instance => sheet != null && instance.observed.has(sheet),
@@ -85,7 +86,14 @@ vi.mock('../motion/animator', async importOriginal => {
         const finished = new Promise<boolean>(resolve => {
           finish = () => resolve(true);
         });
-        const exit = {values, options, finish, retarget: vi.fn(), finished};
+        const exit = {
+          values,
+          options,
+          finish,
+          retarget: vi.fn(),
+          finished,
+          started: Promise.resolve(0),
+        };
         exits.push(exit);
         return exit;
       },
@@ -157,9 +165,9 @@ function Host() {
   );
 }
 
-function getHandle(): HTMLElement {
+function getHandle(label = 'Sheet'): HTMLElement {
   const handle = document
-    .querySelector('dialog[aria-label="Sheet"] .astryx-bottom-sheet')
+    .querySelector(`dialog[aria-label="${label}"] .astryx-bottom-sheet`)
     ?.querySelector<HTMLElement>('[aria-hidden="true"]');
   if (handle == null) {
     throw new Error('grab handle not found');
@@ -168,8 +176,8 @@ function getHandle(): HTMLElement {
 }
 
 /** A fast downward touch drag on the handle: a flick, which closes the sheet. */
-function flickDown() {
-  const handle = getHandle();
+function flickDown(label = 'Sheet') {
+  const handle = getHandle(label);
   fireEvent.pointerDown(handle, {
     pointerId: 1,
     pointerType: 'touch',
@@ -212,9 +220,9 @@ it('leaves a finished exit where it ended', async () => {
 });
 
 /** The inline fade duration on the sheet's dialog, '' when none. */
-function scrimFade(): string {
+function scrimFade(label = 'Sheet'): string {
   const dialog = document.querySelector<HTMLDialogElement>(
-    'dialog[aria-label="Sheet"]',
+    `dialog[aria-label="${label}"]`,
   );
   return dialog?.style.getPropertyValue('--_sheet-scrim-duration') ?? '';
 }
@@ -234,7 +242,8 @@ it('fades the scrim for as long as the close plays when a drag closes the sheet'
   expect(scrimFade()).toBe(`${close.settleTime(SETTLE_THRESHOLD.y) * 1000}ms`);
 });
 
-it("decides the scrim's fade before the scrim starts to clear", () => {
+/** Records each inline style property write, as `name: value`. */
+function recordStyleWrites(): string[] {
   const writes: string[] = [];
   const setProperty = CSSStyleDeclaration.prototype.setProperty;
   vi.spyOn(CSSStyleDeclaration.prototype, 'setProperty').mockImplementation(
@@ -248,9 +257,11 @@ it("decides the scrim's fade before the scrim starts to clear", () => {
       setProperty.call(this, name, value, priority);
     },
   );
-  render(<Host />);
-  layOutSheet();
-  flickDown();
+  return writes;
+}
+
+/** Expects the scrim's fade to be written before the scrim starts to clear. */
+function expectFadeBeforeClear(writes: string[]) {
   // A fade written after the clear would not reach the running transition.
   const fade = writes.findIndex(write =>
     write.startsWith('--_sheet-scrim-duration: '),
@@ -258,6 +269,45 @@ it("decides the scrim's fade before the scrim starts to clear", () => {
   const clear = writes.indexOf('--_sheet-scrim-opacity: 0');
   expect(fade).toBeGreaterThanOrEqual(0);
   expect(clear).toBeGreaterThan(fade);
+}
+
+it("decides the scrim's fade before the scrim starts to clear", () => {
+  const writes = recordStyleWrites();
+  render(<Host />);
+  layOutSheet();
+  flickDown();
+  expectFadeBeforeClear(writes);
+});
+
+function Flow() {
+  const [activeSheet, setActiveSheet] = useState<string | null>('steps');
+  return (
+    <BottomSheetSwitcher
+      activeSheet={activeSheet}
+      onActiveSheetChange={setActiveSheet}>
+      <BottomSheet sheetId="steps" label="Steps">
+        Content
+      </BottomSheet>
+    </BottomSheetSwitcher>
+  );
+}
+
+it("fades a switcher flow's scrim for as long as the close plays when a drag closes it", () => {
+  const writes = recordStyleWrites();
+  render(<Flow />);
+  layOutSheet('Steps');
+  flickDown('Steps');
+  expect(exits).toHaveLength(1);
+  const [exit] = exits;
+  const close = solveSpring(toSpring(springs.sheetDismissSwipe), {
+    from: 0,
+    to: exit.values.y,
+    velocity: exit.options.velocity?.y,
+  });
+  expect(scrimFade('Steps')).toBe(
+    `${close.settleTime(SETTLE_THRESHOLD.y) * 1000}ms`,
+  );
+  expectFadeBeforeClear(writes);
 });
 
 it("clears the scrim's fade duration when the drag exit ends", async () => {

@@ -305,6 +305,36 @@ function scrimOpacityForView(view: BottomSheetStackView): '0' | '1' {
   return view.isStacked && !view.ownsScrim ? '0' : '1';
 }
 
+/**
+ * Writes the fade a touch drag's close paces on `dialog`'s scrim, or clears
+ * it when `ms` is null. `written` keeps the value the host wrote, so a clear
+ * removes only that value.
+ */
+function writeScrimFadeDuration(
+  dialog: HTMLDialogElement | null,
+  ms: number | null,
+  written: {current: string | null},
+): void {
+  if (dialog == null) {
+    return;
+  }
+  const current = dialog.style.getPropertyValue('--_sheet-scrim-duration');
+  if (ms == null) {
+    // Only its own value: a stack's 0s pin in the meantime stays.
+    if (written.current != null && current === written.current) {
+      dialog.style.removeProperty('--_sheet-scrim-duration');
+    }
+    written.current = null;
+    return;
+  }
+  // A stack's 0s pin hands the scrim over with no fade; it stays.
+  if (current === '0s') {
+    return;
+  }
+  written.current = `${ms}ms`;
+  dialog.style.setProperty('--_sheet-scrim-duration', written.current);
+}
+
 interface BottomSheetSharedProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the visual sheet panel <div>. */
   ref?: React.Ref<HTMLDivElement>;
@@ -548,26 +578,11 @@ function StandaloneBottomSheet({
   const scrimFadeRef = useRef<string | null>(null);
   const handleScrimFadeDuration = useCallback(
     (panel: HTMLElement, ms: number | null) => {
-      const dialog = panel.closest('dialog');
       const view = stackViewRef.current;
-      if (dialog == null || (view.isStacked && !view.ownsScrim)) {
+      if (view.isStacked && !view.ownsScrim) {
         return;
       }
-      const current = dialog.style.getPropertyValue('--_sheet-scrim-duration');
-      if (ms == null) {
-        // Only its own value: a stack's 0s pin in the meantime stays.
-        if (scrimFadeRef.current != null && current === scrimFadeRef.current) {
-          dialog.style.removeProperty('--_sheet-scrim-duration');
-        }
-        scrimFadeRef.current = null;
-        return;
-      }
-      // A stack's 0s pin hands the scrim over with no fade; it stays.
-      if (current === '0s') {
-        return;
-      }
-      scrimFadeRef.current = `${ms}ms`;
-      dialog.style.setProperty('--_sheet-scrim-duration', scrimFadeRef.current);
+      writeScrimFadeDuration(panel.closest('dialog'), ms, scrimFadeRef);
     },
     [],
   );
@@ -1123,6 +1138,16 @@ function SwitcherBottomSheetItem({
     },
     [hasValidSheetId, onSheetScrimOpacityChange, sheetId],
   );
+  // The fade a touch drag's close wrote on this step's dialog, until that
+  // close ends. The step a drag closes becomes the flow's retained step, so
+  // its backdrop is the flow's scrim.
+  const scrimFadeRef = useRef<string | null>(null);
+  const handleScrimFadeDuration = useCallback(
+    (panel: HTMLElement, ms: number | null) => {
+      writeScrimFadeDuration(panel.closest('dialog'), ms, scrimFadeRef);
+    },
+    [],
+  );
 
   useLayoutEffect(() => {
     if (!hasValidSheetId) {
@@ -1325,6 +1350,7 @@ function SwitcherBottomSheetItem({
           xstyle={xstyle}
           onDismiss={dismissOnSwipe}
           onScrimOpacity={handleScrimOpacity}
+          onScrimFadeDuration={handleScrimFadeDuration}
           onElementChange={handlePanelElementChange}
           onMotionStart={handleMotionStart}
           onMotionComplete={handleMotionComplete}>
