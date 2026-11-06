@@ -264,6 +264,21 @@ export function useOverflow(
   itemCount: number,
   options: UseOverflowOptions = {},
 ): UseOverflowReturn {
+  return useOverflowInternal(itemCount, options, {tracksRows: true});
+}
+
+/**
+ * `useOverflow` for a host inside Core that states whether it renders from
+ * `rows` and `rowHeight`. With `tracksRows` false, the hook does not track
+ * them and reports `rows: 1` and `rowHeight: 0`. A state write that nobody
+ * reads still re-renders the host. Internal: the public hook always tracks
+ * them.
+ */
+export function useOverflowInternal(
+  itemCount: number,
+  options: UseOverflowOptions,
+  {tracksRows}: {tracksRows: boolean},
+): UseOverflowReturn {
   const {
     gap = 0,
     minVisibleItems = 0,
@@ -303,6 +318,11 @@ export function useOverflow(
         applied.visibleCount = nextVisible;
         setVisibleCount(nextVisible);
       }
+      // A host that does not track rows renders from neither value, so they
+      // are not written.
+      if (!tracksRows) {
+        return;
+      }
       if (applied.rows !== nextRows) {
         applied.rows = nextRows;
         setRows(nextRows);
@@ -312,7 +332,7 @@ export function useOverflow(
         setRowHeight(nextRowHeight);
       }
     },
-    [],
+    [tracksRows],
   );
 
   const calculate: Measure = useCallback(
@@ -488,7 +508,9 @@ export function useOverflow(
     measureRef,
     visibleCount,
     hasOverflow,
-    rows,
-    rowHeight,
+    // A host that stops tracking keeps state from earlier measurements, so
+    // the return uses the fixed values.
+    rows: tracksRows ? rows : 1,
+    rowHeight: tracksRows ? rowHeight : 0,
   };
 }

@@ -22,6 +22,7 @@ import {
   packedCli,
   placeCli,
   recyclePlacedCopies,
+  releasePackedCli,
   seedPackedRelease,
   startRegistry,
 } from '../test-utils/global-local-fixtures.mjs';
@@ -69,7 +70,7 @@ afterEach(async () => {
   }
 }, 90_000);
 afterAll(() => {
-  fs.rmSync(path.dirname(packedCli()), {recursive: true, force: true});
+  releasePackedCli();
 });
 
 /**

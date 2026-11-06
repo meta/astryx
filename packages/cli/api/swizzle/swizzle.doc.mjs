@@ -76,7 +76,7 @@ export const doc = {
     {
       type: 'swizzle.copy',
       description:
-        'A receipt after copying the component into the project: the component name, owning package, output directory, files-copied count, the written file names, whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling.',
+        'A receipt after copying the component into the project: the component name, owning package, output directory, files-copied count, the copied file names (relative to the component folder, including the private attribute owner modules and their unexported style modules copied beside it, e.g. `../privateAttributes/press.stylex.ts`), whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling.',
     },
   ],
   throws: [

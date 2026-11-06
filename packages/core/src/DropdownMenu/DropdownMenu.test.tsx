@@ -38,6 +38,7 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {MENU_PRESS_LONG_PRESS_MS} from '../hooks/useMenuPress';
 import {MENU_PRESS_SETTLE_MS} from '../hooks/menuPressGesture';
+import {isInHeldLayer} from '../Layer/inputHold';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 
@@ -801,7 +802,7 @@ describe('DropdownMenu', () => {
         );
       });
       expect(menu).toHaveStyle(
-        'max-height: min(300px,calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))))',
+        'max-height: min(300px,min(calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))), var(--_layer-keyboard-max-block-size, 100dvb)))',
       );
       expect(menu).not.toHaveStyle({overflowY: 'auto'});
       expect(menu).toHaveAttribute('tabindex', '-1');
@@ -2932,6 +2933,115 @@ describe('DropdownMenu data/compound parity', () => {
   });
 });
 
+describe('DropdownMenu entrance under a finger', () => {
+  function renderMenu(presentation?: 'popover') {
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        presentation={presentation}
+        items={[
+          {label: 'Edit', onClick: () => {}},
+          {label: 'Delete', onClick: () => {}},
+        ]}
+      />,
+    );
+    return screen.getByRole('button', {name: /Actions/});
+  }
+
+  const item = (name: string) =>
+    screen.getByRole('menuitem', {name, hidden: true});
+
+  // The primary pointer: a phone's finger, or a desktop's mouse.
+  function stubPointer(pointer: 'coarse' | 'fine') {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: pointer === 'coarse' && query === TOUCH_QUERY,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+  }
+
+  /**
+   * Gives each popover a running entrance (Web Animations' `getAnimations()`,
+   * which jsdom lacks) whose end the test decides.
+   */
+  function stubEntrance() {
+    let end = () => {};
+    const finished = new Promise<void>(resolve => {
+      end = resolve;
+    });
+    const entrance = {
+      playState: 'running',
+      finished,
+      effect: {getComputedTiming: () => ({endTime: 165})},
+    };
+    Object.defineProperty(Element.prototype, 'getAnimations', {
+      configurable: true,
+      value(this: Element) {
+        return this.matches('[popover]') ? [entrance] : [];
+      },
+    });
+    return {
+      async end() {
+        await act(async () => {
+          end();
+        });
+      },
+    };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(Element.prototype, 'getAnimations');
+  });
+
+  it('takes no touch while it enters: the layer is held until the entrance ends (spec:AST-094 FR35)', async () => {
+    stubPointer('coarse');
+    const entrance = stubEntrance();
+    const user = userEvent.setup();
+    await user.click(renderMenu());
+    expect(isInHeldLayer(item('Edit'))).toBe(true);
+
+    await entrance.end();
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+
+  it('lets go at once when it closes during its entrance', async () => {
+    stubPointer('coarse');
+    stubEntrance();
+    const user = userEvent.setup();
+    const trigger = renderMenu();
+    await user.click(trigger);
+    expect(isInHeldLayer(item('Edit'))).toBe(true);
+
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+
+  it('under a fine primary pointer (a mouse, or a finger on a touchscreen laptop), holds nothing: the layer\u2019s own entrance plays', async () => {
+    stubPointer('fine');
+    stubEntrance();
+    const user = userEvent.setup();
+    await user.click(renderMenu());
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+
+  it('pinned to presentation="popover", holds nothing under a finger', async () => {
+    stubPointer('coarse');
+    stubEntrance();
+    const user = userEvent.setup();
+    await user.click(renderMenu('popover'));
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+});
+
 describe('DropdownMenu press model', () => {
   const mouse = {pointerType: 'mouse', pointerId: 1, button: 0};
   const touch = {pointerType: 'touch', pointerId: 1};
@@ -3486,11 +3596,13 @@ describe('DropdownMenu menuMaxHeight', () => {
     const menu = screen.getByRole('menu', {hidden: true});
     // The cap is lifted to the given height, still bounded by the viewport.
     expect(menu).toHaveStyle({maxHeight: 'var(--x-maxHeight)'});
-    expect(menu.getAttribute('style')).toContain('min(528px, calc(100dvb');
+    expect(menu.getAttribute('style')).toContain('min(528px, min(calc(100dvb');
     expect(menu.getAttribute('style')).not.toContain('min(300px');
     // The popover viewport that holds the menu lifts its cap with it.
     const popover = menu.closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain('min(528px, calc(100dvb');
+    expect(popover?.getAttribute('style')).toContain(
+      'min(528px, min(calc(100dvb',
+    );
   });
 
   it('keeps the viewport bound below the raised cap', () => {
@@ -3505,7 +3617,7 @@ describe('DropdownMenu menuMaxHeight', () => {
       />,
     );
     const menu = screen.getByRole('menu', {hidden: true});
-    expect(menu.getAttribute('style')).toContain('min(720px, calc(100dvb');
+    expect(menu.getAttribute('style')).toContain('min(720px, min(calc(100dvb');
   });
 });
 

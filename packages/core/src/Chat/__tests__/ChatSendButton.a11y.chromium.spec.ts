@@ -322,24 +322,6 @@ function isIdentityTransform(transform: string): boolean {
   return false;
 }
 
-function isScale098(transform: string): boolean {
-  const values = transform
-    .slice(transform.indexOf('(') + 1, transform.lastIndexOf(')'))
-    .match(/-?[\d.]+/g)
-    ?.map(Number);
-  const close = (actual: number, expected: number) =>
-    Math.abs(actual - expected) < 0.001;
-  if (transform.startsWith('matrix3d(') && values?.length === 16) {
-    const expected = [0.98, 0, 0, 0, 0, 0.98, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-    return values.every((value, index) => close(value, expected[index]));
-  }
-  if (transform.startsWith('matrix(') && values?.length === 6) {
-    const expected = [0.98, 0, 0, 0.98, 0, 0];
-    return values.every((value, index) => close(value, expected[index]));
-  }
-  return false;
-}
-
 function resolveBackdrop(
   backgroundColor: string,
   backgroundImage: string,
@@ -759,7 +741,7 @@ async function capture(
       : interaction === 'focus-visible'
         ? 'Focused: outline style'
         : interaction === 'pressed'
-          ? 'Pressed: scale(0.98) plus pressed overlay'
+          ? 'Pressed: identity transform plus pressed overlay under reduced motion'
           : 'Rest: base tokens with no interaction';
   const interactionStateIsExclusive =
     interaction === 'rest'
@@ -798,7 +780,7 @@ async function capture(
         : interaction === 'pressed'
           ? overlayIsAlpha &&
             pressedOverlayMatches &&
-            isScale098(actual.transform) &&
+            isIdentityTransform(actual.transform) &&
             interactionStateIsExclusive
           : interactionStateIsExclusive;
   const renderedContrastPairs = contrastPairs(actual, fixture, interaction);

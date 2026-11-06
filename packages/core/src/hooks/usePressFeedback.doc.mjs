@@ -52,7 +52,7 @@ export const docs = {
   relatedComponents: ['Button', 'Item', 'ClickableCard'],
   relatedHooks: ['useLongPress'],
   importPath: '@astryxdesign/core/hooks',
-  category: 'interaction',
+  category: 'motion & gestures',
 };
 
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */

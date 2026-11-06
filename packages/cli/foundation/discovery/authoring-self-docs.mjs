@@ -15,9 +15,9 @@
  *   the self-doc tests fail.
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../fs/paths.mjs';
+import {listDirEntries} from '../fs/listing-cache.mjs';
 import {readDocView} from '../doc-compiler/read.mjs';
 import {
   DOC_OUTPUT_BUDGET_BYTES,
@@ -75,7 +75,7 @@ export function discoverAuthoringSelfDocSources(root = AUTHORING_ROOT) {
   const found = [];
   /** @param {string} dir */
   const walk = dir => {
-    for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+    for (const entry of listDirEntries(dir)) {
       if (entry.name === 'node_modules' || entry.name.startsWith('__'))
         continue;
       const full = path.join(dir, entry.name);

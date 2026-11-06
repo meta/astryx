@@ -273,8 +273,9 @@ describe('Field', () => {
         <input id="help-input" />
       </Field>,
     );
-    // Info icon should be present
-    expect(document.querySelector('svg')).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {name: 'About Help'}),
+    ).toBeInTheDocument();
   });
 
   it('does not render tooltip icon when labelTooltip is not provided', () => {

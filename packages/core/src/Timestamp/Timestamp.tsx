@@ -34,7 +34,7 @@ import {useLocale} from '../i18n/useLocale';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {formatInstant} from './formatInstant';
+import {formatInstant, formatZoneName} from './formatInstant';
 import {formatRelativeTime} from './formatRelativeTime';
 import {formatTooltipLines} from './tooltipEntries';
 import type {
@@ -428,7 +428,13 @@ export function Timestamp({
   // full absolute time, itself copyable, just like a configured entry.
   const lines: ReadonlyArray<TimestampTooltipLine> =
     entries === undefined
-      ? [{value: fullAbsoluteText, isCopyable: true}]
+      ? [
+          {
+            value: fullAbsoluteText,
+            zoneName: isValidDate ? formatZoneName(date, locale) : '',
+            isCopyable: true,
+          },
+        ]
       : formatTooltipLines(date, entries, locale, calendar);
 
   const timestampProps = mergeProps(

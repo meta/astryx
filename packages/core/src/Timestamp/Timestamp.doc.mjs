@@ -93,6 +93,23 @@ export const docs = {
       {className: 'astryx-timestamp', visualProps: ['type', 'color', 'format']},
       {className: 'astryx-timestamp-copy-button'},
     ],
+    componentIcons: [
+      {
+        slot: 'timestamp-copy',
+        description: "The copy button icon on a hover card row.",
+        fallback: '`copy`; `check` while copied',
+        state: [
+          {
+            name: 'copied',
+            type: 'boolean',
+            description:
+              'True while the copied feedback shows after a successful copy.',
+          },
+        ],
+        whenNull:
+          'Hides the glyph. The button keeps its size, name, tooltip, and copy action.',
+      },
+    ],
   },
   usage: {
     description:

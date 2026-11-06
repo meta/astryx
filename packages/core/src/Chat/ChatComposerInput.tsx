@@ -620,9 +620,21 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     [emitChange, insertTextWithoutEmit],
   );
 
+  const insertTokenWithoutEmit = tokens.insertToken;
+  const insertToken = useCallback(
+    (token: ChatComposerToken) => {
+      const id = insertTokenWithoutEmit(token);
+      if (id != null) {
+        emitChange();
+      }
+      return id;
+    },
+    [emitChange, insertTokenWithoutEmit],
+  );
+
   // A caller may retain a handle across renders. Resolve mutation permission
   // through the latest callbacks rather than the render that created it.
-  insertTokenRef.current = isDisabled ? () => undefined : tokens.insertToken;
+  insertTokenRef.current = isDisabled ? () => undefined : insertToken;
   insertTextRef.current = isDisabled ? () => {} : insertText;
   expandTokenRef.current = isDisabled ? () => {} : tokens.expandToken;
 
@@ -888,9 +900,13 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         return;
       }
 
-      // Paste-as-token: convert long pastes to token chips.
+      // Paste-as-token: convert long pastes to token chips. The default
+      // converter inserts through the handle, which publishes the change.
+      const versionBeforeToken = emitChangeVersionRef.current;
       if (pasteAsToken?.onPaste(e, text)) {
-        emitChange();
+        if (emitChangeVersionRef.current === versionBeforeToken) {
+          emitChange();
+        }
         return;
       }
 

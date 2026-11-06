@@ -9,7 +9,10 @@
  *   presentation order; a settle bound in cast steps reads the step from the
  *   run (2 px in WebKit's cast, 1 px in Chromium's), stops a WebKit coast at
  *   its tail's plateaus where a 2 px bound reads them as a stall, and still
- *   fails a 40 ms freeze more than two steps from rest in either cast.
+ *   fails a 40 ms freeze more than two steps from rest in either cast. The
+ *   proof reads a held frame at its run's own pace, whatever the settle
+ *   bound. A slow spring late in a WebKit block passes, and its holds and a
+ *   freeze still fail.
  * @position Unit test of ./busy and ./frames' ordering; the browser proof
  *   with a real compositor animation and a rAF control is in
  *   harness.interaction.browser.spec.ts.
@@ -17,6 +20,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {busyWindowProof, BusyWindowTooLateError, castStep} from './busy';
+import * as lateBlock from './busy.lateblock.fixture';
 import * as skip from './busy.skip.fixture';
 import * as slowTail from './busy.slowtail.fixture';
 import * as webkitDecel from './busy.webkitdecel.fixture';
@@ -707,6 +711,80 @@ describe('busyWindowProof in a slow tail', () => {
   });
 });
 
+describe('busyWindowProof in a slow tail late in a WebKit block', () => {
+  const control = slowTailFrames(lateBlock.control);
+  /**
+   * The spring's frames, each frame from `from` through `to` ms holding the
+   * position before.
+   */
+  const held = (from: number, to: number): TrackedFrame[] => {
+    const frames = slowTailFrames(lateBlock.tracked);
+    const hold = [...frames].reverse().find(f => f.t < from)!.box!;
+    return frames.map(f =>
+      f.t >= from && f.t <= to ? ({...f, box: {...hold}} as TrackedFrame) : f,
+    );
+  };
+  const judge = (tracked: readonly TrackedFrame[]) =>
+    busyWindowProof(tracked, lateBlock.block, {
+      axis: 'x',
+      settledWithin: 2,
+      control,
+    });
+
+  it("reads a held frame at its run's own pace where uneven stamps put the frames before it over two steps a frame", () => {
+    // The frame at +942 ms holds the position before while the control
+    // moves, and the next catches up 2 px. The run moves 1.0 px a frame.
+    const proof = judge(slowTailFrames(lateBlock.tracked));
+    expect(proof.verdict.failures).toEqual([]);
+  });
+
+  it('still fails a one-frame hold there where the spring moves two steps a frame or more', () => {
+    // Held at 168 px at +397 ms, where the spring moves about 5 px a frame:
+    // the next frame catches up 9 px.
+    const proof = judge(held(390, 400));
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /moved on \d+ of the \d+ frames the control moved/,
+    );
+  });
+
+  it('still fails a two-frame hold in its slow tail', () => {
+    // Held at 258 px at +847 and +872 ms, then 264 px: about 1.6 px a frame
+    // across the run, two frames held.
+    const proof = judge(held(840, 880));
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /moved on \d+ of the \d+ frames the control moved/,
+    );
+  });
+
+  it('still fails the spring frozen through the block', () => {
+    const proof = judge(held(100, 1000));
+    expect(proof.verdict.pass, proof.summary).toBe(false);
+  });
+
+  it('reads a held frame across a sparse stretch at the pace before it', () => {
+    // 1 px a frame, then three frames 36.7 ms apart read 230, 230 and 232.
+    // The pace before the run explains the held frame, as with frames on
+    // time. The run's own reading, over the time it spans, is slower.
+    const frames: (readonly [number, number])[] = [];
+    for (let i = 0; i <= 30; i += 1) {
+      frames.push([-200 + i * 16.7, 200 + i]);
+    }
+    const sparse = frames[frames.length - 1][0];
+    frames.push([sparse + 36.7, 230], [sparse + 73.4, 232]);
+    for (let j = 1; sparse + 73.4 + j * 16.7 <= 1100; j += 1) {
+      frames.push([sparse + 73.4 + j * 16.7, 232 + j]);
+    }
+    const proof = busyWindowProof(slowTailFrames(frames), lateBlock.block, {
+      axis: 'x',
+      settledWithin: 2,
+      control: slowTailFrames(
+        frames.map(([t]) => [t, Math.round(0.18 * (t + 200))] as const),
+      ),
+    });
+    expect(proof.verdict.failures).toEqual([]);
+  });
+});
+
 describe('busyWindowProof settledWithinSteps', () => {
   /** Holds the position the frame at or before `fromT` shows for `ms`. */
   const freeze = (
@@ -978,9 +1056,9 @@ describe('busyWindowProof settledWithinSteps', () => {
     expect(proof.verdict.failures).toEqual([]);
   });
 
-  it("reads the run's own pace only for a step-counted bound: with settledWithin, that held frame fails as before", () => {
-    // The same coast with a pixel bound: the pace before the hold alone
-    // judges the held frame, as for every proof that does not opt in.
+  it("reads that held frame at the run's own pace under a pixel bound too", () => {
+    // The same coast with a pixel bound: the settle bound does not change how
+    // a held frame is read.
     const proof = busyWindowProof(
       webkit(webkitDecel.tracked),
       webkitDecel.block,
@@ -990,9 +1068,7 @@ describe('busyWindowProof settledWithinSteps', () => {
         control: webkit(webkitDecel.control),
       },
     );
-    expect(proof.verdict.failures.join('\n')).toMatch(
-      /moved on 7 of the 8 frames the control moved/,
-    );
+    expect(proof.verdict.failures).toEqual([]);
   });
 
   it('reads a three-frame plateau that ends in a two-step change at about 1.3 px a frame as slow motion', () => {
