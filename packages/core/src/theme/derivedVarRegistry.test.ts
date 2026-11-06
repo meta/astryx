@@ -37,6 +37,7 @@ const SRC_DIR = join(__dirname, '..');
 type ComponentDocModule = {
   docs?: {
     theming?: {
+      targets?: {className: string}[];
       vars?: {name: string}[];
       derived?: DerivedDocEntry[];
     };
@@ -125,6 +126,14 @@ const STRUCTURAL_VARS = new Set([
   '--_progress-bar-pulse',
   '--_progress-bar-pulse-curve',
   '--_progress-bar-pulse-floor',
+  // The room a layer has above the software keyboard. The layer runtime
+  // writes it on each open layer from the keyboard's measured height
+  // (Layer/useLayerKeyboardClearance.ts). Runtime geometry, never authored by
+  // a theme.
+  '--_layer-keyboard-max-block-size',
+  // Written beside it: `auto` while the keyboard caps the layer, so the
+  // surface scrolls from that commit. Runtime state, never authored by a theme.
+  '--_layer-keyboard-overflow',
 ]);
 
 /**
@@ -176,6 +185,7 @@ interface ComponentInfo {
   sourceVars: string[];
   docVars: string[];
   docDerived: {property: string; vars?: string[]; expand?: string}[];
+  docTargetKeys: string[];
 }
 
 function discoverComponents(): ComponentInfo[] {
@@ -217,10 +227,14 @@ function discoverComponents(): ComponentInfo[] {
 
     let docVars: string[] = [];
     let docDerived: DerivedDocEntry[] = [];
+    let docTargetKeys: string[] = [];
     try {
       const mod = require(docPath) as ComponentDocModule;
       docVars = (mod.docs?.theming?.vars || []).map(v => v.name);
       docDerived = mod.docs?.theming?.derived || [];
+      docTargetKeys = (mod.docs?.theming?.targets || []).map(t =>
+        t.className.replace(/^astryx-/, ''),
+      );
     } catch {
       /* skip */
     }
@@ -240,6 +254,7 @@ function discoverComponents(): ComponentInfo[] {
       sourceVars: [...allVars],
       docVars,
       docDerived,
+      docTargetKeys,
     });
   }
   return results;
@@ -255,7 +270,7 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
   BottomSheet: 'bottom-sheet',
   Button: 'button',
   Card: 'card',
-  Chat: 'chat',
+  Chat: 'chat-composer',
   ContextMenu: 'context-menu',
   Dialog: 'dialog',
   Drawer: 'drawer',
@@ -493,7 +508,7 @@ describe('component CSS vars are documented and themeable', () => {
 describe('derivedVarRegistry ↔ doc file consistency', () => {
   const components = discoverComponents();
 
-  for (const {dir, docDerived} of components) {
+  for (const {dir, docDerived, docTargetKeys} of components) {
     const key = DIR_TO_REGISTRY_KEY[dir];
     if (!key || docDerived.length === 0) {
       continue;
@@ -503,6 +518,12 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
       const registryEntries = derivedVarRegistry[key];
       expect(registryEntries).toBeDefined();
       expect(registryEntries).toEqual(docDerived);
+    });
+
+    // generateThemeRules looks the registry up by the theme's components key,
+    // so a key that is not one of the doc's targets never expands.
+    it(`${dir} (${key}): registry key is a documented theming target`, () => {
+      expect(docTargetKeys).toContain(key);
     });
   }
 

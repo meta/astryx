@@ -20,6 +20,7 @@ import {useMediaQuery} from '../hooks/useMediaQuery';
 import {animatorFor, type Animator} from '../motion/animator';
 import {subscribeInput} from '../utils/inputStream';
 import {layoutViewportHeight} from '../utils/layoutViewport';
+import {isDocument, isNode} from '../utils/nodeType';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {TOUCH_QUERY} from '../utils/touchPresentation';
 import {
@@ -27,7 +28,6 @@ import {
   findTextEntryControl,
   getKeyboardHeight,
   isKeyboardMeasurable,
-  isNodeTarget,
   isTextEntryControl,
   refuseFocusReveal,
   subscribeKeyboardHeight,
@@ -824,7 +824,7 @@ export function useMobileKeyboard(
       // the page's own scroll moves the document.
       const stopDocumentScroll = subscribeInput(window, 'scroll', event => {
         const target = event.target;
-        if (!isNodeTarget(target) || (target as Node).nodeType === 9) {
+        if (!isNode(target) || isDocument(target)) {
           handleDocumentScroll();
         }
       });

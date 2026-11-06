@@ -13,7 +13,7 @@ export type CoreStatusMessageBinding =
   | 'Toast announcement channel'
   | 'Toast card'
   | 'FieldStatus announcement channel'
-  | 'Spinner'
+  | 'Spinner announcement channel'
   | 'ProgressBar';
 
 export interface CoreStatusMessageBindingDefinition {
@@ -157,14 +157,13 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
   },
   {
     id: 'spinner-default-label-mounted',
-    binding: 'Spinner',
+    binding: 'Spinner announcement channel',
     summary:
-      'a loading spinner is mounted with its default accessible status name',
+      'a mounted spinner sends its default label and updates through the persistent polite channel',
     facts: liveFacts({
       role: 'status',
       politeness: 'polite',
       initialMessage: 'Loading',
-      messageSource: 'accessible-name',
       message: 'Loading',
       replacement: 'Saving',
       semanticTransitions: ['replace'],
@@ -173,14 +172,13 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
   },
   {
     id: 'spinner-visible-label-mounted',
-    binding: 'Spinner',
+    binding: 'Spinner announcement channel',
     summary:
-      'a loading spinner is mounted with a visible label that names its status role',
+      'a mounted spinner sends its visible label and updates through the persistent polite channel',
     facts: liveFacts({
       role: 'status',
       politeness: 'polite',
       initialMessage: 'Fetching data',
-      messageSource: 'accessible-name',
       message: 'Fetching data',
       replacement: 'Saving data',
       semanticTransitions: ['replace'],

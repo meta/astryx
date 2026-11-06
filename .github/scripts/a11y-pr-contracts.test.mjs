@@ -27,6 +27,11 @@ import {
   changedOnly,
   changedSinceMergeBase,
   DEFAULT_CHECK_BUDGET_MS,
+  DEPENDENT_SHARE_MS,
+  dependentSpecs,
+  importerGraph,
+  renderingFolders,
+  valueImports,
   fileSeconds,
   kebab,
   ownedSpecs,
@@ -477,6 +482,202 @@ describe('the default check of the touched components', () => {
     );
     expect(runner).toContain('seconds: readDurations(root, policySha)');
     expect(runner).toContain('workers: contractWorkers()');
+  });
+});
+
+describe('the folders that render a touched component (spec:AST-030 FR12)', () => {
+  const write = (root, file, text) => {
+    fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+    fs.writeFileSync(path.join(root, file), text);
+  };
+  // #7910's shape: Spinner changes; TextInput renders it, CommandPalette
+  // renders TextInput, a Lab component imports Spinner from Core's root, and
+  // a shared file passes the reach on, file by file.
+  const repo = () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'render-graph-'));
+    const files = {
+      'packages/core/src/index.ts':
+        "export * from './Spinner';\nexport * from './Button';\n",
+      'packages/core/src/Spinner/index.ts':
+        "export {Spinner} from './Spinner';\n",
+      'packages/core/src/Spinner/Spinner.tsx': 'export function Spinner() {}\n',
+      'packages/core/src/Button/index.ts': "export {Button} from './Button';\n",
+      'packages/core/src/Button/Button.tsx': 'export function Button() {}\n',
+      'packages/core/src/TextInput/TextInput.tsx':
+        "import {Spinner} from '../Spinner/Spinner';\n",
+      'packages/core/src/CommandPalette/CommandPaletteInput.tsx':
+        "import {TextInput} from '../TextInput/TextInput';\n",
+      // One shared file renders Spinner; its neighbour does not.
+      'packages/core/src/internal/loading.ts':
+        "import {Spinner} from '../Spinner/Spinner';\n",
+      'packages/core/src/internal/mergeProps.ts':
+        'export function mergeProps() {}\n',
+      'packages/core/src/Banner/Banner.tsx':
+        "import {loading} from '../internal/loading';\n",
+      'packages/core/src/Divider/Divider.tsx':
+        "import {mergeProps} from '../internal/mergeProps';\n",
+      // A type-only import puts no code on the page.
+      'packages/core/src/internal/groupItems.ts':
+        "import type {SpinnerSize} from '../Spinner/Spinner';\nimport {type SpinnerTone} from '../Spinner/Spinner';\n",
+      'packages/core/src/Menu/Menu.tsx':
+        "import {groupItems} from '../internal/groupItems';\n",
+      'packages/core/src/Avatar/__tests__/Avatar.test.tsx':
+        "import {Spinner} from '../../Spinner/Spinner';\n",
+      'packages/core/src/Avatar/Avatar.stories.tsx':
+        "import {Spinner} from '../Spinner/Spinner';\n",
+      'packages/lab/src/Schedule/shared.tsx':
+        "import {Button, Spinner as Busy} from '@astryxdesign/core';\n",
+      'packages/lab/src/Rating/Rating.tsx':
+        "import {Button} from '@astryxdesign/core';\n",
+      // A lazy import is an edge; a barrel's names reach only their own files.
+      'packages/core/src/Tooltip/Tooltip.tsx':
+        "const Busy = lazy(() => import('../Spinner/Spinner'));\n",
+      'packages/core/src/hooks/index.ts':
+        "export {useAnnounce} from './useAnnounce';\nexport {useSpin} from './useSpin';\n",
+      'packages/core/src/hooks/useAnnounce.ts':
+        'export function useAnnounce() {}\n',
+      'packages/core/src/hooks/useSpin.ts':
+        "import {Spinner} from '../Spinner/Spinner';\nexport function useSpin() {}\n",
+      'packages/core/src/Kbd/Kbd.tsx':
+        "import {useAnnounce} from '../hooks';\n",
+      'packages/core/src/Meter/Meter.tsx':
+        "import {useSpin} from '../hooks';\n",
+    };
+    for (const [file, text] of Object.entries(files)) write(root, file, text);
+    return root;
+  };
+
+  it('lists every folder that renders a touched one, nearest first, never a shared folder, a test or a type-only import', () => {
+    const root = repo();
+    try {
+      expect(renderingFolders(importerGraph(root), ['core/Spinner'])).toEqual([
+        {folder: 'core/Banner', depth: 1},
+        {folder: 'core/Meter', depth: 1},
+        {folder: 'core/TextInput', depth: 1},
+        {folder: 'core/Tooltip', depth: 1},
+        {folder: 'lab/Schedule', depth: 1},
+        {folder: 'core/CommandPalette', depth: 2},
+      ]);
+      // Nothing renders an untouched leaf.
+      expect(
+        renderingFolders(importerGraph(root), ['core/CommandPalette']),
+      ).toEqual([]);
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  it('reads value imports and re-exports, never type-only ones', () => {
+    expect(
+      valueImports(
+        "import type {A} from './a';\nimport {type B} from './b';\nimport {type C, D} from './c';\nexport {E} from './e';\nexport type {F} from './f';\nimport G from './g';\nimport './h';\nconst I = lazy(() => import('./i'));",
+      ),
+    ).toEqual([
+      {specifier: './c', names: ['D']},
+      {specifier: './e', names: ['E']},
+      {specifier: './g', names: []},
+      {specifier: './h', names: []},
+      {specifier: './i', names: []},
+    ]);
+  });
+
+  it("selects the rendering folders' scoped and release-only specs, nearest first, leaving out what is planned", () => {
+    const at = (folder, name, lines = []) =>
+      spec(`packages/${folder}/__tests__/${name}.a11y.chromium.spec.ts`, lines);
+    const specs = [
+      at('core/src/CommandPalette', 'CommandPalettePending'),
+      at('core/src/CommandPalette', 'CommandPalette', [
+        '// @pr-a11y audit CommandPalette',
+      ]),
+      at('core/src/TextInput', 'TextInput', ['// @pr-a11y release-only']),
+      at('core/src/TextInput', 'TextInputAlways', ['// @pr-a11y always']),
+      at('core/src/Spinner', 'SpinnerMotion'),
+    ];
+    const rendering = [
+      {folder: 'core/TextInput', depth: 1},
+      {folder: 'core/CommandPalette', depth: 2},
+    ];
+    expect(dependentSpecs(specs, rendering, new Set())).toEqual([
+      {
+        file: 'packages/core/src/TextInput/__tests__/TextInput.a11y.chromium.spec.ts',
+        reason: 'renders a touched component',
+      },
+      {
+        file: 'packages/core/src/CommandPalette/__tests__/CommandPalettePending.a11y.chromium.spec.ts',
+        reason: 'renders a touched component (2 folders away)',
+      },
+    ]);
+    expect(
+      dependentSpecs(
+        specs,
+        rendering,
+        new Set([
+          'packages/core/src/TextInput/__tests__/TextInput.a11y.chromium.spec.ts',
+        ]),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("runs the dependents' specs after the owned ones, in the time left, and reports the rest as not run", () => {
+    const own =
+      'packages/core/src/Spinner/__tests__/SpinnerMotion.a11y.chromium.spec.ts';
+    const near =
+      'packages/core/src/TextInput/__tests__/TextInput.a11y.chromium.spec.ts';
+    const far = 'packages/core/src/Aaa/__tests__/Far.a11y.chromium.spec.ts';
+    const {run, notRun} = planDefaultCheck({
+      changed: [],
+      owned: [{file: own, reason: 'component core/Spinner'}],
+      // Given nearest first: the far one is not sorted ahead by its path.
+      dependents: [
+        {file: near, reason: 'renders a touched component'},
+        {file: far, reason: 'renders a touched component (3 folders away)'},
+      ],
+      seconds: {[own]: 60, [near]: 40, [far]: 400},
+      workers: 1,
+    });
+    expect(run.map(({file}) => file)).toEqual([own, near]);
+    expect(notRun.map(({file}) => file)).toEqual([far]);
+    expect(notRun[0].reason).toContain(
+      'renders a touched component (3 folders away)',
+    );
+    expect(notRun[0].reason).toContain('add ci:run-a11y to run it');
+  });
+
+  it('gives the dependents at most their one-minute share, and reports the rest as not run', () => {
+    const own =
+      'packages/core/src/Spinner/__tests__/SpinnerMotion.a11y.chromium.spec.ts';
+    const deps = ['A', 'B', 'C'].map(name => ({
+      file: `packages/core/src/${name}/__tests__/${name}.a11y.chromium.spec.ts`,
+      reason: 'renders a touched component',
+    }));
+    // 40 s each with the 1.25 margin is 50 s: one fits 60 s, two do not.
+    const {run, notRun} = planDefaultCheck({
+      changed: [],
+      owned: [{file: own, reason: 'component core/Spinner'}],
+      dependents: deps,
+      seconds: {
+        [own]: 60,
+        ...Object.fromEntries(deps.map(({file}) => [file, 40])),
+      },
+      workers: 1,
+    });
+    expect(run.map(({file}) => file)).toEqual([own, deps[0].file]);
+    expect(notRun.map(({file}) => file)).toEqual([deps[1].file, deps[2].file]);
+    expect(notRun[0].reason).toContain(
+      '1-minute share for folders that render a touched component',
+    );
+    expect(DEPENDENT_SHARE_MS).toBe(60 * 1000);
+  });
+
+  it('says in the summary how many folders render a touched component', () => {
+    expect(
+      summaryMarkdown({
+        components: ['core/Spinner'],
+        selected: [],
+        notRun: [],
+        rendering: [{folder: 'core/TextInput', depth: 1}],
+      }),
+    ).toContain('Folders that render a touched component: 1');
   });
 });
 

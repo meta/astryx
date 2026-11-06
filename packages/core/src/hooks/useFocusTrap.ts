@@ -19,6 +19,7 @@
 
 import {useCallback, useEffect, useRef} from 'react';
 import {isFocusLost} from '../utils/focusReturn';
+import {isHTMLElement} from '../utils/nodeType';
 
 import {FOCUSABLE_SELECTOR} from './focusableSelector';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
@@ -139,16 +140,6 @@ export function getFocusableElements(container: HTMLElement): HTMLElement[] {
  */
 function trapDocument(container: HTMLElement | null): Document {
   return container?.ownerDocument ?? document;
-}
-
-/**
- * `instanceof HTMLElement`, asked of the node's own window: an element of a
- * second document is an instance of that window's `HTMLElement`, not of this
- * one's.
- */
-function isHTMLElement(node: Node | null): node is HTMLElement {
-  const view = node?.ownerDocument?.defaultView;
-  return view != null && node instanceof view.HTMLElement;
 }
 
 /**

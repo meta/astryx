@@ -15,7 +15,7 @@
  *   pnpm storybook:build
  *   pnpm exec playwright install chromium webkit
  *   pnpm test:interaction --project chromium
- *   pnpm test:interaction harness.interaction.browser.spec.ts
+ *   pnpm test:interaction BottomSheetDetent.interaction.browser.spec.ts
  *
  * Specs import `test` from `@astryxdesign/a11y-spec/playwright`, the base test
  * shared with playwright.config.ts: no context reaches a remote host. The

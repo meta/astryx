@@ -13,6 +13,8 @@
  *   checkout. The suites that place CLI copies unpack one shared tarball. Run
  *   these prerequisites here, serially and before the test workers, rather
  *   than depending on an unrelated build job or local generated files.
+ *   Those suites unpack and keep their copies in this run's folder, which the
+ *   teardown removes.
  *
  * SYNC: When modified, update this header.
  */
@@ -27,6 +29,21 @@ import {
   registerTestRun,
 } from './packages/cli/clients/cli/commands/ensure-core-built.mjs';
 import {packCli} from './packages/cli/test-utils/pack-cli.mjs';
+import {
+  sweepTrash,
+  trashFolder,
+} from './packages/cli/test-utils/run-folder.mjs';
+
+/**
+ * Trash what an earlier run left in `packDir`. Its workers have stopped, and
+ * the next run unpacks again.
+ * @param {string} packDir
+ */
+function trashUnpackedClis(packDir) {
+  for (const entry of fs.readdirSync(packDir)) {
+    if (!entry.endsWith('.tgz')) trashFolder(path.join(packDir, entry));
+  }
+}
 
 /** @param {import('vitest/node').TestProject} project */
 export default async function setup(project) {
@@ -51,6 +68,9 @@ export default async function setup(project) {
         maxBuffer: 32 * 1024 * 1024,
       },
     );
+    // An earlier run's child may have been stopped before it removed that
+    // run's folder.
+    sweepTrash(os.tmpdir(), Date.now());
     // `npm pack` costs about 5 s of CPU. Packing once here keeps that out of
     // every suite that places CLI copies, and out of their timed tests. A watch
     // session packs again before a rerun of this project's tests, so they see
@@ -58,14 +78,23 @@ export default async function setup(project) {
     const packDir = fs.mkdtempSync(
       path.join(os.tmpdir(), 'astryx-cli-tarball-'),
     );
+    // The suites unpack the tarball and keep their placed copies in this
+    // folder, thousands of files each. The teardown removes them once, after
+    // every suite, so no suite's own hook spends that time on a busy machine.
+    project.provide('astryxPackedCliRunDir', packDir);
     const pack = () =>
       project.provide('astryxPackedCliTarball', packCli(packDir));
     pack();
     project.onTestsRerun(specs => {
-      if (specs.some(spec => spec.project.name === project.name)) pack();
+      if (specs.some(spec => spec.project.name === project.name)) {
+        trashUnpackedClis(packDir);
+        pack();
+      }
     });
     return () => {
-      fs.rmSync(packDir, {recursive: true, force: true});
+      // Vitest gives close() 10 s, and the folder holds thousands of files.
+      // It moves aside at once, and a detached child removes it.
+      trashFolder(packDir);
       endRun();
     };
   } catch (error) {
