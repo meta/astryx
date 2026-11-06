@@ -24,7 +24,9 @@
  *   beyond its position in the direction it moves, or on the nearest
  *   snap point to its projection if that is farther. A snap point within
  *   `tolerance` of the position counts as reached, so the flick goes on to
- *   the one after it.
+ *   the one after it. With `flickPastProjection`, a flick lands on the first
+ *   snap point at or past its projection instead. A projection that passes a
+ *   snap point carries the flick on.
  * - With `start` (where the drag began), a release moving back toward it
  *   cancels to the snap point nearest `start`, whatever its travel so far or its
  *   speed.
@@ -99,6 +101,7 @@ export function resolveSnapPoint({
   velocity,
   flickThreshold,
   tolerance = 0,
+  flickPastProjection = false,
   projection,
   start,
   fromIndex,
@@ -112,6 +115,8 @@ export function resolveSnapPoint({
   flickThreshold: number;
   /** A snap point this close to the position counts as reached by a flick. */
   tolerance?: number;
+  /** A flick lands on the first snap point at or past its projection. */
+  flickPastProjection?: boolean;
   /** Judge a slow release where it would coast to; absent, where it was let go. */
   projection?: SnapPointProjection;
   /** Where the drag began: a release moving back toward it cancels to it. */
@@ -151,6 +156,26 @@ export function resolveSnapPoint({
     }
     if (next !== -1 && (velocity > 0 ? next > index : next < index)) {
       index = next;
+    }
+    if (flickPastProjection) {
+      // The first snap point at or past the projection in the flick's
+      // direction, or the last one there when the projection passes them all.
+      const projected = choice.projected;
+      let past = velocity > 0 ? points.length - 1 : 0;
+      if (velocity > 0) {
+        const at = points.findIndex(d => d >= projected - tolerance);
+        past = at === -1 ? past : at;
+      } else {
+        for (let i = points.length - 1; i >= 0; i -= 1) {
+          if (points[i] <= projected + tolerance) {
+            past = i;
+            break;
+          }
+        }
+      }
+      if (velocity > 0 ? past > index : past < index) {
+        index = past;
+      }
     }
   }
   if (
