@@ -48,6 +48,7 @@ import {
 import {useThemeDefinition} from '../theme/useTheme';
 import * as stylex from '@stylexjs/stylex';
 import {devWarn} from '../utils/devWarning';
+import {matchesMediaQuery, watchMediaQuery} from '../utils/coarsePointer';
 import type {BaseProps} from '../BaseProps';
 import {FALLBACK_CLOSE_SELECTOR, usePopover} from './usePopover';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
@@ -103,15 +104,12 @@ function usePresentationSurface(
     [points],
   );
   const subscribe = useCallback(
-    (onStoreChange: () => void) => {
-      const mql = window.matchMedia(query);
-      mql.addEventListener('change', onStoreChange);
-      return () => mql.removeEventListener('change', onStoreChange);
-    },
+    (onStoreChange: () => void) =>
+      watchMediaQuery(window, query, onStoreChange),
     [query],
   );
   const getSnapshot = useCallback(
-    () => window.matchMedia(query).matches,
+    () => matchesMediaQuery(window, query),
     [query],
   );
   const isCompactTouch = useSyncExternalStore(
