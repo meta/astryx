@@ -23,6 +23,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import changeScope from './change-scope.cjs';
+import {loadConfig} from './visual-gate/lib/sources.mjs';
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -43,20 +44,6 @@ function readPackage(repoRoot, file, manifests) {
 
 /** A Changeset is release notes: it renders nothing. */
 const CHANGESET = /^\.changeset\/(?!README\.md$)[^/]+\.md$/;
-
-/**
- * The visual gate's probe theme: a private fixture that styles every theming
- * target. The release plan's probe tier shoots every story in it, so a change
- * to its source changes those shots and needs the whole plan.
- * @param {string} repoRoot
- */
-function probeThemeName(repoRoot) {
-  const config = path.join(
-    repoRoot,
-    '.github/scripts/visual-gate/visual-gate.config.json',
-  );
-  return fs.existsSync(config) ? (readJSON(config).probeTheme ?? null) : null;
-}
 
 /**
  * @param {string[]} files
@@ -95,10 +82,13 @@ export function classifyVisualScope(
       ),
     ) ||
     paths.includes('packages/core/package.json');
-  const probe = probeThemeName(repoRoot);
-  const probeChanged =
-    probe != null &&
-    paths.some(file => file.startsWith(`packages/themes/${probe}/src/`));
+  // The gate's probe theme: a private fixture that styles every theming
+  // target. The release plan's probe tier shoots every story in it, so a
+  // change to its source changes those shots and needs the whole plan.
+  const probe = loadConfig(repoRoot).probeTheme;
+  const probeChanged = paths.some(file =>
+    file.startsWith(`packages/themes/${probe}/src/`),
+  );
   let broadStableVisual = stableVisualInfrastructure || probeChanged;
 
   for (const file of stableCoreFiles) {

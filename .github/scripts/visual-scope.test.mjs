@@ -256,6 +256,13 @@ describe('classifyVisualScope', () => {
     ).toBe(false);
   });
 
+  it("defaults the probe fixture as the gate does when the config doesn't name it", () => {
+    writeGateConfig({});
+    expect(
+      classifyVisualScope(['packages/themes/probe/src/probeTheme.ts'], root),
+    ).toMatchObject({hasStableVisual: true, broadStableVisual: true});
+  });
+
   it('reads the probe fixture from the gate config, so a renamed fixture still counts', () => {
     writeGateConfig({probeTheme: 'preview'});
     expect(
