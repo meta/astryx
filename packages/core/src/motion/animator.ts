@@ -2995,6 +2995,36 @@ export function createMotionEngine(
     landings.delete(landing);
   };
 
+  /**
+   * How long `landing` still waits for its fade, in ms. A sampler that pauses
+   * the fade holds it, so it checks again later. A running fade holds it for
+   * the rest of the fade on the live clock. A fade at its end, or one the
+   * engine does not time, holds nothing.
+   */
+  const fadeHeldFor = (landing: Landing): number => {
+    const animation = running.get('opacity');
+    const owner = segments.get('opacity')?.owner;
+    if (
+      animation == null ||
+      owner == null ||
+      (owner !== landing.owner && !landing.carried.includes(owner))
+    ) {
+      return 0;
+    }
+    if (animation.playState === 'paused') {
+      return RETIRE_RECHECK_MS;
+    }
+    // The timeline reads the frame before a long task, so the fade's current
+    // time would date a fade that has ended as still running.
+    const start = animation.startTime;
+    const duration = Number(animation.effect?.getTiming?.().duration);
+    if (start == null || !Number.isFinite(duration)) {
+      return 0;
+    }
+    const left = Number(start) + duration - END_HOLD_MS - now();
+    return left > 0 ? Math.max(left, END_RECHECK_MS) : 0;
+  };
+
   /** Arms a landing from the call's start (the browser's, for a call from rest). */
   const scheduleLanding = (
     owner: HandleState,
@@ -3042,6 +3072,14 @@ export function createMotionEngine(
    * and the call settles then.
    */
   const land = (landing: Landing) => {
+    // A sampler that pauses the fade, or seeks it back, holds the landing too.
+    // The travel is written once the fade reaches its end on its own clock.
+    const held = fadeHeldFor(landing);
+    if (held > 0) {
+      landing.due = now() + held;
+      landing.timer = setTimeout(() => land(landing), held);
+      return;
+    }
     landings.delete(landing);
     landing.timer = null;
     const time = now();

@@ -3049,6 +3049,56 @@ describe('Reduced Motion (design:reduced-motion)', () => {
     }
   });
 
+  it('a landing waits while a sampler pauses its fade after the browser started it, and lands once the fade resumes', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate({x: 100}, {spring: springs.navigationPush});
+    let settled: boolean | undefined;
+    void handle.finished.then(value => {
+      settled = value;
+    });
+    await commitFrame(clock);
+    await advance(fade / 4);
+    // A harness holds the fade mid-way, after the browser started it.
+    const [fadeOut] = live('opacity');
+    fadeOut.paused = true;
+    await advance(5000);
+    // The travel waits for the fade, which still shows the element.
+    expect(animator.get('x')).toBe(0);
+    expect(settled).toBeUndefined();
+    fadeOut.paused = false;
+    for (let step = 0; step < 16; step++) {
+      await advance(fade / 4);
+    }
+    expect(animator.get('x')).toBe(100);
+    expect(animator.get('opacity')).toBe(1);
+    expect(settled).toBe(true);
+  });
+
+  it('an exit whose fade a sampler pauses after its start settles only once the fade resumes', async () => {
+    const {animator} = reduced();
+    const handle = animator.animate(
+      {x: 100, opacity: 0},
+      {spring: springs.navigationPush},
+    );
+    let settled: boolean | undefined;
+    void handle.finished.then(value => {
+      settled = value;
+    });
+    await commitFrame(clock);
+    await advance(fade / 4);
+    const [fadeOut] = live('opacity');
+    fadeOut.paused = true;
+    await advance(5000);
+    // A component that removes the element when the call settles keeps it
+    // while the fade is held on screen.
+    expect(settled).toBeUndefined();
+    fadeOut.paused = false;
+    for (let step = 0; step < 16; step++) {
+      await advance(fade / 4);
+    }
+    expect(settled).toBe(true);
+  });
+
   it('a landing later than the whole fade back in shows the element at once and settles then', async () => {
     // A hold released long after the dip was due: the landing\u2019s timer runs
     // more than the whole fade back in late, so the element appears at once
