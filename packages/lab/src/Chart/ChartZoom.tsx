@@ -10,7 +10,13 @@
  * the domains of the first render.
  */
 
-import {type CSSProperties, useCallback, useRef, useState} from 'react';
+import {
+  type CSSProperties,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {createPortal} from 'react-dom';
 import {IconButton} from '@astryxdesign/core/IconButton';
 import {useChart} from './ChartContext';
@@ -172,20 +178,20 @@ export function ChartZoom({
     [xScale, yScale, onXDomainChange, onYDomainChange, xOnly, yOnly, zoomAxis],
   );
 
+  const surfaceRef = useRef<SVGRectElement>(null);
   const handleWheel = useCallback(
-    (e: React.WheelEvent<SVGRectElement>) => {
+    (e: WheelEvent) => {
       e.preventDefault();
 
-      const svg = e.currentTarget.ownerSVGElement;
+      const surface = e.currentTarget as SVGRectElement;
+      const svg = surface.ownerSVGElement;
       if (!svg) {
         return;
       }
       const pt = svg.createSVGPoint();
       pt.x = e.clientX;
       pt.y = e.clientY;
-      const local = pt.matrixTransform(
-        e.currentTarget.getScreenCTM()?.inverse(),
-      );
+      const local = pt.matrixTransform(surface.getScreenCTM()?.inverse());
 
       // Clamp delta to prevent trackpad acceleration from blowing out the domain.
       // A single tick should zoom by at most zoomSpeed (10% default).
@@ -219,6 +225,17 @@ export function ChartZoom({
       zoomAxis,
     ],
   );
+
+  // Syncs a native wheel listener on the zoom surface. React registers
+  // `wheel` as passive, so a React `onWheel` cannot stop the page scrolling.
+  useLayoutEffect(() => {
+    const surface = surfaceRef.current;
+    if (surface == null) {
+      return;
+    }
+    surface.addEventListener('wheel', handleWheel, {passive: false});
+    return () => surface.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<SVGRectElement>) => {
@@ -338,13 +355,13 @@ export function ChartZoom({
     <>
       <g>
         <rect
+          ref={surfaceRef}
           x={0}
           y={0}
           width={width}
           height={height}
           fill="transparent"
           style={zoomRectStyle}
-          onWheel={handleWheel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
