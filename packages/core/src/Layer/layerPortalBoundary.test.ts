@@ -8,7 +8,8 @@
  */
 
 import {afterEach, describe, expect, it} from 'vitest';
-import {layerPortalRootProps, resolveLayerPortalTarget} from './layerHost';
+import {resolveLayerPortalTarget} from './layerHost';
+import {layerRootProps} from '../privateAttributes/layerRoot.stylex';
 import {rendererManagedRootProps} from '../privateAttributes/layerPortalBoundary.stylex';
 const roots: HTMLElement[] = [];
 function mount(html: string) {
@@ -24,7 +25,7 @@ function mount(html: string) {
   }
   const popup = root.querySelector('#popup');
   if (popup) {
-    for (const [name, value] of Object.entries(layerPortalRootProps)) {
+    for (const [name, value] of Object.entries(layerRootProps)) {
       popup.setAttribute(name, value);
     }
   }

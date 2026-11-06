@@ -2,8 +2,8 @@
 
 /**
  * @file layerHost.ts
- * @input Uses the intended inline parent and integration-managed DOM boundaries
- * @output Exports the corrective portal resolver and internal integration boundary props
+ * @input Uses the intended inline parent, renderer-managed roots and layer roots
+ * @output Exports the corrective portal resolver
  * @position Layer utility; used by useLayer to place the popover in the DOM
  *
  * SYNC: When modified, update:
@@ -11,13 +11,7 @@
  */
 
 import {isRendererManagedRoot} from '../privateAttributes/layerPortalBoundary.stylex';
-
-const LAYER_PORTAL_BOUNDARY_ATTRIBUTE = 'data-astryx-layer-portal-boundary';
-const LAYER_DOM = 'layer';
-
-export const layerPortalRootProps = {
-  [LAYER_PORTAL_BOUNDARY_ATTRIBUTE]: LAYER_DOM,
-} as const;
+import {isLayerRoot} from '../privateAttributes/layerRoot.stylex';
 
 /**
  * Ancestors a layer must not be hosted inside.
@@ -147,8 +141,7 @@ export function resolveLayerPortalTarget(
     if (tagName === 'dialog') {
       break;
     }
-    const boundary = node.getAttribute(LAYER_PORTAL_BOUNDARY_ATTRIBUTE);
-    if (boundary === LAYER_DOM) {
+    if (isLayerRoot(node)) {
       isTargetLayerOwned = true;
     }
     if (UNSAFE_HOSTS.has(tagName)) {

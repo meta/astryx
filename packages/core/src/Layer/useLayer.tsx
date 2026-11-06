@@ -32,7 +32,7 @@ import {LayerContentBoundary} from './layerScopedContext';
 import {layerClickBoundary} from './layerClickBoundary';
 import {addAnchorName, removeAnchorName} from './anchorName';
 import {currentGesture, currentGestureHasClicked} from './gestureCounter';
-import {layerPortalRootProps, resolveLayerPortalTarget} from './layerHost';
+import {resolveLayerPortalTarget} from './layerHost';
 import {layerTextReset} from './layerTextReset.stylex';
 import {layerStructureReset} from './layerStructureReset.stylex';
 import {layerViewportInset} from './layerViewportInset.stylex';
@@ -1925,7 +1925,6 @@ function useLayerImplementation(
       // The slot renders the layer once the hook has resolved that mount.
       const renderLayer = (mount: ContextLayerMount) => (
         <Container
-          {...layerPortalRootProps}
           ref={popoverRefCallback}
           id={id}
           // Anchor positioning, as this commit renders it: the software
@@ -2012,7 +2011,6 @@ function useLayerImplementation(
 
       return (
         <div
-          {...layerPortalRootProps}
           ref={popoverRefCallback}
           id={id}
           popover={lightDismiss ? 'auto' : 'manual'}
