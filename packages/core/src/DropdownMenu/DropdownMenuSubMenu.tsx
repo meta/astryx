@@ -111,6 +111,7 @@ import {
   MENU_ROW_SELECTOR,
   MENU_BOUNDARY_SELECTOR,
   activateMenuItem,
+  keepDisabledRowUnfocused,
 } from './menuItemRoles';
 import {
   DropdownMenuContext,
@@ -1216,6 +1217,10 @@ export function DropdownMenuSubMenu(
         // state and wiring are set after them, and its own handlers run
         // before the caller's.
         {...rest}
+        onMouseDown={composeEventHandlers(
+          rest.onMouseDown,
+          isDisabled ? keepDisabledRowUnfocused : undefined,
+        )}
         ref={triggerRowRef}
         id={triggerId}
         role="menuitem"

@@ -43,6 +43,7 @@ import {focusMenuItemOnHover} from './menuItemHover';
 import {colorVars, focusVars, spacingVars} from '../theme/tokens.stylex';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
+import {keepDisabledRowUnfocused} from './menuItemRoles';
 
 const styles = stylex.create({
   root: {
@@ -204,6 +205,10 @@ export function DropdownMenuCheckboxItem({
   return (
     <Item
       {...rest}
+      onMouseDown={composeEventHandlers(
+        rest.onMouseDown,
+        isDisabled ? keepDisabledRowUnfocused : undefined,
+      )}
       role="menuitemcheckbox"
       aria-checked={value}
       tabIndex={-1}

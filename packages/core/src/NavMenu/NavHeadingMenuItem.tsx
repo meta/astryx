@@ -23,6 +23,7 @@ import {
   typeScaleVars,
   radiusVars,
 } from '../theme/tokens.stylex';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {mergeProps} from '../utils/mergeProps';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import type {BaseProps} from '../BaseProps';
@@ -30,6 +31,7 @@ import {useNavHeadingMenuContext} from './NavMenuContext';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {themeProps} from '../utils/themeProps';
 import {isRenderable} from '../utils/isRenderable';
+import {keepDisabledRowUnfocused} from '../DropdownMenu/menuItemRoles';
 
 const styles = stylex.create({
   root: {
@@ -164,6 +166,10 @@ export function NavHeadingMenuItem({
   return (
     <Element
       {...restProps}
+      onMouseDown={composeEventHandlers(
+        restProps.onMouseDown,
+        isDisabled ? keepDisabledRowUnfocused : undefined,
+      )}
       ref={itemRef}
       role="menuitem"
       // Every row, disabled included, takes focus but is not a Tab stop.

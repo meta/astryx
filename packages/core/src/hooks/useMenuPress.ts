@@ -169,7 +169,6 @@ export interface UseMenuPressReturn {
   /** Spread onto the menu root: claims presses that begin inside it. */
   menuProps: {
     onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
-    onMouseDown: (event: React.MouseEvent<HTMLElement>) => void;
     [MENU_PRESS_MARKER]: '';
   };
   /** Spread onto the trigger: a mouse press opens; a held finger opens. */
@@ -316,24 +315,6 @@ function handoffPosition(
  * <div ref={listRef} role="menu" {...menuPress.menuProps}>…</div>
  * ```
  */
-/**
- * A disabled row takes focus from the keys (`tabindex="-1"`), so the mouse
- * press that lands on it would focus it and light it. The press leaves focus
- * where it is, and the row stays unlit.
- */
-function keepFocusOffDisabledRow(event: React.MouseEvent<HTMLElement>): void {
-  const row = (event.target as Element | null)?.closest?.(
-    '[role="menuitem"],[role="menuitemradio"],[role="menuitemcheckbox"]',
-  );
-  if (
-    row != null &&
-    row.getAttribute('aria-disabled') === 'true' &&
-    event.currentTarget.contains(row)
-  ) {
-    event.preventDefault();
-  }
-}
-
 export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   // The touch model is DropdownMenu's alone; an untyped caller's
   // `touchModel` does not reach the model.
@@ -971,7 +952,6 @@ export function useDropdownMenuPress(
     () => ({
       menuProps: {
         onPointerDown: handleMenuPointerDown,
-        onMouseDown: keepFocusOffDisabledRow,
         [MENU_PRESS_MARKER]: '',
       },
       triggerProps: {

@@ -2503,6 +2503,26 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
     ).toHaveFocus();
   });
 
+  it("a disabled row keeps a mouse press's focus off and still runs the caller's onMouseDown", async () => {
+    const user = userEvent.setup();
+    const onMouseDown = vi.fn();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Edit" onClick={() => {}} />
+        <DropdownMenuItem
+          label="Delete"
+          isDisabled
+          onClick={() => {}}
+          onMouseDown={onMouseDown}
+        />
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const del = screen.getByRole('menuitem', {name: 'Delete', hidden: true});
+    expect(fireEvent.mouseDown(del)).toBe(false);
+    expect(onMouseDown).toHaveBeenCalledOnce();
+  });
+
   it('a disabled row takes focus from the keys, stays inert, and leaves the menu open', async () => {
     const user = userEvent.setup();
     const onDelete = vi.fn();

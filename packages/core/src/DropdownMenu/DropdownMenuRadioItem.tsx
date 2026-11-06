@@ -40,6 +40,7 @@ import {colorVars, focusVars, spacingVars} from '../theme/tokens.stylex';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useDropdownMenuRadioGroupContext} from './DropdownMenuContext';
+import {keepDisabledRowUnfocused} from './menuItemRoles';
 
 const styles = stylex.create({
   root: {
@@ -189,6 +190,10 @@ export function DropdownMenuRadioItem({
   return (
     <Item
       {...rest}
+      onMouseDown={composeEventHandlers(
+        rest.onMouseDown,
+        isDisabled ? keepDisabledRowUnfocused : undefined,
+      )}
       role="menuitemradio"
       aria-checked={isChecked}
       tabIndex={-1}

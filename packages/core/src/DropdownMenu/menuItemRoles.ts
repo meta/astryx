@@ -83,3 +83,14 @@ export function activateMenuItem(
     }),
   );
 }
+
+/**
+ * A disabled row's `onMouseDown`. The row takes focus from the keys
+ * (`tabindex="-1"`), so a mouse press would otherwise focus it and light it.
+ * Cancelling the press's default keeps focus where it is.
+ */
+export function keepDisabledRowUnfocused(event: {
+  preventDefault(): void;
+}): void {
+  event.preventDefault();
+}
