@@ -229,7 +229,12 @@ export function buildAuthoringReferenceDoc(docs) {
     placement: {parent: 'namespace:authoring', slot: 'reference', order: 10},
     title: 'Field reference',
     category: 'guide',
-    keywords: ['authoring reference', 'field reference', 'every field'],
+    keywords: [
+      'authoring',
+      'authoring reference',
+      'field reference',
+      'every field',
+    ],
     description:
       'Every file an integration author writes, field by field: the integration manifest, astryx.config, codemods, identity, and each doc type. The guides that use them are the rest of {@link namespace:authoring}.',
     sections: docs

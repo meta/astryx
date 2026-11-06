@@ -427,6 +427,39 @@ describe('integration docs in the docs tree', () => {
     expect(check.message).not.toContain('names no doc');
   }, SLOW);
 
+  it("opens the CLI's links to a topic an integration replaces under the same name", async () => {
+    scaffold({
+      ...kit(),
+      'theme.doc.mjs': {
+        type: 'generic',
+        name: 'theme',
+        title: 'Acme theme',
+        description: 'Theming the Acme kit.',
+        replaces: 'theme',
+        sections: [{title: 'One', content: [{type: 'prose', text: 'One.'}]}],
+      },
+      'getting-started.doc.mjs': {
+        type: 'generic',
+        name: 'getting-started',
+        title: 'Acme getting started',
+        description: 'Starting with the Acme kit.',
+        replaces: 'getting-started',
+        sections: [{title: 'One', content: [{type: 'prose', text: 'One.'}]}],
+      },
+    });
+    const check = await checkDocsTree({
+      docsCatalog: await loadDocsCatalog(tmpDir),
+    });
+    expect(check.message).not.toContain('"generic:theme" names no doc');
+    expect(check.message).not.toContain(
+      '"generic:getting-started" names no doc',
+    );
+    expect(check).toMatchObject({id: 'docs-tree', status: 'pass'});
+    expect((await docs('theme', undefined, {cwd: tmpDir})).data.title).toBe(
+      'Acme theme',
+    );
+  }, SLOW);
+
   it("keeps the CLI's routes from a replacement that answers to one, in one package or across a chain", async () => {
     const flat = (/** @type {string} */ name, /** @type {object} */ extra = {}) => ({
       type: 'generic',

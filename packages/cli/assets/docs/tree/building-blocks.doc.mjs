@@ -11,6 +11,7 @@ export const docs = {
   summary:
     'Add components, templates, themes, docs, and codemods, and configure how it behaves.',
   keywords: [
+    'authoring',
     'building blocks',
     'contribute',
     'add to an integration',
