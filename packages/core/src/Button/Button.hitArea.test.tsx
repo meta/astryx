@@ -4,7 +4,7 @@
  * @file Button.hitArea.test.tsx
  * @input Button, ButtonGroup, and the shared hit area (mocked)
  * @output Unit coverage that a standalone Button takes the shared touch band,
- *   and that a grouped, disabled or busy Button takes none of its own
+ *   and that a grouped, disabled or busy-only Button takes none of its own
  * @position Button's FR42 touch-target evidence beside Button.test.tsx
  */
 
@@ -61,7 +61,7 @@ describe('Button touch target (AST-094 FR42)', () => {
     expect(isWatched(screen.getByRole('link', {name: 'Docs'}))).toBe(true);
   });
 
-  it('gives a disabled or busy button no band, since it takes no tap', () => {
+  it('gives a disabled or busy-only button no band, since it takes no tap', () => {
     render(
       <>
         <Button label="Delete" isDisabled />
@@ -75,6 +75,13 @@ describe('Button touch target (AST-094 FR42)', () => {
     for (const bandClass of bandClasses) {
       expect(disabled).not.toHaveClass(bandClass);
     }
+  });
+
+  it('keeps the band on a busy button that can still be interrupted', () => {
+    render(<Button label="Stop upload" isLoading isInterruptible />);
+    expect(isWatched(screen.getByRole('button', {name: 'Stop upload'}))).toBe(
+      true,
+    );
   });
 
   it('leaves a grouped button to the group: it draws no band of its own', () => {

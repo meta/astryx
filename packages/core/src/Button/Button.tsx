@@ -735,9 +735,8 @@ export function Button({
   const isBusyOnlyDisabled =
     !isTrueDisabled && isLoadingState && !isInterruptible;
   const buttonDisabled = isTrueDisabled || isBusyOnlyDisabled;
-  // Under a finger the button's target grows toward 44 px, where its
-  // neighbors leave room. A grouped button takes the group's band instead,
-  // and a button that takes no tap gets none.
+  // The group draws one band for all its members.
+  // A disabled or busy-only button takes no tap.
   const hasHitArea = buttonGroup == null && !buttonDisabled;
   const hitAreaRef = useTouchHitArea(hasHitArea);
   // isIconOnly prop is the source of truth for icon-only rendering.
