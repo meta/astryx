@@ -109,19 +109,19 @@ ThemeNestingContext.displayName = 'ThemeNestingContext';
 // =============================================================================
 
 /**
- * The runtime theme CSS in the document, by theme name. The CSS is shared by
- * the whole document. It is removed only when the last `Theme` that uses it
- * unmounts.
+ * The CSS is shared by the whole document. Remove it only when the last
+ * `Theme` that uses it unmounts.
  */
 interface InjectedTheme {
-  count: number;
+  /** Each mounted `Theme` that uses this name, by its id, with its theme. */
+  users: Map<string, DefinedTheme>;
+  /** The theme whose CSS is in the document. */
   theme: DefinedTheme;
   styles: HTMLStyleElement[];
 }
 const injectedThemes = new Map<string, InjectedTheme>();
 const THEME_LAYER_ORDER = '@layer reset, astryx-base, astryx-theme;';
 
-/** Write `theme`'s runtime CSS into the document head. */
 function writeThemeStyles(theme: DefinedTheme, id: string): HTMLStyleElement[] {
   const {prose, component} = generateThemeCSS(theme);
   const styles: HTMLStyleElement[] = [];
@@ -148,6 +148,19 @@ function writeThemeStyles(theme: DefinedTheme, id: string): HTMLStyleElement[] {
     styles.push(compStyle);
   }
   return styles;
+}
+
+/** Replace an entry's CSS with `theme`'s. */
+function rewriteThemeStyles(
+  entry: InjectedTheme,
+  theme: DefinedTheme,
+  id: string,
+): void {
+  for (const style of entry.styles) {
+    style.remove();
+  }
+  entry.theme = theme;
+  entry.styles = writeThemeStyles(theme, id);
 }
 
 /**
@@ -179,29 +192,33 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
           `For custom themes, run \`npx @astryxdesign/cli theme build <file>\` to generate ` +
           `the built artifacts.`,
       );
-      entry = {count: 0, theme, styles: writeThemeStyles(theme, id)};
+      entry = {users: new Map(), theme, styles: writeThemeStyles(theme, id)};
       injectedThemes.set(themeKey, entry);
     } else if (entry.theme !== theme) {
       // A theme redefined under the same name (a live editor, Fast Refresh)
-      // replaces the CSS for every `Theme` that uses it.
-      for (const style of entry.styles) {
-        style.remove();
-      }
-      entry.theme = theme;
-      entry.styles = writeThemeStyles(theme, id);
+      // replaces the CSS. The newest definition wins.
+      rewriteThemeStyles(entry, theme, id);
     }
     // A later `Theme` with the same theme does no generation: the CSS is
     // already in the document, identical for each.
-    entry.count += 1;
+    entry.users.set(id, theme);
     const current = entry;
 
     return () => {
-      current.count -= 1;
-      if (current.count === 0) {
+      current.users.delete(id);
+      if (current.users.size === 0) {
         for (const style of current.styles) {
           style.remove();
         }
         injectedThemes.delete(themeKey);
+        return;
+      }
+      // When no remaining `Theme` uses the definition in the document, write
+      // the CSS of one that remains, so each keeps its own theme.
+      const remaining = [...current.users];
+      if (!remaining.some(([, used]) => used === current.theme)) {
+        const [userId, used] = remaining[remaining.length - 1];
+        rewriteThemeStyles(current, used, userId);
       }
     };
   }, [theme, id]);
