@@ -2228,8 +2228,17 @@ export interface LayoutSwapMotion {
   readonly copy: (p: number, ride: LayoutRide) => Keyframe;
   /** Its text's opacity, on its own curve, when that differs from the copy's. */
   readonly copyText?: (p: number) => number;
-  /** The copy paints above its neighbours, in the background it shows. */
+  /**
+   * The copy paints in the background it shows, above its neighbours: at
+   * `z-index: 1` as the host's last child, or at `copyBefore`'s level.
+   */
   readonly isOpaque?: boolean;
+  /**
+   * Place the copy just before this child of the host, at that child's
+   * level in the paint order, with no `z-index` of its own. Without it the
+   * opaque copy is the host's last child at `z-index: 1`.
+   */
+  readonly copyBefore?: Element;
   /**
    * An element the glide moves, such as the column the old content sat in.
    * Every part plays over its glide, frame by frame, and is told how far it
@@ -2305,9 +2314,11 @@ export function playLayoutSwap(
   // Captured now: the parts riding a glide play a microtask later, on the
   // start of the change they are part of.
   const change = changeStartIn(swap.area, copy.ownerDocument);
-  placeOver(copy, how.host, swap.rect);
+  placeOver(copy, how.host, swap.rect, how.copyBefore ?? null);
   if (how.isOpaque === true) {
-    copy.style.zIndex = '1';
+    if (how.copyBefore == null) {
+      copy.style.zIndex = '1';
+    }
     copy.style.backgroundColor = paintedBackground(copy);
   }
   const animations: Animation[] = [];
@@ -2684,21 +2695,20 @@ export function playLayoutEdge(
     while (raised != null && raised.parentElement !== host) {
       raised = raised.parentElement;
     }
-    const restore =
-      raised == null
-        ? null
-        : {position: raised.style.position, zIndex: raised.style.zIndex};
-    if (raised != null) {
-      if (getComputedStyle(raised).position === 'static') {
-        raised.style.position = 'relative';
-      }
-      raised.style.zIndex = '2';
+    const restore = raised == null ? null : {position: raised.style.position};
+    // The copy paints at the element's own level: just before it in the
+    // host, with no z-index, so page content stacks against the pair as it
+    // does against the element alone. The element, positioned, paints above
+    // the copy by tree order.
+    if (raised != null && getComputedStyle(raised).position === 'static') {
+      raised.style.position = 'relative';
     }
     const end = playLayoutSwap(
       {...swap, rect: at},
       {
         host,
         isOpaque: true,
+        copyBefore: raised ?? undefined,
         copy: (p, ride) => ({
           clipPath: clip(extentOfBox(before) - extentAt(p, ride)),
           opacity: copyOpacity(p),
@@ -2708,7 +2718,6 @@ export function playLayoutEdge(
         onEnd: () => {
           if (raised != null && restore != null) {
             raised.style.position = restore.position;
-            raised.style.zIndex = restore.zIndex;
           }
         },
         incoming: own.incoming ?? [],

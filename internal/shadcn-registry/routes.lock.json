@@ -1987,6 +1987,11 @@
       "aliases": []
     },
     {
+      "name": "example-create-drag-to-snap-points-playing-card-in-plain-java-script",
+      "path": "examples/create-drag-to-snap-points/playing-card-in-plain-java-script",
+      "aliases": []
+    },
+    {
       "name": "example-date-input-clearable",
       "path": "examples/date-input/clearable",
       "aliases": []
@@ -3722,6 +3727,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-drag-to-snap-points-playing-card-on-three-places",
+      "path": "examples/use-drag-to-snap-points/playing-card-on-three-places",
+      "aliases": []
+    },
+    {
       "name": "example-use-focus-trap-quick-edit-panel",
       "path": "examples/use-focus-trap/quick-edit-panel",
       "aliases": []
@@ -3852,6 +3862,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-snap-paging-onboarding-pages",
+      "path": "examples/use-snap-paging/onboarding-pages",
+      "aliases": []
+    },
+    {
       "name": "example-use-streaming-text-streaming-response",
       "path": "examples/use-streaming-text/streaming-response",
       "aliases": []
@@ -3957,6 +3972,11 @@
       "aliases": []
     },
     {
+      "name": "hook-create-drag-to-snap-points",
+      "path": "hooks/create-drag-to-snap-points",
+      "aliases": []
+    },
+    {
       "name": "hook-create-pan-gesture",
       "path": "hooks/create-pan-gesture",
       "aliases": []
@@ -4019,6 +4039,11 @@
     {
       "name": "hook-use-dev-warning",
       "path": "hooks/use-dev-warning",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-drag-to-snap-points",
+      "path": "hooks/use-drag-to-snap-points",
       "aliases": []
     },
     {
@@ -4189,6 +4214,11 @@
     {
       "name": "hook-use-scrollable-area",
       "path": "hooks/use-scrollable-area",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-snap-paging",
+      "path": "hooks/use-snap-paging",
       "aliases": []
     },
     {
