@@ -157,7 +157,7 @@ describe.each([
     expect(animated).toContain(after);
     expect(
       component.chevron()?.style.getPropertyValue('transition-timing-function'),
-    ).toBe('var(--ease-move)');
+    ).toBe('cubic-bezier(0.24, 1, 0.4, 1)');
   });
 
   it('changes nothing without a handle', async () => {

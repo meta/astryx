@@ -757,13 +757,28 @@ describe('the indicator transition', () => {
       chevron,
     );
     expect(chevron.style.getPropertyValue('transition-timing-function')).toBe(
-      'var(--ease-move)',
+      'cubic-bezier(0.24, 1, 0.4, 1)',
     );
-    expect(chevron.style.getPropertyValue('transition-duration')).toBe(
-      'var(--duration-medium-min)',
-    );
+    expect(chevron.style.getPropertyValue('transition-duration')).toBe('310ms');
     applyLayoutChangeTransition(null, chevron);
     expect(chevron.style.getPropertyValue('transition-duration')).toBe('');
+  });
+
+  it('takes the timing read where the area is, whatever scope sits between them', () => {
+    document.body.innerHTML = `<div id="area" style="--duration-medium-min: 465ms; --ease-move: cubic-bezier(0, 0, 0.2, 1)">
+      <div style="--duration-medium-min: 620ms; --ease-move: cubic-bezier(0.3, 1.2, 0.5, 1)"><svg id="chevron"></svg></div></div>`;
+    const area = document.getElementById('area') as HTMLElement;
+    const chevron = document.getElementById(
+      'chevron',
+    ) as unknown as SVGSVGElement;
+    applyLayoutChangeTransition(
+      createAnimatedLayout(() => area),
+      chevron,
+    );
+    expect(chevron.style.getPropertyValue('transition-duration')).toBe('465ms');
+    expect(chevron.style.getPropertyValue('transition-timing-function')).toBe(
+      'cubic-bezier(0, 0, 0.2, 1)',
+    );
   });
 
   it('is immediate under Reduce Motion', () => {

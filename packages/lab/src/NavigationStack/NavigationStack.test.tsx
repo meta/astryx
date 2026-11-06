@@ -209,13 +209,31 @@ describe('NavigationStack', () => {
       render(<LargeHarness />);
       const large = screen.getByRole('heading', {level: 1, name: 'Settings'});
       // First in the screen's scrolling content.
-      expect(screenCard('Settings')?.firstElementChild?.firstElementChild).toBe(
-        large,
-      );
+      expect(
+        screenCard('Settings')?.firstElementChild?.firstElementChild
+          ?.firstElementChild,
+      ).toBe(large);
       // The bar's copy of the title is hidden while the large one shows.
       expect(screen.getAllByRole('heading', {name: 'Settings'})).toHaveLength(
         1,
       );
+    });
+
+    it('puts the scroll edge sentinel right after the large title', () => {
+      render(<LargeHarness />);
+      const scroller = screenCard('Settings')?.firstElementChild;
+      const content = scroller?.firstElementChild;
+      const [title, sentinel] = Array.from(content?.children ?? []);
+      expect(title).toBe(
+        screen.getByRole('heading', {level: 1, name: 'Settings'}),
+      );
+      // It ends where the large title ends, so the veil comes on as the
+      // bar's title takes over. The scroller holds no other sentinel.
+      expect(sentinel).toHaveAttribute('data-navigation-scroll-edge-sentinel');
+      expect(sentinel).toHaveAttribute('aria-hidden', 'true');
+      expect(
+        scroller?.querySelectorAll('[data-navigation-scroll-edge-sentinel]'),
+      ).toHaveLength(1);
     });
 
     it('moves focus to the pushed screen’s large title', async () => {
@@ -231,6 +249,24 @@ describe('NavigationStack', () => {
         {timeout: 3000},
       );
     });
+  });
+
+  it('marks the top of an inline screen’s content with the scroll edge sentinel, under its veil', () => {
+    render(<Harness />);
+    const card = screenCard('Settings');
+    const [sentinel, content] = Array.from(
+      card?.firstElementChild?.children ?? [],
+    );
+    // The sentinel sits just above the content, at its static position in
+    // the scroller. The screen's first element stays the content's first.
+    expect(sentinel).toHaveAttribute('data-navigation-scroll-edge-sentinel');
+    expect(
+      content?.querySelector('[data-navigation-scroll-edge-sentinel]'),
+    ).toBeNull();
+    // The veil is the card's own child, over the scroller, hidden from
+    // assistive technology.
+    const veil = card?.querySelector(':scope > [data-navigation-scroll-edge]');
+    expect(veil).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('shows a screen’s end content in its bar, out of reach once a screen covers it', async () => {
