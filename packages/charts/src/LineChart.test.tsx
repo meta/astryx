@@ -141,9 +141,12 @@ describe('LineChart series composition', () => {
     );
     reportWidth(600);
 
+    const svg = screen.getByRole('img', {name: 'Stepped revenue'});
     expect(
-      screen.getByRole('img', {name: 'Stepped revenue'}),
-    ).toBeInTheDocument();
+      svg.querySelector('path[fill="none"]')?.getAttribute('stroke-width'),
+    ).toBe('3');
+    expect(svg.querySelectorAll('circle')).toHaveLength(data.length);
+    expect(document.querySelector('[role="tooltip"]')).not.toBeNull();
   });
 
   it('hides the legend when legend is false', () => {
