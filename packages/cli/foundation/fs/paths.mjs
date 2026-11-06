@@ -852,22 +852,6 @@ export function discoverExternalPackages(startDir = process.cwd()) {
 }
 
 /**
- * Directories under `packages/core/src` that are shared infrastructure, not
- * swizzleable components: their modules are consumed through the package's
- * own subpath exports (or not exported at all), so a copy of them cannot
- * compile in a consumer project.
- */
-const NON_COMPONENT_DIRS = new Set([
-  '__tests__',
-  'gestures',
-  'hooks',
-  'i18n',
-  'motion',
-  'theme',
-  'utils',
-]);
-
-/**
  * List available component directories in packages/core/src.
  * Component directories are capitalized (`Button`, `Dialog`); lowercase
  * directories hold shared infrastructure and are never listed.
@@ -881,7 +865,6 @@ export function listComponents(coreDir) {
   return entries
     .filter(e => {
       if (!e.isDirectory()) return false;
-      if (NON_COMPONENT_DIRS.has(e.name)) return false;
       return /^[A-Z]/.test(e.name);
     })
     .map(e => e.name)
