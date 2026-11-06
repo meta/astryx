@@ -316,7 +316,7 @@ describe("a LayoutPanel's pane slides on collapse and open (component:Resizable 
     fireEvent.pointerUp(zone, {pointerId: 1, clientX: 260});
   });
 
-  it('catches a pane still sliding shut where it shows: it opens, and its edge follows the finger', () => {
+  it('holds a pane still sliding shut where it shows, and opens it at the finger once the finger passes the minimum', () => {
     render(<PropsSplit />);
     const zone = grabZone();
     fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
@@ -324,14 +324,42 @@ describe("a LayoutPanel's pane slides on collapse and open (component:Resizable 
     fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
     expect(propsRegion?.isCollapsed).toBe(true);
     // At once, while it slides shut: the lift left the edge near 43 px, the
-    // 50 px minimum less the band. The finger catches it there.
+    // 50 px minimum less the band. The finger holds it there, still shut.
     fireEvent.pointerDown(zone, {pointerId: 2, clientX: 110});
-    expect(propsRegion?.isCollapsed).toBe(false);
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 113});
+    expect(propsRegion?.isCollapsed).toBe(true);
     fireEvent.pointerMove(zone, {pointerId: 2, clientX: 140});
-    // The edge followed the finger 30 px.
+    // The finger passed the minimum 30 px from where it caught the edge.
+    expect(propsRegion?.isCollapsed).toBe(false);
     expect(propsRegion?.size).toBeGreaterThan(65);
     expect(propsRegion?.size).toBeLessThan(80);
     fireEvent.pointerUp(zone, {pointerId: 2, clientX: 140});
+  });
+
+  it('opens a held closing pane to its minimum on a lift above the collapse threshold', () => {
+    render(<PropsSplit />);
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    fireEvent.pointerMove(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerDown(zone, {pointerId: 2, clientX: 110});
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 112});
+    fireEvent.pointerUp(zone, {pointerId: 2, clientX: 112});
+    expect(propsRegion?.isCollapsed).toBe(false);
+    expect(propsRegion?.size).toBe(50);
+  });
+
+  it('keeps a held closing pane shut on a lift under the collapse threshold', () => {
+    render(<PropsSplit />);
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    fireEvent.pointerMove(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
+    fireEvent.pointerDown(zone, {pointerId: 2, clientX: 110});
+    // Down to about 13 px, under the 40 px threshold.
+    fireEvent.pointerMove(zone, {pointerId: 2, clientX: 80});
+    fireEvent.pointerUp(zone, {pointerId: 2, clientX: 80});
+    expect(propsRegion?.isCollapsed).toBe(true);
   });
 
   it('catches a pane sliding shut between snap points where it shows, and follows the finger to a snap', () => {
