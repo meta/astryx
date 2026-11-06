@@ -7,7 +7,7 @@
  * @position Shared by the keyboard module's reveals and Outline's scroll spy.
  */
 
-const SCROLLING_OVERFLOW = new Set(['auto', 'scroll', 'overlay']);
+import {SCROLLABLE_OVERFLOW} from './scrollView';
 
 /**
  * The nearest ancestor of `element` that scrolls on the block axis: its
@@ -29,7 +29,7 @@ export function scrollingAncestor(
     node = node.parentElement
   ) {
     if (
-      SCROLLING_OVERFLOW.has(view.getComputedStyle(node).overflowY) &&
+      SCROLLABLE_OVERFLOW.has(view.getComputedStyle(node).overflowY) &&
       node.scrollHeight > node.clientHeight
     ) {
       return node;

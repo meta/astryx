@@ -749,13 +749,10 @@ export interface KeepFieldAboveKeyboardOptions {
   offset?: number;
 }
 
-// How the field path places `field` when it gains focus: a ride of its docked
-// container, or a reveal by its nearest scroller. A fixed container the app
-// positions fills the viewport, floats above the bottom edge, or sets its own
-// `translate`. In one, that is a scroller between the field and the container.
-// Null where the browser's own reveal stays. That is inside a keyboard target,
-// which places the field itself, or in such a container with no scroller around
-// the field.
+// The placement of `field` when it gains focus. A docked container rides.
+// Page content, or a fixed container the app positions, reveals the field
+// through a scroller. Null keeps the browser's reveal: inside a keyboard
+// target, or with no such scroller.
 function placementOf(
   field: HTMLElement,
 ): {ride: HTMLElement} | {reveal: Element} | null {
