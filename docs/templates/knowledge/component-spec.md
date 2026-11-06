@@ -8,7 +8,7 @@ archive_reason: null
 superseded_by: null
 approved_by: null
 approved_at: null
-owners: [<owner>]
+owners: [<Damarcus Jones Sr>]
 review_triggers: [public-api, behavior, layout, theming, accessibility]
 verified_by: [<test-or-check>]
 modules: [module:<Name>/<PublicModule>]
