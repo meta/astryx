@@ -124,7 +124,7 @@ describe('useTableRowExpansion adopts animatedLayout (spec:AST-105 FR1, FR2)', (
       document
         .querySelector<HTMLElement>('[data-expansion-toggle] > *')
         ?.style.getPropertyValue('transition-timing-function'),
-    ).toBe('var(--ease-move)');
+    ).toBe('cubic-bezier(0.24, 1, 0.4, 1)');
   });
 
   it.each(['columns', 'grid'] as const)(
@@ -157,7 +157,7 @@ describe('useTableRowExpansion adopts animatedLayout (spec:AST-105 FR1, FR2)', (
         '[data-expansion-toggle] > *',
       );
       expect(glyph?.style.getPropertyValue('transition-timing-function')).toBe(
-        'var(--ease-move)',
+        'cubic-bezier(0.24, 1, 0.4, 1)',
       );
       rerender(<ExpandableTable withHandle dividers={dividers} />);
       expect(glyph?.style.getPropertyValue('transition-timing-function')).toBe(

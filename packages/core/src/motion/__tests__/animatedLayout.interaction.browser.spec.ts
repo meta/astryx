@@ -7,7 +7,8 @@
  *   phone with a coarse pointer) plus a fine-pointer describe
  * @output Proof of which elements glide after a reported size change, by how
  *   much, and on one shared start and the theme's move curve. That curve may
- *   be a `linear()` or `steps()` easing. It checks that
+ *   be a `linear()` or `steps()` easing. A disclosure's indicator turns on the
+ *   timing read where the area is, through a nested theme scope. It checks that
  *   the glide never passes the area or scrolls it, and that nothing moves
  *   without a handle. It checks Reduce Motion by pointer, and the edge reveal:
  *   a block-end and an inline-edge reveal and conceal, and the two-state form.
@@ -2414,6 +2415,37 @@ test.describe('spec:AST-105 FR2–FR4', () => {
       );
     });
   }
+
+  test("a disclosure's indicator turns on the timing read where the area is, whatever theme scope sits between them (FR4)", async ({
+    page,
+  }) => {
+    // The area's tokens, and a nested scope with others around the indicator.
+    await open(
+      page,
+      PAGE,
+      `#area { --duration-medium-min: 310ms; --ease-move: cubic-bezier(0.24, 1, 0.4, 1); }
+       #grow { --duration-medium-min: 620ms; --ease-move: cubic-bezier(0, 0, 0.2, 1); }`,
+    );
+    await change(page);
+    const [motion] = await page.evaluate(() => window.motionOf('#a'));
+    const indicator = await page.evaluate(() => {
+      const area = document.getElementById('area') as HTMLElement;
+      const chevron = document.createElement('span');
+      document.getElementById('grow')?.append(chevron);
+      window.AnimatedLayout.applyLayoutChangeTransition(
+        window.AnimatedLayout.createAnimatedLayout(() => area),
+        chevron,
+      );
+      const style = getComputedStyle(chevron);
+      return {
+        ms: parseFloat(style.transitionDuration) * 1000,
+        easing: style.transitionTimingFunction,
+      };
+    });
+    expect(motion.duration).toBeCloseTo(310, 3);
+    expect(indicator.ms).toBeCloseTo(motion.duration, 3);
+    expect(indicator.easing).toBe('cubic-bezier(0.24, 1, 0.4, 1)');
+  });
 
   test('under Reduce Motion with a coarse pointer, both cross-fade with no travel (FR4)', async ({
     page,

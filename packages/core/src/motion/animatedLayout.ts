@@ -89,7 +89,7 @@ import {
   visiblePartCopy,
   wrapText,
 } from './transientCopy';
-import {readThemeTiming} from './themeTiming';
+import {readThemeTiming, readThemeTokenText} from './themeTiming';
 import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {reducedMotionCrossFade} from './uikit/timing';
 
@@ -117,6 +117,8 @@ type LayoutMotion =
 /** The move curve as remaining distance (1 → 0) over its duration. */
 interface GlideProgress {
   readonly durationMs: number;
+  /** The move curve's CSS text, as read where the area is. */
+  readonly easing: string;
   /** Remaining fraction of the move at `t` ms. */
   remaining(t: number): number;
 }
@@ -139,12 +141,14 @@ function glideProgress(area: Element): GlideProgress | null {
     duration: '--duration-medium-min',
     easing: '--ease-move',
   });
-  if (curve == null) {
+  const easing = readThemeTokenText(area, '--ease-move');
+  if (curve == null || easing == null) {
     return null;
   }
   const durationMs = curve.duration * 1000;
   return {
     durationMs,
+    easing,
     remaining: t => (t >= durationMs ? 0 : 1 - curve.at(t / 1000)),
   };
 }
@@ -3043,9 +3047,10 @@ export function reportLayoutEdge(
 
 /**
  * A disclosure's indicator (its chevron) turns on the same motion as the
- * glide. Its CSS transition takes the theme's move curve and duration, and is
- * immediate under Reduce Motion. Without a handle the inline values are
- * cleared, so the component's own transition applies.
+ * glide. Its CSS transition takes the theme's move curve and duration as the
+ * glide reads them where the area is, and is immediate under Reduce Motion.
+ * Without a handle the inline values are cleared, so the component's own
+ * transition applies.
  */
 export function applyLayoutChangeTransition(
   handle: AnimatedLayout | null | undefined,
@@ -3066,11 +3071,14 @@ export function applyLayoutChangeTransition(
     element.style.removeProperty('transition-timing-function');
     return;
   }
+  // Values, not the tokens: a theme scope between the area and the indicator
+  // would retime a token that the indicator reads where it is.
+  const ms = Math.round(motion.progress.durationMs * 1000) / 1000;
+  element.style.setProperty('transition-duration', `${ms}ms`);
   element.style.setProperty(
-    'transition-duration',
-    'var(--duration-medium-min)',
+    'transition-timing-function',
+    motion.progress.easing,
   );
-  element.style.setProperty('transition-timing-function', 'var(--ease-move)');
 }
 
 /**
