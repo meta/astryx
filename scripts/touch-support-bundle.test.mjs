@@ -233,6 +233,8 @@ const GESTURE_USERS = new Set([
   'SideNav',
   'TimeInput',
   'TopNav',
+  // Toast: its swipe's claim, a one-way pan whose first move decides.
+  'Toast',
   // The public pan, which the root's createPanGesture shares.
   'hooks: usePanGesture',
 ]);

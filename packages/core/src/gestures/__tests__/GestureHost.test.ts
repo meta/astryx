@@ -1518,6 +1518,81 @@ describe('GestureHost', () => {
     });
   });
 
+  describe('a pan whose first move decides (firstMoveDecides)', () => {
+    /** A toast card whose one-way pan toward the bottom decides on the first move. */
+    function toastCard() {
+      const {card} = mount('<div id="card"></div>');
+      const pan = new PanGestureRecognizer({
+        name: 'toast',
+        direction: 'down',
+        firstMoveDecides: true,
+      });
+      detachers.push(host.attach(card, pan));
+      const finger = {id: 1, x: 50, y: 100};
+      touch('touchstart', card, [finger], [finger], 0);
+      const at = (x: number, y: number, time: number) =>
+        touch(
+          'touchmove',
+          card,
+          [{...finger, x, y}],
+          [{...finger, x, y}],
+          time,
+        );
+      const lift = (x: number, y: number, time: number) =>
+        touch('touchend', card, [{...finger, x, y}], [], time);
+      return {card, pan, finger, at, lift};
+    }
+
+    it('holds every move from a first move its own way, and still begins at 10 px', () => {
+      const {pan, at, lift} = toastCard();
+      expect(at(50, 101, 16).defaultPrevented).toBe(true);
+      expect(pan.state).toBe('possible');
+      // The first move decided: a move back the other way stays held.
+      expect(at(50, 98, 32).defaultPrevented).toBe(true);
+      expect(pan.state).toBe('possible');
+      expect(at(50, 112, 48).defaultPrevented).toBe(true);
+      expect(pan.state).toBe('began');
+      lift(50, 112, 64);
+    });
+
+    it('fails on a first move the other way and leaves every move to the page', () => {
+      const {pan, at, lift} = toastCard();
+      expect(at(50, 99, 16).defaultPrevented).toBe(false);
+      expect(pan.state).toBe('failed');
+      expect(at(50, 120, 32).defaultPrevented).toBe(false);
+      lift(50, 120, 48);
+    });
+
+    it('fails on a sideways first move', () => {
+      const {pan, at, lift} = toastCard();
+      expect(at(51, 100, 16).defaultPrevented).toBe(false);
+      expect(pan.state).toBe('failed');
+      lift(51, 100, 32);
+    });
+
+    it('fails on a diagonal first move that is no more down than across', () => {
+      const {pan, at, lift} = toastCard();
+      expect(at(51, 101, 16).defaultPrevented).toBe(false);
+      expect(pan.state).toBe('failed');
+      lift(51, 101, 32);
+    });
+
+    it('holds nothing while two fingers are down, so a pinch stays the page\u2019s', () => {
+      const {card, finger, at} = toastCard();
+      expect(at(50, 101, 16).defaultPrevented).toBe(true);
+      const second = {id: 2, x: 150, y: 100};
+      touch('touchstart', card, [second], [{...finger, y: 101}, second], 24);
+      const moved = [
+        {...finger, y: 104},
+        {...second, y: 96},
+      ];
+      expect(touch('touchmove', card, moved, moved, 32).defaultPrevented).toBe(
+        false,
+      );
+      touch('touchend', card, moved, [], 48);
+    });
+  });
+
   it('names the pointer a finger, a pen or a mouse is driven by', () => {
     const {box} = mount('<div id="box"></div>');
     const press = new LongPressGestureRecognizer({name: 'press'});

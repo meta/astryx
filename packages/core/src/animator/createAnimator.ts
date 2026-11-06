@@ -212,7 +212,8 @@ export function createAttachableAnimator(): {
       if (inactive() || Object.keys(to).length === 0) {
         return;
       }
-      // The role registry is written on first use, never on import.
+      // The spring roles registered as their module loaded, so this call
+      // registers nothing new.
       registerSpringsTable();
       const velocity = motionValues(options?.velocity);
       await motion.animate(to, {
