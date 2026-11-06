@@ -33,7 +33,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Stack more than a handful of series. Stacked areas past four or five bands are hard to read — prefer a LineChart.',
+          'Stack more than a handful of series. Stacked areas past four or five bands are hard to read — prefer a line chart.',
       },
     ],
     accessibility: [

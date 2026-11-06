@@ -3,7 +3,7 @@
 /**
  * @file AreaChart.tsx
  * @input Data rows, an x field, one or more y fields, and presentation options
- * @output Ready-to-use area chart — Chart root with area marks, axes, legend, and tooltip
+ * @output AreaChart element
  * @position Composed component; delegates scales, layout, and interaction to Chart
  */
 
