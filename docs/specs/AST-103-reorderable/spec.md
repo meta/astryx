@@ -441,7 +441,7 @@ Rejected: a translator-function option, and one flat option per string.
 ### DEC-7 — A collection can opt into shift feedback
 
 **Reference:** `spec:AST-103/DEC-7`
-**Decider:** `cixzhang`, `2026-10-28`
+**Decider:** pending owner confirmation
 
 Some collections, such as a hand of playing cards, read better when the items
 shift during the drag, as iOS does. `feedbackBehavior: 'shift'` opts into that while

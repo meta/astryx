@@ -151,7 +151,7 @@ Rejected: neighbors sliding aside during the drag.
 ### DEC-2 — Shift feedback is opt-in
 
 **Reference:** `design:ordered-collection-reordering/DEC-2`
-**Decider:** `cixzhang`, `2026-10-28`
+**Decider:** pending owner confirmation
 
 A collection can opt into neighbours sliding aside during the drag
 (`spec:AST-103` FR9), while DEC-1's insertion line stays the default. Shift
