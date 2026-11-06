@@ -408,6 +408,42 @@ describe('Theme', () => {
     expect(document.head.querySelector(selector)).toBeNull();
   });
 
+  it("paints the owning Theme's new definition when only its theme changes", () => {
+    const edited = defineTheme({
+      name: 'test',
+      tokens: {
+        '--color-accent': ['#0000AA', '#5555FF'],
+      },
+    });
+    function App({ownerTheme}: {ownerTheme: typeof testTheme}) {
+      return (
+        <>
+          <Theme theme={ownerTheme}>
+            <span>owner</span>
+          </Theme>
+          <Theme theme={testTheme}>
+            <span>other</span>
+          </Theme>
+        </>
+      );
+    }
+    const selector = 'style[data-astryx-theme="test"]';
+    const {rerender, unmount} = render(<App ownerTheme={testTheme} />);
+    expect(document.head.querySelector(selector)?.textContent).toMatch(
+      /#aa0000/i,
+    );
+
+    // The first Theme owns the CSS. Its own theme changes; the other keeps
+    // the original. As on main, the owner's new definition paints.
+    rerender(<App ownerTheme={edited} />);
+    const styles = document.head.querySelectorAll(selector);
+    expect(styles).toHaveLength(1);
+    expect(styles[0].textContent).toMatch(/#0000aa/i);
+
+    unmount();
+    expect(document.head.querySelector(selector)).toBeNull();
+  });
+
   it('replaces the shared CSS when a theme is redefined under the same name', () => {
     const redefined = defineTheme({
       name: 'test',

@@ -117,6 +117,11 @@ interface InjectedTheme {
   users: Map<string, DefinedTheme>;
   /** The id of the `Theme` whose theme is in the document. */
   owner: string;
+  /**
+   * The owner that last handed the CSS over. When the same `Theme` sets up
+   * again in the same commit (its own theme changed), it takes the CSS back.
+   */
+  formerOwner: string | null;
   /** The theme whose CSS is in the document. */
   theme: DefinedTheme;
   styles: HTMLStyleElement[];
@@ -197,6 +202,7 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
       entry = {
         users: new Map(),
         owner: id,
+        formerOwner: null,
         theme,
         styles: writeThemeStyles(theme, id),
       };
@@ -205,6 +211,14 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
     // A later `Theme` does no generation. The CSS of the first `Theme` that
     // injected the name stays in the document.
     entry.users.set(id, theme);
+    if (entry.formerOwner === id) {
+      // The owner's own theme changed: its new definition paints, as on main.
+      entry.owner = id;
+      entry.formerOwner = null;
+      if (entry.theme !== theme) {
+        rewriteThemeStyles(entry, theme, id);
+      }
+    }
     const current = entry;
 
     return () => {
@@ -224,6 +238,7 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
       // replaces the old one.
       const [nextOwner, nextTheme] = [...current.users][0];
       current.owner = nextOwner;
+      current.formerOwner = id;
       if (nextTheme !== current.theme) {
         rewriteThemeStyles(current, nextTheme, nextOwner);
       }
