@@ -4,7 +4,7 @@
  * @file Button.hitArea.test.tsx
  * @input Button, ButtonGroup, and the shared hit area (mocked)
  * @output Unit coverage that a standalone Button takes the shared touch band,
- *   on an element of its own that leaves a caller's ::after alone, and that a
+ *   on its content wrapper, which leaves a caller's ::after alone, and that a
  *   grouped, disabled or busy-only Button takes none
  * @position Button's FR42 touch-target evidence beside Button.test.tsx
  */
@@ -43,7 +43,7 @@ function isWatched(element: Element): boolean {
   return hitAreaWatches.some(entry => entry.element === element);
 }
 
-/** The button's own element that carries the band, if any. */
+/** The element inside the button that carries the band, if any. */
 function bandElementOf(button: Element): Element | undefined {
   return [...button.querySelectorAll('*')].find(element =>
     bandClasses.every(bandClass => element.classList.contains(bandClass)),
@@ -68,7 +68,6 @@ describe('Button touch target (AST-094 FR42)', () => {
     expect(bandClasses.length).toBeGreaterThan(0);
     const band = bandElementOf(button);
     expect(band).toBeDefined();
-    expect(band?.childNodes).toHaveLength(0);
     expect(button).toHaveAccessibleName('Save');
     const watch = hitAreaWatches.find(entry => entry.element === button);
     expect(watch).toBeDefined();
@@ -76,7 +75,7 @@ describe('Button touch target (AST-094 FR42)', () => {
     expect(button.style.getPropertyValue('--astryx-hit-inset-top')).toBe('6px');
   });
 
-  it("leaves a caller's ::after decoration on the button itself, and the band on its own element", () => {
+  it("leaves a caller's ::after decoration on the button itself, and the band on its content wrapper", () => {
     render(<Button label="Inbox" xstyle={callerStyles.dot} />);
     const button = screen.getByRole('button', {name: 'Inbox'});
     const callerClasses = (stylex.props(callerStyles.dot).className ?? '')

@@ -470,23 +470,6 @@ const contentHide = stylex.keyframes({
 // frame in between. Reduced motion is instant.
 const SPINNER_DELAY = durationVars['--duration-medium-min'];
 
-// The touch band has its own element, so the button's `::before` and `::after`
-// stay free for a caller's decoration. The element is empty, so it adds
-// nothing to the accessible name. It covers the button's box and takes no
-// layout and no tap. Only its band takes a tap.
-const touchBandStyles = stylex.create({
-  element: {
-    position: 'absolute',
-    inset: 0,
-    pointerEvents: 'none',
-  },
-  band: {
-    '::after': {
-      pointerEvents: 'auto',
-    },
-  },
-});
-
 const loadingStyles = stylex.create({
   // Hide the button's own content while the spinner overlay is shown. Applied
   // to the content wrapper (not the button) so the button keeps its variant
@@ -900,6 +883,10 @@ export function Button({
       <span
         {...stylex.props(
           styles.contentWrapper,
+          // The content wrapper's `::after` carries the touch band, so the
+          // button's own `::before` (the touch press) and `::after` (a
+          // caller's decoration) stay as they are.
+          hasHitArea && touchHitAreaStyles.layer,
           isLoadingState &&
             (delaySpinner
               ? loadingStyles.hiddenContentDelayed
@@ -925,15 +912,6 @@ export function Button({
       <VisuallyHidden role="status" aria-live="polite">
         {isLoadingState && isLiveRegionReady ? t('@astryx.button.loading') : ''}
       </VisuallyHidden>
-      {hasHitArea && (
-        <span
-          {...stylex.props(
-            touchBandStyles.element,
-            touchHitAreaStyles.layer,
-            touchBandStyles.band,
-          )}
-        />
-      )}
     </>
   );
 

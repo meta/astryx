@@ -80,8 +80,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   interruptible opt-out.
 - Pending presentation: Spinner overlay, hidden content, `aria-busy`, and the
   loading announcement region.
-- A hidden touch-band element under a coarse pointer (`spec:AST-094` FR42): not
-  a styling part; caller pseudo-elements are untouched.
+- The touch band under a coarse pointer (`spec:AST-094` FR42), carried by the
+  content wrapper's `::after`; the root's `::before` and `::after` stay as FR15
+  and callers use them.
 - Busy-only and disabled operability guards.
 - Link mode's rendering choice and its disabled fallback.
 - Standalone resting elevation and the `button` theme target.
@@ -234,8 +235,8 @@ record governs Button; exact paint stays in code and visual evidence.
 
 The root carries the one `button` target (FR14). Icon, Label, and End content
 have no target of their own and take color from `button`; the Spinner is a
-Spinner instance with the inherited shade. The hidden touch-band element has no
-target. The consumer anatomy names no root part, so this record carries no
+Spinner instance with the inherited shade. The touch band has no target. The
+consumer anatomy names no root part, so this record carries no
 anatomy-theming map.
 
 ## Family and system relationships
@@ -276,7 +277,7 @@ anatomy-theming map.
 | FR15                         | `Button.test.tsx` touch pressed-state suite                                                                                                                                                                                          | Touch press on and fading                                           | Losing the touch press arm or its release fade fails.                                                                                                                         | `audit:Button/behavior`      |
 | FR15 (disabled paint)        | `pressFeedback.test.ts` "paints nothing on a disabled surface, and does not light the row around it" for the touch press. Evidence gap: no test of the hover and pressed overlays or the mouse scale on a Button exposed as disabled | Native disabled; `aria-disabled`                                    | A disabled surface that takes the touch press fails.                                                                                                                          | `audit:Button/behavior`      |
 | FR15 (reduced motion)        | `ReducedMotionPress.a11y.chromium.spec.ts` ("a pressed button never scales under reduced motion, with a mouse or a finger (DR1)")                                                                                                    | Mouse press; touch press                                            | A computed transform other than `none` or `scale(1)` during the press.                                                                                                        | `audit:Button/behavior`      |
-| `spec:AST-094` FR42          | `Button.hitArea.test.tsx`: a standalone and a link Button take the touch band on a hidden element of their own, and a caller's `::after` stays on the button; a disabled, busy-only or grouped Button takes none                     | standalone; link; caller `::after`; disabled; busy-only; grouped    | A Button without the band, or a disabled, busy-only or grouped Button with its own, fails. Known gap: WebKit clear-button reach (`component:Field` Current-state impact).     | `audit:Button/behavior`      |
+| `spec:AST-094` FR42          | `Button.hitArea.test.tsx`: a standalone and a link Button take the touch band on their content wrapper, and a caller's `::after` stays on the button; a disabled, busy-only or grouped Button takes none                             | standalone; link; caller `::after`; disabled; busy-only; grouped    | A Button without the band, or a disabled, busy-only or grouped Button with its own, fails. Known gap: WebKit clear-button reach (`component:Field` Current-state impact).     | `audit:Button/behavior`      |
 | FR15 (hover and mouse scale) | Evidence gap: no test asserts the hover overlay or the 0.98 mouse-press scale                                                                                                                                                        | Hover; mouse press, standalone and grouped                          | —                                                                                                                                                                             | `audit:Button/behavior`      |
 | FR16                         | `edgeCompensation.test.tsx` Button data-attribute suite                                                                                                                                                                              | Ghost and primary                                                   | A ghost Button without the marker, or a primary Button with it, fails.                                                                                                        | `audit:Button/layout`        |
 | FR17                         | `Button.test.tsx` ref suites and the caller `aria-disabled`/`aria-busy` case                                                                                                                                                         | Initial render and rerender; caller `aria-busy` and `aria-disabled` | A dropped or detached ref, or a dropped caller `aria-busy` or `aria-disabled`, fails. Evidence gap: no test asserts that a caller `aria-disabled` leaves the Button operable. | `audit:Button/behavior`      |
