@@ -286,7 +286,7 @@ describe('the interaction proof legs in ci.yml', () => {
     {
       id: 'pr-interaction-webkit',
       project: 'webkit',
-      legs: [1, 2],
+      legs: [1, 2, 3, 4, 5, 6],
       run: 'Run WebKit interaction proofs',
       plan: "Plan this leg's WebKit interaction proofs",
       evidence: 'interaction-evidence-webkit-${{ matrix.leg }}',
@@ -475,7 +475,10 @@ describe('the interaction proof legs in ci.yml', () => {
             '-c',
             count.run
               .replaceAll('${{ matrix.leg }}', String(leg))
-              .replaceAll('${{ strategy.job-total }}', '2'),
+              .replaceAll(
+                '${{ strategy.job-total }}',
+                String(job.strategy.matrix.leg.length),
+              ),
           ],
           {
             cwd: dir,
@@ -772,12 +775,6 @@ describe('the interaction proof legs in ci.yml', () => {
         durations['seconds-per-test'][`interaction-${lane.project}`];
       const testsOf = file =>
         countTests(fs.readFileSync(path.join(root, file), 'utf8'));
-      const seconds = estimateSeconds(times, filters, {
-        listed: specs,
-        fallback,
-        testsOf,
-        perTest,
-      });
       const limits = {
         setupSeconds: 90,
         maxSeconds: 600,
@@ -786,32 +783,47 @@ describe('the interaction proof legs in ci.yml', () => {
       expect(count.run, lane.id).toContain(
         '--setup-seconds 90 --max-seconds 600',
       );
-      // The matrix still has room: the count stays under its legs.
-      const needed = Math.ceil(
-        seconds / (limits.maxSeconds - limits.setupSeconds),
-      );
-      expect(
-        needed,
-        `${lane.id}: ${Math.round(seconds)} s of proofs`,
-      ).toBeLessThan(lane.legs.length);
-      const legsNow = legCount({seconds, ...limits});
-      const planned = planLegs(
-        specs.filter(
-          file =>
-            filters.length === 0 || filters.some(each => file.includes(each)),
-        ),
-        Object.fromEntries(
-          specs.map(file => [
-            file,
-            times[file] ?? fallback[file] ?? testsOf(file) * perTest,
-          ]),
-        ),
-        legsNow,
-      );
-      for (const leg of planned)
-        expect(leg.seconds + limits.setupSeconds, lane.id).toBeLessThanOrEqual(
-          limits.maxSeconds + 60,
+      // WebKit also runs every changed spec: a release-wide change, which
+      // touches them all, must fit too.
+      const changes = lane.project === 'webkit' ? [[], specs] : [[]];
+      for (const changed of changes) {
+        const label = `${lane.id}, ${changed.length} changed specs`;
+        const seconds = estimateSeconds(times, filters, {
+          listed: specs,
+          changed,
+          fallback,
+          testsOf,
+          perTest,
+        });
+        // The matrix still has room: the count stays under its legs.
+        const needed = Math.ceil(
+          seconds / (limits.maxSeconds - limits.setupSeconds),
         );
+        expect(
+          needed,
+          `${label}: ${Math.round(seconds)} s of proofs`,
+        ).toBeLessThan(lane.legs.length);
+        const legsNow = legCount({seconds, ...limits});
+        const planned = planLegs(
+          specs.filter(
+            file =>
+              filters.length === 0 ||
+              filters.some(each => file.includes(each)) ||
+              changed.includes(file),
+          ),
+          Object.fromEntries(
+            specs.map(file => [
+              file,
+              times[file] ?? fallback[file] ?? testsOf(file) * perTest,
+            ]),
+          ),
+          legsNow,
+        );
+        for (const leg of planned)
+          expect(leg.seconds + limits.setupSeconds, label).toBeLessThanOrEqual(
+            limits.maxSeconds + 60,
+          );
+      }
     }
   });
 

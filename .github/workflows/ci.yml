@@ -2681,13 +2681,13 @@ jobs:
     needs: [room, admission, heavy-ci, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
-    # One leg runs every spec while the planner's estimate fits; past that two
-    # legs share the spec files by their recorded times, as the Chromium
-    # proofs' legs do.
+    # The leg count plans as many legs as keep each one's setup and proofs
+    # within ten minutes, as the Chromium proofs' count does. The matrix is
+    # the ceiling; a leg with no share passes at once.
     strategy:
       fail-fast: false
       matrix:
-        leg: [1, 2]
+        leg: [1, 2, 3, 4, 5, 6]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Playwright's own image for the version the lockfile resolves, with
@@ -2772,8 +2772,8 @@ jobs:
 
       # One leg runs every proof while its setup and the recorded times fit
       # ten minutes, which leaves a third of the job's limit for a slow
-      # runner. Past that the planner adds the second leg, so a growing suite
-      # does not reach the limit. Each leg decides the same way, before its
+      # runner. Past that the planner adds legs, up to the matrix, so a
+      # growing suite or a wide change does not reach the limit. Each leg decides the same way, before its
       # own setup, from the workflow's times and the changed files. The spec
       # files come from the merge commit's tree, which the scope checkout
       # fetched whole, so a spec with no recorded time still counts.
