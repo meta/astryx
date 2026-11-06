@@ -115,6 +115,8 @@ ThemeNestingContext.displayName = 'ThemeNestingContext';
 interface InjectedTheme {
   /** Each mounted `Theme` that uses this name, by its id, with its theme. */
   users: Map<string, DefinedTheme>;
+  /** The id of the `Theme` whose theme is in the document. */
+  owner: string;
   /** The theme whose CSS is in the document. */
   theme: DefinedTheme;
   styles: HTMLStyleElement[];
@@ -192,15 +194,16 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
           `For custom themes, run \`npx @astryxdesign/cli theme build <file>\` to generate ` +
           `the built artifacts.`,
       );
-      entry = {users: new Map(), theme, styles: writeThemeStyles(theme, id)};
+      entry = {
+        users: new Map(),
+        owner: id,
+        theme,
+        styles: writeThemeStyles(theme, id),
+      };
       injectedThemes.set(themeKey, entry);
-    } else if (entry.theme !== theme) {
-      // A theme redefined under the same name (a live editor, Fast Refresh)
-      // replaces the CSS. The newest definition wins.
-      rewriteThemeStyles(entry, theme, id);
     }
-    // A later `Theme` with the same theme does no generation: the CSS is
-    // already in the document, identical for each.
+    // A later `Theme` does no generation. The CSS of the first `Theme` that
+    // injected the name stays in the document.
     entry.users.set(id, theme);
     const current = entry;
 
@@ -213,12 +216,16 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
         injectedThemes.delete(themeKey);
         return;
       }
-      // When no remaining `Theme` uses the definition in the document, write
-      // the CSS of one that remains, so each keeps its own theme.
-      const remaining = [...current.users];
-      if (!remaining.some(([, used]) => used === current.theme)) {
-        const [userId, used] = remaining[remaining.length - 1];
-        rewriteThemeStyles(current, used, userId);
+      if (current.owner !== id) {
+        return;
+      }
+      // The earliest-mounted `Theme` that remains takes over the CSS. If its
+      // theme differs, as after a redefinition under the same name, its CSS
+      // replaces the old one.
+      const [nextOwner, nextTheme] = [...current.users][0];
+      current.owner = nextOwner;
+      if (nextTheme !== current.theme) {
+        rewriteThemeStyles(current, nextTheme, nextOwner);
       }
     };
   }, [theme, id]);

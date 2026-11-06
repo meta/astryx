@@ -367,7 +367,7 @@ describe('Theme', () => {
     expect(document.head.querySelector(selector)).toBeNull();
   });
 
-  it('restores the original CSS when an edited same-name theme inside it unmounts', () => {
+  it('keeps the original CSS while an edited same-name theme mounts inside it and after it unmounts', () => {
     const edited = defineTheme({
       name: 'test',
       tokens: {
@@ -391,10 +391,12 @@ describe('Theme', () => {
       /#aa0000/i,
     );
 
-    // A preview of the edited copy mounts inside the original.
+    // A preview of the edited copy mounts inside the original. The first
+    // Theme that injected the name keeps its CSS in the document.
     rerender(<App showEdited={true} />);
+    expect(document.head.querySelectorAll(selector)).toHaveLength(1);
     expect(document.head.querySelector(selector)?.textContent).toMatch(
-      /#0000aa/i,
+      /#aa0000/i,
     );
 
     rerender(<App showEdited={false} />);
