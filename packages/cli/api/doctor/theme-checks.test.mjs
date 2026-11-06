@@ -407,6 +407,22 @@ describe('the released themes check', () => {
     ]);
   });
 
+  it('reads a stylesheet @import in url() without quotes, in any case', async () => {
+    const dir = appWithBuiltThemes('themes-css-url', ['stone']);
+    write(
+      path.join(dir, 'src/globals.css'),
+      '@IMPORT url(@astryxdesign/theme-stone/theme.css);\n',
+    );
+
+    expect((await themeImportWiring(dir)).wired).toEqual([
+      {
+        slug: 'stone',
+        owner: '@astryxdesign/theme-stone',
+        file: 'src/globals.css',
+      },
+    ]);
+  });
+
   it('keeps the warning when the app only installs a theme, imports its types, or imports it from outside its own source', async () => {
     const dir = appWithBuiltThemes('themes-not-imported', ['neutral']);
     const warning = {

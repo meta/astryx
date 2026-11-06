@@ -16,6 +16,7 @@ import {
   discoverDoctorUnmigratedCopies,
   findDoctorCoreDir,
   doctorElementPropOrigins,
+  doctorStylesheetImports,
   findDoctorInstalledPackage,
   realDoctorFile,
   isLocalThemeOwner,
@@ -417,20 +418,6 @@ function appPackageNamesTheme(cwd) {
 }
 
 /**
- * The `@import` specifiers of a stylesheet.
- * @param {string} css
- * @returns {Set<string>}
- */
-function stylesheetImports(css) {
-  const values = new Set();
-  postcss.parse(css).walkAtRules('import', rule => {
-    const match = /^\s*(?:url\(\s*)?(['"])([^'"]+)\1/u.exec(rule.params);
-    if (match) values.add(/** @type {string} */ (match[2]));
-  });
-  return values;
-}
-
-/**
  * Whether one import specifier names a theme's built module or stylesheet.
  * @param {string} specifier
  * @param {string} file - the importing file
@@ -597,7 +584,7 @@ export async function themeImportWiring(cwd) {
       try {
         specifiers =
           path.extname(file) === '.css'
-            ? stylesheetImports(source)
+            ? doctorStylesheetImports(source)
             : moduleSpecifiers(source, {runtimeOnly: true});
       } catch {
         specifiers = new Set();

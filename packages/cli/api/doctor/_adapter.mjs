@@ -40,6 +40,7 @@ import {
 import {computerAgentTextSettings} from '../../foundation/env/user-settings.mjs';
 import * as fs from 'node:fs';
 import {elementPropOrigins} from '../../foundation/discovery/module-exports.mjs';
+import {cssImports} from '../../foundation/render/embedded-imports.mjs';
 import * as path from 'node:path';
 import {
   Project,
@@ -190,6 +191,16 @@ export function realDoctorFile(file) {
  */
 export function doctorElementPropOrigins(file, element) {
   return elementPropOrigins(file, element);
+}
+
+/**
+ * The `@import` specifiers of a stylesheet, quoted or in `url()`, in any case
+ * (see `cssImports`); empty for CSS that does not parse.
+ * @param {string} css
+ * @returns {Set<string>}
+ */
+export function doctorStylesheetImports(css) {
+  return new Set(cssImports(css));
 }
 
 /** @param {string} projectDir */
