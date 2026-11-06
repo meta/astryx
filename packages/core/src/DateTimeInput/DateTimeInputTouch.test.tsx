@@ -29,6 +29,7 @@ import {Profiler, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {readFileSync} from 'node:fs';
 import {render, screen, fireEvent, within} from '@testing-library/react';
+import {getOnlyButton} from '../__tests__/fastRoleQueries';
 import {InternationalizationProvider} from '../i18n';
 import {DateTimeInput as CoreDateTimeInput} from './DateTimeInput';
 import type {DateTimeInputProps, ISODateTimeString} from './DateTimeInput';
@@ -103,23 +104,6 @@ function dateField(label = 'Meeting'): HTMLElement {
 
 function timeField(label = 'Meeting time'): HTMLElement {
   return screen.getByRole('combobox', {name: label});
-}
-
-// The open sheet holds about 300 buttons, most of them days in the month
-// grids. jsdom reads styles to compute each accessible name, at several
-// milliseconds per element, so a role query by name takes seconds. Only the
-// buttons whose label or text is the name get the full check.
-function buttonNamed(name: string): HTMLElement {
-  const matches = screen.getAllByRole('button', {hidden: true}).filter(
-    element =>
-      (element.getAttribute('aria-label') ?? element.textContent)?.trim() ===
-        name &&
-      within(element.parentElement as HTMLElement)
-        .queryAllByRole('button', {name})
-        .includes(element),
-  );
-  expect(matches, `accessible buttons named "${name}"`).toHaveLength(1);
-  return matches[0];
 }
 
 function dateSegment(): HTMLElement {
@@ -366,13 +350,13 @@ describe('DateTimeInput touch surface', () => {
     expect(dateField()).toHaveAttribute('aria-expanded', 'true');
     expect(timeField()).toHaveAttribute('aria-expanded', 'false');
 
-    fireEvent.click(buttonNamed('Save date'));
+    fireEvent.click(getOnlyButton('Save date'));
     expect(screen.getByRole('radio', {name: 'Time'})).toHaveAttribute(
       'aria-checked',
       'true',
     );
-    fireEvent.click(buttonNamed('Save'));
-    fireEvent.click(buttonNamed('Open calendar'));
+    fireEvent.click(getOnlyButton('Save'));
+    fireEvent.click(getOnlyButton('Open calendar'));
     expect(screen.getByRole('radio', {name: 'Date'})).toHaveAttribute(
       'aria-checked',
       'true',
@@ -389,8 +373,8 @@ describe('DateTimeInput touch surface', () => {
     expect(dateField()).toHaveAttribute('aria-expanded', 'false');
     expect(timeField()).toHaveAttribute('aria-expanded', 'true');
 
-    fireEvent.click(buttonNamed('Save'));
-    fireEvent.click(buttonNamed('Open Meeting time'));
+    fireEvent.click(getOnlyButton('Save'));
+    fireEvent.click(getOnlyButton('Open Meeting time'));
     expect(screen.getByRole('radio', {name: 'Time'})).toHaveAttribute(
       'aria-checked',
       'true',
@@ -411,8 +395,8 @@ describe('DateTimeInput touch surface', () => {
       'aria-checked',
       'true',
     );
-    fireEvent.click(buttonNamed('Save date'));
-    fireEvent.click(buttonNamed('Save'));
+    fireEvent.click(getOnlyButton('Save date'));
+    fireEvent.click(getOnlyButton('Save'));
 
     fireEvent.click(timeSegment());
     expect(screen.getByRole('radio', {name: 'Time'})).toHaveAttribute(
@@ -435,8 +419,8 @@ describe('DateTimeInput touch surface', () => {
       'true',
     );
 
-    fireEvent.click(buttonNamed('Save date'));
-    fireEvent.click(buttonNamed('Save'));
+    fireEvent.click(getOnlyButton('Save date'));
+    fireEvent.click(getOnlyButton('Save'));
     fireEvent.keyDown(timeField(), {key: ' '});
     expect(screen.getByRole('radio', {name: 'Time'})).toHaveAttribute(
       'aria-checked',
@@ -478,7 +462,7 @@ describe('DateTimeInput touch surface', () => {
       render(<DateTimeInput label="Meeting" onChange={onChange} />);
       openDateSheet();
 
-      fireEvent.click(buttonNamed('Saturday, March 21, 2026'));
+      fireEvent.click(getOnlyButton('Saturday, March 21, 2026'));
 
       expect(onChange).toHaveBeenCalledWith('2026-03-21T09:30');
       expect(screen.getByRole('radio', {name: 'Date'})).toHaveAttribute(
@@ -502,7 +486,7 @@ describe('DateTimeInput touch surface', () => {
       expect(onChange).not.toHaveBeenCalled();
 
       fireEvent.click(screen.getByRole('radio', {name: 'Date'}));
-      fireEvent.click(buttonNamed('Saturday, March 21, 2026'));
+      fireEvent.click(getOnlyButton('Saturday, March 21, 2026'));
       expect(onChange).toHaveBeenCalledWith('2026-03-21T15:45');
     });
   });
@@ -530,7 +514,7 @@ describe('DateTimeInput touch surface', () => {
     fireEvent.click(optionIn('Minute', '45'));
     expect(timeField()).toHaveValue('3:45 PM');
 
-    fireEvent.click(buttonNamed('Save'));
+    fireEvent.click(getOnlyButton('Save'));
     expect(timeField()).toHaveValue('');
   });
 
@@ -634,7 +618,7 @@ describe('DateTimeInput touch surface', () => {
       render(<DateTimeInput label="Meeting" onChange={() => {}} />);
       openDateSheet();
 
-      fireEvent.click(buttonNamed('Next month'));
+      fireEvent.click(getOnlyButton('Next month'));
       expect(screen.getByText('April 2026')).toBeInTheDocument();
 
       switchToTimePanel();
@@ -715,7 +699,7 @@ describe('DateTimeInput touch surface', () => {
       fireEvent.click(optionIn('Hour', '3'));
 
       fireEvent.click(screen.getByRole('radio', {name: 'Date'}));
-      fireEvent.click(buttonNamed('Saturday, March 21, 2026'));
+      fireEvent.click(getOnlyButton('Saturday, March 21, 2026'));
 
       expect(onChange).toHaveBeenCalledWith('2026-03-21T09:00');
     });
@@ -732,7 +716,7 @@ describe('DateTimeInput touch surface', () => {
         />,
       );
       openDateSheet();
-      const disabledDay = buttonNamed('Saturday, March 21, 2026');
+      const disabledDay = getOnlyButton('Saturday, March 21, 2026');
 
       expect(disabledDay).toHaveAttribute('aria-disabled', 'true');
       fireEvent.click(disabledDay);
@@ -752,7 +736,7 @@ describe('DateTimeInput touch surface', () => {
       );
       const field = openDateSheet();
 
-      fireEvent.click(buttonNamed('Reset'));
+      fireEvent.click(getOnlyButton('Reset'));
       expect(onChange).toHaveBeenCalledWith(undefined);
       expect(field).toHaveAttribute('aria-expanded', 'true');
       expect(screen.getByRole('radio', {name: 'Date'})).toHaveAttribute(
@@ -766,7 +750,7 @@ describe('DateTimeInput touch surface', () => {
     withMonthLayout(() => {
       render(<ControlledDateTimeInput />);
       openDateSheet();
-      const saveDateButton = buttonNamed('Save date');
+      const saveDateButton = getOnlyButton('Save date');
 
       expect(saveDateButton).toBeDisabled();
       fireEvent.click(saveDateButton);
@@ -783,10 +767,10 @@ describe('DateTimeInput touch surface', () => {
     withMonthLayout(() => {
       render(<ControlledDateTimeInput />);
       openDateSheet();
-      const saveDateButton = buttonNamed('Save date');
+      const saveDateButton = getOnlyButton('Save date');
       expect(saveDateButton).toBeDisabled();
 
-      fireEvent.click(buttonNamed('Saturday, March 21, 2026'));
+      fireEvent.click(getOnlyButton('Saturday, March 21, 2026'));
       expect(dateField()).toHaveValue('March 21, 2026');
       expect(saveDateButton).not.toBeDisabled();
 
@@ -810,10 +794,10 @@ describe('DateTimeInput touch surface', () => {
         />,
       );
       openDateSheet();
-      const saveDateButton = buttonNamed('Save date');
+      const saveDateButton = getOnlyButton('Save date');
       expect(saveDateButton).not.toBeDisabled();
 
-      fireEvent.click(buttonNamed('Reset'));
+      fireEvent.click(getOnlyButton('Reset'));
       expect(dateField()).toHaveValue('');
       expect(saveDateButton).toBeDisabled();
 
@@ -840,7 +824,7 @@ describe('DateTimeInput touch surface', () => {
       openDateSheet();
       const timeTab = screen.getByRole('radio', {name: 'Time'});
 
-      fireEvent.click(buttonNamed('Save date'));
+      fireEvent.click(getOnlyButton('Save date'));
 
       expect(dateField()).toHaveAttribute('aria-expanded', 'false');
       expect(timeField()).toHaveAttribute('aria-expanded', 'true');
@@ -870,8 +854,8 @@ describe('DateTimeInput touch surface', () => {
       fireEvent.keyDown(field, {key: 'Enter'});
       expect(field).toHaveAttribute('aria-expanded', 'true');
 
-      fireEvent.click(buttonNamed('Save date'));
-      fireEvent.click(buttonNamed('Save'));
+      fireEvent.click(getOnlyButton('Save date'));
+      fireEvent.click(getOnlyButton('Save'));
       expect(field).toHaveAttribute('aria-expanded', 'false');
       expect(timeField()).toHaveAttribute('aria-expanded', 'false');
     });
@@ -888,9 +872,9 @@ describe('DateTimeInput touch surface', () => {
         />,
       );
       openDateSheet();
-      fireEvent.click(buttonNamed('Save date'));
+      fireEvent.click(getOnlyButton('Save date'));
 
-      fireEvent.click(buttonNamed('Save'));
+      fireEvent.click(getOnlyButton('Save'));
       expect(dateField()).toHaveAttribute('aria-expanded', 'false');
       expect(timeField()).toHaveAttribute('aria-expanded', 'false');
       expect(onChange).not.toHaveBeenCalled();
@@ -952,7 +936,7 @@ describe('DateTimeInput touch surface', () => {
     const field = dateField();
     const focusSpy = vi.spyOn(field, 'focus');
 
-    fireEvent.click(buttonNamed('Clear Meeting'));
+    fireEvent.click(getOnlyButton('Clear Meeting'));
     expect(onChange).toHaveBeenCalledWith(undefined);
     expect(field).toHaveAttribute('aria-expanded', 'false');
     expect(focusSpy).not.toHaveBeenCalled();
@@ -1020,7 +1004,7 @@ describe('DateTimeInput touch surface', () => {
     );
     openTimeSheet();
     fireEvent.click(optionIn('Minute', '45'));
-    fireEvent.click(buttonNamed('Save'));
+    fireEvent.click(getOnlyButton('Save'));
     const spinner = container.querySelector(
       '.astryx-date-time-input-date-segment .astryx-spinner',
     ) as HTMLElement;
@@ -1121,7 +1105,7 @@ describe('DateTimeInput touch surface: no stale commit', () => {
       );
       const {rerender} = render(ui('2026-12-31T23:59' as ISODateTimeString));
       openDateSheet();
-      const next = buttonNamed('Next month');
+      const next = getOnlyButton('Next month');
       fireEvent.click(next);
       fireEvent.click(next);
       fireEvent.click(next);
