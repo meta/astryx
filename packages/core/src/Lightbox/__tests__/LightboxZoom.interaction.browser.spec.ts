@@ -60,8 +60,10 @@ import {
   type ActiveAnimation,
   type TouchDriver,
   type TouchFrame,
+  toTouchEvents,
   type TouchScript,
 } from '@astryxdesign/interaction-harness';
+import {recordLiftOffset} from './liftOffset';
 
 const storybook = withStorybook(test);
 
@@ -448,6 +450,9 @@ test('a pinch keeps the photo point under the fingers, and the page does not zoo
   const errors: number[] = [];
   const scales: number[] = [];
   let moves = 0;
+  const lastMove = toTouchEvents(moved)
+    .map(step => step.type)
+    .lastIndexOf('touchMove');
   // The centroid of the touches the page received (the engine may round a
   // scripted position), which is what the stage follows.
   await page.evaluate(() => {
@@ -464,11 +469,17 @@ test('a pinch keeps the photo point under the fingers, and the page does not zoo
     );
   });
   await driver.play(moved, {
-    onEvent: async step => {
+    onEvent: async (step, index) => {
       if (step.type !== 'touchMove' || step.fingers.length < 2) {
         return;
       }
       moves++;
+      // A read after the last move holds the lift back by its round trip.
+      // Past the 40 ms stillness interval, the page then reads a resting
+      // finger.
+      if (index === lastMove) {
+        return;
+      }
       // The photo and the touches the page received, in one evaluate. The
       // page takes a touch with its frame, after the dispatch returns. So two
       // reads could straddle one on a busy page: the photo from one move and
@@ -795,24 +806,17 @@ test('a zoomed flick coasts and stops at the far edge', async ({page}) => {
     ),
   );
   await waitForRest(photo);
-  const zoomed = await state();
   const script = flick(mid, {
     velocity: {x: -1500, y: 0},
     durationMs: 80,
     hz: 120,
   });
-  let released = zoomed;
-  await driver.play(script, {
-    onEvent: async step => {
-      if (step.type === 'touchMove') {
-        released = await state();
-      }
-    },
-  });
+  const liftOffset = await recordLiftOffset(photo);
+  await driver.play(script);
   await frames(page, 6);
   const coasting = await state();
   // The photo kept moving after the lift.
-  expect(coasting.x).toBeLessThan(released.x - 5);
+  expect(coasting.x).toBeLessThan((await liftOffset()) - 5);
   await waitForRest(photo, {timeout: 8_000});
   const rest = await state();
   // At the right edge: the photo's right edge on the stage's.

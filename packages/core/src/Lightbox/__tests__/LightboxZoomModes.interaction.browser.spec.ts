@@ -40,6 +40,7 @@ import {
   withStorybook,
   type TouchScript,
 } from '@astryxdesign/interaction-harness';
+import {recordLiftOffset} from './liftOffset';
 
 const storybook = withStorybook(test);
 
@@ -544,14 +545,8 @@ test('under Reduce Motion a zoomed flick coasts on and settles at the edge, as o
   await driver.play(doubleTap(mid));
   await waitForRest(img);
   await frames(page, 2);
-  let lifted = Number.NaN;
-  await driver.play(flick(mid, {velocity: {x: -1500, y: 0}, durationMs: 80}), {
-    onEvent: async step => {
-      if (step.type === 'touchEnd') {
-        lifted = (await read()).x;
-      }
-    },
-  });
+  const liftOffset = await recordLiftOffset(img);
+  await driver.play(flick(mid, {velocity: {x: -1500, y: 0}, durationMs: 80}));
   const opacities = await img.evaluate(
     async el =>
       new Promise<number[]>(resolve => {
@@ -570,7 +565,7 @@ test('under Reduce Motion a zoomed flick coasts on and settles at the edge, as o
   );
   await waitForRest(img);
   // It coasted on past where the finger lifted.
-  expect((await read()).x).toBeLessThan(lifted - 20);
+  expect((await read()).x).toBeLessThan((await liftOffset()) - 20);
   // No cross-fade.
   expect(Math.min(...opacities)).toBe(1);
   // It rests with no gap at the stage's edges.
