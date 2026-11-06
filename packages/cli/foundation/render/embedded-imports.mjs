@@ -266,7 +266,11 @@ export function reachableFiles(files, {aliases = []} = {}) {
       if (match) {
         // Each target in order: the file the alias names, matched in the
         // tree by the path's tail, and placed where this project's target
-        // puts it (`@/c/Header` -> `<target>/c/Header.tsx`).
+        // puts it (`@/c/Header` -> `<target>/c/Header.tsx`). A target whose
+        // folder the file was sent from wins over an earlier one, so a file
+        // under a later target goes back under that target.
+        /** @type {{abs: string, hit: {path: string, tail: string}, sent: boolean}[]} */
+        const options = [];
         for (const target of match.pattern.targets) {
           const named = target.replace('*', match.capture);
           const ext = path.extname(named);
@@ -288,10 +292,14 @@ export function reachableFiles(files, {aliases = []} = {}) {
               : ext
                 ? named
                 : named + hit.tail.slice(rest.length);
-          const {r, fresh} = reach(hit.path);
-          r.aliased.add(abs);
-          if (fresh) queue.push(hit.path);
-          break;
+          const folder = path.basename(path.dirname(abs));
+          options.push({abs, hit, sent: hit.path.endsWith(`${folder}/${path.basename(abs)}`)});
+        }
+        const chosen = options.find(o => o.sent) ?? options[0];
+        if (chosen) {
+          const {r, fresh} = reach(chosen.hit.path);
+          r.aliased.add(chosen.abs);
+          if (fresh) queue.push(chosen.hit.path);
         }
       }
     }

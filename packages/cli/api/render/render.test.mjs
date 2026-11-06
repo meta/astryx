@@ -740,6 +740,40 @@ describe('render(): every write stays inside the current folder', () => {
     for (const text of ['lib-index', 'lib-button', 'second-target', 'mid-star']) expect(html).toContain(text);
   }, 60_000);
 
+  it('loads a JSON file through any key shape, from the first target that has it, and gives it back', async () => {
+    put('jsonp/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'~*': ['./lib/data/*'], 'cfg-*': ['./lib/missing/*', './lib/more/*']}}}));
+    put('jsonp/package.json', '{"name":"jsonp","private":true}');
+    put('jsonp/lib/data/cfg.json', '{"label":"first-target-json"}\n');
+    put('jsonp/lib/more/extra.json', '{"label":"later-target-json"}\n');
+    put(
+      'jsonp/page.tsx',
+      "import cfg from '~cfg.json';\nimport extra from 'cfg-extra.json';\nexport default function Page() { return <p>{cfg.label} {extra.label}</p>; }\n",
+    );
+    const r = /** @type {any} */ (await render('jsonp/page.tsx', {cwd: dir}));
+    expect(r.data.files).toEqual(expect.arrayContaining(['page.tsx', 'lib/data/cfg.json', 'lib/more/extra.json']));
+    const html = fs.readFileSync(path.join(dir, 'jsonp/page.html'), 'utf8');
+    expect(html).toContain('first-target-json');
+    expect(html).toContain('later-target-json');
+    // Back into a project with the same paths: each file goes where its alias points.
+    fs.mkdirSync(path.join(dir, 'jsonp-to'), {recursive: true});
+    put('jsonp-to/tsconfig.json', fs.readFileSync(path.join(dir, 'jsonp/tsconfig.json'), 'utf8'));
+    put('jsonp-to/package.json', '{"name":"jsonp-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'jsonp/page.html'), path.join(dir, 'jsonp-to/page.html'));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'jsonp-to'), reverse: true, out: 'lib/app/page.tsx'}));
+    // The file sent from the later target goes back under that target.
+    expect(back.data.files).toEqual(expect.arrayContaining(['lib/data/cfg.json', 'lib/more/extra.json']));
+  }, 60_000);
+
+  it('names a package a catch-all key cannot place as not installed, and renders a page whose package stylesheet is missing with a warning', async () => {
+    put('catchall2/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'*': ['./types/*']}}}));
+    put('catchall2/package.json', '{"name":"catchall2","private":true}');
+    put('catchall2/dep.tsx', "import x from 'not-a-real-package-xyz';\nexport default () => <p>{String(x)}</p>;\n");
+    expect(await codeOf(() => render('catchall2/dep.tsx', {cwd: dir}))).toBe('ERR_RENDER_MISSING_DEPENDENCY');
+    put('catchall2/sheet.tsx', "import 'not-a-real-package-xyz/style.css';\nexport default () => <p>styled</p>;\n");
+    const r = /** @type {any} */ (await render('catchall2/sheet.tsx', {cwd: dir}));
+    expect(r.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('missing-asset');
+  }, 60_000);
+
   it('leaves relative and package imports alone under a catch-all paths key', async () => {
     put('catchall/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'*': ['./types/*']}}}));
     put('catchall/package.json', '{"name":"catchall","private":true}');
