@@ -132,6 +132,20 @@ describe('a docs child named without its namespace', () => {
   );
 
   it(
+    'never opens an experimental doc by a bare name',
+    async () => {
+      // `add`, `calendar` and `render` name experimental docs the project
+      // reaches only by a marked route (spec:AST-017 FR27).
+      for (const name of ['add', 'calendar', 'render']) {
+        await expect(docs(name)).rejects.toMatchObject({
+          code: 'ERR_UNKNOWN_TOPIC',
+        });
+      }
+    },
+    SLOW,
+  );
+
+  it(
     'still refuses a name no child holds',
     async () => {
       await expect(docs('Button')).rejects.toMatchObject({
