@@ -550,6 +550,72 @@ for (const [photo, fill] of [
   });
 }
 
+for (const [story, trigger] of [
+  ['core-lightbox--with-caption', 'Open with caption'],
+  ['core-lightbox--zoom-with-caption', 'Open zoom with caption'],
+] as const) {
+  test(`a single photo's caption keeps 4.5:1 on its backing over a white page and photo (${story})`, async ({
+    page,
+  }) => {
+    await page.route('https://picsum.photos/**', async route =>
+      route.fulfill({
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="1200" height="800" fill="#ffffff"/></svg>',
+      }),
+    );
+    await page.goto(`${storybook()}/iframe.html?id=${story}&viewMode=story`);
+    await page.locator('#storybook-root > *').first().waitFor();
+    // The page behind the viewer is white, the lightest it can be.
+    await page.addStyleTag({
+      content:
+        'html, body, #storybook-root { background: #ffffff !important; }',
+    });
+    await frames(page, 2);
+    const driver = await touchDriver(page);
+    const opener = await page
+      .getByRole('button', {name: trigger})
+      .boundingBox();
+    if (opener == null) {
+      throw new Error('no trigger');
+    }
+    await driver.tap({
+      x: opener.x + opener.width / 2,
+      y: opener.y + opener.height / 2,
+    });
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect
+      .poll(async () =>
+        dialog
+          .locator('img')
+          .first()
+          .evaluate(img => (img as HTMLImageElement).naturalWidth),
+      )
+      .toBe(1200);
+    // The caption is the viewer's description.
+    const captionId = await dialog.getAttribute('aria-describedby');
+    const caption = page.locator(`[id="${captionId}"]`);
+    await expect(caption).toBeVisible();
+    await frames(page, 2);
+    // The caption's colour against the lightest pixel in its top padding,
+    // above its first line: what the text sits on, with no glyph there.
+    const {color, points} = await caption.evaluate(element => {
+      const style = getComputedStyle(element);
+      const box = element.getBoundingClientRect();
+      const y = box.top + parseFloat(style.paddingTop) / 2;
+      return {
+        color: style.color,
+        points: [0.25, 0.5, 0.75].map(f => ({x: box.left + box.width * f, y})),
+      };
+    });
+    const shot = PNG.sync.read(await page.screenshot());
+    const scale = shot.width / (page.viewportSize()?.width ?? shot.width);
+    expect(
+      contrast(parseRgb(color), lightestAt(shot, scale, points)),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+}
+
 test('the stage fills the phone screen and fits the photo', async ({page}) => {
   const {state} = await openViewer(page);
   const s = await state();
