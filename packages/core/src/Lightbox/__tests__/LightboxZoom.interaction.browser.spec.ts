@@ -957,8 +957,8 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   const blocking = blockMainThread(page, 1500, {during: photo});
   await driver.play(doubleTap(at));
   const block = await blocking;
-  // Lightbox's own zoom played at tempo 3: each curve three times as long
-  // as at tempo 1, and still running on the compositor after the block.
+  // Lightbox's own zoom played at tempo 3. Each curve runs three times as
+  // long as at tempo 1, and it still runs on the compositor after the block.
   const atTempo3 = curvesByProperty(await waitForAnimation(photo, {since}));
   expect([...atTempo3.keys()].sort()).toEqual([...atTempo1.keys()].sort());
   expect(atTempo3.size).toBeGreaterThan(0);
