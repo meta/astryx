@@ -349,11 +349,15 @@ test('an edge button steps about one view: the viewport less half an item, on th
   expect(await isTakenOver(scroller)).toBe(false);
 });
 
-/** Presses the edge button late in a flick's settle; true if still held. */
-async function pressLateInSettle(
+/**
+ * Flicks the row (toward the start with `back`) and presses the edge button
+ * once the row shows past `until`; true if it was still held.
+ */
+async function pressInSettle(
   page: Page,
   scroller: Locator,
-  target: number,
+  until: number,
+  back = false,
 ) {
   const next = await page
     .getByRole('button', {name: /next|right|forward/i})
@@ -361,20 +365,19 @@ async function pressLateInSettle(
   if (next == null) {
     throw new Error('no edge button');
   }
-  await swipe(page, scroller, {px: 80, ms: 80});
-  await expect
-    .poll(
-      async () =>
-        scroller.evaluate(el =>
-          (el.firstElementChild as HTMLElement).style.translate === ''
-            ? Infinity
-            : el.getBoundingClientRect().left -
-              (el.firstElementChild as HTMLElement).getBoundingClientRect()
-                .left,
-        ),
-      {intervals: [5]},
-    )
-    .toBeGreaterThanOrEqual(target * 0.9);
+  await swipe(page, scroller, {px: 80, ms: 80, rtl: back});
+  const past = async () =>
+    scroller.evaluate(
+      (el, arg) => {
+        const first = el.firstElementChild as HTMLElement;
+        const shown =
+          el.getBoundingClientRect().left - first.getBoundingClientRect().left;
+        const isPast = arg.back ? shown < arg.until : shown >= arg.until;
+        return first.style.translate === '' || isPast;
+      },
+      {until, back},
+    );
+  await expect.poll(past, {intervals: [5]}).toBe(true);
   const held = await isTakenOver(scroller);
   await page.mouse.click(next.x + next.width / 2, next.y + next.height / 2);
   return held;
@@ -397,7 +400,7 @@ async function restingOffset(scroller: Locator) {
 test('an edge press late in a settle steps on to a stop', async ({page}) => {
   const {scroller} = await open(page, 'snap-paging-three-up', 'paging');
   const stops = await stopsOf(scroller);
-  expect(await pressLateInSettle(page, scroller, stops[3])).toBe(true);
+  expect(await pressInSettle(page, scroller, stops[3] * 0.9)).toBe(true);
   const at = await restingOffset(scroller);
   // At least one stop past the flick's own target.
   expect(at).toBeGreaterThan(stops[4] - 0.5);
@@ -414,7 +417,7 @@ for (const holdMs of [150, 40]) {
     if (box == null) {
       throw new Error('no scroller');
     }
-    expect(await pressLateInSettle(page, scroller, stops[3])).toBe(true);
+    expect(await pressInSettle(page, scroller, stops[3] * 0.9)).toBe(true);
     const driver = await touchDriver(page);
     await driver.play(
       tap({x: box.x + box.width / 2, y: box.y + box.height / 2}, {holdMs}),
@@ -432,7 +435,7 @@ test.describe('with a finger and a mouse', () => {
   test('Shift+wheel during an edge press goes to a stop', async ({page}) => {
     const {scroller} = await open(page, 'snap-paging-three-up', 'paging');
     const stops = await stopsOf(scroller);
-    expect(await pressLateInSettle(page, scroller, stops[3])).toBe(true);
+    expect(await pressInSettle(page, scroller, stops[3] * 0.9)).toBe(true);
     // Where the row shows at the wheel, and any native scroll while held.
     const probe = scroller.evaluate(async el => {
       const first = el.firstElementChild as HTMLElement;
@@ -462,6 +465,37 @@ test.describe('with a finger and a mouse', () => {
     expect(drift).toBe(0);
     expect(await restingOffset(scroller)).toBeCloseTo(expected, 0);
   });
+});
+
+test('an edge press after a flick back near the end shows no space past the last item', async ({
+  page,
+}) => {
+  const {scroller} = await open(page, 'snap-paging-three-up', 'paging');
+  const stops = await stopsOf(scroller);
+  // One stop from the end, where the edge button still shows.
+  await scroller.evaluate((el, left) => {
+    el.scrollTo({left, behavior: 'instant'});
+  }, stops[5]);
+  await expect.poll(async () => offset(scroller)).toBeCloseTo(stops[5], 0);
+  // The widest space past the last item, on every frame until the hand-back.
+  const space = scroller.evaluate(async el => {
+    const last = el.lastElementChild as HTMLElement;
+    const isHeld = () => last.style.translate !== '';
+    let widest = 0;
+    let wasHeld = false;
+    while (!wasHeld || isHeld()) {
+      wasHeld ||= isHeld();
+      const box = el.getBoundingClientRect();
+      widest = Math.max(widest, box.right - last.getBoundingClientRect().right);
+      await new Promise(requestAnimationFrame);
+    }
+    return widest;
+  });
+  // Once the flick back widens the overflow by its translate.
+  expect(await pressInSettle(page, scroller, stops[5] - 15, true)).toBe(true);
+  expect(await space).toBeLessThan(1);
+  const at = await restingOffset(scroller);
+  expect(Math.min(...stops.map(stop => Math.abs(stop - at)))).toBeLessThan(1);
 });
 
 test('hasSnap alone attaches no paging: no gesture claims the row', async ({

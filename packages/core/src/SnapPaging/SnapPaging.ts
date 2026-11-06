@@ -147,11 +147,16 @@ function childTrack(element: HTMLElement) {
     return -sign() * (animatorFor(first).get('x') - sign() * heldOffset);
   }
 
-  function stops(): number[] {
-    const end = isMoving
+  // A held row's translate widens its overflow, so its travel is the one it
+  // was taken over with.
+  function travel(): number {
+    return isMoving
       ? heldTravel
       : Math.max(0, element.scrollWidth - element.clientWidth);
-    return snapStops(element, position(), end);
+  }
+
+  function stops(): number[] {
+    return snapStops(element, position(), travel());
   }
 
   function viewWidth(): number {
@@ -269,6 +274,7 @@ function childTrack(element: HTMLElement) {
       return isMoving;
     },
     position,
+    travel,
     stops,
     viewWidth,
     place,
@@ -347,8 +353,8 @@ function attachPaging(
       }
       // A finger on the row keeps it.
       if (!pager.isDragging) {
-        const end = Math.max(0, element.scrollWidth - element.clientWidth);
-        const to = Math.min(Math.max(target(track.position()), 0), end);
+        const end = track.travel();
+        const to = Math.min(Math.max(target(track.position(), end), 0), end);
         // The pager's own move: a finger catches it as it catches a settle.
         pager.goTo(pager.nearestPage(to), {offset: to});
       }

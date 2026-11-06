@@ -329,10 +329,10 @@ const paddingStyles = stylex.create({
 function pagingStep(
   el: HTMLElement,
   at: number,
+  end: number,
   direction: -1 | 1,
   wraps: boolean,
 ): number {
-  const end = Math.max(0, el.scrollWidth - el.clientWidth);
   if (wraps && (direction === 1 ? at >= end - 0.5 : at <= 0.5)) {
     return direction === 1 ? 0 : end;
   }
@@ -340,10 +340,9 @@ function pagingStep(
   const itemWidth = firstChild ? firstChild.offsetWidth : 0;
   const amount = el.clientWidth - itemWidth * 0.5;
   const stops = snapStops(el, at, end);
-  const to = at + direction * Math.max(amount, itemWidth);
-  const nearest = stops.reduce(
-    (best, stop) => (Math.abs(stop - to) < Math.abs(best - to) ? stop : best),
-    stops[0],
+  const nearest = nearestStop(
+    stops,
+    at + direction * Math.max(amount, itemWidth),
   );
   if (direction === 1 && nearest <= at + 0.5) {
     return stops.find(stop => stop > at + 0.5) ?? nearest;
@@ -458,11 +457,10 @@ export function Carousel({
       const onWheel = (event: WheelEvent) => {
         const delta = event.deltaX || (event.shiftKey ? event.deltaY : 0);
         const travel = isRtlElement(el) ? -delta : delta;
-        const end = Math.max(0, el.scrollWidth - el.clientWidth);
         if (
           !event.defaultPrevented &&
           delta !== 0 &&
-          moveHeldSnapPaging(el, at =>
+          moveHeldSnapPaging(el, (at, end) =>
             nearestStop(snapStops(el, at, end), at + travel),
           )
         ) {
@@ -512,8 +510,8 @@ export function Carousel({
       }
       // While a flick's drag or settle holds the row, the paging moves it.
       if (
-        moveHeldSnapPaging(el, at =>
-          pagingStep(el, at, direction, hasLoop && hasOverflow),
+        moveHeldSnapPaging(el, (at, end) =>
+          pagingStep(el, at, end, direction, hasLoop && hasOverflow),
         )
       ) {
         return;
@@ -550,7 +548,14 @@ export function Carousel({
       if (isPaging) {
         // Snap paging lands the step on the nearest stop, at least one stop
         // on, in every engine. A native snap after scrollBy picks its own.
-        const next = pagingStep(el, Math.abs(el.scrollLeft), direction, false);
+        const end = Math.max(0, el.scrollWidth - el.clientWidth);
+        const next = pagingStep(
+          el,
+          Math.abs(el.scrollLeft),
+          end,
+          direction,
+          false,
+        );
         el.scrollTo({left: rtlSign * next, behavior});
         return;
       }

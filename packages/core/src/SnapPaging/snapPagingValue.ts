@@ -34,7 +34,7 @@ export interface SnapPaging {
 /** The paging attached to one row. */
 export interface SnapPagingAttachment {
   readonly detach: () => void;
-  readonly moveHeld: (target: (shown: number) => number) => boolean;
+  readonly moveHeld: (target: (at: number, end: number) => number) => boolean;
 }
 
 interface SnapPagingValue {
@@ -73,12 +73,12 @@ export function attachSnapPaging(
 }
 
 /**
- * Moves a row the paging holds to `target(shown)`, an offset toward the end,
- * and returns true; false when the row scrolls natively.
+ * Moves a row the paging holds to `target(shown, end)`, an offset toward the
+ * end. `end` is its travel when taken over. False when it is not held.
  */
 export function moveHeldSnapPaging(
   element: HTMLElement,
-  target: (shown: number) => number,
+  target: (shown: number, end: number) => number,
 ): boolean {
   return attachments.get(element)?.moveHeld(target) ?? false;
 }
