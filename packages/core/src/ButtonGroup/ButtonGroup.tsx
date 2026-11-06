@@ -155,8 +155,8 @@ const keepDisabledGroupStop = oneTabStopAmong(
  * styles in pure CSS.
  *
  * The group is a single tab stop: arrow keys move between members along the
- * orientation, Home/End jump to the ends, focus wraps, and disabled members are
- * skipped (the APG roving tabindex technique, via `useListFocus`).
+ * orientation, Home/End jump to the ends, and focus wraps (the APG roving
+ * tabindex technique, via `useListFocus`).
  *
  * Members that render their own layer — a Button with a `tooltip`, or a
  * DropdownMenu — compose correctly, including as the trailing member.
