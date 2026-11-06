@@ -45,6 +45,7 @@ function withPublisher(root) {
     'canary-pending.mjs',
     'publish-order.mjs',
     'publish-package.mjs',
+    'published-manifests.mjs',
     'registry.mjs',
   ]) {
     const target = path.join(root, 'scripts/npm', file);
@@ -189,6 +190,7 @@ function runStablePublish({
   failingPackage = '',
   failOnce = '',
   verifyExit = null,
+  cliPeers = null,
 } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-stable-publish-'));
   const publishLog = path.join(root, 'publish.log');
@@ -206,6 +208,7 @@ function runStablePublish({
       name: '@astryxdesign/cli',
       version: '0.7.7',
       dependencies: {'@astryxdesign/core': '0.7.7'},
+      ...(cliPeers ? {peerDependencies: cliPeers} : {}),
     });
     // Publishes after core in the loop and peers on it.
     writeJson(root, 'packages/themes/stone/package.json', {
@@ -303,6 +306,7 @@ server.listen(0, '127.0.0.1', () => console.log(server.address().port));`,
     for (const file of [
       'canary-pending.mjs',
       'publish-package.mjs',
+      'published-manifests.mjs',
       'registry.mjs',
     ]) {
       const target = path.join(root, 'scripts/npm', file);
@@ -973,5 +977,29 @@ describe('stable publish requires the cut commit release-check (spec:AST-030 FR1
     expect(stable.outputs.verified).toBeDefined();
     expect(publish.output).toContain('verified=pending');
     expect(first.output).toContain('verified=pending');
+  });
+
+  it('never publishes a package whose @astryxdesign peers do not name this release', () => {
+    const result = runStablePublish({
+      cliPeers: {'@astryxdesign/theme-neutral': '*'},
+      verifyExit: 0,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      '@astryxdesign/cli: peerDependencies @astryxdesign/theme-neutral is "*"; name this release\'s version, "0.7.7"',
+    );
+    expect(result.published).not.toContain('publish ./packages/cli');
+    expect(result.published).toContain('publish ./packages/core');
+  });
+
+  it('publishes a package whose @astryxdesign peers name this release', () => {
+    const result = runStablePublish({
+      cliPeers: {'@astryxdesign/core': '0.7.7'},
+      verifyExit: 0,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.published).toContain('publish ./packages/cli');
   });
 });

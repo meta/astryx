@@ -675,8 +675,13 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   same rule backs dismissing a BottomSheet, a Toast or a Lightbox, popping a
   NavigationStack, and dismissing the keyboard (except ChatLayout's
   transcript-drag dismissal, which follows `component:ChatLayout` FR10/DEC-1:
-  it dismisses when the drag reaches the composer); each use's commit point
-  and projection are measured values (FR1, FR2). A row swipe keeps
+  it dismisses when the drag reaches the composer); each use's commit point and
+  projection are measured values (FR1, FR2). A BottomSheet's touch release takes
+  UIKit's measured sheet values. Its projection is 0.1 s of the release
+  velocity, and its commit point is halfway from its lowest detent to closed. A
+  release past its measured flick speed lands on the first position at or past
+  its projection, at least its next one. So a short fast flick at its lowest
+  detent closes it (`component:BottomSheet` FR19). A row swipe keeps
   `spec:AST-057`'s own release rule.
 - **FR37 — Moving back cancels.** A release whose velocity points back
   toward the start MUST cancel, whatever the travel so far (except
@@ -932,7 +937,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   touch target reaches 44 px only through an invisible hit area clamped by
   its neighbors, unless a component or module record sets its own (FR42).
 - `component:DropdownMenu`, `component:ContextMenu` and `component:Popover`:
-  under a finger they follow FR26–FR35 as each applies.
+  under a finger they follow FR26–FR35 as each applies. Popover's input hold
+  (FR35) starts on the first frame after the open, so a touch that lands
+  within that frame reaches the page.
 - `component:AlertDialog`, `component:Dialog`, `component:BottomSheet`,
   `component:BottomSheetSwitcher`, `component:Drawer`, `component:MobileNav`
   and `component:Lightbox`: under a finger, a tap or a drag during the

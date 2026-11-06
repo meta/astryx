@@ -4,10 +4,10 @@
  * @file touch.ts
  * @input The gesture core: the arena, the recognizers and their geometry.
  *   Also the pan, the motion engine and math, and the touch-presentation,
- *   direction and focus helpers that Lab components read
+ *   direction, focus and hit-area helpers that Lab components read
  * @output `@astryxdesign/core/internal/touch`: the gesture core's primitives
- *   and the motion, touch-presentation, direction and focus modules for Lab
- *   components, re-exported by name
+ *   and the motion, touch-presentation, direction, focus and hit-area
+ *   modules for Lab components, re-exported by name
  * @position An internal entry reserved for Astryx's own packages:
  *   undocumented, outside the public API and its compatibility promise
  *   (spec:AST-017 FR21), versioned in lockstep with Core, and allowed only in
@@ -107,3 +107,9 @@ export type {UseFingerScrollOptions} from '../gestures/useFingerScroll';
 // coarse-pointer check.
 export {getGestureHost} from '../gestures/GestureHost';
 export {isCoarsePointer} from '../utils/coarsePointer';
+// Lab's PageControl also reads an element's shared animator, the Reduce
+// Motion cross-fade, and the touch hit area's hook and layer.
+export {animatorFor} from '../motion/animator';
+export {reducedMotionFade} from '../motion/reducedMotion';
+export {useTouchHitArea} from '../utils/touchHitArea';
+export {touchHitAreaStyles} from '../utils/touchHitArea.stylex';

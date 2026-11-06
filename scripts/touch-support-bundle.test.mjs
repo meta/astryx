@@ -118,7 +118,9 @@ function exportsOf(entry) {
  * screen-edge pan, the spring solver, the motion resolver, UIKit's
  * navigation table and its four navigation springs. It also reads the focus
  * helpers that follow the last input. Lab components that watch a finger's
- * scroll read the finger-scroll watch.
+ * scroll read the finger-scroll watch. PageControl reads an element's shared
+ * animator, the Reduce Motion cross-fade, and the touch hit area's hook and
+ * layer.
  */
 const LAB_ONLY_NAMES = [
   'PanGestureRecognizer',
@@ -149,6 +151,10 @@ const LAB_ONLY_NAMES = [
   'focusForLastInput',
   'isFocusLost',
   'useInteractionModalityTracking',
+  'animatorFor',
+  'reducedMotionFade',
+  'useTouchHitArea',
+  'touchHitAreaStyles',
 ];
 
 /** The inputs matching `pattern` that put bytes in `bytes`. */
