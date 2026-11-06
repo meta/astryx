@@ -10,7 +10,12 @@
  * @position Cross-browser proof for Lightbox's full-screen sizing
  */
 
-import {expect, test} from '@astryxdesign/a11y-spec/playwright';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -72,3 +77,318 @@ test('the viewer is as tall as the dynamic viewport, so a toolbar never covers i
   expect(declared.supported).toBe(true);
   expect(declared.heights).toContain('100dvh');
 });
+
+/** A 3:2 photo for every item, so no size waits on the network. */
+const PHOTO_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800"><rect width="1200" height="800" fill="#7a8a99"/></svg>';
+
+/** Opens "Gallery with captions": long, medium, no and short captions. */
+async function openCaptionGallery(
+  page: Page,
+  viewport: {width: number; height: number},
+): Promise<Locator> {
+  await page.setViewportSize(viewport);
+  await page.route(/picsum\.photos/, async route =>
+    route.fulfill({contentType: 'image/svg+xml', body: PHOTO_SVG}),
+  );
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story`,
+  );
+  await page.getByRole('button', {name: 'Open gallery with captions'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+interface PageFacts {
+  mediaTop: number;
+  mediaHeight: number;
+  bandHeight: number;
+  bandBackground: string;
+  hasCaption: boolean;
+}
+
+/** The current page's photo box and caption band. */
+async function readPage(dialog: Locator): Promise<PageFacts> {
+  return dialog.evaluate(element => {
+    const current = element.querySelector('[data-current]') as HTMLElement;
+    const media = current.querySelector(
+      '[data-lightbox-page-media]',
+    ) as HTMLElement;
+    const band = media.nextElementSibling as HTMLElement;
+    const mediaBox = media.getBoundingClientRect();
+    return {
+      mediaTop: mediaBox.top,
+      mediaHeight: mediaBox.height,
+      bandHeight: band.getBoundingClientRect().height,
+      bandBackground: getComputedStyle(band).backgroundColor,
+      hasCaption: band.querySelector('[data-lightbox-caption]') != null,
+    };
+  });
+}
+
+/** The clamped caption's text, its last shown line and its toggle. */
+async function readToggle(dialog: Locator) {
+  return dialog.evaluate(element => {
+    const caption = element.querySelector(
+      '[data-current] [data-lightbox-caption]',
+    ) as HTMLElement;
+    const text = caption.querySelector('.astryx-text') as HTMLElement;
+    const toggle = caption.querySelector('button') as HTMLElement;
+    const textBox = text.getBoundingClientRect();
+    const toggleBox = toggle.getBoundingClientRect();
+    const style = getComputedStyle(text);
+    const lineHeight = parseFloat(style.lineHeight);
+    // The rendered words of the text's last shown line, from its text
+    // nodes only.
+    const words: DOMRect[] = [];
+    const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node != null; node = walker.nextNode()) {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      words.push(...range.getClientRects());
+    }
+    const lastLine = words.filter(
+      rect =>
+        rect.width > 0 &&
+        rect.bottom <= textBox.bottom + 0.5 &&
+        rect.top >= textBox.bottom - lineHeight - 0.5,
+    );
+    return {
+      textLeft: textBox.left,
+      textRight: textBox.right,
+      textWidth: textBox.width,
+      textBottom: textBox.bottom,
+      paddingEnd: parseFloat(style.paddingRight),
+      captionWidth: caption.getBoundingClientRect().width,
+      toggleLeft: toggleBox.left,
+      toggleRight: toggleBox.right,
+      toggleMiddle: (toggleBox.top + toggleBox.bottom) / 2,
+      toggleWidth: toggleBox.width,
+      lineHeight,
+      lastLineWords: lastLine.length,
+      lastLineEnd: Math.max(...lastLine.map(rect => rect.right)),
+      isClamped: text.scrollHeight > text.clientHeight + 1,
+    };
+  });
+}
+
+function expectToggleEndsLastLine(
+  facts: Awaited<ReturnType<typeof readToggle>>,
+): void {
+  const detail = JSON.stringify(facts);
+  // The caption, its last line and its toggle are there.
+  expect(facts.textWidth, detail).toBeGreaterThan(100);
+  expect(facts.toggleWidth, detail).toBeGreaterThan(0);
+  expect(facts.lastLineWords, detail).toBeGreaterThan(0);
+  expect(facts.isClamped, detail).toBe(true);
+  // The text runs the caption's whole width: no column beside it.
+  expect(facts.textWidth, detail).toBeGreaterThanOrEqual(
+    facts.captionWidth - 0.5,
+  );
+  // The toggle ends the last line, inside the text's padding.
+  expect(facts.toggleRight, detail).toBeLessThanOrEqual(
+    facts.textRight - facts.paddingEnd + 0.5,
+  );
+  expect(facts.lastLineEnd, detail).toBeLessThanOrEqual(facts.toggleLeft + 0.5);
+  expect(
+    Math.abs(facts.toggleMiddle - (facts.textBottom - facts.lineHeight / 2)),
+    detail,
+  ).toBeLessThanOrEqual(1);
+}
+
+for (const viewport of [
+  {width: 402, height: 874},
+  {width: 1440, height: 900},
+]) {
+  const size = `${viewport.width}×${viewport.height}`;
+
+  test(`a gallery page without a caption shows no caption backing, and every page's photo keeps its top (${size})`, async ({
+    page,
+  }) => {
+    const dialog = await openCaptionGallery(page, viewport);
+    const pages: PageFacts[] = [];
+    for (let shown = 1; shown <= 4; shown++) {
+      if (shown > 1) {
+        await dialog.getByRole('button', {name: 'Next'}).click();
+      }
+      await expect(dialog.getByText(`${shown} / 4`)).toBeVisible();
+      pages.push(await readPage(dialog));
+    }
+    const detail = JSON.stringify(pages);
+    // Every page has its photo box and its band.
+    for (const facts of pages) {
+      expect(facts.mediaHeight, detail).toBeGreaterThan(100);
+      expect(facts.bandHeight, detail).toBeGreaterThan(20);
+    }
+    expect(
+      pages.map(facts => facts.hasCaption),
+      detail,
+    ).toEqual([true, true, false, true]);
+    for (const facts of pages) {
+      expect(
+        Math.abs(facts.mediaTop - pages[0].mediaTop),
+        detail,
+      ).toBeLessThanOrEqual(0.5);
+    }
+    expect(pages[2].bandBackground, detail).toBe('rgba(0, 0, 0, 0)');
+    expect(pages[0].bandBackground, detail).not.toBe('rgba(0, 0, 0, 0)');
+  });
+
+  test(`a clamped caption's "more" ends its second line, with no column of its own (${size})`, async ({
+    page,
+  }) => {
+    const dialog = await openCaptionGallery(page, viewport);
+    await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+    const facts = await readToggle(dialog);
+    expectToggleEndsLastLine(facts);
+  });
+}
+
+test(`the first frame that shows the clamped caption at open already ends it in "more"`, async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 402, height: 874});
+  await page.route(/picsum\.photos/, async route =>
+    route.fulfill({contentType: 'image/svg+xml', body: PHOTO_SVG}),
+  );
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-lightbox--gallery-with-captions&viewMode=story`,
+  );
+  // Each frame from here on: whether the open viewer shows the current
+  // caption, and whether its "more" is there. A frame's animation-frame
+  // callbacks see what that frame paints.
+  await page.evaluate(() => {
+    const frames: {isShown: boolean; hasMore: boolean}[] = [];
+    (window as unknown as {__captionFrames: typeof frames}).__captionFrames =
+      frames;
+    const read = () => {
+      const caption = document.querySelector(
+        'dialog[open] [data-current] [data-lightbox-caption]',
+      );
+      const text = caption?.querySelector('.astryx-text');
+      const isShown = text != null && text.getBoundingClientRect().height > 0;
+      frames.push({isShown, hasMore: caption?.querySelector('button') != null});
+      if (frames.length < 600 && !frames.some(frame => frame.hasMore)) {
+        requestAnimationFrame(read);
+      }
+    };
+    requestAnimationFrame(read);
+  });
+  await page.getByRole('button', {name: 'Open gallery with captions'}).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+  const frames = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __captionFrames: {isShown: boolean; hasMore: boolean}[];
+        }
+      ).__captionFrames,
+  );
+  const firstShown = frames.find(frame => frame.isShown);
+  expect(firstShown, JSON.stringify(frames.slice(-6))).toEqual({
+    isShown: true,
+    hasMore: true,
+  });
+});
+
+test(`a caption whose text grows while its box keeps two lines gets "more" at the end of its second line`, async ({
+  page,
+}) => {
+  const dialog = await openCaptionGallery(page, {width: 402, height: 874});
+  await dialog.getByRole('button', {name: 'Next'}).click();
+  await expect(dialog.getByText('2 / 4')).toBeVisible();
+  // The second page's caption fits its two lines, with no toggle.
+  await expect(dialog.getByRole('button', {name: 'more'})).toHaveCount(0);
+  const lines = await dialog.evaluate(element => {
+    const text = element.querySelector(
+      '[data-current] [data-lightbox-caption] .astryx-text',
+    ) as HTMLElement;
+    const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+    let last: Text | null = null;
+    for (let node = walker.nextNode(); node != null; node = walker.nextNode()) {
+      last = node as Text;
+    }
+    const before = text.getBoundingClientRect().height;
+    // New text, past two lines, in a box that keeps its height.
+    last?.appendData(
+      ' The trail climbs past the old mill, crosses the river on stepping stones, and winds back through the beeches to the car park at the top of the hill.',
+    );
+    return {before, after: text.getBoundingClientRect().height};
+  });
+  expect(lines.after, JSON.stringify(lines)).toBeCloseTo(lines.before, 0);
+  await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+  await expect(async () => {
+    expectToggleEndsLastLine(await readToggle(dialog));
+  }).toPass({timeout: 3_000});
+});
+
+test(`a clamped caption's "more" still ends its second line after the viewport narrows (402 → 360)`, async ({
+  page,
+}) => {
+  const dialog = await openCaptionGallery(page, {width: 402, height: 874});
+  await expect(dialog.getByRole('button', {name: 'more'})).toBeVisible();
+  expectToggleEndsLastLine(await readToggle(dialog));
+  await page.setViewportSize({width: 360, height: 874});
+  await expect(async () => {
+    const facts = await readToggle(dialog);
+    expect(facts.textWidth, JSON.stringify(facts)).toBeLessThan(361);
+    expectToggleEndsLastLine(facts);
+  }).toPass({timeout: 3_000});
+});
+
+for (const width of [360, 390]) {
+  test(`an open caption scrolled to its end keeps every line beside "less" clear of it (${width}×150)`, async ({
+    page,
+  }) => {
+    // A short viewport: the open caption runs past its panel and scrolls.
+    const dialog = await openCaptionGallery(page, {width, height: 150});
+    await dialog.getByRole('button', {name: 'more'}).click();
+    await expect(dialog.getByRole('button', {name: 'less'})).toBeVisible();
+    const facts = await dialog.evaluate(element => {
+      const caption = element.querySelector(
+        '[data-current] [data-lightbox-caption]',
+      ) as HTMLElement;
+      const text = caption.querySelector('.astryx-text') as HTMLElement;
+      text.scrollTop = text.scrollHeight;
+      const textBox = text.getBoundingClientRect();
+      const toggle = (
+        caption.querySelector('button') as HTMLElement
+      ).getBoundingClientRect();
+      const words: DOMRect[] = [];
+      const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT);
+      for (
+        let node = walker.nextNode();
+        node != null;
+        node = walker.nextNode()
+      ) {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        words.push(...range.getClientRects());
+      }
+      // The shown words level with the toggle.
+      const beside = words.filter(
+        rect =>
+          rect.width > 0 &&
+          rect.bottom > textBox.top + 0.5 &&
+          rect.top < textBox.bottom - 0.5 &&
+          rect.bottom > toggle.top + 0.5 &&
+          rect.top < toggle.bottom - 0.5,
+      );
+      return {
+        overflow: text.scrollHeight - text.clientHeight,
+        isAtEnd:
+          Math.abs(text.scrollTop + text.clientHeight - text.scrollHeight) <= 1,
+        besideCount: beside.length,
+        besideEnd: Math.max(...beside.map(rect => rect.right)),
+        toggleLeft: toggle.left,
+      };
+    });
+    const detail = JSON.stringify(facts);
+    expect(facts.overflow, detail).toBeGreaterThan(20);
+    expect(facts.isAtEnd, detail).toBe(true);
+    expect(facts.besideCount, detail).toBeGreaterThan(0);
+    expect(facts.besideEnd, detail).toBeLessThanOrEqual(facts.toggleLeft + 0.5);
+  });
+}

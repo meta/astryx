@@ -8,7 +8,18 @@
 import {act, render, screen, waitFor} from '@testing-library/react';
 import {afterEach, describe, it, expect, vi} from 'vitest';
 import {useCallback} from 'react';
-import {useTruncation} from './useTruncation';
+import type * as layoutEffects from '../hooks/useIsomorphicLayoutEffect';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useHeldTruncation, useTruncation} from './useTruncation';
+
+// The shipped layout effect, observable: a test counts who runs one.
+vi.mock('../hooks/useIsomorphicLayoutEffect', async importOriginal => {
+  const actual = await importOriginal<typeof layoutEffects>();
+  return {
+    ...actual,
+    useIsomorphicLayoutEffect: vi.fn(actual.useIsomorphicLayoutEffect),
+  };
+});
 
 function Probe({text}: {text: string}) {
   const truncation = useTruncation({maxLines: 1});
@@ -161,6 +172,75 @@ describe('useTruncation', () => {
         'already watched',
       );
       unmount();
+    });
+  });
+
+  describe('useHeldTruncation', () => {
+    function HeldProbe({isHeld, height}: {isHeld: boolean; height: number}) {
+      const truncation = useHeldTruncation({maxLines: 2, isHeld});
+      return (
+        <>
+          <span ref={truncation.ref} data-height={height}>
+            text
+          </span>
+          <output data-testid="truncated">
+            {String(truncation.isTruncated)}
+          </output>
+        </>
+      );
+    }
+
+    // jsdom lays nothing out: the text's content height is its scrollHeight,
+    // which each case sets through the element's data-height.
+    function stubHeights() {
+      const scrollHeight = vi
+        .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          return Number(this.dataset.height ?? 0);
+        });
+      const offsetHeight = vi
+        .spyOn(HTMLElement.prototype, 'offsetHeight', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          return this.dataset.height == null ? 0 : 48;
+        });
+      return () => {
+        scrollHeight.mockRestore();
+        offsetHeight.mockRestore();
+      };
+    }
+
+    // Text and Heading run plain useTruncation in every instance, so only the
+    // held variant may add a step to each render.
+    it('adds a layout effect only to the held variant, never to useTruncation', () => {
+      const layoutEffect = vi.mocked(useIsomorphicLayoutEffect);
+      layoutEffect.mockClear();
+      render(<Probe text="a status line" />);
+      expect(layoutEffect).not.toHaveBeenCalled();
+      render(<HeldProbe isHeld={false} height={40} />);
+      expect(layoutEffect).toHaveBeenCalled();
+    });
+
+    it('keeps its last answer while held, and measures again on release', async () => {
+      const restore = stubHeights();
+      try {
+        const {rerender} = render(<HeldProbe isHeld={false} height={120} />);
+        await waitFor(() =>
+          expect(screen.getByTestId('truncated')).toHaveTextContent('true'),
+        );
+        // Held, the text shows every line: no measurement changes the answer.
+        rerender(<HeldProbe isHeld={true} height={48} />);
+        await act(async () => {
+          await Promise.resolve();
+        });
+        expect(screen.getByTestId('truncated')).toHaveTextContent('true');
+        // Released over text that now fits, it measures again.
+        rerender(<HeldProbe isHeld={false} height={40} />);
+        await waitFor(() =>
+          expect(screen.getByTestId('truncated')).toHaveTextContent('false'),
+        );
+      } finally {
+        restore();
+      }
     });
   });
 

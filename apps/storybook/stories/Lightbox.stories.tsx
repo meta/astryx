@@ -104,7 +104,7 @@ export const WithZoom: Story = {
   },
 };
 
-/** Zoom on a photo with a caption, which sits under the fitted photo. */
+/** Zoom on a photo with a caption, in the caption band a gallery's pages use. */
 export const ZoomWithCaption: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -126,6 +126,11 @@ export const ZoomWithCaption: Story = {
   },
 };
 
+/**
+ * A gallery a phone can page through. Drag or flick between photos, with
+ * Photos' 40 pt gap. Pinch or double-tap a photo to zoom, and drag a zoomed
+ * photo to its edge before the next drag pages.
+ */
 export const GalleryWithZoom: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);
@@ -139,6 +144,91 @@ export const GalleryWithZoom: Story = {
           media={GALLERY_MEDIA}
           index={index}
           onIndexChange={setIndex}
+          hasZoom
+        />
+      </>
+    );
+  },
+};
+
+/**
+ * A gallery whose captions differ in length. The first runs long, so two
+ * lines cut it short and "more" shows it all. The next runs about two lines,
+ * one has none, and the last is short. The photo keeps one box on every page.
+ */
+export const GalleryWithCaptions: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>
+          Open gallery with captions
+        </button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={[
+            {
+              ...GALLERY_MEDIA[0],
+              caption:
+                'A winding path through the forest, past the old mill and down to the river, where the trail turns back toward the village. In autumn the beeches along it turn copper, and on a clear morning you can see the church spire from the bridge before the path climbs the last hill home.',
+            },
+            {
+              ...GALLERY_MEDIA[1],
+              caption:
+                'Morning fog lifting off the lake, seen from the old stone bridge',
+            },
+            GALLERY_MEDIA[3],
+            {...GALLERY_MEDIA[2], caption: 'Golden hour'},
+          ]}
+          hasZoom
+        />
+      </>
+    );
+  },
+};
+
+export const GalleryKeepsIndex: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>
+          Open gallery that keeps its photo
+        </button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={GALLERY_MEDIA}
+          index={0}
+          onIndexChange={() => {}}
+          hasZoom
+        />
+      </>
+    );
+  },
+};
+
+/**
+ * A single photo whose caption runs long. As on a gallery's page, two lines
+ * cut it short and "more" shows it all.
+ */
+export const SingleWithLongCaption: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>
+          Open single photo with a long caption
+        </button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={{
+            ...GALLERY_MEDIA[0],
+            caption:
+              'A winding path through the forest, past the old mill and down to the river, where the trail turns back toward the village. In autumn the beeches along it turn copper, and on a clear morning you can see the church spire from the bridge before the path climbs the last hill home.',
+          }}
           hasZoom
         />
       </>
@@ -161,6 +251,34 @@ export const WithCaption: Story = {
             caption:
               'A beautiful forest path winding through tall trees on a misty morning',
           }}
+        />
+      </>
+    );
+  },
+};
+
+/**
+ * A gallery with a video between two photos. A drag on the video's frame
+ * pages, and a drag that starts on its controls stays the video's.
+ */
+export const GalleryWithVideo: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>Open gallery with video</button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={[
+            GALLERY_MEDIA[0],
+            {
+              src: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.webm',
+              alt: 'Flower blooming',
+              type: 'video',
+            },
+            GALLERY_MEDIA[1],
+          ]}
         />
       </>
     );
