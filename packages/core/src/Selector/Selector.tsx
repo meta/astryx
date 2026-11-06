@@ -50,6 +50,7 @@ import {Divider} from '../Divider';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {useKeepLayerOpenProps, type LayerPlacement} from '../Layer/useLayer';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Spinner} from '../Spinner';
 import {PanelSearchInput} from '../Field/PanelSearchInput';
@@ -95,6 +96,10 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
@@ -350,10 +355,31 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
   },
 
+  // A panel with a search field, capped as a whole.
+  searchPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    // No taller than its layer's block-size cap, which folds in the software
+    // keyboard's. The search field's row keeps its height, and the list takes
+    // what is left.
+    maxHeight: stylex.firstThatWorks(
+      `calc(${layerViewportInset.maxBlockSize})`,
+      `calc(${layerViewportInset.maxBlockSizeFallback})`,
+    ),
+  },
+
   // Dropdown container
   dropdown: {
     boxSizing: 'border-box',
-    maxHeight: '300px',
+    // In a search panel, the list shrinks below its content to fit the cap.
+    minHeight: 0,
+    // 300 px, and no taller than its layer's block-size cap, which folds in
+    // the software keyboard's: the list ends above the keyboard with the
+    // layer.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     outline: 'none',
     paddingBlock: spacingVars['--spacing-1'],
@@ -939,7 +965,12 @@ interface SelectorOptionRowProps {
   renderOption: ((option: SelectorOptionData) => ReactNode) | undefined;
   SelectionMark: IndicatorComponent<IndicatorMap['check']>;
   onSelect: (item: SelectorOptionData) => void;
-  onHover: (item: SelectorOptionData, flatIndex: number) => void;
+  /** `isActive`: the option was already the highlighted one when entered. */
+  onHover: (
+    item: SelectorOptionData,
+    flatIndex: number,
+    isActive: boolean,
+  ) => void;
 }
 
 /**
@@ -993,7 +1024,7 @@ const SelectorOptionRow = memo(function SelectorOptionRow({
       aria-selected={isSelected}
       aria-disabled={item.disabled}
       onClick={() => onSelect(item)}
-      onMouseEnter={() => onHover(item, flatIndex)}
+      onMouseEnter={() => onHover(item, flatIndex, isHighlighted)}
       {...mergeProps(
         // Stable theme target on the option row itself, mirroring
         // `multi-selector-option`: it carries the row's size and runtime
@@ -1521,6 +1552,27 @@ export function Selector<T extends SelectorOptionType>(
 
   // Only after keyboard input does the active option draw the focus ring; a
   // pointer highlight keeps the fill alone, as a focused menu row does.
+  // Modality changes only on a key or a press, so a hover alone still reads
+  // as keyboard. The option the mouse enters therefore draws no ring until a
+  // key moves the highlight again. Entering the option that is already
+  // active, as when a key scrolls it under a still mouse, changes nothing.
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const keyDownAfterHover = useCallback(
+    (e: React.KeyboardEvent) => {
+      setHoveredIndex(null);
+      comboboxKeyDown(e);
+    },
+    [comboboxKeyDown],
+  );
+  const mouseEnterOption = useCallback(
+    (item: SelectorOptionData, index: number, isActive: boolean) => {
+      if (!isActive) {
+        setHoveredIndex(index);
+      }
+      comboboxItemMouseEnter(item, index);
+    },
+    [comboboxItemMouseEnter],
+  );
   const {
     isKeyboardHighlight: isHighlightFromKeyboard,
     noteHighlightMove,
@@ -1528,8 +1580,8 @@ export function Selector<T extends SelectorOptionType>(
     onItemMouseEnter,
   } = useKeyboardHighlight(
     triggerModality.readModality,
-    comboboxKeyDown,
-    comboboxItemMouseEnter,
+    keyDownAfterHover,
+    mouseEnterOption,
   );
   const onTriggerClick = useCallback(() => {
     comboboxTriggerClick();
@@ -1595,7 +1647,8 @@ export function Selector<T extends SelectorOptionType>(
       const index = optionIndexFromRow(row);
       const item = filteredItems[index];
       if (item != null) {
-        onItemMouseEnter(item, index);
+        // A press is pointer input, even on the active option.
+        onItemMouseEnter(item, index, false);
       }
     },
     onActivate: row => {
@@ -1613,6 +1666,7 @@ export function Selector<T extends SelectorOptionType>(
         return;
       }
       noteHighlightMove();
+      setHoveredIndex(null);
       // With hasSearch the query input owns typing, so type-to-select is off.
       if (!hasSearch && typeahead.onKeyDown(e)) {
         e.preventDefault();
@@ -1770,7 +1824,9 @@ export function Selector<T extends SelectorOptionType>(
         id={getItemId(flatIndex)}
         isHighlighted={flatIndex === highlightedIndex}
         isKeyboardHighlighted={
-          flatIndex === highlightedIndex && isHighlightFromKeyboard
+          flatIndex === highlightedIndex &&
+          isHighlightFromKeyboard &&
+          flatIndex !== hoveredIndex
         }
         isSelected={item.value === normalizedValue}
         size={size}
@@ -1786,6 +1842,7 @@ export function Selector<T extends SelectorOptionType>(
       indicatorPosition,
       highlightedIndex,
       isHighlightFromKeyboard,
+      hoveredIndex,
       size,
       normalizedValue,
       getItemId,
@@ -1945,7 +2002,7 @@ export function Selector<T extends SelectorOptionType>(
     );
 
   const panelContent = hasSearch ? (
-    <div>
+    <div {...stylex.props(styles.searchPanel)}>
       {renderSearch()}
       <Divider />
       <div
@@ -2099,7 +2156,11 @@ export function Selector<T extends SelectorOptionType>(
             variant === 'ghost' && styles.triggerGhost,
             variant === 'secondary' && styles.triggerSecondary,
             variant !== 'input' && interactionOverlayStyles.backgroundImage,
-            variant !== 'input' && focusOutlineStyles.focusWithin,
+            // Rings for the trigger button only. The clear and status
+            // buttons ring themselves.
+            variant !== 'input' &&
+              !surface.isTriggerFocusRingSuppressed &&
+              focusWithinOwner,
             surface.isTriggerFocusRingSuppressed &&
               selectorPresentationStyles.pointerRestoredFocus,
             isDisabled && inputWrapperStyles.disabled,
@@ -2142,6 +2203,7 @@ export function Selector<T extends SelectorOptionType>(
         <button
           {...triggerSharedProps}
           ref={triggerButtonRef}
+          {...focusOwnerProps}
           type="button"
           // The read-only trigger stays a combobox even when hasSearch is set:
           // no search input is rendered in that state, and preserving the role

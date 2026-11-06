@@ -278,7 +278,7 @@ export interface DateInputProps extends Omit<
   /**
    * The selected date in ISO format (YYYY-MM-DD).
    */
-  value?: ISODateString;
+  value?: ISODateString | undefined;
 
   /**
    * Callback fired when the date changes.

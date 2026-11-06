@@ -252,6 +252,11 @@ describe('Schedule', () => {
       />,
     );
 
+    expect(
+      screen
+        .getByLabelText('Loading events')
+        .parentElement?.closest('[aria-hidden="true"]'),
+    ).toBeNull();
     await waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
     const [start, end] = loader.mock.calls[0];
     expect(typeof start).toBe('number');
@@ -259,6 +264,11 @@ describe('Schedule', () => {
     expect(start).toBe(Date.UTC(2026, 4, 13));
     expect(end).toBe(Date.UTC(2026, 4, 14));
     expect(await screen.findByText('Loaded event')).toBeInTheDocument();
+    expect(
+      screen
+        .getByLabelText('Loading events')
+        .parentElement?.closest('[aria-hidden="true"]'),
+    ).not.toBeNull();
   });
 
   it('renders list view grouped by localized day', async () => {

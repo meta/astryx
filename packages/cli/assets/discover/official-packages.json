@@ -102,6 +102,10 @@
         },
         {
           "kind": "component",
+          "name": "CircleCheckIndicator"
+        },
+        {
+          "kind": "component",
           "name": "CircularProgress"
         },
         {
@@ -139,6 +143,14 @@
         {
           "kind": "component",
           "name": "LogStream"
+        },
+        {
+          "kind": "component",
+          "name": "NavigationScreen"
+        },
+        {
+          "kind": "component",
+          "name": "NavigationStack"
         },
         {
           "kind": "component",

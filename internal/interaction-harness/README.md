@@ -11,6 +11,8 @@ An accessibility spec (`*.a11y.browser.spec.ts`, under
 [`playwright.config.ts`](../../playwright.config.ts)) may use the animation
 holds and the timer gate too, to check a state an animation passes through.
 
+The exemplar to copy is
+[`BottomSheetDetent.interaction.browser.spec.ts`](../../packages/core/src/BottomSheet/__tests__/BottomSheetDetent.interaction.browser.spec.ts).
 The harness proves its own instruments in
 [`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts).
 The busy-main-thread proof and the rendering-trace counts have a negative
@@ -24,7 +26,7 @@ self-tests check an instrument against a known answer.
 pnpm storybook:build                      # the specs read stories from the built Storybook
 pnpm exec playwright install chromium webkit
 pnpm test:interaction --project chromium  # everything, Chromium
-pnpm test:interaction <spec file>         # one spec, both engines
+pnpm test:interaction BottomSheetDetent   # one spec, both engines
 pnpm storyboards                          # only the tests tagged @storyboard
 ```
 
@@ -129,6 +131,9 @@ seeking and sampling run a curve forward. The recorder keeps one entry per
 `Animation` object, so one reversed or replayed mid-run is misread: a watch
 taken before the reversal rejects, and an unwatched wait returns at once with
 a curve dated before it. Take a fresh animation for each run a proof reads.
+`sampleCurve(locator, times, {pseudoElement: '::before'})` samples the
+element's `::before` or `::after` instead: its presented values, labelled by
+that pseudo-element's own animations.
 
 **Waiting for an animation.** The page records every animation from the first
 call into `curves.ts` on it (and on every later document): a frame loop on the
@@ -266,6 +271,13 @@ the screencast's stamps. A loaded machine stamps frames late, and
 `inPresentationOrder` can then put a frame after frames that came after it.
 The clock takes the cycle origin that most frames agree with, so such a frame
 moves only its own reading. A frame within 36 px of a turn gets no reading.
+A proof that needs every frame read starts a second control after the first,
+`startBusyControl(page, {ahead: true})`: an `AHEAD_CONTROL_RGB` box in the
+strip below, half a leg (200 ms) ahead. Wherever the first control is near a
+turn, the one ahead is mid-leg. Track it with `trackControl(page, frames,
+{ahead: true})` and read it with its own `controlClock`. `startBusyControl`
+resolves with each control's `start` on the page clock, where its own time
+is zero. Keep the component's marker out of the top 28 px then.
 
 An animation that lasts a fraction of a second, such as a 0.2 s fade, leaves a
 block only a few frames to judge: in WebKit, or on a loaded machine, the control

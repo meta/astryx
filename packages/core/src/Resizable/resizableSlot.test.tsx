@@ -70,6 +70,7 @@ const separator = () => screen.getByRole('separator', {name: 'Resize pane'});
 afterEach(() => {
   latest = undefined;
   localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 describe("the `resizable` slot takes useResizable's output directly", () => {

@@ -5,8 +5,9 @@
  * the version, in a folder with no project, loads none of the large parser,
  * schema and module-loader packages, and none of the CLI's own doc, discovery,
  * project and integration modules. The project, integration and contribution
- * modules use them. A module hook in the child records every module that the
- * run resolves.
+ * modules use them. A component lookup loads no code-rewrite package, which
+ * only patching an integration manifest uses. A module hook in the child
+ * records every module that the run resolves.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -168,4 +169,19 @@ describe('a run of the bin that prints the version', () => {
       ).toEqual([]);
     },
   );
+});
+
+describe('a component lookup in a folder with no project', () => {
+  it('loads no code-rewrite package (astryx component Buttn)', () => {
+    const {status, packages, cliModules} = modulesLoadedBy([
+      'component',
+      'Buttn',
+    ]);
+    // No component has that name, so the run ends with its suggestions.
+    expect(status).toBe(1);
+    expect(cliModules.has('clients/cli/commands/component.mjs')).toBe(true);
+    expect(
+      ['jscodeshift', 'recast'].filter(name => packages.has(name)),
+    ).toEqual([]);
+  });
 });

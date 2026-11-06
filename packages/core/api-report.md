@@ -337,7 +337,7 @@ component Carousel(props: CarouselProps)
   prop hasButtons?: boolean = true
   prop hasEdgeFade?: boolean = true
   prop hasLoop?: boolean = false
-  prop hasSnap?: boolean = false
+  prop hasSnap?: boolean | SnapPaging = false
   prop padding?: SpacingStep = undefined (no padding)
   prop ref?: React.Ref<HTMLDivElement>
   prop xstyle?: StyleXStyles
@@ -2885,7 +2885,7 @@ hook useChatLayoutContext: () => ChatLayoutContextValue | null
 hook useChatNewMessages: ({…}: UseChatNewMessagesOptions) => UseChatNewMessagesReturn
 hook useChatPasteAsToken: ({…}: UseChatPasteAsTokenOptions) => UseChatPasteAsTokenReturn
 hook useChatStreamScroll: ({…}: UseChatStreamScrollOptions) => UseChatStreamScrollReturn
-hook useClickableContainer: ({…}: UseClickableContainerOptions) => ClickableContainerResult
+hook useClickableContainer: (options: UseClickableContainerOptions) => ClickableContainerResult
 hook useClipboard: (options?: UseClipboardOptions) => UseClipboardReturn
 hook useCollapsible: (options: UseCollapsibleOptions) => UseCollapsibleReturn
 hook useCollator: (options?: Intl.CollatorOptions) => Intl.Collator
@@ -2894,6 +2894,7 @@ hook useCommandPaletteContext: () => CommandPaletteContextValue | null
 hook useContainerReveal: (options?: UseContainerRevealOptions) => UseContainerRevealReturn
 hook useDevWarning: (component: string, message: string, condition?: boolean) => void
 hook useDirection: () => 'ltr' | 'rtl'
+hook useDragToSnapPoints: (ref: RefObject<HTMLElement | null>, options: DragToSnapPointsOptions) => UseDragToSnapPointsResult
 hook useDropdownMenuContext: () => DropdownMenuContextValue | null
 hook useEntryAnimation: (preset?: EntryAnimationPreset) => StyleXStyles | null
 hook useFocusTrap: <T extends HTMLElement = HTMLElement>(options: UseFocusTrapOptions) => UseFocusTrapReturn<T>
@@ -2933,6 +2934,7 @@ hook useOutlineFromDOM: (containerRef: React.RefObject<HTMLElement | null>) => O
 hook useOutlineFromMarkdown: <Node extends MarkdownExtensionNode = never>(markdown: string, options?: ParseOutlineFromMarkdownOptions<Node>) => OutlineItem[]
 hook useOverflow: (itemCount: number, options?: UseOverflowOptions) => UseOverflowReturn
 hook useOverlay: ({…}?: UseOverlayOptions) => UseOverlayResult
+hook usePanGesture: (ref: RefObject<Element | null>, options: PanGestureOptions) => void
 hook usePopover: (options?: UsePopoverOptions) => UsePopoverReturn
 hook usePowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
 hook usePressFeedback: () => typeof pressableProps
@@ -2946,6 +2948,7 @@ hook useSelectedItemOffset: ({…}: UseSelectedItemOffsetOptions) => UseSelected
 hook useSideNavCollapse: () => SideNavCollapseState
 hook useSideNavRenderMode: () => SideNavRenderMode
 hook useSize: <T extends string = ElementSize>(sizeProp?: T, defaultSize?: T) => T
+hook useSnapPaging: (options?: SnapPagingOptions) => SnapPaging
 hook useSpeechRecognition: (options?: UseSpeechRecognitionOptions) => UseSpeechRecognitionReturn
 hook useStepperContext: () => StepperContextValue
 hook useStreamingText: (targetText: string, isStreaming: boolean, options?: UseStreamingTextOptions) => string
@@ -2995,8 +2998,10 @@ function composeEventHandlers: <E extends SyntheticEvent>(...handlers: (((event:
 function container: ({…}: ContainerOptions) => readonly [Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly paddingInlineStart: stylex.StyleXClassNameFor<"paddingIn … #72b9b91f
 function createAnimator: (element: HTMLElement) => Animator
 function createCodeLanguage: ({…}: CreateCodeLanguageOptions) => CodeLanguage
+function createDragToSnapPoints: (element: HTMLElement, options: DragToSnapPointsOptions) => DragToSnapPoints
 function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
+function createPanGesture: (element: Element, options: PanGestureOptions) => PanGesture
 function createPowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
 function createStaticSource: <T extends SearchableItem>(items: T[], options?: CreateStaticSourceOptions<T>) => SearchSource<T>
 function dateToISO: (pd: PlainDate) => ISODateString
@@ -3284,7 +3289,7 @@ const colorDefaults: object
   --color-border-yellow: 'light-dark(#C58600, #B47700)'
   --color-icon-yellow: 'light-dark(#FBC02D, #FFEE58)'
   --color-text-yellow: 'light-dark(#753F07, #FBCE03)'
-const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #0171E3)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #a042f923
+const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #0171E3)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #9de1262f
 const dataTokenDefaults: object
   --color-data-categorical-blue: 'light-dark(#0171E3, #0171E3)'
   --color-data-categorical-orange: 'light-dark(#EB6E00, #EB6E00)'
@@ -3380,7 +3385,7 @@ const inputStatusBorderStyles: Readonly<{ readonly warning: Readonly<{ readonly 
 const inputStatusFocusStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)"> }>; readonly error: Readonly … #a9ac1cbc
 const inputStatusFocusWithinStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)" | "Highlight"> }>; readonly e … #739ff723
 const inputStatusHoverShadowStyles: Readonly<{ readonly warning: Readonly<{ readonly boxShadow: stylex.StyleXClassNameFor<"boxShadow", "none" | { readonly '@media (hover: hover)': stylex.StyleXVar … #de6f47e5
-const inputWrapperStyles: Readonly<{ readonly base: Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly position: stylex.StyleXClassNameFor<"pos … #90a96087
+const inputWrapperStyles: Readonly<{ readonly base: Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly position: stylex.StyleXClassNameFor<"pos … #ba795170
 const interactionOverlayStyles: Readonly<{ readonly backgroundColor: Readonly<{ readonly backgroundColor: stylex.StyleXClassNameFor<"backgroundColor", "light-dark(#0536590C, #FFFFFF0C)" | "lig … #3522ad34
 const overlayPaddingReset: Readonly<{ readonly reset: Readonly<{ readonly '--container-padding-inline-start': stylex.StyleXClassNameFor<"--container-padding-inline-start", "0px">; readonl … #15cd7287
 const radiusDefaults: object
@@ -4212,6 +4217,14 @@ interface DividerVariantMap
   strong: true
   subtle: true
 type DomainTokenName = SyntaxTokenName | DataTokenName
+interface DragToSnapPoints
+  destroy: () => void
+  settleTo: (index: number) => void
+interface DragToSnapPointsOptions
+  axis: 'x' | 'y'
+  flickThreshold?: number
+  onSettle: (index: number) => void
+  snapPoints: ReadonlyArray<number>
 interface DrawerHeaderProps extends BaseProps<HTMLDivElement> (props of DrawerHeader)
 interface DrawerProps extends BaseProps<HTMLDialogElement> (props of Drawer)
 type DropdownMenuButtonProps = Omit<ButtonProps, 'onClick'>
@@ -4929,6 +4942,16 @@ interface PaginationVariantMap
   input: true
   none: true
   pages: true
+interface PanGesture
+  destroy: () => void
+interface PanGestureEvent
+  state: PanGestureState
+  translation: { x: number; y: number }
+  velocity: { x: number; y: number }
+interface PanGestureOptions
+  axis?: 'x' | 'y'
+  onPan: (event: PanGestureEvent) => void
+type PanGestureState = 'began' | 'changed' | 'ended' | 'cancelled'
 type ParseOptions<Plugins extends ReadonlyArray<MarkdownPluginEntry> = readonly []> = CommonParseOptions<Plugins> & { math?: false | undefined }
 interface ParseOutlineFromMarkdownOptions<Node extends MarkdownExtensionNode = never>
   isFinal?: boolean
@@ -5282,6 +5305,10 @@ interface SliderSingleProps extends SliderBaseProps
   valueDisplay?: 'tooltip' | 'text' | 'none' = "tooltip"
   width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface SnapPaging
+  [snapPagingBrand]: true
+interface SnapPagingOptions
+  pages?: 'view' | 'item' = 'view'
 type SourceRange
   end: number
   start: number
@@ -5813,7 +5840,7 @@ interface UseCalendarNavigationReturn
   monthYearLabel: string
   navigateMonth: (delta: number, focusedDate?: ISODateString, offset?: number) => void
   pendingFocus: ISODateString | null
-  visibleCalendarMonths: Array<{ year: number; month: number }>
+  visibleCalendarMonths: { year: number; month: number }[]
   visibleMonths: PlainDate[]
 interface UseChatComposerTokensOptions
   editableRef: React.RefObject<HTMLDivElement | null>
@@ -5905,6 +5932,8 @@ interface UseContainerRevealOptions
 interface UseContainerRevealReturn
   getContainerProps: (options?: ContainerRevealOptions) => { className?: string; style?: CSSProperties }
   getContentRevealProps: (options?: ContentRevealOptions) => { className?: string; style?: CSSProperties }
+interface UseDragToSnapPointsResult
+  settleTo: (index: number) => void
 interface UseFocusTrapOptions
   isActive: boolean
   onEscape?: () => void
@@ -8507,6 +8536,16 @@ SliderRangeProps (.)
 SliderSingleProps (.)
 ```
 
+## `./SnapPaging`
+
+### Also exported from an earlier entry point
+
+```text
+SnapPaging (.)
+SnapPagingOptions (.)
+useSnapPaging (.)
+```
+
 ## `./Spinner`
 
 ### Also exported from an earlier entry point
@@ -9086,6 +9125,8 @@ AnnouncePoliteness (.)
 ClickableContainerResult (.)
 ContainerRevealOptions (.)
 ContentRevealOptions (.)
+DragToSnapPoints (.)
+DragToSnapPointsOptions (.)
 EntryAnimationPreset (.)
 Hotkey (.)
 INTERACTIVE_SELECTORS (.)
@@ -9100,6 +9141,10 @@ MenuPressEvent (.)
 MenuPressGesture (.)
 MenuPressPointerType (.)
 MenuPressStep (.)
+PanGesture (.)
+PanGestureEvent (.)
+PanGestureOptions (.)
+PanGestureState (.)
 ScrollAxis (.)
 ScrollAxisState (.)
 ScrollKeyboardAccess (.)
@@ -9116,6 +9161,7 @@ UseClipboardOptions (.)
 UseClipboardReturn (.)
 UseContainerRevealOptions (.)
 UseContainerRevealReturn (.)
+UseDragToSnapPointsResult (.)
 UseFocusTrapOptions (.)
 UseFocusTrapReturn (.)
 UseGridFocusOptions (.)
@@ -9154,6 +9200,7 @@ useClickableContainer (.)
 useClipboard (.)
 useContainerReveal (.)
 useDevWarning (.)
+useDragToSnapPoints (.)
 useEntryAnimation (.)
 useFocusTrap (.)
 useGridFocus (.)
@@ -9170,6 +9217,7 @@ useMediaQuery (.)
 useMenuPress (.)
 useMergedRefs (.)
 useOverflow (.)
+usePanGesture (.)
 usePressFeedback (.)
 useScrollLock (.)
 useScrollOverflow (.)

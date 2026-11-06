@@ -1023,8 +1023,9 @@ describe('ci admission', () => {
     const waiting = count =>
       Array.from({length: count}, (_, i) => waitingRun(300 + i));
 
-    it('turns away a pull-request run that finds no room and ten others waiting', async () => {
-      // 5 x 12 + 10 waiting + 18 + 16 = 104: no room, and ten already wait.
+    it('lets an eleventh pull-request run wait instead of turning it away at once', async () => {
+      // 5 x 12 + 10 waiting + 18 + 16 = 104: no room for the run, and ten
+      // already wait, but room for its Storybook build (89 <= 90).
       const result = await admit({
         active: [...prs(5), ...waiting(10)],
         peak: 16,
@@ -1032,25 +1033,13 @@ describe('ci admission', () => {
         maxWait: 12,
         maxLooks: 2,
       });
-      expect(result.looks).toBe(1);
-      expect(result.outputs.full).toBe('true');
-      expect(result.warning[0]).toContain(
-        'CI is full: 10 pull-request runs are already waiting',
-      );
-    });
-
-    it('counts only waiting pull-request runs toward the ten', async () => {
-      const queued = Array.from({length: 12}, (_, i) =>
-        waitingRun(400 + i, {event: 'merge_group'}),
-      );
-      const result = await admit({
-        active: [...prs(5), ...waiting(9), ...queued],
-        peak: 16,
-        phase: 'room',
-        maxWait: 12,
-        maxLooks: 2,
-      });
       expect(result.outputs.full).toBeUndefined();
+      expect(result.info).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('Room for the Storybook build'),
+        ]),
+      );
+      expect(result.warning.join('\n')).not.toContain('already waiting');
     });
 
     it('never turns away a merge-queue entry', async () => {
@@ -1068,7 +1057,7 @@ describe('ci admission', () => {
       expect(entry.looks).toBeGreaterThan(1);
     });
 
-    it('lets the tenth waiter wait, and never turns away a run that fits or a main run', async () => {
+    it('lets a waiter wait, and never turns away a run that fits or a main run', async () => {
       const ninth = await admit({
         active: [...prs(5), ...waiting(9)],
         peak: 16,
@@ -1156,6 +1145,18 @@ describe('ci admission', () => {
         maxLooks: 2,
         ...more,
       });
+
+    it('still stops a run at its longest wait when more than ten that waited longer still wait', async () => {
+      // The at-once stop at ten waiting runs is gone; the longest-wait stop stays.
+      const longer = Array.from({length: 11}, (_, i) => waiter(90 + i, -1));
+      const result = await atLimit([...full, ...longer]);
+      expect(result.looks).toBe(2);
+      expect(result.outputs.full).toBe('true');
+      expect(result.warning.join('\n')).toContain(
+        'CI is full: still no room after 12 minutes',
+      );
+      expect(result.warning.join('\n')).not.toContain('already waiting');
+    });
 
     it('starts the whole run, once, when no other run started at its longest wait', async () => {
       const result = await atLimit(full);
@@ -1455,6 +1456,102 @@ describe('ci admission', () => {
     });
     expect(result.looks).toBe(2);
     expect(result.lookTimes[1]).toBeGreaterThan(11 * 60_000);
+  });
+
+  it('queues waiting main runs by when they began, so two never block each other', async () => {
+    // Two main dispatches waiting at once each counted the other's whole peak
+    // (39), so neither fit beside a quiet CI and both waited their two hours.
+    const mainSince = (id, minutes) => {
+      const run = waitingRun(id, {event: 'workflow_dispatch'});
+      run.jobs[0].steps[0].started_at = new Date(
+        NOW - minutes * 60_000,
+      ).toISOString();
+      return run;
+    };
+    // This main run began waiting before the other: the younger one holds
+    // only its waiting job. 2 x 12 + 1 + 18 + 37 = 80 fits.
+    const older = await admit({
+      active: [...prs(2), mainSince(70, -1)],
+      peak: 37,
+      isMain: true,
+      maxWait: 120,
+      maxLooks: 30,
+    });
+    expect(older.looks).toBe(1);
+    expect(older.outputs.fits).toBe('true');
+    expect(older.info.find(line => line.startsWith('Look 1:'))).toContain(
+      'ci 70 workflow_dispatch: 1 waiting',
+    );
+    // A main run that began waiting earlier still goes first: its whole peak
+    // counts. 2 x 12 + 39 + 18 + 37 = 118 does not fit.
+    const younger = await admit({
+      active: look =>
+        look < 2
+          ? [...prs(2), mainSince(70, 5)]
+          : [...prs(2), admittedRun(70, 1, {event: 'workflow_dispatch'})],
+      peak: 37,
+      isMain: true,
+      maxWait: 120,
+      maxLooks: 30,
+    });
+    expect(younger.looks).toBeGreaterThan(1);
+    expect(younger.info.find(line => line.startsWith('Look 1:'))).toContain(
+      'ci 70 workflow_dispatch: 39 waiting',
+    );
+  });
+
+  it('compares two main runs that began waiting in the same second on one clock, the lower run id first', async () => {
+    // GitHub records wait starts in whole seconds, after this run's own clock
+    // read them: compared on that one clock, a tie goes to the lower run id.
+    const sameSecond = new Date(NOW - 3_000).toISOString();
+    const own = {
+      ...waitingRun(OWN, {event: 'workflow_dispatch'}),
+      status: 'queued',
+    };
+    own.jobs[0].steps[0].started_at = sameSecond;
+    const other = id => {
+      const run = waitingRun(id, {event: 'workflow_dispatch'});
+      run.jobs[0].steps[0].started_at = sameSecond;
+      return run;
+    };
+    const first = await admit({
+      active: [own, ...prs(2), other(70)],
+      peak: 37,
+      isMain: true,
+      maxWait: 120,
+      maxLooks: 30,
+    });
+    expect(first.info.find(line => line.startsWith('Look 1:'))).toContain(
+      'ci 70 workflow_dispatch: 1 waiting',
+    );
+    expect(first.outputs.fits).toBe('true');
+    const second = await admit({
+      active: look =>
+        look < 2
+          ? [own, ...prs(2), other(0)]
+          : [own, ...prs(2), admittedRun(0, 1, {event: 'workflow_dispatch'})],
+      peak: 37,
+      isMain: true,
+      maxWait: 120,
+      maxLooks: 30,
+    });
+    expect(second.info.find(line => line.startsWith('Look 1:'))).toContain(
+      'ci 0 workflow_dispatch: 39 waiting',
+    );
+  });
+
+  it("still counts a waiting main run's whole peak for a pull-request run", async () => {
+    const run = waitingRun(70, {event: 'workflow_dispatch'});
+    run.jobs[0].steps[0].started_at = new Date(NOW + 60_000).toISOString();
+    const result = await admit({
+      active: [...prs(2), run],
+      peak: 16,
+      maxWait: 12,
+      maxLooks: 2,
+    });
+    expect(result.info.find(line => line.startsWith('Look 1:'))).toContain(
+      'ci 70 workflow_dispatch: 39 waiting',
+    );
   });
 
   it("yields to a waiting main run only for that wait's first fifteen minutes", async () => {

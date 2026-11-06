@@ -8,7 +8,11 @@ approved_by: rubyycheung
 approved_at: 2026-10-17
 review_triggers:
   [tokens, palette-values, component-mappings, contrast, artifacts]
-verified_by: [scripts/check-badge-contrast.test.mjs]
+verified_by:
+  [
+    scripts/check-badge-contrast.test.mjs,
+    packages/themes/neutral/src/neutralTheme.test.ts,
+  ]
 package: '@astryxdesign/theme-neutral'
 source_theme: packages/themes/neutral/src/neutralTheme.ts
 references:
@@ -95,6 +99,17 @@ variants of ProgressBar, StatusDot, and Stepper indicators paint Neutral's
 accent, and Banner and the pale destructive Button use the portable overlay
 and neutral roles; Neutral adds no component override for any of them. Every new mapping needs exact-head theme review and
 rendered light/dark evidence; shared color alone is not enough.
+
+Neutral's selected fill, `--color-accent-muted`, is `neutral.light[85]` /
+`neutral.dark[30]` (`#d4d4d4` / `#474747`). Text on it reads at 4.5:1 or more
+in both modes. In dark mode Neutral lifts `--color-text-secondary` to
+`neutral.dark[80]` on a selected `item` or `tree-list-item` (a checked
+CheckboxListItem row reflects `selected` on its `item` target), on a
+`citation` with `variant:number`, and on a `file-input` with `mode:dropzone`,
+whose drag-over fill has no state target, so that text clears 4.5:1 at rest
+and under the hover overlay. Neutral's syntax `comment`, `operator` and
+`punctuation` colours are `neutral.light[35]` / `neutral.dark[75]`, so they
+read on a highlighted code line.
 
 This work does not add component states. It intentionally excludes
 `table-row-status`, which has no approved theming target, and SegmentedControl
