@@ -463,22 +463,17 @@ export interface OvershootDrawing {
 }
 
 /**
- * Draws a pull past a limit with no layout change. The pane keeps its
- * laid-out size and stretches from its far edge, so its content never
- * reflows. The handle and the content beside it move with the edge. The
- * geometry is measured once, as the overshoot starts.
+ * Draws a pull past a limit with no layout change. The handle alone moves
+ * past the limit, over the content beside it, so the panes keep their sizes
+ * and nothing reflows. The geometry is measured once, as the overshoot
+ * starts.
  */
-export function createOvershootDrawing(
-  pane: ResizablePane,
-  sizeOf: () => number,
-): OvershootDrawing {
+export function createOvershootDrawing(pane: ResizablePane): OvershootDrawing {
   const element = pane.element;
   let geometry: {
     sign: number;
-    extent: number;
     isInline: boolean;
-    origin: string;
-    movers: HTMLElement[];
+    handle: HTMLElement | null;
   } | null = null;
   let drawn = 0;
   let running: Animation[] = [];
@@ -489,54 +484,26 @@ export function createOvershootDrawing(
     }
     const edge = pane.contentFacingEdge();
     const isInline = edge.startsWith('inline');
-    const isTowardEnd = edge.endsWith('end');
     const isRtl =
       isInline &&
       element.ownerDocument.defaultView?.getComputedStyle(element).direction ===
         'rtl';
-    const handle = resizeHandleBeside(element, null);
-    const beside = isTowardEnd
-      ? handle?.nextElementSibling
-      : handle?.previousElementSibling;
-    const farSide = isInline
-      ? isTowardEnd === isRtl
-        ? 'right'
-        : 'left'
-      : isTowardEnd
-        ? 'top'
-        : 'bottom';
     geometry = {
-      sign: (isTowardEnd ? 1 : -1) * (isRtl ? -1 : 1),
-      // The size the pane lays out at. A pane caught mid-close has not
-      // rendered it yet when the catch draws.
-      extent: sizeOf(),
+      sign: (edge.endsWith('end') ? 1 : -1) * (isRtl ? -1 : 1),
       isInline,
-      origin: isInline ? `${farSide} center` : `center ${farSide}`,
-      movers: [handle, beside].filter(
-        (mover): mover is HTMLElement => mover instanceof HTMLElement,
-      ),
+      handle: resizeHandleBeside(element, null),
     };
     return geometry;
   };
-  const stylesAt = (amount: number) => {
-    const {sign, extent, isInline} = measure();
+  const translateAt = (amount: number) => {
+    const {sign, isInline} = measure();
     const offset = sign * amount;
-    const stretch = extent > 0 ? (extent + amount) / extent : 1;
-    return {
-      translate: isInline ? `${offset}px 0` : `0 ${offset}px`,
-      scale: isInline ? `${stretch} 1` : `1 ${stretch}`,
-    };
+    return isInline ? `${offset}px 0` : `0 ${offset}px`;
   };
   const write = (amount: number) => {
-    if (geometry == null) {
-      return;
-    }
-    const isDrawn = amount !== 0;
-    const {translate, scale} = stylesAt(amount);
-    element.style.transformOrigin = isDrawn ? geometry.origin : '';
-    element.style.scale = isDrawn ? scale : '';
-    for (const mover of geometry.movers) {
-      mover.style.translate = isDrawn ? translate : '';
+    const handle = geometry?.handle;
+    if (handle != null) {
+      handle.style.translate = amount === 0 ? '' : translateAt(amount);
     }
   };
   const stopRunning = () => {
@@ -564,7 +531,8 @@ export function createOvershootDrawing(
     springBack(spring, velocity) {
       stopRunning();
       const from = drawn;
-      if (from === 0 || geometry == null) {
+      const handle = geometry?.handle;
+      if (from === 0 || handle == null) {
         return null;
       }
       const progress = springGlide(spring, velocity / Math.abs(from));
@@ -575,28 +543,16 @@ export function createOvershootDrawing(
       const frames = Array.from({length: count}, (_, index) => {
         const offset = index / (count - 1);
         const at = from * progress.remaining(offset * progress.durationMs);
-        return {offset, ...stylesAt(at)};
+        return {offset, translate: translateAt(at)};
       });
-      const {origin, movers} = geometry;
       drawn = 0;
-      // The drawing ends at rest: the motion plays over the cleared styles.
+      // The drawing ends at rest: the motion plays over the cleared style.
       write(0);
-      const timing = {duration: progress.durationMs, easing: 'linear'};
       running = [
-        element.animate(
-          frames.map(({offset, scale}) => ({
-            offset,
-            scale,
-            transformOrigin: origin,
-          })),
-          timing,
-        ),
-        ...movers.map(mover =>
-          mover.animate(
-            frames.map(({offset, translate}) => ({offset, translate})),
-            timing,
-          ),
-        ),
+        handle.animate(frames, {
+          duration: progress.durationMs,
+          easing: 'linear',
+        }),
       ];
       return elapsedMs =>
         elapsedMs >= progress.durationMs ? 0 : progress.remaining(elapsedMs);
