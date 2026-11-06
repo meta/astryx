@@ -11,6 +11,12 @@ import {Text} from './Text';
 import type {TextType} from './Text';
 import type {TextColor} from '../theme/types';
 
+// jsdom does not resolve var(); the browser spec checks the resolved value.
+// Untruncated text reads the private container override, else break-word.
+const DEFAULT_WRAP = 'var(--_astryx-text-overflow-wrap,break-word)';
+const wrapOf = (element: Element) =>
+  getComputedStyle(element).overflowWrap.replace(/\s/g, '');
+
 describe('Text', () => {
   describe('rendering', () => {
     it('renders without type prop (defaults to body)', () => {
@@ -224,6 +230,33 @@ describe('Text', () => {
     });
   });
 
+  // Text FR3 (spec:AST-020 FR1, WCAG 2.2 1.4.10): a token longer than its line
+  // wraps in text that is not truncated; truncation keeps its own treatment.
+  describe('long unbroken tokens', () => {
+    const token =
+      'https://example.com/aVeryLongUnbrokenTokenThatIsWiderThan320px';
+
+    it('wraps them in inline and block text that is not truncated', () => {
+      render(
+        <>
+          <Text>{token}</Text>
+          <Text display="block">{`${token}/block`}</Text>
+        </>,
+      );
+      expect(wrapOf(screen.getByText(token))).toBe(DEFAULT_WRAP);
+      expect(wrapOf(screen.getByText(`${token}/block`))).toBe(DEFAULT_WRAP);
+    });
+
+    it('leaves single-line truncation clipping on one line', () => {
+      render(<Text maxLines={1}>{token}</Text>);
+      const style = getComputedStyle(screen.getByText(token));
+      expect(style.whiteSpace).toBe('nowrap');
+      expect(style.textOverflow).toBe('ellipsis');
+      expect(style.wordBreak).toBe('break-all');
+      expect(style.overflowWrap).not.toBe('break-word');
+    });
+  });
+
   it('renders the stable target and type data attribute for theme targeting', () => {
     render(<Text type="body">Themed Text</Text>);
     const element = screen.getByText('Themed Text');
@@ -401,5 +434,39 @@ describe('Text maxLines without a truncation tooltip', () => {
       );
     });
     expect(reads).toBeGreaterThan(0);
+  });
+});
+
+describe('Text keeps its children mounted when maxLines changes', () => {
+  it('keeps the same child elements, focus, and input values across a clamp toggle', () => {
+    const {rerender} = render(
+      <Text maxLines={2} hasTruncateTooltip={false}>
+        Lead text <input aria-label="Note" defaultValue="" />
+      </Text>,
+    );
+    const input = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Note',
+    });
+    input.value = 'typed';
+    input.focus();
+
+    rerender(
+      <Text maxLines={0} hasTruncateTooltip={false}>
+        Lead text <input aria-label="Note" defaultValue="" />
+      </Text>,
+    );
+    const after = screen.getByRole<HTMLInputElement>('textbox', {
+      name: 'Note',
+    });
+    expect(after).toBe(input);
+    expect(after.value).toBe('typed');
+    expect(document.activeElement).toBe(after);
+
+    rerender(
+      <Text maxLines={2} hasTruncateTooltip={false}>
+        Lead text <input aria-label="Note" defaultValue="" />
+      </Text>,
+    );
+    expect(screen.getByRole('textbox', {name: 'Note'})).toBe(input);
   });
 });

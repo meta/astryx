@@ -10,42 +10,18 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts (exports)
- *
- * A checkbox or radio focuses a native `<input>` that is `opacity: 0`, so the
- * visible focus indicator has to appear on the picture beside it — and that
- * picture is a themeable indicator, which is what makes "who draws the ring"
- * awkward:
- *
- * - Only the indicator's own element can shape the ring: `outline` follows
- *   that element's `border-radius`. Draw it on a wrapper and the owner has to
- *   hardcode a guess about whatever indicator it hosts (RadioListItem used to
- *   carry `border-radius: 50%` for a circle it did not own).
- * - But an indicator supplied by a theme is third-party code. If drawing the
- *   ring is its job, a replacement that simply doesn't ships a control with no
- *   visible focus (WCAG 2.4.7) — and that is the DEFAULT outcome: the sample
- *   replacement in our own Storybook destructures `{state, size, isDisabled}`
- *   and drops the rest, which is what a theme author plausibly writes. Nothing
- *   can enforce otherwise; a component ignoring every prop is still assignable
- *   to `IndicatorComponent`, and branding the return type does not work either
- *   (JSX types every expression as `JSX.Element`).
- *
- * So the owner draws it, on the indicator's own element, imperatively at focus
- * time. No cooperation is required and none can be forgotten.
- *
- * Two details that are load-bearing, both measured rather than assumed:
- *
- * 1. **Inline style, not a class.** React replaces `className` wholesale on
- *    re-render, so an injected class disappears the moment the control changes
- *    state — pressing Space on a focused checkbox lost the ring. React
- *    reconciles `style` per property, so an `outline` set here survives.
- * 2. **`:focus-visible`, not `:focus`.** The CSS this replaces got
- *    keyboard-vs-pointer for free; an event handler has to ask. Checking the
- *    element keeps the browser's heuristic, including `focus({focusVisible:
- *    true})`, which a hand-rolled modality guess would miss.
- *
- * Imperative styling on an interaction event follows `useTableSelection`,
- * which sets row-selection styles the same way.
  */
+
+// The owner draws the ring on the indicator's own element, at focus time:
+// - Only that element can shape the ring, because `outline` follows its
+//   `border-radius`.
+// - A theme can replace the indicator, and a replacement can drop any prop.
+//   If the indicator drew the ring, such a replacement would have no visible
+//   focus. No type can make it keep the props.
+// - The ring is an inline style, not a class. React replaces `className` on
+//   re-render, but it updates `style` per property, so the outline stays.
+// - The handler checks `:focus-visible`, not focus. This keeps the browser's
+//   heuristic, including `focus({focusVisible: true})`.
 
 import {useCallback, useMemo} from 'react';
 import type {FocusEvent, RefObject} from 'react';
@@ -86,9 +62,8 @@ export function useIndicatorFocusRing(
 ): UseIndicatorFocusRingReturn {
   const paint = useCallback(
     (on: boolean) => {
-      // `firstElementChild`, not a search: the container holds the indicator
-      // and nothing else, so there is no ambiguity — and no way for a later
-      // sibling to quietly become the target.
+      // The container holds only the indicator, so its first child is the
+      // target. A later sibling can never become the target.
       const indicator = containerRef.current?.firstElementChild;
       if (indicator instanceof HTMLElement) {
         Object.assign(

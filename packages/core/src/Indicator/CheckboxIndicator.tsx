@@ -16,7 +16,9 @@ import {
   easeVars,
   radiusVars,
 } from '../theme/tokens.stylex';
-import {isRenderable, mergeProps, themeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
 import {indicatorScope} from './indicator.markers.stylex';
 import type {IndicatorProps} from './types';
 

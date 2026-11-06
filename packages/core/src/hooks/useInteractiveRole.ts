@@ -4,24 +4,11 @@
 
 /**
  * @file useInteractiveRole.ts
- * @input Uses useInteractiveTrigger
- * @output Exports useInteractiveRole hook and InteractiveRole type
- * @position Hook utility; consumed by Token, Thumbnail, Item, ClickableCard, etc.
- *
- * Centralizes the "what element should I render as?" decision for
- * polymorphic components. The priority order:
- *
- *   1. href → 'link' (navigation always wins, unless disabled)
- *   2. onClick → 'button' (explicit interactivity)
- *   3. interactive trigger context → 'button' (implicit via parent)
- *   4. else → 'inert' (non-interactive)
- *
- * A disabled `href` is excluded at step 1 and therefore resolves via the
- * remaining steps — 'inert' when no onClick or context applies.
- *
- * This hook is the single place to add new context-based triggers
- * (e.g., Popover, DropdownMenu, Disclosure). Components that consume
- * this hook never need updating when new trigger contexts are added.
+ * @input useInteractiveTrigger
+ * @output useInteractiveRole hook and InteractiveRole type
+ * @position Hook utility for polymorphic components such as Token, Thumbnail,
+ *   Item and ClickableCard. Add new context-based triggers here, so the
+ *   components that use this hook need no change.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts (export)
@@ -90,13 +77,11 @@ export function useInteractiveRole({
 }: UseInteractiveRoleOptions): InteractiveRole {
   const contextRole = useInteractiveRoleContext();
 
-  // 1. href → link (unless disabled — a disabled href is skipped here and
-  // resolved by the checks below, landing on 'inert' if nothing else applies)
+  // A disabled href is skipped, so the checks below decide the role.
   if (href != null && !isDisabled) {
     return 'link';
   }
 
-  // 2. Explicit onClick → button
   if (onClick != null) {
     return 'button';
   }
@@ -106,6 +91,5 @@ export function useInteractiveRole({
     return contextRole;
   }
 
-  // 4. Nothing interactive → inert
   return 'inert';
 }

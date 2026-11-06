@@ -65,6 +65,26 @@ export const docs = {
       ],
     },
     {
+      id: 'upgrade',
+      title: 'Upgrade',
+      content: [
+        {
+          type: 'prose',
+          text: 'Upgrade every Astryx package your app lists in one command, to the same release. Each theme names the exact Core release it works with, so a theme left on an older release no longer matches the new Core.',
+        },
+        {
+          type: 'code',
+          lang: 'bash',
+          label: 'Terminal',
+          code: `{@pm install @astryxdesign/core@latest @astryxdesign/theme-neutral@latest @astryxdesign/cli@latest}\n{@command upgrade --from <old Core version> --apply}`,
+        },
+        {
+          type: 'prose',
+          text: "Add every other Astryx package your app lists to the same command, and pass the Core version you had before to `--from`. If your package manager holds new releases back, exempt the whole `@astryxdesign/*` scope; in pnpm, `minimumReleaseAgeExclude: ['@astryxdesign/*']`. Exempting only some of its packages installs packages from different releases side by side.",
+        },
+      ],
+    },
+    {
       id: 'install-once',
       title: 'Install once, use everywhere',
       content: [
@@ -193,22 +213,22 @@ const overrides = stylex.create({
             [
               'Next.js',
               'Next.js + theme CSS',
-              '[apps/example-nextjs](https://github.com/facebook/astryx/tree/main/apps/example-nextjs)',
+              '[apps/example-nextjs](https://github.com/meta/astryx/tree/main/apps/example-nextjs)',
             ],
             [
               'Next.js + StyleX',
               'Next.js + StyleX for custom styles',
-              '[apps/example-nextjs-stylex](https://github.com/facebook/astryx/tree/main/apps/example-nextjs-stylex)',
+              '[apps/example-nextjs-stylex](https://github.com/meta/astryx/tree/main/apps/example-nextjs-stylex)',
             ],
             [
               'Next.js + Tailwind',
               'Next.js + Tailwind bridge',
-              '[apps/example-nextjs-tailwind](https://github.com/facebook/astryx/tree/main/apps/example-nextjs-tailwind)',
+              '[apps/example-nextjs-tailwind](https://github.com/meta/astryx/tree/main/apps/example-nextjs-tailwind)',
             ],
             [
               'Vite + Tailwind',
               'Vite + Tailwind bridge',
-              '[apps/example-vite-tailwind](https://github.com/facebook/astryx/tree/main/apps/example-vite-tailwind)',
+              '[apps/example-vite-tailwind](https://github.com/meta/astryx/tree/main/apps/example-vite-tailwind)',
             ],
           ],
         },
@@ -216,7 +236,7 @@ const overrides = stylex.create({
           type: 'code',
           lang: 'bash',
           label: 'Clone and run an example',
-          code: `git clone https://github.com/facebook/astryx.git
+          code: `git clone https://github.com/meta/astryx.git
 cd astryx/apps/example-nextjs
 {@pm install}
 {@pm run dev}`,

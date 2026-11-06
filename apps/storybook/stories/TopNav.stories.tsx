@@ -3,6 +3,7 @@
 import type {Meta, StoryObj} from '@storybook/react';
 import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
+import {NavHeadingMenu, NavHeadingMenuItem} from '@astryxdesign/core/NavMenu';
 import {Button} from '@astryxdesign/core/Button';
 import {
   HomeIcon,
@@ -104,6 +105,29 @@ export const WithLogo: Story = {
         variant="ghost"
         icon={<UserCircleIcon style={{width: 16, height: 16}} />}
         isIconOnly
+      />
+    ),
+  },
+};
+
+/**
+ * A heading with a product menu. A press that slides across the menu's items
+ * acts on the item it lifts on, as every menu does.
+ */
+export const WithHeadingMenu: Story = {
+  args: {
+    label: 'Main navigation',
+    heading: (
+      <TopNavHeading
+        heading="Acme Suite"
+        logo={<NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />}
+        menu={
+          <NavHeadingMenu>
+            <NavHeadingMenuItem label="Analytics" onClick={() => {}} />
+            <NavHeadingMenuItem label="Billing" onClick={() => {}} />
+            <NavHeadingMenuItem label="Settings" onClick={() => {}} />
+          </NavHeadingMenu>
+        }
       />
     ),
   },

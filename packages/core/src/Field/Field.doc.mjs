@@ -120,7 +120,8 @@ export const docs = {
     {
       name: 'labelTooltip',
       type: 'string',
-      description: 'Tooltip text to display in an info icon at the end of the label.',
+      description:
+        'Help text for an info button after the label, named "About {label}". Hover and keyboard focus preview it; a tap, click, Enter, or Space opens it and never focuses or toggles the control.',
     },
     {
       name: 'status',

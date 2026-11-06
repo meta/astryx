@@ -410,11 +410,19 @@ describe('resolveTheme source precedence', () => {
       type: 'module',
       dependencies: {'@astryxdesign/core': '*'},
     });
-    fs.symlinkSync(
-      path.join(process.cwd(), 'node_modules'),
-      path.join(dir, 'node_modules'),
-      'dir',
+    // The ejected theme imports what the stone package declares. So the app
+    // links stone's dependencies, not those of the folder the run starts in.
+    const stoneModules = path.resolve(
+      import.meta.dirname,
+      '../../../../themes/stone/node_modules',
     );
+    // Stone's dev install links the workspace Core, which this case builds with.
+    expect(
+      fs.realpathSync(path.join(stoneModules, '@astryxdesign', 'core')),
+    ).toBe(
+      fs.realpathSync(path.resolve(import.meta.dirname, '../../../../core')),
+    );
+    fs.symlinkSync(stoneModules, path.join(dir, 'node_modules'), 'dir');
     fs.mkdirSync(path.join(dir, 'src'));
     fs.writeFileSync(path.join(dir, 'tsconfig.json'), '{}\n');
 

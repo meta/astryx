@@ -9,9 +9,11 @@
  * so `mod` resolves to "Ctrl" rather than "\u2318" after the layout effect.
  */
 
-import {render, screen} from '@testing-library/react';
+import {render, screen, within} from '@testing-library/react';
+import {renderToString} from 'react-dom/server';
 import {describe, it, expect, afterEach, vi} from 'vitest';
 import {Kbd} from './Kbd';
+import {InternationalizationProvider} from '../i18n';
 
 describe('Kbd', () => {
   const originalPlatform = navigator.platform;
@@ -66,6 +68,51 @@ describe('Kbd', () => {
   it('maps special keys', () => {
     render(<Kbd keys="enter" />);
     expect(screen.getByText('\u21B5')).toBeInTheDocument(); // \u21B5
+  });
+
+  it.each([
+    {key: 'backspace', glyph: '\u232B', label: 'Backspace'},
+    {key: 'tab', glyph: '\u21E5', label: 'Tab'},
+    {key: 'up', glyph: '\u2191', label: 'Up arrow'},
+    {key: 'down', glyph: '\u2193', label: 'Down arrow'},
+    {key: 'left', glyph: '\u2190', label: 'Left arrow'},
+    {key: 'right', glyph: '\u2192', label: 'Right arrow'},
+  ])('shows the $key symbol and speaks its name', ({key, glyph, label}) => {
+    render(<Kbd keys={key} />);
+    expect(screen.getByText(glyph)).toBeInTheDocument();
+    expect(screen.getByRole('img')).toHaveAccessibleName(label);
+  });
+
+  it('renders Ctrl and the Control name on the server, even on a Mac', () => {
+    Object.defineProperty(navigator, 'platform', {
+      value: 'MacIntel',
+      configurable: true,
+    });
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(<Kbd keys="mod+k" />);
+    document.body.appendChild(container);
+    try {
+      expect(within(container).getByText('Ctrl')).toBeInTheDocument();
+      expect(within(container).queryByText('\u2318')).not.toBeInTheDocument();
+      expect(within(container).getByRole('img')).toHaveAccessibleName(
+        'Control + K',
+      );
+    } finally {
+      container.remove();
+    }
+  });
+
+  it('puts the kbd theme target on the shortcut only, not on a key badge', () => {
+    render(<Kbd keys="mod+shift+k" />);
+    const shortcut = screen.getByRole('img');
+    expect(shortcut).toHaveClass('astryx-kbd');
+    const badges = Array.from(shortcut.querySelectorAll('kbd'));
+    expect(badges).toHaveLength(3);
+    badges.forEach(badge =>
+      expect(
+        Array.from(badge.classList).filter(name => name.startsWith('astryx-')),
+      ).toEqual([]),
+    );
   });
 
   it('renders escape as text', () => {
@@ -184,6 +231,100 @@ describe('Kbd', () => {
     // ...without disturbing the computed accessibility contract.
     expect(el).toHaveAttribute('role', 'img');
     expect(el).toHaveAttribute('aria-label', 'Control + K');
+  });
+
+  it.each([
+    {platform: 'Linux', key: 'control', expectedGlyph: 'Ctrl'},
+    {platform: 'MacIntel', key: 'command', expectedGlyph: '⌘'},
+  ])(
+    'localizes modifier labels on $platform without changing the glyph',
+    ({platform, key, expectedGlyph}) => {
+      Object.defineProperty(navigator, 'platform', {
+        value: platform,
+        configurable: true,
+      });
+      const overrides = {
+        fr: {
+          [`@astryx.kbd.key.${key}`]: 'Modificateur',
+          '@astryx.kbd.key.shift': 'Majuscule',
+        },
+      };
+      const {rerender} = render(
+        <InternationalizationProvider locale="fr" overrides={overrides}>
+          <Kbd keys="mod+shift+k" />
+        </InternationalizationProvider>,
+      );
+      expect(screen.getByRole('img')).toHaveAccessibleName(
+        'Modificateur + Majuscule + K',
+      );
+      expect(screen.getByText(expectedGlyph)).toBeInTheDocument();
+      expect(screen.getByText('⇧')).toBeInTheDocument();
+      rerender(
+        <InternationalizationProvider locale="en" overrides={overrides}>
+          <Kbd keys="mod+shift+k" />
+        </InternationalizationProvider>,
+      );
+      expect(screen.getByRole('img')).toHaveAccessibleName(
+        `${key === 'command' ? 'Command' : 'Control'} + Shift + K`,
+      );
+    },
+  );
+
+  it.each([
+    'ctrl',
+    'alt',
+    'shift',
+    'enter',
+    'backspace',
+    'escape',
+    'tab',
+    'up',
+    'down',
+    'left',
+    'right',
+    'plus',
+    'esc',
+    'return',
+  ])('uses a catalog entry for the %s spoken key', key => {
+    const canonical =
+      key === 'ctrl'
+        ? 'control'
+        : key === 'esc'
+          ? 'escape'
+          : key === 'return'
+            ? 'enter'
+            : key;
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{fr: {[`@astryx.kbd.key.${canonical}`]: 'Touche traduite'}}}>
+        <Kbd keys={key} />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('img')).toHaveAccessibleName('Touche traduite');
+  });
+
+  it('localizes visible key text and the spoken shortcut combination', () => {
+    render(
+      <InternationalizationProvider
+        locale="de"
+        overrides={{
+          de: {
+            '@astryx.kbd.key.controlShort': 'Strg',
+            '@astryx.kbd.key.escapeShort': 'Abbr',
+            '@astryx.kbd.key.control': 'Steuerung',
+            '@astryx.kbd.key.escape': 'Abbrechen',
+            '@astryx.kbd.shortcut': '{key} mit {shortcut}',
+          },
+        }}>
+        <Kbd keys="mod+esc" />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('Strg')).toBeInTheDocument();
+    expect(screen.getByText('Abbr')).toBeInTheDocument();
+    expect(screen.getByRole('img')).toHaveAccessibleName(
+      'Abbrechen mit Steuerung',
+    );
   });
 
   it('computed role and aria-label win over consumer-passed overrides', () => {

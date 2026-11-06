@@ -3,13 +3,17 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {expect, userEvent, waitFor, within} from 'storybook/test';
-import {DateInput} from '@astryxdesign/core/DateInput';
+import {DateInput, type DateInputProps} from '@astryxdesign/core/DateInput';
 import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {Text} from '@astryxdesign/core/Text';
 import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
+import {
+  type CalendarSystem,
+  InternationalizationProvider,
+} from '@astryxdesign/core/i18n';
 
 const meta: Meta<typeof DateInput> = {
   title: 'Core/DateInput',
@@ -158,6 +162,34 @@ export const WithValue: Story = {
   },
 };
 
+/**
+ * A day-first locale: typed numeric dates read day, then month. The line
+ * under the field shows each value the field reports.
+ */
+export const DayFirstLocale: Story = {
+  tags: ['!autodocs'],
+  render: args => {
+    const [value, setValue] = useState<ISODateString | undefined>(undefined);
+    const [reported, setReported] = useState<string[]>([]);
+    return (
+      <InternationalizationProvider locale="en-GB">
+        <DateInput
+          {...args}
+          value={value}
+          onChange={next => {
+            setValue(next);
+            setReported(previous => [...previous, String(next)]);
+          }}
+        />
+        <Text data-testid="reported">{reported.join(', ')}</Text>
+      </InternationalizationProvider>
+    );
+  },
+  args: {
+    label: 'Start date',
+  },
+};
+
 export const MondayFirstWeek: Story = {
   name: 'Week starts on Monday',
   render: args => {
@@ -221,6 +253,207 @@ export const Formats: Story = {
       </div>
     );
   },
+};
+
+const CALENDAR_FIELDS: ReadonlyArray<{
+  locale: string;
+  calendar: CalendarSystem;
+  label: string;
+  dir: 'ltr' | 'rtl';
+  min?: ISODateString;
+  max?: ISODateString;
+}> = [
+  {locale: 'fa-IR', calendar: 'persian', label: 'تاریخ شروع', dir: 'rtl'},
+  {locale: 'he', calendar: 'hebrew', label: 'תאריך התחלה', dir: 'rtl'},
+  {locale: 'ja-JP', calendar: 'japanese', label: '開始日', dir: 'ltr'},
+  {
+    locale: 'th-TH',
+    calendar: 'buddhist',
+    label: 'วันที่เริ่มต้น',
+    dir: 'ltr',
+    min: '2020-01-01' as ISODateString,
+    max: '2030-12-31' as ISODateString,
+  },
+  {
+    locale: 'en',
+    calendar: 'hebrew',
+    label: 'Start date (Hebrew calendar)',
+    dir: 'ltr',
+  },
+];
+
+function CalendarField({
+  locale,
+  calendar,
+  label,
+  dir,
+  min,
+  max,
+}: (typeof CALENDAR_FIELDS)[number]) {
+  const [value, setValue] = useState<ISODateString | undefined>(
+    '2026-11-02' as ISODateString,
+  );
+  return (
+    <InternationalizationProvider locale={locale}>
+      <div
+        dir={dir}
+        lang={locale}
+        data-calendar-field={`${locale}-${calendar}`}
+        style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+        <DateInput
+          label={label}
+          calendar={calendar}
+          value={value}
+          onChange={setValue}
+          min={min}
+          max={max}
+          width={320}
+        />
+        <Text type="supporting" color="secondary">
+          <code data-value>{`value: ${value ?? '—'}`}</code>
+        </Text>
+      </div>
+    </InternationalizationProvider>
+  );
+}
+
+/**
+ * `calendar` sets the calendar the field reads and writes typed dates in.
+ * `value` and `onChange` stay Gregorian ISO dates. Type in the locale's
+ * digits or Latin digits; the field reports a date only when it is complete,
+ * and names a date the calendar does not have. The Buddhist field sets `min`
+ * and `max`, so a Gregorian year typed by mistake is caught. Calendars other
+ * than Gregorian, Buddhist, Minguo, and Japanese need `Temporal`.
+ */
+export const CalendarSystems: Story = {
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+      {CALENDAR_FIELDS.map(field => (
+        <CalendarField key={`${field.locale}-${field.calendar}`} {...field} />
+      ))}
+    </div>
+  ),
+};
+
+const PRESENTATION_FIELDS: ReadonlyArray<{
+  id: string;
+  locale: string;
+  calendar: CalendarSystem;
+  label: string;
+  dir: 'ltr' | 'rtl';
+  value: ISODateString;
+  min?: ISODateString;
+  max?: ISODateString;
+  presentation?: DateInputProps['presentation'];
+}> = [
+  {
+    id: 'fa-persian',
+    locale: 'fa-IR',
+    calendar: 'persian',
+    label: 'تاریخ شروع',
+    dir: 'rtl',
+    value: '2026-11-02' as ISODateString,
+  },
+  {
+    id: 'en-persian-native',
+    locale: 'en',
+    calendar: 'persian',
+    label: 'Start date (Persian, presentation="native")',
+    dir: 'ltr',
+    value: '2026-11-02' as ISODateString,
+    presentation: 'native',
+  },
+  {
+    id: 'en-hebrew-leap',
+    locale: 'en',
+    calendar: 'hebrew',
+    label: 'Start date (Hebrew, a leap year)',
+    dir: 'ltr',
+    value: '2024-02-15' as ISODateString,
+    min: '2020-01-01' as ISODateString,
+    max: '2030-12-31' as ISODateString,
+  },
+  {
+    id: 'ja-japanese',
+    locale: 'ja-JP',
+    calendar: 'japanese',
+    label: '開始日',
+    dir: 'ltr',
+    value: '2026-11-02' as ISODateString,
+    min: '2015-01-01' as ISODateString,
+    max: '2030-12-31' as ISODateString,
+  },
+  {
+    id: 'en-ethiopic-pagume',
+    locale: 'en',
+    calendar: 'ethiopic',
+    label: 'Start date (Ethiopic, the thirteenth month)',
+    dir: 'ltr',
+    value: '2026-09-08' as ISODateString,
+  },
+  {
+    id: 'en-gregory',
+    locale: 'en',
+    calendar: 'gregory',
+    label: 'Start date (Gregorian)',
+    dir: 'ltr',
+    value: '2026-11-02' as ISODateString,
+  },
+];
+
+function PresentationField({
+  id,
+  locale,
+  calendar,
+  label,
+  dir,
+  value: initialValue,
+  min,
+  max,
+  presentation,
+}: (typeof PRESENTATION_FIELDS)[number]) {
+  const [value, setValue] = useState<ISODateString | undefined>(initialValue);
+  return (
+    <InternationalizationProvider locale={locale}>
+      <div
+        dir={dir}
+        lang={locale}
+        data-calendar-field={id}
+        style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+        <DateInput
+          label={label}
+          calendar={calendar}
+          value={value}
+          onChange={setValue}
+          min={min}
+          max={max}
+          presentation={presentation}
+          width={320}
+        />
+        <Text type="supporting" color="secondary">
+          <code data-value>{`value: ${value ?? '—'}`}</code>
+        </Text>
+      </div>
+    </InternationalizationProvider>
+  );
+}
+
+/**
+ * In a calendar other than Gregorian, the field never shows the native date
+ * control, which is Gregorian: the default and `presentation="native"` open
+ * the calendar popover on a mouse and the bottom sheet on a touch screen. The
+ * bottom sheet shows months of the calendar, its month wheel lists the months
+ * of the calendar year, including leap months, and its year wheel names the
+ * era. Values stay Gregorian ISO dates.
+ */
+export const CalendarSystemPresentations: Story = {
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+      {PRESENTATION_FIELDS.map(field => (
+        <PresentationField key={field.id} {...field} />
+      ))}
+    </div>
+  ),
 };
 
 export const NativePickerModes: Story = {
@@ -831,4 +1064,40 @@ export const StylingParts: Story = {
       </div>
     </div>
   ),
+};
+
+/**
+ * The bottom sheet with two centuries of years: the year wheel has 200 rows.
+ * Under a finger, opening the month and year wheels costs about the same as
+ * for two years: each year is drawn once, as a flat row.
+ */
+export const BottomSheetWideRange: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISODateString | undefined>(
+      '2026-03-15' as ISODateString,
+    );
+    return <DateInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Date of birth',
+    presentation: 'bottom-sheet',
+    min: '1900-01-01' as ISODateString,
+    max: '2099-12-31' as ISODateString,
+  },
+};
+
+/** The same sheet with two years: the year wheel has 2 rows. */
+export const BottomSheetNarrowRange: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISODateString | undefined>(
+      '2026-03-15' as ISODateString,
+    );
+    return <DateInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Date of birth',
+    presentation: 'bottom-sheet',
+    min: '2026-01-01' as ISODateString,
+    max: '2027-12-31' as ISODateString,
+  },
 };
