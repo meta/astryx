@@ -70,7 +70,7 @@ export default function Page() {
 `;
 
 beforeAll(async () => {
-  dir = makeLinkedFixture('astryx-render-test-', ['@astryxdesign', '@stylexjs', 'react', 'react-dom']);
+  dir = makeLinkedFixture('astryx-render-test-', ['@astryxdesign', '@stylexjs', 'react', 'react-dom', 'recharts']);
   put('dot.png', PNG);
   put('page.tsx', PAGE);
   put('plain.html', '<!doctype html><html><body><h1>Hello</h1><p class="lead">Hi</p></body></html>');
@@ -1279,5 +1279,152 @@ console.log(JSON.stringify({inside, outside}));
     });
     expect(page.fromSet).toEqual([]);
     expect(page.stylesheets).toContain('@astryxdesign/core/astryx.css');
+  }, 60_000);
+});
+
+describe('render(): charts', () => {
+  const DATA = "const data = [{d: 'a', v: 1}, {d: 'b', v: 3}, {d: 'c', v: 2}];";
+
+  it('draws a chart sized by its container and a chart of fixed size, and lets the first fit the width', async () => {
+    put(
+      'charts.tsx',
+      `import {ResponsiveContainer, LineChart, Line, XAxis, BarChart, Bar} from 'recharts';
+${DATA}
+export default function Page() {
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={200}>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" /></LineChart>
+      </ResponsiveContainer>
+      <BarChart width={300} height={120} data={data}><Bar dataKey="v" /></BarChart>
+    </div>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts.tsx', {cwd: dir}));
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('chart-size');
+    const html = fs.readFileSync(path.join(dir, 'charts.html'), 'utf8');
+    expect(html.match(/<svg[^>]*class="recharts-surface"/g)).toHaveLength(2);
+    expect(html).toContain('recharts-line-curve');
+    expect(html).toContain('recharts-bar-rectangle');
+    // A container 200 pixels high starts two and a half times as wide.
+    expect(html).toContain('viewBox="0 0 500 200"');
+    expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{width:100%!important');
+    expect(html).not.toContain('<astryx-chart');
+  }, 60_000);
+
+  it('keeps room for a legend where its props place it, in a container chart, a fixed chart and at the side', async () => {
+    put(
+      'charts-legend.tsx',
+      `import {ResponsiveContainer, LineChart, Line, XAxis, Legend} from 'recharts';
+${DATA}
+export default function Page() {
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={200}>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" /><Legend /></LineChart>
+      </ResponsiveContainer>
+      <LineChart width={400} height={200} data={data}><XAxis dataKey="d" /><Line dataKey="v" /><Legend /></LineChart>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data}><XAxis dataKey="d" /><Line dataKey="v" name="Visits" /><Legend layout="vertical" align="right" verticalAlign="middle" /></LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-legend.tsx', {cwd: dir}));
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).not.toContain('chart-size');
+    const html = fs.readFileSync(path.join(dir, 'charts-legend.html'), 'utf8');
+    const axes = [...html.matchAll(/<line\b[^>]*class="recharts-cartesian-axis-line"[^>]*>/g)].map(m => ({
+      y: Number(/\by1="([\d.]+)"/.exec(m[0])?.[1]),
+      x2: Number(/\bx2="([\d.]+)"/.exec(m[0])?.[1]),
+    }));
+    // A bottom legend of one row is kept 24 px of room above the chart's
+    // bottom edge, so the x-axis sits above it: 200 - 5 - 24 - 30 = 141.
+    expect(axes[0].y).toBe(141);
+    expect(axes[1].y).toBe(141);
+    // A legend at the side keeps room on the right: the plot ends before it.
+    expect(axes[2].x2).toBeLessThan(550 - 40);
+    const legends = [...html.matchAll(/<div\b[^>]*class="recharts-legend-wrapper"[^>]*>/g)].map(m => m[0]);
+    expect(legends).toHaveLength(3);
+    // In a container chart the legend is placed in percent of the starting
+    // size, so it keeps its place as the drawing scales; a fixed one in pixels.
+    expect(legends[0]).toMatch(/bottom:[\d.]+%/);
+    expect(legends[1]).toMatch(/bottom:5px/);
+    expect(legends[2]).toMatch(/right:[\d.]+%/);
+    expect(legends[2]).toMatch(/top:[\d.]+%/);
+    expect(html).toMatch(/aspect-ratio:500 \/ 200/);
+    // Only the chart's own picture scales; a legend's icons keep their size.
+    expect(html).toContain('.recharts-responsive-container>.recharts-wrapper>svg.recharts-surface{');
+    expect(html).not.toContain('.recharts-responsive-container .recharts-surface');
+  }, 60_000);
+
+  it("draws a chart's parts in the React context the page gives them", async () => {
+    put(
+      'charts-context.tsx',
+      `import {createContext, useContext} from 'react';
+import {BarChart, Bar, XAxis} from 'recharts';
+${DATA}
+const Units = createContext('items');
+function Tick(props: any) {
+  const units = useContext(Units);
+  return <text x={props.x} y={props.y + 12}>{props.payload.value} {units}</text>;
+}
+export default function Page() {
+  return (
+    <Units.Provider value="km">
+      <BarChart width={300} height={150} data={data}><XAxis dataKey="d" tick={<Tick />} /><Bar dataKey="v" /></BarChart>
+    </Units.Provider>
+  );
+}
+`,
+    );
+    await render('charts-context.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'charts-context.html'), 'utf8');
+    expect(html).toContain('a km');
+    expect(html).not.toContain('a items');
+  }, 60_000);
+
+  it('names a chart of fixed size it cannot draw', async () => {
+    put(
+      'charts-ns-fixed.tsx',
+      `import * as R from 'recharts';
+${DATA}
+export default function Page() {
+  return <R.BarChart width={300} height={120} data={data}><R.Bar dataKey="v" /></R.BarChart>;
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-ns-fixed.tsx', {cwd: dir}));
+    const warning = result.data.warnings.find((/** @type {any} */ w) => w.code === 'chart-size');
+    expect(warning?.message).toContain("from recharts by name");
+    expect(warning?.message).not.toContain('fixed width');
+  }, 60_000);
+
+  it('warns about a chart it cannot draw', async () => {
+    put(
+      'charts-ns.tsx',
+      `import * as R from 'recharts';
+${DATA}
+export default function Page() {
+  return (
+    <R.ResponsiveContainer width="100%" height={200}>
+      <R.LineChart data={data}><R.Line dataKey="v" /></R.LineChart>
+    </R.ResponsiveContainer>
+  );
+}
+`,
+    );
+    const result = /** @type {any} */ (await render('charts-ns.tsx', {cwd: dir}));
+    expect(result.data.warnings.map((/** @type {any} */ w) => w.code)).toContain('chart-size');
+  }, 60_000);
+
+  it('gives back a page with charts byte for byte', async () => {
+    const source = fs.readFileSync(path.join(dir, 'charts.tsx'), 'utf8');
+    const back = /** @type {any} */ (await render('charts.html', {cwd: dir, reverse: true, out: 'charts-back/charts.tsx'}));
+    expect(back.data.exact).toBe(true);
+    expect(fs.readFileSync(path.join(dir, 'charts-back', 'charts.tsx'), 'utf8')).toBe(source);
   }, 60_000);
 });
