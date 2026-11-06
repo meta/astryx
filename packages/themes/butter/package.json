@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/theme-butter",
-  "version": "0.7.10",
+  "version": "0.7.11",
   "displayName": "Butter Theme",
   "private": false,
   "description": "Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable.",
@@ -75,11 +75,11 @@
     "lucide-react": "^1.18.0"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "0.7.10",
+    "@astryxdesign/core": "0.7.11",
     "react": ">=19"
   },
   "devDependencies": {
-    "@astryxdesign/cli": "0.7.10"
+    "@astryxdesign/cli": "0.7.11"
   },
   "module": "./dist/source.mjs"
 }
