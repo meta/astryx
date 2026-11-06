@@ -208,16 +208,7 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     const offset = nativePosition();
     const rowTravel = Math.max(0, element.scrollWidth - element.clientWidth);
     const rowSign = isRtl() ? -1 : 1;
-    // A flick moves one view at most: the items within a view of the
-    // viewport get their own layers, and no others.
-    const box = element.getBoundingClientRect();
     const items = children();
-    const layered = items.filter(child => {
-      const rect = child.getBoundingClientRect();
-      return (
-        rect.right >= box.left - box.width && rect.left <= box.right + box.width
-      );
-    });
     heldOffset = offset;
     heldTravel = rowTravel;
     heldSign = rowSign;
@@ -226,9 +217,8 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     // A snap type would snap the row again as its children move.
     ownSnapType = element.style.getPropertyValue('scroll-snap-type');
     element.style.setProperty('scroll-snap-type', 'none');
-    for (const child of layered) {
-      child.style.setProperty('will-change', 'transform');
-    }
+    // Each child's animator gives it a layer while it moves and takes the layer
+    // away after the motion. So the takeover writes no will-change itself.
     place(heldOffset);
     follow();
   }
@@ -243,7 +233,6 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
       animator.stop(['x']);
       animator.set({x: 0});
       child.style.removeProperty('translate');
-      child.style.removeProperty('will-change');
     }
     isMoving = false;
     if (ownSnapType === '') {
