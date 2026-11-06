@@ -5,9 +5,9 @@
  * @input The built List "Compact" story (dividers between pressable rows) in
  *   light and dark, real mouse and touch input, and the interaction harness
  * @output Proofs that a highlighted row keeps both of its dividers visible
- *   through its tint: hovered or pressed by a mouse, and pressed by a finger. Each
- *   divider stands out from the tint beside it as it stands out from its row
- *   at rest.
+ *   through its tint. The row is hovered or pressed by a mouse, or pressed
+ *   by a finger under a coarse or a fine primary pointer. Each divider stands
+ *   out from the tint beside it as it stands out from its row at rest.
  * @position Real-engine layer for List's dividers; the touch release is in
  *   ListRowPressPaths.interaction.browser.spec.ts
  */
@@ -224,6 +224,57 @@ test.describe('a highlighted List row keeps both dividers visible through its ti
           'mouse press',
         );
         await page.mouse.up();
+      });
+    });
+
+    // A laptop's touch screen: no touch emulation, so the primary pointer
+    // stays fine, and the touches arrive through CDP.
+    test(`${scheme}: pressed by a finger where the primary pointer is fine`, async ({
+      browser,
+      browserName,
+    }, testInfo) => {
+      test.skip(
+        browserName !== 'chromium',
+        'a touch screen beside a fine primary pointer is emulated through CDP',
+      );
+      await withMouse(browser, testInfo, async page => {
+        await openList(page, scheme);
+        expect(
+          await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+        ).toBe(false);
+        const above = rowOf(page, 'Notifications');
+        const row = rowOf(page, 'Messages');
+        const atRest = await edgesOf(page, above, row);
+        const box = await row.boundingBox();
+        if (box == null) {
+          throw new Error('no row');
+        }
+        const driver = await touchDriver(page);
+        await driver.play(
+          tap(
+            {x: box.x + box.width / 2, y: box.y + box.height / 2},
+            {holdMs: 800},
+          ),
+          {
+            onEvent: async (_step, index) => {
+              if (index !== 0) {
+                return;
+              }
+              await expect
+                .poll(async () =>
+                  row.evaluate(el => el.getAttribute('data-astryx-press')),
+                )
+                .toBe('on');
+              await expectDividersThroughTint(
+                page,
+                above,
+                row,
+                atRest,
+                'finger press, fine pointer',
+              );
+            },
+          },
+        );
       });
     });
 

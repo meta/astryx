@@ -208,11 +208,12 @@ export const rowPressLayerStyles = stylex.create({
     },
   },
   /**
-   * A row of a List with dividers, composed after `cell`. With a mouse, its
-   * own divider is its border, which paints over its tint. The tint also
-   * covers the divider above it, as a shadow. Under a finger, the press layer
-   * covers both dividers, so they fade with it on the release. The tint is
-   * translucent, so a divider under it reads as it does at rest.
+   * A row of a List with dividers, composed after `cell`. Where the primary
+   * pointer is fine, its own divider is its border, which paints over its
+   * tint. The tint also covers the divider above it, as a shadow, under a
+   * mouse or a finger. Under a coarse pointer, the press layer covers both
+   * dividers, so they fade with it on the release. The tint is translucent,
+   * so a divider under it reads as it does at rest.
    */
   overDividers: {
     boxShadow: {
@@ -230,9 +231,17 @@ export const rowPressLayerStyles = stylex.create({
             ':hover': tintAbove(colorVars['--color-overlay-hover']),
             ':active': tintAbove(colorVars['--color-overlay-pressed']),
           },
-          // The press layer paints while the controller paints.
-          [PRESSED_ON]: 'none',
-          [PRESSED_FADING]: 'none',
+          // A press the controller paints. Under a coarse pointer, the press
+          // layer covers the divider above. Elsewhere the strip takes the
+          // row's own press paint, which follows the release's strength.
+          [PRESSED_ON]: {
+            default: tintAbove('var(--_press-paint)'),
+            [COARSE]: 'none',
+          },
+          [PRESSED_FADING]: {
+            default: tintAbove('var(--_press-paint)'),
+            [COARSE]: 'none',
+          },
         },
       },
     },
