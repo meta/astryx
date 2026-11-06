@@ -18,6 +18,7 @@ import {useCallback, useEffect, useMemo, useRef} from 'react';
 import {UIKIT_PAN} from '../motion/uikit/gestures';
 import {shadowHostOf, shadowRootsOutward} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
+import {isElement, isNode} from '../utils/nodeType';
 
 export interface OutsidePressOptions {
   /** The pointer types the watch follows; every type when omitted. */
@@ -233,21 +234,6 @@ export function useOutsidePress(): OutsidePressWatch {
   // Stops the outside-press listeners on unmount.
   useEffect(() => stop, [stop]);
   return useMemo(() => ({start, stop}), [start, stop]);
-}
-
-// Node, Element and ShadowRoot are checked by nodeType, not instanceof: a
-// node from a same-origin iframe or a Picture-in-Picture window belongs to
-// another realm, where instanceof against this window's classes is false.
-function isNode(target: unknown): target is Node {
-  return (
-    typeof target === 'object' &&
-    target !== null &&
-    typeof (target as {nodeType?: unknown}).nodeType === 'number'
-  );
-}
-
-function isElement(node: Node): node is Element {
-  return node.nodeType === 1;
 }
 
 /** Whether `node` is the layer with this id, or inside it across shadow roots. */

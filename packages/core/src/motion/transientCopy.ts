@@ -237,15 +237,16 @@ export function paintedBackground(element: Element): string {
 }
 
 /**
- * Lay `element` over `rect` (viewport coordinates), absolutely, as the last
- * child of `host`, wherever its containing block is: no ancestor's position
- * changes. A copy's scrolled descendants then restore their offsets, and the
+ * Lay `element` over `rect` (viewport coordinates), absolutely, as a child of
+ * `host` (before `beforeNode`, else last), wherever its containing block is:
+ * no ancestor's position changes. A copy's scrolled descendants then restore their offsets, and the
  * CSS animations and transitions its element ran carry on in it.
  */
 export function placeOver(
   element: HTMLElement,
   host: Element,
   rect: DOMRect,
+  beforeNode: Node | null = null,
 ): void {
   Object.assign(element.style, {
     position: 'absolute',
@@ -256,7 +257,7 @@ export function placeOver(
     width: `${rect.width}px`,
     height: `${rect.height}px`,
   });
-  host.appendChild(element);
+  host.insertBefore(element, beforeNode);
   // What it inherited where it was, where the host passes something else.
   const hostStyle = getComputedStyle(host);
   for (const [name, value] of inheritedValues.get(element) ?? []) {

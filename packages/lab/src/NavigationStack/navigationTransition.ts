@@ -4,22 +4,21 @@
  * @file navigationTransition.ts
  * @input The navigation table (navigationMotion.ts) and Core's rubber band
  *   (its internal touch entry)
- * @output Pure math for NavigationStack's push/pop transition: the layers'
- *   values at a progress (`layersAt`) and their velocities for a progress
- *   velocity (`layerVelocities`). It also gives the interactive pop's release
- *   rule (`shouldFinishPop`), progress from a finger's travel
- *   (`progressFromTravel`) and the progress a caught screen resumes from
- *   (`progressFromScreen`).
+ * @output Pure math for NavigationStack's transition: layer values and
+ *   velocities at a progress (`layersAt`, `layerVelocities`). Also the pop's
+ *   release rule (`shouldFinishPop`) and progress from travel or a caught
+ *   screen (`progressFromTravel`, `progressFromScreen`).
  * @position Lab NavigationStack internals; no DOM, no React. The component
  *   hands these numbers to the compositor animator.
  *
- * One number describes a transition: progress `p`, the share of the width
- * the top card has uncovered. `p = 0`: the top card covers the screen (a
- * push has landed). `p = 1`: it has left and the card under it is back (a
- * pop has landed). A push runs p 1 → 0 and a pop runs p 0 → 1. An
- * interactive pop scrubs p with the finger (UIKit: `percentComplete` =
- * translation / width).
- *
+ * SYNC: When modified, update navigationTransition.test.ts.
+ */
+
+import {rubberBand, rubberBandInverse} from '@astryxdesign/core/internal/touch';
+
+import {navigation} from './navigationMotion';
+
+/**
  * The layers, as UIKit moves them on iOS 26.2 (measured):
  * - top card: x = p · W;
  * - card under it: x = parallax · W · (1 − p), so from −0.3 W to 0;
@@ -29,14 +28,7 @@
  *
  * Every layer is linear in p, so one spring run on all of them with
  * velocities scaled the same way keeps them on one trajectory.
- *
- * SYNC: When modified, update navigationTransition.test.ts.
  */
-
-import {rubberBand, rubberBandInverse} from '@astryxdesign/core/internal/touch';
-
-import {navigation} from './navigationMotion';
-
 export interface TransitionLayers {
   /** The top card's translateX, px. */
   readonly topX: number;
@@ -49,9 +41,12 @@ export interface TransitionLayers {
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
 /**
- * The layers at progress `p` for a container `width` px wide. `direction`
- * is the writing direction: under RTL cards enter from the left, so every x
- * flips.
+ * The layers at progress `p` for a container `width` px wide. `p` is the
+ * share of the width the top card has uncovered: 0 when a push has landed,
+ * 1 when a pop has landed. A push runs p 1 → 0 and a pop runs p 0 → 1. An
+ * interactive pop scrubs p with the finger (UIKit's `percentComplete`).
+ * `direction` is the writing direction: under RTL cards enter from the left,
+ * so every x flips.
  */
 export function layersAt(
   p: number,

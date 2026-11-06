@@ -320,7 +320,7 @@ describe('SideNav rail motion (component:SideNav FR6, component:AppShell FR17)',
   it('starts a change made mid-motion from the width the rail shows', async () => {
     render(<Shell />);
     await toggle();
-    // About 150 ms into the collapse, on one of the glide's keyframes, the
+    // About 30 ms into the collapse, on one of the glide's keyframes, the
     // clip shows part of the old rail. The column shows past its place by its
     // glide's offset then.
     const main = screen.getByRole('main');
@@ -328,7 +328,7 @@ describe('SideNav rail motion (component:SideNav FR6, component:AppShell FR17)',
       entry => entry.element !== main && entry.element.contains(main),
     );
     const step = Number(slide.options.duration) / (slide.keyframes.length - 1);
-    const at = Math.round(150 / step) * step;
+    const at = Math.round(30 / step) * step;
     const shift = translateAt(slide, at);
     Object.defineProperty(document, 'timeline', {
       configurable: true,
@@ -367,10 +367,10 @@ describe('SideNav rail motion (component:SideNav FR6, component:AppShell FR17)',
   it('continues what the rail and the page show when a change reverses a running one', async () => {
     render(<Shell />);
     await toggle();
-    // 40 ms into the collapse: the old labels still show, fading.
+    // 20 ms into the collapse: the old labels still show, fading.
     Object.defineProperty(document, 'timeline', {
       configurable: true,
-      value: {currentTime: 1040},
+      value: {currentTime: 1020},
     });
     recorded = [];
     await toggle();
@@ -403,11 +403,11 @@ describe('SideNav rail motion (component:SideNav FR6, component:AppShell FR17)',
     await toggle();
     settle();
     await toggle();
-    // 40 ms into the expand, collapse again.
+    // 10 ms into the expand, collapse again.
     const at = (document.timeline as {currentTime: number}).currentTime;
     Object.defineProperty(document, 'timeline', {
       configurable: true,
-      value: {currentTime: at + 40},
+      value: {currentTime: at + 10},
     });
     recorded = [];
     await toggle();
@@ -415,8 +415,12 @@ describe('SideNav rail motion (component:SideNav FR6, component:AppShell FR17)',
       element => element.querySelector('nav') != null,
     );
     expect(railCopies).toHaveLength(1);
-    const panel = document.querySelector<HTMLElement>('.astryx-layout-panel');
-    expect(panel?.style.zIndex).toBe('2');
+    // The real panel: its copy, placed just before it, carries the same class.
+    const panel = document.querySelector<HTMLElement>(
+      '.astryx-layout-panel:not([inert])',
+    );
+    expect(panel?.style.zIndex).toBe('');
+    expect(railCopies[0].nextElementSibling).toBe(panel);
     // Its icons start at the opacity the collapsed rail showed, mostly seen.
     const icons = recorded.find(
       entry => entry.element === panel && 'opacity' in entry.keyframes[0],
