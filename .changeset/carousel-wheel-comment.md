@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[chore] Internal: a source comment in `Carousel` now names what the wheel listener reads while a flick holds the row: the row's stops and its direction. Apps see no change.
+[chore] Internal: a source comment in `Carousel` now says that the wheel listener reads no style or layout unless a flick holds the row. Apps see no change.
 
 @vjeux

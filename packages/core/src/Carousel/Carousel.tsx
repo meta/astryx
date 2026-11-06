@@ -463,7 +463,7 @@ export function Carousel({
   // horizontal scroll. A trackpad gives deltaX, so the browser scrolls the row.
   // A row that fits gets no listener, so a page scroll over it does not wait
   // for script. The listener reads no style or layout unless a flick holds
-  // the row. A held row's move reads its stops and direction.
+  // the row.
   useAttachment(
     scrollElRef,
     el => {
