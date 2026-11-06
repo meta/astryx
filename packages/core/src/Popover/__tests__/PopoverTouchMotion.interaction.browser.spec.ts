@@ -218,14 +218,21 @@ async function scaleAnimationOf(locator: Locator) {
   }
 }
 
+/** A scale animation's `animate()` call and its own start, epoch ms. */
+interface ScaleStart {
+  call: number;
+  start: number;
+}
+
 /**
- * Logs when each `scale` animation starts, epoch ms, from a wrapper on
- * `Element.animate`. It runs no frame loop, so it reads nothing between
- * frames.
+ * Logs each `scale` animation's `animate()` call and its own start time, epoch
+ * ms, from a wrapper on `Element.animate`. A motion created in a frame
+ * callback can start at that frame's time, before the call. It runs no frame
+ * loop, so it reads nothing between frames.
  */
 async function logScaleStarts(page: Page) {
   await page.addInitScript(() => {
-    const starts: number[] = [];
+    const starts: ScaleStart[] = [];
     Object.defineProperty(window, '__popoverScaleStarts', {value: starts});
     const animate = Element.prototype.animate;
     Element.prototype.animate = function (keyframes, options) {
@@ -234,7 +241,20 @@ async function logScaleStarts(page: Page) {
         Array.isArray(keyframes) &&
         keyframes.some(frame => frame != null && 'scale' in frame)
       ) {
-        starts.push(performance.timeOrigin + performance.now());
+        const call = performance.timeOrigin + performance.now();
+        void animation.ready.then(
+          () => {
+            const {startTime} = animation;
+            starts.push({
+              call,
+              start:
+                startTime == null
+                  ? call
+                  : performance.timeOrigin + Number(startTime),
+            });
+          },
+          () => {},
+        );
       }
       return animation;
     };
@@ -261,9 +281,9 @@ async function pageNow(page: Page): Promise<number> {
 }
 
 /**
- * Waits in the page until `ms` after the first logged scale start at or after
- * `after`, and returns that start. It reads only the log, never a style, and
- * after the start it sets one timer.
+ * Waits in the page until `ms` after the start of the first scale animation
+ * called at or after `after`, and returns that start. It reads only the log,
+ * never a style, and after the start it sets one timer.
  */
 async function waitPastScaleStart(
   page: Page,
@@ -273,12 +293,14 @@ async function waitPastScaleStart(
   return page.evaluate(
     async ({after, ms}) =>
       new Promise<number>((resolve, reject) => {
-        const starts = (window as unknown as {__popoverScaleStarts: number[]})
-          .__popoverScaleStarts;
+        const starts = (
+          window as unknown as {__popoverScaleStarts: ScaleStart[]}
+        ).__popoverScaleStarts;
         const deadline = performance.now() + 5_000;
         const look = () => {
-          const start = starts.find(logged => logged >= after);
-          if (start != null) {
+          const logged = starts.find(entry => entry.call >= after);
+          if (logged != null) {
+            const {start} = logged;
             const now = performance.timeOrigin + performance.now();
             setTimeout(() => resolve(start), Math.max(0, start + ms - now));
           } else if (performance.now() > deadline) {
@@ -672,6 +694,129 @@ test('the presentation and the dismissal do no Layout or Paint per frame', async
       `work in the frame drawn ${Math.round(write - loopFrom)} ms in`,
     ).toBe(true);
   }
+});
+
+/**
+ * The layouts inside the task that opens the story's popover from the
+ * keyboard, and that task's length. It runs from the key's dispatch to the end
+ * of the click the key activates. A listener on the document runs after
+ * React's, on its root, has opened the popover. A layout inside it is one its
+ * script forced by reading geometry the page had not laid out yet.
+ */
+async function openingTaskLayouts(page: Page) {
+  const trigger = page.getByRole('button', {name: 'Settings'});
+  await trigger.focus();
+  await page.evaluate(() => {
+    const at = () => performance.timeOrigin + performance.now();
+    const marks = {from: 0, to: 0};
+    (window as unknown as {__opening: typeof marks}).__opening = marks;
+    document.addEventListener(
+      'keydown',
+      () => {
+        marks.from = at();
+      },
+      {capture: true, once: true},
+    );
+    document.addEventListener(
+      'click',
+      () => {
+        marks.to = at();
+      },
+      {once: true},
+    );
+  });
+  const trace = await traceRendering(page, async () => {
+    await page.keyboard.press('Enter');
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await page.waitForTimeout(100);
+  });
+  const opening = await page.evaluate(
+    () =>
+      (window as unknown as {__opening: {from: number; to: number}}).__opening,
+  );
+  expect(opening.to).toBeGreaterThan(opening.from);
+  return {
+    layouts: countBetween(trace, opening.from, opening.to).Layout ?? 0,
+    openingMs: Math.round(opening.to - opening.from),
+    events: trace.events
+      .filter(e => e.t >= opening.from && e.t <= opening.to)
+      .map(e => `${e.name}@${Math.round(e.t - opening.from)}`),
+  };
+}
+
+test('the task that opens it lays out no more than a mouse opening does: the presentation reads its geometry in the next frame', async ({
+  page,
+  browser,
+  browserName,
+}) => {
+  test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
+  await openDefault(page);
+  const touch = await openingTaskLayouts(page);
+  // The same story under a mouse, which presents nothing of its own. What
+  // the opening lays out there, the popover's own measurements, is the
+  // opening's. The touch presentation adds nothing to it.
+  const context = await browser.newContext({
+    hasTouch: false,
+    isMobile: false,
+    viewport: page.viewportSize(),
+  });
+  try {
+    const mousePage = await context.newPage();
+    await openStory(mousePage, storybook(), 'core-popover--default');
+    expect(
+      await mousePage.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(false);
+    const mouse = await openingTaskLayouts(mousePage);
+    expect(touch.layouts, JSON.stringify({touch, mouse})).toBeLessThanOrEqual(
+      mouse.layouts,
+    );
+  } finally {
+    await context.close();
+  }
+});
+
+test('a style read after the opening tap finds no CSS entrance running on the layer', async ({
+  page,
+}) => {
+  const story = await openDefault(page);
+  // A frame callback asked for at the tap's press runs in the first frame
+  // after the popover opens, ahead of the presentation's own callback.
+  // There it reads what runs on the layer, as any style read after the
+  // opening task would.
+  await page.evaluate(() => {
+    const probe = window as unknown as {__entrance?: Promise<string[]>};
+    probe.__entrance = new Promise(resolve => {
+      const look = () => {
+        const layer = document.querySelector('[popover]:has([role="dialog"])');
+        if (layer == null || !layer.matches(':popover-open')) {
+          requestAnimationFrame(look);
+          return;
+        }
+        resolve(
+          layer
+            .getAnimations()
+            .filter(
+              animation =>
+                animation instanceof CSSAnimation &&
+                animation.playState === 'running',
+            )
+            .map(animation => (animation as CSSAnimation).animationName),
+        );
+      };
+      addEventListener('pointerdown', () => requestAnimationFrame(look), {
+        capture: true,
+        once: true,
+      });
+    });
+  });
+  await openWithTap(story);
+  const running = await page.evaluate(
+    async () =>
+      (window as unknown as {__entrance: Promise<string[]>}).__entrance,
+  );
+  expect(running).toEqual([]);
+  // The growth still plays.
+  await waitForAnimation(story.layer);
 });
 
 test('Reduce Motion: the popover cross-fades in at its size and out where it stands, in 200 ms or less with no spring', async ({
