@@ -56,6 +56,15 @@ async function openTimestampHoverCard(): Promise<HTMLElement> {
   return screen.getByRole('dialog', {hidden: true});
 }
 
+/** The long name of a zone at an instant, as Intl spells it in en-US. */
+function longZoneName(timeZone?: string, at: Date = new Date()): string {
+  return (
+    new Intl.DateTimeFormat('en-US', {timeZoneName: 'long', timeZone})
+      .formatToParts(at)
+      .find(part => part.type === 'timeZoneName')?.value ?? ''
+  );
+}
+
 describe('Timestamp', () => {
   // The hover card is loaded lazily (React.lazy + Suspense), so its chunk
   // resolves asynchronously the first time a card renders. Warm the module
@@ -958,7 +967,12 @@ describe('Timestamp', () => {
       // aria-label spells the timezone out in full (WCAG 3.1.4), so the two
       // strings intentionally differ — compare the row against an
       // independently formatted short-form string.
-      expect(card.querySelectorAll('dd')).toHaveLength(1);
+      // Without labels the card is still a description list: the value is
+      // named by its long time-zone name, which is visually hidden.
+      expect(card.querySelectorAll('dl > div > dd')).toHaveLength(1);
+      expect(card.querySelector('dl > div > dt')?.textContent).toBe(
+        longZoneName(),
+      );
       expect(card.querySelectorAll('button')).toHaveLength(1);
 
       const normalize = (s: string) => s.replace(/\s+/g, ' ');
@@ -980,7 +994,7 @@ describe('Timestamp', () => {
     it("copies the default absolute row's value", async () => {
       render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
       const card = await openTimestampHoverCard();
-      const rowValue = card.querySelector('dd')?.textContent ?? '';
+      const rowValue = card.querySelector('dd > span')?.textContent ?? '';
       expect(rowValue).toBeTruthy();
       fireEvent.click(card.querySelector('button')!);
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(rowValue);
@@ -1421,10 +1435,37 @@ describe('Timestamp', () => {
       );
       const card = await openTimestampHoverCard();
       // An unlabeled entry still emits its label cell, so the grid stays
-      // aligned and the <dl> stays valid markup.
+      // aligned; its zone's long name, visually hidden, names its value.
       expect(card.querySelectorAll('dt')).toHaveLength(3);
       expect(card.querySelectorAll('dd')).toHaveLength(3);
-      expect(card.querySelectorAll('dt')[1].textContent).toBe('');
+      expect(card.querySelectorAll('dt')[1].textContent).toBe(
+        longZoneName('Asia/Tokyo', new Date(VALUE)),
+      );
+    });
+
+    it('keeps a copyable labelled card a valid description list', async () => {
+      render(
+        <Timestamp
+          value={VALUE}
+          format="relative"
+          tooltipEntries={[
+            {timezoneID: 'UTC', label: 'UTC', isCopyable: true},
+            {timezoneID: 'Asia/Tokyo', label: 'Tokyo'},
+          ]}
+        />,
+      );
+      const card = await openTimestampHoverCard();
+      const list = card.querySelector('dl')!;
+      // Each group holds only its dt and dd (WCAG 2.2 1.3.1); the copy
+      // button sits inside the value.
+      for (const group of Array.from(list.children)) {
+        expect(group.tagName).toBe('DIV');
+        expect(Array.from(group.children, el => el.tagName)).toEqual([
+          'DT',
+          'DD',
+        ]);
+      }
+      expect(list.querySelectorAll('dd button')).toHaveLength(1);
     });
 
     it('gives the tab stop back when entries are removed', () => {
