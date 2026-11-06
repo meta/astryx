@@ -16,7 +16,9 @@
  * - /packages/cli/assets/templates/blocks/components/TopNav/ (showcase blocks)
  */
 
-import type {ReactNode} from 'react';
+import {use, type ReactNode} from 'react';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {TopNavShellContext} from './TopNavShellContext';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
@@ -121,6 +123,10 @@ const styles = stylex.create({
     flexDirection: 'column',
     gap: spacingVars['--spacing-0-5'],
   },
+  // The items of a hidden top nav stay mounted in the drawer, keeping state.
+  drawerItemsHidden: {
+    display: 'none',
+  },
   drawerDivider: {
     marginBlock: spacingVars['--spacing-2'],
   },
@@ -213,6 +219,12 @@ export function TopNav({
   const hasCollapsibleContent = hasStartContent || hasCenterContent;
   // Show mobile toggle when there's ANY drawer content — own items OR SideNav via context
   const hasMobileDrawerContent = hasCollapsibleContent || hasMobileContent;
+  const shell = use(TopNavShellContext);
+  // Syncs AppShell's drawer with whether this top nav has items of its own.
+  useIsomorphicLayoutEffect(() => {
+    shell?.reportOwnItems(hasCollapsibleContent);
+  }, [shell, hasCollapsibleContent]);
+  const isOwnContentHidden = shell?.isOwnContentHidden === true;
 
   // =========================================================================
   // Mobile bar mode — heading + endContent + toggle, hide nav items.
@@ -256,14 +268,22 @@ export function TopNav({
     return (
       <MobileNav header={heading}>
         {hasCollapsibleContent && (
-          <div {...stylex.props(styles.drawerItems)}>
+          <div
+            {...stylex.props(
+              styles.drawerItems,
+              isOwnContentHidden && styles.drawerItemsHidden,
+            )}
+            inert={isOwnContentHidden || undefined}>
             {resolvedStartContent}
             {centerContent}
           </div>
         )}
-        {hasCollapsibleContent && hasMobileContent && (
-          <Divider xstyle={styles.drawerDivider} />
-        )}
+        {hasCollapsibleContent &&
+          hasMobileContent &&
+          !isOwnContentHidden &&
+          shell?.isMobileContentHidden !== true && (
+            <Divider xstyle={styles.drawerDivider} />
+          )}
         {hasMobileContent && (
           <div {...stylex.props(styles.drawerExtraContent)}>
             {mobileContent}

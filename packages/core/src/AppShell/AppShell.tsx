@@ -62,7 +62,16 @@ import {
   type FocusWithin,
 } from '../utils/focusReturn';
 import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {warnOnce} from '../utils/devWarning';
+import {
+  AppShellDrawerFocusContext,
+  type AppShellDrawerFocus,
+} from './appShellDrawerFocus';
+import {
+  TopNavShellContext,
+  type TopNavShell,
+} from '../TopNav/TopNavShellContext';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useAnimatedLayout} from '../hooks/useAnimatedLayout';
 import {
@@ -349,6 +358,12 @@ const styles = stylex.create({
     minWidth: 0,
     overflow: 'clip',
     borderInlineEndWidth: 0,
+  },
+  drawerContent: {
+    display: 'contents',
+  },
+  drawerContentHidden: {
+    display: 'none',
   },
   regionHiddenBlock: {
     height: 0,
@@ -697,10 +712,11 @@ export function AppShell({
     hasSideNav && hiddenRegions?.includes('sideNav') === true;
   const showsTopNav = hasTopNav && !isTopNavHidden;
   const showsSideNav = hasSideNav && !isSideNavHidden;
-  // The drawer shows the top nav and the side nav. With both hidden it has
-  // nothing to show, so it reads as closed and disabled. The app's own open
-  // state is kept, and hiding never writes it.
-  const drawerHasContent = showsTopNav || showsSideNav;
+  // The drawer shows the side nav and the top nav's own items. With nothing
+  // left to show, it reads as closed and disabled. The app's own open state is
+  // kept, and hiding never writes it.
+  const [topNavHasOwnItems, setTopNavHasOwnItems] = useState(true);
+  const drawerHasContent = showsSideNav || (showsTopNav && topNavHasOwnItems);
 
   const [uncontrolledMobileOpen, setUncontrolledMobileOpen] = useState(false);
   const isMobileNavOpen =
@@ -965,28 +981,56 @@ export function AppShell({
   // Wrap with mobile content context so TopNav knows there's SideNav content
   // in the drawer and shows the toggle even without its own collapsible items.
   const mobileContentValue =
-    showsSideNav && mobileNavHasToggle ? (
+    hasSideNav && mobileNavHasToggle ? (
       // eslint-disable-next-line @eslint-react/no-unstable-context-value -- context transports ReactNode; instability is inherent
       <SideNavRenderContext value="drawer-content">
         {sideNav}
       </SideNavRenderContext>
     ) : null;
 
-  const drawerMobileContentValue = showsSideNav ? (
+  // A hidden side nav stays mounted in the drawer, keeping its state.
+  const drawerMobileContentValue = hasSideNav ? (
     // eslint-disable-next-line @eslint-react/no-unstable-context-value -- context transports ReactNode; instability is inherent
-    <SideNavRenderContext value="drawer-content">
-      {sideNav}
-    </SideNavRenderContext>
+    <div
+      {...stylex.props(
+        isSideNavHidden ? styles.drawerContentHidden : styles.drawerContent,
+      )}
+      inert={isSideNavHidden || undefined}>
+      <SideNavRenderContext value="drawer-content">
+        {sideNav}
+      </SideNavRenderContext>
+    </div>
   ) : null;
+  const drawerHasContentRef = useRef(drawerHasContent);
+  useIsomorphicLayoutEffect(() => {
+    drawerHasContentRef.current = drawerHasContent;
+  });
+  const drawerFocus = useMemo<AppShellDrawerFocus>(
+    () => ({
+      main: () => mainNodeRef.current,
+      isDrawerEmpty: () => !drawerHasContentRef.current,
+    }),
+    [],
+  );
+  const topNavShell = useMemo<TopNavShell>(
+    () => ({
+      isOwnContentHidden: isTopNavHidden,
+      isMobileContentHidden: isSideNavHidden,
+      reportOwnItems: setTopNavHasOwnItems,
+    }),
+    [isTopNavHidden, isSideNavHidden],
+  );
 
   const topNavContent = hasTopNav ? (
-    isBelowBreakpoint && !mobileNavDisabled && mobileNavReactNode == null ? (
-      <TopNavMobileContentContext value={mobileContentValue}>
-        <TopNavRenderContext value="mobile-bar">{topNav}</TopNavRenderContext>
-      </TopNavMobileContentContext>
-    ) : (
-      topNav
-    )
+    <TopNavShellContext value={topNavShell}>
+      {isBelowBreakpoint && !mobileNavDisabled && mobileNavReactNode == null ? (
+        <TopNavMobileContentContext value={mobileContentValue}>
+          <TopNavRenderContext value="mobile-bar">{topNav}</TopNavRenderContext>
+        </TopNavMobileContentContext>
+      ) : (
+        topNav
+      )}
+    </TopNavShellContext>
   ) : null;
 
   const headerInner =
@@ -1203,7 +1247,7 @@ export function AppShell({
       }),
     [contentLayout],
   );
-  // The focus a hiding region hands to main shows its ring by the last input.
+  // `moveFocusLeftBehind` reads the last input. Keep modality tracking on.
   useInteractionModalityTracking();
   const noteTopNavFocus = useFocusLeavingChange(
     isTopNavHidden,
@@ -1447,7 +1491,9 @@ export function AppShell({
         // exposes the same landmark structure as the topNav one. Only when
         // there is no headerContent: a banner slot with no topNav renders both,
         // and two sibling banner regions is worse than the one this restores.
-        role={headerContent == null && !isSideNavHidden ? 'banner' : undefined}
+        role={
+          !showsTopNav && !hasBanner && !isSideNavHidden ? 'banner' : undefined
+        }
         {...mergeProps(
           themeProps('app-shell-header', {variant}),
           stylex.props(
@@ -1538,32 +1584,36 @@ export function AppShell({
 
               {/* Mobile nav — always mounted below breakpoint via Activity so DOM
             presence detection works. Hidden until the drawer opens. */}
-              {shouldRenderMobileNavReactNode && mobileNavReactNode}
-              {shouldRenderConfigContent && mobileNavConfigContent}
-              {isBelowBreakpoint &&
-                !mobileNavDisabled &&
-                mobileNavReactNode == null &&
-                !mobileNavConfigContent && (
-                  <ActivityWrapper
-                    mode={isMobileNavActivityVisible ? 'visible' : 'hidden'}>
-                    {/* SideNav drawer — always mounted so presence detection works.
+              <AppShellDrawerFocusContext value={drawerFocus}>
+                {shouldRenderMobileNavReactNode && mobileNavReactNode}
+                {shouldRenderConfigContent && mobileNavConfigContent}
+                {isBelowBreakpoint &&
+                  !mobileNavDisabled &&
+                  mobileNavReactNode == null &&
+                  !mobileNavConfigContent && (
+                    <ActivityWrapper
+                      mode={isMobileNavActivityVisible ? 'visible' : 'hidden'}>
+                      {/* SideNav drawer — always mounted so presence detection works.
                 Hidden when TopNav owns the drawer (combined mode passes
                 sideNav via TopNav's mobile content context instead). */}
-                    {hasSideNav && !showsTopNav && (
-                      <SideNavRenderContext value="drawer">
-                        {sideNav}
-                      </SideNavRenderContext>
-                    )}
-                    {showsTopNav && (
-                      <TopNavMobileContentContext
-                        value={drawerMobileContentValue}>
-                        <TopNavRenderContext value="drawer">
-                          {topNav}
-                        </TopNavRenderContext>
-                      </TopNavMobileContentContext>
-                    )}
-                  </ActivityWrapper>
-                )}
+                      {hasSideNav && !hasTopNav && (
+                        <SideNavRenderContext value="drawer">
+                          {sideNav}
+                        </SideNavRenderContext>
+                      )}
+                      {hasTopNav && (
+                        <TopNavShellContext value={topNavShell}>
+                          <TopNavMobileContentContext
+                            value={drawerMobileContentValue}>
+                            <TopNavRenderContext value="drawer">
+                              {topNav}
+                            </TopNavRenderContext>
+                          </TopNavMobileContentContext>
+                        </TopNavShellContext>
+                      )}
+                    </ActivityWrapper>
+                  )}
+              </AppShellDrawerFocusContext>
             </LayoutDividerContext>
           </LayoutSlotsContext>
         </LayoutAreaContext>

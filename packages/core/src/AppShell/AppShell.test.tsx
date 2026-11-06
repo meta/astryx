@@ -1675,6 +1675,118 @@ describe('AppShell hiddenRegions', () => {
     expect(screen.getByText('Count 0').closest('[inert]')).not.toBeNull();
   });
 
+  function stubPhone() {
+    mockMql = createMockMatchMedia(true);
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));
+  }
+
+  function PhoneShell({
+    hiddenRegions,
+    topNav,
+  }: {
+    hiddenRegions?: ReadonlyArray<'topNav' | 'sideNav'>;
+    topNav?: React.ReactNode;
+  }) {
+    return (
+      <AppShell
+        hiddenRegions={hiddenRegions}
+        topNav={topNav}
+        sideNav={<CountingSideNav />}
+        mobileNav={{defaultIsMobile: true}}>
+        <button type="button">In content</button>
+      </AppShell>
+    );
+  }
+
+  it('on a phone, keeps the side nav mounted in the drawer while it is hidden', async () => {
+    stubPhone();
+    const user = userEvent.setup();
+    const topNav = (
+      <TopNav heading={<TopNavHeading heading="App" />}>
+        <TopNavItem label="Home" href="/home" />
+      </TopNav>
+    );
+    const {rerender} = render(<PhoneShell topNav={topNav} />);
+    await user.click(screen.getByTestId('mobile-nav-toggle'));
+    await user.click(screen.getByRole('button', {name: 'Count 0'}));
+    // Activating a row closes the drawer; its content stays mounted.
+    const row = screen.getByRole('button', {name: 'Count 1', hidden: true});
+    rerender(<PhoneShell topNav={topNav} hiddenRegions={['sideNav']} />);
+    expect(row.closest('[inert]')).not.toBeNull();
+    rerender(<PhoneShell topNav={topNav} />);
+    expect(screen.getByRole('button', {name: 'Count 1', hidden: true})).toBe(
+      row,
+    );
+  });
+
+  // Reads what AppShell reports to its subtree.
+  let probedMobile: ReturnType<typeof useAppShellMobile> | null = null;
+  function MobileProbe() {
+    probedMobile = useAppShellMobile();
+    return null;
+  }
+
+  // A top nav with no items of its own leaves only the side nav in the drawer.
+  function HeadingOnlyTopNavShell({hidden}: {hidden?: boolean}) {
+    return (
+      <AppShell
+        hiddenRegions={hidden ? ['sideNav'] : undefined}
+        topNav={<TopNav heading={<TopNavHeading heading="App" />} />}
+        sideNav={<CountingSideNav />}
+        mobileNav={{defaultIsMobile: true}}>
+        <MobileProbe />
+      </AppShell>
+    );
+  }
+
+  it('on a phone, reports a drawer with nothing left to show as closed', async () => {
+    stubPhone();
+    const user = userEvent.setup();
+    const {rerender} = render(<HeadingOnlyTopNavShell />);
+    await user.click(screen.getByTestId('mobile-nav-toggle'));
+    expect(probedMobile).toMatchObject({isMobileNavOpen: true});
+    rerender(<HeadingOnlyTopNavShell hidden />);
+    expect(probedMobile).toMatchObject({
+      isMobileNavOpen: false,
+      isMobileNavEnabled: false,
+    });
+    expect(screen.queryByTestId('mobile-nav-toggle')).toBeNull();
+  });
+
+  it('on a phone, moves focus to main when the drawer closes because its side nav hid', async () => {
+    stubPhone();
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+      const {rerender} = render(<PhoneShell />);
+      const toggle = screen.getByTestId('mobile-nav-toggle');
+      act(() => toggle.focus());
+      await user.click(toggle);
+      rerender(<PhoneShell hiddenRegions={['sideNav']} />);
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.getByRole('main')).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('on a phone, keeps a banner landmark on the side nav bar when only the top nav hides', () => {
+    stubPhone();
+    render(
+      <PhoneShell
+        topNav={
+          <TopNav heading={<TopNavHeading heading="App" />}>
+            <TopNavItem label="Home" href="/home" />
+          </TopNav>
+        }
+        hiddenRegions={['topNav']}
+      />,
+    );
+    expect(screen.getAllByRole('banner')).toHaveLength(1);
+  });
+
   it('on a phone, closes the drawer and disables it when the side nav it holds hides', () => {
     mockMql = createMockMatchMedia(true);
     vi.stubGlobal('matchMedia', vi.fn().mockReturnValue(mockMql));

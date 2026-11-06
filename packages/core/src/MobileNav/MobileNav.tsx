@@ -44,6 +44,7 @@
  */
 
 import {
+  use,
   useCallback,
   useEffect,
   useId,
@@ -65,6 +66,11 @@ import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {Heading} from '../Heading/Heading';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {
+  AppShellDrawerFocusContext,
+  type AppShellDrawerFocus,
+} from '../AppShell/appShellDrawerFocus';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {mergeProps, composeEventHandlers} from '../utils';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
@@ -375,22 +381,33 @@ function resolveCloseDelay(dialog: HTMLDialogElement): number {
 function closeAndRestoreFocus(
   dialog: HTMLDialogElement,
   openerRef: RefObject<HTMLElement | null>,
+  shellFocus: AppShellDrawerFocus | null,
 ): void {
   dialog.close();
   const opener = openerRef.current;
   openerRef.current = null;
-  if (!opener || opener === document.body || !opener.isConnected) {
+  if (!opener || opener === document.body) {
     return;
   }
   // An opener that is still connected but hidden, such as the menu button of
-  // a navigation region the app hid, cannot take focus. Focus goes to main.
+  // a navigation region the app hid, cannot take focus. Inside AppShell, a
+  // menu button removed because the drawer has nothing left to show is gone
+  // for the same reason. In both cases focus goes to main.
   const isHidden =
-    opener.closest('[inert]') != null ||
-    (typeof opener.checkVisibility === 'function' && !opener.checkVisibility());
-  if (isHidden) {
-    opener.ownerDocument
-      .querySelector<HTMLElement>('[role="main"], main')
-      ?.focus();
+    opener.isConnected &&
+    (opener.closest('[inert]') != null ||
+      (typeof opener.checkVisibility === 'function' &&
+        !opener.checkVisibility()));
+  const isRemovedByHiding =
+    !opener.isConnected && shellFocus?.isDrawerEmpty() === true;
+  if (isHidden || isRemovedByHiding) {
+    (
+      shellFocus?.main() ??
+      opener.ownerDocument.querySelector<HTMLElement>('[role="main"], main')
+    )?.focus();
+    return;
+  }
+  if (!opener.isConnected) {
     return;
   }
   opener.focus();
@@ -508,6 +525,12 @@ export function MobileNav({
   const t = useComponentTranslator();
   // Read from AppShell context as fallback
   const appShellMobile = useAppShellMobile();
+  // Read when the drawer closes, from a timer or a teardown.
+  const shellFocus = use(AppShellDrawerFocusContext);
+  const shellFocusRef = useRef(shellFocus);
+  useIsomorphicLayoutEffect(() => {
+    shellFocusRef.current = shellFocus;
+  });
   const isOpen = isOpenProp ?? appShellMobile.isMobileNavOpen;
   // Share the id from AppShell context so the toggle's aria-controls resolves to
   // this drawer; fall back to a locally generated id when used standalone.
@@ -622,7 +645,7 @@ export function MobileNav({
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
       closeTimeoutRef.current = setTimeout(() => {
-        closeAndRestoreFocus(dialog, triggerElementRef);
+        closeAndRestoreFocus(dialog, triggerElementRef, shellFocusRef.current);
         setIsCloseHeld(false);
       }, resolveCloseDelay(dialog));
     } else {
@@ -662,7 +685,7 @@ export function MobileNav({
       releaseHoldRef.current?.();
       releaseHoldRef.current = null;
       if (dialog?.open) {
-        closeAndRestoreFocus(dialog, triggerElementRef);
+        closeAndRestoreFocus(dialog, triggerElementRef, shellFocusRef.current);
       }
     };
   }, []);
