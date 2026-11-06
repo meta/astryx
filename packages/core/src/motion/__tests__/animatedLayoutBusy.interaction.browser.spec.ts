@@ -249,24 +249,27 @@ async function busyGlide(
   const cast = await startScreencast(page);
   const {busy, glides} = await clickThenBlock(page, trigger, follower, axis);
   expect(glides.length, 'a glide carries the follower').toBeGreaterThan(0);
-  // Until every animation but the control's has ended.
-  await expect
-    .poll(async () =>
-      page.evaluate(
-        () =>
-          document
-            .getAnimations()
-            .filter(
-              a =>
-                !(
-                  (a.effect as KeyframeEffect | null)?.target?.closest(
-                    '[data-harness-control]',
-                  ) ?? false
-                ),
-            ).length,
-      ),
-    )
-    .toBe(0);
+  // Until every animation but the control's has ended. A count polled
+  // against a fixed 5 s measured the starved main thread, not the glide.
+  await page.evaluate(async () => {
+    for (;;) {
+      const left = document
+        .getAnimations()
+        .filter(
+          a =>
+            a.playState !== 'finished' &&
+            !(
+              (a.effect as KeyframeEffect | null)?.target?.closest(
+                '[data-harness-control]',
+              ) ?? false
+            ),
+        );
+      if (left.length === 0) {
+        break;
+      }
+      await Promise.allSettled(left.map(async a => a.finished));
+    }
+  });
   // Where the marker rests, read from the page. A glide frozen through the
   // block stays far from it, and a frame after the block can still be stale.
   const settledAt = await follower.evaluate((el, along) => {
