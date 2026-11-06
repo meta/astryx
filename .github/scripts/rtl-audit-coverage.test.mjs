@@ -1035,23 +1035,24 @@ describe('audited package and story routing', () => {
           storyId: 'charts-chrome-legend--default',
           rollup: 'RTL-ready',
         },
+        {
+          component: 'charts/MetricTile',
+          storyId: 'charts-metrictile--inverted-delta',
+          rollup: 'RTL-ready',
+        },
       ],
-      verifiedNa: [
-        'ChartAxis',
-        'ChartGrid',
-        'ChartSwatch',
-        'ChartTooltip',
-        'MetricTile',
-      ].map(component => ({
-        component: `charts/${component}`,
-        reason: 'Direction-neutral chart-space rendering.',
-      })),
+      verifiedNa: ['ChartAxis', 'ChartGrid', 'ChartSwatch', 'ChartTooltip'].map(
+        component => ({
+          component: `charts/${component}`,
+          reason: 'Direction-neutral chart-space rendering.',
+        }),
+      ),
     });
 
     expect(coverage).toMatchObject({
       total: 7,
-      measured: 2,
-      verifiedNa: 5,
+      measured: 3,
+      verifiedNa: 4,
       gaps: 0,
       staleVerifiedNa: 0,
     });
