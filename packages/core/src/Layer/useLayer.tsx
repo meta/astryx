@@ -534,7 +534,8 @@ function toSeconds(time: string): number {
  * of its own `display` or `overlay`, run as a discrete step, keeps a hidden
  * popover in view, until the transition ends. This reads computed style only,
  * so it forces no layout. It reads the open style, so it misses a transition
- * that only the closed style declares.
+ * that only the closed style declares. The release after the hide puts the
+ * name back for such a layer.
  */
 function staysInViewAfterHide(layer: HTMLElement): boolean {
   const style = getComputedStyle(layer);
@@ -1234,11 +1235,9 @@ function useLayerImplementation(
   // during the exit keeps the name, and so does a later exit.
   const releaseAnchor = useCallback(
     (layer: HTMLElement | null) => {
-      // The hide dropped the name already, so no animation needs a read.
       const holder = triggerRef.current;
-      if (holder != null && !readAnchorNames(holder).includes(anchorId)) {
-        return;
-      }
+      const dropped =
+        holder != null && !readAnchorNames(holder).includes(anchorId);
       const exit = {};
       exitRef.current = exit;
       const release = () => {
@@ -1255,6 +1254,11 @@ function useLayerImplementation(
       if (running.length === 0) {
         release();
         return;
+      }
+      // A layer whose closed style runs its exit still paints after the hide
+      // dropped the name. It gets the name back until its animations end.
+      if (dropped && holder != null && !isOpenRef.current) {
+        addAnchorName(holder, anchorId);
       }
       void Promise.all(
         running.map(async animation =>
@@ -1666,11 +1670,15 @@ function useLayerImplementation(
       if (isOpenRef.current) {
         observeBrowserHide(el);
         onCloseStartRef.current?.();
+        // The browser's own close releases the name from its toggle event.
+        // Only then can the release see a fade that the closed style starts.
+        return;
       }
-      // A layer that leaves view with the hide drops its trigger's anchor name
-      // here, inside the hide, so the hide's own layout covers the change. A
-      // name dropped after that layout costs one more. A layer that fades out
-      // keeps the name until the fade ends.
+      // Our hide drops its trigger's anchor name here, inside the hide, so the
+      // hide's own layout covers the change. A name dropped after that layout
+      // costs one more. A layer that fades out keeps the name until the fade
+      // ends. The release right after the hide puts back a name that a
+      // still-running fade needs.
       const trigger = triggerRef.current;
       if (
         trigger != null &&

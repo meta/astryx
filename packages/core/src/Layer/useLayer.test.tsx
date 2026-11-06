@@ -1843,7 +1843,7 @@ describe('useLayer', () => {
         });
     }
 
-    it('drops the name inside the hide, in the layer\u2019s beforetoggle, and reads no animations after it', () => {
+    it('drops the name inside our hide, in the layer\u2019s beforetoggle, and keeps it dropped when no animation runs after the hide', () => {
       let api = {show: () => {}, hide: () => {}};
       const {getByRole, container} = render(
         <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
@@ -1867,12 +1867,21 @@ describe('useLayer', () => {
         expect(namesInHide).toEqual([]);
         expect(anchorNames(trigger)).toEqual([]);
 
-        // The browser's own close fires `beforetoggle`, then `toggle`.
-        act(() => api.show());
-        act(() => {
-          layer.dispatchEvent(closing());
-        });
-        expect(anchorNames(trigger)).toEqual([]);
+        // The release after the hide read the layer's animations.
+        expect(getAnimations).toHaveBeenCalledTimes(1);
+      } finally {
+        hidePopover.mockRestore();
+      }
+    });
+
+    it('keeps the name through the beforetoggle of a close the browser runs itself, and releases it from the toggle event', async () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, container} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const trigger = getByRole('button', {name: 'First'});
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      const toggle = () =>
         act(() => {
           layer.dispatchEvent(
             Object.assign(new Event('toggle'), {
@@ -1881,8 +1890,90 @@ describe('useLayer', () => {
             }),
           );
         });
+      // No animation after the first close; a closed-style fade after the
+      // second.
+      let end = () => {};
+      const finished = new Promise<void>(resolve => {
+        end = resolve;
+      });
+      let fading = false;
+      layer.getAnimations = () =>
+        (fading
+          ? [
+              {
+                finished,
+                playState: 'running',
+                effect: {getComputedTiming: () => ({endTime: 200})},
+              },
+            ]
+          : []) as unknown as Animation[];
+
+      act(() => api.show());
+      act(() => {
+        layer.dispatchEvent(closing());
+      });
+      expect(anchorNames(trigger)).toHaveLength(1);
+      toggle();
+      expect(anchorNames(trigger)).toEqual([]);
+
+      act(() => api.show());
+      act(() => {
+        layer.dispatchEvent(closing());
+      });
+      fading = true;
+      toggle();
+      // Still painting, so still placed against its trigger.
+      expect(anchorNames(trigger)).toHaveLength(1);
+      await act(async () => {
+        end();
+        await finished;
+      });
+      expect(anchorNames(trigger)).toEqual([]);
+    });
+
+    it('puts the name back after the hide for a layer whose closed style runs its fade, until the fade ends', async () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, container} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const trigger = getByRole('button', {name: 'First'});
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      // The open style declares no exit, so the hide's beforetoggle drops the
+      // name. The closed style's fade then runs after the hide.
+      let end = () => {};
+      const finished = new Promise<void>(resolve => {
+        end = resolve;
+      });
+      let fading = false;
+      layer.getAnimations = () =>
+        (fading
+          ? [
+              {
+                finished,
+                playState: 'running',
+                effect: {getComputedTiming: () => ({endTime: 200})},
+              },
+            ]
+          : []) as unknown as Animation[];
+      let namesInHide: string[] = [];
+      const hidePopover = vi
+        .spyOn(layer, 'hidePopover')
+        .mockImplementation(() => {
+          layer.dispatchEvent(closing());
+          namesInHide = anchorNames(trigger);
+          fading = true;
+        });
+      try {
+        act(() => api.show());
+        act(() => api.hide());
+        expect(namesInHide).toEqual([]);
+        // Still painting, so placed against its trigger again.
+        expect(anchorNames(trigger)).toHaveLength(1);
+        await act(async () => {
+          end();
+          await finished;
+        });
         expect(anchorNames(trigger)).toEqual([]);
-        expect(getAnimations).not.toHaveBeenCalled();
       } finally {
         hidePopover.mockRestore();
       }
@@ -1944,7 +2035,7 @@ describe('useLayer', () => {
         staysInView: false,
       },
     ])(
-      'in the hide\u2019s beforetoggle, keeps the name only for a layer its own transition keeps in view: $transition.property $transition.duration $transition.behavior, delay $transition.delay',
+      'in our hide\u2019s beforetoggle, keeps the name only for a layer its own transition keeps in view: $transition.property $transition.duration $transition.behavior, delay $transition.delay',
       ({transition, staysInView}) => {
         let api = {show: () => {}, hide: () => {}};
         const {getByRole, container} = render(
@@ -1953,13 +2044,19 @@ describe('useLayer', () => {
         const trigger = getByRole('button', {name: 'First'});
         const layer = container.querySelector('[popover]') as HTMLElement;
         const computed = withTransition(layer, transition);
+        let namesInHide: string[] = [];
+        const hidePopover = vi
+          .spyOn(layer, 'hidePopover')
+          .mockImplementation(() => {
+            layer.dispatchEvent(closing());
+            namesInHide = anchorNames(trigger);
+          });
         try {
           act(() => api.show());
-          act(() => {
-            layer.dispatchEvent(closing());
-          });
-          expect(anchorNames(trigger)).toHaveLength(staysInView ? 1 : 0);
+          act(() => api.hide());
+          expect(namesInHide).toHaveLength(staysInView ? 1 : 0);
         } finally {
+          hidePopover.mockRestore();
           computed.mockRestore();
         }
       },
