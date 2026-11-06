@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
-import {useState} from 'react';
+import {useLayoutEffect, useRef, useState} from 'react';
 import {OverflowList} from '@astryxdesign/core/OverflowList';
 import type {OverflowItem} from '@astryxdesign/core/OverflowList';
 import {Button} from '@astryxdesign/core/Button';
@@ -491,6 +491,46 @@ export const ManyLists: StoryObj<{lists: number}> = {
               <Button key={label} label={label} variant="ghost" size="sm" />
             ))}
           </OverflowList>
+        </div>
+      ))}
+    </div>
+  ),
+};
+
+// Writes to its own box while the commit runs, as an app's row does when it
+// sizes a part on mount. A list that measures inside the commit then lays the
+// page out again for each row.
+function MountWriter({row}: {row: number}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (element != null) {
+      element.style.width = `${40 + (row % 7) * 10}px`;
+      element.textContent = `Row ${row}`;
+    }
+  }, [row]);
+  return <span ref={ref} style={{display: 'inline-block'}} />;
+}
+
+export const ManyListsWithWrites: StoryObj<{lists: number}> = {
+  args: {lists: 50},
+  argTypes: {lists: {control: {type: 'number', min: 1, max: 200}}},
+  tags: ['!autodocs'],
+  render: ({lists}) => (
+    <div style={{display: 'grid', gap: 8}}>
+      {Array.from({length: lists}, (_, list) => (
+        <div key={list} style={{display: 'flex', gap: 8, alignItems: 'center'}}>
+          <div style={{width: 240 + (list % 5) * 60}}>
+            <OverflowList
+              overflowRenderer={(items: OverflowItem[]) => (
+                <Badge label={`+${items.length}`} />
+              )}>
+              {MANY_LIST_LABELS.map(label => (
+                <Button key={label} label={label} variant="ghost" size="sm" />
+              ))}
+            </OverflowList>
+          </div>
+          <MountWriter row={list} />
         </div>
       ))}
     </div>
