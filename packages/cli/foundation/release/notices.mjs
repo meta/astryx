@@ -460,6 +460,19 @@ export const RUN_FROM_PROJECT =
   "Run this from the Astryx project's folder, or declare an Astryx package in this folder's package.json to make it a project of its own.";
 
 /**
+ * The release of the project at `dir`, for a command that runs in its folder
+ * from a folder below it: its own CLI's version when it installs one, else
+ * the Core it records; null when it records neither.
+ * @param {string} dir
+ * @returns {{version: string, own: boolean} | null}
+ */
+export function projectRelease(dir) {
+  const facts = readReleaseFacts(dir);
+  const version = facts.cli?.version ?? coreVersionOf(facts);
+  return version ? {version, own: Boolean(facts.cli)} : null;
+}
+
+/**
  * The command that adds the CLI at Core's version, for a run in `cwd` whose
  * Core is `core`, with the project's package manager in the project root.
  * `command` is null in a folder inside the project whose package.json is not

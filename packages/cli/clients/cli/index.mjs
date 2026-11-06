@@ -22,7 +22,7 @@ import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {findConfigPath} from '../../foundation/config/config-path.mjs';
 import {API_VERSION, setJsonMode} from '../../foundation/response/json.mjs';
 import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
-import {cliInstallAdvice, installFolder} from '../../foundation/release/notices.mjs';
+import {cliInstallAdvice, installFolder, projectRelease} from '../../foundation/release/notices.mjs';
 import {buildManifest} from './lib/manifest.mjs';
 import {cliError} from './lib/cli-error.mjs';
 import {section, text, records} from './formatters/index.mjs';
@@ -738,9 +738,11 @@ export async function createProgram({argv} = {}) {
       // before it, so the command is the picker's for that folder, never the
       // bare `astryx` name a package runner would fetch from the registry
       // (spec AST-081 FR5).
+      // The command names the project's release, as run from its folder,
+      // never the Core this folder installs for itself.
       if (target.moved) {
         console.error(
-          setupNudge(getCliInvocation(target.dir), {before: `cd ${quoteCommandArgument(target.dir)}`}).trimEnd(),
+          setupNudge(getCliInvocation(target.dir, {release: projectRelease(target.dir)}), {before: `cd ${quoteCommandArgument(target.dir)}`}).trimEnd(),
         );
         return;
       }

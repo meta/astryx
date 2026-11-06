@@ -211,11 +211,25 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
     write('functions/package.json', '{"name":"functions"}');
     const r = await runCli(['docs', 'tokens'], path.join(tmp, 'functions'));
     // Only `cd` comes first, so the app has no CLI of its own yet: the
-    // command is the scoped package at the answering release, never the bare
+    // command is the scoped package at the project's release, never the bare
     // `astryx` name a package runner would fetch from the registry.
-    const {version} = JSON.parse(fs.readFileSync(new URL('../../../package.json', import.meta.url), 'utf8'));
     expect(r.stderr.trim()).toBe(
-      `Next step: run \`cd ${tmp}\`, then \`npx @astryxdesign/cli@${version} init\` to finish setup and install the Astryx agent prompt.`,
+      `Next step: run \`cd ${tmp}\`, then \`npx @astryxdesign/cli@0.7.0 init\` to finish setup and install the Astryx agent prompt.`,
+    );
+  });
+
+  // A tool folder that installs its own Core: the command runs in the
+  // project's folder at the project's release, never at the Core the tool
+  // installs.
+  it("in a tool folder with its own Core, names the project's Core, not the tool's", async () => {
+    write('package.json', JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '^0.7.0'}}));
+    write('package-lock.json', '{}');
+    write('node_modules/@astryxdesign/core/package.json', JSON.stringify({name: '@astryxdesign/core', version: '0.7.3'}));
+    write('tools/codegen/package.json', '{"name":"codegen"}');
+    write('tools/codegen/node_modules/@astryxdesign/core/package.json', JSON.stringify({name: '@astryxdesign/core', version: '0.7.4'}));
+    const r = await runCli(['docs', 'tokens'], path.join(tmp, 'tools', 'codegen'));
+    expect(r.stderr.trim()).toBe(
+      `Next step: run \`cd ${tmp}\`, then \`npx @astryxdesign/cli@0.7.3 init\` to finish setup and install the Astryx agent prompt.`,
     );
   });
 
