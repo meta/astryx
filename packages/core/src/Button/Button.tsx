@@ -19,6 +19,7 @@
  */
 
 import {
+  isValidElement,
   use,
   useEffect,
   useRef,
@@ -44,6 +45,7 @@ import {
   focusVars,
 } from '../theme/tokens.stylex';
 import {Spinner} from '../Spinner/Spinner';
+import {Icon} from '../Icon/Icon';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {IconDefaultSizeProvider} from '../Icon/IconDefaultSizeContext';
 import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
@@ -51,6 +53,10 @@ import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
+import {
+  PressGroupContext,
+  pressGroupItemProps,
+} from '../hooks/pressGroupContext';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {
@@ -64,6 +70,10 @@ import type {LinkComponentType} from '../Link/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {
+  controlPressLayerStyles,
+  rowPressLayerStyles,
+} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ButtonVariantMap} from './index';
 import {
@@ -74,6 +84,15 @@ import english from '../i18n/generated-english/Button/Button.generated';
 import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
+
+/**
+ * Written by the press controller or a group's tracker while a press is
+ * believed. Typed `string`, so StyleX reads it as a computed key.
+ */
+const PRESSED_ON: string = '[data-astryx-press="on"]';
+
+/** `aria-haspopup` values of a trigger that keeps its own press and opening. */
+const MENU_POPUPS: ReadonlySet<string> = new Set(['true', 'menu', 'listbox']);
 
 /**
  * Base button styles
@@ -135,8 +154,38 @@ const styles = stylex.create({
       ':active:where(:not(:disabled,[aria-disabled="true"]))': {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
+        // Under reduced motion a press never scales the button. The overlay
+        // alone shows the press.
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [PRESSED_ON]: {
+        default: 'scale(0.98)',
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
+      },
+    },
+  },
+  // A tracked action's own `:active` image paints nothing: the tracker paints
+  // the action under the pointer, which need not be the one pressed first.
+  trackedOverlay: {
+    backgroundSize: {default: null, [`:active:not(${PRESSED_ON})`]: '0 0'},
+  },
+  // A tracked action's press is painted by its group's tracker alone.
+  pressableTracked: {
+    transform: {
+      default: 'scale(1)',
+      [PRESSED_ON]: {
+        default: 'scale(0.98)',
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
+      },
     },
   },
   inactive: {
@@ -145,7 +194,7 @@ const styles = stylex.create({
     transform: {
       default: 'none',
       ':active': 'none',
-      '[data-astryx-press="on"]': 'none',
+      [PRESSED_ON]: 'none',
     },
   },
   disabled: {
@@ -158,7 +207,7 @@ const styles = stylex.create({
     backgroundImage: {
       default: 'none',
       ':active': 'none',
-      '[data-astryx-press="on"]': 'none',
+      [PRESSED_ON]: 'none',
     },
   },
   iconOnly: {
@@ -560,6 +609,21 @@ const groupStyles = stylex.create({
 });
 
 /**
+ * Whether `node` adds nothing to a content name: nothing renders, or an Icon
+ * with no label. Any other node can add text.
+ */
+function addsNoName(node: ReactNode): boolean {
+  if (!isRenderable(node)) {
+    return true;
+  }
+  if (!isValidElement<{label?: unknown}>(node) || node.type !== Icon) {
+    return false;
+  }
+  const {label} = node.props;
+  return typeof label !== 'string' || label.trim() === '';
+}
+
+/**
  * A versatile button component with multiple variants.
  *
  * Styles use Astryx theme tokens via StyleX.
@@ -615,6 +679,14 @@ export function Button({
   const t = useComponentTranslator();
   const size = useSize(sizeProp, 'md');
   const buttonGroup = useButtonGroup();
+  // A tracking group's tracker paints this button's pointer press. A menu
+  // trigger is not tracked: it keeps its own press and opening.
+  const groupPointers = use(PressGroupContext);
+  const groupItemProps =
+    groupPointers != null && !MENU_POPUPS.has(String(props['aria-haspopup']))
+      ? pressGroupItemProps(groupPointers)
+      : undefined;
+  const isGroupTracked = groupItemProps != null;
   const inputGroup = useInputGroup();
 
   const [isPending, startTransition] = useTransition();
@@ -743,11 +815,18 @@ export function Button({
     sizeStyles[size],
     isIconOnly && styles.iconOnly,
     interactionOverlayStyles.backgroundImage,
+    // The press the controller writes, on a layer under the label whose
+    // release runs on the compositor.
+    rowPressLayerStyles.cell,
+    rowPressLayerStyles.cellOnImage,
+    controlPressLayerStyles.control,
+    isGroupTracked && styles.trackedOverlay,
     buttonDisabled && styles.inactive,
     isTrueDisabled && styles.disabled,
     useAriaDisabled && styles.ariaDisabled,
     renderAsLink && styles.link,
-    !buttonGroup && styles.pressable,
+    !buttonGroup &&
+      (isGroupTracked ? styles.pressableTracked : styles.pressable),
     buttonGroup &&
       (buttonGroup.orientation === 'horizontal'
         ? groupStyles.horizontal
@@ -836,10 +915,29 @@ export function Button({
     (children != null && children !== label);
   const ariaLabelProp = needsAriaLabel ? {'aria-label': label} : null;
 
+  // The Button's accessible name when props decide it: the derived
+  // aria-label, else a caller aria-label, else the label text alone. It is
+  // not known here when a caller aria-labelledby names the Button from other
+  // elements, or when `icon` or `endContent` can add text to its content
+  // name (a count, for example). A decorative Icon in either slot adds none.
+  const accessibleName =
+    props['aria-labelledby'] != null
+      ? undefined
+      : needsAriaLabel
+        ? label
+        : (props['aria-label'] ??
+          (addsNoName(icon) && addsNoName(endContent) ? label : undefined));
+  // A tooltip that repeats the name adds nothing to the description, so a
+  // screen reader does not read the same words twice.
+  const isTooltipName =
+    tooltip != null &&
+    accessibleName != null &&
+    tooltip.trim() === accessibleName.trim();
+
   // When a tooltip is attached via the hook, point aria-describedby at the
   // tooltip content (composing with any consumer-provided value).
   const describedByProp =
-    tooltip != null
+    tooltip != null && !isTooltipName
       ? {
           'aria-describedby':
             [props['aria-describedby'], tooltipHook.describedBy]
@@ -870,6 +968,7 @@ export function Button({
           : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
+        {...groupItemProps}
         {...props}
         {...ariaLabelProp}
         {...describedByProp}
@@ -894,6 +993,7 @@ export function Button({
           : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
+        {...groupItemProps}
         {...props}
         {...ariaLabelProp}
         {...describedByProp}

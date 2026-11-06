@@ -129,6 +129,12 @@ intentional decision.
   assertive region; warnings and successes MUST update the persistent polite
   region, including on first mount and when message or type changes, without
   moving focus. Inside a mounted live container, `spec:AST-086` FR4 applies.
+- **AR6 — A repeated submit is the form's occasion.** A field's status
+  announces when its message or type changes, and not again for the same value
+  (`spec:AST-086` FR6). A submit is the form's occasion (`spec:AST-086` FR1),
+  so when a repeated submit fails with unchanged errors, the form announces it
+  once through `useAnnounce`, for example the error count and the first error,
+  and FieldStatus does not announce again.
 - **AR5 — Assistive-technology output.** Claims about whether, when, or how the
   message is spoken or presented in braille are recommended real-AT follow-up
   under `spec:AST-009`, not a merge or release requirement; DOM and

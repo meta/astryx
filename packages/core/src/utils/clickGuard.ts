@@ -7,10 +7,11 @@
  * @output armClickGuard (and its ClickGuardOptions), disarmClickGuard,
  *   isClickGuardArmed, withoutClickGuard and CLICK_GUARD_WINDOW_MS
  * @position The one guard for the browser's click after a gesture that
- *   already acted, shared by hooks/useMenuPress.ts and gestures/GestureHost.ts
+ *   already acted, shared by hooks/useMenuPress.ts, gestures/GestureHost.ts
+ *   and utils/boxHold.ts
  *
- * SYNC: When modified, update clickGuard.test.ts, hooks/useMenuPress.ts and
- * gestures/GestureHost.ts.
+ * SYNC: When modified, update clickGuard.test.ts, hooks/useMenuPress.ts,
+ * gestures/GestureHost.ts and utils/boxHold.ts.
  */
 
 // Armed at a tracked release, the guard swallows the next click on the
@@ -20,6 +21,16 @@
 // listener stays, so it keeps its place ahead of window listeners that the
 // page adds later (AST-057, AST-094). If only the gesture host arms it, the
 // click listener stays only while the guard is armed.
+//
+// An arm at a claimed touch's lift also takes that touch's late `mousedown`
+// and `mouseup`. WebKit sends them a few ms after a held tap's cancelled
+// `touchend`, aimed at whatever is under the finger by then. They go with
+// the click, the next `pointerdown` or the window, as the guard does.
+//
+// The menu press model's arm at a finger's release also cancels that touch's
+// `touchend`, so the browser creates no click and no compatibility mouse
+// events. A busy main thread can otherwise hold that click past the window,
+// when a drill-in has put another row under the finger.
 //
 // Some clicks always pass:
 // - a click with `detail` 0: a keyboard's, a screen reader's, or one that the
@@ -45,6 +56,19 @@ export interface ClickGuardOptions {
    * @default false
    */
   readonly staysInstalled?: boolean;
+  /**
+   * The gesture host's arm at a claimed touch's lift: the guard also takes
+   * that touch's late `mousedown` and `mouseup` while it is armed.
+   * @default false
+   */
+  readonly takesLateMouse?: boolean;
+  /**
+   * The menu press model's arm at a finger's release: the guard also cancels
+   * that touch's `touchend`, so the browser creates no click for it. A
+   * cancelled `touchend` disarms the guard.
+   * @default false
+   */
+  readonly cancelsTouchEnd?: boolean;
 }
 
 interface Guard {
@@ -78,7 +102,11 @@ function listenForClicks(view: Window): () => void {
 /** Swallow the browser's next click on `doc` (see the file header). */
 export function armClickGuard(
   doc: Document,
-  {staysInstalled = false}: ClickGuardOptions = {},
+  {
+    staysInstalled = false,
+    takesLateMouse = false,
+    cancelsTouchEnd = false,
+  }: ClickGuardOptions = {},
 ): void {
   const view = doc.defaultView;
   if (view == null) {
@@ -98,6 +126,33 @@ export function armClickGuard(
     // The next press is a new gesture: its click must never be eaten.
     subscribeInput(view, 'pointerdown', () => disarmClickGuard(doc)),
   );
+  if (takesLateMouse) {
+    for (const type of ['mousedown', 'mouseup'] as const) {
+      guard.unsubscribers.push(
+        subscribeInput(view, type, swallowLateMouse, {cancels: true}),
+      );
+    }
+  }
+  if (cancelsTouchEnd) {
+    // A touch sends its pointerup before its touchend, so the next touchend is
+    // that touch's own. The next pointerdown disarms the guard first.
+    const stopTouchEnd = subscribeInput(
+      view,
+      'touchend',
+      event => {
+        stopTouchEnd();
+        // A touchend that the browser took for a scroll is not cancelable.
+        // The guard stays armed for a click that may follow it.
+        if (event.cancelable) {
+          event.preventDefault();
+          // No click follows a cancelled touchend.
+          disarmClickGuard(doc);
+        }
+      },
+      {cancels: true},
+    );
+    guard.unsubscribers.push(stopTouchEnd);
+  }
   guard.timer = setTimeout(() => disarmClickGuard(doc), CLICK_GUARD_WINDOW_MS);
 }
 
@@ -147,6 +202,15 @@ export function __resetClickGuardForTest(): void {
     stayingClickListeners.get(window)?.();
     stayingClickListeners.delete(window);
   }
+}
+
+/** Swallows a claimed touch's late `mousedown` or `mouseup`. */
+function swallowLateMouse(event: MouseEvent): void {
+  if (isExempt(event)) {
+    return;
+  }
+  event.preventDefault();
+  event.stopImmediatePropagation();
 }
 
 function isExempt(event: MouseEvent): boolean {

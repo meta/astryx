@@ -255,6 +255,138 @@
     "defaultMessage": "{count, number} {count, plural, one {result} other {results}}",
     "description": "Live result-count text next to the PowerSearch input, announced to screen readers on change. Example: `12 results`, `1 result`; keep compact."
   },
+  "@astryx.powersearch.sheet.filtersTitle": {
+    "defaultMessage": "Filters",
+    "description": "Heading and accessible name of the PowerSearch touch sheet that lists the active filters (experimental bottom-sheet presentation). Plural noun."
+  },
+  "@astryx.powersearch.sheet.addFilter": {
+    "defaultMessage": "Add filter",
+    "description": "Button label in the PowerSearch touch flow: in the Filters sheet header it opens the field list; in the value step it confirms a new filter. Imperative verb; no leading plus sign."
+  },
+  "@astryx.powersearch.sheet.noFilters": {
+    "defaultMessage": "No filters applied",
+    "description": "Heading of the PowerSearch Filters sheet empty state when no filter is active (experimental bottom-sheet presentation). Neutral tone."
+  },
+  "@astryx.powersearch.sheet.noFiltersInDraft": {
+    "defaultMessage": "No filters",
+    "description": "Heading of the PowerSearch Filters sheet empty state while the sheet's draft is empty but the field still has applied filters, which Done replaces. Must not say the filters are applied or removed yet. Neutral tone."
+  },
+  "@astryx.powersearch.sheet.noFiltersDescription": {
+    "defaultMessage": "Add a filter to narrow your results and find what you need faster.",
+    "description": "Guidance line under the PowerSearch Filters sheet empty state, above its Add filter action. One short sentence."
+  },
+  "@astryx.powersearch.sheet.clearAll": {
+    "defaultMessage": "Clear all",
+    "description": "Button label in the PowerSearch Filters sheet footer that asks to remove every editable filter. Imperative verb + determiner."
+  },
+  "@astryx.powersearch.sheet.clearAllTitle": {
+    "defaultMessage": "Clear all filters?",
+    "description": "Title and accessible name of the confirmation dialog that Clear all opens in the PowerSearch touch flow. A short question."
+  },
+  "@astryx.powersearch.sheet.clearAllDescription": {
+    "defaultMessage": "This removes all editable filters from this search.",
+    "description": "Body text of the PowerSearch Clear all confirmation dialog. Read-only filters stay, so it names editable filters."
+  },
+  "@astryx.powersearch.sheet.clearAllConfirm": {
+    "defaultMessage": "Clear filters",
+    "description": "Destructive action of the PowerSearch Clear all confirmation dialog: removes the editable filters. Imperative verb + plural noun."
+  },
+  "@astryx.powersearch.sheet.clearAllCancel": {
+    "defaultMessage": "Keep filters",
+    "description": "Safe action of the PowerSearch Clear all confirmation dialog: closes it and changes nothing. Imperative verb + plural noun."
+  },
+  "@astryx.powersearch.sheet.done": {
+    "defaultMessage": "Done",
+    "description": "Primary button label in the PowerSearch Filters sheet footer that commits the sheet's filter draft and closes the sheet. Short; marks the end of the filtering task."
+  },
+  "@astryx.powersearch.sheet.discardTitle": {
+    "defaultMessage": "Discard changes?",
+    "description": "Title of the confirmation dialog shown when someone tries to dismiss the PowerSearch filter sheet after changing its filter draft. A question."
+  },
+  "@astryx.powersearch.sheet.discardDescription": {
+    "defaultMessage": "Your changes to the filters haven't been applied.",
+    "description": "Body of the dirty-dismiss confirmation inside the PowerSearch filter sheet. Done applies the draft; a dismissal would drop it."
+  },
+  "@astryx.powersearch.sheet.keepEditing": {
+    "defaultMessage": "Keep editing",
+    "description": "Label of the safe cancel action in the PowerSearch dirty-dismiss confirmation. It closes the confirmation and returns to the unchanged draft."
+  },
+  "@astryx.powersearch.sheet.discardConfirm": {
+    "defaultMessage": "Discard changes",
+    "description": "Label of the destructive action in the PowerSearch dirty-dismiss confirmation. It closes the sheet without applying its filter draft."
+  },
+  "@astryx.powersearch.sheet.search": {
+    "defaultMessage": "Search",
+    "description": "Screen-reader-only label of the content-search box at the top of the PowerSearch Add filter sheet; its suggestions list inline below it. Noun or verb as reads best."
+  },
+  "@astryx.powersearch.sheet.searchResults": {
+    "defaultMessage": "Search results",
+    "description": "Screen-reader-only name of the inline suggestion list under the PowerSearch Add filter sheet's content search. Plural noun."
+  },
+  "@astryx.powersearch.sheet.searchFields": {
+    "defaultMessage": "Search filters",
+    "description": "Screen-reader-only label of the field-list filter box in the PowerSearch Add filter sheet, shown once the config has eight or more fields. Imperative verb + plural noun."
+  },
+  "@astryx.powersearch.sheet.searchFieldsPlaceholder": {
+    "defaultMessage": "Search filters…",
+    "description": "Placeholder inside the field-list filter box in the PowerSearch Add filter sheet. Imperative verb; trailing `…` is one character."
+  },
+  "@astryx.powersearch.sheet.ungroupedFields": {
+    "defaultMessage": "General",
+    "description": "Heading of the PowerSearch Add filter sheet's list of fields that belong to no group, shown before the named groups. A short noun."
+  },
+  "@astryx.powersearch.sheet.noMatchingFields": {
+    "defaultMessage": "No filters match your search",
+    "description": "Empty-state text in the PowerSearch Add filter sheet when the field-list filter matches no field. Neutral tone."
+  },
+  "@astryx.powersearch.sheet.tryDifferentSearch": {
+    "defaultMessage": "Try a different search.",
+    "description": "Guidance line under the PowerSearch Add filter sheet's empty search result (\"No results found\", \"No filters match your search\"). One short sentence."
+  },
+  "@astryx.powersearch.sheet.noResults": {
+    "defaultMessage": "No results found",
+    "description": "Empty-state text in the PowerSearch Add filter sheet when the content search has no suggestion for the typed query. Neutral tone (not error-y)."
+  },
+  "@astryx.powersearch.sheet.filterUnavailable": {
+    "defaultMessage": "This filter is no longer available",
+    "description": "Message in the PowerSearch value step when a config update removed the field or operator being edited; Cancel remains as the way out, and the Filters row keeps its remove action."
+  },
+  "@astryx.powersearch.sheet.removeFilter": {
+    "defaultMessage": "Remove {field} filter",
+    "description": "Accessible name and tooltip of the trailing remove button on a PowerSearch Filters sheet row; field is the filter's field label (for example \"Remove Status filter\")."
+  },
+  "@astryx.powersearch.sheet.relativeDaysAgo": {
+    "defaultMessage": "{count, number} {count, plural, one {day} other {days}} ago",
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 days ago\"). The popover editor lists the same choices."
+  },
+  "@astryx.powersearch.sheet.relativeDaysFromNow": {
+    "defaultMessage": "{count, number} {count, plural, one {day} other {days}} from now",
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 days from now\"). The popover editor lists the same choices."
+  },
+  "@astryx.powersearch.sheet.relativeWeeksAgo": {
+    "defaultMessage": "{count, number} {count, plural, one {week} other {weeks}} ago",
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 weeks ago\"). The popover editor lists the same choices."
+  },
+  "@astryx.powersearch.sheet.relativeWeeksFromNow": {
+    "defaultMessage": "{count, number} {count, plural, one {week} other {weeks}} from now",
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 weeks from now\"). The popover editor lists the same choices."
+  },
+  "@astryx.powersearch.sheet.relativeMonthsAgo": {
+    "defaultMessage": "{count, number} {count, plural, one {month} other {months}} ago",
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 months ago\"). The popover editor lists the same choices."
+  },
+  "@astryx.powersearch.sheet.relativeMonthsFromNow": {
+    "defaultMessage": "{count, number} {count, plural, one {month} other {months}} from now",
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 months from now\"). The popover editor lists the same choices."
+  },
+  "@astryx.powersearch.sheet.fieldOperator": {
+    "defaultMessage": "{field} {operator}",
+    "description": "A field label joined with an operator label in the PowerSearch touch sheet: the value step's title, an operator radio's name, and the first part of a Filters row (for example \"Status is\"). Translators may reorder the two parts."
+  },
+  "@astryx.powersearch.sheet.labelValue": {
+    "defaultMessage": "{label} {value}",
+    "description": "A Filters row's \"field operator\" text joined with its value, as the removal announcement reads it (for example \"Status is Open\"). Translators may reorder the two parts."
+  },
   "@astryx.alertDialog.cancel": {
     "defaultMessage": "Cancel",
     "description": "Button label on the secondary/dismiss button of an AlertDialog (modal confirmation). Imperative verb; consumers usually override with task-specific text."
@@ -989,7 +1121,23 @@
   },
   "@astryx.dateInput.invalidDate": {
     "defaultMessage": "Invalid date",
-    "description": "Screen-reader-only live-region alert in DateInput / DateTimeInput when the typed date cannot be parsed. The field silently reverts on blur, so this is the only rejection feedback a screen-reader user gets."
+    "description": "Screen-reader-only live-region alert in DateInput / DateTimeInput when the typed text cannot be read as a date. Text the field cannot finish, such as a one-digit year, stays on Enter or blur and shows this message as the field status."
+  },
+  "@astryx.dateInput.nonexistentDate": {
+    "defaultMessage": "This date does not exist in the {calendar}",
+    "description": "Error in DateInput / DateTimeInput, shown below the field and announced, when the typed date is readable but the calendar does not have it, such as 30 Esfand in a common Persian year or February 30. {calendar} is the calendar's localized name from the platform, such as \"Persian Calendar\" or \"Gregorian Calendar\"."
+  },
+  "@astryx.dateInput.outOfRangeDate": {
+    "defaultMessage": "{bounds, select, both {Enter a date from {min} to {max}} min {Enter a date on or after {min}} max {Enter a date on or before {max}} other {This date is not available}}",
+    "description": "Error in DateInput / DateTimeInput, shown below the field and announced, when the typed date is outside the allowed range. {min} and {max} are the bounds, written as dates in the field's calendar. `bounds` is `both`, `min`, or `max` for a date outside those bounds, and `other` for a date that a custom rule rejects."
+  },
+  "@astryx.dateInput.formatHint": {
+    "defaultMessage": "e.g., {example}",
+    "description": "Placeholder hint in a DateInput / DateTimeInput date field that uses a calendar other than the Gregorian calendar, shown when the field is focused and empty. {example} is today's date, or the nearest date the field accepts, written in that calendar's numeric pattern, such as ۱۴۰۵/۸/۱۱."
+  },
+  "@astryx.dateInput.calendarDescription": {
+    "defaultMessage": "Dates use the {calendar}",
+    "description": "Screen-reader-only description of a DateInput / DateTimeInput date field whose calendar differs from the app's calendar, such as a Persian field in a Gregorian app or a Gregorian field in a Persian app. {calendar} is the calendar's localized name from the platform, such as \"Persian Calendar\" or \"Gregorian Calendar\"."
   },
   "@astryx.dateInput.resetPicking": {
     "defaultMessage": "Reset",
@@ -1123,6 +1271,10 @@
     "defaultMessage": "All filters removed",
     "description": "Screen-reader announcement after a PowerSearch field's Clear all removes every filter. Distinct from @astryx.tokenizer.allRemoved: PowerSearch words its items as filters."
   },
+  "@astryx.powersearch.editableFiltersRemoved": {
+    "defaultMessage": "Editable filters removed",
+    "description": "Screen-reader announcement after a PowerSearch field's Clear all removes the filters the user can edit and keeps its read-only filters. Used instead of @astryx.powersearch.allFiltersRemoved while a read-only filter remains."
+  },
   "@astryx.resizable.collapsed": {
     "defaultMessage": "Collapsed",
     "description": "aria-valuetext for the Resizable drag handle (role=separator) while its panel is collapsed to zero size. Replaces the numeric value announcement, since the numeric value is clamped to the minimum while collapsed. Adjective describing the panel state, not a verb/command."
@@ -1186,6 +1338,10 @@
   "@astryx.spinner.loading": {
     "defaultMessage": "Loading",
     "description": "Screen-reader-only default name for a standalone Spinner's role=\"status\" element, used when the consumer supplies neither `aria-label` nor a visible string label; also announced once when a busy input or selector starts loading, in place of its decorative Spinner. Present-progressive form. Kept separate from `button.loading` and `typeahead.loading` — translations may diverge."
+  },
+  "@astryx.scrollRegion.label": {
+    "defaultMessage": "Content",
+    "description": "Accessible name of a scrolling content region (LayoutContent, LayoutPanel or StackItem) when the caller gives none. A screen reader announces it with the region's group role while the region scrolls."
   },
   "@astryx.chatComposerDrawer.expand": {
     "defaultMessage": "Expand {label}",
@@ -1274,6 +1430,10 @@
   "@astryx.field.optional": {
     "defaultMessage": "Optional",
     "description": "Visible indicator shown next to a form field's label when the field is optional (isOptional). Mutually exclusive with the required indicator. Very short — appears inline after the label text."
+  },
+  "@astryx.field.labelTooltip": {
+    "defaultMessage": "About {label}",
+    "description": "Screen-reader name of the small info button after a form field's label; the button shows help about the field. {label} is the field's visible label. Example: `About Auto-save`."
   },
   "@astryx.field.required": {
     "defaultMessage": "Required",
@@ -1507,9 +1667,17 @@
     "defaultMessage": "Collapse row",
     "description": "Screen-reader-only label on the row-expand chevron when the row is currently expanded. Part of the four-way expand/collapse set."
   },
+  "@astryx.tableRowExpansion.collapseRowNamed": {
+    "defaultMessage": "Collapse {label}",
+    "description": "Aria label for an expanded row expansion control when a human-readable identity is available. `label` is the row identity from getRowLabel."
+  },
   "@astryx.tableRowExpansion.expandRow": {
     "defaultMessage": "Expand row",
     "description": "Screen-reader-only label on the row-expand chevron when the row is currently collapsed. Part of a four-way set with `collapseRow`, `expandAllRows`, `collapseAllRows`."
+  },
+  "@astryx.tableRowExpansion.expandRowNamed": {
+    "defaultMessage": "Expand {label}",
+    "description": "Aria label for a collapsed row expansion control when a human-readable identity is available. `label` is the row identity from getRowLabel."
   },
   "@astryx.tableRowExpansion.columnHeader": {
     "defaultMessage": "Row expansion",
@@ -1567,9 +1735,17 @@
     "defaultMessage": "Collapse row",
     "description": "Aria label for the Table tree-data expander chevron when the row is currently expanded."
   },
+  "@astryx.tableTree.collapseRowNamed": {
+    "defaultMessage": "Collapse {label}",
+    "description": "Aria label for an expanded Table tree-data row when a human-readable identity is available. `label` is the row identity from getRowLabel."
+  },
   "@astryx.tableTree.expandRow": {
     "defaultMessage": "Expand row",
     "description": "Aria label for the Table tree-data expander chevron when the row is currently collapsed."
+  },
+  "@astryx.tableTree.expandRowNamed": {
+    "defaultMessage": "Expand {label}",
+    "description": "Aria label for a collapsed Table tree-data row when a human-readable identity is available. `label` is the row identity from getRowLabel."
   },
   "@astryx.tableTree.collapseAllRows": {
     "defaultMessage": "Collapse all rows",
@@ -2270,5 +2446,13 @@
   "@astryx.comments.postFailed": {
     "defaultMessage": "Your comment couldn't be posted.",
     "description": "Error shown above the new-comment composer of a lab Comments panel when posting failed; the draft is kept and a Retry action follows."
+  },
+  "@astryx.infoTip.label": {
+    "defaultMessage": "More information",
+    "description": "Default accessible name of an InfoTip, the small info-icon button whose press reveals help about the label, value, or metric beside it."
+  },
+  "@astryx.navigationStack.back": {
+    "defaultMessage": "Back",
+    "description": "Label of the back button in a lab NavigationStack's bar when the screen it returns to has no title of its own. Returns to the previous screen; keep it short, as on an iOS navigation bar."
   }
 }

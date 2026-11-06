@@ -63,7 +63,6 @@ import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
-import {MenuRegionsContext} from './menuRegionsContext';
 import {moveRegionsTab} from './menuRegionStops';
 import {Item} from '../Item';
 import {useLayer} from '../Layer/useLayer';
@@ -99,6 +98,7 @@ import {
   rtlStyles,
 } from '../utils';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {getInteractionModality} from '../utils/interactionModality';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useDevWarning} from '../hooks/useDevWarning';
@@ -146,7 +146,9 @@ const triggerStyles = stylex.create({
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',
-      ':focus': colorVars['--color-overlay-hover'],
+      // menuPressLitRowStyle sets the variable on the row a held finger or pen
+      // lights.
+      ':focus': `var(--_menu-row-focus-paint, ${colorVars['--color-overlay-hover']})`,
     },
     borderWidth: 0,
     borderStyle: 'none',
@@ -515,7 +517,6 @@ export function DropdownMenuSubMenu(
   const t = useComponentTranslator();
   const menuCtx = useDropdownMenuContext();
   const rootSurface = use(DropdownMenuSurfaceContext);
-  const rootHasRegions = use(MenuRegionsContext);
   const menuSize = menuCtx?.menuSize ?? 'md';
   const canOpen = !isDisabled;
   // With a header or footer the sub-menu's surface holds controls that are not
@@ -922,14 +923,13 @@ export function DropdownMenuSubMenu(
           );
           return;
         }
-        // In a menu with a header or footer above this level, Tab leaves the
-        // flyout stack: every open level closes as the key bubbles past it,
-        // this one's own rows or a deeper level's, and the level with the
-        // regions moves focus on.
-        if (rootHasRegions) {
-          close({focusTrigger: false});
-          return;
-        }
+        // Otherwise Tab leaves the flyout stack: every open level closes as
+        // the key bubbles past it, this one's own rows or a deeper level's.
+        // In a menu with a header or footer above this level, that level
+        // moves focus on; in a plain menu the root closes the whole menu,
+        // and focus moves on from its trigger (APG menu button).
+        close({focusTrigger: false});
+        return;
       }
       if (!ownsEvent(e)) {
         return;
@@ -978,15 +978,7 @@ export function DropdownMenuSubMenu(
       }
       listNavKeyDown(e);
     },
-    [
-      ownsEvent,
-      close,
-      listNavKeyDown,
-      typeahead,
-      menuRef,
-      rootHasRegions,
-      hasRegions,
-    ],
+    [ownsEvent, close, listNavKeyDown, typeahead, menuRef, hasRegions],
   );
 
   // A region keeps its own keys: arrows move a field's caret and letters type.
@@ -1099,9 +1091,6 @@ export function DropdownMenuSubMenu(
       </DropdownMenuSurfaceContext>
     </DropdownMenuContext>
   );
-  // A level with its own header or footer tells the levels below it, so Tab
-  // from a deeper flyout closes that flyout and this level walks on.
-  //
   // Nested rows live in this level's flyout, a layer of their own where the
   // layer-scoped signal resets; re-provide it, as whether every level above
   // them is open, so their pending hover intent dies with the root menu or
@@ -1109,11 +1098,7 @@ export function DropdownMenuSubMenu(
   // leave a flyout with a header or footer shown beside the root's menu.
   const nestedContent = (
     <DropdownMenuRootOpenContext value={isRootMenuOpen && isOpen}>
-      {hasRegions ? (
-        <MenuRegionsContext value={true}>{nestedRows}</MenuRegionsContext>
-      ) : (
-        nestedRows
-      )}
+      {nestedRows}
     </DropdownMenuRootOpenContext>
   );
 
@@ -1243,6 +1228,7 @@ export function DropdownMenuSubMenu(
         xstyle={[
           focusOutlineStyles.focusVisible,
           triggerStyles.root,
+          menuPressLitRowStyle,
           triggerSizeStyles[menuSize],
           isOpen && triggerStyles.open,
           isDisabled && triggerStyles.disabled,

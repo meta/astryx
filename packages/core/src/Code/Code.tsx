@@ -114,7 +114,7 @@ export function Code({
       ref={ref}
       {...props}
       {...mergeProps(
-        themeProps('code', {color}),
+        themeProps('code', {color, size}),
         stylex.props(
           styles.base,
           colorStyles[color],

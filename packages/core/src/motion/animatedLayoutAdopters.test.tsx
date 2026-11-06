@@ -5,10 +5,10 @@
  * @input vitest (jsdom), React Testing Library, Collapsible, TreeList,
  *   useAnimatedLayout, a recording stand-in for Element.animate and stubbed
  *   rectangles for the content after the changed component
- * @output Checks each adopting component with and without a handle
- *   (`spec:AST-105` FR1, FR2): with one, a toggle glides the content after it
- *   inside the container and the chevron takes the spring; without one,
- *   nothing animates and the chevron keeps its own transition
+ * @output Checks each adopting component with and without a handle. With
+ *   one, a toggle glides the content after it inside the container, and the
+ *   chevron takes the move curve. Without one, nothing animates and the
+ *   chevron keeps its own transition
  * @position Testing; the walk and the motion are covered in
  *   animatedLayout.test.ts and, in real browsers,
  *   __tests__/animatedLayout.interaction.browser.spec.ts
@@ -157,7 +157,7 @@ describe.each([
     expect(animated).toContain(after);
     expect(
       component.chevron()?.style.getPropertyValue('transition-timing-function'),
-    ).toMatch(/^linear\(/);
+    ).toBe('cubic-bezier(0.24, 1, 0.4, 1)');
   });
 
   it('changes nothing without a handle', async () => {
@@ -516,7 +516,7 @@ describe("a close plays the content's exit (spec:AST-105 FR4)", () => {
     expect(groupOf('photos')).toBeNull();
   });
 
-  it("drops the chevron's spring when the handle is removed", async () => {
+  it("drops the chevron's move curve when the handle is removed", async () => {
     const user = userEvent.setup();
     const {rerender} = render(
       <Area withHandle>

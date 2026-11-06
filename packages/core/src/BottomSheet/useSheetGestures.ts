@@ -64,6 +64,8 @@ import {
   type UIEvent as ReactUIEvent,
 } from 'react';
 
+import {rubberBand} from '../motion/rubberBand';
+import {scroll} from '../motion/uikit/scroll';
 import {
   computeDetentOffsets,
   peekOffsetFor,
@@ -112,12 +114,19 @@ function isSyntheticTouch(event: ReactPointerEvent): boolean {
   return (event as SyntheticTouchPointer).syntheticTouch === true;
 }
 
-// Rubber-band factor for dragging up past fully-open, capped at OVERSCROLL_MAX
-// (the sheet reserves that much bottom padding for the lift to reveal).
+type StylusTouch = Touch & {touchType?: string};
+
+// An Apple Pencil raises touch events too, marked `stylus`. Its drag is a
+// pen's, as on the grabber, where WebKit reports it as a pen.
+function touchPointerType(touch: Touch): string {
+  return (touch as StylusTouch).touchType === 'stylus' ? 'pen' : 'touch';
+}
+
+// A mouse's or a pen's stretch past fully open: a resisted fraction of the
+// drag, capped at OVERSCROLL_MAX.
 const OVERSCROLL_RESISTANCE = 0.35;
-// SYNC: must match OVERSCROLL_PADDING in BottomSheetPanel.tsx (the reserved
-// bottom padding the lift reveals). Kept as a local const rather than a shared
-// import so it can be used inside stylex.create there.
+// SYNC: must not exceed MIN_RESERVE in BottomSheetPanel.tsx, the smallest
+// reserve the sheet keeps below the screen.
 const OVERSCROLL_MAX = 48;
 // Travel past the point where a scrolling gesture ran out of content before it
 // hands the sheet the rest of the pull. Small enough to feel continuous with
@@ -308,6 +317,36 @@ function chainAtBottom(chain: ReadonlyArray<HTMLElement>): boolean {
   return chain.every(elementAtBottom);
 }
 
+function chainScrolls(chain: ReadonlyArray<HTMLElement>): boolean {
+  return chain.some(element => element.scrollHeight - element.clientHeight > 1);
+}
+
+/**
+ * iOS rubber-bands a scroller past its end even under `overscroll-behavior:
+ * contain`. While the content sits at its end mid-pull, `none` holds it still,
+ * so only the sheet moves. Returns the undo.
+ */
+function holdAtEnd(chain: ReadonlyArray<HTMLElement>): () => void {
+  const previous = chain.map(element => element.style.overscrollBehaviorY);
+  for (const element of chain) {
+    element.style.overscrollBehaviorY = 'none';
+  }
+  return () => {
+    chain.forEach((element, index) => {
+      element.style.overscrollBehaviorY = previous[index];
+    });
+  };
+}
+
+function releaseContentHold(
+  armed: {releaseContentHold: (() => void) | null} | null,
+): void {
+  if (armed?.releaseContentHold != null) {
+    armed.releaseContentHold();
+    armed.releaseContentHold = null;
+  }
+}
+
 function visibleHeightForOffset(
   sheetHeight: number,
   offset: number,
@@ -354,6 +393,8 @@ export interface UseSheetGesturesOptions {
   snapHeights?: () => number[];
   /** Notified when the settled visible detent height (px) changes. */
   onSnap?: (heightPx: number) => void;
+  /** Called once a drag first moves the sheet off its detent. */
+  onTravelStart?: () => void;
   /**
    * Called with the scrim opacity the sheet should show (1 = fully visible,
    * 0 = hidden) as the drag moves and on settle. Full while the sheet is at
@@ -370,6 +411,14 @@ export interface UseSheetGesturesOptions {
    * @default false
    */
   hasFixedHeight?: boolean;
+}
+
+/** A drag's close: the distance left to the closed position and the speed. */
+export interface SheetDragExit {
+  /** px from the release position to the closed position. */
+  readonly distance: number;
+  /** The release velocity, px/s, positive toward closed. */
+  readonly velocity: number;
 }
 
 export interface SheetContentProps {
@@ -446,6 +495,11 @@ export interface UseSheetGesturesResult {
    */
   isDismissedByTouchDrag: boolean;
   /**
+   * The exit a touch drag's release started: the distance left to travel and
+   * the release speed. Null for a close that no touch drag started.
+   */
+  dragExit: SheetDragExit | null;
+  /**
    * The sheet's offset right now, in px: the settled detent at rest, the live
    * position during a drag. Written per input sample without a render; read
    * it where the live number is needed without subscribing to it.
@@ -508,6 +562,7 @@ export function useSheetGestures({
   onDismiss,
   snapHeights,
   onSnap,
+  onTravelStart,
   onScrimOpacity,
   hasFixedHeight = false,
 }: UseSheetGesturesOptions): UseSheetGesturesResult {
@@ -518,31 +573,38 @@ export function useSheetGestures({
   // onDismiss() and sets `pending`; the host answers in the same update, so
   // the first render afterwards says whether it took the close (its
   // controlled state now says closed: the exit under way is the drag's) or
-  // refused it (a guarded onOpenChange left it open: the sheet snaps back and
-  // the request is spent). Either way the flag is settled during render, the
-  // prev-prop pattern, and derived back to false once the sheet is open
-  // again — so a later close from a control, Escape or code is never
-  // mistaken for a drag.
+  // refused it (a guarded onOpenChange left it open: the sheet snaps back,
+  // its scrim with it, and the request is spent). Either way the flag is
+  // settled during render, the prev-prop pattern, and derived back to false
+  // once the sheet is open again — so a later close from a control, Escape
+  // or code is never mistaken for a drag.
   const [touchDragDismissal, setTouchDragDismissal] = useState<{
     isTouch: boolean;
     pending: boolean;
+    exit: SheetDragExit | null;
   } | null>(null);
+  // The render that spends a refused request counts it. The layout effect
+  // below answers each count.
+  const [refusedDismissalCount, setRefusedDismissalCount] = useState(0);
   if (touchDragDismissal != null) {
     if (touchDragDismissal.pending) {
-      setTouchDragDismissal(
-        isOpenRequested
-          ? null
-          : {isTouch: touchDragDismissal.isTouch, pending: false},
-      );
+      if (isOpenRequested) {
+        setTouchDragDismissal(null);
+        setRefusedDismissalCount(count => count + 1);
+      } else {
+        setTouchDragDismissal({...touchDragDismissal, pending: false});
+      }
     } else if (isOpenRequested) {
       setTouchDragDismissal(null);
     }
   }
-  const isDismissedByTouchDrag =
+  const isDismissedByDrag =
     touchDragDismissal != null &&
     !touchDragDismissal.pending &&
-    touchDragDismissal.isTouch &&
     !isOpenRequested;
+  const isDismissedByTouchDrag =
+    isDismissedByDrag && touchDragDismissal.isTouch;
+  const dragExit = isDismissedByDrag ? touchDragDismissal.exit : null;
   // Whether the drag in flight has moved the sheet off its base detent. One
   // state change per drag, for hosts that react to travel beginning.
   const [isTraveling, setIsTraveling] = useState(false);
@@ -654,6 +716,8 @@ export function useSheetGestures({
   // stops by the time the re-anchor read it.
   const snapHeightsRef = useRef(snapHeights);
   snapHeightsRef.current = snapHeights;
+  const onTravelStartRef = useRef(onTravelStart);
+  onTravelStartRef.current = onTravelStart;
 
   const onDismissRef = useRef(onDismiss);
   const canDismissRef = useRef(canDismiss);
@@ -667,6 +731,24 @@ export function useSheetGestures({
     onScrimOpacityRef.current = onScrimOpacity;
     hasFixedHeightRef.current = hasFixedHeight;
   });
+
+  // The release cannot know whether the host takes the close. The host
+  // answers through `isOpenRequested` in the next render. Keep the left
+  // detent's scrim until then.
+  const restingScrimOpacityRef = useRef<number | null>(null);
+  // Syncs the host's scrim (its backdrop, written through `onScrimOpacity`)
+  // with the panel's return to rest after a refusal: the panel rests on that
+  // detent again, so the scrim the drag thinned toward the dismiss line rests
+  // with it. The refusal changes none of the host's own scrim inputs, so the
+  // drag's last value would otherwise stand.
+  useLayoutEffect(() => {
+    const restingScrimOpacity = restingScrimOpacityRef.current;
+    if (refusedDismissalCount === 0 || restingScrimOpacity == null) {
+      return;
+    }
+    restingScrimOpacityRef.current = null;
+    onScrimOpacityRef.current?.(restingScrimOpacity);
+  }, [refusedDismissalCount]);
 
   // Live drag bookkeeping (refs so pointermove doesn't churn renders).
   const dragStateRef = useRef<{
@@ -685,6 +767,8 @@ export function useSheetGestures({
     samples: {t: number; y: number}[];
     velocity: number;
     height: number;
+    /** The surface kept below the screen when the drag began. */
+    reserve: number;
     baseOffset: number;
     baseLayoutOffset: number;
     renderedOffset: number;
@@ -699,6 +783,8 @@ export function useSheetGestures({
   const sheetElRef = useRef<HTMLElement | null>(null);
   const bodyNodeRef = useRef<HTMLElement | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
+  // Syncs the browser layout with the transform reset, then ends the
+  // scroll-area reconcile one frame later.
   useLayoutEffect(() => {
     if (!isScrollAreaReconciling) {
       return;
@@ -738,7 +824,9 @@ export function useSheetGestures({
         }
         return;
       }
-      recordSheetHeight(node.getBoundingClientRect().height);
+      // No measure here: reading the height while the sheet mounts forces a
+      // layout in the middle of the open. The observer's first report comes
+      // after the browser's own layout, before the first paint.
       const ro = new ResizeObserver(entries => {
         const entry = entries[0];
         if (entry) {
@@ -756,6 +844,7 @@ export function useSheetGestures({
     },
     [recordSheetHeight],
   );
+  // Releases the height observer on unmount.
   useEffect(() => () => observerRef.current?.disconnect(), []);
 
   // Reset to the tallest detent each time the sheet re-opens.
@@ -907,6 +996,8 @@ export function useSheetGestures({
     resolveDetents,
   ]);
 
+  // Syncs window resize and orientation listeners with `isOpen`. Each event
+  // anchors the sheet to its settled detent again.
   useEffect(() => {
     if (!isOpen || typeof window === 'undefined') {
       return;
@@ -1024,6 +1115,8 @@ export function useSheetGestures({
     [prepareScrollAreaSettle, resolveDetents],
   );
 
+  // Syncs window blur and document visibilitychange listeners with `isOpen`. A
+  // blur or a hidden page cancels a drag.
   useEffect(() => {
     // Only an open sheet can be dragged; a closed one listens to nothing.
     if (!isOpen) {
@@ -1101,37 +1194,54 @@ export function useSheetGestures({
         }
       };
 
+      const closeSheet = (exit: SheetDragExit | null) => {
+        if (!canDismissRef.current) {
+          settleAt(maxOffset);
+          return;
+        }
+        prepareScrollAreaSettle(
+          baseLayoutOffset,
+          baseOffset,
+          baseLayoutOffset,
+          baseLayoutOffset,
+          baseLayoutOffset,
+          naturalEndGap,
+          false,
+        );
+        restingScrimOpacityRef.current = scrimOpacityForOffset(
+          baseOffset,
+          offsets,
+          dismissOffset,
+          peekOffset,
+        );
+        setTouchDragDismissal({isTouch, pending: true, exit});
+        onDismissRef.current();
+      };
       // A release that would coast past the dismiss line closes the sheet: a
       // throw from anywhere, or a slow drag that already crossed it.
       if (dir > 0 && projected > dismissOffset) {
-        if (canDismissRef.current) {
-          prepareScrollAreaSettle(
-            baseLayoutOffset,
-            baseOffset,
-            baseLayoutOffset,
-            baseLayoutOffset,
-            baseLayoutOffset,
-            naturalEndGap,
-            false,
-          );
-          setTouchDragDismissal({isTouch, pending: true});
-          onDismissRef.current();
-        } else {
-          settleAt(maxOffset);
-        }
+        closeSheet(
+          isTouch
+            ? {
+                distance: Math.max(0, height - offset),
+                velocity: velocity * 1000,
+              }
+            : null,
+        );
         return;
       }
       // Settle to the detent nearest where the release would coast to, in the
       // drag direction (never back past the starting detent), de-duped and
       // direction-clamped by the util. A throw upward projects past the
       // tallest detent and lands on it.
-      const target = resolveSettleOffset(
-        Math.min(Math.max(projected, 0), maxOffset),
-        offsets,
-        dir,
-        baseOffset,
+      settleAt(
+        resolveSettleOffset(
+          Math.min(Math.max(projected, 0), maxOffset),
+          offsets,
+          dir,
+          baseOffset,
+        ),
       );
-      settleAt(target);
     },
     [prepareScrollAreaSettle, recordSettledLayoutOffset, resolveDetents],
   );
@@ -1157,7 +1267,7 @@ export function useSheetGestures({
       const baseLayoutOffset = settledLayoutOffsetRef.current;
       dragStateRef.current = {
         syntheticTouch,
-        pointerType: syntheticTouch ? 'touch' : event.pointerType,
+        pointerType: event.pointerType,
         pointerId: event.pointerId,
         startCoord: start,
         lastCoord: event.clientY,
@@ -1165,6 +1275,7 @@ export function useSheetGestures({
         samples: [{t: event.timeStamp, y: event.clientY}],
         velocity: 0,
         height: sheetHeight,
+        reserve: offscreenBlockEndInsetRef.current,
         baseOffset: settledOffset,
         baseLayoutOffset,
         renderedOffset: settledOffset,
@@ -1265,8 +1376,19 @@ export function useSheetGestures({
       const maxDetentOffset = offsets[offsets.length - 1];
       let next: number;
       if (raw < 0) {
-        // Up past fully-open: damped + capped rubber-band; springs back on release.
-        next = Math.max(-OVERSCROLL_MAX, raw * OVERSCROLL_RESISTANCE);
+        // A touch device's reserve covers the whole stretch. The clamp binds
+        // only where the reserve is short.
+        next =
+          state.pointerType === 'touch'
+            ? Math.max(
+                -state.reserve,
+                rubberBand(
+                  raw,
+                  state.height - state.reserve,
+                  scroll.rubberBand.coefficient,
+                ),
+              )
+            : Math.max(-OVERSCROLL_MAX, raw * OVERSCROLL_RESISTANCE);
       } else if (raw > maxDetentOffset) {
         // In the dismiss zone: no magnet, so it doesn't fight a drag-to-close.
         next = raw;
@@ -1303,6 +1425,7 @@ export function useSheetGestures({
       if (!state.hasTraveled && next !== state.baseOffset) {
         state.hasTraveled = true;
         setIsTraveling(true);
+        onTravelStartRef.current?.();
       }
 
       // Mirror the scrim to the live drag: full at/above the mid detent,
@@ -1467,6 +1590,8 @@ export function useSheetGestures({
     // armed at `touchstart`. That drag never cancelled the native scroll, so
     // it has to yield again if the finger comes back down.
     promotedAtContentEnd: boolean;
+    // Null while no hold is set.
+    releaseContentHold: (() => void) | null;
   } | null>(null);
   const previousTouchHandlersRef = useRef<{
     start: (e: TouchEvent) => void;
@@ -1480,6 +1605,7 @@ export function useSheetGestures({
   // the gesture; the sheet returns to its detent.
   const yieldToPinch = useCallback(
     (target?: HTMLElement) => {
+      releaseContentHold(touchDragRef.current);
       touchDragRef.current = null;
       armedBodyRef.current = null;
       cancelDrag(target);
@@ -1507,6 +1633,7 @@ export function useSheetGestures({
       ({
         syntheticTouch: true,
         pointerId: touch.identifier,
+        pointerType: touchPointerType(touch),
         clientY: touch.clientY,
         timeStamp: Date.now(),
         currentTarget: target,
@@ -1527,21 +1654,21 @@ export function useSheetGestures({
       // scroll, but it is tracked all the same: the scroller can run out of
       // content while the finger is still down (see onTouchMove). A touch
       // inside a layer this sheet hosts is that layer's, never tracked here.
+      releaseContentHold(touchDragRef.current);
       if (!touch || isInsideNestedLayer(event.target, body)) {
         touchDragRef.current = null;
         return;
       }
       const scrollers = scrollChainUnder(event.target, body);
       const top = chainAtTop(scrollers);
-      // The bottom edge hands off so the sheet can EXPAND, so it is only a
-      // handoff when a taller detent exists. Already at the tallest, an
-      // upward pull has nowhere to travel: promoting it would trade the
-      // user's scroll for a rubber-band the release throws straight back, and
-      // — because promotion preventDefault()s the rest of the gesture — would
-      // strand the scroller for as long as the finger stays down, so reversing
-      // downward to scroll back would collapse the sheet instead. Leave the
-      // gesture with the content.
-      const bottom = chainAtBottom(scrollers) && activeOffsetRef.current > 0;
+      // Claiming a pull up from its first move blocks the content's scroll for
+      // the whole touch. So it is claimed here only below the tallest detent,
+      // or over content that cannot scroll. At the tallest detent, a list at
+      // its end keeps its touch. Its pull reaches the sheet through the
+      // content-end hand-off below, and a reversal hands it back.
+      const bottom =
+        chainAtBottom(scrollers) &&
+        (activeOffsetRef.current > 0 || !chainScrolls(scrollers));
       touchDragRef.current = {
         id: touch.identifier,
         startY: touch.clientY,
@@ -1550,6 +1677,7 @@ export function useSheetGestures({
         bottom,
         contentEndY: null,
         promotedAtContentEnd: false,
+        releaseContentHold: null,
       };
     };
 
@@ -1579,6 +1707,7 @@ export function useSheetGestures({
             // at once; a later pull past the end promotes again.
             armed.contentEndY = null;
             armed.promotedAtContentEnd = false;
+            releaseContentHold(armed);
             cancelDragRef.current(scroller);
             return;
           }
@@ -1612,6 +1741,7 @@ export function useSheetGestures({
         chainAtBottom(armed.scrollers);
       if (pullDownAtTop || pullUpAtBottom) {
         event.preventDefault();
+        releaseContentHold(armed);
         touchDragRef.current = null;
         beginDragRef.current(
           asPointer(t, scroller),
@@ -1631,13 +1761,14 @@ export function useSheetGestures({
       // cannot see this, and re-arming for a preventDefault() promotion would
       // be useless anyway: once the browser has committed the gesture to
       // scrolling, every remaining touchmove is non-cancelable. Nothing needs
-      // cancelling either — the scroller is clamped at its maximum, so further
-      // upward travel scrolls nothing. Anchor at the point where the content
+      // cancelling either: the hold clamps the scroller at its maximum, so
+      // further upward travel scrolls nothing. Anchor at the point where the content
       // ran out and give the sheet everything past it, so the pull continues
       // into the sheet with no jump and no lost scrolling.
-      if (activeOffsetRef.current > 0 && chainAtBottom(armed.scrollers)) {
+      if (chainAtBottom(armed.scrollers)) {
         if (armed.contentEndY == null) {
           armed.contentEndY = t.clientY;
+          armed.releaseContentHold ??= holdAtEnd(armed.scrollers);
         } else if (armed.contentEndY - t.clientY >= CONTENT_END_HANDOFF_SLOP) {
           armed.promotedAtContentEnd = true;
           beginDragRef.current(
@@ -1649,10 +1780,12 @@ export function useSheetGestures({
         }
       } else {
         armed.contentEndY = null;
+        releaseContentHold(armed);
       }
     };
 
     const onTouchEnd = (event: TouchEvent) => {
+      releaseContentHold(touchDragRef.current);
       touchDragRef.current = null;
       const pointerId = dragStateRef.current?.pointerId;
       if (pointerId == null) {
@@ -1859,6 +1992,7 @@ export function useSheetGestures({
     isDragging,
     isTraveling,
     isDismissedByTouchDrag,
+    dragExit,
     activeOffsetRef,
     sheetHeight,
     scrollPreservationInset,

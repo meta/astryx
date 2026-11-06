@@ -798,6 +798,119 @@ describe('MultiSelector', () => {
     expect(trigger).toHaveAttribute('aria-activedescendant', options[2].id);
   });
 
+  it('typeahead walks to the next match on a repeated letter', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Food"
+        options={['Tea', 'Toast', 'Tofu']}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const options = screen.getAllByRole('option', h);
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[0].id);
+
+    await user.keyboard('t');
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[1].id);
+    await user.keyboard('t');
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[2].id);
+    await user.keyboard('t');
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[0].id);
+  });
+
+  it('typeahead searches a letter typed after a pause from the next option', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+      render(
+        <MultiSelector
+          label="Food"
+          options={['Tea', 'Toast', 'Tofu']}
+          value={[]}
+          onChange={() => {}}
+        />,
+      );
+
+      const trigger = screen.getByRole('combobox');
+      await user.click(trigger);
+      const options = screen.getAllByRole('option', h);
+
+      await user.keyboard('{ArrowDown}');
+      expect(trigger).toHaveAttribute('aria-activedescendant', options[1].id);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      await user.keyboard('t');
+      expect(trigger).toHaveAttribute('aria-activedescendant', options[2].id);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('typeahead keeps refining a longer prefix from the current option', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Food"
+        options={['Tea', 'Toast', 'Tofu']}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const options = screen.getAllByRole('option', h);
+
+    await user.keyboard('tof');
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[2].id);
+  });
+
+  it('Space still toggles the option a typed letter jumped to', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <MultiSelector
+        label="Status"
+        options={['Open', 'Pending', 'Done']}
+        value={[]}
+        onChange={onChange}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const options = screen.getAllByRole('option', h);
+
+    await user.keyboard('p');
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[1].id);
+    await user.keyboard(' ');
+    expect(onChange).toHaveBeenCalledWith(['Pending']);
+  });
+
+  it('typeahead opens a closed list on the match', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Food"
+        options={['Apple', 'Banana', 'Cherry']}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox');
+    await act(async () => trigger.focus());
+    await user.keyboard('c');
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const options = screen.getAllByRole('option', h);
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[2].id);
+  });
+
   it('toggles item with Enter key', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
@@ -1834,6 +1947,33 @@ describe('MultiSelector', () => {
   });
 
   describe('keyboard accessibility', () => {
+    it('a row that scrolls under a still mouse after a key does not take the highlight; a mouse that moves does', async () => {
+      const user = userEvent.setup();
+      const many = Array.from({length: 30}, (_, i) => `Option ${i}`);
+      render(
+        <MultiSelector
+          label="Items"
+          options={many}
+          value={[]}
+          onChange={() => {}}
+        />,
+      );
+      const trigger = screen.getByRole('combobox', {name: 'Items'});
+      trigger.focus();
+      await user.keyboard('{ArrowDown}');
+      const rows = screen.getAllByRole('option', {hidden: true});
+      const active = () => trigger.getAttribute('aria-activedescendant');
+      await user.keyboard('{End}');
+      expect(active()).toBe(rows[29].id);
+      // The browser reports the row now under the still mouse as entered.
+      fireEvent.mouseEnter(rows[20]);
+      expect(active()).toBe(rows[29].id);
+      // The mouse moves onto the next row.
+      fireEvent.mouseEnter(rows[21]);
+      fireEvent.pointerMove(rows[21], {screenX: 60, screenY: 90});
+      expect(active()).toBe(rows[21].id);
+    });
+
     it('trigger is focusable via Tab when enabled', async () => {
       const user = userEvent.setup();
       render(
@@ -2005,6 +2145,7 @@ describe('MultiSelector', () => {
 
         const options = screen.getAllByRole('option', {hidden: true});
         fireEvent.mouseEnter(options[3]);
+        fireEvent.pointerMove(options[3], {screenX: 121, screenY: 121});
 
         expect(trigger.getAttribute('aria-activedescendant')).toBe(
           options[3].id,
@@ -2555,7 +2696,9 @@ describe('MultiSelector', () => {
 
         rerender(selector(true));
 
-        await waitFor(() => expect(dialog).toHaveAttribute('inert'));
+        // The sheet closes with focus inside it, so it stays out of inert
+        // through its exit (component:BottomSheet FR9).
+        await waitFor(() => expect(dialog).not.toHaveAttribute('aria-modal'));
         fireEvent.transitionEnd(panel!, {propertyName: 'transform'});
         const readOnlyTrigger = screen.getByRole('combobox', {name: 'Fruit'});
         await waitFor(() => expect(readOnlyTrigger).toHaveFocus());
@@ -3579,6 +3722,44 @@ describe('MultiSelector popup theme target', () => {
     expect(trigger.parentElement).toHaveClass(
       stylex.props(selectorPresentationStyles.pointerRestoredFocus).className!,
     );
+  });
+});
+
+describe('MultiSelector built-in trigger focus on close', () => {
+  it('with the built-in trigger, a light dismiss onto another field leaves focus there, and Escape returns it to the trigger', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <MultiSelector
+          label="Labels"
+          options={['Bug', 'Feature', 'Docs']}
+          value={[]}
+          onChange={() => {}}
+        />
+        <input aria-label="Notes" />
+      </>,
+    );
+    const trigger = screen.getByRole('combobox', {name: 'Labels'});
+    await user.click(trigger);
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    const notes = screen.getByRole('textbox', {name: 'Notes'});
+    act(() => {
+      notes.focus();
+    });
+    const popover = document.querySelector('[popover]') as HTMLElement;
+    act(() => {
+      popover.dispatchEvent(
+        Object.assign(new Event('toggle'), {
+          oldState: 'open',
+          newState: 'closed',
+        }),
+      );
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(notes).toHaveFocus();
   });
 });
 
@@ -4633,6 +4814,7 @@ describe('MultiSelector option actions (grid)', () => {
     const bug = screen.getByRole('row', {name: 'Bug', ...h});
     const actionCell = bug.children[1] as HTMLElement;
     fireEvent.mouseEnter(actionCell);
+    fireEvent.pointerMove(actionCell, {screenX: 210, screenY: 210});
     // The hover moved the highlight onto the action cell, without the ring.
     expect(trigger).toHaveAttribute('aria-activedescendant', actionCell.id);
     for (const token of ringClasses) {
@@ -4757,6 +4939,7 @@ describe('MultiSelector option actions (grid)', () => {
       const {trigger, row} = await openWithKeyboardOnBugAction();
       const docsAction = row('Docs').children[1] as HTMLElement;
       fireEvent.mouseEnter(docsAction);
+      fireEvent.pointerMove(docsAction, {screenX: 149, screenY: 149});
       expect(trigger).toHaveAttribute('aria-activedescendant', docsAction.id);
       expect(hasRing(docsAction)).toBe(true);
     });
@@ -4907,13 +5090,16 @@ describe('MultiSelector option actions (grid)', () => {
     const bug = screen.getByRole('row', {name: 'Bug', ...h});
     const feature = screen.getByRole('row', {name: 'Feature', ...h});
     fireEvent.mouseEnter(feature.children[0]);
+    fireEvent.pointerMove(feature.children[0], {screenX: 128, screenY: 128});
     expect(trigger).toHaveAttribute('aria-activedescendant', feature.id);
     fireEvent.mouseEnter(bug.children[1]);
+    fireEvent.pointerMove(bug.children[1], {screenX: 135, screenY: 135});
     expect(trigger).toHaveAttribute(
       'aria-activedescendant',
       bug.children[1].id,
     );
     fireEvent.mouseEnter(bug.children[0]);
+    fireEvent.pointerMove(bug.children[0], {screenX: 142, screenY: 142});
     expect(trigger).toHaveAttribute('aria-activedescendant', bug.id);
   });
 

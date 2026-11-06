@@ -23,17 +23,19 @@ import type {GestureTouch} from '../gestures/types';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
-  createAnimator,
+  createMotionEngine,
   type Animator,
   type MotionCurve,
 } from '../motion/animator';
 import {solveSpring, toSpring, type SpringDescription} from '../motion/spring';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import {registerSwitchTable, switchControl} from '../motion/uikit/switch';
+import {resolveMotion} from '../motion/resolveMotion';
 import {useTouchPresentation} from '../utils/touchPresentation';
-import {armClickGuard, withoutClickGuard} from '../utils/clickGuard';
+import {awaitBrowserClick, clickForLift} from '../utils/browserClickWait';
+import {lockPressedRow} from '../utils/boxHold';
+import {armClickGuard} from '../utils/clickGuard';
 import {
-  BROWSER_CLICK_WAIT_MS,
   commitOnRelease,
   dragTarget,
   settleTime,
@@ -253,11 +255,8 @@ export class SwitchTouchController {
   private isTracking = false;
   /** Which presentation the switch has: the touch one, or its own. */
   private presentation: SwitchPresentation = 'touch';
-  /** The press-time listeners under a fine pointer, while armed. */
-  private pressListeners: (() => void) | null = null;
-  private pressListenersTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Passive: a lift is waiting for the browser's own click. */
-  private browserClickTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Passive: a lift is waiting for the browser's own click; this ends it. */
+  private endBrowserClickWait: (() => void) | null = null;
   private reconcileTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(isOn: boolean, geometry: SwitchTouchGeometry) {
@@ -285,15 +284,15 @@ export class SwitchTouchController {
       return;
     }
     registerSwitchTable();
-    this.thumb = createAnimator(elements.thumb);
+    this.thumb = createMotionEngine(elements.thumb);
     // The layer rests clear (its class's opacity 0) while the visuals show
     // the value; from here its opacity is the animator's.
-    this.fade = createAnimator(elements.track, {
+    this.fade = createMotionEngine(elements.track, {
       pseudoElement: '::after',
       initial: {opacity: 0},
     });
     this.fade.set({opacity: 0});
-    this.shadow = createAnimator(elements.thumb, {
+    this.shadow = createMotionEngine(elements.thumb, {
       pseudoElement: '::after',
       initial: {opacity: 0},
     });
@@ -319,6 +318,8 @@ export class SwitchTouchController {
       getBounds: () => surface.getBoundingClientRect(),
       isEnabled: () => this.isInteractive,
       isBraking: () => host.isScrollBraking(surface),
+      // A held finger selects no text beside the switch.
+      selectionLock: lockPressedRow,
       // A held switch opens no menu (UISwitch shows none).
       holdsContextMenu: () => this.pressTime != null,
       onControlEvent: (event, touch) => this.onControlEvent(event, touch),
@@ -328,73 +329,7 @@ export class SwitchTouchController {
         }
       },
     });
-    // The lift's own click activates the input natively: the switch then
-    // clicks nothing itself.
-    const onClick = (event: MouseEvent) => {
-      if (event.isTrusted && this.browserClickTimer != null) {
-        clearTimeout(this.browserClickTimer);
-        this.browserClickTimer = null;
-        this.scheduleReconcile();
-      }
-    };
-    const listen = (): (() => void) => {
-      surface.addEventListener('click', onClick, true);
-      return () => {
-        surface.removeEventListener('click', onClick, true);
-      };
-    };
-    if (this.presentation === 'pointer') {
-      // Under a fine pointer only the press the host arms listens at rest.
-      // The switch's click listener comes with a press and goes after its
-      // click wait.
-      this.listenForPress = listen;
-      return [
-        host.attachConsumer(surface, tracker),
-        () => tracker.dispose(),
-        () => this.stopPressListeners(),
-      ];
-    }
-    return [
-      host.attachConsumer(surface, tracker),
-      () => tracker.dispose(),
-      listen(),
-    ];
-  }
-
-  /** Under a fine pointer: adds the switch's own listeners for a press. */
-  private listenForPress: (() => () => void) | null = null;
-
-  private startPressListeners(): void {
-    if (this.pressListenersTimer != null) {
-      clearTimeout(this.pressListenersTimer);
-      this.pressListenersTimer = null;
-    }
-    if (this.pressListeners == null && this.listenForPress != null) {
-      this.pressListeners = this.listenForPress();
-    }
-  }
-
-  /** The press's click window is over: its listeners go. */
-  private endPressListeners(afterMs: number): void {
-    if (this.pressListeners == null) {
-      return;
-    }
-    if (this.pressListenersTimer != null) {
-      clearTimeout(this.pressListenersTimer);
-    }
-    this.pressListenersTimer = setTimeout(() => {
-      this.pressListenersTimer = null;
-      this.stopPressListeners();
-    }, afterMs);
-  }
-
-  private stopPressListeners(): void {
-    if (this.pressListenersTimer != null) {
-      clearTimeout(this.pressListenersTimer);
-      this.pressListenersTimer = null;
-    }
-    this.pressListeners?.();
-    this.pressListeners = null;
+    return [host.attachConsumer(surface, tracker), () => tracker.dispose()];
   }
 
   /** Undo everything: listeners, timers, animations and inline styles. */
@@ -403,7 +338,6 @@ export class SwitchTouchController {
       detach();
     }
     this.detachers = [];
-    this.listenForPress = null;
     this.clearTimers();
     for (const animator of [this.thumb, this.fade, this.shadow]) {
       const element = animator?.element;
@@ -576,7 +510,6 @@ export class SwitchTouchController {
     switch (event) {
       case 'touchDown':
         this.isTracking = true;
-        this.startPressListeners();
         this.touchDown(time);
         return;
       case 'touchDragInside':
@@ -612,16 +545,18 @@ export class SwitchTouchController {
             byBrowserClick: true,
             clicksIfNoBrowserClick: touch.pointerType === 'touch',
           });
-          this.endPressListeners(BROWSER_CLICK_WAIT_MS);
           return;
         }
-        if (this.drag?.flip.didFlip !== true && touch.pointerType !== 'touch') {
-          // A mouse or a pen slid off and released outside, with no flip:
-          // the switch is left alone, as the native checkbox is. Only a
-          // finger's press slid off toggles.
+        if (
+          touch.pointerType !== 'touch' &&
+          (event === 'touchUpOutside' || this.drag?.flip.didFlip !== true)
+        ) {
+          // A mouse or a pen released outside the tracking bounds, flipped or
+          // not, leaves the switch alone, as the native checkbox does. So the
+          // press can be taken back (WCAG 2.5.2). Only a finger's press slid
+          // off toggles.
           this.released = true;
           this.abandon(time);
-          this.endPressListeners(0);
           return;
         }
         // A drag that flipped, or a press slid off and lifted outside, which
@@ -633,7 +568,6 @@ export class SwitchTouchController {
           armClickGuard(this.elements.input.ownerDocument);
         }
         this.release(time);
-        this.endPressListeners(0);
         return;
       case 'touchCancel':
         // The browser took the touch for its scroll, or a recognizer above
@@ -643,7 +577,6 @@ export class SwitchTouchController {
           this.released = true;
           this.abandon(time);
         }
-        this.endPressListeners(0);
         return;
       case 'touchDragEnter':
       case 'touchDragExit':
@@ -725,14 +658,23 @@ export class SwitchTouchController {
       this.showSide(commit, time, undefined, true);
     }
     this.pressEnded(time, true);
-    if (byBrowserClick) {
-      this.browserClickTimer = setTimeout(() => {
-        this.browserClickTimer = null;
-        if (clicksIfNoBrowserClick && commit !== this.isOn) {
-          this.clickInput();
-        }
-        this.scheduleReconcile();
-      }, BROWSER_CLICK_WAIT_MS);
+    const surface = this.elements?.surface;
+    if (byBrowserClick && surface != null) {
+      // The lift's own click activates the input natively: the switch then
+      // clicks nothing itself.
+      this.endBrowserClickWait = awaitBrowserClick(surface, {
+        onClicked: () => {
+          this.endBrowserClickWait = null;
+          this.scheduleReconcile();
+        },
+        onNoClick: () => {
+          this.endBrowserClickWait = null;
+          if (clicksIfNoBrowserClick && commit !== this.isOn) {
+            this.clickInput();
+          }
+          this.scheduleReconcile();
+        },
+      });
       return;
     }
     if (commit !== this.isOn) {
@@ -749,11 +691,9 @@ export class SwitchTouchController {
    */
   private clickInput(): void {
     const input = this.elements?.input;
-    if (input == null) {
-      return;
+    if (input != null) {
+      clickForLift(input);
     }
-    armClickGuard(input.ownerDocument);
-    withoutClickGuard(() => input.click());
   }
 
   /** If the owner kept the old value, the visuals go back to it. */
@@ -955,9 +895,16 @@ export class SwitchTouchController {
       return;
     }
     this.liftTime = null;
-    const lift = switchControl.lift;
-    const settle = switchControl.settle;
-    this.settleAt = settleTime(time, liftTime);
+    // The lift played these roles at the thumb's tempo, so the settle and the
+    // minimum lift take that tempo too.
+    const element = this.thumb?.element;
+    const lift = resolveMotion(element, switchControl.lift);
+    const settle = resolveMotion(element, switchControl.settle);
+    this.settleAt = settleTime(
+      time,
+      liftTime,
+      resolveMotion(element, switchControl, 'minimumLiftMs'),
+    );
     const hold = (this.settleAt - time) / 1000;
     const play = (
       animator: Animator | null,
@@ -1026,18 +973,16 @@ export class SwitchTouchController {
           rest: held ? keep : 1,
           holdSeconds: held ? 0 : hold,
           threshold: 1e-4,
-          lift: switchControl.lift,
-          settle: switchControl.settle,
+          lift: resolveMotion(thumb.element, switchControl.lift),
+          settle: resolveMotion(thumb.element, switchControl.settle),
         }),
       });
     }
   }
 
   private clearTimers(): void {
-    if (this.browserClickTimer != null) {
-      clearTimeout(this.browserClickTimer);
-      this.browserClickTimer = null;
-    }
+    this.endBrowserClickWait?.();
+    this.endBrowserClickWait = null;
     if (this.reconcileTimer != null) {
       clearTimeout(this.reconcileTimer);
       this.reconcileTimer = null;

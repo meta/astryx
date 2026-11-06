@@ -124,7 +124,7 @@ describe('useTableRowExpansion adopts animatedLayout (spec:AST-105 FR1, FR2)', (
       document
         .querySelector<HTMLElement>('[data-expansion-toggle] > *')
         ?.style.getPropertyValue('transition-timing-function'),
-    ).toMatch(/^linear\(/);
+    ).toBe('cubic-bezier(0.24, 1, 0.4, 1)');
   });
 
   it.each(['columns', 'grid'] as const)(
@@ -146,7 +146,7 @@ describe('useTableRowExpansion adopts animatedLayout (spec:AST-105 FR1, FR2)', (
   );
 
   it.each(['columns', 'grid'] as const)(
-    'takes the spring off a chevron when the table turns to %s dividers',
+    'takes the move curve off a chevron when the table turns to %s dividers',
     async dividers => {
       const user = userEvent.setup();
       const {rerender} = render(<ExpandableTable withHandle dividers="rows" />);
@@ -156,9 +156,9 @@ describe('useTableRowExpansion adopts animatedLayout (spec:AST-105 FR1, FR2)', (
       const glyph = document.querySelector<HTMLElement>(
         '[data-expansion-toggle] > *',
       );
-      expect(
-        glyph?.style.getPropertyValue('transition-timing-function'),
-      ).toMatch(/^linear\(/);
+      expect(glyph?.style.getPropertyValue('transition-timing-function')).toBe(
+        'cubic-bezier(0.24, 1, 0.4, 1)',
+      );
       rerender(<ExpandableTable withHandle dividers={dividers} />);
       expect(glyph?.style.getPropertyValue('transition-timing-function')).toBe(
         '',
@@ -255,9 +255,9 @@ describe('markGlidingRows', () => {
     expect(
       rows.map(row => row.hasAttribute('data-astryx-row-gliding')),
     ).toEqual([false, false, true, true, false]);
-    expect(
-      rows[2].style.getPropertyValue('--_table-row-glide-width'),
-    ).toBe('0px');
+    expect(rows[2].style.getPropertyValue('--_table-row-glide-width')).toBe(
+      '0px',
+    );
     // The first cell that scrolls draws the line; the pinned one draws its
     // own; the nested table's cell is not marked.
     expect(cellMarks(rows[2])).toEqual(['', 'line', '']);
@@ -271,9 +271,7 @@ describe('markGlidingRows', () => {
     expect(rows.some(row => row.hasAttribute('data-astryx-row-gliding'))).toBe(
       false,
     );
-    expect(
-      rows[2].style.getPropertyValue('--_table-row-glide-width'),
-    ).toBe('');
+    expect(rows[2].style.getPropertyValue('--_table-row-glide-width')).toBe('');
     expect(cellMarks(rows[2])).toEqual([null, null, null]);
     body.remove();
   });

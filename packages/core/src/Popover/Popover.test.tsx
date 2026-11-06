@@ -1449,12 +1449,10 @@ describe('Popover', () => {
 
   describe('surface padding', () => {
     // StyleX's dev runtime names the style object a class came from
-    // ("padding__paddingStyles.3"), which is the padding rung the surface
-    // was handed.
+    // ("paddingStyles__paddingStyles.3", after its module), which is the
+    // padding rung the surface was handed.
     function paddingRungOf(surface: Element | null): string | null {
-      const match = surface?.className.match(
-        /padding__paddingStyles\.([\d.]+)/,
-      );
+      const match = surface?.className.match(/__paddingStyles\.([\d.]+)/);
       return match ? match[1] : null;
     }
 
@@ -1549,6 +1547,148 @@ describe('Popover', () => {
     expect(target).toHaveStyle({padding: '0'});
     expect(target).toContainElement(screen.getByTestId('content'));
     expect(screen.getByTestId('popover')).not.toHaveClass('consumer-popover');
+  });
+});
+
+describe('Popover touch presentation', () => {
+  interface RecordedAnimation {
+    target: Element;
+    keyframes: Keyframe[];
+    cancelled: boolean;
+  }
+  let recorded: RecordedAnimation[] = [];
+  let isCoarse = true;
+  const originalMatchMedia = window.matchMedia;
+  const originalShow = HTMLElement.prototype.showPopover;
+  const originalHide = HTMLElement.prototype.hidePopover;
+  const originalRequestFrame = window.requestAnimationFrame;
+  const originalCancelFrame = window.cancelAnimationFrame;
+  // The animation frames asked for, run by `frame()`: the touch
+  // presentation reads its geometry in the next one.
+  const frames = new Map<number, FrameRequestCallback>();
+  let lastFrame = 0;
+  const frame = () =>
+    act(() => {
+      const due = [...frames.values()];
+      frames.clear();
+      for (const callback of due) {
+        callback(performance.now());
+      }
+    });
+
+  beforeAll(() => {
+    window.requestAnimationFrame = callback => {
+      lastFrame += 1;
+      frames.set(lastFrame, callback);
+      return lastFrame;
+    };
+    window.cancelAnimationFrame = handle => {
+      frames.delete(handle);
+    };
+    // The shared resolver reads the primary pointer (one touch model on every
+    // touch device); Reduce Motion is off.
+    window.matchMedia = (query: string) => ({
+      matches: query.includes('pointer: coarse') ? isCoarse : false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    });
+    // The browser announces a close with `beforetoggle` while the popover is
+    // still shown, then hides it.
+    HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+      const before = new Event('beforetoggle');
+      Object.defineProperty(before, 'newState', {value: 'closed'});
+      this.dispatchEvent(before);
+      popoverOpenState.set(this, false);
+      const event = new Event('toggle');
+      Object.defineProperty(event, 'newState', {value: 'closed'});
+      this.dispatchEvent(event);
+    });
+    HTMLElement.prototype.animate = function (keyframes) {
+      const animation = {
+        target: this,
+        keyframes: keyframes as Keyframe[],
+        cancelled: false,
+        // Started at once, as the browser commits it (the animator holds a
+        // curve's start until it has one).
+        startTime: performance.now() as number | null,
+        finished: new Promise(() => {}),
+        cancel() {
+          this.cancelled = true;
+        },
+      };
+      recorded.push(animation);
+      return animation as unknown as Animation;
+    };
+  });
+
+  afterAll(() => {
+    window.requestAnimationFrame = originalRequestFrame;
+    window.cancelAnimationFrame = originalCancelFrame;
+    window.matchMedia = originalMatchMedia;
+    HTMLElement.prototype.showPopover = originalShow;
+    HTMLElement.prototype.hidePopover = originalHide;
+    Reflect.deleteProperty(HTMLElement.prototype, 'animate');
+  });
+
+  const open = () => {
+    recorded = [];
+    render(
+      <Popover content={<span>Filters</span>} label="Filters">
+        <button type="button">Filter</button>
+      </Popover>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Filter'}));
+    // The touch presentation reads its geometry in the next frame.
+    frame();
+    const layer = screen
+      .getByRole('dialog', {name: 'Filters', hidden: true})
+      .closest<HTMLElement>('[popover]');
+    expect(layer).not.toBeNull();
+    return layer!;
+  };
+
+  it('under a finger, grows the popover out of its trigger in place of the layer\u2019s entrance', () => {
+    isCoarse = true;
+    const layer = open();
+    expect(layer.style.getPropertyValue('animation-name')).toBe('none');
+    expect(layer.style.getPropertyValue('transform-origin')).not.toBe('');
+    const scale = recorded.find(
+      animation =>
+        animation.target === layer && 'scale' in animation.keyframes[0],
+    );
+    expect(scale).toBeDefined();
+    expect(String(scale!.keyframes[0].scale).split(' ')[0]).toBe('0.01');
+  });
+
+  it('under a finger, shrinks back into its trigger on a copy that outlives the close', () => {
+    isCoarse = true;
+    const layer = open();
+    fireEvent.click(screen.getByRole('button', {name: 'Filter'}));
+    const copy = layer.parentElement!.querySelector<HTMLElement>(
+      '[data-astryx-popover-exit]',
+    );
+    expect(copy).not.toBeNull();
+    expect(copy!.getAttribute('aria-hidden')).toBe('true');
+    expect(copy!.hasAttribute('inert')).toBe(true);
+  });
+
+  it('under a mouse, keeps the layer\u2019s own entrance, plays nothing and closes at once', () => {
+    isCoarse = false;
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const layer = open();
+    expect(layer.style.getPropertyValue('animation-name')).toBe('');
+    expect(recorded.filter(animation => animation.target === layer)).toEqual(
+      [],
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Filter'}));
+    expect(
+      layer.parentElement!.querySelector('[data-astryx-popover-exit]'),
+    ).toBeNull();
   });
 });
 
@@ -1668,13 +1808,22 @@ describe('usePopover trigger ref', () => {
     function Trigger({count}: {count: number}) {
       const popover = usePopover({onShow: () => {}, onHide: () => {}});
       return (
-        <button type="button" ref={popover.triggerRef}>
-          Open {count}
-        </button>
+        <>
+          <button
+            type="button"
+            ref={popover.triggerRef}
+            onClick={() => popover.show()}>
+            Open {count}
+          </button>
+          {popover.render(<span>Details</span>)}
+        </>
       );
     }
     const {rerender} = render(<Trigger count={0} />);
     const trigger = screen.getByRole('button', {name: /^Open/});
+    // A closed popover's trigger is no anchor; a shown one's is.
+    expect(trigger.style.getPropertyValue('anchor-name')).toBe('');
+    fireEvent.click(trigger);
     const anchorName = trigger.style.getPropertyValue('anchor-name');
     expect(anchorName).toMatch(/^--astryx-layer-/);
     const records: MutationRecord[] = [];

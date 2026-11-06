@@ -9,6 +9,7 @@
  * @position Child item; renders as a radio button within the segmented control
  *
  * SYNC: When modified, update:
+ * - /packages/core/src/SegmentedControl/useSegmentedSelectionMotion.ts (the title marker)
  * - /packages/core/src/SegmentedControl/SegmentedControl.doc.mjs
  * - /packages/core/src/SegmentedControl/index.ts
  * - /packages/core/src/SegmentedControl/SegmentedControl.test.tsx
@@ -18,6 +19,7 @@
 import React, {type ReactNode} from 'react';
 import {joinAriaIDs} from '../utils/inputAria';
 import {segmentDisabledProps} from '../privateAttributes/segmentDisabled.stylex';
+import {segmentTitleProps} from '../privateAttributes/segmentTitle.stylex';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -38,6 +40,9 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {isRenderable} from '../utils/isRenderable';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useTouchHitArea} from '../utils/touchHitArea';
+import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
 
 export interface SegmentedControlItemProps extends BaseProps<HTMLButtonElement> {
   ref?: React.Ref<HTMLButtonElement>;
@@ -147,6 +152,12 @@ const styles = stylex.create({
     textOverflow: 'ellipsis',
     minWidth: 0,
   },
+  // Under a finger, script animates the selection change, because the surface
+  // slides. A CSS transition would run a second, main-thread version of the
+  // same change.
+  touchPresentation: {
+    transitionProperty: 'none',
+  },
 });
 
 const CONCENTRIC_RADIUS =
@@ -220,13 +231,17 @@ export function SegmentedControlItem({
     },
   );
 
+  // A disabled segment takes no taps, so it gets no band.
+  const hasHitArea = !isItemDisabled;
+  const segmentRef = useMergedRefs(ref, useTouchHitArea(hasHitArea));
+
   const iconElement = isRenderable(icon) ? (
     <span {...stylex.props(styles.icon, iconSizeStyles[size])}>{icon}</span>
   ) : null;
 
   return (
     <button
-      ref={ref}
+      ref={segmentRef}
       {...rest}
       type="button"
       role="radio"
@@ -263,12 +278,16 @@ export function SegmentedControlItem({
             !isItemDisabled &&
             interactionOverlayStyles.backgroundColor,
           isItemDisabled && styles.disabled,
+          hasHitArea && touchHitAreaStyles.layer,
+          ctx.isTouchPresentation === true && styles.touchPresentation,
           xstyle,
         ),
       )}>
       {iconElement}
       {!isLabelHidden && (
-        <span {...stylex.props(styles.labelText)}>{label}</span>
+        <span {...segmentTitleProps} {...stylex.props(styles.labelText)}>
+          {label}
+        </span>
       )}
     </button>
   );

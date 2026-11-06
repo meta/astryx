@@ -37,6 +37,7 @@ const SRC_DIR = join(__dirname, '..');
 type ComponentDocModule = {
   docs?: {
     theming?: {
+      targets?: {className: string}[];
       vars?: {name: string}[];
       derived?: DerivedDocEntry[];
     };
@@ -125,6 +126,14 @@ const STRUCTURAL_VARS = new Set([
   '--_progress-bar-pulse',
   '--_progress-bar-pulse-curve',
   '--_progress-bar-pulse-floor',
+  // The room a layer has above the software keyboard. The layer runtime
+  // writes it on each open layer from the keyboard's measured height
+  // (Layer/useLayerKeyboardClearance.ts). Runtime geometry, never authored by
+  // a theme.
+  '--_layer-keyboard-max-block-size',
+  // Written beside it: `auto` while the keyboard caps the layer, so the
+  // surface scrolls from that commit. Runtime state, never authored by a theme.
+  '--_layer-keyboard-overflow',
 ]);
 
 /**
@@ -176,6 +185,7 @@ interface ComponentInfo {
   sourceVars: string[];
   docVars: string[];
   docDerived: {property: string; vars?: string[]; expand?: string}[];
+  docTargetKeys: string[];
 }
 
 function discoverComponents(): ComponentInfo[] {
@@ -217,10 +227,14 @@ function discoverComponents(): ComponentInfo[] {
 
     let docVars: string[] = [];
     let docDerived: DerivedDocEntry[] = [];
+    let docTargetKeys: string[] = [];
     try {
       const mod = require(docPath) as ComponentDocModule;
       docVars = (mod.docs?.theming?.vars || []).map(v => v.name);
       docDerived = mod.docs?.theming?.derived || [];
+      docTargetKeys = (mod.docs?.theming?.targets || []).map(t =>
+        t.className.replace(/^astryx-/, ''),
+      );
     } catch {
       /* skip */
     }
@@ -240,6 +254,7 @@ function discoverComponents(): ComponentInfo[] {
       sourceVars: [...allVars],
       docVars,
       docDerived,
+      docTargetKeys,
     });
   }
   return results;
@@ -255,7 +270,7 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
   BottomSheet: 'bottom-sheet',
   Button: 'button',
   Card: 'card',
-  Chat: 'chat',
+  Chat: 'chat-composer',
   ContextMenu: 'context-menu',
   Dialog: 'dialog',
   Drawer: 'drawer',
@@ -340,6 +355,13 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // properties a theme author sets on the component.
   '--_thumbnail-hit-inset',
   '--_input-clear-hit-inset',
+  '--_power-search-sheet-hit-inset',
+  // The border width a host draws where its touch hit layer reaches past,
+  // such as a divided ListItem's divider (0 on the last row).
+  // The ::after layer adds it to its offset, so the band starts past the
+  // border. It is the layer's geometry, not a property a theme author sets. A
+  // theme changes the divider through `--border-width`, which this follows.
+  '--_hit-border-bottom',
   // The interaction overlay's colour on the ::after layer of the cards:
   // written by the component's own hover and mouse `:active` arms, never a
   // value a theme author sets; the overlay colours themselves are the shared
@@ -350,7 +372,14 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // by whatever paints it. A theme sets `--color-overlay-pressed`, not this.
   '--_press-paint',
   '--_press-paint-image',
+  // A checkbox row's touch press image, which an indicator that paints its
+  // own press inherits. The row writes it from the press paint above.
+  '--_indicator-press-image',
+  // A CheckboxList row's own press paint, handed to its checkbox's box:
+  // written by the row's own press arms, never a value a theme author sets.
+  '--_checkbox-row-press-paint',
   '--_input-clear-hit-content',
+  '--_power-search-sheet-hit-content',
   // Placement and swipe lifecycle values are private Toast behavior. A theme
   // author controls the surface transform/opacity as a whole, not these values.
   '--_toast-slide-y',
@@ -479,7 +508,7 @@ describe('component CSS vars are documented and themeable', () => {
 describe('derivedVarRegistry ↔ doc file consistency', () => {
   const components = discoverComponents();
 
-  for (const {dir, docDerived} of components) {
+  for (const {dir, docDerived, docTargetKeys} of components) {
     const key = DIR_TO_REGISTRY_KEY[dir];
     if (!key || docDerived.length === 0) {
       continue;
@@ -489,6 +518,12 @@ describe('derivedVarRegistry ↔ doc file consistency', () => {
       const registryEntries = derivedVarRegistry[key];
       expect(registryEntries).toBeDefined();
       expect(registryEntries).toEqual(docDerived);
+    });
+
+    // generateThemeRules looks the registry up by the theme's components key,
+    // so a key that is not one of the doc's targets never expands.
+    it(`${dir} (${key}): registry key is a documented theming target`, () => {
+      expect(docTargetKeys).toContain(key);
     });
   }
 

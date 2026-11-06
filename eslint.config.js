@@ -911,6 +911,29 @@ export default defineConfig(
       'no-restricted-syntax': 'off',
     },
   },
+  // Browser specs use the shared base test, whose contexts answer remote
+  // images locally and block other remote requests. A remote host that is
+  // slow then cannot stall a spec.
+  {
+    files: ['**/*.browser.spec.ts', '**/*.chromium.spec.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            '@playwright/test',
+            'playwright/test',
+            'playwright',
+            'playwright-core',
+          ].map(name => ({
+            name,
+            message:
+              "Import from '@astryxdesign/a11y-spec/playwright' instead: its `test` keeps every browser context off remote hosts.",
+          })),
+        },
+      ],
+    },
+  },
   // Inside a package's own shipped source, import the module that defines a
   // name, not a folder's index (a barrel): a lazily imported module that goes
   // through a barrel pulls every sibling export into its graph, which broke
@@ -981,6 +1004,19 @@ export default defineConfig(
         reactSeverity,
         {baseline: privateAttributeBaseline, root: import.meta.dirname},
       ],
+    },
+  },
+  // React attaches its wheel, touchstart and touchmove listeners as passive,
+  // so preventDefault() in those handlers does nothing. Shipped package
+  // source, the same files as the block above.
+  {
+    files: privateAttributeScope.files,
+    ignores: privateAttributeScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-prevent-default-in-passive-react-handler': 'error',
     },
   },
   // A source comment explains a reason, a constraint, or a quirk. It does not

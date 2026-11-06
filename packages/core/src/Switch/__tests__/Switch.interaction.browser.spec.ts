@@ -20,7 +20,7 @@ import {
   type Browser,
   type Locator,
   type Page,
-} from '@playwright/test';
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   castStoryboard,
   animationStoryboard,
@@ -53,8 +53,7 @@ import {
   type CastFrame,
   type TouchDriver,
 } from '@astryxdesign/interaction-harness';
-import {press} from '../../motion/uikit/timing';
-import {BROWSER_CLICK_WAIT_MS} from '../switchTouch';
+import {BROWSER_CLICK_WAIT_MS} from '../../utils/browserClickWait';
 import {CLICK_GUARD_WINDOW_MS} from '../../utils/clickGuard';
 
 const storybook = withStorybook(test);
@@ -81,12 +80,33 @@ const LIFT_SCALE = 1 + INSET / THUMB_OFF;
  * opacity-only cross-fade of this many ms or less.
  */
 const REDUCED_FADE_MAX_MS = 200;
-/** The shared press release (motion/uikit/timing.ts `press`), ms. */
-const PRESS_RELEASE_MS = press.highlightOutMs;
-const pressReleaseEase = cubicBezier(...press.highlightOutCurve);
-/** The press layer's opacity t ms into the release, 1 → 0. */
-const pressReleaseAt = (t: number) =>
-  1 - pressReleaseEase(Math.min(1, Math.max(0, t / PRESS_RELEASE_MS)));
+/** The release's clock and curve: the theme's exit motion tokens. */
+interface Exit {
+  readonly ms: number;
+  readonly curve: readonly [number, number, number, number];
+  readonly ease: (t: number) => number;
+}
+
+/** Reads `--duration-exit` and `--ease-exit` where the press paints. */
+async function exitOf(surface: Locator): Promise<Exit> {
+  const {ms, curve} = await surface.evaluate(el => {
+    const style = getComputedStyle(el);
+    const time = style.getPropertyValue('--duration-exit').trim();
+    const points = (
+      style.getPropertyValue('--ease-exit').match(/-?\d*\.?\d+/g) ?? []
+    ).map(Number);
+    return {
+      ms: time.endsWith('ms') ? parseFloat(time) : parseFloat(time) * 1000,
+      curve: points,
+    };
+  });
+  const points = curve as unknown as Exit['curve'];
+  return {ms, curve: points, ease: cubicBezier(...points)};
+}
+
+/** The layer's opacity t ms into the release: the strength, 1 → 0. */
+const strengthAt = (exit: Exit, t: number) =>
+  1 - exit.ease(Math.min(1, Math.max(0, t / exit.ms)));
 
 interface ChangeSample {
   t: number;
@@ -886,6 +906,7 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     expect(await pressState(page)).toBe('fading');
     await freezeTimers(page);
     const row = page.locator('#storybook-root [data-astryx-pressable]').first();
+    const exit = await exitOf(row);
     const held = await holdAnimations(page, row);
     // One CSS animation per press layer runs the release, the track's and
     // the thumb's (design:user-states DR1), each its opacity on the shared
@@ -897,27 +918,27 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       JSON.stringify(held),
     ).toEqual(['astryx-switch', 'astryx-switch-thumb']);
     for (const animation of css) {
-      expect(animation.durationMs).toBe(PRESS_RELEASE_MS);
+      expect(animation.durationMs).toBe(exit.ms);
     }
     // The lift's settle started at the lift's touch event, a frame or two
     // before the attribute's change started the release. So seek on the
     // release's own clock.
     const samples: {t: number; value: number}[] = [];
-    for (const t of timeline(PRESS_RELEASE_MS)) {
+    for (const t of timeline(exit.ms)) {
       await seekAnimations(page, t + css[0].offsetMs);
       samples.push({t, value: (await pressLayer(page)) ?? 0});
     }
     await restoreHeldRates(page);
     await releaseAnimations(page, {finish: true});
     await thawTimers(page);
-    const comparison = compareCurve(samples, pressReleaseAt, 0.005);
+    const comparison = compareCurve(samples, t => strengthAt(exit, t), 0.005);
     await writeEvidence(
       'curves/switch-press-release',
       {
         [`${testInfo.project.name}.json`]: JSON.stringify(
           {
-            releaseMs: PRESS_RELEASE_MS,
-            curve: press.highlightOutCurve,
+            releaseMs: exit.ms,
+            curve: exit.curve,
             held,
             samples,
             comparison,
@@ -937,21 +958,24 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     expect(await pressLayer(page)).toBeNull();
   });
 
-  test('the press layers’ release follows the theme’s tempo, and Reduce Motion never lengthens it', async ({
+  test('the press layers’ release plays the theme’s exit duration, no longer than DR2’s bound under Reduce Motion', async ({
     page,
   }) => {
-    // The shared release scales its clock by the theme's tempo, up to 1.5;
-    // under Reduce Motion a tempo may shorten it, never lengthen it.
+    // The shared release plays `--duration-exit` (spec:AST-094 FR5); under
+    // Reduce Motion it is no longer than design:reduced-motion DR2's bound.
     const releaseMsUnder = async (
       reducedMotion: 'reduce' | 'no-preference',
     ): Promise<number[]> => {
       await page.emulateMedia({reducedMotion});
       const {driver, center} = await openSwitch(page);
+      // On the pressable itself: a theme root nearer than the document
+      // declares its own exit duration.
       await page.evaluate(() =>
-        document.documentElement.style.setProperty(
-          '--_astryx-motion-tempo',
-          '1.5',
-        ),
+        document
+          .querySelector<HTMLElement>(
+            '#storybook-root [data-astryx-pressable]',
+          )!
+          .style.setProperty('--duration-exit', '333ms'),
       );
       // Hold the release timer and each release animation from its start, so
       // a loaded machine still reads them before the clock runs out.
@@ -994,8 +1018,8 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       return css.map(a => a.durationMs);
     };
     for (const [reducedMotion, releaseMs] of [
-      ['no-preference', PRESS_RELEASE_MS * 1.5],
-      ['reduce', PRESS_RELEASE_MS],
+      ['no-preference', 333],
+      ['reduce', REDUCED_FADE_MAX_MS],
     ] as const) {
       const durations = await releaseMsUnder(reducedMotion);
       for (const durationMs of durations) {
@@ -2210,6 +2234,13 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       'screencast frame evidence is Chromium-only in Playwright (WebKit: checked on the iOS simulator instead)',
     );
     const {driver, input, onLayer, center} = await openSwitch(page);
+    // A long exit duration on the pressable, so the block spans enough
+    // delivered frames to judge whatever the theme's own value is.
+    await page.evaluate(() =>
+      document
+        .querySelector<HTMLElement>('#storybook-root [data-astryx-pressable]')!
+        .style.setProperty('--duration-exit', '400ms'),
+    );
     // Only the press layer may change the probe. The thumb is hidden, though
     // its animations still run, and the colour fade is off. The value stays
     // off: every click is stopped before it reaches the input.

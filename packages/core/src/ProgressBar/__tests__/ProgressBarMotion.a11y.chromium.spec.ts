@@ -18,7 +18,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -705,7 +705,10 @@ test('a theme\u2019s tempo leaves the reduced-motion pulse unscaled', async ({
     `${storybook.origin}/iframe.html?id=${INDETERMINATE}&viewMode=story`,
   );
   await expect(page.getByRole('progressbar').first()).toBeVisible();
-  await page.addStyleTag({content: ':root { --_astryx-motion-tempo: 1.5; }'});
+  // On the bar itself: the story's theme root declares its own tempo.
+  await page.addStyleTag({
+    content: '[role="progressbar"] { --_astryx-motion-tempo: 1.5; }',
+  });
   const durations = await page.evaluate(() =>
     Array.from(document.querySelectorAll('[role="progressbar"]')).map(track =>
       Number(

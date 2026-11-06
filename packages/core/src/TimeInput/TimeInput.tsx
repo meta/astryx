@@ -243,7 +243,7 @@ export interface TimeInputProps extends Omit<
   /**
    * The selected time in ISO format (HH:MM or HH:MM:SS).
    */
-  value?: ISOTimeString;
+  value?: ISOTimeString | undefined;
 
   /**
    * Callback fired when the time changes.
@@ -491,6 +491,8 @@ function TimeField({
   // region mounted together with its content is not reliably announced.
   // Ungrouped mode delegates to Field -> FieldStatus, which announces itself.
   const announce = useAnnounce();
+  // Syncs the live region with `status.message` when the field is in an
+  // InputGroup.
   useEffect(() => {
     if (inputGroup && status?.message) {
       announce(

@@ -2502,9 +2502,10 @@ describe('R11 non-modal sheets', () => {
         : nativeMatches(selectors),
     );
     fireEvent.click(screen.getByRole('button', {name: 'Swap'}));
-    // The modal sheet is mid-exit: still an open modal dialog, but inert.
+    // The modal sheet is mid-exit: still an open modal dialog. Focus was
+    // inside it at the close, so it is not inert until its exit ends.
     expect(modal).toHaveAttribute('open');
-    expect(modal).toHaveAttribute('inert');
+    expect(modal).not.toHaveAttribute('aria-modal');
     expect(modal.matches(':modal')).toBe(true);
     expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
     expect(HTMLDialogElement.prototype.show).not.toHaveBeenCalled();

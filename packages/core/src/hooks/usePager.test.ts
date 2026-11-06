@@ -17,7 +17,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../gestures/GestureHost';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {ManualClock} from '../gestures/__tests__/harness';
-import {createAnimator, type Animator} from '../motion/animator';
+import {createMotionEngine, type Animator} from '../motion/animator';
 import {solveAnimatedPageScroll, solvePaging} from '../motion/paging';
 import type * as motionResolution from '../motion/resolveMotion';
 import {resolveMotion} from '../motion/resolveMotion';
@@ -305,7 +305,7 @@ function setup(options: Partial<PagerOptions> = {}, rtl = false): Fixture {
     value: WIDTH,
     configurable: true,
   });
-  const animator = createAnimator(track, {
+  const animator = createMotionEngine(track, {
     now: () => now,
     requestFrame: callback => {
       frameQueue.push(callback);
@@ -855,6 +855,26 @@ describe('createPager', () => {
     expect(f.x()).toBe(-2 * WIDTH);
   });
 
+  it('goTo with an offset ends there as a settle, and a still finger that catches it settles on the nearest page', async () => {
+    const f = setup({defaultIndex: 0});
+    f.pager.goTo(2, {offset: 2.4 * WIDTH});
+    await advance(0, f.clock);
+    const curve = solveAnimatedPageScroll({from: 0, to: 2.4 * WIDTH});
+    await advance(150, f.clock);
+    expect(-f.x()).toBeCloseTo(curve.at(0.15), 0);
+    await settle(f);
+    expect(-f.x()).toBeCloseTo(2.4 * WIDTH, 0);
+    expect(f.calls).toEqual(['index:2:goTo', 'settle:2:0']);
+    f.pager.goTo(4, {offset: 3.6 * WIDTH});
+    await advance(60, f.clock);
+    touch('touchstart', f.page, 300, 100, now);
+    await advance(paging.catchStopMs + 40, f.clock);
+    expect(f.pager.isSettling).toBe(false);
+    touch('touchend', f.page, 300, 100, now);
+    await settle(f);
+    expect(-f.x() / WIDTH).toBe(Math.round(-f.x() / WIDTH));
+  });
+
   it('loops: past the last page goes forward to a virtual page, wrapped for callbacks', async () => {
     const f = setup({defaultIndex: 4, loop: true});
     await drag(f, {from: 300, dx: -250, hold: 50});
@@ -1259,7 +1279,7 @@ describe('createPager', () => {
   // (DR3). The drag itself follows the pointer.
   function reducedPager(f: Fixture, defaultIndex: number, coarse: boolean) {
     stubMedia(true, coarse);
-    const reduced = createAnimator(f.track, {
+    const reduced = createMotionEngine(f.track, {
       now: () => now,
       requestFrame: callback => {
         frameQueue.push(callback);
@@ -1928,7 +1948,7 @@ function setupChildren(
     value: WIDTH,
     configurable: true,
   });
-  const animator = createAnimator(track, {
+  const animator = createMotionEngine(track, {
     now: () => now,
     requestFrame: callback => {
       frameQueue.push(callback);
@@ -2461,7 +2481,7 @@ describe('pre-review fixes', () => {
       configurable: true,
     });
     const host = {attach: () => () => {}} as unknown as GestureHost;
-    const animator = createAnimator(track, {
+    const animator = createMotionEngine(track, {
       now: () => now,
       requestFrame: callback => {
         frameQueue.push(callback);

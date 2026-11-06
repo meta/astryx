@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.7",
+  "version": "0.7.10",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -399,6 +399,11 @@
       "types": "./dist/Indicator/index.d.ts",
       "default": "./dist/Indicator/index.js"
     },
+    "./InfoTip": {
+      "source": "./src/InfoTip/index.ts",
+      "types": "./dist/InfoTip/index.d.ts",
+      "default": "./dist/InfoTip/index.js"
+    },
     "./InputGroup": {
       "source": "./src/InputGroup/index.ts",
       "types": "./dist/InputGroup/index.d.ts",
@@ -573,6 +578,11 @@
       "source": "./src/Slider/index.ts",
       "types": "./dist/Slider/index.d.ts",
       "default": "./dist/Slider/index.js"
+    },
+    "./SnapPaging": {
+      "source": "./src/SnapPaging/index.ts",
+      "types": "./dist/SnapPaging/index.d.ts",
+      "default": "./dist/SnapPaging/index.js"
     },
     "./Spinner": {
       "source": "./src/Spinner/index.ts",
@@ -819,15 +829,35 @@
       "types": "./dist/Markdown/remark.d.ts",
       "default": "./dist/Markdown/remark.js"
     },
+    "./internal/indicatorPress.stylex": {
+      "source": "./src/internal/indicatorPress.stylex.ts",
+      "types": "./dist/internal/indicatorPress.stylex.d.ts",
+      "default": "./dist/internal/indicatorPress.stylex.js"
+    },
     "./internal/touch": {
       "source": "./src/internal/touch.ts",
       "types": "./dist/internal/touch.d.ts",
       "default": "./dist/internal/touch.js"
     },
-    "./internal/tokenizer-presentation": {
-      "source": "./src/internal/tokenizer-presentation.ts",
-      "types": "./dist/internal/tokenizer-presentation.d.ts",
-      "default": "./dist/internal/tokenizer-presentation.js"
+    "./internal/selectable-card": {
+      "source": "./src/internal/selectable-card.ts",
+      "types": "./dist/internal/selectable-card.d.ts",
+      "default": "./dist/internal/selectable-card.js"
+    },
+    "./internal/spinner-rotor": {
+      "source": "./src/internal/spinner-rotor.ts",
+      "types": "./dist/internal/spinner-rotor.d.ts",
+      "default": "./dist/internal/spinner-rotor.js"
+    },
+    "./internal/calendar-system": {
+      "source": "./src/internal/calendar-system.ts",
+      "types": "./dist/internal/calendar-system.d.ts",
+      "default": "./dist/internal/calendar-system.js"
+    },
+    "./internal/dialog-context": {
+      "source": "./src/internal/dialog-context.ts",
+      "types": "./dist/internal/dialog-context.d.ts",
+      "default": "./dist/internal/dialog-context.js"
     }
   },
   "files": [
@@ -889,7 +919,8 @@
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@types/babel__core": "^7.20.5",
-    "tailwindcss": "^4.3.2"
+    "tailwindcss": "^4.3.2",
+    "temporal-polyfill": "^1.0.6"
   },
   "dependencies": {
     "intl-messageformat": "^11.2.9"
