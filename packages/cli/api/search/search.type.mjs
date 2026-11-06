@@ -54,12 +54,16 @@
 /**
  * The candidates `search` ranks in a folder, as `exportSearchIndex()` returns them:
  * plain JSON to store and rank later with `rankSearchIndex()`.
+ * @experimental May change or be removed in a patch release.
  * @typedef {object} SearchIndex
  * @property {string} version - The CLI version that made it. `rankSearchIndex()`
  *   ranks only indexes made by its own version.
  * @property {Record<string, unknown>[]} candidates - The gathered candidates,
  *   each the entry search scores. Their fields are the ranker's input, not a
  *   contract: they may change in any release, which is why `version` must match.
+ * @property {string} [coreSkipped] - Why Core could not be had where the index
+ *   was made, when it could not: its components, hooks and templates are then
+ *   missing, and `rankSearchIndex()` reports `meta.partial` as `search` does.
  */
 
 /**

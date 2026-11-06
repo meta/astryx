@@ -8,14 +8,18 @@
  * package's code. A catalog that lists packages it must not load (a web page
  * that lists every published integration) stores each package's index once,
  * where loading is safe, and ranks the stored indexes per query.
- * An index made in one folder and ranked by `rankSearchIndex(query, index)`
- * answers as `search(query)` does in that folder: same results, order, scores.
  * @position api/search; search.mjs is the folder-reading search.
  */
 
+import {
+  docPackageManager,
+  runWithDocPackageManager,
+} from '../../foundation/env/package-manager.mjs';
+import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
 import {cliVersion} from '../../foundation/release/run-context.mjs';
 import {runTree} from '../../foundation/route/route.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {linkSearchResponse} from '../component/_adapter.mjs';
 import {AstryxError} from '../error.mjs';
 import {gatherCandidates, loadSearchData} from './_adapter.mjs';
 import {checkSearchArgs} from './_result.mjs';
@@ -27,6 +31,13 @@ import {SEARCH_TREE} from './tree.mjs';
  * leaves them out and reads the same wherever it was made.
  */
 const LOCAL_FIELDS = ['_docPath'];
+
+/**
+ * A component candidate's description as `search` prints it: its inline
+ * `{@link}`, `{@pm}` and `{@command}` tokens resolved in the folder the index
+ * is made in. The raw description stays the one that is scored.
+ */
+const DISPLAY_FIELD = '_displayDescription';
 
 /**
  * @param {Record<string, unknown>} candidate
@@ -43,6 +54,9 @@ function portable(candidate) {
  * The candidates `search` ranks in a folder, as plain JSON: store it, and rank
  * it later with {@link rankSearchIndex}.
  *
+ * Experimental (spec:AST-017 FR27): may change or be removed in a patch
+ * release.
+ * @experimental
  * @param {object} [options]
  * @param {string} [options.cwd] - The folder to gather from, as `search` reads it.
  * @param {string} [options.package] - Keep only the candidates this npm package
@@ -58,17 +72,59 @@ export async function exportSearchIndex(options = {}) {
       ERROR_CODES.ERR_INVALID_ARGUMENT,
     );
   }
-  const gathered = await gatherCandidates({cwd});
-  const kept =
-    owner == null
-      ? gathered.all
-      : gathered.all.filter(candidate => candidate._package === owner);
-  return {
-    version: cliVersion(),
-    candidates: kept.map(candidate =>
-      portable(/** @type {Record<string, unknown>} */ (candidate)),
-    ),
-  };
+  return runWithDocPackageManager(docPackageManager(cwd), () =>
+    withListingCache(async () => {
+      const gathered = await gatherCandidates({cwd});
+      const kept =
+        owner == null
+          ? gathered.all
+          : gathered.all.filter(candidate => candidate._package === owner);
+      const candidates = kept.map(candidate =>
+        portable(/** @type {Record<string, unknown>} */ (candidate)),
+      );
+      await addDisplayDescriptions(candidates, cwd);
+      return {
+        version: cliVersion(),
+        candidates,
+        ...(gathered.coreSkipped == null
+          ? {}
+          : {coreSkipped: gathered.coreSkipped}),
+      };
+    }),
+  );
+}
+
+/**
+ * Resolves each component description's inline tokens as `search` does for
+ * the results it prints, and keeps the printed text beside the scored one.
+ * @param {Record<string, unknown>[]} candidates
+ * @param {string} cwd
+ */
+async function addDisplayDescriptions(candidates, cwd) {
+  const linkable = candidates.filter(
+    candidate =>
+      candidate.domain === 'component' &&
+      typeof candidate.description === 'string' &&
+      candidate.description.includes('{@'),
+  );
+  if (linkable.length === 0) return;
+  const response = await linkSearchResponse(
+    /** @type {any} */ ({
+      type: 'search',
+      data: {
+        results: linkable.map(candidate => ({
+          domain: 'component',
+          package: candidate._package,
+          description: candidate.description,
+        })),
+      },
+    }),
+    cwd,
+  );
+  response.data.results.forEach((/** @type {any} */ result, i) => {
+    if (result.description !== linkable[i].description)
+      linkable[i][DISPLAY_FIELD] = result.description;
+  });
 }
 
 /**
@@ -78,8 +134,12 @@ export async function exportSearchIndex(options = {}) {
  * (made with `package`) and one for Core, are ranked together as one list; a
  * doc that one package replaces or extends in another is not merged across
  * them. Every index must come from this CLI's version, since the tree reads
- * the candidates' shape.
+ * the candidates' shape. When every index was made where Core could not be
+ * had, the answer carries `meta.partial`, as `search` does.
  *
+ * Experimental (spec:AST-017 FR27): may change or be removed in a patch
+ * release.
+ * @experimental
  * @param {string} query - Free-text search term.
  * @param {import('./search.type.mjs').SearchIndex | import('./search.type.mjs').SearchIndex[]} indexes
  * @param {object} [options]
@@ -113,18 +173,55 @@ export async function rankSearchIndex(query, indexes, options = {}) {
   const {type} = options;
   const wanted =
     type == null ? all : all.filter(candidate => candidate.domain === type);
-  return /** @type {import('./search.type.mjs').SearchResponse} */ (
+  // Core is missing only when no index had it.
+  const coreSkipped = list.every(index => typeof index.coreSkipped === 'string')
+    ? /** @type {string} */ (list[0]?.coreSkipped ?? null)
+    : null;
+  const response = /** @type {import('./search.type.mjs').SearchResponse} */ (
     await runTree(
       SEARCH_TREE,
       {query, options: {type, limit: options.limit}},
       {
         all: wanted,
         components: wanted.filter(candidate => candidate.domain === 'component'),
-        searchedComponents: type == null || type === 'component',
+        searchedComponents:
+          coreSkipped == null && (type == null || type === 'component'),
         outside: false,
-        coreSkipped: null,
+        coreSkipped,
         data: loadSearchData(),
       },
     )
   );
+  return withDisplayDescriptions(response, wanted);
+}
+
+/**
+ * The response with each component result's description as `search` prints
+ * it, from the text the index stored when it was made.
+ * @param {import('./search.type.mjs').SearchResponse} response
+ * @param {any[]} candidates
+ * @returns {import('./search.type.mjs').SearchResponse}
+ */
+function withDisplayDescriptions(response, candidates) {
+  /** @type {Map<string, string>} */
+  const display = new Map();
+  for (const candidate of candidates) {
+    if (candidate.domain === 'component' && typeof candidate[DISPLAY_FIELD] === 'string')
+      display.set(
+        `${candidate._package}\u0000${candidate._resultName ?? candidate.name}`,
+        candidate[DISPLAY_FIELD],
+      );
+  }
+  if (display.size === 0) return response;
+  return {
+    ...response,
+    data: {
+      ...response.data,
+      results: response.data.results.map(result => {
+        if (result.domain !== 'component') return result;
+        const text = display.get(`${result.package}\u0000${result.name}`);
+        return text == null ? result : {...result, description: text};
+      }),
+    },
+  };
 }
