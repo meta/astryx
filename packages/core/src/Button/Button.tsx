@@ -70,6 +70,10 @@ import type {LinkComponentType} from '../Link/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {
+  controlPressLayerStyles,
+  rowPressLayerStyles,
+} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ButtonVariantMap} from './index';
 import {
@@ -150,8 +154,20 @@ const styles = stylex.create({
       ':active:where(:not(:disabled,[aria-disabled="true"]))': {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
+        // Under reduced motion a press never scales the button. The overlay
+        // alone shows the press.
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
       },
-      [PRESSED_ON]: 'scale(0.98)',
+      [PRESSED_ON]: {
+        default: 'scale(0.98)',
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
+      },
     },
   },
   // A tracked action's own `:active` image paints nothing: the tracker paints
@@ -163,7 +179,13 @@ const styles = stylex.create({
   pressableTracked: {
     transform: {
       default: 'scale(1)',
-      [PRESSED_ON]: 'scale(0.98)',
+      [PRESSED_ON]: {
+        default: 'scale(0.98)',
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
+      },
     },
   },
   inactive: {
@@ -781,6 +803,11 @@ export function Button({
     sizeStyles[size],
     isIconOnly && styles.iconOnly,
     interactionOverlayStyles.backgroundImage,
+    // The press the controller writes, on a layer under the label whose
+    // release runs on the compositor.
+    rowPressLayerStyles.cell,
+    rowPressLayerStyles.cellOnImage,
+    controlPressLayerStyles.control,
     isGroupTracked && styles.trackedOverlay,
     buttonDisabled && styles.inactive,
     isTrueDisabled && styles.disabled,

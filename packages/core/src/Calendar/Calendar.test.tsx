@@ -483,6 +483,35 @@ describe('Calendar', () => {
     expect(screen.getByText('February 2026')).toBeInTheDocument();
   });
 
+  it('still moves the visible month when only onFocusDateChange is given', async () => {
+    const user = userEvent.setup();
+    const handleFocusChange = vi.fn();
+
+    // A listener alone does not make the focus date controlled (that needs
+    // focusDate too), so the calendar must keep moving on its own.
+    render(
+      <Calendar
+        defaultValue="2026-01-15"
+        onFocusDateChange={handleFocusChange}
+      />,
+    );
+    expect(screen.getByText('January 2026')).toBeInTheDocument();
+
+    await user.click(getButton('Next month'));
+
+    expect(handleFocusChange).toHaveBeenCalledWith('2026-02-01');
+    expect(screen.getByText('February 2026')).toBeInTheDocument();
+
+    // Crossing a month with the keyboard takes the same path.
+    const jan31 = screen.queryByRole('button', {name: /January 31/});
+    expect(jan31).toBeNull();
+    const feb28 = getButton(/February 28/);
+    feb28.focus();
+    await user.keyboard('{ArrowRight}');
+    expect(handleFocusChange).toHaveBeenLastCalledWith('2026-03-01');
+    expect(screen.getByText('March 2026')).toBeInTheDocument();
+  });
+
   it('calls onFocusDateChange when navigating', async () => {
     const user = userEvent.setup();
     const handleFocusChange = vi.fn();
