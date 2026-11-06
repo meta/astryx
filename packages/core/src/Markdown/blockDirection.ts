@@ -4,10 +4,9 @@
  * @file blockDirection.ts
  * @input A Markdown AST prose block (a paragraph, heading, blockquote or list
  *   item) or a table cell
- * @output 'ltr' or 'rtl' from the block's own text, or undefined when the
- *   text has no strongly directional character
- * @position Read by Markdown.tsx to set each block's `dir`. A block with no
- *   direction of its own takes its parent's.
+ * @output The `dir` for the block: its own text's direction, or the
+ *   provider's for a block whose text has no strongly directional character
+ * @position Read by Markdown.tsx to set each block's `dir`.
  */
 
 import {firstStrongDirection} from '../i18n/firstStrongDirection';
@@ -61,4 +60,42 @@ export function markdownBlockDirection(
   node: DirectionalNode,
 ): 'ltr' | 'rtl' | undefined {
   return nodeDirection(node) ?? undefined;
+}
+
+/** The provider's direction, and the direction of the block around this one. */
+export interface BlockDirectionScope {
+  readonly provider: 'ltr' | 'rtl';
+  readonly around: 'ltr' | 'rtl';
+}
+
+/**
+ * The `dir` for a prose block or a table cell. A block with no direction of
+ * its own takes the provider's. It needs the attribute only where the block
+ * around it reads the other way; elsewhere it inherits the same direction.
+ */
+export function blockDirection(
+  node: DirectionalNode,
+  scope: BlockDirectionScope | undefined,
+): 'ltr' | 'rtl' | undefined {
+  const own = markdownBlockDirection(node);
+  if (own != null) {
+    return own;
+  }
+  return scope != null && scope.around !== scope.provider
+    ? scope.provider
+    : undefined;
+}
+
+/** The scope for the blocks inside a quote or a list item. */
+export function innerDirectionScope(
+  node: DirectionalNode,
+  scope: BlockDirectionScope | undefined,
+): BlockDirectionScope | undefined {
+  if (scope == null) {
+    return undefined;
+  }
+  return {
+    provider: scope.provider,
+    around: markdownBlockDirection(node) ?? scope.provider,
+  };
 }

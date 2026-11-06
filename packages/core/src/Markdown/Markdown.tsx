@@ -65,7 +65,11 @@ import {
 } from './parser';
 import type {IncrementalState, MathParseOptions, ParseOptions} from './parser';
 import {getMarkdownAstLegacyCodeLanguage, markdownAstText} from './ast';
-import {markdownBlockDirection} from './blockDirection';
+import {
+  blockDirection,
+  innerDirectionScope,
+  type BlockDirectionScope,
+} from './blockDirection';
 import type {
   MarkdownAstBlockContent,
   MarkdownAstPhrasingContent,
@@ -104,6 +108,7 @@ import {
   registerEnglishFallback,
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
+import {useDirection} from '../i18n/useDirection';
 import english from '../i18n/generated-english/Markdown/Markdown.generated';
 
 registerEnglishFallback(english);
@@ -1366,6 +1371,7 @@ function renderBlock(
   headingProjection?: MarkdownHeadingProjection,
   // How many lists enclose this block (spec:AST-061 DEC-6).
   listDepth = 0,
+  directionScope?: BlockDirectionScope,
 ): SyncReactNode {
   const blockAlignMargin = BLOCK_ALIGN_MARGIN[contentAlign];
   const blockAlignStyle =
@@ -1416,7 +1422,7 @@ function renderBlock(
           <Tag
             key={index}
             id={headingId}
-            dir={markdownBlockDirection(node)}
+            dir={blockDirection(node, directionScope)}
             {...mergeProps(
               themeProps('markdown-heading', {density, level}),
               stylex.props(
@@ -1441,7 +1447,7 @@ function renderBlock(
       return (
         <HeadingLinksRenderer
           key={index}
-          dir={markdownBlockDirection(node)}
+          dir={blockDirection(node, directionScope)}
           headingId={headingId}
           headingLabel={headingLabel}
           permalinkUrl={permalinkUrl}
@@ -1504,7 +1510,7 @@ function renderBlock(
         <div
           key={index}
           role="paragraph"
-          dir={markdownBlockDirection(node)}
+          dir={blockDirection(node, directionScope)}
           {...mergeProps(
             themeProps('markdown-paragraph', {density}),
             stylex.props(
@@ -1664,6 +1670,7 @@ function renderBlock(
             codeLanguages,
             headingProjection,
             listDepth,
+            directionScope,
           ),
         );
         return (
@@ -1675,7 +1682,7 @@ function renderBlock(
       return (
         <Blockquote
           key={index}
-          dir={markdownBlockDirection(node)}
+          dir={blockDirection(node, directionScope)}
           {...themeProps('markdown-blockquote', {density})}
           {...lineStamps}
           xstyle={[
@@ -1709,6 +1716,7 @@ function renderBlock(
               codeLanguages,
               headingProjection,
               listDepth,
+              innerDirectionScope(node, directionScope),
             ),
           )}
         </Blockquote>
@@ -1795,6 +1803,7 @@ function renderBlock(
                         codeLanguages,
                         headingProjection,
                         listDepth + 1,
+                        innerDirectionScope(item, directionScope),
                       ),
                     )}
                   </>
@@ -1806,7 +1815,7 @@ function renderBlock(
                     key={i}
                     value={`task-${i}`}
                     label={label}
-                    dir={markdownBlockDirection(item)}
+                    dir={blockDirection(item, directionScope)}
                     {...(recordsSourceLines
                       ? sourceLineAttributes(blockSourceLines(item))
                       : undefined)}
@@ -1886,6 +1895,7 @@ function renderBlock(
                       codeLanguages,
                       headingProjection,
                       listDepth + 1,
+                      innerDirectionScope(item, directionScope),
                     ),
                   )}
                 </>
@@ -1928,7 +1938,7 @@ function renderBlock(
                   hasMarkerGutter={node.ordered}>
                   <ListItem
                     label={label}
-                    dir={markdownBlockDirection(item)}
+                    dir={blockDirection(item, directionScope)}
                     {...(recordsSourceLines
                       ? sourceLineAttributes(blockSourceLines(item))
                       : undefined)}
@@ -1984,7 +1994,7 @@ function renderBlock(
                   <TableHeaderCell
                     // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown table columns are positional by definition
                     key={i}
-                    dir={markdownBlockDirection(h)}
+                    dir={blockDirection(h, directionScope)}
                     xstyle={[
                       markdownTableCellStyles.headerCell,
                       dynamicStyles.cellMinWidth(`${colMinWidths[i]}ch`),
@@ -2014,7 +2024,7 @@ function renderBlock(
                   <TableCell
                     // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown table cells are positional by row and column
                     key={j}
-                    dir={markdownBlockDirection(cell)}
+                    dir={blockDirection(cell, directionScope)}
                     xstyle={[
                       markdownTableCellStyles.cell,
                       node.align[j] === 'center' && cellAlignStyles.center,
@@ -2183,6 +2193,7 @@ export function Markdown<
   ...props
 }: MarkdownProps<Plugins>): React.ReactElement {
   const t = useComponentTranslator();
+  const direction = useDirection();
   // Keep one list while it names the same values, so an inline
   // `codeLanguages={[…]}` does not re-render every block on each parent
   // render (adjusting state during render, not in an Effect).
@@ -2454,6 +2465,8 @@ export function Markdown<
         t,
         codeLanguages,
         headingProjection,
+        undefined,
+        {provider: direction, around: direction},
       ),
     );
   }, [
@@ -2475,6 +2488,7 @@ export function Markdown<
     t,
     headingProjection,
     codeLanguages,
+    direction,
   ]);
 
   if (display === 'inline') {
