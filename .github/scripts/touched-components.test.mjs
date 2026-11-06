@@ -223,6 +223,27 @@ describe('wide changes', () => {
     expect(decideWideChange(owners(1), behaviour).wideChange).toBe(false);
   });
 
+  it('never counts a test, story, doc or note in a foundation folder as a shared style', () => {
+    const notStyles = [
+      'packages/core/src/theme/derivedVarRegistry.test.ts',
+      'packages/core/src/theme/__tests__/themingTargets.test.ts',
+      'packages/themes/neutral/src/__tests__/neutralTheme.test.ts',
+      'packages/themes/neutral/src/neutralTheme.stories.tsx',
+      'packages/core/src/theme/theme.doc.mjs',
+      'packages/themes/neutral/README.md',
+      'packages/core/src/Layer/__tests__/layer.stylex.test.ts',
+    ];
+    expect(foundationChanges(notStyles)).toEqual([]);
+    expect(decideWideChange(owners(2), notStyles).wideChange).toBe(false);
+    // A real foundation beside them still makes the change wide.
+    expect(
+      decideWideChange(owners(2), [
+        ...notStyles,
+        'packages/core/src/theme/tokens.stylex.ts',
+      ]).wideChange,
+    ).toBe(true);
+  });
+
   it('writes a skipped visual verdict for a wide change, carrying the run identity', () => {
     const verdict = wideVisualVerdict(
       {componentCount: 7},

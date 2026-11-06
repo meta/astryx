@@ -68,13 +68,20 @@ const styles = stylex.create({
   // layer nested in a capped one does not inherit the outer cap. The surfaces
   // inside a layer read it through `layerViewportInset.maxBlockSize`. The cap
   // also writes the overflow a capped surface takes. Popover's surface reads
-  // it, so it scrolls from the commit that caps it. Both are private runtime
-  // state, never set by an app or a theme.
-  // SYNC: the properties are LAYER_KEYBOARD_CAP_PROPERTY and
-  // LAYER_KEYBOARD_OVERFLOW_PROPERTY (useLayerKeyboardClearance.ts).
-  keyboardCap: (cap: string, overflow: 'auto' | 'visible') => ({
+  // it, so it scrolls from the commit that caps it. Beside them, the
+  // keyboard's inset from the viewport's bottom lets a layer that places
+  // itself slide above the keyboard. The inset keeps its largest value until
+  // the layer closes, so that layer stays put as the keyboard goes. Every
+  // layer sets it, `initial` until a keyboard is up, so a nested layer does
+  // not inherit it. All three are private runtime state, never set by an app
+  // or a theme.
+  // SYNC: the properties are LAYER_KEYBOARD_CAP_PROPERTY,
+  // LAYER_KEYBOARD_OVERFLOW_PROPERTY and LAYER_KEYBOARD_INSET_PROPERTY
+  // (useLayerKeyboardClearance.ts).
+  keyboardCap: (cap: string, overflow: 'auto' | 'visible', inset: string) => ({
     '--_layer-keyboard-max-block-size': cap,
     '--_layer-keyboard-overflow': overflow,
+    '--_layer-keyboard-inset-block-end': inset,
   }),
   // Base reset for all layers
   base: {
@@ -1678,10 +1685,11 @@ function useLayerImplementation(
 
   // An anchored layer that would run under the software keyboard keeps its
   // block-start edge and ends clear of the keyboard.
-  const {cap: keyboardCap, followLayerElement} = useLayerKeyboardClearance(
-    isOpen && mode === 'context',
-    popoverRef,
-  );
+  const {
+    cap: keyboardCap,
+    inset: keyboardInset,
+    followLayerElement,
+  } = useLayerKeyboardClearance(isOpen && mode === 'context', popoverRef);
 
   const popoverRefCallback = useCallback(
     (el: HTMLElement | null) => {
@@ -1924,6 +1932,7 @@ function useLayerImplementation(
         styles.keyboardCap(
           keyboardCap == null ? '100vh' : `${keyboardCap}px`,
           keyboardCap == null ? 'visible' : 'auto',
+          keyboardInset == null ? 'initial' : `${keyboardInset}px`,
         ),
         viewportStyles,
         offsetStyle,
@@ -1984,6 +1993,7 @@ function useLayerImplementation(
       isAnchorInView,
       keepsAnchorClear,
       keyboardCap,
+      keyboardInset,
       lightDismiss,
       mountStore,
       popoverRefCallback,
@@ -2015,7 +2025,7 @@ function useLayerImplementation(
         overlayPaddingReset.reset,
         // A fixed layer is never capped; it still sets its own limit so it is
         // not clamped by a capped layer it sits in.
-        styles.keyboardCap('100vh', 'visible'),
+        styles.keyboardCap('100vh', 'visible', 'initial'),
         styles.fixed,
         xstyle,
       );

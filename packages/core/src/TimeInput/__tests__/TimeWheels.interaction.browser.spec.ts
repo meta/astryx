@@ -5,10 +5,10 @@
  * @input The built "Bottom Sheet Wheels" TimeInput story, real touch input
  *   and the interaction harness
  * @output Interaction proofs for the sheet's time wheels under a finger, in
- *   Chromium and WebKit: an hour drag from 11 to 12 turns AM to PM on the
- *   AM/PM column's own spin; the turn advances through a blocked main thread;
- *   it cross-fades under Reduce Motion; a finger stops it mid-turn. With a
- *   mouse, 11 to 12 stays AM.
+ *   Chromium and WebKit. An hour drag from 11 to 12 turns AM to PM on the
+ *   AM/PM column's own spring. The turn advances through a blocked main
+ *   thread. It cross-fades under Reduce Motion, and a finger stops it
+ *   mid-turn. With a mouse, 11 to 12 stays AM.
  * @position Interaction tests of TimeWheels.tsx, run by
  *   `pnpm test:interaction`
  */
@@ -41,17 +41,26 @@ import {
   type TouchDriver,
   type TrackedFrame,
 } from '@astryxdesign/interaction-harness';
-import {cubicBezier} from '../../motion/bezier';
-import {picker} from '../../motion/uikit/picker';
-import {timing} from '../../motion/uikit/timing';
+import {bounceCurve, scaleFor} from '../../DateInput/wheelPhysics';
+import {springs} from '../../motion/uikit/springs';
 import {WHEEL_ROW_HEIGHT} from '../../DateInput/wheelOptions';
 
 const storybook = withStorybook(test);
 
-const TURN_MS = picker.tapSpin.durationMs;
-const move = cubicBezier(timing.curves.move);
-/** The column turn's oracle: the wheel's spin, `timing.curves.move` over `picker.tapSpin`. */
-const spin = (t: number) => (t >= TURN_MS ? 1 : move(Math.max(t, 0) / TURN_MS));
+/**
+ * The column turn's oracle: one row on `springs.settle`, from rest. The
+ * wheel's main interaction is a gesture, so a turn the program starts springs.
+ */
+const turn = bounceCurve(
+  0,
+  0,
+  WHEEL_ROW_HEIGHT,
+  scaleFor(WHEEL_ROW_HEIGHT),
+  springs.settle,
+);
+const TURN_MS = turn.duration * 1000;
+const spin = (t: number) =>
+  t >= TURN_MS ? 1 : turn.value(Math.max(t, 0) / 1000) / WHEEL_ROW_HEIGHT;
 
 interface OpenWheels {
   driver: TouchDriver;
@@ -210,7 +219,7 @@ async function catchTurn(column: Locator): Promise<void> {
   );
 }
 
-test('the AM/PM column follows the hour from 11 to 12 on UIDatePicker’s turn', async ({
+test('the AM/PM column follows the hour from 11 to 12 on a spring, from rest', async ({
   page,
 }) => {
   const {driver, hour, meridiem} = await openWheels(
@@ -226,7 +235,7 @@ test('the AM/PM column follows the hour from 11 to 12 on UIDatePicker’s turn',
   // The hour commits at rest; the AM/PM column then turns by itself. The
   // page catches that turn as it is created (see catchTurn). So the hold
   // below finds it, however late a loaded machine's round trips are. A wait
-  // from the harness found the 0.3 s turn already ended.
+  // from the harness found the turn already ended.
   const caught = catchTurn(meridiem);
   await turnHourTo12(driver, hour);
   await caught;
@@ -260,7 +269,7 @@ test('the AM/PM column follows the hour from 11 to 12 on UIDatePicker’s turn',
   }));
   const fit = compareCurve(progress, spin, 0.02);
   expect(fit.pass, JSON.stringify(fit.worst)).toBe(true);
-  // The held end timer finishes the turn, as it would have at 0.3 s.
+  // The held end timer finishes the turn, as it would have at its end.
   await thawTimers(page);
   await waitForRest(meridiem);
 
@@ -352,7 +361,7 @@ test('the AM/PM turn keeps advancing every frame through a blocked main thread',
 }, testInfo) => {
   test.skip(
     browserName === 'webkit',
-    "WebKit's screencast clock is not the page's (frames arrive ~100 ms off), so a 0.3 s turn cannot be placed inside the block; Mobile Safari on the iOS simulator is this proof's WebKit evidence",
+    "WebKit's screencast clock is not the page's (frames arrive ~100 ms off), so a turn this short cannot be placed inside the block; Mobile Safari on the iOS simulator is this proof's WebKit evidence",
   );
   const {driver, hour, meridiem} = await openWheels(
     page,
@@ -503,7 +512,7 @@ test('Reduced Motion: the AM/PM column cross-fades onto PM instead of turning', 
 });
 
 /**
- * A finger lands on the AM/PM column early in its 0.3 s turn. The column stops
+ * A finger lands on the AM/PM column early in its turn. The column stops
  * where it was at the touch's time. The lift rests it on the nearer row.
  *
  * Chromium's injected touches carry the timestamps they are given. The Wheel
@@ -724,7 +733,7 @@ test(
       'core-timeinput--bottom-sheet-wheels',
     );
     // Caught as it is created (catchTurn), so a late harness still films the
-    // turn from its start. Held after waitForAnimation instead, the 0.3 s turn
+    // turn from its start. Held after waitForAnimation instead, the turn
     // had ended on a loaded machine.
     await installTimerGate(page);
     const caught = catchTurn(meridiem);

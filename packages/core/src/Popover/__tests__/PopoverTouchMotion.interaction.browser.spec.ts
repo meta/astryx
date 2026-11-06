@@ -516,11 +516,11 @@ test('the dismissal shrinks back into the trigger on the theme\u2019s exit token
   const exit = await themeTiming(story.layer, POPOVER_EXIT_TOKENS);
   // Tap outside: the browser's light dismiss closes the popover at once.
   const viewport = page.viewportSize()!;
+  const dismissal = await armExitCopyHold(story);
   await story.driver.tap({x: 20, y: viewport.height - 20});
+  const held = await dismissal.held();
   await expect(story.trigger).toHaveAttribute('aria-expanded', 'false');
   const copy = exitCopyOf(page);
-  await scaleAnimationOf(copy);
-  const held = await holdAnimations(page, copy);
   // The popover is closed and gone; the dismissal plays on a static copy
   // where it stood, out of the accessibility tree and out of reach.
   const state = await page.evaluate(() => {
@@ -936,9 +936,7 @@ test('Reduce Motion: the popover cross-fades in at its size and out where it sta
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
   const story = await openDefault(page);
-  await openWithTap(story);
-  await waitForAnimation(story.layer);
-  await holdAnimations(page, story.layer);
+  await openHeldWhileGrowing(page, story);
   const unit = {x: 0, y: 0, width: 100, height: 100};
   // design:reduced-motion DR2: opacity only, 200 ms or less, here on
   // UIKit's cross-fade curve.
@@ -970,10 +968,10 @@ test('Reduce Motion: the popover cross-fades in at its size and out where it sta
     expect(sample.opacity).toBeCloseTo(1, 3);
   }
   // The dismissal fades out where the popover stands, on the same curve.
+  const dismissal = await armExitCopyHold(story);
   await page.keyboard.press('Escape');
+  await dismissal.held();
   const copy = exitCopyOf(page);
-  await waitForAnimation(copy);
-  await holdAnimations(page, copy);
   const [closing, gone] = await sampleBoxes(copy, unit, [
     100,
     timing.reducedMotionCrossFadeMs,
@@ -1006,15 +1004,14 @@ test(
           opacity: Number(style.opacity),
         };
       });
-    await openWithTap(story);
-    await waitForAnimation(story.layer);
     const entrance = await themeTiming(story.layer, POPOVER_ENTRANCE_TOKENS);
     const exit = await themeTiming(story.layer, POPOVER_EXIT_TOKENS);
+    const presented = await openHeldWhileGrowing(page, story);
     await freezeTimers(page);
     const {storyboard: presentBoard} = await animationStoryboard(page, {
       name: 'popover-touch-present',
       clip,
-      scope: story.layer,
+      held: presented,
       measure: measureOf(story.layer),
       // The growth ends with the entrance duration; the animation holds its
       // end state past that.
@@ -1025,14 +1022,15 @@ test(
     await releaseAnimations(page, {finish: true});
     await thawTimers(page);
     await waitForRest(story.layer);
+    const dismissal = await armExitCopyHold(story);
     await story.driver.tap({x: 20, y: viewport.height - 20});
+    const dismissing = await dismissal.held();
     const copy = exitCopyOf(page);
-    await waitForAnimation(copy);
     await freezeTimers(page);
     const {storyboard: dismissBoard} = await animationStoryboard(page, {
       name: 'popover-touch-dismiss',
       clip,
-      scope: copy,
+      held: dismissing,
       measure: measureOf(copy),
       times: timeline(exit.ms + 100),
       columns: 8,
@@ -1125,14 +1123,53 @@ function outsidePoint(page: Page) {
 }
 
 /**
- * Opens the popover with a tap and holds its growth where it starts, so the
- * next press lands while it grows. Returns the held growth; release it with
- * `releaseAnimations`.
+ * Whether `target` itself runs a held motion, so a motion on another element
+ * cannot stand in for the one the test reads. It waits for nothing: a missing
+ * element counts as no.
+ */
+async function holdsOn(target: Locator): Promise<boolean> {
+  return target.evaluateAll(elements =>
+    elements.some(element =>
+      element
+        .getAnimations()
+        .some(animation => animation.playState === 'paused'),
+    ),
+  );
+}
+
+/**
+ * Arms a hold for the exit copy before the action that closes the popover.
+ * The copy does not exist yet, so the hold arms on the layer's parent. The
+ * dismissal places it there for a popover in no other layer. Only motions
+ * that start after arming count, and the held motion must be the copy's.
+ */
+async function armExitCopyHold(story: OpenStory) {
+  const page = story.layer.page();
+  const armed = await armHold(page, story.layer.locator('xpath=..'), {
+    newOnly: true,
+  });
+  return {
+    async held() {
+      const held = await armed.held();
+      expect(await holdsOn(exitCopyOf(page)), 'held on the exit copy').toBe(
+        true,
+      );
+      return held;
+    },
+  };
+}
+
+/**
+ * Opens the popover with a tap and holds its presentation where it starts, so
+ * the next press lands while it grows. Under Reduce Motion it holds the
+ * cross-fade. Returns the held motion; release it with `releaseAnimations`.
  */
 async function openHeldWhileGrowing(page: Page, story: OpenStory) {
   const armed = await armHold(page, story.layer);
   await openWithTap(story);
-  return armed.held();
+  const held = await armed.held();
+  expect(await holdsOn(story.layer), 'held on the popover').toBe(true);
+  return held;
 }
 
 const focusedElement = async (page: Page) =>
