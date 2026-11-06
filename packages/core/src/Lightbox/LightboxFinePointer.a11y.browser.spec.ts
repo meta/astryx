@@ -278,8 +278,11 @@ for (const via of ['the Next button', 'the arrow key'] as const) {
     // The track's place every frame from the press on. Under a finger the
     // pager slides; with a mouse or the keyboard the new photo shows at once,
     // as it always has. The sampler is installed and awaited before the press,
-    // since a press the page gets first would leave it waiting.
-    await page.evaluate(() => {
+    // since a press the page gets first would leave it waiting. It runs for
+    // 600 ms and at least 12 frames, since a busy runner paints few frames.
+    // At half the test's timeout it gives up, so too few frames fail by name.
+    const giveUpMs = test.info().timeout / 2;
+    await page.evaluate(giveUpMs => {
       (window as unknown as {__places: Promise<number[]>}).__places =
         new Promise<number[]>(resolve => {
           const track = document.querySelector(
@@ -289,6 +292,7 @@ for (const via of ['the Next button', 'the arrow key'] as const) {
           let start: number | null = null;
           const begin = () => {
             start = performance.now();
+            window.setTimeout(() => resolve(places), giveUpMs);
           };
           window.addEventListener('click', begin, {capture: true, once: true});
           window.addEventListener('keydown', begin, {
@@ -299,7 +303,7 @@ for (const via of ['the Next button', 'the arrow key'] as const) {
             if (start != null && track != null) {
               places.push(Math.round(track.getBoundingClientRect().x));
             }
-            if (start == null || now - start < 600) {
+            if (start == null || now - start < 600 || places.length < 12) {
               requestAnimationFrame(tick);
             } else {
               resolve(places);
@@ -307,7 +311,7 @@ for (const via of ['the Next button', 'the arrow key'] as const) {
           };
           requestAnimationFrame(tick);
         });
-    });
+    }, giveUpMs);
     if (via === 'the Next button') {
       await dialog.getByRole('button', {name: 'Next'}).click();
     } else {
@@ -317,7 +321,7 @@ for (const via of ['the Next button', 'the arrow key'] as const) {
       async () => (window as unknown as {__places: Promise<number[]>}).__places,
     );
     await expect(dialog).toContainText('2 / 4');
-    expect(places.length).toBeGreaterThan(10);
+    expect(places.length, 'too few frames to judge').toBeGreaterThanOrEqual(12);
     // One place from the first frame after the press: no frame in between.
     expect(new Set(places).size).toBe(1);
   });
