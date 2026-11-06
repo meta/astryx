@@ -499,6 +499,16 @@ anything iOS-only — needs Mobile Safari itself, on a device or the iOS
 simulator. Skip such a proof on the driver's flag, citing the reason:
 `test.skip(!driver.partialLifts, PARTIAL_LIFT_SKIP)`.
 
+A touch play waits for its `onEvent` before it sends the next event, so page
+work there delays that event by a round trip. WebKit stamps a touch when it
+arrives. So a lift sent past the 40 ms stillness interval after its finger's
+last move reads as a resting finger. The page releases it at 0. Unless the play
+is paced by `'spacing'`, it fails with `TouchLiftStallError`. Each event
+reached the page by its answer, and the lift no sooner than it left. So the gap
+the play judges is at most the page's. Record what the page did in a listener
+of its own, or let the script rest before the lift. A play whose proof reads no
+release from the lift, such as a pinch's end, passes `releaseUnread`.
+
 A wheel gesture is a run of steps, and `wheel` waits for each step's round
 trip, so on a loaded runner awaited steps land as far apart as a round trip
 takes: 49 to 141 ms in WebKit, past the 100 ms a proof may allow between the

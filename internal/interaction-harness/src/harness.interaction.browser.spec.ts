@@ -109,10 +109,12 @@ import {
   thawPage,
   thawTimers,
   timeline,
+  toTouchEvents,
   touchDriver,
   trackBrightness,
   TouchPageStallError,
   touchStoryboard,
+  TouchLiftStallError,
   traceRendering,
   trackControl,
   trackMarker,
@@ -390,6 +392,78 @@ test.describe('touch input', () => {
     expect(String(outcome)).toMatch(
       /the page's own touch and pointer listeners took \d+ ms/,
     );
+  });
+
+  /** A flick up a page that takes every touch, its lift right after its last move. */
+  async function liftStallPage(page: Page) {
+    await page.route('http://lift-stall.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>window.touches=[];for(const type of ["touchmove","touchend"])addEventListener(type,e=>touches.push([type,e.timeStamp]),{passive:true})</script>',
+      }),
+    );
+    await page.goto('http://lift-stall.test/');
+    const script = flick(
+      {x: 200, y: 400},
+      {velocity: {x: 0, y: -1500}, durationMs: 80, hz: 120},
+    );
+    const lastMove = toTouchEvents(script).length - 2;
+    // Page work at the last move, as a busy runner's round trip.
+    const slowRead = async (_: unknown, index: number) => {
+      if (index === lastMove) {
+        await page.evaluate(
+          () => new Promise(resolve => setTimeout(resolve, 60)),
+        );
+      }
+    };
+    // The page's own gap from the last move to the lift, ms.
+    const pageLiftGap = () =>
+      page.evaluate(() => {
+        const {touches} = window as unknown as {touches: [string, number][]};
+        const lift = touches.findIndex(([type]) => type === 'touchend');
+        return touches[lift][1] - touches[lift - 1][1];
+      });
+    return {driver: await touchDriver(page), script, slowRead, pageLiftGap};
+  }
+
+  test('a play whose onEvent holds its lift back past the stillness interval fails by name, where the page stamps touches on arrival', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    const {driver, script, slowRead, pageLiftGap} = await liftStallPage(page);
+    const outcome = await driver.play(script, {onEvent: slowRead}).then(
+      () => 'resolved',
+      (error: unknown) => error,
+    );
+    expect(outcome).toBeInstanceOf(TouchLiftStallError);
+    expect(String(outcome)).toMatch(
+      /the lift reached the page at least \d+ ms after its finger's last move, where the script spaces \d+ ms: .* onEvent ran \d+ ms in that gap/,
+    );
+    const {numbers} = outcome as TouchLiftStallError;
+    expect(numbers.gapMs).toBeGreaterThan(40);
+    expect(numbers.scriptedGapMs).toBeLessThanOrEqual(40);
+    // The page itself read the rest.
+    expect(await pageLiftGap()).toBeGreaterThan(40);
+    // The same flick with a quick onEvent passes.
+    await driver.play(script, {onEvent: () => {}});
+    // A proof that reads no release from the lift opts out.
+    await driver.play(script, {onEvent: slowRead, releaseUnread: true});
+  });
+
+  test('a Chromium play carries the scripted times, so a slow onEvent before its lift does not fail it', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'Chromium carries the scripted times; WebKit stamps a touch when it arrives',
+    );
+    const {driver, script, slowRead} = await liftStallPage(page);
+    await driver.play(script, {onEvent: slowRead});
   });
 
   test("a touch play reaches a page that takes touches late with no gap more than 2 ms short of the script's", async ({
