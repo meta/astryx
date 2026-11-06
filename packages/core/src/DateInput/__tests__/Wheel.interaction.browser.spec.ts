@@ -47,8 +47,9 @@ import {
   toTouchEvents,
   traceRendering,
   trackMarker,
-  waitForAnimation,
+  type waitForAnimation,
   waitForRest,
+  watchAnimations,
   retakeOnWheelPacing,
   webInputDriver,
   WHEEL_SKIP,
@@ -380,8 +381,9 @@ test('a flick coasts on UIKit’s curve onto the row it projects, and commits it
   const {script, offsetAtLift} = flickUp(start);
   expect(releaseVelocity(script).y).toBeCloseTo(-FLICK_VELOCITY, -1);
   await recordFingerInputs(page);
+  const watch = await watchAnimations(strip);
   await driver.play(script);
-  const coast = stripAnimationOf(await waitForAnimation(strip));
+  const coast = stripAnimationOf(await watch.started());
   const held = await holdAnimations(page, strip);
   const motion = held.find(animation => animation.kind === 'Animation');
   if (motion == null) {
@@ -520,10 +522,9 @@ test('the coast keeps advancing every frame while the main thread is blocked', a
   // The compositor's own record of the frames it presents: a frame the
   // screencast skips under load is not a stall (busyWindowProof).
   const compositor = await startCompositorTrace(page);
+  const watch = await watchAnimations(strip);
   await driver.play(script);
-  const coast = stripAnimationOf(
-    await waitForAnimation(strip, {minProgressMs: 16}),
-  );
+  const coast = stripAnimationOf(await watch.started({minProgressMs: 16}));
   // Read the coast the page is playing, from its keyframes: where the strip is
   // at each moment. WebKit's real-time input gives the page its own release
   // velocity.
@@ -674,10 +675,9 @@ test('a finger landing on the coasting wheel stops it where it is, then it eases
 }) => {
   const {driver, field, strip, start} = await openWheel(page);
   const before = await stripOffset(strip);
+  const watch = await watchAnimations(strip);
   await driver.play(flickUp(start).script);
-  const coast = stripAnimationOf(
-    await waitForAnimation(strip, {minProgressMs: 16}),
-  );
+  const coast = stripAnimationOf(await watch.started({minProgressMs: 16}));
   const coastEnd = -stripYOf(coast.keyframes?.at(-1));
   await page.waitForTimeout(300);
   // Land and hold still: the wheel stops at once, between rows.
@@ -728,6 +728,7 @@ test(
     // The wheel ends a motion from a timer; gate the page's timers so the
     // held coast is not finished behind the filmstrip's back.
     await installTimerGate(page);
+    const watch = await watchAnimations(strip);
     const flickBoard = await touchStoryboard(page, driver, script, {
       name: 'wheel-flick',
       clip,
@@ -735,7 +736,7 @@ test(
       columns: 6,
       cellScale: 0.5,
     });
-    await waitForAnimation(strip);
+    await watch.started();
     await freezeTimers(page);
     const {storyboard: coastBoard} = await animationStoryboard(page, {
       name: 'wheel-coast',

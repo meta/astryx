@@ -46,8 +46,8 @@ import {
   touchStoryboard,
   traceRendering,
   trackMarker,
-  waitForAnimation,
   waitForRest,
+  watchAnimations,
   withStorybook,
   writeEvidence,
   type CastFrame,
@@ -2051,8 +2051,9 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     // The travel and the track color, from a programmatic change: the thumb
     // starts at rest, as UISwitch's `setOn(_:animated:)` does.
     await openStory(page, storybook(), 'core-switch--controlled-update');
+    const watch = await watchAnimations(thumb);
     await page.getByRole('button', {name: 'Turn on remotely'}).click();
-    await waitForAnimation(thumb);
+    await watch.started();
     await holdAnimations(page, page.locator('#storybook-root .astryx-switch'));
     const travelSamples = await sampleThumb(page, timeline(500));
     await releaseAnimations(page);
@@ -2391,9 +2392,10 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       throw new Error('no track');
     }
     const cast = await startScreencast(page);
+    const watch = await watchAnimations(onLayer);
     await driver.play(tap(center, {holdMs: 50}));
     await expect(input).toBeChecked();
-    await waitForAnimation(onLayer, {minProgressMs: 16});
+    await watch.started({minProgressMs: 16});
     const block = await blockMainThread(page, 700);
     await page.waitForTimeout(150);
     const castFrames = await cast.stop();
@@ -2513,8 +2515,9 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
       const {driver, thumb, center} = await openSwitch(page);
       await installTimerGate(page);
       const clip = page.locator('#storybook-root .astryx-switch');
+      const watch = await watchAnimations(thumb);
       await driver.play(tap(center, {holdMs: 50}));
-      await waitForAnimation(thumb);
+      await watch.started();
       await freezeTimers(page);
       const {storyboard} = await animationStoryboard(page, {
         name: 'switch-tap',

@@ -29,8 +29,8 @@ import {
   openStory,
   releaseAnimations,
   touchDriver,
-  waitForAnimation,
   waitForRest,
+  watchAnimations,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
 
@@ -311,8 +311,9 @@ test(
     const layer = veil(page, 'root');
     const viewport = page.viewportSize() ?? {width: 402, height: 714};
     const clip = {x: 0, y: 0, width: viewport.width, height: 120};
+    const watch = await watchAnimations(layer);
     await fingerScrollTo(page, 'root', 120);
-    await waitForAnimation(layer);
+    await watch.started();
     const {storyboard} = await animationStoryboard(page, {
       name: 'navigation-stack-scroll-edge-appear',
       clip,

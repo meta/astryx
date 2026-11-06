@@ -52,7 +52,6 @@ import {
   timeline,
   touchDriver,
   traceRendering,
-  waitForAnimation,
   watchAnimations,
   withStorybook,
   writeEvidence,
@@ -519,8 +518,9 @@ test('the release does no Layout or Paint per frame', async ({
   let release = {from: 0, to: 0};
   const started = Date.now();
   const trace = await traceRendering(page, async () => {
+    const watch = await watchAnimations(row);
     await driver.play(tap(center, {holdMs: HOLD_MS}));
-    [release] = await waitForAnimation(row);
+    [release] = await watch.started();
     await page.waitForTimeout(exit.ms + 100);
   });
   // The steady part of the release: its first and last frames may commit.
