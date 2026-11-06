@@ -10,6 +10,7 @@ import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
 import {
+  countTests,
   estimateSeconds,
   isInteractionSpec,
   legCount,
@@ -117,6 +118,34 @@ describe('estimateSeconds and legCount', () => {
         changed: ['other.spec.ts'],
       }),
     ).toBe(170 + 50);
+  });
+
+  it('costs a spec with no recorded time by its tests at the mean time a test', () => {
+    // A spec with 50 tests at 1.56 s a test, not the 10.7 s median file.
+    const source = Array.from(
+      {length: 50},
+      (_, i) => `  test('case ${i}', async () => {});`,
+    ).join('\n');
+    expect(countTests(source)).toBe(50);
+    expect(
+      countTests(
+        "test.describe('group', () => {\n  test.skip('a', () => {});\n  it('b', () => {});\n  test.use({});\n});",
+      ),
+    ).toBe(2);
+    const estimate = estimateSeconds(times, ['packages/lab/'], {
+      listed: [...listed, 'packages/lab/TabBar.spec.ts'],
+      testsOf: file => (file === 'packages/lab/TabBar.spec.ts' ? 50 : 0),
+      perTest: 1.56,
+    });
+    expect(estimate).toBeCloseTo(78, 5);
+    // With no tests to count, the file median stands.
+    expect(
+      estimateSeconds(times, ['packages/lab/'], {
+        listed: ['packages/lab/Empty.spec.ts'],
+        testsOf: () => 0,
+        perTest: 1.56,
+      }),
+    ).toBe(50);
   });
 
   it('counts a listed spec in the lane that has no recorded time yet', () => {
@@ -352,7 +381,7 @@ describe('the interaction proof legs in ci.yml', () => {
         '--leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }}',
         // Every spec file in the merge commit, recorded or not.
         'git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"',
-        '--listed "$RUNNER_TEMP/interaction-legs/listed.txt"',
+        '--listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope',
       ])
         expect(count.run).toContain(part);
     });
@@ -615,9 +644,15 @@ describe('the interaction proof legs in ci.yml', () => {
         lane.project === 'webkit'
           ? ci.jobs[lane.id].env.WEBKIT_SPEC_PATHS.split(' ')
           : [];
+      const perTest =
+        durations['seconds-per-test'][`interaction-${lane.project}`];
+      const testsOf = file =>
+        countTests(fs.readFileSync(path.join(root, file), 'utf8'));
       const seconds = estimateSeconds(times, filters, {
         listed: specs,
         fallback,
+        testsOf,
+        perTest,
       });
       const limits = {
         setupSeconds: 90,
@@ -642,9 +677,10 @@ describe('the interaction proof legs in ci.yml', () => {
             filters.length === 0 || filters.some(each => file.includes(each)),
         ),
         Object.fromEntries(
-          specs
-            .map(file => [file, times[file] ?? fallback[file]])
-            .filter(([, v]) => v != null),
+          specs.map(file => [
+            file,
+            times[file] ?? fallback[file] ?? testsOf(file) * perTest,
+          ]),
         ),
         legsNow,
       );

@@ -41,6 +41,7 @@
     "packages/core/src/SideNav/__tests__/SideNavRailMotion.interaction.browser.spec.ts": 23.9,
     "packages/core/src/Slider/__tests__/SliderFinePointer.interaction.browser.spec.ts": 6.6,
     "packages/core/src/Slider/__tests__/SliderTouch.interaction.browser.spec.ts": 54.0,
+    "packages/core/src/SnapPaging/__tests__/SnapPaging.interaction.browser.spec.ts": 53.1,
     "packages/core/src/Switch/__tests__/Switch.interaction.browser.spec.ts": 107.8,
     "packages/core/src/Switch/__tests__/SwitchPointer.interaction.browser.spec.ts": 21.6,
     "packages/core/src/TabList/__tests__/TabListOverflow.interaction.browser.spec.ts": 1.8,
@@ -52,6 +53,7 @@
     "packages/core/src/Tooltip/__tests__/TooltipClosedTriggerAnchor.interaction.browser.spec.ts": 6.4,
     "packages/core/src/TreeList/__tests__/TreeListGuideAlignment.interaction.browser.spec.ts": 3.4,
     "packages/core/src/animator/__tests__/createAnimator.interaction.browser.spec.ts": 6.9,
+    "packages/core/src/dragToSnapPoints/__tests__/createDragToSnapPoints.interaction.browser.spec.ts": 6.1,
     "packages/core/src/gestures/__tests__/browser/gestures.interaction.browser.spec.ts": 44.8,
     "packages/core/src/gestures/__tests__/browser/presentedHitTesting.interaction.browser.spec.ts": 4.6,
     "packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts": 38.6,
@@ -64,7 +66,9 @@
     "packages/lab/src/Chart/__tests__/ChartZoomWheel.interaction.browser.spec.ts": 2.8,
     "packages/lab/src/CircleCheckIndicator/__tests__/CircleCheckIndicator.interaction.browser.spec.ts": 12.6,
     "packages/lab/src/NavigationStack/__tests__/NavigationStack.interaction.browser.spec.ts": 111.7,
-    "packages/lab/src/RefreshControl/__tests__/RefreshControl.interaction.browser.spec.ts": 79.2
+    "packages/lab/src/NavigationStack/__tests__/NavigationStackScrollEdge.interaction.browser.spec.ts": 14.7,
+    "packages/lab/src/RefreshControl/__tests__/RefreshControl.interaction.browser.spec.ts": 79.2,
+    "packages/lab/src/TabBar/__tests__/TabBar.interaction.browser.spec.ts": 85.5
   },
   "interaction-webkit": {
     "internal/interaction-harness/src/harness.interaction.browser.spec.ts": 168.8,
@@ -82,5 +86,9 @@
     "internal-docs-prompt.spec.ts": 98,
     "mobile-navigation.spec.ts": 8,
     "playground-preview-isolation.spec.ts": 113.8
+  },
+  "seconds-per-test": {
+    "interaction-chromium": 1.56,
+    "interaction-webkit": 1.28
   }
 }

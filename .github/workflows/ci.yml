@@ -2550,7 +2550,7 @@ jobs:
         run: |
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
-            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" \
+            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
             --key interaction-chromium --fallback-key interaction-webkit \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --setup-seconds 90 --max-seconds 600 \
@@ -2768,7 +2768,7 @@ jobs:
           read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
-            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" \
+            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
             --key interaction-webkit --fallback-key interaction-chromium \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --changed "${CHANGED_FILES:-}" \

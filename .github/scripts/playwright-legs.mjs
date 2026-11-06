@@ -60,13 +60,14 @@ export function planLegs(files, durations, legs) {
 /**
  * The seconds a suite's proofs take: each listed spec file a filter selects
  * (every listed spec with no filter), and each changed spec, at its recorded
- * time. A spec with no time of its own
- * counts its time in `fallback` (another browser's), else the median.
+ * time. A spec with no time of its own counts its time in `fallback`
+ * (another browser's); else its test count (`testsOf`) times the suite's mean
+ * time a test (`perTest`); else the median time a file.
  */
 export function estimateSeconds(
   times,
   filters,
-  {listed = [], changed = [], fallback = {}} = {},
+  {listed = [], changed = [], fallback = {}, testsOf = () => 0, perTest} = {},
 ) {
   // No filter: the suite plans every listed spec.
   const files = new Set(
@@ -77,8 +78,36 @@ export function estimateSeconds(
   for (const file of changed) files.add(file);
   const median = medianOf(Object.values(times));
   let seconds = 0;
-  for (const file of files) seconds += times[file] ?? fallback[file] ?? median;
+  for (const file of files) {
+    const tests =
+      times[file] == null && fallback[file] == null && perTest > 0
+        ? testsOf(file)
+        : 0;
+    seconds +=
+      times[file] ?? fallback[file] ?? (tests > 0 ? tests * perTest : median);
+  }
   return seconds;
+}
+
+// A test declaration at the start of a line: test(), test.only() and the
+// like, not test.describe() or test.use().
+const TEST_CALL = /^\s*(?:test|it)(?:\.(?:only|skip|fixme|fail|slow))?\s*\(/gm;
+
+/** How many tests a spec file declares; a test inside a loop counts once. */
+export function countTests(source) {
+  return (source.match(TEST_CALL) ?? []).length;
+}
+
+/** The mean seconds a test, over every test of every log. */
+function meanTestSeconds(texts, project, strip) {
+  let seconds = 0;
+  let tests = 0;
+  for (const text of texts)
+    for (const each of Object.values(recordLog(text, project, strip, true))) {
+      seconds += each.seconds;
+      tests += each.tests;
+    }
+  return tests > 0 ? Math.round((seconds / tests) * 100) / 100 : undefined;
 }
 
 /**
@@ -127,8 +156,9 @@ function stamp(line) {
  * `strip` turns the printed path into the one Playwright lists (relative to
  * the config's test directory).
  */
-export function recordLog(text, project, strip = '') {
+export function recordLog(text, project, strip = '', counts = false) {
   const seconds = {};
+  const tests = {};
   let previous = null;
   for (const line of text.split('\n')) {
     const at = stamp(line);
@@ -144,9 +174,17 @@ export function recordLog(text, project, strip = '') {
       ? match[3].slice(strip.length)
       : match[3];
     seconds[file] = (seconds[file] ?? 0) + (time - previous) / 1000;
+    tests[file] = (tests[file] ?? 0) + 1;
     previous = time;
   }
-  return seconds;
+  return counts
+    ? Object.fromEntries(
+        Object.entries(seconds).map(([file, value]) => [
+          file,
+          {seconds: value, tests: tests[file]},
+        ]),
+      )
+    : seconds;
 }
 
 function readDurations(file = DURATIONS) {
@@ -257,7 +295,7 @@ function legs(args) {
   };
   if (!key || !Number.isInteger(leg) || leg < 1)
     throw new Error(
-      'usage: legs --key <times key> --leg <i> --listed <file> --setup-seconds <s> --max-seconds <s> --max-legs <n> [--fallback-key <times key>] [--durations <file>] [--changed <file>] [-- <filters...>]',
+      'usage: legs --key <times key> --leg <i> --listed <file> [--source <git dir>] --setup-seconds <s> --max-seconds <s> --max-legs <n> [--fallback-key <times key>] [--durations <file>] [--changed <file>] [-- <filters...>]',
     );
   const specs = file =>
     fs.readFileSync(file, 'utf8').split('\n').filter(isInteractionSpec);
@@ -285,10 +323,28 @@ function legs(args) {
     return;
   }
   const durations = readDurations(option(own, '--durations') ?? DURATIONS);
+  // A spec with no recorded time counts its tests, read from the merge
+  // commit (the scope checkout) without a checkout of its own.
+  const source = option(own, '--source');
+  const testsOf = file => {
+    if (!source) return 0;
+    try {
+      return countTests(
+        execFileSync('git', ['-C', source, 'show', `HEAD:${file}`], {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+        }),
+      );
+    } catch {
+      return 0;
+    }
+  };
   const seconds = estimateSeconds(durations[key] ?? {}, filters, {
     listed,
     changed: changedFile ? specs(changedFile) : [],
     fallback: durations[option(own, '--fallback-key')] ?? {},
+    testsOf,
+    perTest: durations['seconds-per-test']?.[key],
   });
   const count = legCount({seconds, ...limits});
   const runs = leg <= count;
@@ -315,9 +371,10 @@ function record(args) {
       'usage: record --key <times key> [--project <name>] [--strip <path prefix>] <job log...>',
     );
   const seconds = {};
-  for (const log of logs) {
+  const texts = logs.map(log => fs.readFileSync(log, 'utf8'));
+  for (const text of texts) {
     for (const [file, value] of Object.entries(
-      recordLog(fs.readFileSync(log, 'utf8'), project, strip),
+      recordLog(text, project, strip),
     )) {
       seconds[file] = (seconds[file] ?? 0) + value;
     }
@@ -325,6 +382,11 @@ function record(args) {
   if (Object.keys(seconds).length === 0)
     throw new Error(`no ${key} test lines in the logs`);
   const durations = readDurations();
+  // The mean time a test, for a spec that has no recorded time yet.
+  durations['seconds-per-test'] = {
+    ...durations['seconds-per-test'],
+    [key]: meanTestSeconds(texts, project, strip),
+  };
   durations[key] = Object.fromEntries(
     Object.entries(seconds)
       .sort(([a], [b]) => (a < b ? -1 : 1))
