@@ -625,7 +625,18 @@ function summarize(result) {
  */
 function flattenNamespaces(rows) {
   return rows.flatMap(row => [
-    {topic: row.topic, description: row.description, package: row.package},
+    {
+      topic: row.topic,
+      // An experimental doc is marked here as it is wherever else it is
+      // listed, so a reader cannot take a row of this list for a stable doc.
+      description:
+        'stability' in row &&
+        row.stability === 'experimental' &&
+        !/^experimental\b/iu.test(row.description)
+          ? `[experimental] ${row.description}`
+          : row.description,
+      package: row.package,
+    },
     ...flattenNamespaces(row.children ?? []),
   ]);
 }
