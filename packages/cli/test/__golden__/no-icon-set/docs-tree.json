@@ -748,6 +748,7 @@
     "sections": [
       "quick-start-with-ai",
       "install",
+      "upgrade",
       "install-once",
       "add-base-css-and-a-theme",
       "add-your-first-component",
@@ -924,7 +925,8 @@
       "custom-icons",
       "theme-overrides",
       "icon-variants",
-      "component-and-library-icons"
+      "component-and-library-icons",
+      "component-icon-slots"
     ],
     "mentions": [
       "This lets you swap the icon set (e.g."

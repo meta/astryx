@@ -467,8 +467,8 @@ function settleProgress(ms: number): number {
 
 /**
  * Samples the photo's width every frame from the first `startEvent` on,
- * while `act` zooms it 2×, and checks that the zoom settles on
- * `springs.settle` from rest.
+ * while `act` zooms it 2×. Checks that the zoom settles on `springs.settle`
+ * from rest.
  */
 async function expectSpringZoom(
   page: Page,

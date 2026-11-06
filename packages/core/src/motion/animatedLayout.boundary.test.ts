@@ -127,14 +127,17 @@ describe('architecture:react-component-runtime INV12 source boundary', () => {
     }
   });
 
-  it("keeps the swap's copy mechanism private to the module", () => {
+  it("keeps the copy mechanism to the swap and the layer's exit copy", () => {
     const users = sourceFiles(coreSrc)
       .filter(path =>
         /from '[./]+(motion\/)?transientCopy'/.test(readFileSync(path, 'utf8')),
       )
       .map(path => relative(coreSrc, path))
       .sort();
-    expect(users).toEqual(['motion/animatedLayout.ts']);
+    expect(users).toEqual([
+      'Layer/layerExitCopy.ts',
+      'motion/animatedLayout.ts',
+    ]);
   });
 
   it('is used only by the hook and the components that adopt it', () => {

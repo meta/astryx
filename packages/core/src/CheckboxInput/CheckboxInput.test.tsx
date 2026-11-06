@@ -455,6 +455,65 @@ describe('CheckboxInput', () => {
     });
   });
 
+  describe('caller handlers', () => {
+    const h = {hidden: true} as const;
+
+    it('does not run a disabled checkbox’s caller handlers other than focus and blur', () => {
+      const onKeyDown = vi.fn();
+      const onKeyUp = vi.fn();
+      const onPointerDown = vi.fn();
+      const onMouseDown = vi.fn();
+      const onFocus = vi.fn();
+      const onBlur = vi.fn();
+      render(
+        <CheckboxInput
+          label="Accept terms"
+          value={false}
+          onChange={() => {}}
+          isDisabled
+          onKeyDown={onKeyDown}
+          onKeyUp={onKeyUp}
+          onPointerDown={onPointerDown}
+          onMouseDown={onMouseDown}
+          onFocus={onFocus}
+          onBlur={onBlur}
+        />,
+      );
+      const checkbox = screen.getByRole('checkbox', h);
+      fireEvent.pointerDown(checkbox);
+      fireEvent.mouseDown(checkbox);
+      fireEvent.keyDown(checkbox, {key: 'x'});
+      fireEvent.keyUp(checkbox, {key: 'x'});
+      expect(onPointerDown).not.toHaveBeenCalled();
+      expect(onMouseDown).not.toHaveBeenCalled();
+      expect(onKeyDown).not.toHaveBeenCalled();
+      expect(onKeyUp).not.toHaveBeenCalled();
+      fireEvent.focus(checkbox);
+      fireEvent.blur(checkbox);
+      expect(onFocus).toHaveBeenCalledTimes(1);
+      expect(onBlur).toHaveBeenCalledTimes(1);
+    });
+
+    it('still runs an enabled checkbox’s caller handlers', () => {
+      const onKeyDown = vi.fn();
+      const onPointerDown = vi.fn();
+      render(
+        <CheckboxInput
+          label="Accept terms"
+          value={false}
+          onChange={() => {}}
+          onKeyDown={onKeyDown}
+          onPointerDown={onPointerDown}
+        />,
+      );
+      const checkbox = screen.getByRole('checkbox', h);
+      fireEvent.pointerDown(checkbox);
+      fireEvent.keyDown(checkbox, {key: 'x'});
+      expect(onPointerDown).toHaveBeenCalledTimes(1);
+      expect(onKeyDown).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('disabledMessage', () => {
     const h = {hidden: true} as const;
 

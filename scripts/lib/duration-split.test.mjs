@@ -70,7 +70,7 @@ describe('splitting test files by recorded time', () => {
       /import \{medianOf\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
     );
     expect(read('.github/scripts/playwright-legs.mjs')).toMatch(
-      /import \{costOf, splitByDuration\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
+      /import \{[^}]*costOf[^}]*splitByDuration[^}]*\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
     );
     for (const file of [
       'scripts/vitest-shard-sequencer.mjs',

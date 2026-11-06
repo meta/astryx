@@ -27,7 +27,6 @@ import {PinchGestureRecognizer} from '../gestures/PinchGestureRecognizer';
 import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import type {Point} from '../gestures/types';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
-import {useAttachment} from '../hooks/useAttachment';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {UIKIT_PAN} from '../motion/uikit/gestures';
 import {coast as coastCurves} from '../motion/coast';
@@ -95,6 +94,11 @@ export interface UseZoomStageOptions {
    * tracked touches. False leaves the fingers to the page's zoom.
    */
   shouldBeginPinch?: (recognizer: GestureRecognizer) => boolean;
+  /**
+   * An outer pager takes a one-finger drag that heads past the zoomed photo's
+   * edge. Without one, the pan begins there and gives past the edge.
+   */
+  hasOuterPager?: boolean;
   /** Drag to dismiss, as Photos has it; none without. */
   dismiss?: ZoomStageDismiss;
 }
@@ -152,11 +156,6 @@ const DOUBLE_TAP_POINTERS = ['touch'] as const;
 /** A mouse's or a pen's click beside the photo is the browser's `click`. */
 const TAP_POINTERS = ['touch'] as const;
 
-/** Sets the zoom pan's begin threshold for the press that just landed. */
-function setBeginThreshold(pan: PanGestureRecognizer, px: number): void {
-  pan.hysteresis = px;
-}
-
 /**
  * Lightbox's zoom gestures. They take every pointer: a mouse, a pen and a
  * finger alike. The pinch is the fingers', and a ctrl-wheel pinches too. The
@@ -174,10 +173,11 @@ function setBeginThreshold(pan: PanGestureRecognizer, px: number): void {
  *   down after the pinch keeps panning.
  * - pan: one or two fingers, a mouse's or a pen's drag, or a trackpad's
  *   scroll. It moves a zoomed photo. In the touch presentation, its release
- *   carries a scroll view's velocity. As UIScrollView's, it begins only when
- *   the photo can move that way. That is with two fingers down, or on a
- *   zoomed photo short of its edge on the side the drag heads to. Any other
- *   drag is left to an outer pager.
+ *   carries a scroll view's velocity. With two fingers down it begins when
+ *   the pinch may. With one, it begins on a zoomed photo. Where an outer
+ *   pager takes the drag, it begins only short of the photo's edge on the
+ *   side the drag heads to. UIKit's paging scroll view does the same.
+ *   Elsewhere it gives past that edge.
  * - double tap, a finger's: it fills the viewer, at least 2×, and keeps the
  *   point in place. When zoomed it goes back to the fitted size. A mouse's or
  *   a pen's double-click is the browser's `dblclick` (the core's
@@ -203,8 +203,8 @@ function setBeginThreshold(pan: PanGestureRecognizer, px: number): void {
  * It follows UIKit's measured behavior (motion/uikit/zoomMedia.ts). Inside the
  * limits the zoom follows the pinch 1:1. The content point under the centroid
  * stays under it, past the limits too. No scale momentum follows the lift.
- * Past a limit, the return is one eased animation anchored at the last
- * centroid. In the touch presentation, a zoomed pan coasts and bounces like a
+ * Past a limit, the return springs from the pinch's velocity, anchored at
+ * the last centroid. In the touch presentation, a zoomed pan coasts and bounces like a
  * scroll view. A two-finger tap does nothing.
  */
 export function useZoomStage(
@@ -262,10 +262,10 @@ export function useZoomStage(
     );
   };
 
-  // UIScrollView's pan begins only when the content can move that way. That is
-  // with two fingers down for a pinch, or on a zoomed photo short of its edge
-  // on the side the drag heads to. Any other drag is left to an outer pager,
-  // or to nothing.
+  // The pan begins with two fingers down when a pinch may, or on a zoomed
+  // photo. Where an outer pager takes the drag, it begins only short of the
+  // photo's edge on the side the drag heads to. UIScrollView's pan in a
+  // paging scroll view does the same, and the pager takes the rest.
   const panShouldBeginRef = useRef<(pan: PanGestureRecognizer) => boolean>(
     () => true,
   );
@@ -273,7 +273,7 @@ export function useZoomStage(
   const pinchShouldBeginRef = useRef<
     (recognizer: GestureRecognizer) => boolean
   >(() => true);
-  const {shouldBeginPinch} = options;
+  const {shouldBeginPinch, hasOuterPager = false} = options;
   // A drag to dismiss starts downward on a photo at its fitted size.
   const dismissShouldBeginRef = useRef<(pan: PanGestureRecognizer) => boolean>(
     () => false,
@@ -290,6 +290,7 @@ export function useZoomStage(
       }
       const {x, y} = pan.totalTranslation();
       return !(
+        hasOuterPager &&
         Math.abs(x) >= Math.abs(y) &&
         isAtEdgeOf(geometry, x < 0 ? 'left' : 'right')
       );
@@ -328,6 +329,14 @@ export function useZoomStage(
       allowedPointerTypes: EVERY_POINTER,
       allowedScrollTypes: ['continuous'],
       shouldBegin: recognizer => panShouldBeginRef.current(recognizer),
+      // A mouse's or a pen's drag on a zoomed photo pans from its first move.
+      // A finger keeps UIKit's begin threshold, which tells a tap from a pan.
+      hysteresis: touch =>
+        touch.pointerType !== 'touch' &&
+        geometryRef.current != null &&
+        isZoomed(geometryRef.current, current())
+          ? 0
+          : UIKIT_PAN.hysteresis.value,
     });
     // A finger's double tap. A mouse's or a pen's double-click is the
     // browser's `dblclick`, which keeps the system's double-click speed.
@@ -368,29 +377,6 @@ export function useZoomStage(
 
   const recognizerOptions = {isEnabled: options.isEnabled, manageStyle: false};
   const surfaceRef = options.surfaceRef ?? options.stageRef;
-  // A mouse's or a pen's drag on a zoomed photo pans from its first move. A
-  // finger keeps UIKit's begin threshold, which tells a tap from a pan. Each
-  // press sets it, before the pan can begin.
-  useAttachment(
-    surfaceRef,
-    element => {
-      const onPress = (event: PointerEvent) => {
-        const geometry = geometryRef.current;
-        setBeginThreshold(
-          recognizers.pan,
-          event.pointerType !== 'touch' &&
-            geometry != null &&
-            isZoomed(geometry, current())
-            ? 0
-            : UIKIT_PAN.hysteresis.value,
-        );
-      };
-      element.addEventListener('pointerdown', onPress, {capture: true});
-      return () =>
-        element.removeEventListener('pointerdown', onPress, {capture: true});
-    },
-    recognizers,
-  );
 
   useGestureRecognizer(
     surfaceRef,
