@@ -96,6 +96,11 @@ export {
 export {focusForLastInput, isFocusLost} from '../utils/focusReturn';
 export {useInteractionModalityTracking} from '../utils/interactionModality';
 
+// Lab components that watch a finger's scroll read whether a scroller's
+// scroll is a finger's, and act when that scroll ends.
+export {useFingerScroll} from '../gestures/useFingerScroll';
+export type {UseFingerScrollOptions} from '../gestures/useFingerScroll';
+
 // Lab's TabBar tracks its press with the shared action-group tracker.
 export {useActionGroupTracking} from '../hooks/useActionGroupTracking';
 export type {ActionGroupTrackingOptions} from '../hooks/useActionGroupTracking';
