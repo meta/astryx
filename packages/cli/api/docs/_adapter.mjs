@@ -1765,9 +1765,41 @@ export function nameOwner(tree, catalog, name) {
     return entry == null ? null : {kind: 'topic', entry};
   }
   const entry = catalog.resolve(name);
-  if (entry == null) return null;
-  const owner = routeOwner(tree, entry);
-  return owner == null ? {kind: 'topic', entry} : {kind: 'node', node: owner};
+  if (entry != null) {
+    const owner = routeOwner(tree, entry);
+    return owner == null ? {kind: 'topic', entry} : {kind: 'node', node: owner};
+  }
+  return childOwner(tree, name);
+}
+
+/**
+ * The child a reader names without its namespace, or with a route that leaves
+ * out the prefix the child's own name repeats (spec:AST-046 FR5). A namespace
+ * whose children repeat its name makes its own routes stutter: `tokens` holds
+ * `tokens-color`, so the route is `tokens/tokens-color`, while the namespace
+ * listing shows the bare `tokens-color`. Both spellings name one child, so
+ * that child answers. Two or more children answering is ambiguous, and the
+ * read falls through to the suggestion list, unchanged.
+ * @param {DocsTree} tree
+ * @param {string} name
+ * @returns {{kind: 'node', node: TreeNode} | null}
+ */
+function childOwner(tree, name) {
+  const wanted = name.toLowerCase();
+  const slash = wanted.lastIndexOf('/');
+  const parent = slash > 0 ? wanted.slice(0, slash) : null;
+  const unstuttered =
+    parent == null
+      ? null
+      : `${parent}/${parent.slice(parent.lastIndexOf('/') + 1)}-${wanted.slice(slash + 1)}`;
+  const matches = [...tree.nodes.values()].filter(
+    node =>
+      node.ref?.flatTopic == null &&
+      node.route.includes('/') &&
+      (node.name?.toLowerCase() === wanted ||
+        (unstuttered != null && node.route.toLowerCase() === unstuttered)),
+  );
+  return matches.length === 1 ? {kind: 'node', node: matches[0]} : null;
 }
 
 /**
