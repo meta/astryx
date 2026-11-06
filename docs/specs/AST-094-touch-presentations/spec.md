@@ -966,9 +966,7 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   spring, as it does today; without a touch presentation a click, a key or a
   change of value keeps the theme's curve, unchanged. Implementation gap:
   ProgressBar's fill still moves linearly for `progress.fillTrackMs` times the
-  share of the track moved under a coarse pointer (`component:ProgressBar` FR4);
-  and DateInput's sheet wheel turns onto a clamped or a tapped row on its
-  measured tap spin, not `springs.settle` (`component:DateInput` FR14).
+  share of the track moved under a coarse pointer (`component:ProgressBar` FR4).
 - Under FR45, a swipe row is a gesture component: a close or return that a tap
   or Escape starts (`spec:AST-057` FR5, FR7) plays the row's spring from rest,
   and a swipe that closes it keeps its measured spring from the release.
@@ -1010,7 +1008,6 @@ Motion that FR45 moves, by component. Each component's record carries its own li
 | Lightbox                    | Controls fade on a tap, a double tap's zoom, the grow from its source                          | Named measured roles                                     | Springs, `springs.settle` unless the motion table names another role; the controls fade keeps the main spring's pace                                                 |
 | TreeList                    | Group slide under a coarse pointer                                                             | Measured motion                                          | Theme tokens                                                                                                                                                         |
 | ProgressBar                 | Determinate fill on a value change under a coarse pointer                                      | Linear, `progress.fillTrackMs` times the share moved     | `--duration-medium` and the theme's easing, every pointer                                                                                                            |
-| DateInput                   | Sheet wheel turning onto a clamped or a tapped row                                             | `picker.tapSpin.durationMs` on `timing.curves.move`      | `springs.settle` from rest                                                                                                                                           |
 | DateInput                   | Sheet wheel under a trackpad                                                                   | Coarse primary pointer only                              | Wherever the sheet shows                                                                                                                                             |
 | Carousel                    | Paging under a trackpad swipe                                                                  | Coarse primary pointer only                              | Every pointer                                                                                                                                                        |
 | Every tap-component overlay | A touch exit that a tap, a key or an outside press starts                                      | The native counterpart's timing                          | `--duration-exit` and `--ease-exit`; the exit switches never remove it; a gesture component's such exit, such as a sheet's or the Lightbox's, plays its spring (FR7) |
