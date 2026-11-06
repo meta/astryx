@@ -117,8 +117,8 @@ function exportsOf(entry) {
  * and its query, and an element's direction. Lab's NavigationStack reads the
  * screen-edge pan, the spring solver, the motion resolver, UIKit's
  * navigation table and its four navigation springs. It also reads the focus
- * helpers that follow the last input. Lab's ChatVirtualizer reads the
- * finger-scroll watch.
+ * helpers that follow the last input. Lab components that watch a finger's
+ * scroll read the finger-scroll watch.
  */
 const LAB_ONLY_NAMES = [
   'PanGestureRecognizer',

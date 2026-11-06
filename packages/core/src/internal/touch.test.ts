@@ -84,7 +84,7 @@ describe('internal/touch', () => {
     }
   });
 
-  it("re-exports by name what Lab's ChatVirtualizer reads", async () => {
+  it('re-exports by name the finger-scroll watch Lab components read', async () => {
     const entry: Record<string, unknown> = await import('./touch');
     const fingerScroll = await import('../gestures/useFingerScroll');
     expect(entry.useFingerScroll).toBe(fingerScroll.useFingerScroll);

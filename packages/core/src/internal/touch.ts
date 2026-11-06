@@ -96,7 +96,7 @@ export {
 export {focusForLastInput, isFocusLost} from '../utils/focusReturn';
 export {useInteractionModalityTracking} from '../utils/interactionModality';
 
-// Lab's ChatVirtualizer reads whether its scroller's scroll is a finger's,
-// and flushes its held writes when that scroll ends.
+// Lab components that watch a finger's scroll read whether a scroller's
+// scroll is a finger's, and act when that scroll ends.
 export {useFingerScroll} from '../gestures/useFingerScroll';
 export type {UseFingerScrollOptions} from '../gestures/useFingerScroll';
