@@ -461,7 +461,7 @@ describe('pooledBusyProof', () => {
     );
   });
 
-  it('judges a run in which the component froze while its control moved: it is never left out', () => {
+  it('judges a run in which the component froze while its control moved: it is never left out, and it fails on its own', () => {
     const pooled = pooledBusyProof(
       [1000, 1300, 1600].map(from => ({
         tracked: held(moving(), 1300, 1390),
@@ -475,17 +475,27 @@ describe('pooledBusyProof', () => {
       /moved on 6 of the 9 frames the control moved over 3 runs/,
     );
     expect(failures).toMatch(
+      /run 2: moved on 0 of the 3 frames its control moved/,
+    );
+    expect(failures).not.toMatch(/run [13]: moved on/);
+    expect(failures).toMatch(
       /run 2: longest stall .* longer than the control's/,
     );
   });
 
-  it('throws when it needs more judged runs than it has', () => {
+  it('throws when it needs more judged runs than it has, or none', () => {
     expect(() =>
       pooledBusyProof(
         [{tracked: moving(), control: asControl(moving()), window: BLOCK}],
         {minJudgedRuns: 2},
       ),
-    ).toThrow(/minJudgedRuns 2 is more than the 1 runs/);
+    ).toThrow(/minJudgedRuns 2 is not between 1 and the 1 runs/);
+    expect(() =>
+      pooledBusyProof(
+        [{tracked: moving(), control: asControl(moving()), window: BLOCK}],
+        {minJudgedRuns: 0},
+      ),
+    ).toThrow(/minJudgedRuns 0 is not between 1 and the 1 runs/);
   });
 
   it('judges one long run as busyWindowProof judges it against the control', () => {

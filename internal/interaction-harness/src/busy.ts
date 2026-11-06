@@ -1551,10 +1551,13 @@ export interface PooledBusyProof {
  * - at least `minJudgedRuns` runs are judged (by default, half the runs,
  *   rounded up);
  * - the control moved on at least `minJudgedFrames` frames over them;
- * - the component moved on every one of those frames;
+ * - in each judged run, the component moved on every frame its control moved
+ *   on, so a freeze fails its run and is never pooled. A run of unchanged
+ *   frames counts as motion only where the cast cannot show the motion (see
+ *   `busyWindowProof`).
  * - in each judged run, its longest stall is no longer than that run's
- *   control's: a stall belongs to its run and is never pooled.
- * `maxMedianFrameMs`, when given, applies to each judged run. A main-thread
+ *   control's.
+ * `maxMedianFrameMs`, when given, applies to every run. A main-thread
  * animation still fails: in every run the control moves and it does not.
  */
 export function pooledBusyProof(
@@ -1578,9 +1581,9 @@ export function pooledBusyProof(
     ...windowOptions
   } = options;
   const {minJudgedFrames = 4, maxMedianFrameMs = Infinity} = windowOptions;
-  if (minJudgedRuns > runs.length) {
+  if (minJudgedRuns < 1 || minJudgedRuns > runs.length) {
     throw new Error(
-      `pooledBusyProof: minJudgedRuns ${minJudgedRuns} is more than the ${runs.length} runs`,
+      `pooledBusyProof: minJudgedRuns ${minJudgedRuns} is not between 1 and the ${runs.length} runs`,
     );
   }
   const proofs = runs.map(run =>
@@ -1623,15 +1626,20 @@ export function pooledBusyProof(
     );
   }
   proofs.forEach((proof, i) => {
-    if (!judged[i]) {
-      return;
-    }
     if (proof.frames > 0 && proof.medianFrameMs > maxMedianFrameMs) {
       failures.push(
         `run ${i + 1}: median frame interval ${proof.medianFrameMs.toFixed(1)} ms > ${maxMedianFrameMs} ms`,
       );
     }
+    if (!judged[i]) {
+      return;
+    }
     const read = reads[i];
+    if (read.movedWith < read.moved) {
+      failures.push(
+        `run ${i + 1}: moved on ${read.movedWith} of the ${read.moved} frames its control moved`,
+      );
+    }
     if (read.componentStallMs > read.longestStallMs) {
       failures.push(
         `run ${i + 1}: longest stall ${read.componentStallMs.toFixed(1)} ms, longer than the control's ${read.longestStallMs.toFixed(1)} ms`,
