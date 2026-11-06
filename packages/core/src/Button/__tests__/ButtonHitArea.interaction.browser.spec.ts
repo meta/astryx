@@ -137,15 +137,17 @@ test.describe('Button touch target (spec:AST-094 FR42), under a finger', () => {
     const taps = page.locator(
       '#storybook-root output[aria-label="Offset taps"]',
     );
-    // Redo sits past Undo's corner on both axes. Every point here is nearer
-    // Redo's box than Undo's.
-    for (const step of [0.7, 0.8, 0.9]) {
-      const at = {
-        x: undo.box.right + (redo.box.left - undo.box.right) * step,
-        y: undo.box.bottom + (redo.box.top - undo.box.bottom) * step,
-      };
-      await tapAt(driver, at);
-    }
+    // Redo sits past Undo's corner on both axes. This point is in Undo's
+    // band but nearer Redo's box. It is a whole pixel because the WebKit
+    // driver rounds a tap to one.
+    const at = {
+      x: Math.ceil(undo.box.right) + 1,
+      y: Math.floor(redo.box.top) + 3,
+    };
+    expect(at.x).toBeLessThanOrEqual(undo.box.right + undo.insets.right);
+    expect(at.y).toBeLessThanOrEqual(undo.box.bottom + undo.insets.bottom);
+    expect(redo.box.left - at.x).toBeLessThan(at.y - undo.box.bottom);
+    await tapAt(driver, at);
     await expect(taps).toContainText('Undo 0');
   });
 
@@ -173,12 +175,7 @@ test.describe('Button touch target (spec:AST-094 FR42), under a finger', () => {
 
   test('a tap on the band just past the clear button’s edge clears', async ({
     page,
-    browserName,
   }) => {
-    test.fixme(
-      browserName === 'webkit',
-      'Implementation gap: WebKit touch adjustment sends a tap just outside the clear button to the larger text field; the band geometry matches Chromium.',
-    );
     await openStory(page, storybook(), STORY);
     await waitForHitArea(page, [CLEAR]);
     const driver = await touchDriver(page);

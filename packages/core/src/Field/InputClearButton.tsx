@@ -93,7 +93,11 @@ function renderInputClearButton({
         />
       }
       onPointerDown={e => {
-        e.preventDefault();
+        // WebKit drops the click of a touch whose pointerdown is cancelled.
+        // For touch, the mousedown handler below keeps focus in the field.
+        if (e.pointerType !== 'touch') {
+          e.preventDefault();
+        }
         onPointerDown?.(e);
       }}
       onMouseDown={e => e.preventDefault()}

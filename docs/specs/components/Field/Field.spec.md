@@ -211,10 +211,6 @@ The ordinary description remains stable consumer anatomy without a Field-owned t
 - **Attached default (FR9).** Field defaults `statusVariant` to `attached` for
   every child, against `family:input-fields/FR8`; how to migrate the default is
   OQ1.
-- **Clear button reach in WebKit (`spec:AST-094` FR42).** Implementation gap:
-  in WebKit (iOS Safari), a tap just outside the clear ✕ may go to the text
-  field (engine touch adjustment toward the larger focusable target); the band
-  geometry matches Chromium.
 
 ## Decision log
 

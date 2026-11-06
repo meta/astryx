@@ -310,4 +310,21 @@ describe('InputClearButton pointer and focus interactions', () => {
     expect(handlePointerDown).toHaveBeenCalledTimes(1);
     expect(pointerDownEvent).toBe(false);
   });
+
+  it('leaves a touch pointerdown uncancelled so the tap still clicks, and still keeps focus through mousedown', () => {
+    const handlePointerDown = vi.fn();
+    render(
+      <InternalInputClearButton
+        label="Clear"
+        onClick={() => {}}
+        onPointerDown={handlePointerDown}
+        onClickCapture={() => {}}
+      />,
+    );
+    const button = screen.getByRole('button', {name: 'Clear'});
+
+    expect(fireEvent.pointerDown(button, {pointerType: 'touch'})).toBe(true);
+    expect(handlePointerDown).toHaveBeenCalledTimes(1);
+    expect(fireEvent.mouseDown(button)).toBe(false);
+  });
 });
