@@ -4,7 +4,8 @@
 
 /**
  * @file TableCellContextMenu.tsx
- * @input React (lazy, Suspense), ContextMenuTrigger, useLongPress
+ * @input React (lazy, Suspense), ContextMenuTrigger, useLongPress,
+ *   useIsHydrating
  * @output TableCellContextMenu, loadTableContextMenu
  * @position Renders a cell's `contextMenuActions` for TableCell and
  * TableHeaderCell. The menu code loads only for cells that have actions. The
@@ -19,6 +20,7 @@ import type {
   ContextMenuTriggerHandlers,
 } from '../ContextMenu/ContextMenu';
 import {ContextMenuTrigger} from '../ContextMenu/ContextMenuTrigger';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import {useLongPress} from '../hooks/useLongPress';
 import {currentGesture} from '../Layer/gestureCounter';
 import type {StyleXStyles} from '../theme/types';
@@ -151,6 +153,11 @@ function CellTrigger({
     },
   }).current;
 
+  // The menu is not in server markup or the hydrating render: a lazy
+  // component that has not loaded would abort hydration. The trigger holds
+  // an invocation until the menu renders right after hydration.
+  const isHydrating = useIsHydrating();
+
   // Syncs the shared hold with this cell's lifetime: a cell that unmounts
   // before its menu loads drops its own hold, and keeps another cell's.
   useEffect(() => () => dropHeldInvocation(triggerRef), []);
@@ -185,8 +192,8 @@ function CellTrigger({
             handlers.onContextMenu(event);
             return;
           }
-          // Hold the right-click, Shift+F10 or Menu key until the menu loads,
-          // so the browser's own menu does not open in its place.
+          // Hold the invocation until the menu loads. Then the browser's own
+          // menu does not open.
           event.preventDefault();
           holdInvocation({
             owner: triggerRef,
@@ -231,9 +238,11 @@ function CellTrigger({
         }}>
         {children}
       </ContextMenuTrigger>
-      <Suspense fallback={null}>
-        <LazyTableContextMenu actions={actions} trigger={triggerHandle} />
-      </Suspense>
+      {isHydrating ? null : (
+        <Suspense fallback={null}>
+          <LazyTableContextMenu actions={actions} trigger={triggerHandle} />
+        </Suspense>
+      )}
     </>
   );
 }
