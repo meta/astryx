@@ -1,13 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The built-in value index must not depend on directory listing order.
+ * @file The built-in value index must not depend on the order docs load in.
  *
  * A parent doc can list a sub-component by name only (`Avatar.doc.mjs` lists
  * `{name: 'AvatarStatusDot'}`), while the sub-component's own doc declares its
- * props. Directory order differs between file systems, so this file lists
- * every directory in reverse name order: the parent doc then loads after the
- * sub-component doc that declares the values.
+ * props. This file lists every directory in reverse name order, which forces
+ * the parent doc to load after the sub-component doc that declares the values.
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
