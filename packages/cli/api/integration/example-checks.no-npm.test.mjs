@@ -10,17 +10,41 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {Command} from 'commander';
-import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
+import {
+  requireNatively,
+  stubBuiltin,
+} from '../../test-utils/native-require.mjs';
 
-vi.mock('../../foundation/release/cache.mjs', () => ({
-  npmCommand: () => {
-    throw new Error('npm is not installed');
+/** An npm entry file `npmCommand` looks for: the `npm` link or npm's CLI. */
+const NPM_ENTRY = /[\\/](?:npm|npm\.cmd|npm-cli\.js)$/u;
+
+// npm is not installed: each check for an npm entry file throws, so
+// `npmCommand` throws before it names one. The stub is in place before the
+// code under test loads.
+const restoreFs = stubBuiltin('node:fs', real => ({
+  existsSync: (/** @type {import('node:fs').PathLike} */ file) => {
+    if (NPM_ENTRY.test(String(file))) throw new Error('npm is not installed');
+    return real.existsSync(file);
   },
 }));
+afterAll(restoreFs);
 
-const {validateIntegration} = await import('./validate-integration.mjs');
-const {integrationCheck} = await import('./check/check.mjs');
-const {registerDoctor} = await import('../../clients/cli/commands/doctor.mjs');
+const require = requireNatively(import.meta.url);
+/** @type {typeof import('./validate-integration.mjs')} */
+const {validateIntegration} = require('./validate-integration.mjs');
+/** @type {typeof import('./check/check.mjs')} */
+const {integrationCheck} = require('./check/check.mjs');
+/** @type {typeof import('../../clients/cli/commands/doctor.mjs')} */
+const {registerDoctor} = require('../../clients/cli/commands/doctor.mjs');
 
 /** @type {string} */
 let dir;
@@ -65,6 +89,12 @@ afterEach(() => {
 });
 
 describe('template assets when npm gives no answer', () => {
+  it('finds no npm from natively loaded code', () => {
+    /** @type {typeof import('../../foundation/release/cache.mjs')} */
+    const {npmCommand} = require('../../foundation/release/cache.mjs');
+    expect(() => npmCommand()).toThrow('npm is not installed');
+  });
+
   it('reports an asset no entry can reach and lists the others as not checked', async () => {
     packageWith(['templates', '!templates/img']);
     const {data} = await validateIntegration(undefined, {cwd: dir});

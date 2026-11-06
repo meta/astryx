@@ -7,8 +7,8 @@
 
 import {loadWeights} from '../_adapter.mjs';
 import {asksForNewPage} from './kind.mjs';
-import {pickStart} from './rank.mjs';
-import {weighStart} from './weights.mjs';
+import {pickAlternatives, pickStart} from './rank.mjs';
+import {blendOrder, weighStart} from './weights.mjs';
 
 /**
  * @typedef {import('../../search/search.type.mjs').SearchResultEntry} SearchResultEntry
@@ -160,4 +160,51 @@ export function chooseStart(ranked, kind, pages, directMatch, catalog, idea) {
     }
   }
   return null;
+}
+
+/**
+ * The next best page templates beside the start (spec:AST-048/FR7), in the
+ * order the start itself is chosen from. The candidates are the ranker's (a
+ * template with matched words and half a start's score); a whole page orders
+ * them by the word weights' blend, the same ranking that picks its start, so
+ * the templates build names are the blend's best. The blend knows only the
+ * templates its tables list: one it does not list (a shell, an integration's
+ * template, or one added since the tables were fit) keeps the place the ranker
+ * gives it, so a new template is never pushed out by tables that have not seen
+ * it. A part or an edit, or a project without weights, keeps the ranker's
+ * order.
+ * @param {import('./rank.mjs').RankedPage[]} ranked
+ * @param {import('./rank.mjs').IdeaKind} kind
+ * @param {string} startName
+ * @param {PageTemplate[]} catalog
+ * @param {string} idea
+ * @returns {import('./rank.mjs').RankedPage[]}
+ */
+export function pickStartAlternatives(ranked, kind, startName, catalog, idea) {
+  const eligible = pickAlternatives(ranked, startName, ranked.length);
+  const byRanker = eligible.slice(0, 2);
+  if (kind !== 'page') return byRanker;
+  const weights = loadWeights();
+  const order = blendOrder(
+    idea,
+    ranked,
+    pickStart(ranked, kind),
+    catalog,
+    weights,
+  );
+  if (!weights || !order) return byRanker;
+  const listed = new Set(weights.candidates);
+  const at = new Map(order.map((name, i) => [name, i]));
+  // Unlisted templates keep their ranker slot; the rest follow the blend.
+  /** @type {(import('./rank.mjs').RankedPage | null)[]} */
+  const slots = byRanker.map(r => (listed.has(r.name) ? null : r));
+  const rest = eligible
+    .filter(r => listed.has(r.name) && at.has(r.name))
+    .sort(
+      (a, b) =>
+        /** @type {number} */ (at.get(a.name)) -
+        /** @type {number} */ (at.get(b.name)),
+    );
+  const out = slots.map(slot => slot ?? rest.shift() ?? null);
+  return /** @type {import('./rank.mjs').RankedPage[]} */ (out.filter(Boolean));
 }

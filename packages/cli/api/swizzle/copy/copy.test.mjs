@@ -276,3 +276,26 @@ describe('swizzle.copy — private attribute owner modules (spec:AST-110 FR4)', 
     SLOW,
   );
 });
+
+describe('swizzle.copy — browser test harnesses', () => {
+  afterEach(() => {
+    fs.rmSync(path.join(REPO, OUT), {recursive: true, force: true});
+  });
+
+  it('leaves out a component folder\'s *.spec.ts harnesses, which import dev-only packages', async () => {
+    const harness = path.join(
+      REPO,
+      'packages/core/src/Item/ItemMarkerColumns.a11y.chromium.spec.ts',
+    );
+    expect(fs.existsSync(harness)).toBe(true);
+    const r = await swizzle('Item', {cwd: REPO, output: './' + OUT});
+    expect(r.data.files.filter(f => /\.spec\.[cm]?[jt]sx?$/.test(f))).toEqual([]);
+    expect(
+      fs.existsSync(
+        path.join(REPO, OUT, 'Item', 'ItemMarkerColumns.a11y.chromium.spec.ts'),
+      ),
+    ).toBe(false);
+    // The component's own source still comes along.
+    expect(r.data.files).toContain('Item.tsx');
+  }, SLOW);
+});

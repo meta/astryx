@@ -49,7 +49,7 @@ export const docs = {
   },
   usage: {
     description:
-      'A layout container that arranges form fields with consistent spacing and direction. FormLayout handles where fields go, not state or submission. Wrap it in a <form> for that. Supports vertical (default), horizontal, and horizontal-labels directions, and can be nested to mix them.',
+      'A layout container that arranges form fields with consistent spacing and direction. FormLayout handles where fields go, not state or submission. Wrap it in a native <form> for that; <form> has no Astryx replacement, so it stays a plain element. Supports vertical (default), horizontal, and horizontal-labels directions, and can be nested to mix them.',
     bestPractices: [
       {
         guidance: true,
@@ -69,7 +69,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          "Use FormLayout for form state or submission. It's just layout. Wrap it in a <form> for that.",
+          "Use FormLayout for form state or submission. It's just layout. Wrap it in a native <form> for that.",
       },
       {
         guidance: false,
@@ -144,7 +144,7 @@ export const docsZh = {
   },
   usage: {
     description:
-      'A layout container that arranges form fields with consistent spacing and direction. FormLayout handles where fields go, not state or submission. Wrap it in a <form> for that. Supports vertical (default), horizontal, and horizontal-labels directions, and can be nested to mix them.',
+      'A layout container that arranges form fields with consistent spacing and direction. FormLayout handles where fields go, not state or submission. Wrap it in a native <form> for that; <form> has no Astryx replacement, so it stays a plain element. Supports vertical (default), horizontal, and horizontal-labels directions, and can be nested to mix them.',
     bestPractices: [
       {
         guidance: true,
@@ -164,7 +164,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          "Use FormLayout for form state or submission. It's just layout. Wrap it in a <form> for that.",
+          "Use FormLayout for form state or submission. It's just layout. Wrap it in a native <form> for that.",
       },
       {
         guidance: false,
@@ -209,7 +209,7 @@ export const docsDense = {
     'Layout container for form fields w/ consistent spacing + direction.',
   usage: {
     description:
-      'A layout container that arranges form fields with consistent spacing and direction. FormLayout handles where fields go, not state or submission. Wrap it in a <form> for that. Supports vertical (default), horizontal, and horizontal-labels directions, and can be nested to mix them.',
+      'A layout container that arranges form fields with consistent spacing and direction. FormLayout handles where fields go, not state or submission. Wrap it in a native <form> for that; <form> has no Astryx replacement, so it stays a plain element. Supports vertical (default), horizontal, and horizontal-labels directions, and can be nested to mix them.',
     bestPractices: [
       {
         guidance: true,
@@ -229,7 +229,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          "Use FormLayout for form state or submission. It's just layout. Wrap it in a <form> for that.",
+          "Use FormLayout for form state or submission. It's just layout. Wrap it in a native <form> for that.",
       },
       {
         guidance: false,

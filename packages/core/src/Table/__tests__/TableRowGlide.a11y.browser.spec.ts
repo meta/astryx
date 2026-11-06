@@ -206,6 +206,25 @@ test('mid-glide each divider moves with its row, pinned cells included', async (
   }
 });
 
+test("mid-open the panel's divider rides its cell's bottom", async ({page}) => {
+  await mount(page, 'gliding-rows');
+  expect(await toggleAndHold(page, 0, 90)).toBeGreaterThan(0);
+  // The panel's one cell, where it shows now: the line under it moves with
+  // its bottom. A line left where the cell was measured mid-slide is cut off.
+  const cell = await page.evaluate(() => {
+    const box = document
+      .querySelector('tr[data-expansion-panel] > td')
+      ?.getBoundingClientRect();
+    return box == null
+      ? null
+      : {x: Math.round((box.left + box.right) / 2), y: Math.round(box.bottom)};
+  });
+  expect(cell, 'the panel cell').not.toBeNull();
+  expect((await darkestNear(page, cell?.x ?? 0, cell?.y ?? 0))[0]).toBeLessThan(
+    248,
+  );
+});
+
 test("a theme's divider and an app's override move with their rows, pinned cells included", async ({
   page,
 }) => {
@@ -328,7 +347,8 @@ test('the chevron turns on the glide; column lines and Reduce Motion change at o
   page,
 }) => {
   await mount(page, 'gliding-rows');
-  await page.locator('[data-expansion-toggle]').first().click();
+  // Hold the glide before a slow runner can let it finish between calls.
+  expect(await toggleAndHold(page, 0, 90)).toBeGreaterThan(0);
   // The values the rows glide on, as read where the area is.
   const timing = await page
     .locator('[data-expansion-toggle] > *')

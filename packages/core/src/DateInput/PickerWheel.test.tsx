@@ -25,10 +25,10 @@ import {
   it,
   vi,
 } from 'vitest';
-import {motionRole} from '../motion/roles';
-import {picker, timing} from '../motion/uikit';
+import {springs, timing} from '../motion/uikit';
 import {fontWeightVars} from '../theme/tokens.stylex';
 import {PickerWheel} from './PickerWheel';
+import {bounceCurve, scaleFor} from './wheelPhysics';
 import {
   WHEEL_ROW_HEIGHT,
   type WheelHandle,
@@ -39,6 +39,16 @@ import {
 const ROW = WHEEL_ROW_HEIGHT;
 /** The column is laid out 216 px tall, its band's centre 108 px down. */
 const CENTRE = 108;
+
+/**
+ * How long a turn of `rows` rows from rest lasts on `springs.settle`, in ms.
+ * A tap, a key or the program starts that motion.
+ */
+function turnMs(rows: number): number {
+  return (
+    bounceCurve(0, 0, rows * ROW, scaleFor(ROW), springs.settle).duration * 1000
+  );
+}
 
 /** Hours 0-23 with 09:00-17:00 bounds: 0-8 and 18-23 are disabled. */
 const HOURS: WheelOption[] = Array.from({length: 24}, (_, hour) => ({
@@ -341,7 +351,7 @@ describe('PickerWheel — at rest', () => {
       );
       strips.length = 0;
       rerender(wheel(14));
-      advance(Math.round(picker.tapSpin.durationMs / 2));
+      advance(Math.round(turnMs(4) / 2));
       rerender(wheel(16));
       expect(strips).toHaveLength(2);
       const [, second] = strips;
@@ -618,20 +628,8 @@ describe('PickerWheel — a finger', () => {
     advance(60);
     touch('touchend', column, below);
     expect(onChange).not.toHaveBeenCalled();
-    advance(310);
+    advance(turnMs(1) + 10);
     expect(onChange).toHaveBeenCalledWith(11);
-  });
-
-  it('plays a tapped row’s turn on the tap spin’s motion role', () => {
-    const {column} = renderWheel();
-    const below = CENTRE + ROW;
-    touch('touchstart', column, below);
-    advance(60);
-    touch('touchend', column, below);
-    expect(motionRole('picker.tapSpin.durationMs')).toMatchObject({
-      kind: 'duration',
-      value: picker.tapSpin.durationMs,
-    });
   });
 
   it('a finger’s tap turns once: its lift is cancelled, so the browser sends no click', () => {
@@ -655,7 +653,7 @@ describe('PickerWheel — a finger', () => {
       column.dispatchEvent(lift);
     });
     expect(lift.defaultPrevented).toBe(true);
-    advance(310);
+    advance(turnMs(1) + 10);
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith(11);
   });
@@ -1044,6 +1042,125 @@ describe('PickerWheel — a scroll wheel and a trackpad', () => {
   });
 });
 
+describe('PickerWheel — a turn that a tap, a key or the program starts', () => {
+  /** Each animation the wheel asks of its strip: its places and their times. */
+  let strips: {places: number[]; times: number[]}[];
+
+  beforeEach(() => {
+    strips = [];
+    // jsdom runs no Web Animations: record what the wheel asks of its strip.
+    Element.prototype.animate = vi.fn(function animate(
+      this: Element,
+      keyframes: Keyframe[],
+      options?: KeyframeAnimationOptions,
+    ) {
+      if (this.hasAttribute('data-wheel-strip')) {
+        const span = Number(options?.duration ?? 0);
+        strips.push({
+          places: keyframes.map(frame => {
+            const [, y = '0'] = String(frame.translate ?? '')
+              .trim()
+              .split(/\s+/);
+            return Number.parseFloat(y) || 0;
+          }),
+          times: keyframes.map(frame => (frame.offset ?? 0) * span),
+        });
+      }
+      return {cancel: () => {}} as unknown as Animation;
+    });
+  });
+
+  afterEach(() => {
+    Reflect.deleteProperty(Element.prototype, 'animate');
+  });
+
+  function tap(column: HTMLElement, y: number) {
+    touch('touchstart', column, y);
+    advance(60);
+    touch('touchend', column, y);
+  }
+
+  /** The strip goes from `from` to `to` on `springs.settle`, from rest. */
+  function expectSpring(
+    strip: {places: number[]; times: number[]},
+    from: number,
+    to: number,
+  ) {
+    const spring = bounceCurve(from, 0, to, scaleFor(ROW), springs.settle);
+    expect(strip.places[0]).toBeCloseTo(from, 1);
+    let inside = 0;
+    strip.times.forEach((t, i) => {
+      // The strip draws whole pixels.
+      expect(Math.abs(strip.places[i] - spring.value(t / 1000))).toBeLessThan(
+        0.5,
+      );
+      if (t > 0 && t < spring.duration * 1000) {
+        inside++;
+      }
+    });
+    expect(inside).toBeGreaterThanOrEqual(4);
+  }
+
+  it('turns onto a tapped row on the settle spring, from rest, and commits it on arrival', () => {
+    const {column, onChange} = renderWheel();
+    tap(column, CENTRE + ROW);
+    expect(strips).toHaveLength(1);
+    expectSpring(strips[0], -10 * ROW, -11 * ROW);
+    advance(turnMs(1) - 10);
+    expect(onChange).not.toHaveBeenCalled();
+    advance(20);
+    expect(onChange).toHaveBeenCalledWith(11);
+  });
+
+  it('keeps the spring whatever the theme’s duration and easing tokens', () => {
+    // The wheel’s main interaction is a gesture, so its turns spring
+    // (spec:AST-094 FR45): the tokens of a tap-first motion do not time it.
+    const {column} = renderWheel();
+    column.style.setProperty('--duration-medium', '0ms');
+    column.style.setProperty('--ease-move', 'linear');
+    tap(column, CENTRE + ROW);
+    expect(strips).toHaveLength(1);
+    expectSpring(strips[0], -10 * ROW, -11 * ROW);
+  });
+
+  it('turns onto a value set from outside on the same spring (component:DateInput FR14)', () => {
+    const {rerender, onChange} = renderWheel();
+    advance(2000);
+    strips.length = 0;
+    rerender(
+      <PickerWheel
+        label="Hour"
+        options={HOURS}
+        value={14}
+        onChange={onChange}
+      />,
+    );
+    expect(strips).toHaveLength(1);
+    expectSpring(strips[0], -10 * ROW, -14 * ROW);
+  });
+
+  it('turns onto a key’s row on the same spring', () => {
+    const {column} = renderWheel();
+    fireEvent.keyDown(column, {key: 'ArrowDown'});
+    expect(strips).toHaveLength(1);
+    expectSpring(strips[0], -10 * ROW, -11 * ROW);
+  });
+
+  it('keeps a fling’s measured coast', () => {
+    const {column} = renderWheel({
+      options: MINUTES,
+      value: 10,
+      label: 'Minute',
+    });
+    drag(column, 180, 60, {steps: 6, interval: 16});
+    expect(strips.length).toBeGreaterThanOrEqual(1);
+    const coast = strips[strips.length - 1];
+    // A coast decelerates over seconds, far past the spring's turn.
+    expect(coast.times.at(-1)).toBeGreaterThan(turnMs(15));
+    advance(4000);
+  });
+});
+
 describe('PickerWheel — under reduced motion', () => {
   const FADE_MS = timing.reducedMotionCrossFadeMs;
   /** Every animation the wheel started, with its keyframes and timing. */
@@ -1175,7 +1292,7 @@ describe('PickerWheel — mechanics for its owners', () => {
         arrived = value;
       });
     });
-    advance(310);
+    advance(turnMs(5) + 10);
     await act(async () => {});
     expect(arrived).toBe(true);
     expect(onChange).toHaveBeenCalledWith(15);
@@ -1253,7 +1370,9 @@ describe('PickerWheel — mechanics for its owners', () => {
         onChange={onChange}
       />,
     );
-    advance(250);
+    // Just past the turn's end: a turn the re-render started again would
+    // still be running.
+    advance(turnMs(15) - 100 + 10);
     await act(async () => {});
     expect(arrived).toBe(true);
   });

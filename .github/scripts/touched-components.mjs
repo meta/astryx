@@ -50,9 +50,15 @@ const FOUNDATION_PATTERNS = [
 /** A Storybook story file. */
 export const STORY_FILE = /\.stories\.(?:[cm]?[jt]sx?|mdx)$/;
 
+// Tests, stories, docs and notes in a foundation folder style nothing.
+const NOT_A_STYLE =
+  /(?:^|\/)__tests__\/|\.(?:test|spec|stories|doc)\.[^/]+$|\.md$/;
+
 export function foundationChanges(files) {
-  return files.filter(file =>
-    FOUNDATION_PATTERNS.some(pattern => pattern.test(file)),
+  return files.filter(
+    file =>
+      !NOT_A_STYLE.test(file) &&
+      FOUNDATION_PATTERNS.some(pattern => pattern.test(file)),
   );
 }
 
