@@ -290,6 +290,38 @@ describe('keepFieldAboveKeyboard', () => {
     expect(scrollBy).not.toHaveBeenCalled();
   });
 
+  it("reveals at a change of the keyboard's height, not at a report of the same height, so a field the person scrolled away stays there", () => {
+    vi.stubGlobal('scrollBy', vi.fn());
+    const list = element('div', {top: 0, height: 760}, {overflowY: 'auto'});
+    Object.defineProperty(list, 'scrollHeight', {value: 2000});
+    Object.defineProperty(list, 'clientHeight', {value: 760});
+    const input = element('input', {top: 600, height: 40});
+    list.append(input);
+    document.body.append(list);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    expect(list.scrollTop).toBe(
+      640 + FIELD_OFFSET - (window.innerHeight - 300),
+    );
+    // The person scrolls the list back, so the field sits under the keyboard.
+    // The visual viewport then reports a scroll at the same keyboard height.
+    list.scrollTop = 0;
+    act(() => {
+      viewport.dispatchEvent(new Event('scroll'));
+    });
+    runFrames();
+    expect(list.scrollTop).toBe(0);
+    // A zoom moves the measured height by under a pixel: still no reveal.
+    keyboard(300.4);
+    expect(list.scrollTop).toBe(0);
+    // A change of the keyboard's height reveals the field again.
+    keyboard(320);
+    expect(list.scrollTop).toBe(
+      640 + FIELD_OFFSET - (window.innerHeight - 320),
+    );
+  });
+
   it('scrolls only its nearest scroller, and nothing else, when that scroller cannot scroll far enough', () => {
     const scrollBy = vi.fn();
     vi.stubGlobal('scrollBy', scrollBy);

@@ -533,9 +533,9 @@ export function followKeyboard(
   };
 }
 
-// Reveals the focused field `field()` returns through `scroller` at each
-// keyboard report, now, and when focus moves into `region` with the keyboard
-// already up. Returns the call that stops it.
+// Reveals the focused field `field()` returns through `scroller` when the
+// keyboard's height changes, now, and when focus moves into `region` with the
+// keyboard already up. Returns the call that stops it.
 function revealWithKeyboard(
   region: Element,
   field: () => Element | null,
@@ -550,9 +550,15 @@ function revealWithKeyboard(
     }
   };
   const pans = watchPans(win, focused => focused === field());
+  // A report within a pixel of the last height comes from a pan, a scroll or
+  // a zoom's rounding. The field stays where the person put it.
+  let lastHeight = getKeyboardHeight(win);
   const stopReports = subscribeKeyboardHeight(win, event => {
     if (event.type === 'viewport') {
-      revealNow(event.height);
+      if (Math.abs(event.height - lastHeight) > KEYBOARD_EPSILON) {
+        lastHeight = event.height;
+        revealNow(event.height);
+      }
       pans.report(event.height);
     }
   });

@@ -71,8 +71,10 @@ that times motion with it. Everything here is internal to
   `followKeyboard(target, {move, offset})` is a target that moves no inset:
   `'ride'` moves the target with the keyboard, on the guide's slide where one is
   published and at each report elsewhere; `'reveal'` scrolls the field into
-  place in the target, a scroller. `keepFieldAboveKeyboard(field)` is a field's
-  own path. When the field gains focus it decides where it is from its nearest
+  place in the target, a scroller. A reveal comes when the keyboard's height
+  changes or focus moves, so a pan or a scroll leaves the field where the person
+  put it. `keepFieldAboveKeyboard(field)` is a field's own path. When the field
+  gains focus it decides where it is from its nearest
   fixed-position ancestor (`fixedContainerOf`). Docked at the viewport's bottom
   edge by its layout, without any transform, that container moves up by the part
   of it the keyboard still covers; one taller than the room above the keyboard,
