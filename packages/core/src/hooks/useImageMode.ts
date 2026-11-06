@@ -68,6 +68,13 @@ export function useImageMode(
   options: UseImageModeOptions = {},
 ): 'dark' | 'light' | null {
   const {region, threshold = 0.5, fallback = null} = options;
+  // Depend on the region's numbers, not its identity: callers write the
+  // region inline, and a new object each render would re-fetch and re-sample
+  // the image on every render — forever, since the result itself re-renders.
+  const regionX = region?.x;
+  const regionY = region?.y;
+  const regionWidth = region?.width;
+  const regionHeight = region?.height;
   const [detectedResult, setDetectedResult] = useState<{
     src: string;
     mode: 'dark' | 'light' | null;
@@ -93,13 +100,18 @@ export function useImageMode(
           return;
         }
 
-        const sx = region ? Math.round(region.x * bitmap.width) : 0;
-        const sy = region ? Math.round(region.y * bitmap.height) : 0;
-        const sw = region
-          ? Math.round(region.width * bitmap.width)
+        const hasRegion =
+          regionX !== undefined &&
+          regionY !== undefined &&
+          regionWidth !== undefined &&
+          regionHeight !== undefined;
+        const sx = hasRegion ? Math.round(regionX * bitmap.width) : 0;
+        const sy = hasRegion ? Math.round(regionY * bitmap.height) : 0;
+        const sw = hasRegion
+          ? Math.round(regionWidth * bitmap.width)
           : bitmap.width;
-        const sh = region
-          ? Math.round(region.height * bitmap.height)
+        const sh = hasRegion
+          ? Math.round(regionHeight * bitmap.height)
           : bitmap.height;
 
         // Sample at a small size and average the pixels here. A 1×1
@@ -150,7 +162,7 @@ export function useImageMode(
     return () => {
       cancelled = true;
     };
-  }, [src, region, threshold, fallback]);
+  }, [src, regionX, regionY, regionWidth, regionHeight, threshold, fallback]);
 
   if (!src || detectedResult?.src !== src) {
     return fallback;

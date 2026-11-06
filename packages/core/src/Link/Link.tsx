@@ -347,6 +347,10 @@ export function Link({
   // The reflected theme attributes win over a caller's same-named `data-*`, so
   // theme targeting always sees the real value (public-component-api INV5).
   const reflectedAttributes = themeDataAttributes({color});
+  // For a color the root paints, the label inherits it, so the label, the
+  // underline, and the icon keep one color at rest and on hover, whatever a
+  // theme sets on its text targets.
+  const labelColor: TextColor = color in linkColorStyles ? 'inherit' : color;
 
   const sharedContent = (
     <>
@@ -354,7 +358,7 @@ export function Link({
         type={type}
         size={size}
         weight={weight}
-        color={color}
+        color={labelColor}
         display={display}
         maxLines={maxLines}>
         {children}
