@@ -40,6 +40,7 @@ describe('the theme-timing reader on the server', () => {
       'declaredTimingTokens',
       'easedProgress',
       'readThemeTiming',
+      'readThemeTokenText',
       'readThemeTokens',
       'resolveTiming',
     ]);

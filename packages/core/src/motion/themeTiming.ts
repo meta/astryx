@@ -7,8 +7,9 @@
  *   as one timed MotionCurve. It reads the element's own transition, or
  *   tokens where the element is. It plays an easing that is not a cubic
  *   Bézier as the browser plays it. readThemeTokens and resolveTiming: that
- *   duration and easing as values. easedProgress: the curve for a length and
- *   an easing already read.
+ *   duration and easing as values. readThemeTokenText: a token's text where
+ *   the element is. easedProgress: the curve for a length and an easing
+ *   already read.
  * @position Motion foundation, internal to core. Motion that a tap, a key or
  *   the program starts reads its duration and easing from the theme with it.
  *
@@ -257,6 +258,19 @@ export function readThemeTokens(
     duration: duration == null ? undefined : tokenValue(style, duration),
     easing: easing == null ? undefined : tokenValue(style, easing),
   });
+}
+
+/**
+ * The text of a timing token where `element` is: its value there, or the
+ * default core declares, with that default's references read there too. It
+ * holds no reference, so another element that takes it plays the same timing.
+ */
+export function readThemeTokenText(
+  element: Element,
+  token: DurationVarName | EaseVarName,
+): string | null {
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  return style == null ? null : tokenValue(style, token);
 }
 
 /**
