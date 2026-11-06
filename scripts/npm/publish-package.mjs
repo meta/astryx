@@ -34,7 +34,8 @@
  *     small and answers 404 for a missing package, and never its full
  *     document, which grows with every canary and can outlast a read's time
  *     limit. (A missing scoped package's dist-tags answer 401, not 404.) An
- *     unknown answer is asked again and never skips.
+ *     unknown answer is asked again and never skips. *   - A package whose `@astryxdesign` dependencies or peers do not name this
+ *     release's versions is never published (see published-manifests.mjs).
  */
 
 import {spawnSync} from 'node:child_process';
@@ -42,6 +43,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
+import {alignmentProblems, releaseVersions} from './published-manifests.mjs';
 import {DEFAULT_REGISTRY, fetchVersionDocument} from './registry.mjs';
 
 const DEFAULT_ATTEMPTS = 3;
@@ -210,6 +212,16 @@ async function main() {
     fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
   );
   const {name, version} = manifest;
+  // Run from the repository root, as both publish jobs do.
+  const misaligned = alignmentProblems(
+    manifest,
+    releaseVersions(process.cwd()),
+  );
+  if (misaligned.length > 0) {
+    for (const problem of misaligned) console.error(problem);
+    console.error(`${name}@${version} is not published.`);
+    process.exit(1);
+  }
   const registry = process.env.ASTRYX_PUBLISH_REGISTRY || DEFAULT_REGISTRY;
   const attempts = Number(
     process.env.ASTRYX_PUBLISH_ATTEMPTS || DEFAULT_ATTEMPTS,
