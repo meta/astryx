@@ -184,7 +184,12 @@
 import {cubicBezier} from './bezier';
 import {LATE_START_MS} from './frameBlock';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
-import {registerPresentedOffset, type PresentedSource} from './presentation';
+import {
+  clearPresentedResolve,
+  registerPresentedOffset,
+  type PresentedSource,
+  writePresentedResolve,
+} from './presentation';
 import {resolveMotion} from './resolveMotion';
 import {
   reducedMotionCrossFade,
@@ -750,9 +755,6 @@ export const PROMOTION_LINGER_MS = 500;
 
 type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
 
-/** The custom property whose writes make WebKit resolve a moving element. */
-const RESOLVE_PROPERTY = '--astryx-presented';
-
 const CHANNELS: Record<Channel, ReadonlyArray<MotionProperty>> = {
   translate: ['x', 'y'],
   rotate: ['rotate'],
@@ -1026,8 +1028,6 @@ export function createMotionEngine(
    * moves it: where the animation started, or where a `resolve` left it.
    */
   let hitTested = {x: 0, y: 0};
-  /** Counts the style writes that make WebKit resolve the element again. */
-  let resolutions = 0;
   let unpresent: (() => void) | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
   const promoted = new Set<Channel>();
@@ -1261,8 +1261,7 @@ export function createMotionEngine(
       // Any style write makes WebKit resolve the element's transform again,
       // to the value drawn now, where it then stays (iOS 26.2: in the same
       // task); a custom property changes nothing else.
-      resolutions += 1;
-      target.style.setProperty(RESOLVE_PROPERTY, String(resolutions));
+      writePresentedResolve(target);
       hitTested = {x: drawnTranslate('x', time), y: drawnTranslate('y', time)};
     },
   };
@@ -1276,7 +1275,7 @@ export function createMotionEngine(
     unpresent?.();
     unpresent = null;
     if (presented instanceof HTMLElement) {
-      presented.style.removeProperty(RESOLVE_PROPERTY);
+      clearPresentedResolve(presented);
     }
     presented = element;
     if (element != null) {
