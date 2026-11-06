@@ -1812,6 +1812,25 @@ describe('AppShell hiddenRegions', () => {
     });
   });
 
+  // An app's own wrapper around a heading-only TopNav.
+  function AppTopNav() {
+    return <TopNav heading={<TopNavHeading heading="App" />} />;
+  }
+
+  it('on a phone, shows no menu button for a wrapped top nav with only the side nav hidden', () => {
+    stubPhone();
+    render(
+      <AppShell
+        hiddenRegions={['sideNav']}
+        topNav={<AppTopNav />}
+        sideNav={<CountingSideNav />}
+        mobileNav={{defaultIsMobile: true}}>
+        <button type="button">In content</button>
+      </AppShell>,
+    );
+    expect(screen.queryByTestId('mobile-nav-toggle')).toBeNull();
+  });
+
   it('on a phone, keeps an app drawer that hides nothing as it is', () => {
     stubPhone();
     render(
