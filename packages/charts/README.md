@@ -46,7 +46,7 @@ import '@astryxdesign/charts/charts.css';
 npm install @astryxdesign/charts@canary @astryxdesign/core@canary
 ```
 
-> Canary builds track the latest commit on `main` (`0.x.y-canary.<sha>`). They can break between any two versions — pin an exact version if you need stability.
+> Canary builds follow `main`'s tip, published at most once an hour and on demand (`0.x.y-canary.<sha>`). They can break between any two versions — pin an exact version if you need stability.
 
 ## Why no stable release?
 

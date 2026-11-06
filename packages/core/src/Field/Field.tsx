@@ -177,7 +177,7 @@ export interface FieldProps extends Omit<
    */
   status?: FieldStatusInput;
   /**
-   * Tooltip text to display in an info icon at the end of the label.
+   * Help text for an info button after the label, named "About {label}".
    */
   labelTooltip?: string;
   /**

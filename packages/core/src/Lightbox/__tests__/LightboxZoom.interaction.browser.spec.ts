@@ -19,12 +19,14 @@ import {
   type Locator,
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
+import {themeTempo} from '../../motion/themeTempo';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 import {
   CONTROL_RGB,
   animationStoryboard,
   blockMainThread,
+  BusyWindowTooLateError,
   busyWindowProof,
   castStoryboard,
   compareCurve,
@@ -55,6 +57,7 @@ import {
   waitForRest,
   withStorybook,
   writeEvidence,
+  type ActiveAnimation,
   type TouchDriver,
   type TouchFrame,
   type TouchScript,
@@ -551,7 +554,9 @@ test('past the minimum the zoom gives way, then springs back on springs.settle',
       fromDistance: 300,
       toDistance: 100,
       durationMs: 300,
-      restMs: 100,
+      // On a loaded runner a 100 ms rest can still read as moving. The
+      // return then starts at the pinch's speed, not from rest.
+      restMs: 300,
     }),
     {
       onEvent: async step => {
@@ -935,27 +940,50 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   // A compositor-only control animation in the same window: what the
   // compositor presented while the main thread spun, on this machine.
   await startBusyControl(page);
+  const at = {x: 201, y: before.stage.y + before.stage.height / 2};
+  // The same zoom at the default tempo, to compare the slowed one with.
+  await driver.play(doubleTap(at));
+  const atTempo1 = curvesByProperty(await waitForAnimation(photo));
+  await waitForRest(photo);
+  await driver.play(doubleTap(at));
+  await waitForAnimation(photo);
+  await waitForRest(photo);
+  // With the main thread blocked, a loaded runner's compositor presents a
+  // frame every 100 to 135 ms. The spring moves for half a second, which
+  // leaves too few frames to judge. So the zoom plays at tempo 3.
+  await slowZoom(page);
+  const since = await page.evaluate(() => performance.now());
   const cast = await startScreencast(page);
   // The page itself waits for the zoom and blocks one frame into it. The
   // spring covers most of its travel early, and a round trip from the test
   // would start the block too late.
-  const blocking = blockMainThread(page, 500, {during: photo});
-  await driver.play(
-    doubleTap({x: 201, y: before.stage.y + before.stage.height / 2}),
-  );
+  const blocking = blockMainThread(page, 1500, {during: photo});
+  await driver.play(doubleTap(at));
   const block = await blocking;
+  // Lightbox's own zoom played at tempo 3: each curve three times as long
+  // as at tempo 1, and still running on the compositor after the block.
+  const atTempo3 = curvesByProperty(await waitForAnimation(photo, {since}));
+  expect([...atTempo3.keys()].sort()).toEqual([...atTempo1.keys()].sort());
+  expect(atTempo3.size).toBeGreaterThan(0);
+  for (const [property, run] of atTempo3) {
+    const ratio = run.ms / (atTempo1.get(property)?.ms ?? Number.NaN);
+    expect(ratio, property).toBeGreaterThan(2.9);
+    expect(ratio, property).toBeLessThan(3.1);
+    expect(run.isRunning, property).toBe(true);
+  }
   // A few frames after the block, so the screencast holds its end.
   await frames(page, 6);
   const castFrames = await cast.stop();
   const tracked = await trackMarker(page, castFrames);
   const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
-  // The spring slows hard at its end. Near the end each 60 Hz frame moves it
-  // about 0.18 of what remains (2π / 0.5 s, critically damped). So within
-  // about 5.6 cast steps of its end a frame moves less than one step, and
-  // the cast shows plateaus there. Judging stops six cast steps from the end.
+  // The spring slows hard at its end. At a third of its speed, each 60 Hz
+  // frame near the end moves it about 0.07 of what remains (2π / 1.5 s,
+  // critically damped). So within about 14.3 cast steps of its end a frame
+  // moves less than one step, and the cast shows plateaus there. Judging
+  // stops 15 cast steps from the end.
   const proof = busyWindowProof(tracked, block, {
     axis: 'height',
-    settledWithinSteps: 6,
+    settledWithinSteps: 15,
     control,
   });
   await writeEvidence(
@@ -998,6 +1026,126 @@ test('the double-tap zoom keeps advancing every frame while the main thread is b
   expect(proof.verdict.failures).toEqual([]);
   expect(proof.monotonic).toBe(true);
 });
+
+/**
+ * The custom property Lightbox's motion reads its tempo from, asked of
+ * `themeTempo` itself. A rename there renames it here too.
+ */
+function tempoProperty(): string {
+  let read = '';
+  const view = {
+    getComputedStyle: () => ({
+      getPropertyValue: (name: string) => {
+        read = name;
+        return '';
+      },
+    }),
+  };
+  themeTempo({ownerDocument: {defaultView: view}} as unknown as Element);
+  if (!read.startsWith('--')) {
+    throw new Error(`themeTempo read no custom property: "${read}"`);
+  }
+  return read;
+}
+
+/**
+ * Plays the viewer's motion at tempo 3, through the property its motion
+ * reads. A theme's tempo stops at 1.5, so tempo 3 is for this proof only.
+ * Every element in the viewer carries it, so no nested theme's own tempo
+ * wins.
+ */
+async function slowZoom(page: Page): Promise<void> {
+  await page.addStyleTag({
+    content: `dialog, dialog * { ${tempoProperty()}: 3 !important; }`,
+  });
+}
+
+/** Each animated property's curve length, and whether it still runs. */
+function curvesByProperty(runs: ReadonlyArray<ActiveAnimation>) {
+  const meta = new Set(['offset', 'easing', 'composite', 'computedOffset']);
+  return new Map(
+    runs.map(run => [
+      Object.keys(run.keyframes[0] ?? {})
+        .filter(key => !meta.has(key))
+        .sort()
+        .join(','),
+      {ms: run.to - run.from, isRunning: run.finishedAt == null},
+    ]),
+  );
+}
+
+/**
+ * Breaks the zoom for the busy proof's controls. `main-thread` pauses each
+ * of the zoom's animations and moves its time from frame callbacks, and
+ * `frozen` pauses it.
+ */
+async function breakZoom(
+  page: Page,
+  pace: 'main-thread' | 'frozen',
+): Promise<void> {
+  await page.evaluate(mode => {
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (keyframes, options) {
+      const animation = animate.call(this, keyframes, options);
+      if (
+        !(this instanceof HTMLImageElement) ||
+        this.closest('dialog') == null
+      ) {
+        return animation;
+      }
+      animation.pause();
+      if (mode === 'main-thread') {
+        const from = performance.now();
+        const start = Number(animation.currentTime ?? 0);
+        const step = (now: number) => {
+          if (animation.playState !== 'idle') {
+            animation.currentTime = start + now - from;
+            requestAnimationFrame(step);
+          }
+        };
+        requestAnimationFrame(step);
+      }
+      return animation;
+    };
+  }, pace);
+}
+
+for (const pace of ['main-thread', 'frozen'] as const) {
+  test(`the busy proof fails a slowed double-tap zoom that ${pace === 'frozen' ? 'freezes' : 'the main thread drives'}`, async ({
+    page,
+  }) => {
+    const {driver, photo, state} = await openViewer(page);
+    const before = await state();
+    await markElement(photo, {mode: 'outline'});
+    await startBusyControl(page);
+    await slowZoom(page);
+    await breakZoom(page, pace);
+    const cast = await startScreencast(page);
+    await driver.play(
+      doubleTap({x: 201, y: before.stage.y + before.stage.height / 2}),
+    );
+    // Neither runs on the compositor, so the block starts after the tap.
+    await page.waitForTimeout(150);
+    const block = await blockMainThread(page, 1500);
+    await frames(page, 6);
+    const castFrames = await cast.stop();
+    const tracked = await trackMarker(page, castFrames);
+    const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+    let failures: ReadonlyArray<string>;
+    try {
+      failures = busyWindowProof(tracked, block, {
+        axis: 'height',
+        settledWithinSteps: 15,
+        control,
+      }).verdict.failures;
+    } catch (error) {
+      // A zoom that never moved has settled before the window: a red too.
+      expect(error).toBeInstanceOf(BusyWindowTooLateError);
+      failures = [(error as Error).message];
+    }
+    expect(failures.length).toBeGreaterThan(0);
+  });
+}
 
 test('the zoom settles and the pinch do no Layout or Paint per frame', async ({
   page,

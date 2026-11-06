@@ -33,6 +33,7 @@ import {
   startBusyControl,
   startScreencast,
   traceRendering,
+  trackControl,
   trackMarker,
 } from '@astryxdesign/interaction-harness';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
@@ -131,16 +132,11 @@ async function blockedRun(
   const box = page.locator('#box');
   await markElement(box, {inset: MARKER_INSET});
   // Before the animation, so it is on the compositor first; in the top
-  // strip, clear of the box (top 40 px) and its marker.
-  await startBusyControl(page);
-  // The control's start on the page clock. Its own time at a frame, past
-  // this start, is that frame's time on the page clock.
-  const controlStart = await page.evaluate(() => {
-    const animation = document
-      .querySelector('[data-harness-control]')
-      ?.getAnimations()[0];
-    return performance.timeOrigin + Number(animation?.startTime ?? NaN);
-  });
+  // strips, clear of the box (top 40 px) and its marker. The second runs half
+  // a leg ahead of the first. Each start is on the page clock: a control's
+  // own time at a frame, past it, is that frame's time on the page clock.
+  const {start: controlStart} = await startBusyControl(page);
+  const {start: secondStart} = await startBusyControl(page, {ahead: true});
   const cast = await startScreencast(page);
   // The curve starts when the browser commits it (handle.started).
   const start = await page.evaluate(
@@ -160,17 +156,16 @@ async function blockedRun(
   const frames = await cast.stop();
   const tracked = await trackMarker(page, frames);
   const control = await trackMarker(page, frames, {rgb: CONTROL_RGB});
-  return {start, controlStart, busy, tracked, control};
+  const second = await trackControl(page, frames, {ahead: true});
+  return {start, controlStart, secondStart, busy, tracked, control, second};
 }
 
 test('a spring keeps advancing every frame through a 1 s main-thread block, on its curve', async ({
   page,
   browserName,
 }) => {
-  const {start, controlStart, busy, tracked, control} = await blockedRun(
-    page,
-    SLOW,
-  );
+  const {start, controlStart, secondStart, busy, tracked, control, second} =
+    await blockedRun(page, SLOW);
   // Judged against what the compositor presented in the same window, not a
   // display-rate bound: a loaded runner's compositor skips frames for every
   // animation alike, and the harness reads a slow tail inside the block at
@@ -191,24 +186,31 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
   // main-thread animation never does; see the next test).
   expect(proof.verdict.failures, proof.summary).toEqual([]);
   expect(proof.monotonic).toBe(true);
-  // And it is the spring. The control moves 240 px out and back every 800
+  // And it is the spring. Each control moves 240 px out and back every 800
   // ms, linearly, on the compositor. Its start plus its own time places each
   // frame on the page clock (controlClock). The frame's stamp only picks the
-  // whole cycle, so a late stamp moves no frame.
+  // whole cycle, so a late stamp moves no frame. controlClock reads no frame
+  // within 36 px of a turn, 120 ms of every 400. The second control is
+  // mid-leg there, half a leg ahead, so it reads the frames the first cannot.
   const inside = tracked.filter(
     f => f.box != null && f.t > busy.from + 20 && f.t < busy.to - 20,
   );
-  const clock = controlClock(control);
+  const clocks = [
+    {clock: controlClock(control), origin: controlStart},
+    {clock: controlClock(second), origin: secondStart},
+  ];
   const timed = inside.flatMap(f => {
-    const ms = clock.get(f.t);
-    if (ms == null) {
+    const reader = clocks.find(({clock}) => clock.has(f.t));
+    if (reader == null) {
       return [];
     }
-    const cycles = Math.round((f.t - controlStart - ms) / 800);
+    const ms = reader.clock.get(f.t) ?? NaN;
+    const cycles = Math.round((f.t - reader.origin - ms) / 800);
     return [
       {
         x: (f.box?.x ?? NaN) - MARKER_INSET,
-        at: controlStart + ms + cycles * 800 - start,
+        at: reader.origin + ms + cycles * 800 - start,
+        bySecond: reader !== clocks[0],
       },
     ];
   });
@@ -267,6 +269,7 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
   const [spring, faster] = judged;
   const read = {
     frames: timed.length,
+    bySecond: timed.filter(f => f.bySecond).length,
     quarters: [...quarters].sort((p, q) => p - q),
     worst: spring.worst,
     faster: faster.worst,
