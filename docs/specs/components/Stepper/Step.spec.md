@@ -35,7 +35,7 @@ system_specs: [spec:AST-085]
 | Behavior                | One list item of a Stepper. Its progress (completed, in progress, not started) comes from its `step` index against the Stepper's active step; it is a button that asks to go to that step when the Stepper has `onStepClick` and is not compact; a disabled step keeps its button, `aria-disabled`, and never activates. |
 | End-user impact         | Users see each step's progress (number, ring, or check) and its status cue where one applies; screen-reader users hear the current step, a status word, a "Go to step N" name and the step's description on clickable steps; keyboard users Tab between clickable steps, disabled ones included.                         |
 | Builder impact          | None.                                                                                                                                                                                                                                                                                                                    |
-| Compatibility/readiness | Records shipped behavior; no public change. Two implementation gaps (see Current-state impact).                                                                                                                                                                                                                          |
+| Compatibility/readiness | Records shipped behavior and adds the disabled selector on step-indicator (FR6); no prop or default changes. Two implementation gaps (see Current-state impact).                                                                                                                                                         |
 | Review checks           | Reject status conveyed only by color under `indicator="auto"`, an indicator exposed to assistive technology, a disabled step that activates, or `aria-current` on anything but the in-progress step.                                                                                                                     |
 | Governing rules         | `component:Stepper` (targets, connector, label paint, compact layout); `architecture:interaction-modality`.                                                                                                                                                                                                              |
 
@@ -49,7 +49,7 @@ indicator choice, its status cues and text alternatives, its clickable form, its
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public change
+- Compatibility class: records shipped behavior; additive disabled selector on step-indicator (FR6)
 - Controlled/uncontrolled behavior: progress follows the Stepper's active step
 - Migration decision: none
 

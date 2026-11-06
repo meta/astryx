@@ -1374,6 +1374,7 @@ export const CompactOnTrackDisabledRepro: Story = {
               activeStep={0}
               label="Checkout"
               indicatorPosition="on-track"
+              onStepClick={() => {}}
               horizontalOptions={{
                 minimumStepWidth: 160,
                 collapsedVariant: 'withLabelAndControls',
@@ -1392,6 +1393,7 @@ export const CompactOnTrackDisabledRepro: Story = {
               activeStep={0}
               label="Checkout"
               indicatorPosition="on-track"
+              onStepClick={() => {}}
               horizontalOptions={{
                 minimumStepWidth: 160,
                 collapsedVariant: 'withLabelAndControls',
