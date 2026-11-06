@@ -73,7 +73,7 @@ export const docs = {
       name: 'labelTooltip',
       type: 'string',
       description:
-        'Tooltip text for the info icon after the label. Hover shows it; on a touch screen a tap on the icon opens it without focusing the field or toggling the control, while a mouse click on the icon activates the control like the rest of the label.',
+        'Help text for an info button after the label, named "About {label}". Hover and keyboard focus preview it; a tap, click, Enter, or Space opens it and never focuses or toggles the control.',
     },
     {
       name: 'description',
@@ -229,7 +229,7 @@ export const docsDense = {
     isOptional: 'Show localized optional exception indicator.',
     isRequired: 'Show localized required exception indicator.',
     labelIcon: 'Icon type or rendered icon content before label text.',
-    labelTooltip: 'Tooltip text for the info icon after the label.',
+    labelTooltip: 'Help text for the info button after the label.',
     description: 'Supporting content outside the accessible name.',
     descriptionID: 'ID for caller-owned aria-describedby wiring.',
     ref: 'Ref forwarded to the label element; group mode renders a span.',

@@ -27,7 +27,19 @@
  * - /packages/core/src/motion/MEASUREMENTS.md (measurement tasks)
  */
 
-import {registerMotionTable} from '../roles';
+import {registerMotionTable, registerSpringRole} from '../roles';
+import type {SpringDescription} from '../spring';
+
+/**
+ * Registers the row as the role `springs.<name>` and returns it. A page that
+ * plays no spring ships no springs registry. Each spring role registers
+ * itself when the module that plays it loads (one idempotent in-memory write,
+ * no DOM). Write each call with the pure annotation, so a bundle that does
+ * not use the row drops the call.
+ */
+function springRole<T extends SpringDescription>(name: string, spring: T): T {
+  return registerSpringRole(`springs.${name}`, spring);
+}
 
 // ---------------------------------------------------------------------
 // Sourced presets
@@ -38,49 +50,67 @@ import {registerMotionTable} from '../roles';
  * `.spring(duration:bounce:)` defaults.
  * @source apple-docs https://developer.apple.com/documentation/swiftui/spring/smooth(duration:extrabounce:)
  */
-export const SETTLE_SPRING = {duration: 0.5, bounce: 0} as const;
+export const SETTLE_SPRING = /* @__PURE__ */ springRole('settle', {
+  duration: 0.5,
+  bounce: 0,
+} as const);
 
 /**
  * SwiftUI `.snappy`: "small amount of bounce", base bounce 0.15.
  * @source apple-docs https://developer.apple.com/documentation/swiftui/spring/snappy(duration:extrabounce:)
  */
-export const QUICK_CHANGE_SPRING = {duration: 0.5, bounce: 0.15} as const;
+export const QUICK_CHANGE_SPRING = /* @__PURE__ */ springRole('quickChange', {
+  duration: 0.5,
+  bounce: 0.15,
+} as const);
 
 /**
  * SwiftUI `.bouncy`: base bounce 0.3.
  * @source apple-docs https://developer.apple.com/documentation/swiftui/spring/bouncy(duration:extrabounce:)
  */
-export const EMPHASIS_SPRING = {duration: 0.5, bounce: 0.3} as const;
+export const EMPHASIS_SPRING = /* @__PURE__ */ springRole('emphasis', {
+  duration: 0.5,
+  bounce: 0.3,
+} as const);
 
 /**
  * SwiftUI `interactiveSpring()` defaults: for a value that tracks a finger.
  * @source apple-docs https://developer.apple.com/documentation/swiftui/animation/interactivespring(response:dampingfraction:blendduration:)
  */
-export const FINGER_TRACKING_SPRING = {
-  response: 0.15,
-  dampingRatio: 0.86,
-} as const;
+export const FINGER_TRACKING_SPRING = /* @__PURE__ */ springRole(
+  'fingerTracking',
+  {
+    response: 0.15,
+    dampingRatio: 0.86,
+  } as const,
+);
 
 /**
  * SwiftUI `Animation.default` since iOS 17 (what `withAnimation` uses).
  * @source apple-docs https://developer.apple.com/documentation/swiftui/animation/default
  */
-export const STATE_CHANGE_SPRING = {response: 0.55, dampingRatio: 1} as const;
+export const STATE_CHANGE_SPRING = /* @__PURE__ */ springRole('stateChange', {
+  response: 0.55,
+  dampingRatio: 1,
+} as const);
 
 /**
  * SwiftUI `.spring(response:dampingFraction:blendDuration:)` defaults.
  * @source apple-docs https://developer.apple.com/documentation/swiftui/animation/spring(response:dampingfraction:blendduration:)
  */
-export const DIRECT_CHANGE_SPRING = {
+export const DIRECT_CHANGE_SPRING = /* @__PURE__ */ springRole('directChange', {
   response: 0.5,
   dampingRatio: 0.825,
-} as const;
+} as const);
 
 /**
  * UIKit `UIView.animate(springDuration:bounce:…)` defaults (iOS 17).
  * @source apple-docs https://developer.apple.com/documentation/uikit/uiview/animate(springduration:bounce:initialspringvelocity:delay:options:animations:completion:)
  */
-export const TIMED_CHANGE_SPRING = {duration: 0.5, bounce: 0} as const;
+export const TIMED_CHANGE_SPRING = /* @__PURE__ */ springRole('timedChange', {
+  duration: 0.5,
+  bounce: 0,
+} as const);
 
 /**
  * UIKit's default spring, `UISpringTimingParameters()`: Apple documents
@@ -97,11 +127,11 @@ export const TIMED_CHANGE_SPRING = {duration: 0.5, bounce: 0} as const;
  *   `UIView.animate` with curve 7 outside the keyboard is this spring with
  *   its duration forced to 0.5 s
  */
-export const VIEW_CHANGE_SPRING = {
+export const VIEW_CHANGE_SPRING = /* @__PURE__ */ springRole('viewChange', {
   mass: 3,
   stiffness: 1000,
   damping: 500,
-} as const;
+} as const);
 
 // ---------------------------------------------------------------------
 // Navigation (UINavigationController)
@@ -213,10 +243,13 @@ export const SHEET_RELEASE_FAST_SPRING = {
  *   iPhone 17 Pro, CASpringAnimation dump (300 pt swipe in 0.15 s:
  *   stiffness 333.333, damping 29.212), Oct 23 2026
  */
-export const SHEET_DISMISS_SWIPE_SPRING = {
-  response: 0.3441442326,
-  dampingRatio: 0.8,
-} as const;
+export const SHEET_DISMISS_SWIPE_SPRING = /* @__PURE__ */ springRole(
+  'sheetDismissSwipe',
+  {
+    response: 0.3441442326,
+    dampingRatio: 0.8,
+  } as const,
+);
 
 // ---------------------------------------------------------------------
 // Alerts, action sheets, menus
@@ -280,14 +313,20 @@ export const ACTION_SHEET_DISMISS_SPRING = {
  *   iPhone 17 Pro, `_animateUsingSpringWithDampingRatio:response:tracking:`
  *   hooked (0.8, 0.32, tracking), Oct 23 2026
  */
-export const MENU_OPEN_SPRING = {response: 0.32, dampingRatio: 0.8} as const;
+export const MENU_OPEN_SPRING = /* @__PURE__ */ springRole('menuOpen', {
+  response: 0.32,
+  dampingRatio: 0.8,
+} as const);
 
 /**
  * UIMenu closing (a tap outside).
  * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
  *   iPhone 17 Pro, the same hook (0.85, 0.35, not tracking), Oct 23 2026
  */
-export const MENU_CLOSE_SPRING = {response: 0.35, dampingRatio: 0.85} as const;
+export const MENU_CLOSE_SPRING = /* @__PURE__ */ springRole('menuClose', {
+  response: 0.35,
+  dampingRatio: 0.85,
+} as const);
 
 /**
  * A sub-menu opening in place (its row tapped on a phone): a card laid over
@@ -308,10 +347,10 @@ export const MENU_CLOSE_SPRING = {response: 0.35, dampingRatio: 0.85} as const;
  *   It fits the box's eleven frames to 0.12 pt rms of the 99 pt travel
  *   (start 89.5 ms), as a free single-spring fit does (0.86, 0.395)
  */
-export const SUB_MENU_OPEN_SPRING = {
+export const SUB_MENU_OPEN_SPRING = /* @__PURE__ */ springRole('subMenuOpen', {
   response: 0.4,
   dampingRatio: 0.85,
-} as const;
+} as const);
 
 /**
  * Back out of a sub-menu (its header tapped): the card shrinks back up into
@@ -330,7 +369,10 @@ export const SUB_MENU_OPEN_SPRING = {
  *   frames to 0.28 pt rms of the 99 pt travel (start 111 ms), the opacity to
  *   0.0055 rms
  */
-export const SUB_MENU_BACK_SPRING = {response: 0.4, dampingRatio: 1} as const;
+export const SUB_MENU_BACK_SPRING = /* @__PURE__ */ springRole('subMenuBack', {
+  response: 0.4,
+  dampingRatio: 1,
+} as const);
 
 /**
  * Context menu (UIContextMenuInteraction): the preview lifting once the
@@ -338,20 +380,26 @@ export const SUB_MENU_BACK_SPRING = {response: 0.4, dampingRatio: 1} as const;
  * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
  *   iPhone 17 Pro, the same hook (0.8, 0.32, tracking), Oct 23 2026
  */
-export const CONTEXT_MENU_LIFT_SPRING = {
-  response: 0.32,
-  dampingRatio: 0.8,
-} as const;
+export const CONTEXT_MENU_LIFT_SPRING = /* @__PURE__ */ springRole(
+  'contextMenuLift',
+  {
+    response: 0.32,
+    dampingRatio: 0.8,
+  } as const,
+);
 
 /**
  * Context menu dismissing (a tap outside).
  * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
  *   iPhone 17 Pro, the same hook (0.85, 0.35, not tracking), Oct 23 2026
  */
-export const CONTEXT_MENU_DISMISS_SPRING = {
-  response: 0.35,
-  dampingRatio: 0.85,
-} as const;
+export const CONTEXT_MENU_DISMISS_SPRING = /* @__PURE__ */ springRole(
+  'contextMenuDismiss',
+  {
+    response: 0.35,
+    dampingRatio: 0.85,
+  } as const,
+);
 
 /**
  * Context menu: the menu's entrance beside the lifted preview and the preview
@@ -363,10 +411,13 @@ export const CONTEXT_MENU_DISMISS_SPRING = {
  *   preview shadow's opacity each fit (0.30, 0.80), rms ≤ 0.001; the issued
  *   UIViewSpringAnimationBehaviorSettings are (0.8, 0.3)
  */
-export const CONTEXT_MENU_MORPH_SPRING = {
-  response: 0.3,
-  dampingRatio: 0.8,
-} as const;
+export const CONTEXT_MENU_MORPH_SPRING = /* @__PURE__ */ springRole(
+  'contextMenuMorph',
+  {
+    response: 0.3,
+    dampingRatio: 0.8,
+  } as const,
+);
 
 /**
  * What UIKit plays for a menu with Reduce Motion on: critically damped,
@@ -435,7 +486,10 @@ export const BANNER_SPRING = {mass: 3, stiffness: 1000, damping: 500} as const;
  *   damping ratio 1. Four releases fit it per frame (the UIKit slider
  *   table). Oct 23 2026
  */
-export const SLIDER_RELEASE_SPRING = {response: 0.4, dampingRatio: 1} as const;
+export const SLIDER_RELEASE_SPRING = /* @__PURE__ */ springRole(
+  'sliderRelease',
+  {response: 0.4, dampingRatio: 1} as const,
+);
 
 /**
  * UISlider's lift: a finger's touch-down scales the thumb up on this spring.
@@ -443,7 +497,10 @@ export const SLIDER_RELEASE_SPRING = {response: 0.4, dampingRatio: 1} as const;
  *   thumb's scale per frame after touch-down (the UIKit slider table).
  *   Oct 23 2026
  */
-export const SLIDER_LIFT_SPRING = {response: 0.215, dampingRatio: 0.6} as const;
+export const SLIDER_LIFT_SPRING = /* @__PURE__ */ springRole('sliderLift', {
+  response: 0.215,
+  dampingRatio: 0.6,
+} as const);
 
 /**
  * UISlider's drop: the lift's end scales the thumb back down on this spring.
@@ -451,7 +508,10 @@ export const SLIDER_LIFT_SPRING = {response: 0.215, dampingRatio: 0.6} as const;
  *   thumb's scale per frame after the lift (the UIKit slider table).
  *   Oct 23 2026
  */
-export const SLIDER_DROP_SPRING = {response: 0.5, dampingRatio: 0.7} as const;
+export const SLIDER_DROP_SPRING = /* @__PURE__ */ springRole('sliderDrop', {
+  response: 0.5,
+  dampingRatio: 0.7,
+} as const);
 
 /**
  * Every spring above, by row name: the table the existing readers use. A
@@ -515,6 +575,7 @@ const SPRING_ROLES = {
   menuClose: MENU_CLOSE_SPRING,
   subMenuOpen: SUB_MENU_OPEN_SPRING,
   subMenuBack: SUB_MENU_BACK_SPRING,
+  sheetDismissSwipe: SHEET_DISMISS_SWIPE_SPRING,
   contextMenuLift: CONTEXT_MENU_LIFT_SPRING,
   contextMenuDismiss: CONTEXT_MENU_DISMISS_SPRING,
   contextMenuMorph: CONTEXT_MENU_MORPH_SPRING,
@@ -527,9 +588,9 @@ const SPRING_ROLES = {
  * Registers the role springs (`SPRING_ROLES`) as internal motion roles
  * (motion/roles.ts), by their row names (`springs.settle`). Every other
  * spring, UIKit's menu spring under Reduce Motion and the keyboard's
- * included, is not a role. Nothing registers on import: the touch code that
- * plays a role calls it once (it is idempotent), so a page that never does
- * ships no registry.
+ * included, is not a role. Each role row registers itself when it loads, so
+ * a call registers nothing new. A call still puts all 19 role rows in the
+ * caller's bundle.
  */
 export function registerSpringsTable(): void {
   registerMotionTable('springs', SPRING_ROLES, {

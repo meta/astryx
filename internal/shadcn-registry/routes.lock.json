@@ -623,6 +623,21 @@
       "aliases": []
     },
     {
+      "name": "component-lab-navigation-screen",
+      "path": "components/lab/navigation-screen",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-navigation-stack",
+      "path": "components/lab/navigation-stack",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-page-control",
+      "path": "components/lab/page-control",
+      "aliases": []
+    },
+    {
       "name": "component-lab-radial-chart",
       "path": "components/lab/radial-chart",
       "aliases": []
@@ -1964,6 +1979,11 @@
     {
       "name": "example-create-animator-playing-cards-in-plain-java-script",
       "path": "examples/create-animator/playing-cards-in-plain-java-script",
+      "aliases": []
+    },
+    {
+      "name": "example-create-drag-to-snap-points-playing-card-in-plain-java-script",
+      "path": "examples/create-drag-to-snap-points/playing-card-in-plain-java-script",
       "aliases": []
     },
     {
@@ -3702,6 +3722,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-drag-to-snap-points-playing-card-on-three-places",
+      "path": "examples/use-drag-to-snap-points/playing-card-on-three-places",
+      "aliases": []
+    },
+    {
       "name": "example-use-focus-trap-quick-edit-panel",
       "path": "examples/use-focus-trap/quick-edit-panel",
       "aliases": []
@@ -3777,6 +3802,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-multi-combobox-issue-labels",
+      "path": "examples/use-multi-combobox/issue-labels",
+      "aliases": []
+    },
+    {
       "name": "example-use-outline-from-markdown-docs-article",
       "path": "examples/use-outline-from-markdown/docs-article",
       "aliases": []
@@ -3824,6 +3854,11 @@
     {
       "name": "example-use-scrollable-area-activity-log-panel",
       "path": "examples/use-scrollable-area/activity-log-panel",
+      "aliases": []
+    },
+    {
+      "name": "example-use-snap-paging-onboarding-pages",
+      "path": "examples/use-snap-paging/onboarding-pages",
       "aliases": []
     },
     {
@@ -3932,6 +3967,11 @@
       "aliases": []
     },
     {
+      "name": "hook-create-drag-to-snap-points",
+      "path": "hooks/create-drag-to-snap-points",
+      "aliases": []
+    },
+    {
       "name": "hook-create-pan-gesture",
       "path": "hooks/create-pan-gesture",
       "aliases": []
@@ -3994,6 +4034,11 @@
     {
       "name": "hook-use-dev-warning",
       "path": "hooks/use-dev-warning",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-drag-to-snap-points",
+      "path": "hooks/use-drag-to-snap-points",
       "aliases": []
     },
     {
@@ -4164,6 +4209,11 @@
     {
       "name": "hook-use-scrollable-area",
       "path": "hooks/use-scrollable-area",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-snap-paging",
+      "path": "hooks/use-snap-paging",
       "aliases": []
     },
     {
