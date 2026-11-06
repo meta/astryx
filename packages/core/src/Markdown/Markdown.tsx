@@ -1779,6 +1779,12 @@ function renderBlock(
               themeProps('markdown-list', {density}),
               stylex.props(
                 spacing,
+                contentWidthValue != null
+                  ? dynamicStyles.proseWidth(contentWidthValue)
+                  : null,
+                contentAlign !== 'start'
+                  ? dynamicStyles.proseAlign(ALIGN_MARGIN[contentAlign])
+                  : null,
                 isFirst && styles.noMarginBlockStart,
                 isLast && styles.noMarginBlockEnd,
               ),
@@ -1976,7 +1982,7 @@ function renderBlock(
                     ]
                   }
                   task={task}
-                  hasMarkerGutter={node.ordered && !readsAgainstList}
+                  hasMarkerGutter={node.ordered}
                   isOutsideNumberColumns={readsAgainstList}>
                   <ListItem
                     label={label}

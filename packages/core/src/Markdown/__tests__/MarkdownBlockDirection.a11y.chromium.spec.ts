@@ -59,6 +59,14 @@ const MIXED = [
   '| :--- | ---: |',
   '| Apples | 12 |',
   '| תפוחים | מאה |',
+  '',
+  '98. Step ninety-eight',
+  '99. Step ninety-nine',
+  '100. Step one hundred',
+  '101. Step one hundred one',
+  '',
+  '- [ ] English task',
+  '- [x] משימה בעברית',
 ].join('\n');
 
 let storybook: StaticServer;
@@ -263,6 +271,72 @@ for (const pageDirection of ['ltr', 'rtl'] as const) {
       // The Count column is end-aligned: its text touches the table's end.
       const aligned = await cell(againstAligned);
       expect(Math.abs(aligned.toEnd)).toBeLessThanOrEqual(1);
+    });
+
+    test('a wide counter does not move its item text', async ({page}) => {
+      await renderMixed(page, pageDirection);
+      const starts = await page.evaluate(() =>
+        ['ninety-eight', 'ninety-nine', 'one hundred', 'one hundred one'].map(
+          text => {
+            const item = Array.from(
+              document.querySelectorAll<HTMLElement>('#storybook-root ol li'),
+            ).find(element => element.textContent?.trim().endsWith(text));
+            if (item == null) {
+              throw new Error(`No numbered item ends with ${text}`);
+            }
+            const walker = document.createTreeWalker(
+              item,
+              NodeFilter.SHOW_TEXT,
+            );
+            let node = walker.nextNode();
+            while (node != null && !(node.textContent ?? '').includes(text)) {
+              node = walker.nextNode();
+            }
+            const range = document.createRange();
+            range.selectNodeContents(node ?? item);
+            return range.getClientRects()[0].left;
+          },
+        ),
+      );
+      expect(Math.max(...starts) - Math.min(...starts)).toBeLessThanOrEqual(
+        0.5,
+      );
+    });
+
+    test('a task item that reads against the page stays in the prose column', async ({
+      page,
+    }) => {
+      await renderMixed(page, pageDirection);
+      const fit = await page.evaluate(() => {
+        const prose = Array.from(
+          document.querySelectorAll<HTMLElement>(
+            '#storybook-root [role="paragraph"]',
+          ),
+        )
+          .find(element => element.textContent?.includes('Short English line'))
+          ?.getBoundingClientRect();
+        if (prose == null) {
+          throw new Error('No prose paragraph');
+        }
+        return ['English task', 'משימה בעברית'].map(text => {
+          const label = Array.from(
+            document.querySelectorAll<HTMLElement>('#storybook-root li'),
+          ).find(element => element.textContent?.includes(text));
+          if (label == null) {
+            throw new Error(`No task holds ${text}`);
+          }
+          const walker = document.createTreeWalker(label, NodeFilter.SHOW_TEXT);
+          let node = walker.nextNode();
+          while (node != null && !(node.textContent ?? '').includes(text)) {
+            node = walker.nextNode();
+          }
+          const range = document.createRange();
+          range.selectNodeContents(node ?? label);
+          const box = range.getBoundingClientRect();
+          return box.left >= prose.left - 1 && box.right <= prose.right + 1;
+        });
+      });
+      expect(fit).toEqual([true, true]);
     });
   });
 }
