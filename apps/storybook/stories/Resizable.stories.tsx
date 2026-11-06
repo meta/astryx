@@ -27,6 +27,8 @@ const ps = stylex.create({
     overflow: 'hidden',
   },
   sz: {opacity: 0.6, fontSize: 12, fontFamily: 'monospace'},
+  // NOT FOR LANDING: two splits fit one phone screen.
+  compact: {height: 300},
 });
 
 const meta: Meta<typeof ResizeHandle> = {
@@ -854,12 +856,16 @@ function SlidingPanelSplit({
   snaps,
   isInitiallyCollapsed = false,
   maxSize = 320,
+  band,
+  isCompact = false,
 }: {
   side: 'start' | 'end';
   lineCount?: number;
   snaps?: number[];
   isInitiallyCollapsed?: boolean;
   maxSize?: number;
+  band?: 'handle' | 'grip';
+  isCompact?: boolean;
 }) {
   const resizable = useResizable({
     defaultSize: 200,
@@ -889,7 +895,9 @@ function SlidingPanelSplit({
     />
   );
   return (
-    <div {...stylex.props(ps.shell)}>
+    <div
+      {...stylex.props(ps.shell, isCompact && ps.compact)}
+      data-try-it-band={band}>
       <Layout
         height="fill"
         start={
@@ -979,20 +987,48 @@ function TryItPanel({
   );
 }
 
+/** NOT FOR LANDING: on a phone, 55% of the viewport, up to 320 px. */
+function phoneMax(): number {
+  return Math.min(320, Math.round(window.innerWidth * 0.55));
+}
+
 /**
  * NOT FOR LANDING: the slide as it ships, on a phone. The maximum is 55% of
  * the viewport, up to 320 px, so the content beside the panel keeps room to
- * read past the limit.
+ * read past the limit. `band` shows card 81d's handle band or card 81e's
+ * grip tab band.
  */
-export const TryItSlideOnAPhone: Story = {
+export const TryItSlideOnAPhone: StoryObj<{band: 'handle' | 'grip'}> = {
   name: 'Try it: the slide on a phone',
+  args: {band: 'handle'},
+  argTypes: {band: {control: 'inline-radio', options: ['handle', 'grip']}},
+  render: ({band}) => {
+    (globalThis as {__astryxResizeTryIt?: object}).__astryxResizeTryIt = {};
+    return <SlidingPanelSplit side="start" maxSize={phoneMax()} band={band} />;
+  },
+};
+
+/**
+ * NOT FOR LANDING: card 81d beside card 81e on a phone. Above, the handle
+ * bands past a limit; below, the grip tab alone bands while the handle line
+ * stays put. Re-grab and the close on the lift are the same in both.
+ */
+export const TryItHandleBesideGripOnAPhone: Story = {
+  name: 'Try it: 81d handle band beside 81e grip tab band, on a phone',
   render: () => {
     (globalThis as {__astryxResizeTryIt?: object}).__astryxResizeTryIt = {};
     return (
-      <SlidingPanelSplit
-        side="start"
-        maxSize={Math.min(320, Math.round(window.innerWidth * 0.55))}
-      />
+      <Stack gap={3}>
+        <Text>81d: the handle bands</Text>
+        <SlidingPanelSplit side="start" maxSize={phoneMax()} isCompact />
+        <Text>81e: the grip tab bands</Text>
+        <SlidingPanelSplit
+          side="start"
+          maxSize={phoneMax()}
+          band="grip"
+          isCompact
+        />
+      </Stack>
     );
   },
 };

@@ -418,8 +418,10 @@ export function slideNextOnRelease(
  * line where the edge will land. `snapOnLift` lets a drag move freely and
  * settles on the nearest snap at the lift. `expandFeedback` shows a drag out
  * of a collapsed pane: a peek of the edge, or the line at the open size.
+ * `band: 'grip'` bands the grip tab alone (card 81e).
  */
 export interface ResizeTryIt {
+  band?: 'handle' | 'grip';
   closeLine?: boolean;
   snapOnLift?: boolean;
   expandFeedback?: 'peek' | 'line';
@@ -614,10 +616,20 @@ export function createOvershootDrawing(pane: ResizablePane): OvershootDrawing {
       isInline &&
       element.ownerDocument.defaultView?.getComputedStyle(element).direction ===
         'rtl';
+    const handle = resizeHandleBeside(element, null);
+    // NOT FOR LANDING: card 81e bands the grip tab alone, over a still
+    // handle line. A story's wrapper picks it; the page-global switch too.
+    const band =
+      element.closest('[data-try-it-band]')?.getAttribute('data-try-it-band') ??
+      tryIt().band;
+    const grip =
+      band === 'grip'
+        ? handle?.querySelector<HTMLElement>('.astryx-resize-handle-pill')
+        : null;
     geometry = {
       sign: (edge.endsWith('end') ? 1 : -1) * (isRtl ? -1 : 1),
       axis: isInline ? 'x' : 'y',
-      handle: resizeHandleBeside(element, null),
+      handle: grip ?? handle,
     };
     return geometry;
   };
