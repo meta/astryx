@@ -22,6 +22,8 @@ interface Engine {
   /** `transform-origin`, px from the box's top-left corner. */
   origin: readonly [number, number];
   transition?: {property: string; duration: string};
+  /** The computed `translate`, beside the matrix the engine paints. */
+  translate?: string;
 }
 
 /** A number as an engine serializes a computed transform: six digits. */
@@ -50,7 +52,7 @@ function layerIn(engine: Engine): HTMLElement {
         m.join() === '1,0,0,1,0,0'
           ? 'none'
           : `matrix(${m.map(serialized).join(', ')})`,
-      translate: 'none',
+      translate: isOverridden() ? 'none' : (engine.translate ?? 'none'),
       rotate: 'none',
       scale: 'none',
       'transform-origin': `${engine.origin[0]}px ${engine.origin[1]}px`,
@@ -208,5 +210,48 @@ describe('settledBox', () => {
     const centreY = LAYOUT.top + LAYOUT.height / 2;
     expect(box.left + box.width / 2).toBeCloseTo(centreX, 0);
     expect(box.top + box.height / 2).toBeCloseTo(centreY, 0);
+  });
+
+  describe('reads under the one-read override where calculation cannot undo the transform', () => {
+    const entering = (): Engine => ({
+      layout: LAYOUT,
+      matrix: [0.95, 0, 0, 0.95, 0, 8],
+      origin: ORIGIN,
+    });
+    const layoutEdges = () =>
+      edges(new DOMRect(LAYOUT.left, LAYOUT.top, LAYOUT.width, LAYOUT.height));
+
+    it('while its entrance is still pending', () => {
+      const layer = layerIn(entering());
+      layer.getAnimations = () => [{pending: true} as Animation];
+      const write = vi.spyOn(layer.style, 'setProperty');
+      expect(edges(settledBox(layer))).toEqual(layoutEdges());
+      expect(write).toHaveBeenCalled();
+      expect(layer.style.getPropertyValue('transform')).toBe('');
+    });
+
+    it('under a CSS zoom other than 1', () => {
+      const layer = layerIn(entering());
+      Object.defineProperty(layer, 'currentCSSZoom', {value: 2});
+      const write = vi.spyOn(layer.style, 'setProperty');
+      expect(edges(settledBox(layer))).toEqual(layoutEdges());
+      expect(write).toHaveBeenCalled();
+    });
+
+    it('for a translate given as a percentage', () => {
+      const layer = layerIn({...entering(), translate: '10% 0px'});
+      const write = vi.spyOn(layer.style, 'setProperty');
+      expect(edges(settledBox(layer))).toEqual(layoutEdges());
+      expect(write).toHaveBeenCalled();
+    });
+
+    it('but not for a running entrance at a zoom of 1 with a translate in px', () => {
+      const layer = layerIn({...entering(), translate: '0px 0px'});
+      layer.getAnimations = () => [{pending: false} as Animation];
+      Object.defineProperty(layer, 'currentCSSZoom', {value: 1});
+      const write = vi.spyOn(layer.style, 'setProperty');
+      expect(edges(settledBox(layer))).toEqual(layoutEdges());
+      expect(write).not.toHaveBeenCalled();
+    });
   });
 });

@@ -22,13 +22,15 @@ type Matrix2D = readonly [number, number, number, number, number, number];
 const IDENTITY: Matrix2D = [1, 0, 0, 1, 0, 0];
 
 /**
- * Layout boxes sit on a grid of 1/64 px. The computed transform is rounded to
- * a few digits when it is serialized, so a box derived from it can be off the
- * grid by a few millionths of a px. A value that close to the grid is moved
- * onto it, so the derived box equals the layout box exactly.
+ * Chromium and WebKit lay boxes out on a grid of 1/64 px. The computed
+ * transform is rounded to a few digits when it is serialized, so a box derived
+ * from it can be off the grid by a few millionths of a px. A value that close
+ * to the grid is moved onto it, so the derived box equals the layout box
+ * exactly. Firefox's grid of 1/60 px is never that close to a 1/64 px point,
+ * so its values stay as derived.
  */
 const LAYOUT_UNITS_PER_PX = 64;
-const GRID_TOLERANCE_PX = 1 / 1024;
+const GRID_TOLERANCE_PX = 1 / 2048;
 
 function hasTransform(style: CSSStyleDeclaration): boolean {
   return TRANSFORM_PROPERTIES.some(name => {
@@ -107,6 +109,32 @@ function isAxisAligned([a, b, c, d]: Matrix2D): boolean {
   return b === 0 && c === 0 && a !== 0 && d !== 0;
 }
 
+/**
+ * Whether the layer's transform can be taken out of its box by calculation.
+ * Not while one of its animations is pending: Chromium can then report the
+ * first keyframe before the box carries it. Not under a CSS zoom other than 1:
+ * the computed translation and origin are then in the layer's own px, not in
+ * the box's. Not for a `translate` given as a percentage, which the computed
+ * value keeps.
+ */
+function canUndoByCalculation(
+  layer: HTMLElement,
+  style: CSSStyleDeclaration,
+): boolean {
+  const zoom = (layer as {currentCSSZoom?: number}).currentCSSZoom ?? 1;
+  if (zoom !== 1) {
+    return false;
+  }
+  const translate = style.getPropertyValue('translate');
+  if (
+    isSet(translate) &&
+    !translate.split(' ').every(value => value.endsWith('px'))
+  ) {
+    return false;
+  }
+  return !(layer.getAnimations?.() ?? []).some(animation => animation.pending);
+}
+
 function onLayoutGrid(value: number): number {
   const snapped = Math.round(value * LAYOUT_UNITS_PER_PX) / LAYOUT_UNITS_PER_PX;
   return Math.abs(snapped - value) < GRID_TOLERANCE_PX ? snapped : value;
@@ -162,13 +190,13 @@ function untransform(
  * entry animation (or anything else) applies to it. A Tooltip enters from a
  * few pixels toward its trigger, scaled down. So the transformed box of a
  * tooltip that fits beside its trigger can read as covering it while it
- * enters. A transform that only translates and scales, as every entrance
- * does, is undone from the one box read (`untransform`): nothing is written,
- * so the read forces no extra style or layout work. A layer that transitions
- * a transform property is also only read, since restoring an overridden value
- * would start that transition. For any other transform, the layer's
- * transforms are overridden with `none !important` for one read, which
- * outranks an animation. They are restored in the same task, so no frame
+ * enters. A transform that only translates and scales, as a running
+ * entrance does, is undone from the one box read (`untransform`) where
+ * `canUndoByCalculation` allows it: nothing is written, so the read forces no
+ * extra style or layout work. A layer that transitions a transform property is
+ * also only read, since restoring an overridden value would start that
+ * transition. Otherwise the layer's transforms are overridden with
+ * `none !important` for one read, which outranks an animation. They are restored in the same task, so no frame
  * paints in between and the animation keeps running. Where the engine still
  * applies an animated transform under that override (WebKit), the read box
  * has that transform undone instead.
@@ -180,7 +208,11 @@ export function settledBox(layer: HTMLElement): DOMRect {
     return layer.getBoundingClientRect();
   }
   const matrix = transformOf(style);
-  if (matrix != null && isAxisAligned(matrix)) {
+  if (
+    matrix != null &&
+    isAxisAligned(matrix) &&
+    canUndoByCalculation(layer, style)
+  ) {
     return untransform(layer.getBoundingClientRect(), layer, style, matrix);
   }
   const transitions = style
