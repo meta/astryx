@@ -136,7 +136,7 @@ async function clickThenBlock(
         'click',
         () => {
           requestAnimationFrame(() => {
-            const glides = [];
+            const glides: GlideRead[] = [];
             for (
               let node: Element | null = carried;
               node != null;
@@ -151,7 +151,7 @@ async function clickThenBlock(
                   continue;
                 }
                 glides.push({
-                  frames: frames.map(frame => [
+                  frames: frames.map((frame): [number, number] => [
                     frame.computedOffset,
                     offsetOf(frame.translate),
                   ]),
