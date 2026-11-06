@@ -12,7 +12,8 @@
  *   flick on a handle scrolls and moves nothing. A cancelled drag puts the
  *   row back. With Reduce Motion the drop takes its place without travel. A
  *   flush row's handle stays inside the list. A finger held on a handle
- *   refuses text selection on the list until it lifts
+ *   refuses text selection on the list until it lifts. A drag that crosses
+ *   rows forces no style or layout pass
  * @position Interaction evidence for List's reorder (List/listReorderEngine.tsx,
  *   List/ListReorderTouch.ts, List/ListReorderHandle.tsx) in the touch phone
  *   context
@@ -240,6 +241,83 @@ test.describe('under a finger', () => {
           ) == null,
       ),
     ).toBe(true);
+  });
+
+  test('a drag forces no style or layout pass as it crosses rows', async ({
+    page,
+    browser,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'the layout trace and the held finger go through Chromium CDP',
+    );
+    const {at, rowHeight} = await handleOf(page, 'Inbox');
+    const cdp = await page.context().newCDPSession(page);
+    const touch = async (
+      type: 'touchStart' | 'touchMove' | 'touchEnd',
+      y?: number,
+    ) =>
+      cdp.send('Input.dispatchTouchEvent', {
+        type,
+        touchPoints:
+          y == null
+            ? []
+            : [{x: at.x, y, id: 1, radiusX: 1, radiusY: 1, force: 1}],
+      });
+    await touch('touchStart', at.y);
+    await page.waitForTimeout(HOLD_MS);
+    await touch('touchMove', at.y + 4);
+    await expect(page.locator('[data-astryx-reorder-preview]')).toHaveCount(1);
+    // Only the crossings are traced: the pick-up reads the rows once.
+    await browser.startTracing(page, {
+      categories: [
+        'devtools.timeline',
+        'disabled-by-default-devtools.timeline',
+        'disabled-by-default-devtools.timeline.stack',
+      ],
+    });
+    for (let step = 1; step <= 24; step += 1) {
+      await touch('touchMove', at.y + 4 + (rowHeight * 3 * step) / 24);
+      await page.waitForTimeout(16);
+    }
+    await page.waitForTimeout(150);
+    const trace = JSON.parse((await browser.stopTracing()).toString()) as {
+      traceEvents: {
+        name: string;
+        ph: string;
+        pid: number;
+        tid: number;
+        args?: {
+          name?: string;
+          beginData?: {stackTrace?: {functionName?: string}[]};
+        };
+      }[];
+    };
+    await touch('touchEnd');
+    await page.waitForTimeout(SETTLE_MS);
+    const mainThreads = new Set(
+      trace.traceEvents
+        .filter(e => e.ph === 'M' && e.name === 'thread_name')
+        .filter(e => e.args?.name === 'CrRendererMain')
+        .map(e => `${e.pid}:${e.tid}`),
+    );
+    // A style or layout pass with a script stack ran inside script: a read
+    // after a write forced it, instead of the frame's own pass.
+    const forced = trace.traceEvents.filter(
+      e =>
+        (e.name === 'Layout' || e.name === 'UpdateLayoutTree') &&
+        mainThreads.has(`${e.pid}:${e.tid}`) &&
+        (e.args?.beginData?.stackTrace ?? []).length > 0,
+    );
+    expect(
+      forced.map(
+        e =>
+          `${e.name} in ${e.args?.beginData?.stackTrace?.[0]?.functionName ?? '?'}`,
+      ),
+    ).toEqual([]);
+    // The drag did cross: Inbox lands three rows down.
+    expect((await labels(page)).indexOf('Inbox')).toBe(3);
   });
 
   test('a cancelled drag puts the row back and moves nothing', async ({

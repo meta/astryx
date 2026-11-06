@@ -78,8 +78,8 @@ export function attachTouchHold(
     // Only a lone finger: two are the browser's pinch, wherever the second
     // one landed (the gesture host counts every finger on the screen).
     shouldBegin: () => host.fingersDown() <= 1,
-    // A long press brings the selection lock: no text selection or callout
-    // under the held finger, while it is down and only then.
+    // The hold keeps its own styles, so the list itself locks text
+    // selection under a held finger.
   });
   const unlisten = recognizer.addListener(onGesture);
   // The handles set their own `touch-action`.
