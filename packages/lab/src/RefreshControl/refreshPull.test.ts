@@ -9,7 +9,7 @@
  * @position Testing; colocated with refreshPull.ts
  */
 
-import {afterEach, describe, expect, it} from 'vitest';
+import {describe, expect, it} from 'vitest';
 import {
   endMotion,
   endTiming,
@@ -220,24 +220,13 @@ describe('release and end', () => {
 });
 
 describe('the end’s timing from the theme’s tokens', () => {
-  afterEach(() => {
-    document.body.replaceChildren();
-  });
-
-  /** An element with `tokens` set on it, in the document. */
-  function themed(tokens: Record<string, string>): HTMLElement {
-    const element = document.createElement('div');
-    for (const [name, value] of Object.entries(tokens)) {
-      element.style.setProperty(name, value);
-    }
-    document.body.appendChild(element);
-    return element;
-  }
-
   it('plays the theme’s duration and move easing tokens as the element computes them (spec:AST-094 FR45)', () => {
+    const style = (values: Record<string, string>) => ({
+      getPropertyValue: (name: string) => values[name] ?? '',
+    });
     expect(
       endTiming(
-        themed({
+        style({
           '--duration-medium': '300ms',
           '--ease-move': 'cubic-bezier(0.24, 1, 0.4, 1)',
         }),
@@ -245,17 +234,16 @@ describe('the end’s timing from the theme’s tokens', () => {
     ).toEqual({ms: 300, points: [0.24, 1, 0.4, 1]});
     // A theme's tempo reaches the end through the token's value.
     expect(
-      endTiming(themed({'--duration-medium': '450ms', '--ease-move': 'ease'}))
+      endTiming(style({'--duration-medium': '450ms', '--ease-move': 'ease'}))
         ?.ms,
     ).toBe(450);
-    // No tokens, or an easing that is not a cubic Bézier: no slide. The
-    // browser proof resolves a `calc()` token, which jsdom cannot.
+    // No tokens, or tokens in a form it cannot read: no slide.
     expect(
       endTiming(
-        themed({'--duration-medium': '300ms', '--ease-move': 'steps(4)'}),
+        style({'--duration-medium': 'calc(300ms * 1)', '--ease-move': 'ease'}),
       ),
     ).toBeNull();
-    expect(endTiming(themed({}))).toBeNull();
+    expect(endTiming(style({}))).toBeNull();
   });
 });
 

@@ -27,7 +27,10 @@ import {
   rubberBandInverse,
   rubberBandSlope,
 } from '@astryxdesign/core/internal/touch';
-import {resolveTiming} from '@astryxdesign/core/internal/touch';
+import {
+  parseCssEasing,
+  parseMotionRoleValue,
+} from '@astryxdesign/core/internal/touch';
 import {refreshControl} from './refreshValues';
 
 /** The refreshing inset and one-to-one stretch, pt. */
@@ -166,20 +169,18 @@ export function endMotion(scrolled: number): {
 
 /**
  * The end's duration and curve: the theme tokens that `refreshControl` names,
- * resolved as a transition on `element` resolves them. Null when either token
- * has no value there, or is not a time or a cubic Bézier, such as `steps()`.
+ * as the end's element computes them. Null when either token is missing or
+ * in a form it cannot read, such as `calc()`, `var()` or `steps()`.
  */
 export function endTiming(
-  element: Element,
+  style: Pick<CSSStyleDeclaration, 'getPropertyValue'>,
 ): {ms: number; points: readonly [number, number, number, number]} | null {
-  const style = getComputedStyle(element);
-  const duration = style.getPropertyValue(refreshControl.endDurationToken);
-  const easing = style.getPropertyValue(refreshControl.endEasingToken);
-  // Core's token defaults do not apply here. The end slides only when the
-  // theme sets both tokens.
-  if (duration.trim() === '' || easing.trim() === '') {
-    return null;
-  }
-  const {ms, points} = resolveTiming(element, {duration, easing});
+  const ms = parseMotionRoleValue(
+    'duration',
+    style.getPropertyValue(refreshControl.endDurationToken),
+  );
+  const points = parseCssEasing(
+    style.getPropertyValue(refreshControl.endEasingToken),
+  );
   return ms == null || points == null ? null : {ms, points};
 }

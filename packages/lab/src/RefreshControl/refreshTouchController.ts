@@ -558,7 +558,8 @@ export function useRefreshTouchController({
       };
       // The theme's tokens as they apply here, at the end's start. With no
       // tokens, or tokens in a form it cannot read, the end has no slide.
-      const timing = element == null ? null : endTiming(element);
+      const timing =
+        element == null ? null : endTiming(getComputedStyle(element));
       if (timing == null || timing.ms <= 0) {
         finish();
         return;

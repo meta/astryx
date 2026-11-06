@@ -46,8 +46,8 @@ export {DEFAULT_ENVIRONMENT} from '../gestures/types';
 // Lab's useRefreshControl reads these: its pull's pan and the hook that
 // starts it. It also reads the motion engine and math, and the scroll
 // view's bounce spring, for its pull, settle and end. Its indicator fades
-// along the settle's curve, and the shared theme-timing reader resolves the
-// theme's tokens for its end.
+// along the settle's curve, and the motion-role parsers read the theme's
+// tokens for its end.
 export {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 export type {PanGestureRecognizerOptions} from '../gestures/PanGestureRecognizer';
 export type {
@@ -66,7 +66,7 @@ export type {
 } from '../motion/animator';
 export {cubicBezier} from '../motion/bezier';
 export {mapProgress} from '../motion/progress';
-export {resolveTiming} from '../motion/themeTiming';
+export {parseCssEasing, parseMotionRoleValue} from '../motion/roles';
 export {
   rubberBand,
   rubberBandInverse,
