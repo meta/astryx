@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useRef, useState} from 'react';
+import {useLayoutEffect, useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
@@ -966,6 +966,21 @@ const TRY_IT_CONTROLS = {
   expandFeedback: {control: 'inline-radio', options: ['none', 'peek', 'line']},
 } as const;
 
+/**
+ * NOT FOR LANDING: sets the page-global try-it switch while a try-it story
+ * shows, and clears it when the story goes, so no other story reads it.
+ */
+function useTryItSwitch(choices: object): void {
+  const key = JSON.stringify(choices);
+  useLayoutEffect(() => {
+    const page = globalThis as {__astryxResizeTryIt?: object};
+    page.__astryxResizeTryIt = JSON.parse(key) as object;
+    return () => {
+      delete page.__astryxResizeTryIt;
+    };
+  }, [key]);
+}
+
 function TryItPanel({
   closeLine,
   snapOnLift,
@@ -973,11 +988,11 @@ function TryItPanel({
   snaps,
   isInitiallyCollapsed,
 }: TryItArgs & {snaps?: number[]; isInitiallyCollapsed?: boolean}) {
-  (globalThis as {__astryxResizeTryIt?: object}).__astryxResizeTryIt = {
+  useTryItSwitch({
     closeLine,
     snapOnLift,
     expandFeedback: expandFeedback === 'none' ? undefined : expandFeedback,
-  };
+  });
   return (
     <SlidingPanelSplit
       side="start"
@@ -1002,10 +1017,9 @@ export const TryItSlideOnAPhone: StoryObj<{band: 'handle' | 'grip'}> = {
   name: 'Try it: the slide on a phone',
   args: {band: 'handle'},
   argTypes: {band: {control: 'inline-radio', options: ['handle', 'grip']}},
-  render: ({band}) => {
-    (globalThis as {__astryxResizeTryIt?: object}).__astryxResizeTryIt = {};
-    return <SlidingPanelSplit side="start" maxSize={phoneMax()} band={band} />;
-  },
+  render: ({band}) => (
+    <SlidingPanelSplit side="start" maxSize={phoneMax()} band={band} />
+  ),
 };
 
 /**
@@ -1016,7 +1030,6 @@ export const TryItSlideOnAPhone: StoryObj<{band: 'handle' | 'grip'}> = {
 export const TryItHandleBesideGripOnAPhone: Story = {
   name: 'Try it: 81d handle band beside 81e grip tab band, on a phone',
   render: () => {
-    (globalThis as {__astryxResizeTryIt?: object}).__astryxResizeTryIt = {};
     return (
       <Stack gap={3}>
         <Text>81d: the handle bands</Text>
