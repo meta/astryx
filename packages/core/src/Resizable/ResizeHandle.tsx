@@ -80,6 +80,10 @@ function resolveEffectiveSide(
 const styles = stylex.create({
   handle: {
     position: 'relative',
+    // The grab zone and the pill stay above the content beside the handle. A
+    // glide's translate makes the handle a stacking context, which traps
+    // their own z-index inside it.
+    zIndex: 2,
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
