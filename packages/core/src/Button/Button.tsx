@@ -70,6 +70,10 @@ import type {LinkComponentType} from '../Link/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {
+  controlPressLayerStyles,
+  rowPressLayerStyles,
+} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ButtonVariantMap} from './index';
 import {
@@ -811,6 +815,11 @@ export function Button({
     sizeStyles[size],
     isIconOnly && styles.iconOnly,
     interactionOverlayStyles.backgroundImage,
+    // The press the controller writes, on a layer under the label whose
+    // release runs on the compositor.
+    rowPressLayerStyles.cell,
+    rowPressLayerStyles.cellOnImage,
+    controlPressLayerStyles.control,
     isGroupTracked && styles.trackedOverlay,
     buttonDisabled && styles.inactive,
     isTrueDisabled && styles.disabled,

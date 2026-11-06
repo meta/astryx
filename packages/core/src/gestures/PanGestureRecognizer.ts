@@ -29,6 +29,8 @@
  *   scroll for that movement — the finger landed at the edge and pulls away
  *   from it. The browser has not committed yet, so beginning claims the
  *   touch and the browser never scrolls.
+ * - `firstMoveDecides`: a one-way pan holds the touch from a first move its
+ *   own way. Any other first move fails it, so the page keeps the touch.
  *
  * Who gets the drag is decided once, when it begins: a drag that began as
  * the browser's scroll stays the browser's to the lift and rubber-bands at
@@ -81,13 +83,20 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
   /**
    * A trackpad's two-finger scroll (`continuous`) drives the pan where its
    * owner allows it. It moves as a contact with the content, along its own
-   * axis, after the scrollers under the pointer. A mouse wheel's notches
-   * never drive a pan; they scroll what is under the pointer.
+   * axis, after the scrollers under the pointer. Its own element is the pan's
+   * on the axis its `touch-action` keeps, as for a finger. A mouse wheel's
+   * notches never drive a pan; they scroll what is under the pointer.
    * @default [] (none)
    */
   allowedScrollTypes?: ReadonlyArray<'continuous'>;
   /** Begin only when the native scrollers under the touch are at the edge. */
   scrollEdge?: boolean;
+  /**
+   * A one-way pan decides on the touch's first move. A first move its own way
+   * holds the touch from that move. Any other first move fails the pan, so the
+   * page keeps the touch. A toast's swipe works this way.
+   */
+  firstMoveDecides?: boolean;
 }
 
 const ZERO: Point = {x: 0, y: 0};
@@ -116,6 +125,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
   axisRatio: number;
   lockAxis: boolean;
   scrollEdge: boolean;
+  firstMoveDecides: boolean;
   /** The axis a `lockAxis` pan locked to when it began. */
   lockedAxis: 'x' | 'y' | null = null;
   /** The movement the begin threshold took (excluded from `translation()`). */
@@ -136,6 +146,8 @@ export class PanGestureRecognizer extends GestureRecognizer {
   /** Translation since touch-down, before `setTranslation` offsets. */
   private raw: Point = ZERO;
   private offset: Point = ZERO;
+  /** How a `firstMoveDecides` pan read the touch's first move, once it moved. */
+  private firstMove: 'begin' | 'fail' | 'wait' | null = null;
 
   constructor(options: PanGestureRecognizerOptions = {}) {
     super(options);
@@ -150,6 +162,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.axisRatio = options.axisRatio ?? 1;
     this.lockAxis = options.lockAxis ?? false;
     this.scrollEdge = options.scrollEdge ?? false;
+    this.firstMoveDecides = options.firstMoveDecides ?? false;
     this.tracker = new VelocityTracker();
   }
 
@@ -277,6 +290,17 @@ export class PanGestureRecognizer extends GestureRecognizer {
   ): void {
     this.track(event.time);
     if (this.state === 'possible') {
+      if (
+        this.firstMoveDecides &&
+        this.firstMove == null &&
+        (this.raw.x !== 0 || this.raw.y !== 0)
+      ) {
+        this.firstMove = this.classify(this.raw);
+        if (this.firstMove !== 'begin') {
+          this.setState('failed');
+          return;
+        }
+      }
       this.tryBegin();
     } else if (isActive(this.state)) {
       this.setState('changed');
@@ -314,6 +338,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.raw = ZERO;
     this.offset = ZERO;
     this.releaseTime = undefined;
+    this.firstMove = null;
     this.tracker.reset();
   }
 
@@ -409,7 +434,7 @@ export class PanGestureRecognizer extends GestureRecognizer {
   protected override keepsTouch(touchId: number): boolean {
     const touch = this.touches.get(touchId);
     if (
-      !this.scrollEdge ||
+      (!this.scrollEdge && !this.firstMoveDecides) ||
       this.state !== 'possible' ||
       // A lone finger only: two fingers before a claim are the page's pinch
       // (spec:AST-094 FR10).
@@ -419,6 +444,10 @@ export class PanGestureRecognizer extends GestureRecognizer {
       touch.takenByBrowser
     ) {
       return false;
+    }
+    if (this.firstMoveDecides) {
+      // A first move its own way holds the finger until the pan begins.
+      return this.firstMove === 'begin';
     }
     const moved = this.raw;
     return (
