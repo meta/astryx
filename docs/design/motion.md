@@ -89,7 +89,8 @@ hover.
   owner sets its own default values. A timer-driven surface (a tooltip, a hover
   card, a hover-opened menu or flyout) exposes them as `delay` and `hideDelay`,
   in milliseconds, and a caller shortens or removes them only for a stated use
-  case. A container reveal keeps its timing in CSS with no public option.
+  case. A container reveal keeps its timing in CSS; a caller opts into its
+  entry delay with `hoverDelay`, and its exit fade has no option.
 
 Inventory of hover-to-display surfaces and their defaults:
 
@@ -101,8 +102,8 @@ Inventory of hover-to-display surfaces and their defaults:
 | `TopNavMegaMenu`                                | on, `delay`                               | on, `hideDelay`                         | yes                                                  |
 | `DropdownMenu` submenu                          | on, no option                             | on, no option                           | partial: no `delay` or `hideDelay` option            |
 | `SideNavItem` collapsed flyout                  | on, no option                             | on, no option                           | partial: no `delay` or `hideDelay` option            |
-| `TopNavHeading` menu                            | none on a first open                      | on, no option                           | no: first open has no entry delay (gap, FR5)         |
-| `SideNavHeading` collapsed flyout               | none on a first open                      | on, no option                           | no: first open has no entry delay (gap, FR5)         |
+| `TopNavHeading` menu                            | none on a first open, no option           | on, no option                           | no: first open has no entry delay (gap, FR5)         |
+| `SideNavHeading` menu                           | none on a first open, no option           | on, no option                           | no: first open has no entry delay (gap, FR5)         |
 | `Slider` value tooltip                          | none (`delay` set to zero)                | on                                      | no: zero delay with no recorded reason               |
 | `Overlay` with `showOn="hover"`                 | none, no option                           | exit fade, instant under reduced motion | no: no entry delay                                   |
 | Container reveal (`Thumbnail`, `TreeList` rows) | opt-in                                    | exit fade, instant under reduced motion | partial: entry delay opt-in                          |
@@ -160,8 +161,9 @@ eager rendering and updates, and an exit guard so the content does not flicker
 out. The delay exists to prevent users brushing the interface from causing janky
 rerenders while they move their pointer; it is input handling, not motion
 taste. Keyboard focus reveals immediately and coarse pointers are not gated.
-Defaults are on; a caller opts out only for a stated use case. Hover surfaces
-expose the wait as `delay` and the exit guard as `hideDelay` (milliseconds), as
+Defaults are on; a caller opts out only for a stated use case. Timer-driven
+hover surfaces (tooltips, hover cards, hover-opened menus and flyouts) expose
+the wait as `delay` and the exit guard as `hideDelay` (milliseconds), as
 Tooltip, HoverCard and TopNavMenu already do. Within a group of triggers, a
 pointer moving from one open trigger to the next shows the next at once
 (`architecture:interaction-modality` INV11). Removing a
