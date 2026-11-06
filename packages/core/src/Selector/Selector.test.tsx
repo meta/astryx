@@ -5556,6 +5556,26 @@ describe('Selector with hasSearch: the closed trigger names the selection', () =
     ).toBeInTheDocument();
   });
 
+  it('keeps a caller aria-labelledby ahead of a caller aria-label, as the combobox shape does', () => {
+    render(
+      <>
+        <span id="lunch">Lunch</span>
+        <Selector
+          label="Team"
+          aria-label="Pick a team"
+          aria-labelledby="lunch"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          hasSearch
+        />
+      </>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Team Lunch Banana'}),
+    ).toBeInTheDocument();
+  });
+
   it('keeps the combobox shape named by its label, with the value as its value', () => {
     render(
       <Selector

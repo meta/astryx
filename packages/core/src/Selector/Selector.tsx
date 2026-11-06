@@ -2002,10 +2002,11 @@ export function Selector<T extends SelectorOptionType>(
   // A screen reader announces no value for a button. So the searchable
   // trigger's name holds the value text after the label. A standalone label
   // needs an id for this reference. A caller aria-label stays the name's first
-  // part: the trigger refers to itself.
+  // part: the trigger refers to itself. A caller aria-labelledby outranks it,
+  // as it does on the combobox shape.
   const callerAriaLabel = (rest as {'aria-label'?: string})['aria-label'];
   const triggerNameLabelId =
-    callerAriaLabel != null
+    callerAriaLabel != null && ariaLabelledByProp == null
       ? triggerId
       : (triggerLabelledBy ?? (inputGroup ? undefined : fieldLabelId));
   const isValueInTriggerName =

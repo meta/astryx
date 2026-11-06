@@ -213,7 +213,7 @@ These requirements describe shipped behavior on current `main`.
   value. With `hasSearch`, the editable trigger is a button, and the search
   input owns the combobox. The closed trigger's accessible name is its label
   followed by the selected value's text. With nothing selected, that text is
-  the placeholder. A caller `aria-label` takes the label's place in that name.
+  the placeholder. A caller `aria-label` takes the label's place in that name, and a caller `aria-labelledby` outranks it, as on the combobox shape.
 - **AR2 — Focus follows the active interaction model.** The anchored presentation
   keeps the combobox relationship at the trigger/search control. The modal touch
   presentation moves focus into its search control or listbox. On close, focus
