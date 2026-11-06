@@ -184,11 +184,11 @@ function layoutViewportHeight(): number {
   return typeof window === 'undefined' ? 0 : window.innerHeight;
 }
 
-// The layout viewport's height, as the `resize` listener last read it. A
-// render reads this value, never `innerHeight`. After a commit's DOM writes,
-// a read of `innerHeight` forces a style recalculation and a layout. Open
-// sheets share one listener. With no sheet open, the value is null, because
-// nothing keeps it current.
+// The layout viewport's height, as the `resize` listener last read it. While
+// the listener runs, a render reads this value, never `innerHeight`. After a
+// commit's DOM writes, a read of `innerHeight` forces a style recalculation
+// and a layout. Open sheets share one listener. With no sheet open, the value
+// is null, because nothing keeps it current.
 let viewportHeight: number | null = null;
 const viewportHeightListeners = new Set<() => void>();
 let stopViewportResize: (() => void) | null = null;
@@ -205,12 +205,10 @@ function subscribeToViewportHeight(onChange: () => void): () => void {
   if (stopViewportResize == null) {
     stopViewportResize = subscribeInput(window, 'resize', handleViewportResize);
     // A resize between the first render and this listener has no event left
-    // to deliver, so read the height once more.
-    const height = layoutViewportHeight();
-    if (height !== viewportHeight) {
-      viewportHeight = height;
-      onChange();
-    }
+    // to deliver. So read the height now, and let React compare it with the
+    // height it rendered.
+    viewportHeight = layoutViewportHeight();
+    onChange();
   }
   return () => {
     viewportHeightListeners.delete(onChange);
@@ -223,7 +221,10 @@ function subscribeToViewportHeight(onChange: () => void): () => void {
 }
 
 function readViewportHeight(): number {
-  // The first render reads the viewport: no listener keeps the height yet.
+  // Without a listener, nothing keeps a stored height current.
+  if (stopViewportResize == null) {
+    return layoutViewportHeight();
+  }
   viewportHeight ??= layoutViewportHeight();
   return viewportHeight;
 }

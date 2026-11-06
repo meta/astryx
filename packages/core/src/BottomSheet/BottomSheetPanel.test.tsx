@@ -10,7 +10,7 @@
 
 import * as stylex from '@stylexjs/stylex';
 import {act, fireEvent, render, screen} from '@testing-library/react';
-import {useLayoutEffect} from 'react';
+import {Suspense, use, useLayoutEffect} from 'react';
 import {renderToString} from 'react-dom/server';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
@@ -427,6 +427,66 @@ describe('BottomSheetPanel', () => {
       expect(firstReserve).toBe('280px');
     } finally {
       listeners.restore();
+      window.innerHeight = viewportHeight;
+    }
+  });
+
+  it('reads the viewport again after a render that never commits', async () => {
+    const viewportHeight = window.innerHeight;
+    stubTouchPointer();
+    const never = new Promise<never>(() => {});
+    function Suspend(): null {
+      use(never);
+      return null;
+    }
+    try {
+      window.innerHeight = 900;
+      const suspended = await act(async () =>
+        render(
+          <Suspense fallback={null}>
+            <BottomSheetPanel
+              label="Hidden sheet"
+              state={{kind: 'open', entering: false}}
+              height="hug"
+              style={panelTransitionStyle}
+              onDismiss={() => {}}
+              onScrimOpacity={() => {}}>
+              Hidden sheet content
+            </BottomSheetPanel>
+            <Suspend />
+          </Suspense>,
+        ),
+      );
+      expect(screen.queryByText('Hidden sheet content')).toBeNull();
+      suspended.unmount();
+      // No listener watched the viewport since that render.
+      window.innerHeight = 650;
+      let firstReserve = '';
+      function FirstCommit() {
+        useLayoutEffect(() => {
+          firstReserve =
+            getNamedPanel('Next sheet').style.getPropertyValue(
+              '--_sheet-reserve',
+            );
+        }, []);
+        return null;
+      }
+      render(
+        <>
+          <BottomSheetPanel
+            label="Next sheet"
+            state={{kind: 'open', entering: false}}
+            height="hug"
+            style={panelTransitionStyle}
+            onDismiss={() => {}}
+            onScrimOpacity={() => {}}>
+            Next sheet content
+          </BottomSheetPanel>
+          <FirstCommit />
+        </>,
+      );
+      expect(firstReserve).toBe('260px');
+    } finally {
       window.innerHeight = viewportHeight;
     }
   });
