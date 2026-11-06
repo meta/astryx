@@ -16,12 +16,16 @@
  */
 
 import {use} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 export type SelectorRowLayout = 'stacked' | 'inline';
 
 export const SelectorRowLayoutContext =
-  createContext<SelectorRowLayout>('stacked');
+  createLayerScopedContext<SelectorRowLayout>(
+    'SelectorRowLayoutContext',
+    1,
+    'stacked',
+  );
 SelectorRowLayoutContext.displayName = 'SelectorRowLayoutContext';
 
 /**

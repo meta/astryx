@@ -16,8 +16,8 @@
  * - /packages/cli/assets/templates/blocks/components/Collapsible/ (showcase blocks)
  */
 
-import {createContext} from 'react';
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * Context value provided by CollapsibleGroup to coordinate collapsible children.
@@ -34,7 +34,11 @@ export interface CollapsibleGroupContextValue {
  * When present, collapsible components defer their open/close state to the group.
  */
 export const CollapsibleGroupContext =
-  createContext<CollapsibleGroupContextValue | null>(null);
+  createSharedContext<CollapsibleGroupContextValue | null>(
+    'CollapsibleGroupContext',
+    1,
+    null,
+  );
 CollapsibleGroupContext.displayName = 'CollapsibleGroupContext';
 
 /**
@@ -79,6 +83,10 @@ export interface CollapsibleGroupPresentationValue {
  * children so nested collapsibles never inherit row chrome.
  */
 export const CollapsibleGroupPresentationContext =
-  createLayerScopedContext<CollapsibleGroupPresentationValue | null>(null);
+  createLayerScopedContext<CollapsibleGroupPresentationValue | null>(
+    'CollapsibleGroupPresentationContext',
+    1,
+    null,
+  );
 CollapsibleGroupPresentationContext.displayName =
   'CollapsibleGroupPresentationContext';

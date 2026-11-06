@@ -14,7 +14,7 @@
  */
 
 import {use, useMemo, type ReactNode} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 export type ListDensity = 'compact' | 'balanced' | 'spacious';
 export type ListMarkerStyle = 'none' | 'disc' | 'decimal' | 'circle';
@@ -65,7 +65,11 @@ export interface ListContextValue {
   hasMarkerGutter?: boolean;
 }
 
-export const ListContext = createContext<ListContextValue | null>(null);
+export const ListContext = createLayerScopedContext<ListContextValue | null>(
+  'ListContext',
+  1,
+  null,
+);
 ListContext.displayName = 'ListContext';
 
 /**

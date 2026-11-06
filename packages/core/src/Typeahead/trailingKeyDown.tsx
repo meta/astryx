@@ -13,12 +13,17 @@
  *   navigation, selection, or token editing (family:input-fields FR10).
  */
 
-import {createContext, use, type KeyboardEvent} from 'react';
+import {use, type KeyboardEvent} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 export type TrailingKeyDown =
   ((event: KeyboardEvent<HTMLInputElement>) => void) | undefined;
 
-export const TrailingKeyDownContext = createContext<TrailingKeyDown>(undefined);
+export const TrailingKeyDownContext = createSharedContext<TrailingKeyDown>(
+  'TrailingKeyDownContext',
+  1,
+  undefined,
+);
 TrailingKeyDownContext.displayName = 'TrailingKeyDownContext';
 
 /** The consumer key handler BaseTypeahead runs after its own, if any. */

@@ -10,10 +10,14 @@
  */
 
 import {use} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 import type {IconSize} from './IconSize.stylex';
 
-const IconDefaultSizeContext = createContext<IconSize | null>(null);
+const IconDefaultSizeContext = createLayerScopedContext<IconSize | null>(
+  'IconDefaultSizeContext',
+  1,
+  null,
+);
 IconDefaultSizeContext.displayName = 'IconDefaultSizeContext';
 
 export const IconDefaultSizeProvider = IconDefaultSizeContext.Provider;

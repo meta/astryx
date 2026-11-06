@@ -4,7 +4,7 @@
 
 /**
  * @file ItemDescriptionContext.tsx
- * @input Uses React createContext
+ * @input Uses createSharedContext
  * @output Exports ItemDescriptionContext
  * @position Internal seam between Item and a control it renders in a slot
  *
@@ -23,7 +23,11 @@
  * `aria-describedby`.
  */
 
-import {createContext} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
-export const ItemDescriptionContext = createContext<string | null>(null);
+export const ItemDescriptionContext = createSharedContext<string | null>(
+  'ItemDescriptionContext',
+  1,
+  null,
+);
 ItemDescriptionContext.displayName = 'ItemDescriptionContext';

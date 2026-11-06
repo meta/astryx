@@ -14,7 +14,12 @@
  * marker and does not inherit the formatting request.
  */
 
-import {createContext, type ReactNode} from 'react';
+import type {ReactNode} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
-export const ItemMarkerColumnsContext = createContext<ReactNode>(null);
+export const ItemMarkerColumnsContext = createSharedContext<ReactNode>(
+  'ItemMarkerColumnsContext',
+  1,
+  null,
+);
 ItemMarkerColumnsContext.displayName = 'ItemMarkerColumnsContext';

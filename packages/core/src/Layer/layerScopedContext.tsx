@@ -9,16 +9,38 @@
  * @position AST-038 surface membership; unrelated contexts retain their owners
  */
 
-import {createContext, useState, type Context, type ReactNode} from 'react';
+import {useState, type Context, type ReactNode} from 'react';
+import {
+  createSharedContext,
+  realmValue,
+  sharedKey,
+} from '../utils/sharedContext';
 
 type Reset = (children: ReactNode) => ReactNode;
-const resets: Reset[] = [];
+/**
+ * Every layer-scoped context by its key, from every copy of Core, so a layer
+ * boundary resets a swizzled copy's contexts as well as the package's.
+ */
+const resets = realmValue(
+  sharedKey('layer-scoped-context-resets', 1),
+  () => new Map<Context<unknown>, Reset>(),
+);
 
-/** Create a surface-scoped context whose whole default applies in a new layer. */
-export function createLayerScopedContext<T>(defaultValue: T): Context<T> {
-  const Context = createContext(defaultValue);
-  Context.displayName = 'LayerScopedContext';
-  resets.push(children => <Context value={defaultValue}>{children}</Context>);
+/**
+ * Create a surface-scoped context whose whole default applies in a new layer.
+ * The name and version register it like `createSharedContext`.
+ */
+export function createLayerScopedContext<T>(
+  name: string,
+  version: number,
+  defaultValue: T,
+): Context<T> {
+  const Context = createSharedContext(name, version, defaultValue);
+  if (!resets.has(Context as Context<unknown>)) {
+    resets.set(Context as Context<unknown>, children => (
+      <Context value={defaultValue}>{children}</Context>
+    ));
+  }
   return Context;
 }
 
@@ -29,7 +51,7 @@ export function LayerContentBoundary({
 }): ReactNode {
   // Keep the provider chain stable for this mount: lazy imports must not
   // remount existing content and discard its state or focus.
-  const [resetChain] = useState(() => resets.slice());
+  const [resetChain] = useState(() => [...resets.values()]);
   return resetChain.reduceRight(
     (content, reset): ReactNode => reset(content),
     children,

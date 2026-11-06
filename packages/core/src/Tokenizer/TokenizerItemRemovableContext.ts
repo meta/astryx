@@ -15,10 +15,10 @@
  *   while a removable token remains. Without it, every token is removable.
  */
 
-import {createContext} from 'react';
 import type {SearchableItem} from '../Typeahead/types';
+import {createSharedContext} from '../utils/sharedContext';
 
-export const TokenizerItemRemovableContext = createContext<
+export const TokenizerItemRemovableContext = createSharedContext<
   ((item: SearchableItem) => boolean) | null
->(null);
+>('TokenizerItemRemovableContext', 1, null);
 TokenizerItemRemovableContext.displayName = 'TokenizerItemRemovableContext';

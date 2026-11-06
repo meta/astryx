@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/Table/ (showcase blocks)
  */
 
-import {createContext, use, useMemo, type ReactElement, type Ref} from 'react';
+import {use, useMemo, type ReactElement, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import {BaseTable} from './BaseTable';
@@ -38,6 +38,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Table/Table.generated';
+import {createSharedContext} from '../utils/sharedContext';
 
 registerEnglishFallback(english);
 
@@ -146,10 +147,10 @@ const scrollWrapperStyles = stylex.create({
  * Internal to Table: the scroll wrapper is not given it as a prop, so it adds
  * nothing to the public table types.
  */
-const TableNameContext = createContext<{
+const TableNameContext = createSharedContext<{
   label?: string;
   labelledBy?: string;
-} | null>(null);
+} | null>('TableNameContext', 1, null);
 TableNameContext.displayName = 'TableNameContext';
 
 function TableScrollWrapper({

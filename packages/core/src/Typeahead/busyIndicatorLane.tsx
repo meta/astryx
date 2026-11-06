@@ -9,7 +9,8 @@
  * @position Package-internal; not exported from the package entry point
  */
 
-import {createContext, use, useSyncExternalStore} from 'react';
+import {use, useSyncExternalStore} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 /**
  * How the base hands its busy state to a wrapper that owns the inline-end lane.
@@ -92,7 +93,11 @@ export function useIsBusy(lane: BusyIndicatorLane): boolean {
   return useSyncExternalStore(lane.subscribe, lane.getIsBusy, lane.getIsBusy);
 }
 
-const BusyIndicatorLaneContext = createContext<BusyIndicatorLane | null>(null);
+const BusyIndicatorLaneContext = createSharedContext<BusyIndicatorLane | null>(
+  'BusyIndicatorLaneContext',
+  1,
+  null,
+);
 BusyIndicatorLaneContext.displayName = 'BusyIndicatorLaneContext';
 
 export const BusyIndicatorLaneProvider = BusyIndicatorLaneContext.Provider;

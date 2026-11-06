@@ -12,7 +12,7 @@
  *   rendered inside the SideNav, registers itself (`component:SideNav` AR3).
  */
 
-import {createContext} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 export interface SideNavFocusTargets {
   /**
@@ -25,5 +25,9 @@ export interface SideNavFocusTargets {
 }
 
 export const SideNavFocusTargetsContext =
-  createContext<SideNavFocusTargets | null>(null);
+  createSharedContext<SideNavFocusTargets | null>(
+    'SideNavFocusTargetsContext',
+    1,
+    null,
+  );
 SideNavFocusTargetsContext.displayName = 'SideNavFocusTargetsContext';

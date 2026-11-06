@@ -14,7 +14,7 @@
  * - /packages/core/src/FormLayout/index.ts (exports if types change)
  */
 
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 /**
  * Direction of form field arrangement.
@@ -44,8 +44,8 @@ export type FormOptionality = 'optional' | 'required';
  * for spatial arrangement, and `defaultOptionality` so a field can suppress the
  * indicator that merely restates the form-wide default.
  */
-export const FormLayoutContext = createContext<{
+export const FormLayoutContext = createLayerScopedContext<{
   direction: FormLayoutDirection;
   defaultOptionality?: FormOptionality;
-}>({direction: 'vertical'});
+}>('FormLayoutContext', 1, {direction: 'vertical'});
 FormLayoutContext.displayName = 'FormLayoutContext';

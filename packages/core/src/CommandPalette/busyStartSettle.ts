@@ -16,11 +16,15 @@
  * module boundary.
  */
 
-import {createContext} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
 /** Registers the input's settle function, or `null` when the input goes away. */
 export type RegisterBusyStartSettle = (settle: (() => void) | null) => void;
 
 export const BusyStartSettleContext =
-  createContext<RegisterBusyStartSettle | null>(null);
+  createSharedContext<RegisterBusyStartSettle | null>(
+    'BusyStartSettleContext',
+    1,
+    null,
+  );
 BusyStartSettleContext.displayName = 'BusyStartSettleContext';

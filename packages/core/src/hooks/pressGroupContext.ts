@@ -26,5 +26,9 @@ export {pressGroupItemProps} from '../privateAttributes/pressGroupItem.stylex';
  * `:active` paint, so one press never lights two.
  */
 export const PressGroupContext =
-  createLayerScopedContext<ReadonlyArray<string> | null>(null);
+  createLayerScopedContext<ReadonlyArray<string> | null>(
+    'PressGroupContext',
+    1,
+    null,
+  );
 PressGroupContext.displayName = 'PressGroupContext';

@@ -9,7 +9,7 @@
  */
 
 import {use} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 import type {AvatarShape, AvatarSize} from '../Avatar';
 
 export interface AvatarGroupContextValue {
@@ -19,9 +19,12 @@ export interface AvatarGroupContextValue {
   numericSize: number;
 }
 
-export const AvatarGroupContext = createContext<AvatarGroupContextValue | null>(
-  null,
-);
+export const AvatarGroupContext =
+  createLayerScopedContext<AvatarGroupContextValue | null>(
+    'AvatarGroupContext',
+    1,
+    null,
+  );
 AvatarGroupContext.displayName = 'AvatarGroupContext';
 
 export function useAvatarGroup(): AvatarGroupContextValue | null {

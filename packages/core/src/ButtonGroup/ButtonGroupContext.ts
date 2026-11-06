@@ -10,7 +10,7 @@
  */
 
 import {use} from 'react';
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
 export type ButtonGroupOrientation = 'horizontal' | 'vertical';
 
@@ -19,9 +19,12 @@ export interface ButtonGroupContextValue {
   isDisabled: boolean;
 }
 
-export const ButtonGroupContext = createContext<ButtonGroupContextValue | null>(
-  null,
-);
+export const ButtonGroupContext =
+  createLayerScopedContext<ButtonGroupContextValue | null>(
+    'ButtonGroupContext',
+    1,
+    null,
+  );
 ButtonGroupContext.displayName = 'ButtonGroupContext';
 
 /**

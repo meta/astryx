@@ -9,7 +9,11 @@
  * @position Internal group state; not re-exported by index.ts
  */
 
-import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
+import {createLayerScopedContext} from '../Layer/layerScopedContext';
 
-export const InputGroupInternalContext = createContext({isDisabled: false});
+export const InputGroupInternalContext = createLayerScopedContext(
+  'InputGroupInternalContext',
+  1,
+  {isDisabled: false},
+);
 InputGroupInternalContext.displayName = 'InputGroupInternalContext';

@@ -35,7 +35,6 @@
  */
 
 import {
-  createContext,
   use,
   useCallback,
   useId,
@@ -87,6 +86,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/SideNav/SideNavItem.generated';
 import {isRenderable} from '../utils/isRenderable';
+import {createSharedContext} from '../utils/sharedContext';
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -299,7 +299,11 @@ const indentStyles = stylex.create({
  * 1 inside one parent, and so on. A collapsed rail's flyout resets it to 0,
  * since the flyout lists a parent's children as its own top level.
  */
-const SideNavItemDepthContext = createContext(0);
+const SideNavItemDepthContext = createSharedContext(
+  'SideNavItemDepthContext',
+  1,
+  0,
+);
 SideNavItemDepthContext.displayName = 'SideNavItemDepthContext';
 
 /**

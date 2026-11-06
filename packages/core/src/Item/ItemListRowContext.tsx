@@ -4,7 +4,7 @@
 
 /**
  * @file ItemListRowContext.tsx
- * @input Uses React createContext
+ * @input Uses createSharedContext
  * @output Exports ItemListRowContext
  * @position Internal seam between ListItem and the Item it renders. Under a
  *   coarse primary pointer a List row's whole touch target follows its link,
@@ -12,7 +12,11 @@
  *   content, and a standalone Item has none.
  */
 
-import {createContext} from 'react';
+import {createSharedContext} from '../utils/sharedContext';
 
-export const ItemListRowContext = createContext(false);
+export const ItemListRowContext = createSharedContext(
+  'ItemListRowContext',
+  1,
+  false,
+);
 ItemListRowContext.displayName = 'ItemListRowContext';

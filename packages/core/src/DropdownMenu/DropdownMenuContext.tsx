@@ -14,8 +14,9 @@
  * items don't need to register themselves.
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
 import {createLayerScopedContext} from '../Layer/layerScopedContext';
+import {createSharedContext} from '../utils/sharedContext';
 
 /** Menu size, derived from the trigger button size. */
 export type DropdownMenuSize = 'sm' | 'md' | 'lg';
@@ -100,7 +101,11 @@ export interface DropdownMenuSurfaceValue {
  * off the public menu context, and layer-scoped, so each flyout re-provides it.
  */
 export const DropdownMenuSurfaceContext =
-  createLayerScopedContext<DropdownMenuSurfaceValue | null>(null);
+  createLayerScopedContext<DropdownMenuSurfaceValue | null>(
+    'DropdownMenuSurfaceContext',
+    1,
+    null,
+  );
 DropdownMenuSurfaceContext.displayName = 'DropdownMenuSurfaceContext';
 
 /**
@@ -115,7 +120,7 @@ DropdownMenuSurfaceContext.displayName = 'DropdownMenuSurfaceContext';
  */
 export const DropdownMenuRootOpenContext = createLayerScopedContext<
   boolean | null
->(null);
+>('DropdownMenuRootOpenContext', 1, null);
 DropdownMenuRootOpenContext.displayName = 'DropdownMenuRootOpenContext';
 
 /**
@@ -128,7 +133,11 @@ export function useDropdownMenuRootOpen(): boolean {
 }
 
 export const DropdownMenuContext =
-  createLayerScopedContext<DropdownMenuContextValue | null>(null);
+  createLayerScopedContext<DropdownMenuContextValue | null>(
+    'DropdownMenuContext',
+    1,
+    null,
+  );
 DropdownMenuContext.displayName = 'DropdownMenuContext';
 
 /**
@@ -153,7 +162,11 @@ export interface DropdownMenuRadioGroupContextValue {
 }
 
 export const DropdownMenuRadioGroupContext =
-  createContext<DropdownMenuRadioGroupContextValue | null>(null);
+  createSharedContext<DropdownMenuRadioGroupContextValue | null>(
+    'DropdownMenuRadioGroupContext',
+    1,
+    null,
+  );
 DropdownMenuRadioGroupContext.displayName = 'DropdownMenuRadioGroupContext';
 
 /**
