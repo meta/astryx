@@ -150,8 +150,20 @@ const styles = stylex.create({
       ':active:where(:not(:disabled,[aria-disabled="true"]))': {
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
+        // Under reduced motion a press never scales the button. The overlay
+        // alone shows the press.
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
       },
-      [PRESSED_ON]: 'scale(0.98)',
+      [PRESSED_ON]: {
+        default: 'scale(0.98)',
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
+      },
     },
   },
   // A tracked action's own `:active` image paints nothing: the tracker paints
@@ -163,7 +175,13 @@ const styles = stylex.create({
   pressableTracked: {
     transform: {
       default: 'scale(1)',
-      [PRESSED_ON]: 'scale(0.98)',
+      [PRESSED_ON]: {
+        default: 'scale(0.98)',
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'scale(1)',
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          'scale(1)',
+      },
     },
   },
   inactive: {
