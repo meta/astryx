@@ -399,6 +399,11 @@ describe('the interaction proof legs in ci.yml', () => {
         // Every spec file in the merge commit, recorded or not.
         'git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"',
         '--listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope',
+        // The changed files, except for the release check, which plans every
+        // spec already.
+        'CHANGED=(--changed "${CHANGED_FILES:-}")',
+        'if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then CHANGED=(); fi',
+        '"${CHANGED[@]}"',
       ])
         expect(count.run).toContain(part);
     });
@@ -619,6 +624,18 @@ describe('the interaction proof legs in ci.yml', () => {
           'packages/core/src/List/ListRow.tsx',
         ]),
       ).toEqual({count: '2', runs: 'true', leg: '2'});
+    });
+
+    it('splits the whole suite for the release check even without a changed-file list', () => {
+      // With every spec planned, a missing list must not make each leg run
+      // the whole suite on its own.
+      const times = {
+        'packages/core/src/Button/__tests__/Button.interaction.browser.spec.ts': 700,
+      };
+      for (const leg of [1, 2])
+        expect(
+          countFor(leg, times, null, [], {env: {WEBKIT_ALL_SPECS: 'true'}}),
+        ).toEqual({count: '2', runs: 'true', leg: String(leg)});
     });
 
     it('runs every proof in a leg that has no changed-file list, as a leg of its own', () => {

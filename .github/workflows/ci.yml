@@ -2791,13 +2791,17 @@ jobs:
           CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
         run: |
           if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then SPEC_PATHS=(packages/ internal/); else read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"; fi
+          # With every spec planned, the changed files add nothing. Leave them
+          # out, so a missing list cannot make each leg run the whole suite.
+          CHANGED=(--changed "${CHANGED_FILES:-}")
+          if [ "${WEBKIT_ALL_SPECS:-}" = true ]; then CHANGED=(); fi
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
             --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
             --tests-out "$RUNNER_TEMP/interaction-legs/tests.json" \
             --key interaction-webkit --fallback-key interaction-chromium \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
-            --changed "${CHANGED_FILES:-}" \
+            "${CHANGED[@]}" \
             --setup-seconds 90 --max-seconds 600 \
             --leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }} \
             -- "${SPEC_PATHS[@]}"
