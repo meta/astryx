@@ -787,6 +787,23 @@ describe('render(): every write stays inside the current folder', () => {
     expect(back.data.files).toContain(comesBack);
   }, 60_000);
 
+  it('gives back a folder an exact key names under the target it was sent from', async () => {
+    const paths = {compilerOptions: {baseUrl: '.', paths: {'@cfg': ['./lib/a/settings', './lib/b/settings']}}};
+    put('exactdir/tsconfig.json', JSON.stringify(paths));
+    put('exactdir/package.json', '{"name":"exactdir","private":true}');
+    put('exactdir/lib/b/settings/index.ts', "export const setting = 'from-b';\n");
+    put('exactdir/page.tsx', "import {setting} from '@cfg';\nexport default function Page() { return <p>{setting}</p>; }\n");
+    await render('exactdir/page.tsx', {cwd: dir});
+    expect(fs.readFileSync(path.join(dir, 'exactdir/page.html'), 'utf8')).toContain('from-b');
+    fs.mkdirSync(path.join(dir, 'exactdir-to'), {recursive: true});
+    put('exactdir-to/tsconfig.json', JSON.stringify(paths));
+    put('exactdir-to/package.json', '{"name":"exactdir-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'exactdir/page.html'), path.join(dir, 'exactdir-to/page.html'));
+    const back = /** @type {any} */ (await render('page.html', {cwd: path.join(dir, 'exactdir-to'), reverse: true, out: 'lib/zz/page.tsx'}));
+    expect(back.data.files).toContain('lib/b/settings/index.ts');
+    expect(back.data.files).not.toContain('lib/a/settings/index.ts');
+  }, 60_000);
+
   it('gives back a nested aliased module under the target it was sent from', async () => {
     const paths = {compilerOptions: {baseUrl: '.', paths: {'@/*': ['./lib/missing/*', './lib/src/*']}}};
     put('nested/tsconfig.json', JSON.stringify(paths));
