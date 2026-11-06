@@ -299,6 +299,23 @@ describe("a LayoutPanel's pane slides on collapse and open (component:Resizable 
     fireEvent.pointerUp(grabZone(), {pointerId: 1, clientX: 320});
   });
 
+  it('reads no layout while a drag moves inside the limits', () => {
+    render(<PropsSplit />);
+    // The role query reads computed styles, so it runs before the spies.
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    const widths = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get');
+    const styles = vi.spyOn(window, 'getComputedStyle');
+    for (const clientX of [290, 280, 270, 260]) {
+      fireEvent.pointerMove(zone, {pointerId: 1, clientX});
+    }
+    expect(widths).not.toHaveBeenCalled();
+    expect(styles).not.toHaveBeenCalled();
+    widths.mockRestore();
+    styles.mockRestore();
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 260});
+  });
+
   it('plays nothing for the first render or a resize that neither collapses nor opens', () => {
     render(<PropsSplit config={{defaultIsCollapsed: true}} />);
     act(() => {
