@@ -69,6 +69,7 @@ import {
 import {TopNavRenderContext} from '../TopNav/TopNavRenderContext';
 import {TopNavMobileContentContext} from '../TopNav/TopNavMobileContentContext';
 import {AppShellMobileContext} from './AppShellMobileContext';
+import {AppShellNestingContext, useAppShellMainId} from './useAppShellMainId';
 import type {AppShellMobileContextValue} from './AppShellMobileContext';
 import type {SpacingStep} from '../utils/types';
 import type {BaseProps} from '../BaseProps';
@@ -78,6 +79,7 @@ import {
   focusOutlineStyles,
 } from '../utils/focusOutline.stylex';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {matchesMediaQuery} from '../utils/coarsePointer';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {themeProps} from '../utils/themeProps';
 import {useThemeDefinition} from '../theme/useTheme';
@@ -111,8 +113,6 @@ const ActivityWrapper = HasActivity
 // =============================================================================
 // Constants
 // =============================================================================
-
-const MAIN_CONTENT_ID = 'astryx-app-shell-main';
 
 /**
  * Extra time, on top of MobileNav's own worst-case close delay, that
@@ -654,8 +654,10 @@ export function AppShell({
     if (!HasActivity || isMobileNavOpen) {
       return;
     }
-    const delayMs = window.matchMedia('(prefers-reduced-motion: reduce)')
-      .matches
+    const delayMs = matchesMediaQuery(
+      window,
+      '(prefers-reduced-motion: reduce)',
+    )
       ? 0
       : MOBILE_NAV_MAX_CLOSE_DELAY_MS + ACTIVITY_HIDE_BUFFER_MS;
     const timeout = setTimeout(() => {
@@ -680,12 +682,13 @@ export function AppShell({
     [mobileNavIsControlled, mobileNavOnOpenChange],
   );
 
+  const mainContentId = useAppShellMainId();
   // Move focus to the main content container when the skip link is activated.
   // Hash navigation alone doesn't reliably move focus in every browser, so
   // focus the target explicitly (it's focusable via tabIndex={-1}).
   const handleSkipLinkClick = useCallback(() => {
-    document.getElementById(MAIN_CONTENT_ID)?.focus();
-  }, []);
+    document.getElementById(mainContentId)?.focus();
+  }, [mainContentId]);
 
   // Main draws its focus ring only for focus a Tab press moved onto it, and
   // keeps it for as long as that focus stays, even once the content fits.
@@ -987,10 +990,10 @@ export function AppShell({
           return;
         }
         const motion = layoutMotionFor(main);
-        // Only a spring glides the column; under Reduce Motion the two wraps
+        // Only a glide moves the column; under Reduce Motion the two wraps
         // cross-fade over a steady surface (`design:reduced-motion` DR2).
         let change: LayoutChange | null = null;
-        if (motion.kind === 'spring') {
+        if (motion.kind === 'glide') {
           change = reportLayoutChange(contentLayout, railRef);
           change.measureBefore();
         }
@@ -1000,7 +1003,7 @@ export function AppShell({
         let held = 1;
         let entering = 0;
         const last = lastSwapRef.current;
-        if (last != null && motion.kind === 'spring') {
+        if (last != null && motion.kind === 'glide') {
           // Read at the change's own start, where the glide it retargets
           // carries on. After a block, that is later than the frame the
           // timeline still reads.
@@ -1047,7 +1050,7 @@ export function AppShell({
         const surface = backdropRef.current ?? main;
         const color = getComputedStyle(surface).backgroundColor;
         const isPainted = !/^rgba\(.*,\s*0\)$|^transparent$/.test(color);
-        const glides = layoutMotionFor(main).kind === 'spring';
+        const glides = layoutMotionFor(main).kind === 'glide';
         if ((isRtl ? travel > 0 : travel < 0) && glides && isPainted) {
           cover.push({
             element: surface,
@@ -1215,7 +1218,7 @@ export function AppShell({
       ref={mainRefs}
       padding={contentPadding ?? 0}
       role="main"
-      id={MAIN_CONTENT_ID}
+      id={mainContentId}
       // Focusable skip-link target (WCAG 2.4.1) — without tabIndex, several
       // browsers won't move focus to the div when the skip link is activated.
       // A keyboard stop only while it scrolls overflowing content.
@@ -1232,7 +1235,7 @@ export function AppShell({
           : styles.mainFocusTarget,
         styles.mainSafeAreaEnd,
       ]}>
-      {children}
+      <AppShellNestingContext value={true}>{children}</AppShellNestingContext>
     </LayoutContent>
   );
 
@@ -1334,7 +1337,7 @@ export function AppShell({
             <LayoutDividerContext value={null}>
               {/* Skip-to-content link */}
               <a
-                href={`#${MAIN_CONTENT_ID}`}
+                href={`#${mainContentId}`}
                 onClick={handleSkipLinkClick}
                 {...focusOutlineProps.focusVisible(styles.skipLink)}
                 data-testid="skip-to-content">

@@ -94,6 +94,13 @@ describe('architecture:react-component-runtime INV12 source boundary', () => {
     expect(body).toMatch(
       /sibling != null && take\(sibling, false\);\s*sibling = sibling\.previousElementSibling/,
     );
+    // One more descent: a block edge's reveal reads the changed element's own
+    // children, and stops at the first one past the band.
+    expect(body.match(/\.firstChild\b/g) ?? []).toHaveLength(1);
+    expect(body).toMatch(
+      /for \(let node = element\.firstChild; node != null; node = node\.nextSibling\)/,
+    );
+    expect(body).toMatch(/if \(box\.top > band\.end\) \{\s*break;/);
   });
 
   it('keeps the reporting functions out of every public entry point', () => {
@@ -127,14 +134,17 @@ describe('architecture:react-component-runtime INV12 source boundary', () => {
     }
   });
 
-  it("keeps the swap's copy mechanism private to the module", () => {
+  it("keeps the copy mechanism to the swap and the layer's exit copy", () => {
     const users = sourceFiles(coreSrc)
       .filter(path =>
         /from '[./]+(motion\/)?transientCopy'/.test(readFileSync(path, 'utf8')),
       )
       .map(path => relative(coreSrc, path))
       .sort();
-    expect(users).toEqual(['motion/animatedLayout.ts']);
+    expect(users).toEqual([
+      'Layer/layerExitCopy.ts',
+      'motion/animatedLayout.ts',
+    ]);
   });
 
   it('is used only by the hook and the components that adopt it', () => {

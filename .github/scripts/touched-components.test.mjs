@@ -223,6 +223,27 @@ describe('wide changes', () => {
     expect(decideWideChange(owners(1), behaviour).wideChange).toBe(false);
   });
 
+  it('never counts a test, story, doc or note in a foundation folder as a shared style', () => {
+    const notStyles = [
+      'packages/core/src/theme/derivedVarRegistry.test.ts',
+      'packages/core/src/theme/__tests__/themingTargets.test.ts',
+      'packages/themes/neutral/src/__tests__/neutralTheme.test.ts',
+      'packages/themes/neutral/src/neutralTheme.stories.tsx',
+      'packages/core/src/theme/theme.doc.mjs',
+      'packages/themes/neutral/README.md',
+      'packages/core/src/Layer/__tests__/layer.stylex.test.ts',
+    ];
+    expect(foundationChanges(notStyles)).toEqual([]);
+    expect(decideWideChange(owners(2), notStyles).wideChange).toBe(false);
+    // A real foundation beside them still makes the change wide.
+    expect(
+      decideWideChange(owners(2), [
+        ...notStyles,
+        'packages/core/src/theme/tokens.stylex.ts',
+      ]).wideChange,
+    ).toBe(true);
+  });
+
   it('writes a skipped visual verdict for a wide change, carrying the run identity', () => {
     const verdict = wideVisualVerdict(
       {componentCount: 7},
@@ -674,7 +695,7 @@ describe('pr-component-a11y-contracts routing', () => {
     "Run the touched components' accessibility contracts",
   );
   const ran =
-    "steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'";
+    "steps.touched.outputs.contract_owners != '' || steps.specs.outputs.has_specs == 'true'";
 
   it('starts after the Storybook build, beside the test owners, never after pr-visual or the touched check', () => {
     expect(contracts.needs).toEqual([
@@ -725,7 +746,7 @@ describe('pr-component-a11y-contracts routing', () => {
     );
     for (const candidate of contracts.steps.slice(skipIndex + 1)) {
       expect(candidate.if, candidate.name).toMatch(
-        /steps\.scope\.outputs\.applies == 'true'|steps\.touched\.outputs\.has_components == 'true'|steps\.contracts\.outcome/,
+        /steps\.scope\.outputs\.applies == 'true'|steps\.touched\.outputs\.contract_owners != ''|steps\.contracts\.outcome/,
       );
     }
   });
@@ -807,16 +828,20 @@ describe('pr-component-a11y-contracts routing', () => {
       'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
     );
     expect(runStep.run).toContain(
-      'node "$runner" --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS"',
+      'node "$runner" --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS" --dependents-of "$FOLDERS"',
     );
     // Every changed path, not only the changed specs: a change in a
     // component folder owns that folder's specs.
     expect(runStep.env.FILES_PATH).toBe(
       '${{ steps.scope.outputs.changed_files_path }}',
     );
-    // A wide change has no owned specs.
+    // A wide change still runs the touched components' own specs, then the
+    // specs of the folders that render them (FR12).
     expect(runStep.env.OWNERS).toBe(
-      "${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners || '' }}",
+      '${{ steps.touched.outputs.contract_owners }}',
+    );
+    expect(runStep.env.FOLDERS).toBe(
+      '${{ steps.touched.outputs.contract_folders }}',
     );
     expect(runStep.env.A11Y_CONTRACT_WORKERS).toBe(4);
     expect(runStep.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
@@ -937,6 +962,62 @@ describe('the audit of changed stories no other audit covers', () => {
       expect(
         run(['packages/core/src/Layout/LayoutContent.tsx']).changed_stories,
       ).toBe('false');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it("gives the contract job the touched components and folders, wide change or not (#7910's shape)", async () => {
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const {execFileSync} = await import('node:child_process');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'touched-contracts-'));
+    try {
+      const owners = [
+        'core/FieldStatus',
+        'core/Spinner',
+        'core/Tokenizer',
+        'core/Typeahead',
+        'core/CheckboxList',
+        'lab/EmojiPicker',
+        'lab/Schedule',
+      ];
+      fs.writeFileSync(
+        path.join(dir, 'files.txt'),
+        'packages/core/src/Spinner/Spinner.tsx\n',
+      );
+      fs.writeFileSync(
+        path.join(dir, 'analysis.json'),
+        JSON.stringify({modifiedComponentOwners: owners}),
+      );
+      const out = path.join(dir, 'out.txt');
+      fs.writeFileSync(out, '');
+      execFileSync(
+        'node',
+        [
+          new URL('./touched-components.mjs', import.meta.url).pathname,
+          'scope',
+          '--analysis',
+          path.join(dir, 'analysis.json'),
+          '--files',
+          path.join(dir, 'files.txt'),
+          '--out',
+          path.join(dir, 'touched.json'),
+        ],
+        {env: {...process.env, GITHUB_OUTPUT: out, GITHUB_STEP_SUMMARY: ''}},
+      );
+      const outputs = Object.fromEntries(
+        fs
+          .readFileSync(out, 'utf8')
+          .split('\n')
+          .filter(Boolean)
+          .map(line => line.split('=')),
+      );
+      expect(outputs.wide_change).toBe('true');
+      expect(outputs.has_components).toBe('false');
+      expect(outputs.contract_owners.split(',')).toEqual([...owners].sort());
+      expect(outputs.contract_folders.split(',')).toContain('core/Spinner');
+      expect(outputs.contract_folders.split(',')).toContain('lab/Schedule');
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }

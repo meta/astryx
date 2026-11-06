@@ -700,7 +700,8 @@ function docFinderOver(catalog, tree, fromProvider, summaries = true) {
         entry &&
         !entry.tree &&
         (providerOf(entry) === provider ||
-          catalog.aliasesOf(entry).includes(parsed.name.toLowerCase()))
+          catalog.aliasesOf(entry).includes(parsed.name.toLowerCase()) ||
+          entry.replaces?.toLowerCase() === parsed.name.toLowerCase())
       ) {
         let title = entry.title ?? entry.name;
         let summary = entry.description ?? '';

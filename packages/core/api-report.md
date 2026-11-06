@@ -234,10 +234,12 @@ component BreadcrumbMenuRadioItem(props: DropdownMenuRadioItemProps)
 component BreadcrumbMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -337,7 +339,7 @@ component Carousel(props: CarouselProps)
   prop hasButtons?: boolean = true
   prop hasEdgeFade?: boolean = true
   prop hasLoop?: boolean = false
-  prop hasSnap?: boolean = false
+  prop hasSnap?: boolean | SnapPaging = false
   prop padding?: SpacingStep = undefined (no padding)
   prop ref?: React.Ref<HTMLDivElement>
   prop xstyle?: StyleXStyles
@@ -641,6 +643,7 @@ component CodeBlock(props: CodeBlockProps)
   prop language?: string | CodeLanguage = 'plaintext'
   prop maxHeight?: number | string
   prop onCopy?: () => void
+  prop onCopyError?: (error: unknown) => void
   prop ref?: React.Ref<HTMLPreElement>
   prop size?: 'sm' | 'md'
   prop startLineNumber?: number = 1
@@ -850,10 +853,12 @@ component ContextMenuRadioItem(props: DropdownMenuRadioItemProps)
 component ContextMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -1113,10 +1118,12 @@ component DropdownMenuRadioItem(props: DropdownMenuRadioItemProps)
 component DropdownMenuSubMenu(props: DropdownMenuSubMenuProps)
   prop children: ReactNode
   prop data-testid?: string
+  prop delay?: number = 150
   prop description?: ReactNode
   prop footer?: ReactNode
   prop hasSpinner?: boolean = false
   prop header?: ReactNode
+  prop hideDelay?: number = 200
   prop icon?: ReactNode | IconType
   prop isDisabled?: boolean = false
   prop label: ReactNode
@@ -2558,6 +2565,7 @@ component Timestamp(props: TimestampProps)
   prop isTimezoneShown?: boolean = false
   prop ref?: React.Ref<HTMLTimeElement>
   prop size?: TextSize
+  prop timezoneID?: string
   prop tooltipEntries?: ReadonlyArray<TimestampTooltipEntry> = undefined — a single default row with the full absolute time in the viewer's own time zone
   prop type?: TextType = 'supporting'
   prop value: string | number
@@ -2892,6 +2900,7 @@ hook useCommandPaletteContext: () => CommandPaletteContextValue | null
 hook useContainerReveal: (options?: UseContainerRevealOptions) => UseContainerRevealReturn
 hook useDevWarning: (component: string, message: string, condition?: boolean) => void
 hook useDirection: () => 'ltr' | 'rtl'
+hook useDragToSnapPoints: (ref: RefObject<HTMLElement | null>, options: DragToSnapPointsOptions) => UseDragToSnapPointsResult
 hook useDropdownMenuContext: () => DropdownMenuContextValue | null
 hook useEntryAnimation: (preset?: EntryAnimationPreset) => StyleXStyles | null
 hook useFocusTrap: <T extends HTMLElement = HTMLElement>(options: UseFocusTrapOptions) => UseFocusTrapReturn<T>
@@ -2945,6 +2954,7 @@ hook useSelectedItemOffset: ({…}: UseSelectedItemOffsetOptions) => UseSelected
 hook useSideNavCollapse: () => SideNavCollapseState
 hook useSideNavRenderMode: () => SideNavRenderMode
 hook useSize: <T extends string = ElementSize>(sizeProp?: T, defaultSize?: T) => T
+hook useSnapPaging: (options?: SnapPagingOptions) => SnapPaging
 hook useSpeechRecognition: (options?: UseSpeechRecognitionOptions) => UseSpeechRecognitionReturn
 hook useStepperContext: () => StepperContextValue
 hook useStreamingText: (targetText: string, isStreaming: boolean, options?: UseStreamingTextOptions) => string
@@ -2994,6 +3004,7 @@ function composeEventHandlers: <E extends SyntheticEvent>(...handlers: (((event:
 function container: ({…}: ContainerOptions) => readonly [Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly paddingInlineStart: stylex.StyleXClassNameFor<"paddingIn … #72b9b91f
 function createAnimator: (element: HTMLElement) => Animator
 function createCodeLanguage: ({…}: CreateCodeLanguageOptions) => CodeLanguage
+function createDragToSnapPoints: (element: HTMLElement, options: DragToSnapPointsOptions) => DragToSnapPoints
 function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
 function createPanGesture: (element: Element, options: PanGestureOptions) => PanGesture
@@ -3724,10 +3735,12 @@ interface BreadcrumbMenuSection
 interface BreadcrumbMenuSubMenuProps extends DropdownMenuSubMenuBaseProps
   children: ReactNode
   data-testid?: string
+  delay?: number = 150
   description?: ReactNode
   footer?: ReactNode
   hasSpinner?: boolean = false
   header?: ReactNode
+  hideDelay?: number = 200
   icon?: ReactNode | IconType
   isDisabled?: boolean = false
   label: ReactNode
@@ -4068,10 +4081,12 @@ type ContextMenuSection = DropdownMenuSection
 interface ContextMenuSubMenuProps extends DropdownMenuSubMenuBaseProps
   children: ReactNode
   data-testid?: string
+  delay?: number = 150
   description?: ReactNode
   footer?: ReactNode
   hasSpinner?: boolean = false
   header?: ReactNode
+  hideDelay?: number = 200
   icon?: ReactNode | IconType
   isDisabled?: boolean = false
   label: ReactNode
@@ -4212,6 +4227,14 @@ interface DividerVariantMap
   strong: true
   subtle: true
 type DomainTokenName = SyntaxTokenName | DataTokenName
+interface DragToSnapPoints
+  destroy: () => void
+  settleTo: (index: number) => void
+interface DragToSnapPointsOptions
+  axis: 'x' | 'y'
+  flickThreshold?: number
+  onSettle: (index: number) => void
+  snapPoints: ReadonlyArray<number>
 interface DrawerHeaderProps extends BaseProps<HTMLDivElement> (props of DrawerHeader)
 interface DrawerProps extends BaseProps<HTMLDialogElement> (props of Drawer)
 type DropdownMenuButtonProps = Omit<ButtonProps, 'onClick'>
@@ -5292,6 +5315,10 @@ interface SliderSingleProps extends SliderBaseProps
   valueDisplay?: 'tooltip' | 'text' | 'none' = "tooltip"
   width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface SnapPaging
+  [snapPagingBrand]: true
+interface SnapPagingOptions
+  pages?: 'view' | 'item' = 'view'
 type SourceRange
   end: number
   start: number
@@ -5915,6 +5942,8 @@ interface UseContainerRevealOptions
 interface UseContainerRevealReturn
   getContainerProps: (options?: ContainerRevealOptions) => { className?: string; style?: CSSProperties }
   getContentRevealProps: (options?: ContentRevealOptions) => { className?: string; style?: CSSProperties }
+interface UseDragToSnapPointsResult
+  settleTo: (index: number) => void
 interface UseFocusTrapOptions
   isActive: boolean
   onEscape?: () => void
@@ -8517,6 +8546,16 @@ SliderRangeProps (.)
 SliderSingleProps (.)
 ```
 
+## `./SnapPaging`
+
+### Also exported from an earlier entry point
+
+```text
+SnapPaging (.)
+SnapPagingOptions (.)
+useSnapPaging (.)
+```
+
 ## `./Spinner`
 
 ### Also exported from an earlier entry point
@@ -9096,6 +9135,8 @@ AnnouncePoliteness (.)
 ClickableContainerResult (.)
 ContainerRevealOptions (.)
 ContentRevealOptions (.)
+DragToSnapPoints (.)
+DragToSnapPointsOptions (.)
 EntryAnimationPreset (.)
 Hotkey (.)
 INTERACTIVE_SELECTORS (.)
@@ -9130,6 +9171,7 @@ UseClipboardOptions (.)
 UseClipboardReturn (.)
 UseContainerRevealOptions (.)
 UseContainerRevealReturn (.)
+UseDragToSnapPointsResult (.)
 UseFocusTrapOptions (.)
 UseFocusTrapReturn (.)
 UseGridFocusOptions (.)
@@ -9168,6 +9210,7 @@ useClickableContainer (.)
 useClipboard (.)
 useContainerReveal (.)
 useDevWarning (.)
+useDragToSnapPoints (.)
 useEntryAnimation (.)
 useFocusTrap (.)
 useGridFocus (.)

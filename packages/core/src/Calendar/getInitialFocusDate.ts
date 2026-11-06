@@ -35,8 +35,11 @@ export interface InitialFocusDateOptions {
   max?: ISODateString;
   /** How many month panes the calendar renders (1 or 2). */
   numberOfMonths: number;
-  /** Today, injected so the caller keeps a single memoized source of "now". */
-  today: PlainDate;
+  /**
+   * Today, injected so the caller keeps one source of "now"; `null` when it is
+   * not known yet (server render, hydration).
+   */
+  today: PlainDate | null;
   /** The calendar system whose months the panes show. Default: `gregory`. */
   calendar?: CalendarSystem;
 }
@@ -48,7 +51,8 @@ export interface InitialFocusDateOptions {
  * consumer's own instruction about where to look, so neither is second-guessed
  * against `min`/`max`.
  *
- * Otherwise the calendar opens on today, clamped into the `min`/`max` window.
+ * Otherwise the calendar opens on today, clamped into the `min`/`max` window,
+ * or returns `null` while today is not known yet.
  * Without the clamp a window that doesn't contain today (a 2019 audit range, a
  * booking window opening next spring) opened on today's month with every day
  * disabled, leaving prev/next clicking as the only way in.
@@ -61,7 +65,7 @@ export interface InitialFocusDateOptions {
  */
 export function getInitialFocusDate(
   options: InitialFocusDateOptions,
-): PlainDate {
+): PlainDate | null {
   const {
     focusDate,
     value,
@@ -78,6 +82,12 @@ export function getInitialFocusDate(
 
   if (value) {
     return plainDateFromISO(typeof value === 'string' ? value : value.start);
+  }
+
+  // Without a focus date or a value the month follows today, which is not
+  // known yet on the server and while hydrating.
+  if (today == null) {
+    return null;
   }
 
   const minDate = min ? plainDateFromISO(min) : null;

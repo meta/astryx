@@ -933,14 +933,16 @@ function validateReleaseMergeBack({
   }
 
   for (const [file, digest] of planned) {
-    if (baseChangesets.get(file) !== digest)
-      errors.push(
-        `release merge-back cannot verify frozen Changeset on current main: ${file}`,
-      );
-    if (headChangesets.has(file))
-      errors.push(
-        `release merge-back did not delete frozen Changeset: ${file}`,
-      );
+    const baseDigest = baseChangesets.get(file);
+    const headDigest = headChangesets.get(file);
+    if (baseDigest === digest) {
+      if (headDigest !== undefined)
+        errors.push(
+          `release merge-back did not delete frozen Changeset: ${file}`,
+        );
+    } else if (headDigest !== baseDigest) {
+      errors.push(`release merge-back changed post-cut Changeset: ${file}`);
+    }
   }
   for (const [file, digest] of baseChangesets) {
     if (planned.has(file)) continue;
