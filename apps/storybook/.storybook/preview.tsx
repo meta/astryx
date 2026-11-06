@@ -175,11 +175,27 @@ const preview: Preview = {
         dynamicTitle: true,
       },
     },
+    // NOT FOR LANDING: the List divider try-it's toggle. Only the try-it
+    // story reads it.
+    listDividers: {
+      description: 'List dividers around a highlighted row (try-it)',
+      toolbar: {
+        title: 'Dividers',
+        icon: 'grow',
+        items: [
+          {value: 'a', title: 'A: hide both around the tint'},
+          {value: 'b', title: 'B: keep every divider'},
+          {value: 'main', title: 'Main today'},
+        ],
+        dynamicTitle: true,
+      },
+    },
   },
   initialGlobals: {
     astryxTheme: 'neutral',
     colorMode: 'light',
     direction: 'ltr',
+    listDividers: 'a',
   },
   decorators: [withTheme, withRtlAuditMetadata],
 };

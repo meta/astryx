@@ -3,7 +3,8 @@
 /**
  * @file List.stories.tsx
  * @input List, ListItem, and Storybook args
- * @output List examples, including row edge treatments and long number markers
+ * @output List examples, including row edge treatments and long number markers.
+ *   NOT FOR LANDING: a try-it story for the dividers around a highlighted row.
  * @position Storybook demonstrations for List consumers
  */
 
@@ -760,5 +761,128 @@ export const HeaderInFlexParent: Story = {
           'The header should appear above the list, not beside it.',
       },
     },
+  },
+};
+
+// NOT FOR LANDING: the try-it's two divider treatments, keyed on the story's
+// wrapper. A row is tinted on hover and on a mouse press, and on a touch press
+// under a coarse pointer, as Item paints it. (A) hides the divider under the
+// tinted row and the one above it, as UITableView hides a highlighted cell's
+// separators. Under a finger the press layer then also covers where the row's
+// divider was. (B) keeps both dividers. The divider above gets the same tint
+// under it, so it reads over the tint as the row's own divider does. Under a
+// finger the row's own divider needs that too, since the press layer stops at
+// the row's border.
+const TINTED_HOVER = 'li:not([aria-disabled="true"]):hover';
+const TINTED_ACTIVE = 'li:not([aria-disabled="true"]):active';
+const TINTED_TOUCH = 'li[data-astryx-press]';
+const TRY_IT_A = '[data-tryit-dividers="a"]';
+const TRY_IT_B = '[data-tryit-dividers="b"]';
+const strip = (tint: string) => `
+    background-image: linear-gradient(${tint}, ${tint}) !important;
+    background-origin: border-box !important;
+    background-position: bottom !important;
+    background-repeat: no-repeat !important;
+    background-size: 100% var(--border-width, 1px) !important;`;
+const HOVER_TINT = 'var(--color-overlay-hover)';
+const PRESSED_TINT = 'var(--color-overlay-pressed)';
+const TRY_IT_DIVIDER_CSS = `
+@media (hover: hover) {
+  ${TRY_IT_A} ${TINTED_HOVER},
+  ${TRY_IT_A} li:has(+ ${TINTED_HOVER}),
+  ${TRY_IT_A} ${TINTED_ACTIVE},
+  ${TRY_IT_A} li:has(+ ${TINTED_ACTIVE}) {
+    border-block-end-color: transparent !important;
+  }
+  ${TRY_IT_B} li:has(+ ${TINTED_HOVER}) {${strip(HOVER_TINT)}
+  }
+  ${TRY_IT_B} li:has(+ ${TINTED_ACTIVE}) {${strip(PRESSED_TINT)}
+  }
+}
+@media not (pointer: coarse) {
+  ${TRY_IT_A} ${TINTED_ACTIVE},
+  ${TRY_IT_A} li:has(+ ${TINTED_ACTIVE}) {
+    border-block-end-color: transparent !important;
+  }
+  ${TRY_IT_B} li:has(+ ${TINTED_ACTIVE}) {${strip(PRESSED_TINT)}
+  }
+}
+@media (pointer: coarse) {
+  ${TRY_IT_A} ${TINTED_TOUCH},
+  ${TRY_IT_A} li:has(+ ${TINTED_TOUCH}) {
+    border-block-end-color: transparent !important;
+  }
+  ${TRY_IT_A} ${TINTED_TOUCH}::before {
+    inset-block-end: calc(-1 * var(--border-width, 1px)) !important;
+  }
+  ${TRY_IT_B} ${TINTED_TOUCH},
+  ${TRY_IT_B} li:has(+ ${TINTED_TOUCH}) {${strip(PRESSED_TINT)}
+  }
+}
+`;
+
+const TRY_IT_CAPTION: Record<string, string> = {
+  a: 'A: the dividers above and below a highlighted row hide.',
+  b: 'B: every divider stays visible next to the tint.',
+  main: 'Main today: the divider above a highlighted row merges into its tint.',
+};
+
+/**
+ * NOT FOR LANDING. Hover, press or touch a row. The Dividers toolbar item
+ * switches between the two treatments and main.
+ */
+export const DividersAroundHighlightedRow: Story = {
+  name: 'Dividers around a highlighted row (try-it)',
+  tags: ['!autodocs', 'no-visual'],
+  render: function DividersAroundHighlightedRowStory(args, {globals}) {
+    const mode =
+      typeof globals.listDividers === 'string' ? globals.listDividers : 'a';
+    return (
+      <div data-tryit-dividers={mode}>
+        <style>{TRY_IT_DIVIDER_CSS}</style>
+        <VStack gap={2}>
+          <Text type="supporting">
+            {TRY_IT_CAPTION[mode] ?? TRY_IT_CAPTION.a}
+          </Text>
+          <List hasDividers header={<strong>Settings</strong>} {...args}>
+            <ListItem
+              label="Notifications"
+              description="Alerts, sounds and badges"
+              startContent={<Icon icon={BellIcon} />}
+              endContent={<Icon icon={ChevronRightIcon} />}
+              onClick={() => {}}
+            />
+            <ListItem
+              label="Privacy"
+              description="Who can see your activity"
+              startContent={<Icon icon={ShieldCheckIcon} />}
+              endContent={<Icon icon={ChevronRightIcon} />}
+              onClick={() => {}}
+            />
+            <ListItem
+              label="Inbox"
+              description="Filters and folders"
+              startContent={<Icon icon={InboxIcon} />}
+              endContent={<Icon icon={ChevronRightIcon} />}
+              onClick={() => {}}
+            />
+            <ListItem
+              label="Sent"
+              description="Messages you sent"
+              startContent={<Icon icon={PaperAirplaneIcon} />}
+              endContent={<Icon icon={ChevronRightIcon} />}
+              onClick={() => {}}
+            />
+            <ListItem
+              label="General"
+              description="Language and region"
+              startContent={<Icon icon={Cog6ToothIcon} />}
+              endContent={<Icon icon={ChevronRightIcon} />}
+              onClick={() => {}}
+            />
+          </List>
+        </VStack>
+      </div>
+    );
   },
 };
