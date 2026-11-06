@@ -332,12 +332,23 @@ describe('effectFindings', () => {
           '    return input;',
           '  }, [input]);',
           '}',
+          'function useCount(reducer, arg) {',
+          '  rendersRef.current += 1;',
+          '  ++passesRef.current;',
+          '  return useReducer(reducer, arg, init => {',
+          '    seedRef.current = init;',
+          '    return init;',
+          '  });',
+          '}',
         ].join('\n'),
       ),
     ).toEqual([
       [2, '`labelRef.current` is written during render', 'advisory'],
       [7, '`previousRef.current` is written during render', 'advisory'],
       [12, '`cacheRef.current` is written during render', 'advisory'],
+      [17, '`rendersRef.current` is written during render', 'advisory'],
+      [18, '`passesRef.current` is written during render', 'advisory'],
+      [20, '`seedRef.current` is written during render', 'advisory'],
     ]);
   });
 
@@ -350,13 +361,18 @@ describe('effectFindings', () => {
           '    storeRef.current = createStore();',
           '  }',
           '  if (!cacheRef.current) cacheRef.current = new Map();',
+          '  idsRef.current ??= new Set();',
+          '  namesRef.current ||= [];',
+          '  if (countRef.current >= 1 && countRef.current <= 9) count();',
           '  if (storeRef.current === null) {',
           '    otherRef.current = createStore();',
           '  }',
           '}',
         ].join('\n'),
       ),
-    ).toEqual([[7, '`otherRef.current` is written during render', 'advisory']]);
+    ).toEqual([
+      [10, '`otherRef.current` is written during render', 'advisory'],
+    ]);
   });
 
   it('accepts a ref write in a handler, a callback ref, or outside a component', () => {

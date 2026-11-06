@@ -252,10 +252,18 @@ export function copiesIntoState(body) {
   );
 }
 
-const REF_WRITE = /(?<![\w$.])((?:[\w$]+\.)*[\w$]+)\.current\s*=(?![=>])/g;
+const REF = String.raw`(?<![\w$.])((?:[\w$]+\.)*[\w$]+)\.current\b`;
+// `??=` and `||=` set an empty ref only, so they are lazy initialization.
+const REF_WRITES = [
+  new RegExp(
+    String.raw`${REF}\s*(?:(?:[-+*/%&|^]|\*\*|<<|>>>?|&&)?=(?![=>])|\+\+|--)`,
+    'g',
+  ),
+  new RegExp(String.raw`(?:\+\+|--)\s*${REF}`, 'g'),
+];
 const CONTROL = /^(?:if|else|for|while|do|switch|try|catch|finally|with)\b/;
 const RUNS_IN_RENDER =
-  /\buse(?:Memo|State|Reducer)\s*(?:<[^>]*>)?\s*\(\s*(?:\([^()]*\)|[\w$]+)?\s*(?::[^=]+)?=>\s*$/;
+  /\buse(?:Memo|State|Reducer)\s*(?:<[^>]*>)?\s*\((?:[^()]*,)?\s*(?:\([^()]*\)|[\w$]+)?\s*(?::[^=]+)?=>\s*$/;
 
 function functionName(header) {
   return (
@@ -306,7 +314,7 @@ function guardsLazyInit(text, ref) {
 /**
  * The lines of `source` that write a ref's `current` during render: directly
  * in the body of a component or a hook (a function named `Name` or `useName`),
- * or in a `useMemo`, `useState` or `useReducer` initializer. A write in an
+ * or in an inline `useMemo`, `useState` or `useReducer` callback. A write in an
  * Effect, a handler or another nested function, and lazy initialization
  * (`if (ref.current == null) ref.current = …`), are not render writes. The scan
  * reads text. It recognizes strings, comments and template literals, and no
@@ -314,8 +322,10 @@ function guardsLazyInit(text, ref) {
  */
 export function renderRefWrites(source) {
   const writes = new Map();
-  for (const match of source.matchAll(REF_WRITE)) {
-    writes.set(match.index, match[1]);
+  for (const pattern of REF_WRITES) {
+    for (const match of source.matchAll(pattern)) {
+      writes.set(match.index, match[1]);
+    }
   }
   const found = [];
   const blocks = [];
@@ -442,7 +452,7 @@ export function effectFindings(addedLines, readHead) {
         `Own the node through a ref, or keep only the minimal key that render needs (${RUNTIME} INV1).`,
       );
     }
-    if (/\.current\s*=(?![=>])/.test(text) && renderWritesOf(file).has(line)) {
+    if (/\.current\b/.test(text) && renderWritesOf(file).has(line)) {
       add(
         file,
         line,
