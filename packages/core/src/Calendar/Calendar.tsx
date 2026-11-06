@@ -509,9 +509,8 @@ export function Calendar({ref, ...props}: CalendarProps) {
           return;
         }
         const newPd = calendarAddMonths(calendar, baseMonth, delta).start;
-        if (onFocusDateChange) {
-          onFocusDateChange(plainDateToISO(newPd));
-        } else {
+        onFocusDateChange?.(plainDateToISO(newPd));
+        if (!isControlledFocus) {
           setInternalFocusDate(newPd);
         }
         return;
@@ -586,9 +585,8 @@ export function Calendar({ref, ...props}: CalendarProps) {
       const newPd = isBeforeShown
         ? targetMonth.start
         : calendarAddMonths(calendar, targetMonth, -(numberOfMonths - 1)).start;
-      if (onFocusDateChange) {
-        onFocusDateChange(plainDateToISO(newPd));
-      } else {
+      onFocusDateChange?.(plainDateToISO(newPd));
+      if (!isControlledFocus) {
         setInternalFocusDate(newPd);
       }
     },
@@ -597,6 +595,7 @@ export function Calendar({ref, ...props}: CalendarProps) {
       calendar,
       canNavigateNext,
       canNavigatePrevious,
+      isControlledFocus,
       isRootDateDisabled,
       lastVisibleMonth,
       maxDateForKeys,

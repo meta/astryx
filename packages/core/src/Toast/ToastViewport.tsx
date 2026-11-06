@@ -63,7 +63,13 @@ registerEnglishFallback(english);
 const SAFE_AREA_INLINE_START = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-left, 0px))`;
 const SAFE_AREA_INLINE_END = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-right, 0px))`;
 const SAFE_AREA_BLOCK_START = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-top, 0px))`;
-const SAFE_AREA_BLOCK_END = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-bottom, 0px))`;
+// On an iPhone, a downward swipe that starts in the bottom inset can pull the
+// whole screen down. Keep the toast clear of that inset.
+const SAFE_AREA_BLOCK_END = `calc(${spacingVars['--spacing-4']} + env(safe-area-inset-bottom, 0px))`;
+// Safari reports the inset only to a page with `viewport-fit=cover`. Under a
+// coarse pointer the gutter clears 34 px anyway: a Face ID iPhone's bottom
+// inset in portrait.
+const SAFE_AREA_BLOCK_END_TOUCH = `calc(${spacingVars['--spacing-4']} + max(env(safe-area-inset-bottom, 0px), 34px))`;
 const TOAST_EDGE_DRIFT = spacingVars['--spacing-2'];
 const TOAST_EDGE_DRIFT_NEGATIVE = `calc(-1 * ${TOAST_EDGE_DRIFT})`;
 
@@ -78,7 +84,10 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     flexDirection: 'column',
     paddingBlockStart: SAFE_AREA_BLOCK_START,
-    paddingBlockEnd: SAFE_AREA_BLOCK_END,
+    paddingBlockEnd: {
+      default: SAFE_AREA_BLOCK_END,
+      '@media (pointer: coarse)': SAFE_AREA_BLOCK_END_TOUCH,
+    },
     paddingInlineStart: {
       default: SAFE_AREA_INLINE_START,
       ':is([dir="rtl"] *)': SAFE_AREA_INLINE_END,
@@ -107,6 +116,13 @@ const styles = stylex.create({
     borderStyle: 'none',
     backgroundColor: 'transparent',
     overflow: 'visible',
+  },
+  // iOS Safari colors its toolbar from a fixed element at the bottom edge. A
+  // toast that a swipe sends through that edge gives the viewport its color.
+  // Safari keeps that color while the viewport has a box, so an empty
+  // viewport has none.
+  viewportEmpty: {
+    display: 'none',
   },
   // The viewport sits at the inset the app declared on LayerProvider for a
   // bar floating over that edge (spec:AST-059 FR6); unset, each reads 0px.
@@ -189,12 +205,6 @@ const styles = stylex.create({
   toastWrapperInnerSettled: {
     overflow: 'visible',
   },
-  // The card's starting style reads these. Once the entrance starts, a move
-  // renders the card at rest.
-  toastWrapperInnerEntered: {
-    '--_toast-start-opacity': 1,
-    '--_toast-start-slide': '0px',
-  },
 });
 
 export interface ToastViewportProps {
@@ -273,8 +283,8 @@ function ToastRow({
   const isAutoHide = o.isAutoHide ?? (type === 'error' ? false : true);
   const dur = o.autoHideDuration ?? 5000;
   const [isSettled, setIsSettled] = useState(false);
-  // Each move between modal outlets renders the row again. Its starting style
-  // must not apply then.
+  // Each move between modal outlets renders the row and its card again. Their
+  // starting styles must not apply then.
   const [hasEntryStarted, setHasEntryStarted] = useState(false);
   // React's transition run and cancel events have no propertyName field.
   const watchEntry = useCallback((row: HTMLDivElement | null) => {
@@ -335,7 +345,6 @@ function ToastRow({
         {...stylex.props(
           styles.toastWrapperInner,
           isSettled && !isExiting && styles.toastWrapperInnerSettled,
-          hasEntryStarted && styles.toastWrapperInnerEntered,
         )}>
         <ToastSurface
           type={type}
@@ -349,6 +358,7 @@ function ToastRow({
           renderContent={o.renderContent}
           timerKey={entry.id}
           isLiveRegion={isLiveRegion}
+          hasEntryStarted={hasEntryStarted}
         />
       </div>
     </div>
@@ -947,6 +957,7 @@ export function ToastViewport({
           styles.viewport,
           styles.viewportInlineSpan,
           posStyle,
+          !hasToasts && styles.viewportEmpty,
         ),
         {
           style: Object.keys(insetStyle).length > 0 ? insetStyle : undefined,

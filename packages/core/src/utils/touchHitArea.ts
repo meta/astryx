@@ -9,8 +9,9 @@
  * @output `useTouchHitArea`, a callback ref that keeps an element's hit insets
  *   live for its invisible layer (`touchHitAreaStyles.layer`)
  * @position Core-internal hook for the coarse-only 44 px target. List rows,
- *   InfoTip, CheckboxInput, RadioListItem and the press-tracking groups use
- *   it, and so can any control whose target outgrows its box under a finger.
+ *   InfoTip, CheckboxInput, RadioListItem, SegmentedControl segments and the
+ *   press-tracking groups use it, and so can any control whose target outgrows
+ *   its box under a finger.
  *
  * SYNC: When modified, update utils/touchHitArea.stylex.ts and
  * touchHitArea.test.tsx.
