@@ -505,11 +505,13 @@ export function $isImageSource(node: LexicalNode): boolean {
 
 /**
  * Returns `markdown` with every image outside code replaced by a private-use
- * stand-in, and the source each stand-in replaced. An image is found as core
- * Markdown reads it: a `!` that is not escaped, the paired brackets of its
- * text, and the destination and title that close it, read whole by core's
- * inline parser. A link around an image keeps its own brackets, so the image
- * stays inside the link's text.
+ * stand-in, and the source each stand-in replaced. An image starts with a `!`
+ * that is not escaped and the paired brackets of its text. An inline image
+ * (`![a](b)`) ends with the destination and title that close it, read whole
+ * by core's inline parser. A reference image (`![a][b]`, `![a][]`, `![a]`)
+ * ends with its label; its definition can sit in another block, so it is kept
+ * whether or not one exists. A link around an image keeps its own brackets,
+ * so the image stays inside the link's text.
  */
 export function protectImages(markdown: string): {
   readonly markdown: string;
@@ -522,37 +524,44 @@ export function protectImages(markdown: string): {
   const pair = pairedDelimiters(markdown, codeRanges(markdown));
   const found: Array<{readonly start: number; readonly end: number}> = [];
   for (
-    let index = markdown.indexOf('](');
-    index !== -1;
-    index = markdown.indexOf('](', index + 1)
+    let start = markdown.indexOf('![');
+    start !== -1;
+    start = markdown.indexOf('![', start + 1)
   ) {
-    const open = pair[index];
-    if (open < 1 || markdown[open - 1] !== '!') {
+    const open = start + 1;
+    const textClose = pair[open];
+    if (textClose === -1 || textClose < open) {
+      continue;
+    }
+    // An image inside another image's text belongs to the outer one.
+    if (found.length > 0 && start < found[found.length - 1].end) {
       continue;
     }
     let backslashes = 0;
-    while (markdown[open - 2 - backslashes] === '\\') {
+    while (markdown[start - 1 - backslashes] === '\\') {
       backslashes++;
     }
     if (backslashes % 2 === 1) {
       continue;
     }
-    const angleClose = angleDestinationEnd(markdown, index + 1);
-    const close = typeof angleClose === 'number' ? angleClose : pair[index + 1];
-    if (close === -1 || angleClose === 'refused') {
-      continue;
+    const after = markdown[textClose + 1];
+    if (after === '(') {
+      const angleClose = angleDestinationEnd(markdown, textClose + 1);
+      const close =
+        typeof angleClose === 'number' ? angleClose : pair[textClose + 1];
+      if (close === -1 || angleClose === 'refused') {
+        continue;
+      }
+      const [only, ...rest] = parseInlineAst(markdown.slice(start, close + 1));
+      if (rest.length > 0 || only?.type !== 'image') {
+        continue;
+      }
+      found.push({start, end: close + 1});
+    } else if (after === '[' && pair[textClose + 1] > textClose + 1) {
+      found.push({start, end: pair[textClose + 1] + 1});
+    } else {
+      found.push({start, end: textClose + 1});
     }
-    const start = open - 1;
-    const source = markdown.slice(start, close + 1);
-    const [only, ...rest] = parseInlineAst(source);
-    if (rest.length > 0 || only?.type !== 'image') {
-      continue;
-    }
-    // An image inside another image's text belongs to the outer one.
-    while (found.length > 0 && found[found.length - 1].start >= start) {
-      found.pop();
-    }
-    found.push({start, end: close + 1});
   }
   if (found.length === 0) {
     return {markdown, images};
@@ -575,7 +584,8 @@ export function protectImages(markdown: string): {
 /**
  * Puts each image's source back where its stand-in sits under `node`, as
  * text marked as an image's source. The text is a token: a person deletes it
- * whole and cannot type inside it, and autolinking leaves its URL alone.
+ * whole, and autolinking leaves its URL alone. ImageSourceCaretPlugin keeps
+ * the caret out of it, so typing never replaces it.
  */
 export function $restoreImages(
   node: ElementNode,
