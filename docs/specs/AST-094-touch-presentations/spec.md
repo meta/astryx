@@ -942,10 +942,11 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   MobileNav and DropdownMenu hold an entrance only under a coarse primary
   pointer: where the primary pointer is fine and the screen also takes touch
   (a touchscreen laptop), a finger's tap or drag during the entrance is not
-  held. After a
-  finger, the first press of a mouse that has not moved since lands on the
-  entering presentation's shield and does nothing, where FR35 keeps today's
-  behavior for a mouse (DEC-16); a move of the mouse lowers the shield first.
+  held. After a finger, the first press of a mouse that has not moved since
+  passes the entering presentation's shield where the page last heard the
+  mouse. A mouse that has sent no pointer event since the page loaded still
+  lands on the shield, and its press does nothing. A move of the mouse lowers
+  the shield first.
 - BottomSheet, Toast, Lightbox, NavigationStack and keyboard dismissal: a
   drag that commits follows FR36–FR40.
 - `spec:AST-100` owns release velocity, which FR17 reads.
