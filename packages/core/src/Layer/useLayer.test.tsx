@@ -3091,7 +3091,9 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     const width = vi.spyOn(document.documentElement, 'clientWidth', 'get');
     const height = vi.spyOn(document.documentElement, 'clientHeight', 'get');
     const triggerReads = () =>
-      spy.mock.contexts.filter(el => !el.hasAttribute('popover')).length;
+      spy.mock.contexts.filter(
+        el => !(el as HTMLElement).hasAttribute('popover'),
+      ).length;
     const readsBefore = triggerReads();
     width.mockClear();
     height.mockClear();
