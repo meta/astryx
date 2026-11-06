@@ -6,6 +6,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {VStack} from '@astryxdesign/core/Stack';
+import {Text} from '@astryxdesign/core/Text';
 
 const meta: Meta<typeof FieldLabel> = {
   title: 'Core/FieldLabel',
@@ -34,6 +35,7 @@ const groupStyle = {
 export const HiddenLabelInfo: Story = {
   render: () => (
     <VStack gap={6}>
+      <Text type="body">Directory</Text>
       <TextInput
         label="Search people"
         isLabelHidden
