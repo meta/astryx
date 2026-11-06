@@ -62,9 +62,10 @@ const editorTheme = stylex.create({
   // Lexical marks every top-level block `dir="auto"`, which picks each
   // block's direction from its first strong character: a Hebrew paragraph in
   // an English document flips to the right, an English one in an Arabic
-  // document to the left. Blocks take the direction of the surface around
-  // them instead, as core Markdown's do, and bidi inside a block still
-  // follows the Unicode algorithm (spec:AST-061 FR6).
+  // document to the left. Here blocks take the direction of the surface
+  // around them, and bidi inside a block still follows the Unicode
+  // algorithm. Core Markdown differs: it gives each block the direction of
+  // its own text.
   providerDirection: {
     direction: 'inherit',
   },

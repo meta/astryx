@@ -75,6 +75,7 @@ import type {
   MarkdownAstPhrasingContent,
   MarkdownAstPosition,
   MarkdownAstTable,
+  MarkdownAstTableAlignment,
 } from './ast';
 import {
   applyMarkdownTransforms,
@@ -382,6 +383,7 @@ const dynamicStyles = stylex.create({
 });
 
 const cellAlignStyles = stylex.create({
+  start: {textAlign: 'start'},
   center: {textAlign: 'center'},
   end: {textAlign: 'end'},
 });
@@ -433,6 +435,17 @@ const markdownTableCellStyles = stylex.create({
   // and lets the column carry the width instead.
   code: {
     wordBreak: 'normal',
+  },
+  // A cell that reads against its table draws the column rule on the table's
+  // inline-end side, which is the cell's own inline-start.
+  ruleOnTableEnd: {
+    borderInlineEndWidth: 0,
+    borderInlineStartWidth: {
+      default: borderVars['--border-width'],
+      ':last-child': '0',
+    },
+    borderInlineStartStyle: 'solid',
+    borderInlineStartColor: colorVars['--color-border'],
   },
   // The grid's outer edge. `dividers="grid"` draws the lines *between* cells
   // and stops at the table's rim, so without this the top, bottom, and sides
@@ -1350,6 +1363,24 @@ function computeTableColumnMinWidths(node: RenderTable): number[] {
   });
 }
 
+/**
+ * The alignment and column-rule styles for a Markdown table cell. For a cell
+ * that reads against its table, the table's start is the cell's end, so an
+ * explicit alignment and the rule swap logical sides.
+ */
+function tableCellSideStyles(
+  align: MarkdownAstTableAlignment | undefined,
+  isAgainstTable: boolean,
+): ReadonlyArray<StyleXStyles | false> {
+  return [
+    align === 'center' && cellAlignStyles.center,
+    align === 'right' &&
+      (isAgainstTable ? cellAlignStyles.start : cellAlignStyles.end),
+    align === 'left' && isAgainstTable && cellAlignStyles.end,
+    isAgainstTable && markdownTableCellStyles.ruleOnTableEnd,
+  ];
+}
+
 function renderBlock(
   node: RenderBlockNode,
   index: number,
@@ -1925,6 +1956,16 @@ function renderBlock(
                           : t('@astryx.markdown.taskList'),
                     };
 
+              const itemDirection = blockDirection(item, directionScope);
+              // A numbered item that reads against its list keeps its counter
+              // beside its own text, so its text never widens the counter
+              // column that the other rows share.
+              const readsAgainstList =
+                node.ordered &&
+                itemDirection != null &&
+                directionScope != null &&
+                itemDirection !== directionScope.around;
+
               return (
                 <ListMarkerScope
                   // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown list items are rendered from positional AST nodes
@@ -1935,10 +1976,11 @@ function renderBlock(
                     ]
                   }
                   task={task}
-                  hasMarkerGutter={node.ordered}>
+                  hasMarkerGutter={node.ordered && !readsAgainstList}
+                  isOutsideNumberColumns={readsAgainstList}>
                   <ListItem
                     label={label}
-                    dir={blockDirection(item, directionScope)}
+                    dir={itemDirection}
                     {...(recordsSourceLines
                       ? sourceLineAttributes(blockSourceLines(item))
                       : undefined)}
@@ -1952,6 +1994,19 @@ function renderBlock(
     }
     case 'table': {
       const colMinWidths = computeTableColumnMinWidths(node);
+      // A cell whose text reads against its table keeps the table's sides: the
+      // column rule and an explicit alignment resolve in the table's
+      // direction, not the cell's.
+      const readsAgainstTable = (
+        cell: Parameters<typeof blockDirection>[0],
+      ): boolean => {
+        const cellDirection = blockDirection(cell, directionScope);
+        return (
+          cellDirection != null &&
+          directionScope != null &&
+          cellDirection !== directionScope.around
+        );
+      };
       const [header, ...rows] = node.children;
       // Inline code inside a cell keeps its token whole, through the same
       // `components` seam consumers use. A supplied renderer owns its own
@@ -1998,8 +2053,10 @@ function renderBlock(
                     xstyle={[
                       markdownTableCellStyles.headerCell,
                       dynamicStyles.cellMinWidth(`${colMinWidths[i]}ch`),
-                      node.align[i] === 'center' && cellAlignStyles.center,
-                      node.align[i] === 'right' && cellAlignStyles.end,
+                      ...tableCellSideStyles(
+                        node.align[i],
+                        readsAgainstTable(h),
+                      ),
                     ]}>
                     {h.children.map((c, j) =>
                       renderInline(
@@ -2027,8 +2084,10 @@ function renderBlock(
                     dir={blockDirection(cell, directionScope)}
                     xstyle={[
                       markdownTableCellStyles.cell,
-                      node.align[j] === 'center' && cellAlignStyles.center,
-                      node.align[j] === 'right' && cellAlignStyles.end,
+                      ...tableCellSideStyles(
+                        node.align[j],
+                        readsAgainstTable(cell),
+                      ),
                     ]}>
                     {cell.children.map((c, k) =>
                       renderInline(

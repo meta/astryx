@@ -29,7 +29,6 @@ const SKIPPED_TYPES = new Set([
   'inlineMath',
   'table',
   'thematicBreak',
-  'html',
   'citation',
   'break',
   'extension',
