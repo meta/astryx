@@ -349,6 +349,32 @@ describe("a LayoutPanel's pane slides on collapse and open (component:Resizable 
     expect(propsRegion?.size).toBe(50);
   });
 
+  it('springs the drawn handle back by the next frame when a controlled owner keeps the pane open on a closing lift', async () => {
+    const keepsOpen = vi.fn();
+    // At its 50 px minimum already, so the lift restores no other size.
+    render(
+      <PropsSplit
+        config={{
+          defaultSize: 50,
+          isCollapsed: false,
+          onCollapseChange: keepsOpen,
+        }}
+      />,
+    );
+    const zone = grabZone();
+    fireEvent.pointerDown(zone, {pointerId: 1, clientX: 300});
+    // 190 px toward closed: past the minimum, where the handle bands, and
+    // under the collapse threshold.
+    fireEvent.pointerMove(zone, {pointerId: 1, clientX: 110});
+    const drawn = separator().style.translate;
+    expect(drawn).not.toBe('');
+    fireEvent.pointerUp(zone, {pointerId: 1, clientX: 110});
+    expect(keepsOpen).toHaveBeenCalledWith(true);
+    expect(propsRegion?.isCollapsed).toBe(false);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(separator().style.translate).not.toBe(drawn);
+  });
+
   it('keeps a held closing pane shut on a lift under the collapse threshold', () => {
     render(<PropsSplit />);
     const zone = grabZone();

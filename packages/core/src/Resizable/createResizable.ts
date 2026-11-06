@@ -186,7 +186,7 @@ function readWindowExtent(direction: ResizableDirection): number | null {
 /** Starts as warned: the factory warns, and this first-render read does not. */
 const QUIET = {current: true};
 
-/** How far a pull past a size bound can move a pane's edge, in px. */
+/** How far a pull past a size bound can move the handle, in px. */
 const RUBBER_BAND_TRAVEL_PX = 8;
 
 /**
@@ -410,8 +410,8 @@ export type ResizableWarningSource = 'createResizable' | 'useResizable';
 
 /** A slide a closing lift plays. */
 interface ClosingSlide {
-  /** The size laid out at the lift, where the slide starts. */
-  openSize: number;
+  /** The size the handle shows at the lift, where its slide starts. */
+  fromSize: number;
   /** When it started, on the page clock. */
   startedAt: number;
   /** The share still to go by ms since it started. */
@@ -471,13 +471,16 @@ export function createResizableAs(
   let pointerSize = 0;
   // The open size a drag started from, which a close on its lift keeps.
   let sizeBeforeDrag: number | null = null;
-  // Past a bound the pane's edge is drawn this far past it, with no layout
-  // change. It springs back to 0 after the lift.
+  // Past a bound the handle is drawn this far past it. The panes keep their
+  // sizes. It springs back to 0 after the lift.
   let overshoot = 0;
-  // A finger that catches the drawn edge holds it where it shows: inside this
-  // much overshoot the edge follows the finger 1:1.
+  // A finger that catches the drawn handle holds it where it shows: inside
+  // this much overshoot the handle follows the finger 1:1.
   let caught = 0;
   let drawing: OvershootDrawing | null = null;
+  // A closing lift keeps the drawn handle until the slide has measured it,
+  // so the slide starts from where the handle shows.
+  let isDrawingHeldForSlide = false;
   // The drawn handle springs back to its limit after a lift.
   let isSpringingBack = false;
   // The slide a closing lift plays.
@@ -807,6 +810,7 @@ export function createResizableAs(
         } else {
           paneReveal.land();
         }
+        dropHeldDrawing();
         return;
       }
       // The pane renders a collapse or open this factory has not made yet,
@@ -818,8 +822,11 @@ export function createResizableAs(
         expectedFlip = toCollapsed;
         paneReveal.measure(current, current.contentFacingEdge());
       }
+      dropHeldDrawing();
     },
     committed() {
+      // The slide's after-measure reads the handle without its drawing.
+      dropHeldDrawing();
       if (pane != null) {
         paneReveal.committed(pane);
       }
@@ -833,6 +840,7 @@ export function createResizableAs(
     paneReveal.land();
     pendingFlip = null;
     expectedFlip = null;
+    isDrawingHeldForSlide = false;
     drawing?.clear();
     drawing = next == null ? null : createOvershootDrawing(next);
     pane = handOverPane(pane, next, paneListener, derived.isCollapsed, handle);
@@ -983,6 +991,7 @@ export function createResizableAs(
       };
     },
     start() {
+      dropHeldDrawing();
       // The basis holds still for the whole gesture.
       gestureBasis = readLiveBasis();
       isGestureActive = true;
@@ -1125,7 +1134,7 @@ export function createResizableAs(
     // The shown size moves with the share of the slide still to go. It runs
     // from the size laid out at the lift down to the size it shuts to.
     const shutSize =
-      share < 0.98 ? (shownSize - slide.openSize * share) / (1 - share) : 0;
+      share < 0.98 ? (shownSize - slide.fromSize * share) / (1 - share) : 0;
     held = {
       slide,
       motions,
@@ -1140,7 +1149,7 @@ export function createResizableAs(
       return;
     }
     const {slide, motions, durationMs, shutSize} = held;
-    const span = slide.openSize - shutSize;
+    const span = slide.fromSize - shutSize;
     const share =
       span > 0 ? Math.min(1, Math.max(0, (size - shutSize) / span)) : 0;
     // The share still to go falls over the slide's time.
@@ -1255,12 +1264,12 @@ export function createResizableAs(
             excess - held,
             Math.max(RUBBER_BAND_TRAVEL_PX - Math.abs(held), 0),
           );
-    // Below the minimum the drawn edge stops at 0, never past it.
+    // Below the minimum the drawn handle stops at 0, never past it.
     return Math.max(bound + shown, 0) - bound;
   }
 
   /**
-   * The drawn edge springs back to the bound on the settle spring from the
+   * The drawn handle springs back to the bound on the settle spring from the
    * release velocity, on the compositor. The size never left the bound, so
    * nothing is laid out.
    */
@@ -1281,7 +1290,7 @@ export function createResizableAs(
       drawing.clear();
       return;
     }
-    // The drawn edge moved at the pointer's speed times the band's slope.
+    // The drawn handle moved at the pointer's speed times the band's slope.
     const dimension = RUBBER_BAND_TRAVEL_PX;
     const slope = rubberBandSlope(
       rubberBandInverse(from, dimension),
@@ -1291,6 +1300,14 @@ export function createResizableAs(
       resolveMotion(element, springs.settle),
       velocity * slope,
     );
+  }
+
+  /** Drops the drawn handle a closing lift kept for its slide to measure. */
+  function dropHeldDrawing(): void {
+    if (isDrawingHeldForSlide) {
+      isDrawingHeldForSlide = false;
+      drawing?.clear();
+    }
   }
 
   /** The size a pane still sliding shut shows now; 0 once it is shut. */
@@ -1321,21 +1338,22 @@ export function createResizableAs(
       return 0;
     }
     // The handle stays under the finger: the size is read from where it shows.
-    return closingSlide.readShown?.() ?? closingSlide.openSize * share;
+    return closingSlide.readShown?.() ?? closingSlide.fromSize * share;
   }
 
   /**
    * A lift that closes: the pane slides shut from what it shows, on the
-   * settle spring from the release velocity.
+   * settle spring from the release velocity. The handle slides from where it
+   * is drawn.
    */
   function closeOnRelease(velocity: number): void {
     isSpringingBack = false;
-    const openSize = derived.size;
+    const drawnAtLift = overshoot;
     const shown = derived.size + overshoot;
     // Measured while the edge still shows where the lift left it.
     const readShown = pane == null ? null : shownSizeReader(pane, shown);
     overshoot = 0;
-    drawing?.clear();
+    isDrawingHeldForSlide = drawing != null;
     // An open restores the size the drag started from.
     if (sizeBeforeDrag != null) {
       chosenSize = sizeBeforeDrag;
@@ -1351,7 +1369,7 @@ export function createResizableAs(
       view.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
         ? null
         : {
-            openSize,
+            fromSize: shown,
             startedAt: view.performance.now(),
             remaining,
             readShown,
@@ -1360,6 +1378,24 @@ export function createResizableAs(
     commit();
     opts.onCollapseChange?.(true);
     opts.onSizeChange?.(0);
+    // A close the owner keeps open (a controlled isCollapsed) renders no
+    // slide to measure the drawing. By the next frame the handle springs back
+    // from where it is drawn.
+    if (isDrawingHeldForSlide) {
+      const springBackIfKept = () => {
+        if (!isDrawingHeldForSlide) {
+          return;
+        }
+        isDrawingHeldForSlide = false;
+        overshoot = drawnAtLift;
+        settleOvershoot(velocity);
+      };
+      if (typeof view?.requestAnimationFrame === 'function') {
+        view.requestAnimationFrame(springBackIfKept);
+      } else {
+        setTimeout(springBackIfKept, 16);
+      }
+    }
   }
 
   function readLiveBasis(): number {
