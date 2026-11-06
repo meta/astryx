@@ -65,6 +65,7 @@ import {
   attachSnapPaging,
   isSnapPaging,
   moveHeldSnapPaging,
+  moveSnapPaging,
   nearestStop,
   type SnapPaging,
   snapStops,
@@ -507,9 +508,10 @@ export function Carousel({
       if (!el) {
         return;
       }
-      // While a flick's drag or settle holds the row, the paging moves it.
+      // Under snap paging the paging moves the row, held or at rest. A touch
+      // then catches the move, and the release rests on a page.
       if (
-        moveHeldSnapPaging(el, (at, end) =>
+        moveSnapPaging(el, (at, end) =>
           pagingStep(el, at, end, direction, hasLoop && hasOverflow),
         )
       ) {
@@ -590,9 +592,7 @@ export function Carousel({
     const delta = isRtlElement(el)
       ? itemRect.right - containerRect.right
       : itemRect.left - containerRect.left;
-    if (
-      moveHeldSnapPaging(el, at => at + (isRtlElement(el) ? -delta : delta))
-    ) {
+    if (moveSnapPaging(el, at => at + (isRtlElement(el) ? -delta : delta))) {
       return;
     }
     el.scrollBy({

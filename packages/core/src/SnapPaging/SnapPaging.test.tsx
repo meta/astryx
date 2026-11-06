@@ -11,8 +11,9 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {createRef} from 'react';
 import {act, render, renderHook, screen} from '@testing-library/react';
-import {Carousel} from '../Carousel/Carousel';
+import {Carousel, type CarouselHandle} from '../Carousel/Carousel';
 import {useSnapPaging} from './SnapPaging';
 import {
   type HeldRow,
@@ -63,6 +64,7 @@ afterEach(() => {
 
 const attachment = (detach = () => {}): SnapPagingAttachment => ({
   detach,
+  move: () => {},
   moveHeld: () => false,
 });
 
@@ -242,6 +244,50 @@ describe('Carousel with hasSnap', () => {
     expect(attached).toEqual(['first']);
     act(() => unmount());
     expect(attached).toEqual(['first', 'first detached']);
+  });
+
+  describe('a scroll call under snap paging', () => {
+    // A paging value that records each move it is asked for.
+    function renderMoves() {
+      const moves: Array<(at: number, end: number) => number> = [];
+      const value = makeSnapPaging(() => ({
+        ...attachment(),
+        move: target => {
+          moves.push(target);
+        },
+      }));
+      const handle = createRef<CarouselHandle>();
+      render(
+        <Carousel aria-label="Items" hasSnap={value} handleRef={handle}>
+          <div>One</div>
+          <div>Two</div>
+          <div>Three</div>
+        </Carousel>,
+      );
+      const row = scroller();
+      const scrollTo = vi.fn();
+      const scrollBy = vi.fn();
+      row.scrollTo = scrollTo;
+      row.scrollBy = scrollBy;
+      return {moves, handle, scrollTo, scrollBy};
+    }
+
+    it('moves the row at rest through the paging, not with a native smooth scroll', () => {
+      const {moves, handle, scrollTo, scrollBy} = renderMoves();
+      act(() => handle.current?.scrollNext());
+      act(() => handle.current?.scrollPrev());
+      expect(moves).toHaveLength(2);
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(scrollBy).not.toHaveBeenCalled();
+    });
+
+    it('moves the row through the paging for a scroll to an item', () => {
+      const {moves, handle, scrollTo, scrollBy} = renderMoves();
+      act(() => handle.current?.scrollTo(2));
+      expect(moves).toHaveLength(1);
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(scrollBy).not.toHaveBeenCalled();
+    });
   });
 
   describe('the edge buttons follow a held row as shown', () => {

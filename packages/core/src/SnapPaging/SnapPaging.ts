@@ -326,6 +326,23 @@ function attachPaging(
   const track = childTrack(element, onHeld);
   // The stop that view pages count from, set when a gesture takes over.
   let anchor = 0;
+  // Takes the row over where it is shown, on the page nearest it.
+  const takeOverShown = () => {
+    const at = track.position();
+    const stops = track.stops();
+    anchor = stops.reduce(
+      (best, stop, i) =>
+        Math.abs(stop - at) < Math.abs(stops[best] - at) ? i : best,
+      0,
+    );
+    track.takeOver();
+    pager.setOptions({});
+    pager.goTo(pager.nearestPage(at), {
+      animated: false,
+      reason: 'controlled',
+    });
+    track.place(at);
+  };
   const pager = createPager(
     {
       count: 1,
@@ -344,22 +361,9 @@ function attachPaging(
             );
       },
       shouldBeginPan: () => {
+        // The finger catches the row where it is shown.
         if (!track.isMoving) {
-          const at = track.position();
-          const stops = track.stops();
-          anchor = stops.reduce(
-            (best, stop, i) =>
-              Math.abs(stop - at) < Math.abs(stops[best] - at) ? i : best,
-            0,
-          );
-          track.takeOver();
-          pager.setOptions({});
-          pager.goTo(pager.nearestPage(at), {
-            animated: false,
-            reason: 'controlled',
-          });
-          // The finger catches the row where it is shown.
-          track.place(at);
+          takeOverShown();
         }
         return true;
       },
@@ -377,6 +381,20 @@ function attachPaging(
       detach();
       pager.dispose();
       track.handBack();
+    },
+    move: target => {
+      // A finger on the row keeps it.
+      if (pager.isDragging) {
+        return;
+      }
+      // A move from rest is the pager's own too. So a touch catches it as it
+      // catches a settle, and the release rests on a page.
+      if (!track.isMoving) {
+        takeOverShown();
+      }
+      const end = track.travel();
+      const to = Math.min(Math.max(target(track.position(), end), 0), end);
+      pager.goTo(pager.nearestPage(to), {offset: to});
     },
     moveHeld: target => {
       if (!track.isMoving) {
