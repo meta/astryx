@@ -11,6 +11,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {pathToFileURL} from 'node:url';
 
 const CSS = path.join('src', 'index.css');
 const MAIN = path.join('src', 'main.tsx');
@@ -130,7 +131,10 @@ export const RECIPES = {
   },
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   const args = process.argv.slice(2);
   const get = name => {
     const index = args.indexOf(`--${name}`);

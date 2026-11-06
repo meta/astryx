@@ -11,6 +11,7 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, renderHook} from '@testing-library/react';
+import {useState} from 'react';
 import {rubberBand} from '../motion/rubberBand';
 import {
   isInsideNestedLayer,
@@ -1042,6 +1043,88 @@ describe('useSheetGestures', () => {
     move(hook, 240, 900, t);
     up(hook, 240, 1400, t);
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  describe('a dismissal the host refuses', () => {
+    // The host answers a dismissal through `isOpenRequested`: it stays true
+    // when a guarded `onOpenChange` keeps the sheet open (a confirmation
+    // asks before a changed draft is discarded). The panel then rests on its
+    // detent again, and the scrim the drag thinned toward the dismiss line
+    // must rest with it.
+    it('restores the full scrim of a sheet resting fully open', () => {
+      const onScrimOpacity = vi.fn();
+      const {hook, onDismiss} = setup({
+        snapHeights: () => [200],
+        onScrimOpacity,
+      });
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 160, 400, t);
+      move(hook, 330, 900, t);
+      // The live drag has thinned the scrim past the shortest detent.
+      expect(onScrimOpacity.mock.lastCall?.[0]).toBeLessThan(1);
+      // The release asks to close; `isOpen` stays true, so the host refused.
+      up(hook, 330, 1400, t);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+      expect(hook.result.current.settledOffset).toBe(0);
+      expect(hook.result.current.isDismissedByTouchDrag).toBe(false);
+      expect(onScrimOpacity).toHaveBeenLastCalledWith(1);
+    });
+
+    it('restores the thinned scrim of a sheet resting at its peek', () => {
+      const onScrimOpacity = vi.fn();
+      // Sheet 400, stops at 300 and a 60px sliver -> offsets [0, 100, 340];
+      // the sliver is a peek, which rests under the peek floor (0.3).
+      const {hook, onDismiss} = setup({
+        snapHeights: () => [60, 300],
+        onScrimOpacity,
+      });
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 170, 400, t);
+      move(hook, 340, 900, t);
+      up(hook, 340, 1400, t);
+      expect(hook.result.current.settledOffset).toBe(340);
+      // From the peek, a slow pull past the dismiss line asks to close.
+      down(hook, 340, 2000, t);
+      move(hook, 380, 2400, t);
+      move(hook, 420, 2900, t);
+      up(hook, 420, 3400, t);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+      expect(hook.result.current.settledOffset).toBe(340);
+      expect(Number(onScrimOpacity.mock.lastCall?.[0])).toBeCloseTo(0.3);
+    });
+
+    it('leaves the thinned scrim alone when the host takes the dismissal', () => {
+      const onScrimOpacity = vi.fn();
+      const onDismiss = vi.fn();
+      // A host that takes the close: its controlled state answers in the
+      // same update the release asked in.
+      const hook = renderHook(() => {
+        const [isOpenRequested, setIsOpenRequested] = useState(true);
+        return useSheetGestures({
+          isOpen: true,
+          isOpenRequested,
+          onDismiss: () => {
+            onDismiss();
+            setIsOpenRequested(false);
+          },
+          snapHeights: () => [200],
+          onScrimOpacity,
+        });
+      });
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 160, 400, t);
+      move(hook, 330, 900, t);
+      const thinned = onScrimOpacity.mock.lastCall?.[0];
+      expect(thinned).toBeLessThan(1);
+      up(hook, 330, 1400, t);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+      // The host's exit owns the scrim from here, so the hook writes nothing
+      // more.
+      expect(onScrimOpacity.mock.lastCall?.[0]).toBe(thinned);
+    });
   });
 
   describe('body overscroll', () => {

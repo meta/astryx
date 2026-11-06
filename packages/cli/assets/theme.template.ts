@@ -347,6 +347,18 @@ export const myTheme = defineTheme({
   // iconVariants: ['outline', 'filled'],
 
   /**
+   * Choose which shared icon a component's own icon role uses, by slot, such
+   * as `code-block-copy` for CodeBlock's copy button. A value is an icon name,
+   * `null` to hide the icon, a partial `{icon, variant, size}` request, or a
+   * pure function of the slot's state that returns one.
+   * Keep a slot function in its own module and import it, so a built theme
+   * can import it too. Here `copySlot` is
+   * `({copied}) => ({icon: copied ? 'checkDouble' : 'copy'})`.
+   * Reference: `astryx docs icons`; each component's docs list its slots.
+   */
+  // componentIcons: {'code-block-copy': copySlot},
+
+  /**
    * Replace the small components that DRAW control state — the checkbox box,
    * the radio dot, the mark on a chosen option — by indicator name rather than
    * per call site. Replacing `check` re-skins every single-selection mark in
