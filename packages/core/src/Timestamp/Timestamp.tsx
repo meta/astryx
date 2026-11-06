@@ -104,7 +104,8 @@ export interface TimestampProps extends BaseProps<HTMLTimeElement> {
    * zone. An explicit zone renders identically on the server and the client,
    * so it is the way to show an absolute time without a hydration mismatch;
    * without it the server markup depends on the server's zone. Relative
-   * formats name no instant and ignore it. An unknown identifier warns once
+   * formats name no instant, so their visible text ignores it. Configured
+   * `tooltipEntries` rows still follow it. An unknown identifier warns once
    * in development and falls back to the viewer's zone.
    */
   timezoneID?: string;

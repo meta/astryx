@@ -45,7 +45,7 @@ export const docs = {
       name: 'timezoneID',
       type: 'string',
       description:
-        "IANA time zone the absolute formats render in, such as 'UTC' or 'America/Los_Angeles'. Omit (or pass 'local') for the viewer's own zone. An explicit zone renders identically on the server and the client, so it is the way to show an absolute time without a hydration mismatch; relative formats ignore it. An unknown identifier warns once in development and falls back to the viewer's zone.",
+        "IANA time zone the absolute formats render in, such as 'UTC' or 'America/Los_Angeles'. Omit (or pass 'local') for the viewer's own zone. An explicit zone renders identically on the server and the client, so it is the way to show an absolute time without a hydration mismatch; relative formats' visible text ignores it, while configured tooltipEntries rows still follow it. An unknown identifier warns once in development and falls back to the viewer's zone.",
     },
     {
       name: 'autoThreshold',
