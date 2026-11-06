@@ -146,6 +146,7 @@
     "/templates/CarouselCards/",
     "/templates/CarouselShowcase/",
     "/templates/CarouselSnap/",
+    "/templates/CarouselSnapPaging/",
     "/templates/CenterHorizontal/",
     "/templates/CenterInsideACard/",
     "/templates/CenterShowcase/",

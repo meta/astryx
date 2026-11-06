@@ -30,6 +30,7 @@ export * from './IconButton';
 export * from './Card';
 export * from './ClickableCard';
 export * from './Carousel';
+export * from './SnapPaging';
 export * from './Calendar';
 export * from './Center';
 export * from './CodeBlock';
