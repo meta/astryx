@@ -1066,6 +1066,14 @@ describe('app-theme doctor checks', () => {
     expect(result.message).toContain('^9.0.0');
   });
 
+  it('check 7 passes a theme package whose Core range is empty, which accepts every Core', async () => {
+    const {dir} = await fixture([{slug: 'ocean'}], {peerRange: ''});
+
+    expect(check(await checkAppThemes(dir), 'theme-core-peers')).toMatchObject({
+      status: 'pass',
+    });
+  });
+
   it('reports an added theme package outside the Core range once, as theme-core-peers', async () => {
     const {dir} = await fixture([{slug: 'ocean'}], {peerRange: '^9.0.0'});
 

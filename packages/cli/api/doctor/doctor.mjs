@@ -965,8 +965,9 @@ export function checkIntegrationCoreRange(ctx) {
     const name = typeof pkg?.name === 'string' ? pkg.name : integration.name;
     if (reportedByThemeChecks.has(name)) continue;
     const {range, accepts} = corePeerRange(pkg, core);
-    // An integration need not depend on Core; only a declared range is a claim.
-    if (range == null) continue;
+    // An integration need not depend on Core; only a declared, non-empty range
+    // is a claim about which Core it supports.
+    if (range == null || range === '') continue;
     declared.push({
       name,
       version: typeof pkg?.version === 'string' ? pkg.version : null,

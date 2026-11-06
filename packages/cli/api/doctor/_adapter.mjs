@@ -212,17 +212,20 @@ export function doctorStylesheetImports(css) {
  * every other loaded integration.
  * @param {{peerDependencies?: Record<string, unknown>} | null | undefined} pkg
  * @param {string | null | undefined} coreVersion
+ * Any declared string is judged by `satisfiesRange`, so an empty range
+ * accepts every Core; only a missing range is `null`.
  * @returns {{range: string | null, accepts: boolean}}
  */
 export function corePeerRange(pkg, coreVersion) {
   const raw = pkg?.peerDependencies?.['@astryxdesign/core'];
-  const range =
-    typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : null;
+  const range = typeof raw === 'string' ? raw.trim() : null;
   return {
     range,
-    accepts: Boolean(
-      range && coreVersion && satisfiesRange(coreVersion, range),
-    ),
+    accepts:
+      range !== null &&
+      typeof coreVersion === 'string' &&
+      coreVersion !== '' &&
+      satisfiesRange(coreVersion, range),
   };
 }
 
