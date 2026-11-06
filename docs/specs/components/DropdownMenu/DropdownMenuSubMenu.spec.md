@@ -46,7 +46,7 @@ system_specs: [spec:AST-020, spec:AST-086]
 | Behavior                | The row reveals its children as a flyout beside it or as a drilled-in view led by a Back row; with a header or footer that surface is a modal dialog named by the row.                                         |
 | End-user impact         | Pointer, keyboard, and touch users reach nested commands from one row; assistive technology hears the row's popup kind and expanded state, and Escape or the close arrow returns to the row.                   |
 | Builder impact          | Place the row inside a DropdownMenu or ContextMenu and give it a label and rows; data-driven menus get it from a nested `items` array.                                                                         |
-| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"` (FR7).                                                                                                                           |
+| Compatibility/readiness | Records shipped behavior; adds optional `delay` and `hideDelay` (FR11) at the released timing; a disabled row gains `tabindex="-1"` (FR7).                                                                     |
 | Review checks           | Reject a second keyboard owner, a lost popup state, a flyout that does not flip under RTL, a disabled row that opens, dropped caller inputs, or an open callback that misses a transition.                     |
 | Governing rules         | `spec:AST-020` FR15; `architecture:public-component-api/INV5–INV8`; `architecture:react-component-runtime/INV2`; `architecture:layer-runtime`; `spec:AST-020/FR1,FR2`; `spec:AST-086/FR8`.                     |
 
@@ -65,9 +65,10 @@ host that a sub-menu with a header or footer renders into.
 ## Compatibility and migration
 
 - Released default preserved: yes (`isDisabled=false`, `hasSpinner=false`,
-  `presentation='adaptive'`).
-- Compatibility class: records shipped behavior; no public prop or export
-  change; a disabled row gains `tabindex="-1"` (FR7).
+  `presentation='adaptive'`, `delay=150`, `hideDelay=200`).
+- Compatibility class: additive; the row adds optional `delay` and `hideDelay`
+  (FR11), whose defaults are the released timing; a disabled row gains
+  `tabindex="-1"` (FR7).
 - Controlled behavior: the open state is internal; `onOpenChange` reports it.
 - Migration decision: none.
 
@@ -120,7 +121,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR8  | With `hasSpinner` the row shows a decorative spinner in place of the caret and announces the busy start once the root menu shows.                                                                                                                                                        | `spec:AST-086` FR8; current source and tests                       |
 | FR9  | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` reach or compose on the row root after the row's own behavior; the open keys and a disabled click stop before the caller's handler.                                                                      | `architecture:public-component-api` INV5–INV8; current tests       |
 | FR10 | Without its own `header` or `footer` and with none on a level above it, Tab or Shift+Tab on a row in the flyout closes this level as the key bubbles to the menu, which closes the whole menu (`component:DropdownMenu` FR23, `component:ContextMenu` FR11).                             | WAI-ARIA Menu Button pattern; current tests                        |
-| FR11 | On a hover-capable pointer, the flyout opens after `delay` and closes once the pointer has been away for `hideDelay`, in milliseconds (defaults 150 and 200). Keyboard focus and touch never wait.                                                                                       | `design:motion` DEC-1; owner decision, Nov 6 2026 (Cindy)          |
+| FR11 | On a hover-capable pointer, the flyout opens after `delay` and closes once the pointer has been away for `hideDelay`, in milliseconds (defaults 150 and 200). Keyboard focus and touch never wait.                                                                                       | Owner decision, 2026-11-06                                         |
 
 ### Allowed variation
 
