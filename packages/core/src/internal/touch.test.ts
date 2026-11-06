@@ -159,6 +159,23 @@ describe('internal/touch', () => {
     expect(entry.touchHitAreaStyles).toBeDefined();
   });
 
+  it("re-exports by name what NavigationStack's bars and scroll edge effect read", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const host = await import('../gestures/GestureHost');
+    const pointer = await import('../utils/coarsePointer');
+    const fingerScroll = await import('../gestures/useFingerScroll');
+    expect(entry.getGestureHost).toBe(host.getGestureHost);
+    expect(entry.isCoarsePointer).toBe(pointer.isCoarsePointer);
+    expect(entry.useFingerScroll).toBe(fingerScroll.useFingerScroll);
+    for (const name of [
+      'getGestureHost',
+      'isCoarsePointer',
+      'useFingerScroll',
+    ]) {
+      expect(typeof entry[name], name).toBe('function');
+    }
+  });
+
   it('attaches no window or document listeners when it loads', async () => {
     vi.resetModules();
     const onWindow = vi.spyOn(window, 'addEventListener');
