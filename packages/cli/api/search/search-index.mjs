@@ -121,7 +121,7 @@ async function addDisplayDescriptions(candidates, cwd) {
     }),
     cwd,
   );
-  response.data.results.forEach((/** @type {any} */ result, i) => {
+  response.data.results.forEach((/** @type {any} */ result, /** @type {number} */ i) => {
     if (result.description !== linkable[i].description)
       linkable[i][DISPLAY_FIELD] = result.description;
   });
