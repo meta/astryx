@@ -10,6 +10,7 @@
  */
 
 import {describe, it, expect} from 'vitest';
+import * as os from 'node:os';
 import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
@@ -167,4 +168,39 @@ describe('Astryx babel wrapper -- Astryx source under the strict default', () =>
     expect(compiled).toBeGreaterThan(250);
     expect(failures).toEqual([]);
   }, 120_000);
+});
+
+describe('Astryx babel wrapper -- a swizzled copy', () => {
+  it('gives a module under a swizzle marker the library prefix', () => {
+    const app = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-babel-swizzle-'));
+    try {
+      const output = path.join(app, 'src/components/astryx');
+      fs.mkdirSync(path.join(output, 'Box'), {recursive: true});
+      fs.writeFileSync(
+        path.join(output, 'astryx-swizzle.json'),
+        JSON.stringify({packages: {'@astryxdesign/core': '0.0.0'}}),
+      );
+      const compile = filename =>
+        babel.transformSync(SOURCE, {
+          filename,
+          babelrc: false,
+          configFile: false,
+          plugins: [
+            [
+              astryxBabelPlugin,
+              {unstable_moduleResolution: {type: 'commonJS', rootDir: app}},
+            ],
+          ],
+        })?.code ?? '';
+      const copied = atomicClasses(compile(path.join(output, 'Box/Box.tsx')));
+      expect(copied.length).toBeGreaterThan(0);
+      expect(copied.every(c => c.startsWith('astryx'))).toBe(true);
+      // Product code beside the copy keeps the product prefix.
+      expect(atomicClasses(compile(path.join(app, 'src/Page.tsx')))).toEqual(
+        [],
+      );
+    } finally {
+      fs.rmSync(app, {recursive: true, force: true});
+    }
+  });
 });
