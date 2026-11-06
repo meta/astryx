@@ -222,9 +222,10 @@ function settleProgress(ms: number): number {
 }
 
 /**
- * Samples the photo's width every frame from the first `startEvent` on,
- * while `act` zooms it 2×, and checks that the zoom settles on
- * `springs.settle` from rest.
+ * Checks that the photo's zoom, which `act` starts with a `startEvent`,
+ * settles on `springs.settle` from rest. The zoom's own animations on the
+ * photo are paused as they start, and its width is read at set times on
+ * their clock. A busy runner's late frames then move no reading.
  */
 async function expectSpringZoom(
   page: Page,
@@ -232,73 +233,124 @@ async function expectSpringZoom(
   startEvent: 'keydown' | 'dblclick',
   act: () => Promise<void>,
 ): Promise<void> {
-  // The sampler is in place before the input, through an awaited install. A
-  // sampler the page gets later would wait for an input that already came.
+  // The page pauses the zoom itself, before the input comes: a pause sent
+  // from the test would reach a busy page late.
   await page.evaluate(type => {
-    (window as unknown as {__samples: Promise<[number, number][]>}).__samples =
-      new Promise<[number, number][]>(resolve => {
-        const img = document.querySelector('dialog img');
-        const samples: [number, number][] = [];
-        let start: number | null = null;
-        window.addEventListener(
-          type,
-          () => {
-            start = performance.now();
-          },
-          {capture: true, once: true},
+    const img = document.querySelector('dialog img');
+    const w = window as unknown as {
+      __zoom: Promise<{animation: Animation; start: number}[]>;
+    };
+    // A run that the last zoom left in its end hold is not this zoom.
+    const before = new Set(img?.getAnimations() ?? []);
+    w.__zoom = new Promise(resolve => {
+      let begin = 0;
+      let timer = 0;
+      let done = false;
+      const look = () => {
+        if (done) {
+          return;
+        }
+        const running = (img?.getAnimations() ?? []).filter(
+          animation =>
+            !before.has(animation) &&
+            animation.playState === 'running' &&
+            !animation.pending,
         );
-        const tick = (now: number) => {
-          if (start != null && img != null) {
-            samples.push([now - start, img.getBoundingClientRect().width]);
-          }
-          if (start == null || now - start < 1000) {
-            requestAnimationFrame(tick);
-          } else {
-            resolve(samples);
-          }
-        };
-        requestAnimationFrame(tick);
-      });
+        if (running.length > 0 || performance.now() - begin > 5000) {
+          done = true;
+          clearInterval(timer);
+          // Each keeps where it started, so all of them read one instant.
+          const held = running.map(animation => ({
+            animation,
+            start: Number(animation.startTime ?? 0),
+          }));
+          held.forEach(({animation}) => animation.pause());
+          resolve(held);
+        }
+      };
+      // It looks on every frame and every 4 ms between them.
+      const frame = () => {
+        look();
+        if (!done) {
+          requestAnimationFrame(frame);
+        }
+      };
+      window.addEventListener(
+        type,
+        () => {
+          begin = performance.now();
+          timer = window.setInterval(look, 4);
+          requestAnimationFrame(frame);
+        },
+        {capture: true, once: true},
+      );
+    });
   }, startEvent);
   await act();
-  const samples = await page.evaluate(
-    async () =>
-      (window as unknown as {__samples: Promise<[number, number][]>}).__samples,
+  // The photo's width `ms` after the zoom started, on its own clock.
+  const widthAt = async (ms: number) =>
+    page.evaluate(async t => {
+      const w = window as unknown as {
+        __zoom: Promise<{animation: Animation; start: number}[]>;
+      };
+      const held = await w.__zoom;
+      const origin = Math.min(...held.map(({start}) => start));
+      for (const {animation, start} of held) {
+        animation.currentTime = t - (start - origin);
+      }
+      return (
+        document.querySelector('dialog img')?.getBoundingClientRect().width ?? 0
+      );
+    }, ms);
+  const starts = await page.evaluate(async () =>
+    (
+      await (window as unknown as {__zoom: Promise<{start: number}[]>}).__zoom
+    ).map(({start}) => start),
   );
+  expect(
+    starts.length,
+    'the zoom runs as animations on the photo',
+  ).toBeGreaterThan(0);
+  // Its animations start together, so one instant reads them all.
+  expect(new Set(starts).size).toBe(1);
   const to = fitted.width * 2;
-  const progress = (width: number) =>
-    (width - fitted.width) / (to - fitted.width);
-  // Timed from the last frame before the photo moved. An engine can start
-  // the animation a frame or more after the input, more on a busy runner.
-  // The start-up is not the curve.
-  const first = samples.findIndex(([, width]) => progress(width) > 0.001);
-  expect(first).toBeGreaterThanOrEqual(0);
-  const origin = first > 0 ? samples[first - 1][0] : 0;
-  // Progress `ms` in, interpolated between the frames around it.
-  const progressAt = (ms: number) => {
-    const after = samples.findIndex(([t]) => t - origin >= ms);
-    expect(after).toBeGreaterThan(0);
-    const [t0, w0] = samples[after - 1];
-    const [t1, w1] = samples[after];
-    return progress(w0 + ((w1 - w0) * (origin + ms - t0)) / (t1 - t0));
-  };
+  const progressAt = async (ms: number) =>
+    ((await widthAt(ms)) - fitted.width) / (to - fitted.width);
   // The spring's own course: about 0.36 at 100 ms, where a 200 ms ease-out
   // is past 0.6, and 0.72 at 200 ms.
   for (const ms of [100, 200, 300]) {
     expect(
-      Math.abs(progressAt(ms) - settleProgress(ms)),
+      Math.abs((await progressAt(ms)) - settleProgress(ms)),
       `${ms} ms`,
     ).toBeLessThan(0.08);
   }
-  // It comes within half a percent of the target near 0.59 s.
-  const doneAt = samples.find(([, width]) => progress(width) > 0.995)?.[0];
-  expect(doneAt).toBeDefined();
-  expect((doneAt ?? 0) - origin).toBeGreaterThan(450);
-  expect((doneAt ?? Number.POSITIVE_INFINITY) - origin).toBeLessThan(800);
+  // It comes within half a percent of the target near 0.59 s: not yet at
+  // 450 ms, and by 800 ms.
+  expect(await progressAt(450)).toBeLessThanOrEqual(0.995);
+  expect(await progressAt(800)).toBeGreaterThan(0.995);
+  await page.evaluate(async () => {
+    const held = await (
+      window as unknown as {
+        __zoom: Promise<{animation: Animation}[]>;
+      }
+    ).__zoom;
+    held.forEach(({animation}) => animation.finish());
+  });
 }
 
 test('the keyboard’s zoom settles on springs.settle', async ({page}) => {
-  const {stage, fitted} = await openViewer(page);
+  const {stage, img, fitted} = await openViewer(page);
+  // Unpaused, the keyboard's zoom reaches 2× and returns to the fitted size.
+  await stage.focus();
+  await page.keyboard.press('Enter');
+  await expect
+    .poll(async () => (await boxOf(img)).width)
+    .toBeCloseTo(fitted.width * 2, 0);
+  await page.keyboard.press('Enter');
+  await expect
+    .poll(async () => (await boxOf(img)).width)
+    .toBeCloseTo(fitted.width, 0);
+  await settled(page);
   // Enter zooms 2× about the centre, on the spring every zoom plays.
   await expectSpringZoom(page, fitted, 'keydown', async () => {
     await stage.focus();
