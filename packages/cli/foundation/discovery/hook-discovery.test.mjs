@@ -108,6 +108,31 @@ describe('discoverHooks (real core)', () => {
     );
   });
 
+  it('lists a create*.doc.mjs factory beside its own hook, not on its own, when its relatedHooks names that hook', () => {
+    const core = mkTmp('as-hd-beside-');
+    const dir = path.join(core, 'src', 'thing');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'useThing.doc.mjs'),
+      "export default {\n  category: 'interaction',\n};\n",
+    );
+    fs.writeFileSync(
+      path.join(dir, 'createThing.doc.mjs'),
+      "export default {\n  relatedHooks: ['useThing'],\n  category: 'interaction',\n};\n",
+    );
+    // A factory that names another hook still lists on its own.
+    fs.writeFileSync(
+      path.join(dir, 'createOther.doc.mjs'),
+      "export default {\n  relatedHooks: ['useThing'],\n  category: 'interaction',\n};\n",
+    );
+    expect(discoverHooks(core)).toEqual({
+      Interaction: ['createOther', 'useThing'],
+    });
+    expect(findHookDoc(core, 'createThing')).toBe(
+      path.join(dir, 'createThing.doc.mjs'),
+    );
+  });
+
   it('returns {} when src/ is missing (guarded with existsSync)', () => {
     const core = mkTmp('as-hd-nosrc-');
     expect(discoverHooks(core)).toEqual({});
