@@ -2,8 +2,8 @@
 
 /**
  * @file blockDirection.ts
- * @input A Markdown AST prose block: a paragraph, heading, blockquote or list
- *   item
+ * @input A Markdown AST prose block (a paragraph, heading, blockquote or list
+ *   item) or a table cell
  * @output The block's own direction, 'ltr' or 'rtl', or undefined when its
  *   text has no strongly directional character
  * @position Read by Markdown.tsx to give each prose block the `dir` of its

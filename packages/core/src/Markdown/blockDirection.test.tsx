@@ -116,6 +116,26 @@ describe('Markdown block direction (spec:AST-061 FR6)', () => {
     ).not.toBe('ltr');
   });
 
+  it('gives a table cell the direction of its own text, and none to the table', () => {
+    const {container} = renderIn(
+      'ltr',
+      '| Name | שם |\n| - | - |\n| Alice | אליס |\n| 42 | — |',
+    );
+    expect(blockContaining(container, 'th', 'Name').getAttribute('dir')).toBe(
+      'ltr',
+    );
+    expect(blockContaining(container, 'th', 'שם').getAttribute('dir')).toBe(
+      'rtl',
+    );
+    expect(blockContaining(container, 'td', 'אליס').getAttribute('dir')).toBe(
+      'rtl',
+    );
+    expect(blockContaining(container, 'td', '42').hasAttribute('dir')).toBe(
+      false,
+    );
+    expect(container.querySelector('table')?.hasAttribute('dir')).toBe(false);
+  });
+
   it('gives a code block and a table no direction of their own', () => {
     const {container} = renderIn(
       'rtl',

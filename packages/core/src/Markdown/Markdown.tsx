@@ -1984,6 +1984,7 @@ function renderBlock(
                   <TableHeaderCell
                     // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown table columns are positional by definition
                     key={i}
+                    dir={markdownBlockDirection(h)}
                     xstyle={[
                       markdownTableCellStyles.headerCell,
                       dynamicStyles.cellMinWidth(`${colMinWidths[i]}ch`),
@@ -2013,6 +2014,7 @@ function renderBlock(
                   <TableCell
                     // eslint-disable-next-line @eslint-react/no-array-index-key -- markdown table cells are positional by row and column
                     key={j}
+                    dir={markdownBlockDirection(cell)}
                     xstyle={[
                       markdownTableCellStyles.cell,
                       node.align[j] === 'center' && cellAlignStyles.center,

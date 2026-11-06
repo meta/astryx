@@ -43,6 +43,10 @@ const MIXED = [
   '```',
   'const a = 1;',
   '```',
+  '',
+  '| Name | שם |',
+  '| - | - |',
+  '| Alice | אליס |',
 ].join('\n');
 
 let storybook: StaticServer;
@@ -119,6 +123,8 @@ for (const pageDirection of ['ltr', 'rtl'] as const) {
       expect(await direction('blockquote', 'ציטוט')).toBe('rtl');
       expect(await direction('li', 'פריט שני')).toBe('rtl');
       expect(await direction('li', 'First item')).toBe('ltr');
+      expect(await direction('td', 'אליס')).toBe('rtl');
+      expect(await direction('td', 'Alice')).toBe('ltr');
     });
 
     test('a short line starts on its own text edge', async ({page}) => {
@@ -141,12 +147,17 @@ for (const pageDirection of ['ltr', 'rtl'] as const) {
       ).toBe(pageDirection);
     });
 
-    test('a list and a code block keep the page direction', async ({page}) => {
+    test('a list, a code block and a table keep the page direction', async ({
+      page,
+    }) => {
       await renderMixed(page, pageDirection);
       expect((await measure(page, 'ul', 'First item')).direction).toBe(
         pageDirection,
       );
       expect((await measure(page, 'pre', 'const a')).direction).toBe(
+        pageDirection,
+      );
+      expect((await measure(page, 'table', 'Alice')).direction).toBe(
         pageDirection,
       );
     });
