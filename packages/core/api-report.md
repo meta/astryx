@@ -10457,7 +10457,7 @@ target table-cell (Table) props [density]
 target table-footer (Table)
 target table-header (Table)
 target table-header-cell (Table) props [density]
-target table-row (Table)
+target table-row (Table) states [selected]
 target table-scroll-wrapper (Table)
 target text (Text) props [color, size, type]
 target text-area (TextArea) props [size, status] states [disabled, readonly]
@@ -10547,7 +10547,7 @@ attr data-presentation (theme reflection on 1 target)
 attr data-progress (theme reflection on 4 targets)
 attr data-readonly (theme reflection on 5 targets)
 attr data-select-all (theme reflection on 1 target)
-attr data-selected (theme reflection on 14 targets)
+attr data-selected (theme reflection on 15 targets)
 attr data-sender (theme reflection on 2 targets)
 attr data-shade (theme reflection on 1 target)
 attr data-shape (theme reflection on 5 targets)
