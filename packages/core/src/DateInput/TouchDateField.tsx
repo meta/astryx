@@ -59,6 +59,8 @@ import {
   useTransition,
 } from 'react';
 import {flushSync} from 'react-dom';
+import {moveFocusLeftBehind, noteFocusWithin} from '../utils/focusReturn';
+import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
@@ -683,6 +685,9 @@ export function TouchDateField({
   const previousArrowRef = useRef<HTMLButtonElement | null>(null);
   const nextArrowRef = useRef<HTMLButtonElement | null>(null);
   const monthYearButtonRef = useRef<HTMLButtonElement | null>(null);
+  // A focus move out of a hidden month arrow shows the ring for the last
+  // input (`moveFocusLeftBehind`), which reads shared modality tracking.
+  useInteractionModalityTrackingFor(sheetBodyRef);
   // Pending focus handoff from the clear button; see handleClear.
   const clearFocusTimerRef = useRef<number | null>(null);
   // Releases the focus timer on unmount.
@@ -903,9 +908,10 @@ export function TouchDateField({
   // An arrow steps a month. An arrow that reaches the end of the range is
   // hidden, and a hidden element loses focus. So if this arrow holds focus
   // and the step reaches its end, focus moves to the other arrow, or to the
-  // month-and-year button when both arrows hide. The step renders first
-  // (flushSync), because the other arrow can itself be hidden until then: in
-  // a two-month range the arrows trade places on one step.
+  // month-and-year button when both arrows hide.
+  // The step renders first (flushSync), because the other arrow can itself
+  // be hidden until then: in a two-month range the arrows trade places on
+  // one step.
   const stepMonthFromArrow = useCallback(
     (delta: -1 | 1, arrow: HTMLButtonElement) => {
       const target = clampIndex(
@@ -915,19 +921,17 @@ export function TouchDateField({
       );
       const reachesEnd =
         delta < 0 ? target <= minMonthIndex : target >= maxMonthIndex;
-      const holdsFocus = arrow.ownerDocument.activeElement === arrow;
+      const focusOnArrow = reachesEnd ? noteFocusWithin(arrow) : null;
       // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the other arrow must be shown before it can take focus
       flushSync(() => stepMonth(delta));
-      if (reachesEnd && holdsFocus) {
-        const otherArrowStays =
-          delta < 0 ? target < maxMonthIndex : target > minMonthIndex;
-        const destination = otherArrowStays
-          ? delta < 0
-            ? nextArrowRef.current
-            : previousArrowRef.current
-          : monthYearButtonRef.current;
-        destination?.focus();
-      }
+      const otherArrowStays =
+        delta < 0 ? target < maxMonthIndex : target > minMonthIndex;
+      const destination = otherArrowStays
+        ? delta < 0
+          ? nextArrowRef.current
+          : previousArrowRef.current
+        : monthYearButtonRef.current;
+      moveFocusLeftBehind(focusOnArrow, destination, arrow);
     },
     [monthIndex, minMonthIndex, maxMonthIndex, stepMonth],
   );
