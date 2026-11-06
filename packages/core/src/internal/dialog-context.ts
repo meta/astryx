@@ -6,10 +6,9 @@
  * @output `@astryxdesign/core/internal/dialog-context`: `useDialogContext`,
  *   for Astryx's own packages
  * @position An internal entry reserved for Astryx's own packages:
- *   undocumented, outside the public API and its compatibility promise
- *   (spec:AST-017 FR21), versioned in lockstep with Core, and allowed only in
- *   Core and Lab by the `@astryx/no-core-internal-import` lint rule
- *   (architecture:react-component-runtime INV13). Lab's DialogHeroHeader reads
+ *   undocumented, outside the public API and its compatibility promise,
+ *   versioned in lockstep with Core, and allowed only in Core and Lab by the
+ *   `@astryx/no-core-internal-import` lint rule. Lab's DialogHeroHeader reads
  *   the Dialog's title id and inline state through it, so it names the dialog
  *   and requests title focus the way DialogHeader does. Named re-exports only.
  *
