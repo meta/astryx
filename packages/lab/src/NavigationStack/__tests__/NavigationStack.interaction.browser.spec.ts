@@ -29,7 +29,10 @@ import {
   countBetween,
   drag,
   flick,
+  freezePageWhen,
   holdAnimations,
+  installPageFreeze,
+  installTimerGate,
   markElement,
   openStory,
   releaseAnimations,
@@ -37,6 +40,7 @@ import {
   sampleRects,
   startBusyControl,
   startScreencast,
+  thawPage,
   touchDriver,
   touchStoryboard,
   traceRendering,
@@ -298,66 +302,126 @@ const crit = (response: number, ms: number) => {
   return 1 - (1 + u) * Math.exp(-u);
 };
 
-/** The incoming card's, the covered bar's and its cut box's x and boxes. */
-interface CutLayers {
-  card: number;
-  bar: number;
-  cut: number;
-  cardBox: {left: number; right: number};
-  cutBox: {left: number; right: number};
+/** One scene time of a push: where the incoming card and the cut stand. */
+interface CutSample {
+  /** The incoming card's leading edge, px. */
+  cardEdge: number;
+  /** How far the covered bar's cut is from that edge, px. */
+  gap: number;
 }
 
-const cutLayers = (page: Page, covered: string, incoming: string) =>
-  page.evaluate(
-    ([coveredKey, incomingKey]): CutLayers | null => {
-      const x = (element: Element) => {
-        const value = getComputedStyle(element).translate;
-        return value === 'none' ? 0 : parseFloat(value);
-      };
-      const cardElement = document.querySelector(
-        `[data-navigation-screen="${incomingKey}"]`,
-      );
-      const barElement = document.querySelector(
-        `[data-navigation-bar="${coveredKey}"]`,
-      );
-      const cutElement = barElement?.firstElementChild;
-      if (cardElement == null || barElement == null || cutElement == null) {
-        return null;
-      }
-      const cardBox = cardElement.getBoundingClientRect();
-      const cutBox = cutElement.getBoundingClientRect();
-      return {
-        card: x(cardElement),
-        bar: x(barElement),
-        cut: x(cutElement),
-        cardBox: {left: cardBox.left, right: cardBox.right},
-        cutBox: {left: cutBox.left, right: cutBox.right},
-      };
-    },
-    [covered, incoming] as const,
-  );
+/** The scene times `cutAcrossPush` reads, ms after the push starts. */
+const CUT_TIMES = [16, 50, 90, 130, 180, 240, 300, 380];
 
 /**
- * How far the covered bar's cut is from the incoming card's leading edge at
- * `mid`. It reads the layers' animated `translate`, and each edge's static
- * part at `rest`, where box and translate agree. Mid-animation, WebKit can
- * report one layer's box a frame late and not the other's. The boxes alone
- * can then disagree by a pixel or two while the layers move as one.
+ * Runs `push`, then reads the incoming card's leading edge and the covered
+ * bar's cut from their rendered boxes at each of `CUT_TIMES`. The scene
+ * freezes while the push runs, so nothing moves or retires. Each read moves
+ * every animation of the push to one scene time first. Mid-flight, WebKit can
+ * report one moving layer a frame late; at a held time it cannot. A freeze
+ * that lands late on a busy machine still reads the whole flight. The page
+ * needs `installPageFreeze` before it loads and `installTimerGate` after.
  */
-const cutGap = (
-  mid: CutLayers | null,
-  rest: CutLayers | null,
-  direction: 'ltr' | 'rtl',
-): number => {
-  if (mid == null || rest == null) {
-    return Infinity;
+async function cutAcrossPush(
+  page: Page,
+  push: () => Promise<void>,
+  {
+    covered,
+    incoming,
+    direction,
+  }: {covered: string; incoming: string; direction: 'ltr' | 'rtl'},
+): Promise<CutSample[]> {
+  // Armed before the push, so the scene freezes while it runs.
+  const frozen = freezePageWhen(
+    page,
+    key =>
+      document
+        .querySelector(`[data-navigation-screen="${key}"]`)
+        ?.getAnimations()
+        .some(animation => animation.playState === 'running') === true,
+    incoming,
+  );
+  await push();
+  await frozen;
+  try {
+    return await page.evaluate(
+      ([coveredKey, incomingKey, dir, times]) => {
+        const stack = document.querySelector(
+          '[data-testid="navigation-stack"]',
+        );
+        const cardElement = document.querySelector(
+          `[data-navigation-screen="${incomingKey}"]`,
+        );
+        const cutElement = document.querySelector(
+          `[data-navigation-bar="${coveredKey}"]`,
+        )?.firstElementChild;
+        if (stack == null || cardElement == null || cutElement == null) {
+          return [];
+        }
+        const runs = document.getAnimations().filter(animation => {
+          const target =
+            animation.effect instanceof KeyframeEffect
+              ? animation.effect.target
+              : null;
+          return (
+            target != null &&
+            stack.contains(target) &&
+            animation.startTime != null
+          );
+        });
+        // Read once: a held run's start follows its current time.
+        const starts = runs.map(animation => Number(animation.startTime));
+        const heldAt = runs.map(animation => animation.currentTime);
+        // Scene times count from the incoming card's own start, whatever
+        // else in the stack animates (a row's press feedback).
+        const cardRun = runs.findIndex(
+          animation =>
+            animation.effect instanceof KeyframeEffect &&
+            animation.effect.target === cardElement,
+        );
+        if (cardRun < 0) {
+          return [];
+        }
+        const origin = starts[cardRun];
+        const samples = times.map(t => {
+          runs.forEach((animation, index) => {
+            animation.currentTime = Math.max(0, origin + t - starts[index]);
+          });
+          const cardBox = cardElement.getBoundingClientRect();
+          const cutBox = cutElement.getBoundingClientRect();
+          // The cut's trailing edge meets the card's leading edge.
+          const cardEdge = dir === 'rtl' ? cardBox.right : cardBox.left;
+          const cutEdge = dir === 'rtl' ? cutBox.left : cutBox.right;
+          return {cardEdge, gap: Math.abs(cutEdge - cardEdge)};
+        });
+        // Back where the freeze held them, so the thaw plays on from there.
+        runs.forEach((animation, index) => {
+          animation.currentTime = heldAt[index];
+        });
+        return samples;
+      },
+      [covered, incoming, direction, CUT_TIMES] as const,
+    );
+  } finally {
+    await thawPage(page);
   }
-  const cardEdge = direction === 'rtl' ? 'right' : 'left';
-  const cutEdge = direction === 'rtl' ? 'left' : 'right';
-  const cardStatic = rest.cardBox[cardEdge] - rest.card;
-  const cutStatic = rest.cutBox[cutEdge] - rest.bar - rest.cut;
-  return Math.abs(cutStatic + mid.bar + mid.cut - (cardStatic + mid.card));
-};
+}
+
+/**
+ * The samples span the flight, and at every one the cut stays on the card's
+ * leading edge.
+ */
+function expectCutOnCardEdge(samples: CutSample[], width: number) {
+  const trace = JSON.stringify(samples);
+  expect(samples.length, trace).toBeGreaterThanOrEqual(5);
+  const travel = Math.abs(
+    samples[0].cardEdge - samples[samples.length - 1].cardEdge,
+  );
+  expect(travel, trace).toBeGreaterThan(width * 0.5);
+  for (const sample of samples) {
+    expect(sample.gap, trace).toBeLessThan(2);
+  }
+}
 
 const rowCenter = async (page: Page, name: string) => {
   const box = await page.getByRole('button', {name}).first().boundingBox();
@@ -1067,17 +1131,20 @@ test('under a finger, the incoming screen cuts the old title while the main thre
 test('under a finger the cut rides the incoming card’s leading edge', async ({
   page,
 }) => {
-  const {driver} = await openStack(page, 'settings');
-  await driver.tap(await rowCenter(page, 'General'));
-  await waitForAnimation(card(page, 'screen-General'), {minProgressMs: 16});
-  // Mid-push the root's bar shows only left of the incoming card: the cut
-  // and the card's edge move on one spring.
-  const mid = await cutLayers(page, 'root', 'screen-General');
+  // The page clock a freeze needs, installed before the story loads.
+  await installPageFreeze(page);
+  const {driver, width} = await openStack(page, 'settings');
+  await installTimerGate(page);
+  const row = await rowCenter(page, 'General');
+  // Through the push the root's bar shows only left of the incoming card:
+  // the cut and the card's edge move on one spring.
+  const samples = await cutAcrossPush(page, () => driver.tap(row), {
+    covered: 'root',
+    incoming: 'screen-General',
+    direction: 'ltr',
+  });
+  expectCutOnCardEdge(samples, width);
   await waitForRest(card(page, 'screen-General'));
-  const rest = await cutLayers(page, 'root', 'screen-General');
-  expect(mid).not.toBeNull();
-  expect(rest).not.toBeNull();
-  expect(cutGap(mid, rest, 'ltr')).toBeLessThan(2);
   expect(await readCut(page, 'root')).toEqual({shown: 0});
   expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
 });
@@ -1085,20 +1152,22 @@ test('under a finger the cut rides the incoming card’s leading edge', async ({
 test('under a finger in a right-to-left stack, the cut mirrors', async ({
   page,
 }) => {
-  const {driver} = await openStack(page, 'settings');
+  await installPageFreeze(page);
+  const {driver, width} = await openStack(page, 'settings');
+  await installTimerGate(page);
   await page
     .getByTestId('navigation-stack')
     .evaluate(element => element.setAttribute('dir', 'rtl'));
-  await driver.tap(await rowCenter(page, 'General'));
-  await waitForAnimation(card(page, 'screen-General'), {minProgressMs: 16});
+  const row = await rowCenter(page, 'General');
   // The incoming card enters from the left: the root's bar shows only right
-  // of its trailing edge.
-  const mid = await cutLayers(page, 'root', 'screen-General');
+  // of the card's leading edge.
+  const samples = await cutAcrossPush(page, () => driver.tap(row), {
+    covered: 'root',
+    incoming: 'screen-General',
+    direction: 'rtl',
+  });
+  expectCutOnCardEdge(samples, width);
   await waitForRest(card(page, 'screen-General'));
-  const rest = await cutLayers(page, 'root', 'screen-General');
-  expect(mid).not.toBeNull();
-  expect(rest).not.toBeNull();
-  expect(cutGap(mid, rest, 'rtl')).toBeLessThan(2);
   expect(await readCut(page, 'root')).toEqual({shown: 0});
   expect(await readCut(page, 'screen-General')).toEqual({shown: 1});
 });
