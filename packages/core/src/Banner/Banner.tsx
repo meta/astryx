@@ -485,7 +485,8 @@ const elevationStyles = stylex.create({
  * Status controls visual meaning only. The component adds no live-region role;
  * announce async outcomes from their transition handler with `useAnnounce`.
  * Pass `role="alert"` only for an urgent message: Banner places it on the
- * title and description, so controls and supporting content are not read.
+ * title and description, so controls and supporting content are not read as
+ * part of the alert.
  *
  * @example
  * ```

@@ -79,8 +79,9 @@ announcement channel.
   carries a live role (`status`, `alert`, `log`) or `aria-live`.
 - **FR2 — Transient messages use the shared channel.** When the element that
   shows a message mounts, unmounts, or is replaced together with its text, the
-  owner announces through the shared announcement channel, except as FR4, FR10,
-  FR11, and FR14 provide. The new element
+  owner announces through the shared announcement channel, except as FR3 (an
+  urgent Banner's `role="alert"` message), FR4, FR10, FR11, and FR14 provide.
+  The new element
   MUST NOT carry a live role or `aria-live`, except an urgent Banner's
   `role="alert"` message (FR3).
 - **FR3 — Live roles only on persistent containers.** A component MAY own a
