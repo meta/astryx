@@ -2549,6 +2549,7 @@ jobs:
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
             --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
+            --tests-out "$RUNNER_TEMP/interaction-legs/tests.json" \
             --key interaction-chromium --fallback-key interaction-webkit \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --setup-seconds 90 --max-seconds 600 \
@@ -2626,7 +2627,7 @@ jobs:
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         run: |
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
-            --key interaction-chromium --fallback-key interaction-webkit --source .test-scope \
+            --key interaction-chromium --fallback-key interaction-webkit --tests "$RUNNER_TEMP/interaction-legs/tests.json" \
             --config playwright.interaction.config.ts --project chromium \
             --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }} \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
@@ -2771,6 +2772,7 @@ jobs:
           git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
             --listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope \
+            --tests-out "$RUNNER_TEMP/interaction-legs/tests.json" \
             --key interaction-webkit --fallback-key interaction-chromium \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --changed "${CHANGED_FILES:-}" \
@@ -2871,7 +2873,7 @@ jobs:
             echo "::warning title=Changed specs not planned::The scope step could not list the changed files, so a changed interaction spec outside this lane's paths does not run here."
           fi
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
-            --key interaction-webkit --fallback-key interaction-chromium --source .test-scope \
+            --key interaction-webkit --fallback-key interaction-chromium --tests "$RUNNER_TEMP/interaction-legs/tests.json" \
             --config playwright.interaction.config.ts --project webkit \
             --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }} \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \

@@ -113,6 +113,18 @@ export function testsReader(source) {
 }
 
 /**
+ * The test counts the leg count read, from the file it wrote. A spec it did
+ * not count has none.
+ */
+function testsFrom(file) {
+  const counts =
+    file && fs.existsSync(file)
+      ? JSON.parse(fs.readFileSync(file, 'utf8'))
+      : {};
+  return spec => counts[spec] ?? 0;
+}
+
+/**
  * Each file's seconds for the split: its recorded time, else its time in
  * `fallback`, else its test count times `perTest`. A file with none of them
  * is left out, so the splitter counts it at the median.
@@ -297,7 +309,7 @@ function plan(args) {
     leg > legs
   ) {
     throw new Error(
-      'usage: plan --key <times key> [--fallback-key <times key>] [--source <git dir>] --config <file> [--project <name>] --leg <i> --of <n> --out <file> [--durations <file>] [-- <filters...>]',
+      'usage: plan --key <times key> [--fallback-key <times key>] [--tests <file>] --config <file> [--project <name>] --leg <i> --of <n> --out <file> [--durations <file>] [-- <filters...>]',
     );
   }
   const files = list(suite, out, filters);
@@ -309,7 +321,7 @@ function plan(args) {
     files,
     costsFor(files, recorded[key] ?? {}, {
       fallback: recorded[option(own, '--fallback-key')] ?? {},
-      testsOf: testsReader(option(own, '--source')),
+      testsOf: testsFrom(option(own, '--tests')),
       perTest: recorded['seconds-per-test']?.[key],
     }),
     legs,
@@ -353,7 +365,7 @@ function legs(args) {
   };
   if (!key || !Number.isInteger(leg) || leg < 1)
     throw new Error(
-      'usage: legs --key <times key> --leg <i> --listed <file> [--source <git dir>] --setup-seconds <s> --max-seconds <s> --max-legs <n> [--fallback-key <times key>] [--durations <file>] [--changed <file>] [-- <filters...>]',
+      'usage: legs --key <times key> --leg <i> --listed <file> [--source <git dir>] [--tests-out <file>] --setup-seconds <s> --max-seconds <s> --max-legs <n> [--fallback-key <times key>] [--durations <file>] [--changed <file>] [-- <filters...>]',
     );
   const specs = file =>
     fs.readFileSync(file, 'utf8').split('\n').filter(isInteractionSpec);
@@ -384,7 +396,9 @@ function legs(args) {
   // A spec with no recorded time counts its tests, read from the merge
   // commit (the scope checkout) without a checkout of its own.
   const source = option(own, '--source');
-  const testsOf = testsReader(source);
+  const read = testsReader(source);
+  const counted = {};
+  const testsOf = file => (counted[file] = read(file));
   const seconds = estimateSeconds(durations[key] ?? {}, filters, {
     listed,
     changed: changedFile ? specs(changedFile) : [],
@@ -392,6 +406,10 @@ function legs(args) {
     testsOf,
     perTest: durations['seconds-per-test']?.[key],
   });
+  // The plan step runs after the head checkout has replaced the scope
+  // checkout, so it reads the counts from here.
+  const testsOut = option(own, '--tests-out');
+  if (testsOut) fs.writeFileSync(testsOut, `${JSON.stringify(counted)}\n`);
   const count = legCount({seconds, ...limits});
   const runs = leg <= count;
   console.log(

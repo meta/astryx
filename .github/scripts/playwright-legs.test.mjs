@@ -332,7 +332,7 @@ describe('the interaction proof legs in ci.yml', () => {
           `cp .test-scope/${file} "$RUNNER_TEMP/interaction-legs/${dir}"`,
         );
       expect(plan.run).toContain(
-        `--key interaction-${lane.project} --fallback-key interaction-${lane.fallback} --source .test-scope`,
+        `--key interaction-${lane.project} --fallback-key interaction-${lane.fallback} --tests "$RUNNER_TEMP/interaction-legs/tests.json"`,
       );
       expect(plan.run).toContain(
         `--config playwright.interaction.config.ts --project ${lane.project}`,
@@ -641,6 +641,7 @@ describe('the interaction proof legs in ci.yml', () => {
     for (const part of [
       'git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"',
       '--listed "$RUNNER_TEMP/interaction-legs/listed.txt" --source .test-scope',
+      '--tests-out "$RUNNER_TEMP/interaction-legs/tests.json"',
       '--key interaction-chromium --fallback-key interaction-webkit',
       '--durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json"',
       '--setup-seconds 90 --max-seconds 600',
@@ -658,18 +659,27 @@ describe('the interaction proof legs in ci.yml', () => {
     expect(at).toBeLessThan(
       job.steps.indexOf(step(job, 'Check out the heavy-suite caps')),
     );
-    // Both plans cost an unrecorded spec as their counts do.
+    // Both plans cost an unrecorded spec as their counts do, from the
+    // counts the count step wrote: the head checkout has replaced the scope
+    // checkout by then.
     expect(step(job, "Plan this leg's interaction proofs").run).toContain(
-      '--key interaction-chromium --fallback-key interaction-webkit --source .test-scope',
+      '--key interaction-chromium --fallback-key interaction-webkit --tests "$RUNNER_TEMP/interaction-legs/tests.json"',
+    );
+    const webkit = ci.jobs['pr-interaction-webkit'];
+    expect(step(webkit, "Count this run's WebKit legs").run).toContain(
+      '--tests-out "$RUNNER_TEMP/interaction-legs/tests.json"',
     );
     expect(
-      step(
-        ci.jobs['pr-interaction-webkit'],
-        "Plan this leg's WebKit interaction proofs",
-      ).run,
+      step(webkit, "Plan this leg's WebKit interaction proofs").run,
     ).toContain(
-      '--key interaction-webkit --fallback-key interaction-chromium --source .test-scope',
+      '--key interaction-webkit --fallback-key interaction-chromium --tests "$RUNNER_TEMP/interaction-legs/tests.json"',
     );
+    // The scope checkout is gone by the plan step.
+    for (const [id, name] of [
+      ['pr-interaction', "Plan this leg's interaction proofs"],
+      ['pr-interaction-webkit', "Plan this leg's WebKit interaction proofs"],
+    ])
+      expect(step(ci.jobs[id], name).run).not.toContain('.test-scope');
   });
 
   it('splits by the same costs it counts, and stops on a spec it cannot read', () => {
