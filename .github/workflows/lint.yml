@@ -238,6 +238,17 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: pnpm check:repo
 
+      # The probe theme is generated from the component docs, so the visual
+      # gate probes every documented theming target and state. A target or
+      # state added without regenerating is one the gate never sees.
+      - name: Check that the probe theme is current
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        run: |
+          if ! pnpm -s visual:probe-theme:check; then
+            echo '::error title=Probe theme out of date::The probe theme is behind the component docs. Run pnpm visual:probe-theme and commit packages/themes/probe/src/probeTheme.ts.'
+            exit 1
+          fi
+
       # The CLI README's generated tables (commands, error codes, response
       # types) ship to consumers. A merge from main can silently drop a
       # generated row, so the merged result is checked against its sources.
