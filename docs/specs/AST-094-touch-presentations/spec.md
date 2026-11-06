@@ -260,9 +260,11 @@ a measured, sourced difference exists.
   velocity to the settle. The floor is a guess inside the measured bracket
   (UIKit zeroes steady releases at 175 and 200 pt/s and keeps 249 pt/s, iOS
   26.2 simulator, 2026-10-23) until a measurement replaces it (FR2). A page
-  change during a drag starts from rest (DEC-25). On a starved page, a
-  retarget may skip ahead by up to the browser's commit delay
-  (start-at-call).
+  change during a drag starts from rest (DEC-25). A finger or a pen that lands
+  on a pager's settle after a release never reaches the pager's content: no
+  press feedback and no click. UIKit's content took none of 30 such touches
+  (iOS 26.2 simulator, 2026-11-06). On a starved page, a retarget may skip
+  ahead by up to the browser's commit delay (start-at-call).
 - **FR7 — Exits keep the native counterpart's look.** A touch presentation MUST
   play an exit with the look of its UIKit counterpart's exit, on every touch
   platform: a menu shrinks into its trigger, and an alert fades. In a component
@@ -391,7 +393,7 @@ a measured, sourced difference exists.
   activation stays the browser's click, except that an action a
   `family:action-groups` member tracks activates at the lift (FR26), and a toggle
   under `spec:AST-020` FR9's slide-off exception (Switch, Checkbox,
-  CheckboxListItem) may also complete on a lift after the finger slid off; and a Switch completes its own toggle at the lift of a finger hold or a flipping drag, rather than through the browser's click (`component:Switch` FR15); and a SegmentedControl drag commits at the lift on the segment nearest the pointer, wherever it began (`component:SegmentedControl` FR13). Where the engine hit-tests an element a compositor animation moves at the motion's start (iOS WebKit), a touch on moving content goes to what was drawn under the finger at touch-down, and a tap there (no recognizer claimed it, the browser did not take it, and it stayed within 45 pt) MUST activate it: the browser's own click for that touch is cancelled or swallowed, and that element receives one click, an editable focused first.
+  CheckboxListItem) may also complete on a lift after the finger slid off; and a Switch completes its own toggle at the lift of a finger hold or a flipping drag, rather than through the browser's click (`component:Switch` FR15); and a SegmentedControl drag commits at the lift on the segment nearest the pointer, wherever it began (`component:SegmentedControl` FR13). Where the engine hit-tests an element a compositor animation moves at the motion's start (iOS WebKit), a touch on moving content goes to what was drawn under the finger at touch-down, and a tap there (no recognizer claimed it, the browser did not take it, and it stayed within 45 pt) MUST activate it: the browser's own click for that touch is cancelled or swallowed, and that element receives one click, an editable focused first. A pager's settle after a release is the exception: a finger or a pen that lands on it never reaches the content (FR6).
   Under a fine pointer a control uses a third profile with no delay: its
   press paint starts at once on `pointerdown`, through the same press
   controller and release fade as a finger's, in place of CSS `:active`; the

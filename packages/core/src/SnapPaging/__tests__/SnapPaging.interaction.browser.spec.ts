@@ -431,6 +431,79 @@ for (const holdMs of [150, 40]) {
   });
 }
 
+// The touch that stops a scroll view never reaches its content (UIKit).
+test.describe("a touch that lands on a flick's settle", () => {
+  /** Counts clicks that reach the row's items. */
+  async function countItemClicks(scroller: Locator) {
+    await scroller.evaluate(el => {
+      const w = window as unknown as {__itemClicks: number};
+      w.__itemClicks = 0;
+      el.addEventListener('click', () => {
+        w.__itemClicks += 1;
+      });
+    });
+    return async () =>
+      scroller.evaluate(
+        () => (window as unknown as {__itemClicks: number}).__itemClicks,
+      );
+  }
+
+  /** Flicks the row from rest and waits until the paging holds it. */
+  async function flickToSettle(page: Page, scroller: Locator) {
+    await swipe(page, scroller, {px: 80, ms: 80});
+    await expect
+      .poll(async () => isTakenOver(scroller), {intervals: [5]})
+      .toBe(true);
+  }
+
+  test('a tap during the settle clicks no item', async ({page}) => {
+    const {scroller} = await open(page, 'snap-paging-three-up', 'paging');
+    const box = await scroller.boundingBox();
+    if (box == null) {
+      throw new Error('no scroller');
+    }
+    const clicks = await countItemClicks(scroller);
+    await flickToSettle(page, scroller);
+    const driver = await touchDriver(page);
+    // The engine's own tap path: WebKit synthesises a click only from it.
+    await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
+    await settled(scroller);
+    expect(await clicks()).toBe(0);
+  });
+
+  test('a 150 ms hold during the settle clicks no item', async ({page}) => {
+    const {scroller} = await open(page, 'snap-paging-three-up', 'paging');
+    const box = await scroller.boundingBox();
+    if (box == null) {
+      throw new Error('no scroller');
+    }
+    const clicks = await countItemClicks(scroller);
+    await flickToSettle(page, scroller);
+    const driver = await touchDriver(page);
+    await driver.play(
+      tap({x: box.x + box.width / 2, y: box.y + box.height / 2}, {holdMs: 150}),
+    );
+    await settled(scroller);
+    // WebKit synthesises a click only from its own tap path, not from a raw
+    // touch sequence (harness README, engine limits); Chromium does from both.
+    if (driver.engine === 'chromium') {
+      expect(await clicks()).toBe(0);
+    }
+  });
+
+  test('a tap on the resting row still clicks the item', async ({page}) => {
+    const {scroller} = await open(page, 'snap-paging-three-up', 'paging');
+    const box = await scroller.boundingBox();
+    if (box == null) {
+      throw new Error('no scroller');
+    }
+    const clicks = await countItemClicks(scroller);
+    const driver = await touchDriver(page);
+    await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
+    await expect.poll(clicks).toBe(1);
+  });
+});
+
 test.describe('with a finger and a mouse', () => {
   test.use({hasTouch: true, isMobile: false});
 
