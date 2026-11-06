@@ -172,6 +172,54 @@ describe('a block edge reveal slides its parts under a still clip (spec:AST-105 
     expect(glideOf(part)).toBeNull();
   });
 
+  it('keeps the moving clip when a part still glides from an earlier change, so its glide plays on', async () => {
+    document.body.innerHTML = `<div id="area"><div id="content"><p id="a">A</p>
+      <p id="b">B</p></div><p id="after">Next</p></div>`;
+    const byId = (id: string) => document.getElementById(id) as HTMLElement;
+    const [area, content, a, b, after] = [
+      'area',
+      'content',
+      'a',
+      'b',
+      'after',
+    ].map(byId);
+    place(area, 0, 600);
+    // The first row grows by 20 px, so the second row glides down.
+    let grown = 0;
+    vi.spyOn(a, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(0, 40, 400, 40 + grown),
+    );
+    vi.spyOn(b, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(0, 80 + grown, 400, 40),
+    );
+    vi.spyOn(content, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(0, 40, 400, 80 + grown),
+    );
+    Object.defineProperty(content, 'offsetHeight', {get: () => 80 + grown});
+    vi.spyOn(after, 'getBoundingClientRect').mockImplementation(() => {
+      const margin =
+        Number.parseFloat(content.style.getPropertyValue('margin-block-end')) ||
+        0;
+      return new DOMRect(0, 120 + grown + margin, 400, 20);
+    });
+    const layout = createAnimatedLayout(() => area);
+    const grow = reportLayoutChange(layout, () => a);
+    grow.measureBefore();
+    grown = 20;
+    grow.animate();
+    await Promise.resolve();
+    expect(glideOf(b)).not.toBeNull();
+    const glide = glideOf(b);
+    // The content then closes while that glide runs.
+    const close = reportLayoutChange(layout, () => content);
+    close.measureBefore();
+    close.animate();
+    expect(holdLayoutExit(layout, content, vi.fn())).toBe(true);
+    const exit = motionsOn('content').at(-1);
+    expect(exit?.keyframes.some(frame => frame.clipPath != null)).toBe(true);
+    expect(glideOf(b)).toBe(glide);
+  });
+
   it('leaves a child the band cannot show where it is', () => {
     const {content, layout} = setUp({isOpening: true, far: true});
     playLayoutChange(layout, content);

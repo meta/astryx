@@ -1723,6 +1723,8 @@ function extentOf(element: Element, edge: LayoutEdge): number {
 /** The parts that slide, and the still clip that holds them while they do. */
 interface Sliding {
   readonly parts: ReadonlyArray<Element>;
+  /** Each part's ancestors' scale: page px per px of its own offset. */
+  readonly scales: ReadonlyArray<{readonly x: number; readonly y: number}>;
   readonly clip: string;
 }
 
@@ -1764,6 +1766,7 @@ function slidingParts(
   const visible = visibleRect(area);
   const band = bandFor(visible, Math.max(view.innerHeight, extent));
   const parts: Element[] = [];
+  const scales: {x: number; y: number}[] = [];
   for (let node = element.firstChild; node != null; node = node.nextSibling) {
     if (node.nodeType === Node.TEXT_NODE) {
       if ((node.textContent ?? '').trim() !== '') {
@@ -1785,7 +1788,13 @@ function slidingParts(
       break;
     }
     if (box.bottom >= band.start) {
+      // A part an earlier change still glides keeps that glide, which a slide
+      // would hide and then show again. The element keeps the moving clip.
+      if (glides.has(node as Element)) {
+        return null;
+      }
       parts.push(node as Element);
+      scales.push(scaleOf(node as Element, box, ownScaleOf(node as Element)));
     }
   }
   if (parts.length === 0) {
@@ -1798,6 +1807,7 @@ function slidingParts(
     (Number.parseFloat(style.getPropertyValue(`padding-${side}`)) || 0);
   return {
     parts,
+    scales,
     clip:
       edge === 'block-end'
         ? `inset(${inner('top')}px 0px 0px 0px)`
@@ -2203,11 +2213,8 @@ export function playLayoutChange(
   // own clock in WebKit, and the edge would part from that content.
   const extent = edge.startsWith('block') ? extentOf(element, edge) : 0;
   const sliding = slidingParts(element, edge, area, extent);
-  const partMotions = slideParts(
-    sliding?.parts ?? [],
-    progress,
-    change,
-    remaining => slideFrame(edge, (1 - from) * remaining * extent),
+  const partMotions = slideParts(sliding, progress, change, remaining =>
+    slideFrame(edge, (1 - from) * remaining * extent),
   );
   const animation = safeAnimate(
     element,
@@ -2244,14 +2251,14 @@ export function playLayoutChange(
  * `frame` turns the share of the motion still to come into a keyframe.
  */
 function slideParts(
-  parts: ReadonlyArray<Element>,
+  sliding: Sliding | null,
   progress: GlideProgress,
   change: ChangeStart | undefined,
   frame: (remaining: number) => Keyframe,
   fill?: FillMode,
 ): Animation[] {
   const motions: Animation[] = [];
-  for (const part of parts) {
+  for (const [index, part] of (sliding?.parts ?? []).entries()) {
     const motion = safeAnimate(
       part,
       sampleKeyframes(progress, frame),
@@ -2265,12 +2272,18 @@ function slideParts(
       const glide: Glide = {
         animation: motion,
         offsetAt: t => drawnOffset(motion, t),
-        durationMs: progress.durationMs,
+        // A ride retimes the slide, so its length is read off the slide.
+        get durationMs() {
+          return liveDuration(motion, progress.durationMs);
+        },
+        // The part showed at its place when the parts were read.
         shownBefore: {x: 0, y: 0},
-        scale: {x: 1, y: 1},
+        scale: sliding?.scales[index] ?? {x: 1, y: 1},
       };
       glides.set(part, glide);
       slideTargets.set(motion, part);
+      // An exit's slide then holds its end until the release. The element is
+      // inert and has given up its space by then.
       motion.addEventListener?.('finish', () => {
         if (glides.get(part) === glide) {
           glides.delete(part);
@@ -2322,6 +2335,13 @@ function drawnOffset(
 function startedBefore(glide: Glide, animation: Animation): number {
   const shift = Number(animation.startTime) - Number(glide.animation.startTime);
   return Number.isFinite(shift) ? Math.max(0, shift) : 0;
+}
+
+/** `animation`'s length now, in ms, or `fallback` if it has none. */
+function liveDuration(animation: Animation, fallback: number): number {
+  const effect = animation.effect as KeyframeEffect | null;
+  const duration = Number(effect?.getTiming?.().duration);
+  return duration > 0 ? duration : fallback;
 }
 
 /** Each part's slide, by its motion: a stopped slide is no glide. */
@@ -2622,7 +2642,7 @@ export function holdLayoutExit(
     const extent = edge.startsWith('block') ? extentOf(element, edge) : 0;
     const sliding = slidingParts(element, edge, area, extent);
     const partMotions = slideParts(
-      sliding?.parts ?? [],
+      sliding,
       progress,
       change,
       remaining => slideFrame(edge, (1 - from * remaining) * extent),
