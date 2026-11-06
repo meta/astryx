@@ -176,7 +176,7 @@ describe('normalizeTypeText', () => {
       'string[]',
     ]);
     expect(typeTextTooOld({version: '4.7.4'})).toBe(
-      'TypeScript 4.7.4 is older than 4.8, the oldest the type comparison reads',
+      'TypeScript 4.7.4 is older than 4.8, the oldest the type comparison reads; install TypeScript 5.0 through 6 (`npm install -D typescript@6`), or on TypeScript 7 add `@typescript/typescript6`, to judge them',
     );
     for (const version of ['4.8.4', '5.0.4', '6.0.3', ts.version]) {
       expect(typeTextTooOld({version})).toBeNull();

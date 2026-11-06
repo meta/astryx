@@ -21,8 +21,21 @@ export {
   type SyntaxToken,
 } from '@astryxdesign/core/CodeBlock';
 
-// InfoTip — accessible info-icon help affordance (RFC facebook/astryx#3349)
+// InfoTip — accessible info-icon help affordance (RFC meta/astryx#3349)
 export {InfoTip, type InfoTipProps, type InfoTipSize} from './InfoTip';
+
+// SelectableCardGroup — a set of selectable cards with the semantics of its
+// selection: one choice is a radio group, several a group of checkboxes
+export {
+  SelectableCardGroup,
+  SelectableCardGroupItem,
+  type SelectableCardGroupProps,
+  type SelectableCardGroupItemProps,
+} from './SelectableCardGroup';
+
+// CircleCheckIndicator — the iOS multiple-selection circle, a checkbox-family
+// indicator a theme can map to `checkbox`
+export {CircleCheckIndicator} from './CircleCheckIndicator';
 
 // EmojiPicker — standalone searchable emoji panel
 export {
@@ -88,7 +101,7 @@ export {
 } from './ChatReasoning/ChatReasoning';
 export * from './Chat';
 
-// Tour — guided product-tour / NUX walkthrough (facebook/astryx#4239)
+// Tour — guided product-tour / NUX walkthrough (meta/astryx#4239)
 export {
   Tour,
   type TourProps,
@@ -315,15 +328,29 @@ export {
   type DiffViewerSide,
 } from './DiffViewer';
 
-// MobileTokenizer — Lab prototype (stack layer 1) of the touch Tokenizer
-// flow: summary trigger + stacked manage/add BottomSheets. Graduates to
-// Core Tokenizer presentation="bottom-sheet" (stack layer 2).
+// NavigationStack: push/pop drill-down navigation with UIKit's transitions
+// and back swipes.
 export {
-  MobileTokenizer,
-  type MobileTokenizerProps,
-  type MobileTokenizerChange,
-} from './MobileTokenizer';
+  NavigationScreen,
+  NavigationStack,
+  useNavigationStack,
+  type NavigationScreenProps,
+  type NavigationStackApi,
+  type NavigationStackProps,
+} from './NavigationStack';
 
-// RichTextEditor (RFC facebook/astryx#3899) moved out of @astryxdesign/lab into
+// PageControl: UIPageControl's row of page indicators.
+export {PageControl, type PageControlProps} from './PageControl';
+
+// RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:
 //   import {RichTextEditor, RichTextView} from '@astryxdesign/richtext';
+
+// Pull to refresh as UIRefreshControl, applied by the app to its own scroll
+// container, on Core's touch foundation.
+export {
+  REFRESH_REVEAL_VAR,
+  useRefreshControl,
+  type UseRefreshControlOptions,
+  type UseRefreshControlResult,
+} from './RefreshControl';

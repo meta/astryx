@@ -21,9 +21,11 @@
  * @output Ordered, case-insensitively deduped family names, and the human
  *   help snippet (<link> pair + @font-face) printed after the install
  *   instructions.
- * @position Sits beside build.mjs (api/theme/build/). Pure functions, no IO,
- *   so the `--json` receipt and the human output share one source of truth.
+ * @position Sits beside build.mjs (api/theme/build/). Pure functions, no IO
+ *   beyond the CLI invocation the human help names (formatCliCommand), so the
+ *   `--json` receipt and the human output share one source of truth.
  */
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
 // font-family values that never need loading: CSS generic families, the ui-*
 // system keywords, and CSS-wide keywords that can appear in a token value.
@@ -254,6 +256,6 @@ function fontLoadingRecipe(families) {
       font-display: swap;
     }
 
-  Recipe and fallback-stack guidance: astryx docs typography
+  Recipe and fallback-stack guidance: ${formatCliCommand('docs typography')}
 `;
 }

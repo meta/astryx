@@ -1,8 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(internal/a11y-spec/src/patterns/combobox|apps/storybook/stories/ComboboxA11y)
 
 /** Chromium accessibility-tree and relationship proof for Selector's Combobox binding. */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   blockingResults,
   checkAccessibilitySpec,

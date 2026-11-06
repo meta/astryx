@@ -3,6 +3,8 @@
 import {describe, expect, it, vi} from 'vitest';
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {CommentPin} from './CommentPin';
 
 const ADA = {id: 'ada', name: 'Ada Lovelace'};
@@ -43,7 +45,7 @@ describe('CommentPin', () => {
     ).toHaveAttribute('data-grouped', 'grouped');
   });
 
-  it('caps a group at three circles with a +N overflow beyond three people', () => {
+  it('caps a group at three circles with an ellipsis overflow beyond three people', () => {
     const {container} = render(
       <CommentPin
         label="Open 6 grouped annotations from Ada, Lin, and 3 others"
@@ -54,12 +56,53 @@ describe('CommentPin', () => {
 
     expect(container.querySelectorAll('.astryx-avatar')).toHaveLength(2);
     const overflow = container.querySelector('.astryx-avatar-group-overflow');
-    expect(overflow).toHaveTextContent('+3');
+    // An ellipsis, not `+3`: the thread total stays the pin's only number.
+    expect(overflow?.querySelector('svg')).not.toBeNull();
+    expect(overflow).toHaveTextContent(/^$/);
     expect(overflow?.closest('[aria-hidden="true"]')).not.toBeNull();
     expect(screen.getByText('6')).toBeInTheDocument();
   });
 
-  it('shows the unread count in an accent badge in place of the total', () => {
+  it.each([
+    [undefined, 'sm', '22px'],
+    ['sm', 'sm', '22px'],
+    ['md', 'md', '24px'],
+    ['lg', 'lg', '28px'],
+  ] as const)(
+    'size %s reflects %s and draws %s participant circles',
+    (size, reflected, avatarPx) => {
+      const {container} = render(
+        <CommentPin
+          label="Open 6 grouped annotations"
+          participants={[ADA, LIN, MIRA, NOAH, SAM]}
+          threadCount={6}
+          size={size}
+        />,
+      );
+
+      const pin = screen.getByRole('button', {
+        name: 'Open 6 grouped annotations',
+      });
+      expect(pin).toHaveAttribute('data-size', reflected);
+      const avatars = container.querySelectorAll('.astryx-avatar');
+      expect(avatars).toHaveLength(2);
+      for (const avatar of avatars) {
+        expect(avatar.getAttribute('style') ?? '').toContain(avatarPx);
+      }
+    },
+  );
+
+  it('sizes a single participant with the pin', () => {
+    const {container} = render(
+      <CommentPin label="Open annotation" participants={[ADA]} size="lg" />,
+    );
+
+    expect(
+      container.querySelector('.astryx-avatar')?.getAttribute('style') ?? '',
+    ).toContain('28px');
+  });
+
+  it('marks unread threads with an accent dot after the total', () => {
     const {container} = render(
       <CommentPin
         label="Open 4 grouped annotations, 2 unread"
@@ -73,13 +116,20 @@ describe('CommentPin', () => {
       name: 'Open 4 grouped annotations, 2 unread',
     });
     expect(pin).toHaveAttribute('data-unread', 'unread');
-    expect(screen.getByText('2')).toHaveAttribute('aria-hidden', 'true');
-    expect(screen.queryByText('4')).not.toBeInTheDocument();
+    const dot = container.querySelector('.astryx-status-dot');
+    expect(dot).toHaveAttribute('data-variant', 'accent');
+    expect(dot?.closest('[aria-hidden="true"]')).not.toBeNull();
+    // The total stays; the unread count is the dot, not a second number.
+    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(screen.queryByText('2')).not.toBeInTheDocument();
+    expect(dot?.compareDocumentPosition(screen.getByText('4')) ?? 0).toBe(
+      Node.DOCUMENT_POSITION_PRECEDING,
+    );
     expect(container.querySelectorAll('.astryx-avatar')).toHaveLength(2);
   });
 
-  it('shows an unread badge on a single-thread pin', () => {
-    render(
+  it('marks an unread single-thread pin with a dot and no number', () => {
+    const {container} = render(
       <CommentPin
         label="Open unread annotation from Ada"
         participants={[ADA]}
@@ -92,17 +142,18 @@ describe('CommentPin', () => {
     });
     expect(pin).toHaveAttribute('data-unread', 'unread');
     expect(pin).not.toHaveAttribute('data-grouped');
-    expect(screen.getByText('1')).toBeInTheDocument();
+    expect(container.querySelector('.astryx-status-dot')).not.toBeNull();
+    expect(pin).toHaveTextContent(/^AL$/);
   });
 
   it.each([
-    [-1, null],
-    [1.5, null],
-    [Number.NaN, null],
-    [9, '3'],
+    [-1, false],
+    [1.5, false],
+    [Number.NaN, false],
+    [9, true],
   ])(
     'normalizes unreadCount %s and warns in development',
-    async (unreadCount, expectedBadge) => {
+    async (unreadCount, isUnread) => {
       const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const {container, unmount} = render(
         <CommentPin
@@ -114,13 +165,14 @@ describe('CommentPin', () => {
       );
 
       const pin = container.querySelector('.astryx-comment-pin');
-      if (expectedBadge == null) {
-        expect(pin).not.toHaveAttribute('data-unread');
-        expect(screen.getByText('3')).toBeInTheDocument();
-      } else {
+      if (isUnread) {
         expect(pin).toHaveAttribute('data-unread', 'unread');
-        expect(screen.getByText(expectedBadge)).toBeInTheDocument();
+        expect(container.querySelector('.astryx-status-dot')).not.toBeNull();
+      } else {
+        expect(pin).not.toHaveAttribute('data-unread');
+        expect(container.querySelector('.astryx-status-dot')).toBeNull();
       }
+      expect(screen.getByText('3')).toBeInTheDocument();
       await waitFor(() =>
         expect(warning).toHaveBeenCalledWith(
           expect.stringContaining('unreadCount` must be a finite non-negative'),
@@ -148,7 +200,9 @@ describe('CommentPin', () => {
         .querySelector('.astryx-avatar')
         ?.closest('[aria-hidden="true"]'),
     ).toHaveAttribute('aria-hidden', 'true');
-    expect(screen.getByText('4')).toHaveAttribute('aria-hidden', 'true');
+    expect(
+      screen.getByText('4').closest('[aria-hidden="true"]'),
+    ).not.toBeNull();
   });
 
   it('keeps a single marker to one representative even when more are supplied', () => {
@@ -177,10 +231,38 @@ describe('CommentPin', () => {
       name: 'Resolved selected annotation',
     });
     expect(marker).toHaveAttribute('aria-pressed', 'true');
-    expect(marker).toBeDisabled();
+    expect(marker).not.toBeDisabled();
+    expect(marker).toHaveAttribute('aria-disabled', 'true');
     expect(marker).toHaveAttribute('data-selected', 'selected');
     expect(marker).toHaveAttribute('data-resolved', 'resolved');
     expect(marker).toHaveAttribute('data-disabled', 'disabled');
+  });
+
+  it('renders nothing for a resolved pin unless it is selected', () => {
+    const {container, rerender} = render(
+      <CommentPin
+        label="Open resolved annotation from Ada"
+        participants={[ADA]}
+        isResolved
+      />,
+    );
+
+    expect(container.querySelector('.astryx-comment-pin')).toBeNull();
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+
+    rerender(
+      <CommentPin
+        label="Open resolved annotation from Ada"
+        participants={[ADA]}
+        isResolved
+        isSelected
+      />,
+    );
+    const pin = screen.getByRole('button', {
+      name: 'Open resolved annotation from Ada',
+    });
+    expect(pin).toHaveAttribute('data-resolved', 'resolved');
+    expect(pin).toHaveAttribute('data-selected', 'selected');
   });
 
   it('dims non-selected pins without disabling selection changes', () => {
@@ -234,6 +316,33 @@ describe('CommentPin', () => {
     expect(onClick).toHaveBeenCalledTimes(2);
   });
 
+  it('exposes aria-disabled instead of the native attribute when disabled', () => {
+    render(
+      <CommentPin label="Pending annotation" participants={[ADA]} isDisabled />,
+    );
+
+    const pin = screen.getByRole('button', {name: 'Pending annotation'});
+    expect(pin).not.toBeDisabled();
+    expect(pin).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('keeps a disabled pin in the tab order (spec:AST-085 FR1)', async () => {
+    const user = userEvent.setup();
+    render(<CommentPin label="Open annotation" participants={[ADA]} />);
+    render(
+      <CommentPin label="Pending annotation" participants={[LIN]} isDisabled />,
+    );
+    render(<CommentPin label="Another annotation" participants={[MIRA]} />);
+
+    await user.tab();
+    // The first tab stop is the enabled pin; the disabled one keeps its place
+    // right after it rather than being skipped.
+    await user.tab();
+    expect(
+      screen.getByRole('button', {name: 'Pending annotation'}),
+    ).toHaveFocus();
+  });
+
   it('does not call the click handler when disabled', () => {
     const onClick = vi.fn();
     render(
@@ -247,6 +356,152 @@ describe('CommentPin', () => {
 
     fireEvent.click(screen.getByRole('button', {name: 'Pending annotation'}));
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('blocks Enter and Space on a disabled pin (spec:AST-085 FR2)', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <CommentPin
+        label="Pending annotation"
+        participants={[ADA]}
+        isDisabled
+        onClick={onClick}
+      />,
+    );
+
+    // user-event only synthesizes the button's Enter/Space click when the
+    // keydown was not defaultPrevented, and a native listener on the pin sees
+    // any click that does reach the DOM. No click at all is what proves the
+    // keydown guard blocked activation itself, not just the click guard.
+    const nativeClicks = vi.fn();
+    const pin = screen.getByRole('button', {name: 'Pending annotation'});
+    pin.addEventListener('click', nativeClicks);
+
+    pin.focus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    pin.removeEventListener('click', nativeClicks);
+
+    expect(onClick).not.toHaveBeenCalled();
+    expect(nativeClicks).not.toHaveBeenCalled();
+  });
+
+  it('does not let a disabled pin activate a clickable ancestor (spec:AST-085 FR2)', () => {
+    const surfaceClick = vi.fn();
+    const onClick = vi.fn();
+    render(
+      <div role="button" onClick={surfaceClick} aria-label="Annotation surface">
+        <CommentPin
+          label="Pending annotation"
+          participants={[ADA]}
+          isDisabled
+          onClick={onClick}
+        />
+      </div>,
+    );
+
+    fireEvent.click(screen.getByRole('button', {name: 'Pending annotation'}));
+    expect(onClick).not.toHaveBeenCalled();
+    expect(surfaceClick).not.toHaveBeenCalled();
+  });
+
+  it('keeps focus when the pin becomes disabled while focused (spec:AST-085 FR4)', () => {
+    // jsdom keeps focus on a natively disabled button too, so on its own this
+    // cannot tell the two apart; the FR1 tests above pin the mechanism (no
+    // native `disabled`), which is what keeps focus here. A real-browser
+    // probe would be needed to prove FR4 independently.
+    const {rerender} = render(
+      <CommentPin label="Open annotation" participants={[ADA]} />,
+    );
+
+    const pin = screen.getByRole('button', {name: 'Open annotation'});
+    pin.focus();
+    expect(pin).toHaveFocus();
+
+    rerender(
+      <CommentPin label="Open annotation" participants={[ADA]} isDisabled />,
+    );
+    expect(pin).toHaveFocus();
+    expect(pin).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('paints an unselected disabled pin GrayText in forced colors (AST-085 FR6)', () => {
+    // The same declarations as the component's styles compile to the same
+    // atomic classes. Null defaults emit no atom of their own, so these are
+    // exactly the forced-colors arms — the shared default-mode atoms
+    // (borderColor: transparent) cannot make this check pass vacuously.
+    const atoms = (style: stylex.StyleXStyles) =>
+      stylex
+        .props(style)
+        .className!.split(' ')
+        .filter(name => name.includes('x') && !name.includes('__'));
+    const forced = stylex.create({
+      disabled: {
+        borderColor: {
+          default: null,
+          '@media (forced-colors: active)': 'GrayText',
+        },
+        color: {default: null, '@media (forced-colors: active)': 'GrayText'},
+      },
+    });
+    const forcedAtoms = atoms(forced.disabled);
+    expect(forcedAtoms.length).toBeGreaterThan(0);
+
+    const {rerender} = render(
+      <CommentPin label="Pending annotation" participants={[ADA]} isDisabled />,
+    );
+
+    const pin = screen.getByRole('button', {name: 'Pending annotation'});
+    for (const name of forcedAtoms) {
+      expect(pin).toHaveClass(name);
+    }
+
+    // A selected pin keeps its forced-colors Highlight treatment instead; the
+    // disabled affordance rides on the selected presentation staying intact.
+    rerender(
+      <CommentPin
+        label="Pending annotation"
+        participants={[ADA]}
+        isDisabled
+        isSelected
+      />,
+    );
+    for (const name of forcedAtoms) {
+      expect(pin).not.toHaveClass(name);
+    }
+  });
+
+  it('keeps the root text colour on an unselected disabled pin outside forced colors', () => {
+    // disabledUnselected must repeat the root's colour token as its default:
+    // a null default would replace it under StyleX's per-property merge and
+    // the count would fall back to the raw theme text colour.
+    const atoms = (style: stylex.StyleXStyles) =>
+      stylex
+        .props(style)
+        .className!.split(' ')
+        .filter(name => name.includes('x') && !name.includes('__'));
+    const rootColor = stylex.create({
+      color: {color: colorVars['--color-text-secondary']},
+    });
+    const colorAtoms = atoms(rootColor.color);
+    expect(colorAtoms.length).toBeGreaterThan(0);
+
+    render(
+      <CommentPin
+        label="Open 3 grouped annotations"
+        participants={[ADA]}
+        threadCount={3}
+        isDisabled
+      />,
+    );
+
+    const pin = screen.getByRole('button', {
+      name: 'Open 3 grouped annotations',
+    });
+    for (const name of colorAtoms) {
+      expect(pin).toHaveClass(name);
+    }
   });
 
   it('forwards the ref and neutral button props', () => {

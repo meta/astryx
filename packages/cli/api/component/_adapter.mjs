@@ -22,7 +22,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {
-  findCoreDir,
+  requireCoreDir as requireAnswerCoreDir,
   discoverExternalPackages,
 } from '../../foundation/fs/paths.mjs';
 import {
@@ -44,7 +44,42 @@ import {Project} from '../../foundation/config/project.mjs';
 import {loadComponentDoc as loadValidatedComponentDoc} from '../../foundation/discovery/component-loader.mjs';
 import {resolveComponentReplacements} from '../../foundation/discovery/component-replacement.mjs';
 import {searchComponents} from '../../foundation/text/string-utils.mjs';
-import {AstryxError} from '../error.mjs';
+import {
+  rankComponentSuggestions,
+  synonymMatches,
+} from '../../foundation/text/suggest-order.mjs';
+import {AstryxError, coreDirOrThrow} from '../error.mjs';
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
+import {
+  componentLinkProvider,
+  linkComponentDoc,
+  loadDocsCatalog,
+} from '../docs/_adapter.mjs';
+
+/** How far below the first suggestion's score a later one may be. */
+const NEAR_FIRST = 10;
+
+/** @type {Record<string, {synonyms?: string[]}> | undefined} */
+let cards;
+/**
+ * Search's component cards (each component's other names), read once.
+ * @returns {Record<string, {synonyms?: string[]}>}
+ */
+function searchCards() {
+  if (!cards) {
+    try {
+      cards = JSON.parse(
+        fs.readFileSync(
+          new URL('../search/_cards.json', import.meta.url),
+          'utf8',
+        ),
+      );
+    } catch {
+      cards = {};
+    }
+  }
+  return /** @type {Record<string, {synonyms?: string[]}>} */ (cards);
+}
 
 export {CORE_PACKAGE, unscopedComponentOwners};
 
@@ -116,15 +151,7 @@ export {CORE_PACKAGE, unscopedComponentOwners};
  * @returns {string}
  */
 export function requireCoreDir(cwd) {
-  const coreDir = findCoreDir(cwd);
-  if (!coreDir) {
-    throw new AstryxError(
-      'Could not find @astryxdesign/core package',
-      undefined,
-      ERROR_CODES.ERR_CORE_NOT_FOUND,
-    );
-  }
-  return coreDir;
+  return coreDirOrThrow(requireAnswerCoreDir, cwd);
 }
 
 /**
@@ -466,15 +493,34 @@ export async function resolveUnscopedDoc(dirName, {coreDir, cwd, name}) {
         resolvedOwnerPackage = CORE_PACKAGE;
         resolvedSourcePath = findComponentSource(coreDir, resolvedName);
       } else {
+        // How many to suggest: the near-top results, at most five and at
+        // least two. Which ones, and in what order, is the suggestion
+        // ranking's call.
         const threshold = Math.max(topScore - 20, 1);
-        const candidates = results
-          .filter(r => r.score >= threshold)
-          .slice(0, 5);
-        if (candidates.length < 2)
-          candidates.push(...results.slice(candidates.length, 2));
+        const count = Math.max(
+          results.filter(r => r.score >= threshold).slice(0, 5).length,
+          Math.min(2, results.length),
+        );
+        const candidates = rankComponentSuggestions(
+          dirName,
+          results,
+          Object.values(components).flat(),
+          synonymMatches(dirName, searchCards()),
+        ).slice(0, count);
+        // Past the first two suggestions, only the ones about as close as
+        // the first (within NEAR_FIRST points), or a close spelling of the
+        // whole typed name (a typo): a weaker match after a strong one reads
+        // as noise. The list only gets shorter and keeps at least two.
+        const typed = dirName.toLowerCase();
+        const nearFirst = candidates.filter(
+          (c, i) =>
+            i < 2 ||
+            c.score >= candidates[0].score - NEAR_FIRST ||
+            levenshteinDistance(c.name.toLowerCase(), typed) <= 2,
+        );
         throw new AstryxError(
           `No component named "${name}"`,
-          candidates.map(c => ({name: c.name, reason: c.reason})),
+          nearFirst.map(c => ({name: c.name, reason: c.reason})),
           ERROR_CODES.ERR_UNKNOWN_COMPONENT,
         );
       }
@@ -668,4 +714,116 @@ export function scopeIntegrationMember(docs, owner, dirName) {
   if (docs.theming) scoped.theming = docs.theming;
   if (docs.import) scoped.import = docs.import;
   return scoped;
+}
+
+/**
+ * A search response with every inline `{@link <target>}` in a component
+ * result's description resolved to the command that opens the doc it names,
+ * as `astryx component` prints it (spec:AST-047 FR9). The response object is
+ * kept, with its results replaced.
+ * @template {{data: {results: any[]}}} R
+ * @param {R} response
+ * @param {string} cwd
+ * @returns {Promise<R>}
+ */
+export async function linkSearchResponse(response, cwd) {
+  const results = response.data.results;
+  if (
+    !results.some(
+      result =>
+        result?.domain === 'component' &&
+        typeof result.description === 'string' &&
+        result.description.includes('{@'),
+    )
+  ) {
+    return response;
+  }
+  const linked = [];
+  for (const result of results) {
+    if (
+      result?.domain !== 'component' ||
+      typeof result.description !== 'string' ||
+      !result.description.includes('{@')
+    ) {
+      linked.push(result);
+      continue;
+    }
+    const read = await linkComponentResponse(
+      {
+        type: 'component.detail',
+        package: result.package,
+        data: {description: result.description},
+      },
+      cwd,
+    );
+    linked.push({...result, description: read.data.description});
+  }
+  response.data = {...response.data, results: linked};
+  return response;
+}
+
+/**
+ * A component read with every inline `{@link <target>}` in its doc text
+ * resolved to the command that opens the doc it names (spec:AST-047 FR9), in
+ * the detail, its props projection, and each list entry. A Core component's
+ * links resolve against the CLI's own docs; an integration's against that
+ * integration's. A link that names no doc prints as written.
+ * @template {{type: string, package?: string, data?: any}} R
+ * @param {R} response
+ * @param {string} cwd
+ * @returns {Promise<R>}
+ */
+export async function linkComponentResponse(response, cwd) {
+  const {type} = response;
+  if (
+    type !== 'component.detail' &&
+    type !== 'component.detail.props' &&
+    type !== 'component.list'
+  ) {
+    return response;
+  }
+  // Doc tokens render in the same pass as links.
+  if (!JSON.stringify(response.data ?? null).includes('{@')) {
+    return response;
+  }
+  const catalog = await loadDocsCatalog(cwd);
+  /** @type {Map<string, string>} */
+  const declared = new Map();
+  for (const integration of await loadIntegrationsSafely(cwd)) {
+    const id = /** @type {any} */ (integration).providerId;
+    if (typeof id === 'string') declared.set(integration.name, id);
+  }
+  /**
+   * @param {any} doc
+   * @param {string | undefined} owner
+   */
+  const link = async (doc, owner) => {
+    if (typeof owner !== 'string') return doc;
+    try {
+      return (
+        await linkComponentDoc(
+          catalog,
+          componentLinkProvider(owner, declared.get(owner)),
+          doc,
+        )
+      ).doc;
+    } catch {
+      // An owner that is not a provider id links nothing; its text reads as
+      // written.
+      return doc;
+    }
+  };
+  if (type !== 'component.list') {
+    return {...response, data: await link(response.data, response.package)};
+  }
+  /** @type {Record<string, any[]>} */
+  const components = {};
+  for (const [group, entries] of Object.entries(
+    response.data.components ?? {},
+  )) {
+    const linked = [];
+    for (const entry of entries) linked.push(await link(entry, entry?.package));
+    components[group] = linked;
+  }
+  return {...response, data: {...response.data, components}};
 }

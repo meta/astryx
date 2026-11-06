@@ -17,6 +17,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {Command} from 'commander';
 import {registerUpgrade} from './upgrade.mjs';
+import {isError} from '../../../api/json/parse.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {
   generateCompressedIndex,
@@ -47,6 +48,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  process.exitCode = undefined;
   process.chdir(originalCwd);
   fs.rmSync(tmpDir, {recursive: true, force: true});
   vi.restoreAllMocks();
@@ -298,6 +300,13 @@ describe('upgrade integration error policy (skip + warn)', () => {
     ]);
 
     expect(result.code).toBe('ERR_CODEMOD_FAILED');
+    expect(result.receipt).toMatchObject({
+      complete: false,
+      errorCode: 'ERR_CODEMOD_FAILED',
+      agentDocsRefreshed: false,
+      modifiedFiles: ['src/index.ts'],
+      errors: [expect.objectContaining({codemod: 'post-codemod-hook'})],
+    });
     expect(fs.readFileSync(path.join(tmpDir, 'AGENTS.md'), 'utf-8')).toBe(
       before,
     );
@@ -474,5 +483,99 @@ describe('upgrade integration error policy (skip + warn)', () => {
     const out = fs.readFileSync(path.join(tmpDir, 'src', 'index.ts'), 'utf-8');
     expect(out).toContain('foo');
     expect(out).not.toContain('bar');
+  });
+});
+
+describe('upgrade failure receipt when a codemod fails', () => {
+  const codemods = {
+    '0.2.0/drop-foo.mjs': `export default {type: 'code', title: 'Drop foo', transform: file => file.source.replace(/foo/g, 'bar')};\n`,
+    '0.2.0/fail.mjs': `export default {type: 'code', title: 'Fail on boom', transform: file => { if (file.source.includes('boom')) throw new Error('codemod boom'); return undefined; }};\n`,
+  };
+
+  function scaffold() {
+    scaffoldIntegration(codemods);
+    writeInstalledCore('0.2.0');
+    writeSource();
+    fs.writeFileSync(path.join(tmpDir, 'src', 'broken.ts'), 'const boom = 1;\n');
+  }
+
+  const ARGS = ['upgrade', '--from', '0.1.0', '--path', 'src'];
+
+  it('keeps the error envelope and adds the receipt of what was written', async () => {
+    scaffold();
+
+    const result = await runJson(['--json', ...ARGS, '--apply']);
+
+    expect(exitCode).toBe(1);
+    expect(isError(result)).toBe(true);
+    expect(result).not.toHaveProperty('type');
+    expect(result).toMatchObject({
+      apiVersion: 1,
+      code: 'ERR_CODEMOD_FAILED',
+      error: 'Upgrade completed with 1 codemod error.',
+      receipt: {
+        complete: false,
+        errorCode: 'ERR_CODEMOD_FAILED',
+        filesChanged: 1,
+        modifiedFiles: ['src/index.ts'],
+        protectedFiles: [],
+        errors: [
+          {
+            file: 'src/broken.ts',
+            codemod: '@acme/widgets:fail',
+            error: 'codemod boom',
+          },
+        ],
+      },
+    });
+    expect(fs.readFileSync(path.join(tmpDir, 'src', 'index.ts'), 'utf-8')).toBe(
+      'const bar = 1;\n',
+    );
+  });
+
+  it('previews the same receipt in a dry run without writing', async () => {
+    scaffold();
+
+    const result = await runJson(['--json', ...ARGS]);
+
+    expect(result.code).toBe('ERR_CODEMOD_FAILED');
+    expect(result.receipt).toMatchObject({
+      complete: false,
+      modifiedFiles: ['src/index.ts'],
+      errors: [expect.objectContaining({file: 'src/broken.ts'})],
+    });
+    expect(fs.readFileSync(path.join(tmpDir, 'src', 'index.ts'), 'utf-8')).toBe(
+      'const foo = 1;\n',
+    );
+  });
+
+  it('still returns the protected-file receipt when a protected file remains', async () => {
+    scaffold();
+    fs.writeFileSync(
+      path.join(tmpDir, 'src', 'gen.ts'),
+      '// @generated\nconst foo = 2;\n',
+    );
+
+    const result = await runJson(['--json', ...ARGS, '--apply']);
+
+    expect(result).toMatchObject({
+      type: 'upgrade.run',
+      data: {
+        complete: false,
+        errorCode: 'ERR_CODEMOD_PROTECTED',
+        protectedFiles: [expect.objectContaining({file: 'src/gen.ts'})],
+        errors: [expect.objectContaining({file: 'src/broken.ts'})],
+      },
+    });
+  });
+
+  it('keeps the human output and exit status in text mode', async () => {
+    scaffold();
+
+    await runJson([...ARGS, '--apply']);
+
+    expect(process.exitCode).toBe(1);
+    expect(logCalls.join('\n')).toMatch(/Upgrade failed/);
+    expect(logCalls.join('\n')).not.toMatch(/"receipt"/);
   });
 });

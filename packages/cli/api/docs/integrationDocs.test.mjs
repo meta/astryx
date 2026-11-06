@@ -164,6 +164,46 @@ describe('integration-contributed topics', () => {
     expect(prose).not.toContain('{@link');
   }, SLOW);
 
+  it('renders a linked component or template summary once, so an escaped token stays written', async () => {
+    scaffold({
+      'using-widgets.doc.mjs': topic({
+        name: 'using-widgets',
+        title: 'Using widgets',
+        sections: [
+          {
+            title: 'Overview',
+            content: [
+              {type: 'reference', target: 'component:AcmeButton'},
+              {type: 'reference', target: 'block:acme-card'},
+            ],
+          },
+        ],
+      }),
+    });
+    const pkgDir = path.join(tmpDir, 'node_modules', '@acme', 'widgets');
+    fs.writeFileSync(
+      path.join(pkgDir, 'astryx.integration.mjs'),
+      "export default {components: './components', templates: './templates', docs: './docs'};\n",
+    );
+    fs.mkdirSync(path.join(pkgDir, 'components'));
+    fs.writeFileSync(
+      path.join(pkgDir, 'components', 'AcmeButton.doc.mjs'),
+      "export default {type: 'component', name: 'AcmeButton', displayName: 'Acme Button', description: 'Shows {@@pm run build}.', props: []};\n",
+    );
+    fs.writeFileSync(path.join(pkgDir, 'components', 'AcmeButton.tsx'), 'export function AcmeButton() { return null; }\n');
+    fs.mkdirSync(path.join(pkgDir, 'templates'));
+    fs.writeFileSync(
+      path.join(pkgDir, 'templates', 'acme-card.doc.mjs'),
+      "export default {type: 'block', name: 'Acme card', description: 'Card for {@@pm run build}.'};\n",
+    );
+    fs.writeFileSync(path.join(pkgDir, 'templates', 'acme-card.tsx'), 'export default function Fixture() { return null; }\n');
+
+    const detail = await docs('using-widgets', undefined, {cwd: tmpDir, full: true});
+    const text = JSON.stringify(detail.data);
+    expect(text).toContain('Shows {@pm run build}.');
+    expect(text).toContain('Card for {@pm run build}.');
+  }, SLOW);
+
   it('selects Core in a link only where the bare name would open something else', async () => {
     const core = await discoverCoreTemplates();
     const page = core.find(template => template.type === 'page')?.dirName;
@@ -410,11 +450,11 @@ describe('integration-contributed topics', () => {
 
   it('offers the contributed topics as suggestions on an unknown one', async () => {
     scaffold({'deploying.doc.mjs': topic()});
-    await expect(docs('nope-not-a-topic', undefined, {cwd: tmpDir, full: true})).rejects.toBeInstanceOf(
+    await expect(docs('zzqx-qqzz', undefined, {cwd: tmpDir, full: true})).rejects.toBeInstanceOf(
       AstryxError,
     );
     try {
-      await docs('nope-not-a-topic', undefined, {cwd: tmpDir, full: true});
+      await docs('zzqx-qqzz', undefined, {cwd: tmpDir, full: true});
     } catch (err) {
       expect(err.suggestions.map(s => s.name)).toContain('deploying');
     }
@@ -447,7 +487,7 @@ describe('integration-contributed topics', () => {
     // places it.
     expect(top).toContain('troubleshooting');
     expect(
-      top.some(name => /^cli\/integrations\/(?:.+\/)?troubleshooting$/.test(name)),
+      top.some(name => /^authoring\/(?:.+\/)?troubleshooting$/.test(name)),
       top.join(', '),
     ).toBe(true);
   }, SLOW);
@@ -458,4 +498,49 @@ describe('integration-contributed topics', () => {
     expect(catalog.resolve('color')).toBeTruthy();
     expect(catalog.resolve('deploying')).toBeUndefined();
   }, SLOW);
+});
+
+describe('doc tokens in a contributed topic', () => {
+  it(
+    'render in the list, the read and search, for the project the read is about',
+    async () => {
+      scaffold({
+        'deploying.doc.mjs': topic({
+          description:
+            'Install with {@pm install @acme/widgets}, then run {@command doctor}.',
+          sections: [
+            {
+              title: 'Overview',
+              content: [{type: 'prose', text: 'Run {@command doctor} first.'}],
+            },
+          ],
+        }),
+      });
+      // The project in tmpDir uses Bun; the process's own folder uses pnpm.
+      fs.writeFileSync(path.join(tmpDir, 'bun.lock'), '{}\n');
+
+      const listed = await docs(undefined, undefined, {cwd: tmpDir});
+      const entry = listed.data.find(t => t.topic === 'deploying');
+      expect(entry.description).toBe(
+        'Install with `bun add @acme/widgets`, then run `astryx doctor`.',
+      );
+      const detail = await docs('deploying', undefined, {
+        cwd: tmpDir,
+        full: true,
+      });
+      expect(JSON.stringify(detail)).not.toContain('{@');
+      expect(detail.data.sections[0].content[0].text).toBe(
+        'Run `astryx doctor` first.',
+      );
+      // Core's own docs show tokens as written on purpose; this topic's render.
+      const found = await search('deploying', {cwd: tmpDir, type: 'doc'});
+      const hit = found.data.results.find(
+        (/** @type {any} */ result) => result.name === 'deploying',
+      );
+      expect(hit.description).toBe(
+        'Install with `bun add @acme/widgets`, then run `astryx doctor`.',
+      );
+    },
+    SLOW,
+  );
 });

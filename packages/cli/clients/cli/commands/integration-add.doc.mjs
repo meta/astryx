@@ -113,6 +113,7 @@ export const doc = {
       cli: 'astryx integration add theme ocean --from neutral',
     },
   ],
+  outsideProject: 'refuse',
   exitCodes: [
     {code: 0, when: 'the contribution is written or the dry run succeeds'},
     {
@@ -121,4 +122,10 @@ export const doc = {
     },
   ],
   related: ['integration verify', 'doctor integration validate', 'theme add'],
+  notes: [
+    {
+      type: 'prose',
+      text: "In global mode: outside a package, integration add writes nothing and stops with `ERR_FILE_NOT_FOUND`: \"No package.json found. Run this command inside an integration package.\" In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:global-integrations}.",
+    },
+  ],
 };

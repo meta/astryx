@@ -41,6 +41,37 @@ function withTypeScript() {
 }
 
 /**
+ * TypeScript 7 (no JavaScript compiler API) with the TypeScript 6 API package
+ * beside it, which re-exports a real TypeScript.
+ */
+function withTypeScript7AndItsTypeScript6Api() {
+  const ts7 = path.join(pkg, 'node_modules', 'typescript');
+  fs.mkdirSync(ts7, {recursive: true});
+  fs.writeFileSync(
+    path.join(ts7, 'package.json'),
+    JSON.stringify({
+      name: 'typescript',
+      version: '7.0.2',
+      exports: {'./package.json': './package.json'},
+    }),
+  );
+  const ts6 = path.join(pkg, 'node_modules', '@typescript', 'typescript6');
+  fs.mkdirSync(ts6, {recursive: true});
+  fs.writeFileSync(
+    path.join(ts6, 'package.json'),
+    JSON.stringify({
+      name: '@typescript/typescript6',
+      version: '6.0.2',
+      main: 'index.js',
+    }),
+  );
+  fs.writeFileSync(
+    path.join(ts6, 'index.js'),
+    `module.exports = require(${JSON.stringify(TYPESCRIPT_DIR)});\n`,
+  );
+}
+
+/**
  * @param {string} rel
  * @param {string} text
  */
@@ -117,6 +148,10 @@ describe('checkDocTypes', () => {
 
       const report = await check([['components/Badge.doc.mjs', 'components']]);
 
+      // The reason names the version and the fix, so a --strict failure
+      // says what to install.
+      expect(report.reason).toContain('TypeScript 7.0.0');
+      expect(report.reason).toContain('npm install -D @typescript/typescript6');
       expect(report).toEqual({
         status: 'skipped',
         reason: unusableTypeScriptReason('7.0.0', 'docs were not checked'),
@@ -126,6 +161,19 @@ describe('checkDocTypes', () => {
       });
       expect(report.reason).toContain('TypeScript 7.0.0 is installed');
     }
+  });
+
+  it("checks with TypeScript 7's TypeScript 6 API package when the project has one", async () => {
+    write(
+      'components/Badge.doc.mjs',
+      `export default ${JSON.stringify(COMPONENT)};\n`,
+    );
+    withTypeScript7AndItsTypeScript6Api();
+
+    const report = await check([['components/Badge.doc.mjs', 'components']]);
+
+    expect(report.status).toBe('checked');
+    expect(report.docs).toBe(1);
   });
 
   it('says there is nothing to check when the package has no doc files, with or without TypeScript', async () => {
@@ -517,7 +565,7 @@ describe('checkDocTypes', () => {
       'components/Badge.doc.mjs',
       [
         `export default ${JSON.stringify(COMPONENT)};`,
-        "export const docsDense = {name: 'Badge', description: 'count chip'};",
+        "export const docsDense = {name: 'Badge', displayName: 'Badge', summary: 'chip', description: 'count chip'};",
         `export const docsZh = ${JSON.stringify({...COMPONENT, displayName: undefined, keyword: []})};`,
         '',
       ].join('\n'),
@@ -527,10 +575,54 @@ describe('checkDocTypes', () => {
 
     expect(report.docs).toBe(3);
     expect(summary(report)).toEqual([
-      'components/Badge.doc.mjs docsDense name unknown_field',
+      'components/Badge.doc.mjs docsDense summary unknown_field',
       'components/Badge.doc.mjs docsZh keyword unknown_field',
     ]);
     expect(report.findings[0].type).toBe('ComponentTranslationDoc');
+  });
+
+  it('allows a translation overlay to name its component, as Core overlays do', async () => {
+    withTypeScript();
+    write(
+      'components/Badge.doc.mjs',
+      [
+        `export default ${JSON.stringify(COMPONENT)};`,
+        "export const docsZh = {name: 'Badge', displayName: '徽章', description: '计数'};",
+        "export const docsDense = {name: 'Badge', displayName: 'Badge', description: 'count chip'};",
+        '',
+      ].join('\n'),
+    );
+
+    const report = await check([['components/Badge.doc.mjs', 'components']]);
+
+    expect(summary(report)).toEqual([]);
+  });
+
+  it('gives each field TypeScript reports missing together a message naming only that field', async () => {
+    withTypeScript();
+    write(
+      'components/Badge.doc.mjs',
+      [
+        'export default {',
+        "  type: 'component',",
+        "  name: 'Badge',",
+        "  props: [{name: 'label', type: 'string', description: 'Text.'}],",
+        '};',
+        '',
+      ].join('\n'),
+    );
+
+    const report = await check([['components/Badge.doc.mjs', 'components']]);
+    const missing = report.findings.filter(f => f.problem === 'missing_field');
+
+    expect(missing.length).toBeGreaterThan(1);
+    expect(new Set(missing.map(f => f.message)).size).toBe(missing.length);
+    for (const finding of missing) {
+      const others = missing.filter(f => f !== finding).map(f => f.field);
+      expect(finding.message).toContain(`'${finding.field}'`);
+      for (const other of others)
+        expect(finding.message).not.toContain(`'${other}'`);
+    }
   });
 
   it('checks a template, a docs topic by its stamp, a topic overlay, and a theme', async () => {
@@ -591,6 +683,36 @@ describe('checkDocTypes', () => {
     ]);
     expect(new Set(core.findings.map(f => f.type))).toEqual(
       new Set(['TemplateDoc']),
+    );
+  });
+
+  it('checks an icon set descriptor against IconSetDoc', async () => {
+    withTypeScript();
+    write(
+      'icon-sets/outline/outline.doc.mjs',
+      "/** @type {import('@astryxdesign/cli/authoring').IconSetDoc} */\nexport default {type: 'icon-set', name: 'outline', displayName: 'Outline', description: 'D', maintained: true, license: 1, icons: []};\n",
+    );
+    write(
+      'icon-sets/solid/solid.doc.mjs',
+      "export default {type: 'icon-set', name: 'solid', displayName: 'Solid', description: 'D', maintained: true};\n",
+    );
+    write(
+      'icon-sets/ok/ok.doc.mjs',
+      "export default {type: 'icon-set', name: 'ok', displayName: 'Ok', description: 'D', maintained: true, license: 'MIT'};\n",
+    );
+    const report = await check([
+      ['icon-sets/outline/outline.doc.mjs', 'icon-sets'],
+      ['icon-sets/solid/solid.doc.mjs', 'icon-sets'],
+      ['icon-sets/ok/ok.doc.mjs', 'icon-sets'],
+    ]);
+    expect(report.docs).toBe(3);
+    expect(summary(report)).toEqual([
+      'icon-sets/outline/outline.doc.mjs default icons unknown_field',
+      'icon-sets/outline/outline.doc.mjs default license wrong_type',
+      'icon-sets/solid/solid.doc.mjs default license missing_field',
+    ]);
+    expect(new Set(report.findings.map(f => f.type))).toEqual(
+      new Set(['IconSetDoc']),
     );
   });
 

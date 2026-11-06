@@ -10,6 +10,7 @@ import type {
   ComponentAnatomyElement,
   ComponentBestPractice,
   ComponentExampleDoc,
+  ComponentIconSlotDoc,
   ComponentPlaygroundConfig,
   ComponentPropDoc,
   ComponentThemingDerivedVar,
@@ -20,6 +21,15 @@ import type {
   RegistryDocIdentity,
   UsageDoc,
 } from '../base/type.js';
+
+/** What replaces a deprecated component (`ComponentBaseDoc.deprecated`). */
+export interface ComponentDeprecation {
+  /** `name` of the documented component to use instead, e.g. `'BottomSheet'`. */
+  replacement: string;
+  /** The modernization route in a sentence or two: what to write instead,
+   *  and where the migration is described. */
+  description: string;
+}
 
 /**
  * Shared fields between single-component and multi-component docs.
@@ -63,6 +73,13 @@ export interface ComponentBaseDoc extends AuthoredDocGraphFields {
    *  range, and on older CLIs that do not read `replaces`, the component keeps
    *  its own name. */
   replaces?: string;
+  /** Marks a deprecated component (spec:AST-017 FR26, FR29b): it keeps
+   *  working and stays documented, labeled with its replacement. The docsite
+   *  shows a Deprecated badge in its page header and index tile, labels its
+   *  search result, and adds a notice that links the replacement; `astryx
+   *  search` results and `astryx build` kit entries carry the field. Omit for
+   *  a component that is not deprecated. */
+  deprecated?: ComponentDeprecation;
   /** Search keywords for CLI discovery. Terms a developer might type when
    *  looking for this component: synonyms, related UI concepts, and common
    *  names from other design systems (MUI, Chakra, Radix, and others).
@@ -146,6 +163,10 @@ export interface ComponentBaseDoc extends AuthoredDocGraphFields {
      *  on this component, also emit the internal var.
      *  @see ComponentThemingDerivedVar */
     derived?: ComponentThemingDerivedVar[];
+    /** Component icon slots this component resolves through the theme's
+     *  `componentIcons`. Each entry corresponds to a slot in
+     *  `ComponentIconSlotMap`. */
+    componentIcons?: ComponentIconSlotDoc[];
   };
   /** Component usage documentation — concise summary, best practices,
    *  and optional visual anatomy. */
@@ -273,6 +294,14 @@ export interface ComponentRef {
  * Used by both `docsZh` (Chinese translation) and `docsDense` (compressed format).
  */
 export interface ComponentTranslationDoc {
+  /** Optional exact name from the base doc. Allowed so an overlay can say
+   *  which component it translates; the overlay renders through the base
+   *  doc, so this field is ignored at render time. */
+  name?: string;
+  /** Optional translated displayName. Allowed so the displayName backfill
+   *  codemod (which adds `displayName` next to every `name:` field) does not
+   *  break translation overlays. Ignored at render time. */
+  displayName?: string;
   /** Compressed/translated component description. */
   description?: string;
   /** Prop descriptions keyed by prop name. Only include props that have descriptions. */
@@ -338,15 +367,17 @@ export interface SingleComponentDoc extends ComponentBaseDoc {
  * `subComponentOf` field, which names the parent component.
  *
  * A sub-component owns its `description`, `props`, and (optionally) its own
- * `usage`. Family-level fields (`group`, `category`, `keywords`, `theming`,
- * `playground`) are inherited from the directory's primary doc unless
- * overridden here. The generated registry entry is identical to the legacy
- * inline `components[]` expansion — this is purely a file-structure change.
+ * `usage`. The CLI does not copy family-level fields (`group`, `category`,
+ * `keywords`, `theming`, `playground`) from the parent to an integration's
+ * sub-component: its detail, list group and search use only what its own doc
+ * sets. Set any the child needs in its own doc. The generated registry entry
+ * is identical to the legacy inline `components[]` expansion — this is purely
+ * a file-structure change.
  */
 export interface SubComponentDoc extends Omit<ComponentBaseDoc, 'usage'> {
   /** Name of the parent component this sub-component belongs to, matching the
    *  parent doc's `name` (e.g. `"Chat"`). Marks this file as a sub-component
-   *  doc so the pipeline parents and inherits family fields correctly. */
+   *  doc. The CLI does not copy the parent's family fields to it. */
   subComponentOf: string;
   /** One-sentence description of what this sub-component does and its role
    *  within the parent composition. */

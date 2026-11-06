@@ -25,7 +25,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Wrap Schedule in InternationalizationProvider to choose the language, numbering, and field order used by its date and time labels. Schedule date values and calendar arithmetic remain Gregorian for every locale.',
+          'Wrap Schedule in InternationalizationProvider to choose the language, numbering, and field order used by its date and time labels; the provider calendar, such as calendar="persian", writes those labels in another calendar. Schedule date values, its grids, and its date navigation stay Gregorian in every calendar and locale.',
       },
       {
         guidance: true,

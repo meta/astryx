@@ -17,4 +17,5 @@ export const doc = {
   ],
   isReady: false,
   category: 'Tools - Incident Console',
+  icons: {BellAlertIcon: 'notificationActive', PlusIcon: 'add'},
 };

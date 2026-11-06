@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/components/component-imports`: make an
+ * @file `astryx docs authoring/building-blocks/components/component-imports`: make an
  * integration component's documented import resolve from the packed package.
  */
 
@@ -41,7 +41,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "The file name still opens the doc. A name that Core or another doc's file already has stays theirs, and so does a Core name your package replaces: with `Badge.doc.mjs` naming `AcmeBadge`, `astryx component Badge` opens Core's `Badge`, and `--package` with your package name reaches yours.",
+          text: "The file name still opens the doc. A name that Core or another doc's file already has stays theirs, and so does a Core name your package replaces: with `Badge.doc.mjs` naming `AcmeBadge`, `{@command component Badge}` opens Core's `Badge`, and `--package` with your package name reaches yours.",
         },
       ],
     },
@@ -51,12 +51,12 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: '`integration verify` installs the packed package in a temporary app, resolves each documented import, and checks that the module exports the documented component name.',
+          text: '`integration verify` unpacks the packed package into a temporary app, resolves each documented import, and checks that the module exports the documented component name. Its `--json` output names each failure by code.',
         },
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx integration verify',
+          code: '{@command integration verify}',
         },
         {
           type: 'list',
@@ -70,6 +70,16 @@ export const docs = {
         {
           type: 'prose',
           text: 'To import from the package root, set `import: \'@acme/astryx-widgets\'` and re-export the component from the file that `exports["."]` points to. See {@link command:integration verify}.',
+        },
+      ],
+    },
+    {
+      id: 'global-mode',
+      title: 'In global mode',
+      content: [
+        {
+          type: 'prose',
+          text: "In global mode: outside a project, imports the CLI prints name packages installed for the computer, which a new app must install before it can build them; inside a project, only packages the project installs are printed. See {@link namespace:global} and {@link generic:global-integrations}.",
         },
       ],
     },

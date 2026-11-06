@@ -49,6 +49,17 @@ const baseTemplateFields = {
   componentsUsed: z.array(z.string()).optional(),
   preview: previewSchema.optional(),
   isReady: z.boolean().optional(),
+  icons: z
+    .record(
+      z.string().regex(/^[$A-Z_a-z][$\w]*$/u, 'icons keys are imported names'),
+      z
+        .string()
+        .regex(
+          /^[a-z][a-zA-Z0-9]*$/u,
+          'icons values are icon definition names',
+        ),
+    )
+    .optional(),
   scaffold: z.boolean().optional(),
   isHiddenFromOverview: z.boolean().optional(),
   registry: registryIdentitySchema.optional(),

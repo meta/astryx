@@ -33,6 +33,52 @@ export {discoverTemplates, listTemplates} from '../../../api/template/template.m
  */
 
 /**
+ * The line saying how many docs-only demo content elements became a
+ * placeholder, in the copied file when one is named.
+ * @param {number} count
+ * @param {string} [file]
+ * @returns {string}
+ */
+function demoContentNote(count, file) {
+  return (
+    `Replaced ${count} Astryx demo content element${count === 1 ? '' : 's'}${file ? ` in ${file}` : ''} ` +
+    'with a <Text>Card content</Text> placeholder. Put your own content there.'
+  );
+}
+
+/**
+ * The icon report as text lines (AST-084 FR10): one line per mapped or kept
+ * icon, or one line saying why nothing was mapped. Nothing when the project
+ * has no icon set at all (no report: icon sets are experimental).
+ * @param {import('../../../api/template/template.type.mjs').TemplateIconsReport | undefined} icons
+ * @returns {string[]}
+ */
+function iconLines(icons) {
+  if (icons == null) return [];
+  if (icons.status !== 'selected') {
+    return icons.status === 'none'
+      ? []
+      : [`icons: unchanged (${icons.status}): ${icons.reason}`];
+  }
+  return [
+    ...icons.mapped.map(
+      each =>
+        `icons: mapped ${each.source.export} (${each.source.module}) -> ${each.target.export} (${each.target.module}) by ${each.by}` +
+        (each.dropped && each.dropped.length > 0
+          ? `; dropped ${each.dropped.join(', ')} (size comes from CSS)`
+          : ''),
+    ),
+    ...icons.kept.map(
+      each =>
+        `icons: kept ${each.export}${each.module == null ? '' : ` (${each.module})`}: ${each.reason}` +
+        (each.suggestion
+          ? `; likely match: ${each.suggestion.export} (${each.suggestion.module})`
+          : ''),
+    ),
+  ];
+}
+
+/**
  * What the run answered with. Listing and printing a template are lookups;
  * scaffolding one into a project (or writing the CDN starter) is a file
  * written, which is an effect with nothing to count.
@@ -213,7 +259,8 @@ export function registerTemplate(program) {
           // from (cli-surface INV28) and the note about replaced demo media go
           // to stderr, the note in the copy receipt's words. (Text mode only:
           // --json returned above with both in the envelope.)
-          const {source, demoMediaReplaced} = result.data;
+          const {source, demoMediaReplaced, demoContentReplaced, icons} =
+            result.data;
           console.error(`package: ${result.package}`);
           emit(code(source));
           if (demoMediaReplaced > 0) {
@@ -222,12 +269,25 @@ export function registerTemplate(program) {
                 'images now show a neutral placeholder and videos have an empty source. Supply your own media there.',
             );
           }
+          if (demoContentReplaced > 0) {
+            console.error(demoContentNote(demoContentReplaced));
+          }
+          // The icon report goes to stderr too, so stdout stays the source.
+          for (const line of iconLines(icons)) console.error(line);
           break;
         }
 
         case 'template.copy': {
-          const {outputDir, fileName, demoMediaReplaced, notes} = result.data;
+          const {
+            outputDir,
+            fileName,
+            demoMediaReplaced,
+            demoContentReplaced,
+            notes,
+            icons,
+          } = result.data;
           const file = `${outputDir}/${fileName}`;
+          const iconText = iconLines(icons);
           emit(
             text(`Copied template to ${file}`),
             record({package: result.package}),
@@ -236,7 +296,10 @@ export function registerTemplate(program) {
                 `Replaced ${demoMediaReplaced} Astryx demo media reference${demoMediaReplaced === 1 ? '' : 's'} in ${file}: ` +
                   'images now show a neutral placeholder and videos have an empty source. Supply your own media there.',
               ),
+            demoContentReplaced > 0 &&
+              text(demoContentNote(demoContentReplaced, file)),
             ...notes.map(/** @param {string} note */ note => text(note)),
+            iconText.length > 0 && text(iconText.join('\n')),
           );
           break;
         }

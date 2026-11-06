@@ -35,14 +35,21 @@ export const doc = {
     '`integration check` on every build; run ' +
     '`integration verify` before you publish, to check that the packed package ' +
     'works in an app. To check an installed integration by name, run the ' +
-    '`doctor integration` subcommands with its package name.',
+    '`doctor integration` subcommands with its package name. Outside a package, ' +
+    'it writes nothing, `validate` reports one `no_package` issue, and it exits 1.',
   fn: 'integrationCheck',
   options: [
     {
       flag: '--strict',
       param: 'options.strict',
       description:
-        'Also exit 1 on any warning and on any check that did not run. A new check or failure code joins only in a minor release, named in the release notes.',
+        'Also exit 1 on any warning and on any check that did not run. A new check or failure code joins only in a minor release, named in the release notes; until then, a malformed `cliCommand` is reported as a note (`invalid_cli_command`) that fails nothing.',
+    },
+    {
+      flag: '--next',
+      param: 'options.next',
+      description:
+        'Also count the findings the next minor release turns into warnings (the notes marked `next`) as warnings now, so `--strict --next` fails on them. Run it to fix them ahead of the release; every run says how many there are.',
     },
   ],
   examples: [
@@ -56,6 +63,11 @@ export const doc = {
       cli: 'integration check',
     },
     {
+      label:
+        'Fix ahead: fail on the findings the next minor release will fail on',
+      cli: 'integration check --strict --next',
+    },
+    {
       label: 'Read the result as JSON',
       cli: 'integration check --strict --json',
     },
@@ -65,6 +77,7 @@ export const doc = {
       cli: 'integration verify',
     },
   ],
+  outsideProject: 'own',
   exitCodes: [
     {
       code: 0,
@@ -81,5 +94,11 @@ export const doc = {
     'doctor integration components',
     'doctor integration templates',
     'doctor integration docs',
+  ],
+  notes: [
+    {
+      type: 'prose',
+      text: "In global mode: outside a package, it writes nothing, its `validate` check reports one `no_package` issue, and it exits 1. In a project, the project's version of Astryx runs it, whichever astryx command you start. See {@link namespace:global} and {@link generic:global-integrations}.",
+    },
   ],
 };

@@ -19,13 +19,16 @@
  */
 
 import React, {
+  use,
   useCallback,
   useId,
   useRef,
   useMemo,
   useState,
   type ReactNode,
+  type RefObject,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {
   BusyIndicatorLaneProvider,
@@ -43,33 +46,45 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Token} from '../Token';
 import {useTooltip} from '../Tooltip';
 import {renderIconSlot, type IconType} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {Spinner} from '../Spinner';
+import {SpinnerOwnerContext} from '../Spinner/SpinnerOwnerContext';
 import {spacingVars, sizeVars} from '../theme/tokens.stylex';
-import {groupStyles} from '../InputGroup/groupStyles';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {
   composeEventHandlers,
   getInputARIA,
   isImeKeyEvent,
   mergeProps,
 } from '../utils';
+import {joinAriaIDs} from '../utils/inputAria';
 import {TrailingKeyDownContext} from './trailingKeyDown';
 import {
   type FieldInputBaseProps,
   useFieldInputStyling,
 } from '../Field/fieldParts';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import type {SizeValue} from '../utils/types';
 import type {SearchableItem, SearchSource} from './types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Typeahead/Typeahead.generated';
+
+registerEnglishFallback(english);
 export type {
   InputStatus as TypeaheadStatus,
   InputStatusType as TypeaheadStatusType,
@@ -109,7 +124,7 @@ export interface TypeaheadProps<T extends SearchableItem> extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * Icon to display at the start of the input.
    * Accepts a ReactNode (e.g. `<Icon icon={SearchIcon} />`) or an SVG icon component directly.
@@ -159,17 +174,21 @@ export interface TypeaheadProps<T extends SearchableItem> extends Omit<
    * @default 'No results found'
    */
   emptySearchText?: ReactNode;
-  /** Whether the input is disabled. @default false */
+  /**
+   * Whether the input is disabled. A disabled field keeps its tab stop: it is
+   * announced as disabled (`aria-disabled`), is read-only, and opens and
+   * picks nothing.
+   * @default false
+   */
   isDisabled?: boolean;
   /**
    * Explains why the input is disabled. When set together with `isDisabled`,
    * the input shows a tooltip with this text on hover and keyboard focus, and
-   * the field stays focusable (via `aria-disabled`) so the reason is
-   * discoverable by keyboard and assistive technology. Editing and selection
-   * stay blocked.
+   * the reason describes the field for assistive technology. Editing and
+   * selection stay blocked.
    *
-   * Use this instead of wrapping a disabled input in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled input in `Tooltip`, so the reason
+   * is attached to the field itself.
    *
    * @example
    * ```
@@ -349,19 +368,30 @@ const wrapperSizeStyles = stylex.create({
 function EndLane({
   lane,
   loadingLabel,
+  anchorRef,
   clear,
 }: {
   lane: BusyIndicatorLane;
   loadingLabel: string;
+  anchorRef: RefObject<Element | null>;
   clear: ReactNode;
 }) {
   const isBusy = useIsBusy(lane);
+  // The search Spinner stays named (family:input-fields FR7) but is not a
+  // live region; the field announces each search's busy start instead
+  // (spec:AST-086 FR8).
+  useBusyAnnouncement(isBusy, loadingLabel, anchorRef);
   if (!isBusy && clear == null) {
     return null;
   }
   return (
     <div {...stylex.props(styles.endLane)}>
-      {isBusy && <Spinner size="sm" aria-label={loadingLabel} />}
+      {isBusy && (
+        // Named, never live: the typeahead announces its search.
+        <SpinnerOwnerContext value={true}>
+          <Spinner size="sm" aria-label={loadingLabel} role="img" />
+        </SpinnerOwnerContext>
+      )}
       {clear}
     </div>
   );
@@ -387,7 +417,7 @@ export function Typeahead<T extends SearchableItem>({
   maxMenuItems,
   minQueryLength,
   emptySearchText,
-  isDisabled = false,
+  isDisabled: isDisabledProp = false,
   disabledMessage,
   hasClear = true,
   hasAutoFocus,
@@ -405,30 +435,35 @@ export function Typeahead<T extends SearchableItem>({
   controlStyle,
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
+  'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: TypeaheadProps<T>) {
+  const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {rest, container} = useFieldInputStyling('Typeahead', restProps, {
     containerXstyle,
     containerClassName,
     containerStyle,
   });
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const size = useSize(sizeProp, 'md');
   const generatedInputId = useId();
   const inputId = idProp ?? generatedInputId;
   const inputLabelId = useId();
+  const fieldLabelId = useId();
+  const tokenValueId = useId();
   const descriptionId = useId();
   const statusMessageId = useId();
   const inputGroup = useInputGroup();
+  const inputGroupState = use(InputGroupInternalContext);
+  const isDisabled = isDisabledProp || inputGroupState.isDisabled;
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const tokenRef = useRef<HTMLElement>(null);
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the input wrapper (which already exists) and
-  // the input stays perceivable via aria-disabled + readOnly instead of the
-  // disabled attribute. Editing and selection stay blocked by the isDisabled
+  // Disabled-reason tooltip. The tooltip listeners attach to the input wrapper
+  // (which already exists); a disabled input stays perceivable via
+  // aria-disabled + readOnly instead of the disabled attribute. Editing and selection stay blocked by the isDisabled
   // guards (handleWrapperClick, handleEnterEditMode, and BaseTypeahead's own
   // focus/change guards).
   const showsDisabledMessage = isDisabled && !!disabledMessage;
@@ -454,7 +489,14 @@ export function Typeahead<T extends SearchableItem>({
   // Show token when value is selected and not in edit mode
   const showToken = value != null && !isEditing;
 
-  // Enter edit mode: remove token visually, populate input with value label
+  // Enter edit mode: remove token visually, populate input with value label.
+  //
+  // Everything happens inside the tap or click that asked for it, never a
+  // frame later: iOS raises the software keyboard only for a focus made while
+  // the browser is still dispatching the person's own tap (or when the
+  // keyboard is already up). Deferred to an animation frame, the focus landed
+  // with no keyboard, so a tap on the selected value showed a caret and
+  // nothing to type with until a second tap.
   const handleEnterEditMode = useCallback(() => {
     if (isDisabled || !value) {
       return;
@@ -463,21 +505,26 @@ export function Typeahead<T extends SearchableItem>({
     setIsEditing(true);
     // The base will receive onChangeQuery with the value's label
     onChangeQuery?.(value.label);
-    requestAnimationFrame(() => {
-      const input = inputRef.current;
-      if (input) {
-        // Set the input value directly since the base manages its own query state
-        // We trigger a synthetic change to sync the base's internal state
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLInputElement.prototype,
-          'value',
-        )?.set;
+    const input = inputRef.current;
+    if (input) {
+      // Set the input value directly since the base manages its own query
+      // state, and trigger a synthetic change to sync the base's internal
+      // state. flushSync commits that query before the focus, so the base's
+      // focus handler sees the label rather than an empty query: an empty one
+      // would open the hasEntriesOnFocus bootstrap entries, and Enter would
+      // commit the first of them instead of the edited value.
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )?.set;
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the base must hold the label as its query before the in-tap focus
+      flushSync(() => {
         nativeInputValueSetter?.call(input, value.label);
         input.dispatchEvent(new Event('input', {bubbles: true}));
-        input.focus();
-        input.setSelectionRange(0, input.value.length);
-      }
-    });
+      });
+      input.focus();
+      input.setSelectionRange(0, input.value.length);
+    }
   }, [isDisabled, value, onChangeQuery]);
 
   // Handle blur: restore token if editing and no selection was made
@@ -497,34 +544,61 @@ export function Typeahead<T extends SearchableItem>({
     [editingValue, isEditing],
   );
 
+  // Focus the token's button once it renders (the next cycle), so keyboard
+  // users stay in the component after edit mode ends.
+  const focusTokenNextFrame = useCallback(() => {
+    requestAnimationFrame(() => {
+      const tokenEl = tokenRef.current;
+      if (tokenEl) {
+        const button = tokenEl.querySelector('button');
+        (button ?? tokenEl).focus();
+      }
+    });
+  }, []);
+
   // Handle selection from dropdown — clears edit mode
   const handleChange = useCallback(
     (item: T | null) => {
       setIsEditing(false);
       setEditingValue(null);
       onChange(item);
-      // After selection, focus the token so keyboard users stay in the component.
-      // Use requestAnimationFrame because the token renders on the next cycle.
       if (item) {
-        requestAnimationFrame(() => {
-          const tokenEl = tokenRef.current;
-          if (tokenEl) {
-            // Focus the internal button inside the token
-            const button = tokenEl.querySelector('button');
-            (button ?? tokenEl).focus();
-          }
-        });
+        focusTokenNextFrame();
       }
     },
-    [onChange],
+    [onChange, focusTokenNextFrame],
   );
 
-  // Handle clear (explicit X button on token)
+  // Whether the base's list is shown: Escape then hides the list first, and
+  // edit mode stays.
+  const isListOpenRef = useRef(false);
+  const handleOpenChange = useCallback(
+    (isOpen: boolean) => {
+      isListOpenRef.current = isOpen;
+      onOpenChange?.(isOpen);
+    },
+    [onOpenChange],
+  );
+
+  // Handle clear (explicit X button on token). Edit mode copied the label into
+  // the base's query, and the base only resets that query on a selection, so
+  // clearing the value has to empty it the way entering edit mode filled it
+  // (#7038): a native set plus a synthetic input event, which reaches the
+  // base's own change handler and its onChangeQuery.
   const handleClear = useCallback(() => {
+    const input = inputRef.current;
+    if (input && input.value !== '') {
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )?.set;
+      nativeInputValueSetter?.call(input, '');
+      input.dispatchEvent(new Event('input', {bubbles: true}));
+    }
     setIsEditing(false);
     setEditingValue(null);
     onChange(null);
-    inputRef.current?.focus();
+    input?.focus();
   }, [onChange]);
 
   // Handle Escape during edit mode — restore token
@@ -539,14 +613,14 @@ export function Typeahead<T extends SearchableItem>({
       if (isImeKeyEvent(e.nativeEvent)) {
         return;
       }
-      if (e.key === 'Escape' && editingValue) {
+      if (e.key === 'Escape' && editingValue && !isListOpenRef.current) {
         e.preventDefault();
         setIsEditing(false);
         setEditingValue(null);
-        inputRef.current?.blur();
+        focusTokenNextFrame();
       }
     },
-    [editingValue],
+    [editingValue, focusTokenNextFrame],
   );
 
   // Click wrapper to focus input or enter edit mode
@@ -571,6 +645,13 @@ export function Typeahead<T extends SearchableItem>({
     inputGroup,
   );
 
+  // A caller aria-labelledby names the input together with the field's own
+  // label (the Field label standalone, the group and input labels in a group).
+  const inputLabelledBy =
+    ariaLabelledByProp != null
+      ? joinAriaIDs(ariaLabelledBy ?? fieldLabelId, ariaLabelledByProp)
+      : ariaLabelledBy;
+
   const sizeStyle = wrapperSizeStyles[size];
 
   const typeaheadContent = (
@@ -587,6 +668,7 @@ export function Typeahead<T extends SearchableItem>({
             onKeyDown?.(event);
           }
         }}
+        {...(inputGroup ? inputGroupItemProps : undefined)}
         {...mergeProps(
           themeProps('typeahead', {size, status: status?.type}),
           stylex.props(
@@ -597,6 +679,7 @@ export function Typeahead<T extends SearchableItem>({
             status && !isDisabled && inputStatusHoverShadowStyles[status.type],
             status && inputStatusFocusWithinStyles[status.type],
             isDisabled && inputWrapperStyles.disabled,
+            isDisabled && inputDisabledFocusStyles.nestedRing,
             inputGroup && groupStyles.inGroup,
             controlXstyle,
           ),
@@ -614,14 +697,33 @@ export function Typeahead<T extends SearchableItem>({
         <BusyIndicatorLaneProvider value={busyLane}>
           <div {...stylex.props(styles.contentLane)}>
             {showToken && (
-              <Token
-                ref={tokenRef}
-                label={value.label}
-                size={size}
-                onClick={handleEnterEditMode}
-                isDisabled={isDisabled}
-                xstyle={styles.tokenOverlay}
-              />
+              <>
+                {/* The token's button is the field's Tab stop while a value
+                    shows, so it is named as the input is (the field label,
+                    with a caller aria-labelledby) plus the value, and
+                    described like the input (input-fields FR10; WCAG 2.4.6,
+                    4.1.2). */}
+                <span id={tokenValueId} hidden>
+                  {value.label}
+                </span>
+                <Token
+                  ref={tokenRef}
+                  label={value.label}
+                  size={size}
+                  onClick={handleEnterEditMode}
+                  isDisabled={isDisabled}
+                  aria-labelledby={joinAriaIDs(
+                    inputLabelledBy ?? fieldLabelId,
+                    tokenValueId,
+                  )}
+                  aria-describedby={
+                    [ariaDescribedByProp, ariaDescribedBy]
+                      .filter(Boolean)
+                      .join(' ') || undefined
+                  }
+                  xstyle={styles.tokenOverlay}
+                />
+              </>
             )}
             <TrailingKeyDownContext value={onKeyDown}>
               <BaseTypeahead
@@ -638,16 +740,25 @@ export function Typeahead<T extends SearchableItem>({
                 emptySearchText={emptySearchText}
                 isDisabled={isDisabled}
                 hasAutoFocus={hasAutoFocus}
-                isFocusableDisabled={showsDisabledMessage}
+                // A disabled field keeps its tab stop (spec:AST-085 FR1).
+                isFocusableDisabled={isDisabled}
                 inputId={inputId}
                 ariaDescribedBy={
                   [ariaDescribedByProp, ariaDescribedBy]
                     .filter(Boolean)
                     .join(' ') || undefined
                 }
-                ariaLabelledBy={ariaLabelledBy}
+                ariaLabelledBy={inputLabelledBy}
+                // The resolved required state reaches the combobox, also when a
+                // FormLayout default hides the visible marker (component:FormLayout
+                // FR5, AR2).
+                aria-required={isEffectivelyRequired || rest['aria-required']}
+                // An error status is exposed on the combobox as on every other field
+                // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
+                // aria-required / aria-invalid still applies.
+                aria-invalid={status?.type === 'error' || rest['aria-invalid']}
                 onChangeQuery={onChangeQuery}
-                onOpenChange={onOpenChange}
+                onOpenChange={handleOpenChange}
                 debounceMs={debounceMs}
                 anchorRef={wrapperRef}
                 onKeyDown={handleKeyDown}
@@ -666,6 +777,7 @@ export function Typeahead<T extends SearchableItem>({
         <EndLane
           lane={busyLane}
           loadingLabel={t('@astryx.typeahead.loading')}
+          anchorRef={wrapperRef}
           clear={
             hasClear && value && !isDisabled ? (
               <InputClearButton
@@ -695,6 +807,8 @@ export function Typeahead<T extends SearchableItem>({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={inputId}
+      // Always set: the value token's name references the field label.
+      labelID={fieldLabelId}
       descriptionID={description ? descriptionId : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

@@ -20,6 +20,7 @@ import {doc as integrationAddFn} from '../../../api/integration/integrationAdd.d
 import {doc as integrationCheckFn} from '../../../api/integration/integrationCheck.doc.mjs';
 import {printIntegrationCheckResponse} from './doctor.mjs';
 import {doc as integrationPackCheckFn} from '../../../api/integration/integrationPackCheck.doc.mjs';
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
 /**
  * @param {import('commander').Command} command
@@ -76,13 +77,37 @@ async function verifyPackage(program) {
         ),
       );
     }
+    // Only a package that ships an experimental icon set gets this line;
+    // every other package's output is unchanged.
+    const local = result.data.contributions?.local;
+    if (local && (local.iconSets ?? []).length > 0) {
+      const counts = [
+        ['component', local.components.length],
+        ['template', local.templates.length],
+        ['theme', local.themes.length],
+        ['doc topic', local.docs.length],
+        ['codemod', local.codemods.length],
+        ['icon set', (local.iconSets ?? []).length],
+      ]
+        .filter(([, count]) => Number(count) > 0)
+        .map(([word, count]) => `${count} ${word}${count === 1 ? '' : 's'}`);
+      if (counts.length > 0) {
+        blocks.push(text(`Contributes ${counts.join(', ')}.`));
+      }
+    }
     if (issues.length > 0) {
       blocks.push(
         list(
-          issues.map(
-            issue =>
-              `[${issue.severity === 'error' ? 'fail' : 'warn'}] ${issue.message}`,
-          ),
+          issues.map(issue => [
+            `[${issue.severity === 'error' ? 'fail' : 'warn'}] ${issue.message}`,
+            // Every field the JSON issue carries.
+            ...(issue.file != null
+              ? [
+                  `file: ${issue.file}${issue.line != null ? `:${issue.line}` : ''}`,
+                ]
+              : []),
+            ...(issue.fix != null ? [`fix: ${issue.fix}`] : []),
+          ]),
         ),
       );
     }
@@ -97,10 +122,13 @@ async function verifyPackage(program) {
  * it, then one summary: each check's errors, warnings and skipped work, and
  * what decided the exit code.
  * @param {import('commander').Command} program
- * @param {{strict?: boolean}} options
+ * @param {{strict?: boolean, next?: boolean}} options
  */
 async function checkPackage(program, options) {
-  const result = await integrationCheck({strict: options.strict === true});
+  const result = await integrationCheck({
+    strict: options.strict === true,
+    next: options.next === true,
+  });
   if (program.opts().json) {
     jsonOut(result);
   } else {
@@ -122,10 +150,14 @@ async function checkPackage(program, options) {
         ),
       );
     } else {
+      // A package-wide issue every check reports is printed once, under the
+      // first check; the counts below are unchanged.
+      /** @type {Set<string>} */
+      const seen = new Set();
       data.checks.forEach((check, index) => {
         // A blank line keeps each check's output apart from the next.
         if (index > 0) emit(text(''));
-        printIntegrationCheckResponse(check.response);
+        printIntegrationCheckResponse(check.response, seen);
       });
     }
     const plural = (/** @type {number} */ n, /** @type {string} */ word) =>
@@ -155,7 +187,8 @@ async function checkPackage(program, options) {
         : data.name;
     emit(
       // --strict lists each warning and each skipped check again, as the
-      // error it now is, in the issue format the checks use.
+      // error it now is: by check, code and place only, since the check's own
+      // output above already printed its message and fix once.
       ...(data.failures.length > 0
         ? [
             section('Failing under --strict'),
@@ -166,8 +199,6 @@ async function checkPackage(program, options) {
                 'code',
                 'component',
                 'prop',
-                'message',
-                'fix',
                 'file',
                 'line',
               ],
@@ -176,12 +207,21 @@ async function checkPackage(program, options) {
           ]
         : []),
       section(
-        `Integration check: ${identity ?? '(local package)'}${data.strict ? ' (strict)' : ''}`,
+        `Integration check: ${identity ?? '(local package)'}${data.strict ? ' (strict)' : ''}${data.next ? ' (next)' : ''}`,
       ),
       records(data.checks, {
         fields: ['check', 'failed', 'errors', 'warnings', 'skipped'],
       }),
       text(closing),
+      // Every build runs this check, so this is where a package learns what
+      // the next minor release will fail.
+      ...(data.upcoming > 0 && !data.next
+        ? [
+            text(
+              `${plural(data.upcoming, 'finding')} above (the notes) will fail --strict from the next minor release. Fix ${data.upcoming === 1 ? 'it' : 'them'} ahead: ${formatCliCommand('astryx integration check --strict --next')}`,
+            ),
+          ]
+        : []),
     );
   }
   if (result.data.failed) process.exitCode = 1;
@@ -278,14 +318,14 @@ export function registerIntegration(program) {
       if (!options.check) {
         // One way forward: the new name. `npm pack` is what builds a tarball.
         return cliError(
-          '`integration pack` is now `integration verify`: run `astryx integration verify` to check the package the way npm will publish it. To build the tarball, run `npm pack`.',
+          `\`integration pack\` is now \`integration verify\`: run \`${formatCliCommand('integration verify')}\` to check the package the way npm will publish it. To build the tarball, run \`npm pack\`.`,
           {code: ERROR_CODES.ERR_INVALID_ARGUMENT},
         );
       }
       // stderr, and only in text: JSON callers get the same envelope as verify.
       if (!program.opts().json) {
         console.error(
-          'Note: `integration pack --check` is deprecated. Run `astryx integration verify`: it runs the same check.',
+          `Note: \`integration pack --check\` is deprecated. Run \`${formatCliCommand('integration verify')}\`: it runs the same check.`,
         );
       }
       return verifyPackage(program);

@@ -21,7 +21,7 @@ import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
  * (→ `.astryx-table-cell`), and `astryx-button` → key `button`.
  *
  * Keep the `astryx-` literal in sync with packages/core/src/naming.ts
- * (NAMESPACE / classPrefix), the same way build-theme.mjs mirrors it.
+ * (NAMESPACE / classPrefix), the same way commands/theme.mjs mirrors it.
  * <!-- SYNC: packages/core/src/naming.ts (namespace prefix source of truth) -->
  * @param {import('@astryxdesign/cli/authoring').ComponentThemingTarget} target
  * @returns {string}
@@ -161,6 +161,34 @@ function getTargetVariants(target, docs) {
  */
 function getTargetStates(target) {
   return target.states || [];
+}
+
+/**
+ * Format a component's icon slots: the `componentIcons` keys a theme sets,
+ * with each slot's state, fallback, and what `null` does.
+ * @param {any[]} slots - `theming.componentIcons` entries.
+ * @returns {string}
+ */
+function formatComponentIconSlots(slots) {
+  const lines = [
+    '**Component icon slots** - set in `defineTheme({componentIcons})` to a shared icon name, `null`, a partial `{icon, variant, size}` request, or a function of the slot state.\n',
+    '| Slot | State | Fallback | Role | `null` |',
+    '|------|-------|----------|------|--------|',
+  ];
+  for (const slot of slots) {
+    const state = slot.state?.length
+      ? slot.state
+          .map(
+            (/** @type {any} */ field) =>
+              `\`${mdCell(field.name)}: ${mdCell(field.type)}\` ${mdCell(field.description)}`,
+          )
+          .join('<br>')
+      : 'none';
+    lines.push(
+      `| \`${mdCell(slot.slot)}\` | ${state} | ${mdCell(slot.fallback)} | ${mdCell(slot.description)} | ${mdCell(slot.whenNull)} |`,
+    );
+  }
+  return lines.join('\n') + '\n';
 }
 
 /**
@@ -351,6 +379,10 @@ export function formatFull(docs, options = {}) {
       }
     }
 
+    if (docs.theming.componentIcons?.length) {
+      sections.push(formatComponentIconSlots(docs.theming.componentIcons));
+    }
+
     // Legacy componentKey (for backward compatibility)
     if (docs.theming.componentKey) {
       sections.push(`Component key: \`${docs.theming.componentKey}\`\n`);
@@ -507,6 +539,11 @@ export function formatCompact(docs, componentName, importHint) {
     sections.push(propLines.join('\n') + '\n');
   }
 
+  if (docs.theming?.componentIcons?.length) {
+    sections.push('## Component Icon Slots\n');
+    sections.push(formatComponentIconSlots(docs.theming.componentIcons));
+  }
+
   return sections.join('\n');
 }
 
@@ -624,6 +661,18 @@ export function formatBrief(docs, componentName, importHint, options = {}) {
       )
       .join('; ');
     output.push(`  Derived: ${derivedNames}`);
+  }
+
+  // Component icon slots, with the state each slot function receives
+  if (docs.theming?.componentIcons?.length) {
+    const slots = docs.theming.componentIcons
+      .map((/** @type {any} */ slot) =>
+        slot.state?.length
+          ? `${slot.slot} {${slot.state.map((/** @type {any} */ field) => `${field.name}: ${field.type}`).join(', ')}}`
+          : slot.slot,
+      )
+      .join('; ');
+    output.push(`  Icon slots: ${slots}`);
   }
 
   // Theme targets (component class, preferred data attrs, props, states) with theme variant merging

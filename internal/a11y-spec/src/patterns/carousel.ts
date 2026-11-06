@@ -108,7 +108,7 @@ const AST_025_FR12: AstryxRecord = {
   standard: 'astryx',
   id: 'spec:AST-025',
   clause: 'FR12',
-  url: 'https://github.com/facebook/astryx/blob/17044ab1e814586691db43ae6fd71b8b9bb9ceb1/docs/specs/AST-025/spec.md#L137-L141',
+  url: 'https://github.com/meta/astryx/blob/17044ab1e814586691db43ae6fd71b8b9bb9ceb1/docs/specs/AST-025/spec.md#L137-L141',
   requirement:
     'A delivery surface that assigns keyboard scrolling to the viewport MUST add it to the tab order only while at least one applicable axis is effective, and MUST provide an appropriate role and accessible name.',
 };

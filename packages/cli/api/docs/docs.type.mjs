@@ -34,6 +34,8 @@
  *   '@astryxdesign/cli' for a built-in one, else the contributing integration
  * @property {string} [replaces] the topic this one took the place of, when it
  *   was contributed as a replacement
+ * @property {string} [replacedPackage] the package whose topic it took the
+ *   place of, with `replaces`
  */
 
 /**
@@ -58,16 +60,17 @@
  * @typedef {object} DocsDetailResponse
  * @property {'docs.detail'} type
  * @property {string} package the npm package that owns the topic
- * @property {Omit<DocsReadDoc, 'sections'> & {sections: DocsDetailSection[], links: DocsLinks}} data
+ * @property {Omit<DocsReadDoc, 'sections'> & {sections: DocsDetailSection[], links: DocsLinks, replacedPackage?: string}} data
  *   the whole doc, each section naming the package that wrote it, and the
- *   moves from it
+ *   moves from it; `replacedPackage` names the package whose topic or guide
+ *   it took the place of, with `replaces`
  */
 
 /**
  * A topic section as a read returns it. A read inlines each token reference
  * and each `reference` block the author wrote, so its content holds only the
  * stable ReferenceContentBlock kinds.
- * @typedef {Omit<import('@astryxdesign/cli/authoring').ReferenceSection, 'content'>
+ * @typedef {Omit<import('@astryxdesign/cli/authoring').ReferenceSection, 'content' | 'before' | 'after'>
  *   & {content: import('@astryxdesign/cli/authoring').ReferenceContentBlock[]}} DocsReadSection
  */
 
@@ -119,6 +122,9 @@
  * @property {string} name the topic
  * @property {string} title
  * @property {string} description
+ * @property {string} [replaces] the topic or guide this one took the place of
+ * @property {string} [replacedPackage] the package whose topic or guide it
+ *   took the place of
  * @property {DocsIndexSection[]} sections
  * @property {DocsLinks} links the moves from the index
  */
@@ -170,6 +176,8 @@
  * @property {string} package the package that owns the node
  * @property {string} title
  * @property {string} summary
+ * @property {'experimental'} [stability] Present only when the node's doc is
+ *   marked experimental: it may change or be removed in a patch release.
  * @property {DocsNodeLink[]} breadcrumb the namespaces above it, top first
  * @property {DocsNodeSlot[]} slots a namespace's slots that hold children, in
  *   order; empty for a typed doc, and for a depth read of 0
@@ -200,9 +208,15 @@
  * @property {string} route pass it to `astryx docs` to go one level down
  * @property {string} name the last segment of its route
  * @property {string} package the package that owns the child
+ * @property {string} [replaces] the guide's own route, when an integration's
+ *   doc took its place
+ * @property {string} [replacedPackage] the package whose guide it took the
+ *   place of, with `replaces`
  * @property {string} kind
  * @property {string} title
  * @property {string} summary
+ * @property {'experimental'} [stability] Present only when the child's doc is
+ *   marked experimental: it may change or be removed in a patch release.
  * @property {DocsNodeSlot[]} [slots] with a depth read, its own slots, while
  *   the read goes deeper
  * @property {number} [childCount] with a depth read, how many docs sit right

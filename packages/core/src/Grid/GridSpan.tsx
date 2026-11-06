@@ -7,8 +7,10 @@
  * @position Grid span component; controls grid item span
  *
  * SYNC: When modified, update these files to stay in sync:
+ * - /packages/core/src/Grid/GridSpan.doc.mjs
  * - /packages/core/src/Grid/Grid.doc.mjs
  * - /packages/core/src/Grid/Grid.test.tsx
+ * - /apps/storybook/stories/GridSpan.stories.tsx
  * - /apps/storybook/stories/Grid.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/Grid/ (showcase blocks)
  */
@@ -25,7 +27,7 @@ export interface GridSpanProps extends BaseProps<HTMLDivElement> {
   /**
    * Number of columns to span, or 'full' to span all columns.
    * - Number: `grid-column: span N`
-   * - 'full': `grid-column: 1 / -1` (spans entire row)
+   * - 'full': `grid-column: 1 / -1` (spans all explicit columns)
    */
   columns?: number | 'full';
 

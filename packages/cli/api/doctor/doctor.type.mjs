@@ -44,6 +44,9 @@
  * Options for `doctor()`.
  * @typedef {object} DoctorOptions
  * @property {string} [cwd]
+ * @property {string} [built] A finished build to check for Astryx use: a
+ *   project folder, a build output folder, or one built file. Adds the
+ *   `built-astryx-usage` and `built-astryx-purity` checks.
  */
 
 export {};

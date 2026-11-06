@@ -9,12 +9,11 @@
 
 import type {StatusMessageStateFacts} from '@astryxdesign/a11y-spec';
 
-export type ChatTypingStatusStateId =
-  'chat-typing-empty-to-message' | 'chat-typing-name-mounted';
+export type ChatTypingStatusStateId = 'chat-typing-empty-to-message';
 
 export interface ChatTypingStatusBindingDefinition {
   readonly id: ChatTypingStatusStateId;
-  readonly binding: 'ChatTypingIndicator';
+  readonly binding: 'ChatTypingIndicator announcement channel';
   readonly summary: string;
   readonly facts: StatusMessageStateFacts;
   readonly storyId: string;
@@ -28,29 +27,18 @@ const LIFECYCLE_FACTS: StatusMessageStateFacts = {
   initialMessage: '',
   message: 'Ana is typing…',
   replacement: 'Ana and Ben are typing…',
-  semanticTransitions: ['show', 'replace', 'clear'],
+  semanticTransitions: ['show', 'replace'],
 };
 
 export const CHAT_TYPING_STATUS_BINDING_STATES: ReadonlyArray<ChatTypingStatusBindingDefinition> =
   [
     {
       id: 'chat-typing-empty-to-message',
-      binding: 'ChatTypingIndicator',
+      binding: 'ChatTypingIndicator announcement channel',
       summary:
-        'the mounted empty indicator receives one name, replaces it with two, then clears',
+        'one name, then two, reach the persistent polite channel as the indicator updates',
       facts: LIFECYCLE_FACTS,
       storyId: 'a11y-status-message-pattern--chat-typing-empty-to-message',
-    },
-    {
-      id: 'chat-typing-name-mounted',
-      binding: 'ChatTypingIndicator',
-      summary: 'the documented named indicator is mounted with its status text',
-      facts: {
-        ...LIFECYCLE_FACTS,
-        initialMessage: 'Ana is typing…',
-        semanticTransitions: ['replace'],
-      },
-      storyId: 'a11y-status-message-pattern--chat-typing-name-mounted',
     },
   ];
 
@@ -61,7 +49,19 @@ export const CHAT_TYPING_STATUS_EXCLUSIONS = [
     owner: 'ChatTypingIndicator',
     part: 'omitted names',
     reason:
-      'Omitted names and an empty names array render the same empty persistent status state, so one binding row covers both inputs.',
+      'Omitted names and an empty names array render the same dots-only indicator and announce nothing, so one binding row covers both inputs.',
+  },
+  {
+    owner: 'ChatTypingIndicator',
+    part: 'indicator mounted with names',
+    reason:
+      'A named indicator that mounts announces its label once through the same channel; the channel text clears on its own timer, so the mount occasion is asserted with a channel spy in ChatTypingIndicator.test.tsx rather than as a bound initial state.',
+  },
+  {
+    owner: 'useAnnounce',
+    part: 'clearing the names',
+    reason:
+      'Clearing removes the visible label and announces nothing; the channel clears its own text after each announcement, so no clear transition is observable on it.',
   },
   {
     owner: 'ChatTypingIndicator and theme',
@@ -73,6 +73,6 @@ export const CHAT_TYPING_STATUS_EXCLUSIONS = [
     owner: 'ChatMessageList',
     part: 'transcript log announcements',
     reason:
-      'The parent role=log owns sequential message updates and stream batching, which are distinct from this one atomic typing status.',
+      'Inside a role=log the indicator announces nothing and the log delivers the label as added content (spec:AST-086 FR4), asserted in ChatTypingIndicator.test.tsx.',
   },
 ] as const;

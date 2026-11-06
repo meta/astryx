@@ -135,6 +135,21 @@ describe('component list — components whose docs live in a family folder', () 
     });
   }, SLOW);
 
+  it('answers a Core-scoped lookup of a member with that member, as the unscoped lookup does', async () => {
+    for (const name of ['HStack', 'VStack']) {
+      const unscoped = await component(name, {cwd});
+      const scoped = await component(name, {
+        cwd,
+        package: '@astryxdesign/core',
+      });
+      expect(scoped.data.name).toBe(name);
+      expect(scoped.data.parentDoc).toBe('Stack');
+      expect(scoped.data.import).toBe(`@astryxdesign/core/${name}`);
+      expect(scoped.data.props).toEqual(unscoped.data.props);
+      expect(scoped.data.props.length).toBeGreaterThan(0);
+    }
+  }, SLOW);
+
   it('prints each one\'s own import path in the list, the detail, and search', async () => {
     // The path `component <Name>` prints is the one docs and examples teach:
     // the component's own entry point, never its family's (/Stack, /Text) or
@@ -232,6 +247,30 @@ describe('component dispatcher — name resolution', () => {
       }
       expect(err).toBeDefined();
       expect(err.code).toBe('ERR_UNKNOWN_COMPONENT');
+    },
+    SLOW,
+  );
+
+  it(
+    'opens Tokenizer for tokenizer, not CodeBlock through its tokenizer module (spec:AST-083 FR7)',
+    async () => {
+      const r = await component('tokenizer', {cwd});
+      expect(r.type).toBe('component.detail');
+      expect(r.data.name).toBe('Tokenizer');
+    },
+    SLOW,
+  );
+
+  it.each(['slider', 'switch', 'progressBar', 'tokenizer'])(
+    'reads no source for %s, a component name in another case that a motion table or helper module shares',
+    async name => {
+      let err;
+      try {
+        await component(name, {cwd, source: true});
+      } catch (e) {
+        err = e;
+      }
+      expect(err?.code).toBe('ERR_NO_SOURCE');
     },
     SLOW,
   );
@@ -480,6 +519,37 @@ describe('component dispatcher — detail levels on single component (text only)
       expect(Object.keys(compactData.data).sort()).toEqual(
         Object.keys(fullData.data).sort(),
       );
+    },
+    SLOW,
+  );
+});
+
+describe('component not-found suggestions', () => {
+  const suggested = async (/** @type {string} */ name) => {
+    const error = await component(name, {cwd}).catch(e => e);
+    expect(error).toBeInstanceOf(AstryxError);
+    expect(error.code).toBe('ERR_UNKNOWN_COMPONENT');
+    return error.suggestions.map((/** @type {{name: string}} */ s) => s.name);
+  };
+
+  it(
+    'leaves out a weaker match after a strong first suggestion',
+    async () => {
+      // FieldLabel is another name for it; past the second suggestion, the
+      // matches on one word of the name ("input", "label") are weaker and add
+      // only noise.
+      const names = await suggested('InputLabel');
+      expect(names[0]).toBe('FieldLabel');
+      expect(names).toHaveLength(2);
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps a close spelling of the whole name after a stronger first match',
+    async () => {
+      expect(await suggested('Blockqoute')).toContain('Blockquote');
+      expect(await suggested('TextrAea')).toContain('TextArea');
     },
     SLOW,
   );

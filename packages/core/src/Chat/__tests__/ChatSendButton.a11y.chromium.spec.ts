@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit ChatSendButton
 
 /**
  * @file ChatSendButton.a11y.chromium.spec.ts
@@ -19,9 +20,10 @@ import {
   type BrowserContext,
   type Locator,
   type Page,
-} from '@playwright/test';
+} from '@astryxdesign/a11y-spec/playwright';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
+import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -29,7 +31,9 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const OUTPUT = path.resolve('test-results/chat-send-button-audit-evidence');
+const EVIDENCE = path.resolve('test-results/chat-send-button-audit-evidence');
+// This copy's evidence folder, set in beforeAll (one per --repeat-each copy).
+let OUTPUT = EVIDENCE;
 const NARROW_STORY = 'core-chatcomposer--disabled-streaming-narrow';
 const SUBJECT = '.astryx-chat-send-button';
 
@@ -313,24 +317,6 @@ function isIdentityTransform(transform: string): boolean {
   }
   if (transform.startsWith('matrix(') && values?.length === 6) {
     const expected = [1, 0, 0, 1, 0, 0];
-    return values.every((value, index) => close(value, expected[index]));
-  }
-  return false;
-}
-
-function isScale098(transform: string): boolean {
-  const values = transform
-    .slice(transform.indexOf('(') + 1, transform.lastIndexOf(')'))
-    .match(/-?[\d.]+/g)
-    ?.map(Number);
-  const close = (actual: number, expected: number) =>
-    Math.abs(actual - expected) < 0.001;
-  if (transform.startsWith('matrix3d(') && values?.length === 16) {
-    const expected = [0.98, 0, 0, 0, 0, 0.98, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-    return values.every((value, index) => close(value, expected[index]));
-  }
-  if (transform.startsWith('matrix(') && values?.length === 6) {
-    const expected = [0.98, 0, 0, 0.98, 0, 0];
     return values.every((value, index) => close(value, expected[index]));
   }
   return false;
@@ -755,7 +741,7 @@ async function capture(
       : interaction === 'focus-visible'
         ? 'Focused: outline style'
         : interaction === 'pressed'
-          ? 'Pressed: scale(0.98) plus pressed overlay'
+          ? 'Pressed: identity transform plus pressed overlay under reduced motion'
           : 'Rest: base tokens with no interaction';
   const interactionStateIsExclusive =
     interaction === 'rest'
@@ -794,7 +780,7 @@ async function capture(
         : interaction === 'pressed'
           ? overlayIsAlpha &&
             pressedOverlayMatches &&
-            isScale098(actual.transform) &&
+            isIdentityTransform(actual.transform) &&
             interactionStateIsExclusive
           : interactionStateIsExclusive;
   const renderedContrastPairs = contrastPairs(actual, fixture, interaction);
@@ -1264,8 +1250,7 @@ test.beforeAll(async () => {
   if (process.env.ASTRYX_HEAD_SHA && process.env.ASTRYX_HEAD_SHA !== head) {
     throw new Error('PR head differs from the checked out source');
   }
-  fs.rmSync(OUTPUT, {recursive: true, force: true});
-  fs.mkdirSync(OUTPUT, {recursive: true});
+  OUTPUT = resetAuditEvidence(EVIDENCE, test.info());
   server = await serveStorybook(
     process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR,
   );

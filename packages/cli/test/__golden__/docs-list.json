@@ -11,13 +11,38 @@
   "meta": {
     "namespaces": [
       {
+        "topic": "authoring",
+        "description": "Build an npm package that adds components, templates, themes, docs, and codemods to Astryx apps, and look up every field of every file it holds.",
+        "package": "@astryxdesign/cli"
+      },
+      {
+        "topic": "calendars",
+        "description": "Show dates in the Persian, Hebrew, Islamic, Buddhist, Japanese, lunisolar, and other calendars while values stay Gregorian ISO dates.",
+        "package": "@astryxdesign/cli"
+      },
+      {
         "topic": "cli",
-        "description": "Commands, programmatic APIs, integration authoring, and output contracts.",
+        "description": "Commands, programmatic APIs, and output contracts. Building an integration is under `astryx docs authoring`.",
+        "package": "@astryxdesign/cli"
+      },
+      {
+        "topic": "foundations",
+        "description": "Color, elevation, icons, illustrations, motion, shape, and spacing: the visual foundations every component builds on. Each topic keeps its own name; open one by it.",
+        "package": "@astryxdesign/cli"
+      },
+      {
+        "topic": "global",
+        "description": "Install Astryx once on your computer and use it in any folder. Each project still runs its own version of Astryx, so a global install never changes what a project gets.",
+        "package": "@astryxdesign/cli"
+      },
+      {
+        "topic": "guides",
+        "description": "Guides that stand on their own: getting started, principles, theming, and working with AI. Each topic keeps its own name; open one by it.",
         "package": "@astryxdesign/cli"
       },
       {
         "topic": "internationalization",
-        "description": "Set the active locale, load catalogs, coexist with your own i18n library, handle RTL, and test translations.",
+        "description": "Set the active locale, load catalogs, coexist with your own i18n library, show other calendars, handle RTL, and test translations.",
         "package": "@astryxdesign/cli"
       },
       {
@@ -49,12 +74,12 @@
         "topic": "typography",
         "description": "Font families, geometric type scale, weight, line-height, and semantic text tokens for consistent, accessible text styling.",
         "package": "@astryxdesign/cli"
-      },
-      {
-        "topic": "unorganized",
-        "description": "Every topic that no section places yet. Each keeps its own name; open one by it.",
-        "package": "@astryxdesign/cli"
       }
-    ]
+    ],
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
   }
 }

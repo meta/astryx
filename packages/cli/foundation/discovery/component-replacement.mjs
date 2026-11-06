@@ -30,6 +30,7 @@ import {
   COMPONENT_REPLACES_CLI,
   componentReplacesCliProblem,
 } from '../integrations/cli-requirement.mjs';
+import {formatCliCommand} from '../env/package-manager.mjs';
 
 /**
  * @typedef {import('../integrations/integrations.mjs').LoadedIntegration} LoadedIntegration
@@ -292,7 +293,7 @@ export async function resolveComponentReplacements(
         'missing_component_replacement_target',
         differentCase
           ? `Component "${name}" replaces "${replaces}", which is not a Core component name. Core names it "${differentCase}".`
-          : `Component "${name}" replaces "${replaces}", which is not a Core component. Run \`astryx component --list\` for Core component names.`,
+          : `Component "${name}" replaces "${replaces}", which is not a Core component. Run \`${formatCliCommand('component --list')}\` for Core component names.`,
       );
       if (declaration.optedIn) {
         const key = differentCase ?? replaces;

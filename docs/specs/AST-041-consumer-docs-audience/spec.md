@@ -18,6 +18,18 @@ affects_consumer_docs: [is-my-code-good]
 
 # Consumer documentation audience boundary system spec
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": [
+    "packages/cli/assets/docs/**",
+    "packages/**/*.doc.mjs",
+    "packages/**/*.doc.*.mjs"
+  ]
+}
+```
+
 ## Intent
 
 Documentation that Astryx ships to callers serves people and agents building

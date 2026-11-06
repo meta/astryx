@@ -28,13 +28,14 @@ export const doc = {
     '`cli/api` returns its children one level down (`depth` reads as many ' +
     'levels as asked, and `detail` how much of each doc below), a typed doc such as ' +
     "`cli/api/functions/search` returns its content, and a guide the tree " +
-    'places (`cli/integrations/quick-start`) reads like any topic. ' +
+    'places (`authoring/quick-start`) reads like any topic. ' +
     'Every read but the list carries `links`, the commands that move from it: ' +
     '`up` to the level it sits in, `previous` and `next` to its neighbors, and, ' +
     'for a typed doc, `related` to the docs it names (its command or function, ' +
     'and its related docs); `previous` and `next` ' +
     'to the section or node before and after it. ' +
-    'Overlay options select localized or dense variants.',
+    'Overlay options select localized or dense variants.' +
+    " In global mode: with `cwd` outside a project, doc topics from integrations installed next to this CLI package globally are listed too; inside a project, only the project's own integrations count. See {@link namespace:global} and {@link generic:computer-integrations}.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'docs(topic?: string, section?: string, options?: DocsOptions): Promise<DocsListResponse | DocsIndexResponse | DocsDetailResponse | DocsDetailSectionResponse | DocsNodeResponse>',
@@ -106,7 +107,7 @@ export const doc = {
     {
       type: 'docs.list',
       description:
-        "Every reference-doc topic in read order, as DocsListEntry[] ({topic, description, package, replaces?}), each readable with docs(topic). meta.namespaces lists the docs tree's top-level namespaces ({topic, description, package}), and meta.notLoaded each package whose docs did not load ({package, message}).",
+        "Every reference-doc topic in read order, as DocsListEntry[] ({topic, description, package, replaces?, replacedPackage?}), each readable with docs(topic). meta.namespaces lists the docs tree's top-level namespaces ({topic, description, package}), and meta.notLoaded each package whose docs did not load ({package, message}).",
     },
     {
       type: 'docs.detail',
@@ -161,12 +162,12 @@ export const doc = {
     },
     {
       label: 'A namespace and everything below it, in full',
-      code: "await docs('cli/integrations', undefined, {depth: 'all', detail: 'full'});",
+      code: "await docs('authoring', undefined, {depth: 'all', detail: 'full'});",
     },
     {label: 'One API function', code: "await docs('cli/api/functions/search');"},
     {
       label: 'A whole guide from the docs tree',
-      code: "await docs('cli/integrations/quick-start');",
+      code: "await docs('authoring/quick-start');",
     },
     {label: 'One section by key', code: "await docs('spacing', 'scale');"},
   ],

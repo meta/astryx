@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
+import stylexResolution from '../../scripts/stylex-module-resolution.cjs';
 import {categories} from './src/app/sandboxPages';
 import {
   discoverRoutes,
@@ -188,7 +189,7 @@ export default defineConfig({
             ),
           ],
         },
-        unstable_moduleResolution: {type: 'commonJS', rootDir: appDir},
+        unstable_moduleResolution: stylexResolution.stylexModuleResolution,
       },
       stylexPrefix: 'x',
     }),
@@ -220,6 +221,11 @@ export default defineConfig({
       // The app owns the Babel helpers emitted while compiling its template
       // modules; pnpm does not hoist them to each sibling workspace package.
       '@babel/runtime': path.join(appDir, 'node_modules/@babel/runtime'),
+      // Template previews render the docs-only demo content the docsite hosts.
+      '@astryx-docs/demo-content': path.join(
+        appDir,
+        '../docsite/src/templateDemoContent/demoContent.tsx',
+      ),
       ...(lexicalDist() ? {lexical: lexicalDist()} : {}),
     },
   },

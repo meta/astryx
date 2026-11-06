@@ -106,7 +106,7 @@ function Harness({
 async function openSelector(
   name = 'Visible fields',
 ): Promise<HTMLButtonElement> {
-  const trigger = screen.getByRole('button', {
+  const trigger = screen.getByRole('combobox', {
     name,
   }) as HTMLButtonElement;
   fireEvent.keyDown(trigger, {key: 'ArrowDown'});
@@ -416,18 +416,20 @@ describe('TransferListSelector', () => {
     );
 
     expect(
-      screen.getByRole('button', {name: 'Visible fields'}),
+      screen.getByRole('combobox', {name: 'Visible fields'}),
     ).toHaveTextContent('3 selected');
   });
 
-  it('disables list controls when disabled, but never when merely busy', async () => {
+  it('marks list controls disabled without the native attribute, keeping focus, but never when merely busy', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
     const view = render(
       <TransferListSelector
         label="Visible fields"
         options={OPTIONS}
         value={['name']}
-        onChange={() => {}}
-        commitBehavior="staged"
+        onChange={onChange}
+        hasSearch
       />,
     );
     await openSelector();
@@ -435,7 +437,35 @@ describe('TransferListSelector', () => {
       name: 'Visible fields',
       ...hidden,
     });
+    const addStatus = within(dialog).getByRole('button', {
+      name: 'Add Status',
+      hidden: true,
+    });
+    addStatus.focus();
 
+    view.rerender(
+      <TransferListSelector
+        label="Visible fields"
+        options={OPTIONS}
+        value={['name']}
+        onChange={onChange}
+        isDisabled
+        hasSearch
+      />,
+    );
+    const fieldset = dialog.querySelector('fieldset');
+    expect(fieldset).not.toBeNull();
+    // A focusable disabled group: no native `disabled`, which would blur the
+    // focused control; aria-disabled marks every control in it.
+    expect(fieldset).not.toHaveAttribute('disabled');
+    expect(fieldset).toHaveAttribute('aria-disabled', 'true');
+    expect(addStatus).toHaveFocus();
+    await user.click(addStatus);
+    expect(onChange).not.toHaveBeenCalled();
+    // The search field is disabled but focusable.
+    expect(
+      within(dialog).getByRole('searchbox', {hidden: true}),
+    ).toHaveAttribute('aria-disabled', 'true');
     view.rerender(
       <TransferListSelector
         label="Visible fields"
@@ -446,9 +476,6 @@ describe('TransferListSelector', () => {
         isDisabled
       />,
     );
-    const fieldset = dialog.querySelector('fieldset');
-    expect(fieldset).not.toBeNull();
-    expect(fieldset).toBeDisabled();
 
     const cancel = within(dialog).getByRole('button', {
       name: 'Cancel',
@@ -461,7 +488,9 @@ describe('TransferListSelector', () => {
     expect(cancel).toBeEnabled();
     expect(fieldset).not.toContainElement(cancel);
     expect(apply).toBeDisabled();
-    expect(screen.getByRole('button', {name: 'Visible fields'})).toBeDisabled();
+    expect(
+      screen.getByRole('combobox', {name: 'Visible fields'}),
+    ).toHaveAttribute('aria-disabled', 'true');
 
     view.rerender(
       <TransferListSelector
@@ -562,7 +591,7 @@ describe('TransferListSelector', () => {
       screen.getByTestId('column-selector').closest('.astryx-complex-selector'),
     ).toHaveAttribute('data-size', 'sm');
     expect(
-      screen.getByRole('button', {name: 'Table columns'}),
+      screen.getByRole('combobox', {name: 'Table columns'}),
     ).toHaveTextContent('Customize columns');
     expect(
       screen.getByTestId('column-selector').closest('.astryx-field'),

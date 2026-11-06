@@ -45,7 +45,10 @@ export interface DropdownMenuDrillIn {
   viewStack: ReadonlyArray<string>;
   /** The element a shown view renders its rows into (a portal target). */
   host: HTMLElement | null;
-  /** Show a sub-menu's view in place of the current rows. */
+  /**
+   * Show a sub-menu's view in place of the current rows. A view with a header
+   * or footer renders into the root's surface host instead of `host`.
+   */
   push: (viewId: string) => void;
   /** Return to the rows the shown view replaced. */
   pop: () => void;
@@ -64,6 +67,41 @@ export interface DropdownMenuContextValue {
    */
   menuLabel?: string;
 }
+
+/**
+ * The root's surface host. The root owns the element through a ref; this
+ * object is new whenever a new element attaches, so a sub-menu re-renders
+ * into it.
+ */
+export interface DropdownMenuSurfaceHost {
+  /** The host element, or `null` before it attaches. */
+  getElement: () => HTMLElement | null;
+}
+
+/** What a sub-menu with a header or footer needs from the root. Internal. */
+export interface DropdownMenuSurfaceValue {
+  /**
+   * An element inside the root's popover but outside every `role="menu"`
+   * element, where such a sub-menu renders its surface (its flyout layer, or
+   * its drilled-in view, while which the root's menu and regions step aside).
+   */
+  host: DropdownMenuSurfaceHost;
+  /**
+   * The root menu's `id`, which a sub-menu's menu in the host names so the
+   * press model counts it, and only it, as nested in the root.
+   */
+  ownerId: string;
+  /** The root's resolved `menuMaxHeight`, which a drilled-in view caps at. */
+  menuMaxHeight?: string;
+}
+
+/**
+ * The root's surface; `null` under a root with none (ContextMenu). Internal,
+ * off the public menu context, and layer-scoped, so each flyout re-provides it.
+ */
+export const DropdownMenuSurfaceContext =
+  createLayerScopedContext<DropdownMenuSurfaceValue | null>(null);
+DropdownMenuSurfaceContext.displayName = 'DropdownMenuSurfaceContext';
 
 /**
  * Whether the root menu of this layer tree is open; internal companion to

@@ -205,7 +205,7 @@ tokens: {
           type: 'list',
           style: 'ordered',
           items: [
-            'Import the reset/base CSS and a theme CSS file early enough for first paint. For production SSR, prefer built themes from `astryx theme build` or published `/built` theme imports plus `theme.css`.',
+            'Import the reset/base CSS and a theme CSS file early enough for first paint. For production SSR, prefer built themes from `{@command theme build}` or published `/built` theme imports plus `theme.css`.',
             'Choose one owner for color mode. Theme uses `data-theme="light|dark"` and `color-scheme` to resolve `light-dark()` tokens.',
             'Map the external library\'s semantic layer to system variables by intent, not by exact naming. For example, MUI `background.paper` maps to `--color-background-surface`.',
             'Use {@link namespace:tokens} and focused token docs when building mappings. Keep mappings small at first: text, surface/body/card/popover, border, accent, status, spacing, radius, typography, shadow.',

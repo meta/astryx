@@ -4,7 +4,8 @@
 
 /**
  * @file TextArea.tsx
- * @input Uses React, useId, ChangeEvent, ClipboardEvent, FocusEvent, Field, Icon, Spinner
+ * @input Uses React, useId, ChangeEvent, ClipboardEvent, FocusEvent, Field, Icon, Spinner,
+ *   textEntryTraits (the touch-keyboard trait props)
  * @output Exports TextArea component, TextAreaProps, TextAreaStatus, TextAreaStatusType
  * @position Core implementation; consumed by index.ts, tested by TextArea.test.tsx
  *
@@ -41,17 +42,20 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
+import {isRenderable} from '../utils/isRenderable';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
 import {mergeProps} from '../utils';
+import {joinAriaIDs} from '../utils/inputAria';
 import type {BaseProps} from '../BaseProps';
 import {
   type FieldInputBaseProps,
   useFieldInputStyling,
 } from '../Field/fieldParts';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import type {SizeValue} from '../utils/types';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
@@ -60,9 +64,21 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {characterCount} from '../utils/characters';
-import {useTranslator} from '../i18n';
+import {
+  textEntryTraitAttributes,
+  type TextEntryTraitProps,
+} from '../Field/textEntryTraits';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TextArea/TextArea.generated';
+
+registerEnglishFallback(english);
 const COUNTER_WARNING_THRESHOLD = 0.8;
 
 const styles = stylex.create({
@@ -171,7 +187,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
   },
   counterError: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-text-error'],
   },
 });
 
@@ -198,10 +214,10 @@ export interface TextAreaStatus {
   message?: string;
 }
 
-export interface TextAreaProps extends Omit<
-  FieldInputBaseProps,
-  'onChange' | 'defaultValue'
-> {
+export interface TextAreaProps
+  extends
+    Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>,
+    TextEntryTraitProps {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLTextAreaElement>;
   /**
@@ -252,7 +268,9 @@ export interface TextAreaProps extends Omit<
    */
   rows?: number;
   /**
-   * Whether the textarea is disabled.
+   * Whether the textarea is disabled. A disabled textarea is dimmed, cannot be
+   * edited, and is left out of form submission, but it stays in the tab order
+   * (`aria-disabled`, not the native attribute).
    * @default false
    */
   isDisabled?: boolean;
@@ -260,7 +278,7 @@ export interface TextAreaProps extends Omit<
    * Whether the textarea is read-only.
    * The value is shown at full opacity and still submits with the form, but
    * cannot be edited. Unlike `isDisabled`, a read-only textarea is not dimmed
-   * and stays in the tab order — use it for a value the user should see and
+   * and keeps its form value — use it for a value the user should see and
    * send but not change. `isDisabled` takes precedence when both are set.
    * @default false
    */
@@ -272,8 +290,8 @@ export interface TextAreaProps extends Omit<
    * discoverable by keyboard and assistive technology. The field cannot be
    * edited (it becomes read-only) while disabled.
    *
-   * Use this instead of wrapping a disabled textarea in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled textarea in `Tooltip`, so the
+   * reason is attached to the field itself.
    *
    * @example
    * ```
@@ -299,7 +317,7 @@ export interface TextAreaProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
    * (e.g. `'100%'`). Sizes the whole field (label, control, and status) so they
@@ -396,6 +414,10 @@ export function TextArea({
   labelTooltip,
   startIcon,
   hasSpellCheck = true,
+  enterKeyHint,
+  inputMode,
+  autoCapitalize,
+  hasAutoCorrect,
   onPaste,
   maxLength,
   hasAutoFocus = false,
@@ -413,6 +435,7 @@ export function TextArea({
   ref,
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
+  'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: TextAreaProps) {
   const {rest, container} = useFieldInputStyling('TextArea', restProps, {
@@ -421,11 +444,16 @@ export function TextArea({
     containerStyle,
   });
   const size = useSize(sizeProp, 'md');
-  const t = useTranslator();
+  // One presence check for the start icon's slot and its padding
+  // (`architecture:react-component-runtime` INV16), on the value the caller
+  // passed: an icon component counts as present, as any non-empty value does.
+  const hasStartIcon = isRenderable(startIcon as ReactNode);
+  const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const announce = useAnnounce();
   const generatedID = useId();
   const id = idProp ?? generatedID;
+  const fieldLabelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
   const counterID = useId();
@@ -438,13 +466,18 @@ export function TextArea({
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
   const isBusy = isLoading || optimisticValue !== value;
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8).
+  useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), containerRef);
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the textarea container (which already exists)
+  // Disabled-reason tooltip. The tooltip listeners attach to the textarea container (which already exists)
   // and the textarea stays perceivable via aria-disabled instead of the native
   // disabled attribute. The field is made read-only so it can't be typed into,
   // and value mutation is blocked by the isDisabled guard in handleChange.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
+  // A disabled field keeps its tab stop but, like a natively disabled one,
+  // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
+  const fieldProps = withholdCallerHandlers(rest, isDisabled);
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
@@ -557,6 +590,7 @@ export function TextArea({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={id}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
       descriptionID={description ? descriptionID : undefined}
       isOptional={isOptional}
       isRequired={isRequired}
@@ -594,6 +628,7 @@ export function TextArea({
             inputWrapperStyles.base,
             styles.wrapper,
             isDisabled && inputWrapperStyles.disabled,
+            isDisabled && inputDisabledFocusStyles.ring,
             status && inputStatusBorderStyles[status.type],
             status && !isDisabled && inputStatusHoverShadowStyles[status.type],
             status && inputStatusFocusWithinStyles[status.type],
@@ -602,32 +637,45 @@ export function TextArea({
           controlClassName,
           controlStyle,
         )}>
-        {startIcon && (
+        {hasStartIcon && (
           <span {...stylex.props(styles.startIcon)}>
             {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
           </span>
         )}
         <textarea
-          {...rest}
+          {...fieldProps}
           ref={useMergedRefs(ref, textareaRef)}
           id={id}
           name={isDisabled ? undefined : htmlName}
           value={optimisticValue}
           onChange={handleChange}
-          onPaste={onPaste}
+          onPaste={isDisabled ? undefined : onPaste}
           onFocus={onFocus}
           onBlur={onBlur}
           placeholder={placeholder}
           rows={rows}
-          // With a disabledMessage the textarea keeps focusability via
-          // aria-disabled so the reason is focus-discoverable; readOnly + the
-          // handleChange guard keep the value from changing.
-          disabled={isDisabled && !showsDisabledMessage}
-          aria-disabled={showsDisabledMessage ? 'true' : undefined}
-          readOnly={isReadOnly || showsDisabledMessage || undefined}
+          {...textEntryTraitAttributes({
+            enterKeyHint,
+            inputMode,
+            autoCapitalize,
+            hasAutoCorrect,
+          })}
+          // A disabled textarea keeps its place in the tab order
+          // (spec:AST-085): aria-disabled instead of the native attribute,
+          // with readOnly + the handleChange guard keeping the value from
+          // changing.
+          aria-disabled={isDisabled ? 'true' : undefined}
+          readOnly={isReadOnly || isDisabled || undefined}
           spellCheck={hasSpellCheck}
           autoFocus={hasAutoFocus}
           data-autofocus={hasAutoFocus || undefined}
+          // A caller aria-labelledby names the textarea together with the
+          // field's own label, which it would otherwise replace.
+          aria-labelledby={
+            ariaLabelledByProp != null
+              ? joinAriaIDs(fieldLabelID, ariaLabelledByProp)
+              : undefined
+          }
           aria-describedby={
             [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
             undefined
@@ -646,7 +694,7 @@ export function TextArea({
               styles.textarea,
               textareaSizeStyles[size],
               isDisabled && styles.textareaDisabled,
-              Boolean(startIcon) && styles.textareaWithStartIcon,
+              hasStartIcon && styles.textareaWithStartIcon,
               // Reserve trailing space only when the end slot actually renders
               // something (spinner or on-field status icon). The `detached`
               // status variant suppresses the on-field icon — its glyph lives
@@ -660,10 +708,11 @@ export function TextArea({
         />
         {(isBusy || statusIcon) && (
           <span {...stylex.props(styles.endSlot)}>
-            {isBusy && <Spinner size="sm" />}
+            {isBusy && <Spinner size="sm" aria-hidden="true" />}
             {statusIcon}
           </span>
         )}
+        {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `maxLength` is a number; 0 still shows its counter */}
         {maxLength != null && (
           <div
             id={counterID}
@@ -680,7 +729,10 @@ export function TextArea({
               // live-region announcement carry the meaning.
               <Icon icon="warning" size="sm" />
             )}
-            {valueLength}/{maxLength}
+            {t('@astryx.textArea.counter', {
+              count: valueLength,
+              limit: maxLength,
+            })}
           </div>
         )}
       </div>

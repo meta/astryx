@@ -22,7 +22,14 @@ import {
   validateIntegration,
 } from '../../../api/integration/validate-integration.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
-import {emit, section, record, records, text} from '../formatters/index.mjs';
+import {
+  emit,
+  list,
+  section,
+  record,
+  records,
+  text,
+} from '../formatters/index.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {doc as doctorCommand} from './doctor.doc.mjs';
 import {doc as doctorIntegrationGroup} from './doctor-integration.doc.mjs';
@@ -38,6 +45,8 @@ import {doc as integrationDocConflictsFn} from '../../../api/integration/integra
 import {NO_RESULT_SET} from '../../../foundation/debug/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
+import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 
 const STATUS = {
   pass: '[ok]',
@@ -85,16 +94,56 @@ function printHuman(report) {
 
 /**
  * @param {Array<{code: string, severity: string, message: string}>} issues
+ * @param {Set<string>} [seen] issues an earlier check printed
  * @returns {import('../formatters/index.mjs').Block[]}
  */
-function issueBlocks(issues) {
-  if (issues.length === 0) return [];
+function issueBlocks(issues, seen) {
+  const fresh = unseen(issues, seen);
+  if (fresh.length === 0) return alsoApply(issues, fresh);
   return [
     section('Integration issues'),
-    records(issues, {
-      fields: ['severity', 'code', 'message'],
+    records(fresh, {
+      fields: ['severity', 'code', 'message', 'fix', 'file', 'line'],
       format: {severity: statusToken},
     }),
+    ...alsoApply(issues, fresh),
+  ];
+}
+
+/**
+ * The issues not printed yet, recording them as printed. `integration
+ * check` runs several checks that each report an experimental icon set's
+ * package-wide issues; each is printed once, under the first check. Every
+ * other issue prints under each check that reports it, as it always has.
+ * @template {{code: string, message: string}} T
+ * @param {T[]} issues
+ * @param {Set<string> | undefined} seen
+ * @returns {T[]}
+ */
+function unseen(issues, seen) {
+  if (!seen) return issues;
+  const once = (/** @type {T} */ issue) => /icon/u.test(issue.code);
+  const fresh = issues.filter(
+    issue => !once(issue) || !seen.has(`${issue.code}\0${issue.message}`),
+  );
+  for (const issue of issues) {
+    if (once(issue)) seen.add(`${issue.code}\0${issue.message}`);
+  }
+  return fresh;
+}
+
+/**
+ * One line naming the issues an earlier check already printed.
+ * @param {unknown[]} issues
+ * @param {unknown[]} fresh
+ */
+function alsoApply(issues, fresh) {
+  const repeated = issues.length - fresh.length;
+  if (repeated === 0) return [];
+  return [
+    text(
+      `${repeated} package-wide issue${repeated === 1 ? '' : 's'} listed above also appl${repeated === 1 ? 'ies' : 'y'} here.`,
+    ),
   ];
 }
 
@@ -178,9 +227,38 @@ function docTypesBlocks(report, failed) {
 }
 
 /**
- * @param {import('../../../api/integration/validate-integration.type.mjs').ValidateIntegrationResponse['data']} data
+ * The component doc names that could not be judged against their sources.
+ * @param {import('../../../api/integration/validate-integration.type.mjs').DocNamesReport | undefined} report
  */
-function printIntegrationValidation(data) {
+function docNamesBlocks(report) {
+  if (!report || report.unchecked.length === 0) return [];
+  return [
+    text(
+      `[info] Component names not checked: ${report.unchecked.length} doc(s) whose source exports this check cannot read:`,
+    ),
+    records(report.unchecked, {fields: ['file', 'name', 'reason']}),
+  ];
+}
+
+/**
+ * The block component names this check could not judge.
+ * @param {import('../../../api/integration/validate-integration.type.mjs').BlockComponentsReport | undefined} report
+ */
+function blockComponentsBlocks(report) {
+  if (!report || report.unchecked.length === 0) return [];
+  return [
+    text(
+      `[info] Block component names not checked: ${report.unchecked.length} name(s) this check could not judge:`,
+    ),
+    records(report.unchecked, {fields: ['file', 'name', 'reason']}),
+  ];
+}
+
+/**
+ * @param {import('../../../api/integration/validate-integration.type.mjs').ValidateIntegrationResponse['data']} data
+ * @param {Set<string>} [seen] issues an earlier check printed, printed once
+ */
+function printIntegrationValidation(data, seen) {
   const {warnings, errors} = summarizeIssues(data.issues);
   emit(
     section(
@@ -188,29 +266,141 @@ function printIntegrationValidation(data) {
     ),
     ...(data.issues.length > 0
       ? [
-          records(data.issues, {
-            fields: ['severity', 'code', 'message'],
+          records(unseen(data.issues, seen), {
+            fields: ['severity', 'code', 'message', 'fix', 'file', 'line'],
             format: {severity: statusToken},
           }),
         ]
       : [text('[ok] No integration issues found.')]),
+    ...(data.notes ?? []).map(note =>
+      // A note marked next fails --strict from the next minor release.
+      text(`note (${note.code}): ${note.next ? '[next minor] ' : ''}${note.message}`),
+    ),
     text(
       `Summary: ${errors} error${errors === 1 ? '' : 's'}, ` +
         `${warnings} warning${warnings === 1 ? '' : 's'}`,
     ),
     ...docTypesBlocks(data.docTypes, errors > 0),
+    ...docNamesBlocks(data.docNames),
+    ...blockComponentsBlocks(data.blockComponents),
+    ...iconSetCoverageBlocks(data.iconSets),
+    ...olderCliNoteBlocks(data.olderCliNotes),
+    ...(data.exampleAssets && data.exampleAssets.unchecked.length > 0
+      ? [
+          text(
+            `[info] Template assets not checked: ${data.exampleAssets.unchecked.length}:`,
+          ),
+          records(data.exampleAssets.unchecked, {
+            fields: ['file', 'asset', 'reason'],
+          }),
+        ]
+      : []),
+    ...(data.publicImports && data.publicImports.unchecked.length > 0
+      ? [
+          text(
+            `[info] Imports not checked: ${data.publicImports.unchecked.length}:`,
+          ),
+          records(data.publicImports.unchecked, {
+            fields: ['file', 'specifier', 'reason'],
+          }),
+        ]
+      : []),
   );
 }
 
 /**
- * @param {import('../../../api/integration/authoring-checks.type.mjs').IntegrationTemplateConflictResponse['data']} data
+ * The optional icon definitions each icon set leaves unmapped, and the icons
+ * that fit (spec:AST-084 FR15). Listed, never counted: nothing here fails.
+ * @param {import('../../../api/integration/validate-integration.type.mjs').IconSetCoverage[] | undefined} sets
+ * @returns {import('../formatters/index.mjs').Block[]}
  */
-function printTemplateConflicts(data) {
+function iconSetCoverageBlocks(sets) {
+  const listed = (sets ?? []).filter(
+    each => each.unmappedDefinitions.length > 0 || each.suggestions.length > 0,
+  );
+  const unchecked = (sets ?? []).flatMap(each =>
+    (each.unchecked ?? []).map(item => ({
+      set: each.set,
+      item: item.icon
+        ? `icon ${item.icon}`
+        : item.adapter
+          ? `adapter ${item.adapter}`
+          : `theme map ${item.entry}`,
+      reason: item.reason,
+    })),
+  );
+  return [
+    ...(unchecked.length > 0
+      ? [
+          section('Not checked'),
+          records(unchecked, {fields: ['set', 'item', 'reason']}),
+          text(
+            'The icon-set checks could not judge these; they are never counted and never fail a check.',
+          ),
+        ]
+      : []),
+    ...unmappedBlocks(listed),
+  ];
+}
+
+/**
+ * @param {import('../../../api/integration/validate-integration.type.mjs').IconSetCoverage[]} listed
+ * @returns {import('../formatters/index.mjs').Block[]}
+ */
+function unmappedBlocks(listed) {
+  if (listed.length === 0) return [];
+  return [
+    section('Unmapped icon definitions (optional)'),
+    records(
+      listed.map(each => ({
+        set: each.set,
+        unmapped: each.unmappedDefinitions.length,
+      })),
+      {fields: ['set', 'unmapped']},
+    ),
+    // One line per definition: what it means and its words, so an author
+    // can pick from the text alone; a suggested icon when one fits.
+    ...listed.map(each => {
+      const suggested = new Map(
+        each.suggestions.map(({definition, icon}) => [definition, icon]),
+      );
+      const setFlag = listed.length === 1 ? '' : ` --set ${each.set}`;
+      return list(
+        each.unmappedDefinitions.map(
+          definition =>
+            `${definition.name}: ${definition.description} Words: ${definition.words.join(', ')}.${suggested.has(definition.name) ? ` Suggested: astryx experimental icon map ${definition.name} ${suggested.get(definition.name)}${setFlag}` : ''}`,
+        ),
+      );
+    }),
+    text(
+      'Mapping these is optional and never fails a check. Map one with `astryx experimental icon map <definition> <icon id>`; list your icons with `astryx experimental icon --set <set> --all-icons`; see how many definitions each set maps with `astryx experimental icon --list`.',
+    ),
+  ];
+}
+
+/**
+ * Descriptors an older CLI drops: listed, never counted.
+ * @param {import('../../../api/integration/validate-integration.type.mjs').OlderCliNote[] | undefined} notes
+ * @returns {import('../formatters/index.mjs').Block[]}
+ */
+function olderCliNoteBlocks(notes) {
+  if (!notes || notes.length === 0) return [];
+  return [
+    section('Notes for older CLIs'),
+    records(notes, {fields: ['file', 'kind', 'message']}),
+  ];
+}
+
+/**
+ * @param {import('../../../api/integration/authoring-checks.type.mjs').IntegrationTemplateConflictResponse['data']} data
+ * @param {Set<string>} [seen] issues an earlier check printed, printed once
+ */
+function printTemplateConflicts(data, seen) {
   const output = [
     section(
       `Checking integration templates: ${integrationLabel(data) ?? '(local package)'}`,
     ),
-    ...issueBlocks(data.issues),
+    ...issueBlocks(data.issues, seen),
   ];
   if (data.conflicts.length === 0 && data.issues.length === 0) {
     output.push(text('[ok] No template ids conflict with Core.'));
@@ -287,6 +477,9 @@ function propDriftBlocks(report, failed) {
           'codeType',
           'docRequired',
           'codeRequired',
+          'docDefault',
+          'codeDefault',
+          'fix',
         ],
         format: {severity: statusToken},
       }),
@@ -347,18 +540,20 @@ function propDriftBlocks(report, failed) {
 
 /**
  * @param {import('../../../api/integration/authoring-checks.type.mjs').IntegrationComponentConflictResponse['data']} data
+ * @param {Set<string>} [seen] issues an earlier check printed, printed once
  */
-function printComponentConflicts(data) {
+function printComponentConflicts(data, seen) {
   const output = [
     section(
       `Checking integration components: ${integrationLabel(data) ?? '(local package)'}`,
     ),
-    ...issueBlocks(data.issues),
+    ...issueBlocks(data.issues, seen),
   ];
   // An [ok] after a failed check reads as a pass: say nothing it could not check.
   const failed = data.issues.some(issue => issue.severity === 'error');
   if (data.conflicts.length === 0) {
-    if (!failed) output.push(text('[ok] No component names conflict with Core.'));
+    if (!failed)
+      output.push(text('[ok] No component names conflict with Core.'));
   } else {
     output.push(
       records(data.conflicts, {
@@ -383,13 +578,24 @@ function printComponentConflicts(data) {
 
 /**
  * @param {import('../../../api/integration/authoring-checks.type.mjs').IntegrationDocConflictResponse['data']} data
+ * @param {Set<string>} [seen] issues an earlier check printed, printed once
  */
-function printDocConflicts(data) {
+function printDocConflicts(data, seen) {
   const output = [
     section(
       `Checking integration docs: ${integrationLabel(data) ?? '(local package)'}`,
     ),
-    ...issueBlocks(data.issues),
+    // A copied passage or fluff is listed below with its detail, so its
+    // issue is not printed twice.
+    ...issueBlocks(
+      data.issues.filter(
+        issue =>
+          issue.code !== 'copied_passage' &&
+          issue.code !== 'doc_fluff' &&
+          issue.code !== 'stray_doc_pointer',
+      ),
+      seen,
+    ),
   ];
   if (
     !data.issues.some(
@@ -412,6 +618,79 @@ function printDocConflicts(data) {
       }),
     );
   }
+  const copied = data.copiedPassages ?? [];
+  if (copied.length === 0) {
+    if (!data.issues.some(issue => issue.severity === 'error')) {
+      output.push(text('[ok] No topic copies a passage from another.'));
+    }
+  } else {
+    output.push(
+      text(
+        `[warn] ${copied.length} copied passage(s) (copied_passage): two topics say the same thing word for word. Keep the text in one and link to it from the other.`,
+      ),
+      records(copied, {
+        fields: [
+          'topic',
+          'section',
+          'line',
+          'otherTopic',
+          'otherOwner',
+          'owner',
+          'text',
+          'words',
+          'passages',
+          'message',
+        ],
+      }),
+    );
+  }
+  const fluff = data.fluff ?? [];
+  if (fluff.length === 0) {
+    if (!data.issues.some(issue => issue.severity === 'error')) {
+      output.push(text('[ok] No filler phrases or low-density topics.'));
+    }
+  } else {
+    output.push(
+      text(
+        `[warn] ${fluff.length} fluff finding(s) (doc_fluff): words that add length, not meaning. Cut each one.`,
+      ),
+      records(fluff, {
+        fields: [
+          'topic',
+          'kind',
+          'phrase',
+          'section',
+          'file',
+          'line',
+          'density',
+          'message',
+        ],
+      }),
+    );
+  }
+  const stray = data.strayPointers ?? [];
+  if (stray.length === 0) {
+    if (!data.issues.some(issue => issue.severity === 'error')) {
+      output.push(text('[ok] Every pointer to a doc is a link.'));
+    }
+  } else {
+    output.push(
+      text(
+        `[warn] ${stray.length} stray doc pointer(s) (stray_doc_pointer): a written \`astryx docs <name>\` where a link would be checked. Replace each with the link shown.`,
+      ),
+      records(stray, {
+        fields: [
+          'topic',
+          'section',
+          'file',
+          'line',
+          'pointer',
+          'link',
+          'message',
+        ],
+      }),
+    );
+  }
   emit(...output);
 }
 
@@ -419,22 +698,28 @@ function printDocConflicts(data) {
  * Print one `doctor integration` check's result as its own subcommand prints
  * it. `astryx integration check` prints each check it runs through this.
  * @param {import('../../../api/integration/integration-check.type.mjs').IntegrationCheckResponse} response
+ * @param {Set<string>} [seen] issues an earlier check printed, printed once
  */
-export function printIntegrationCheckResponse(response) {
+export function printIntegrationCheckResponse(response, seen) {
   if (response.type === 'integration.validate') {
-    printIntegrationValidation(response.data);
+    printIntegrationValidation(response.data, seen);
   } else if (response.type === 'integration.component-conflicts') {
-    printComponentConflicts(response.data);
+    printComponentConflicts(response.data, seen);
   } else if (response.type === 'integration.template-conflicts') {
-    printTemplateConflicts(response.data);
+    printTemplateConflicts(response.data, seen);
   } else {
-    printDocConflicts(response.data);
+    printDocConflicts(response.data, seen);
   }
 }
 
-/** @param {import('commander').Command} program */
-async function runProjectDoctor(program) {
-  const report = await runChecks();
+/**
+ * @param {import('commander').Command} program
+ * @param {{built?: string}} [options]
+ */
+async function runProjectDoctor(program, options = {}) {
+  const report = await runChecks(
+    options.built != null ? {built: options.built} : {},
+  );
   if (program.opts().json) jsonOut({type: 'doctor', data: report});
   else printHuman(report);
   if (report.summary.fail > 0) process.exitCode = 1;
@@ -455,7 +740,7 @@ async function runIntegrationValidation(program, pkg) {
         noPackage
           ? 'Nothing was validated: no package.json found. Run this command inside a package directory.'
           : 'Nothing was validated: no astryx.integration.* found next to package.json. ' +
-            'To validate an installed integration: astryx doctor integration validate <package>',
+              `To validate an installed integration: ${formatCliCommand('doctor integration validate <package>')}`,
       ),
     );
   } else printIntegrationValidation(result.data);
@@ -478,10 +763,14 @@ async function runAuthoringCheck(program, pkg, kind) {
 
   if (program.opts().json) jsonOut(result);
   else if (!result.data.validated) {
+    // Outside a project no integration is installed to check by name
+    // (spec AST-081 FR3).
     emit(
       text(
-        'Nothing was checked: no astryx.integration.* found next to package.json. ' +
-          `To check an installed integration: astryx doctor integration ${kind} <package>`,
+        isOutsideProject()
+          ? 'Nothing was checked: no astryx.integration.* found next to package.json, and this folder is outside a project.'
+          : 'Nothing was checked: no astryx.integration.* found next to package.json. ' +
+              `To check an installed integration: ${formatCliCommand(`doctor integration ${kind} <package>`)}`,
       ),
     );
   } else if (kind === 'templates') {
@@ -554,7 +843,7 @@ export function registerDoctor(program) {
     action: async (options, invoked) => {
       const word = unknownWord(invoked);
       if (word != null) return unknownSubcommand(doctorCmd, 'doctor', word);
-      return runProjectDoctor(program);
+      return runProjectDoctor(program, options);
     },
   });
   /** @type {import('commander').Command} */
@@ -569,20 +858,30 @@ export function registerDoctor(program) {
       return NO_RESULT_SET;
     },
   });
+  // `--built` checks a project's build; an integration check has none.
+  const refuseBuilt = () =>
+    doctorCmd.opts().built != null
+      ? cliError(
+          '`--built` checks a finished build and goes with `doctor` alone, not with a `doctor integration` check',
+          {code: ERROR_CODES.ERR_INVALID_OPTION},
+        )
+      : null;
   defineCommand(integrationCmd, doctorIntegrationValidateCommand, {
     fn: validateIntegrationFn,
-    action: async pkg => runIntegrationValidation(program, pkg),
+    action: async pkg => refuseBuilt() ?? runIntegrationValidation(program, pkg),
   });
   defineCommand(integrationCmd, doctorIntegrationTemplatesCommand, {
     fn: integrationTemplateConflictsFn,
-    action: async pkg => runAuthoringCheck(program, pkg, 'templates'),
+    action: async pkg =>
+      refuseBuilt() ?? runAuthoringCheck(program, pkg, 'templates'),
   });
   defineCommand(integrationCmd, doctorIntegrationComponentsCommand, {
     fn: integrationComponentConflictsFn,
-    action: async pkg => runAuthoringCheck(program, pkg, 'components'),
+    action: async pkg =>
+      refuseBuilt() ?? runAuthoringCheck(program, pkg, 'components'),
   });
   defineCommand(integrationCmd, doctorIntegrationDocsCommand, {
     fn: integrationDocConflictsFn,
-    action: async pkg => runAuthoringCheck(program, pkg, 'docs'),
+    action: async pkg => refuseBuilt() ?? runAuthoringCheck(program, pkg, 'docs'),
   });
 }

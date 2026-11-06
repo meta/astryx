@@ -22,4 +22,17 @@ export const doc = {
   ],
   isReady: true,
   category: 'Table - Grouped',
+  icons: {
+    ArrowRightIcon: 'arrowRight',
+    ChartBarIcon: 'chart',
+    ChevronDownIcon: 'chevronDown',
+    ChevronRightIcon: 'chevronRight',
+    DocumentDuplicateIcon: 'copy',
+    EllipsisHorizontalIcon: 'moreHorizontal',
+    PencilIcon: 'edit',
+    TagIcon: 'tag',
+    TrashIcon: 'delete',
+    UserIcon: 'user',
+    XMarkIcon: 'close',
+  },
 };

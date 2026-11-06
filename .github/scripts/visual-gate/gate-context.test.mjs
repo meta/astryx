@@ -155,3 +155,121 @@ describe('visual gate capture identity', () => {
     ).toMatchObject({sha: 'invalid', runId: '', runAttempt: 'invalid'});
   });
 });
+
+// Each case spawns the gate on a 192-story index; a loaded CI runner can take
+// longer than the default 30 s for the first, cold spawn.
+describe(
+  'component scope with reverse dependents (spec:AST-030 FR13)',
+  {timeout: 120_000},
+  () => {
+    const repoRoot = path.resolve(path.dirname(SCRIPT), '../../..');
+    const baselineDir = path.join(repoRoot, '.github/visual-baseline');
+    let storybook;
+    let folders;
+
+    // A Storybook index of every baselined story, each tagged for every theme,
+    // so the touched-plus-dependent scope can pass the focused budget.
+    beforeEach(() => {
+      storybook = path.join(root, 'storybook');
+      fs.mkdirSync(storybook);
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(baselineDir, 'manifest.json'), 'utf8'),
+      );
+      const ids = [
+        ...new Set(Object.keys(manifest.shots).map(key => key.split('__')[0])),
+      ];
+      const entries = {};
+      for (const id of ids) {
+        const folder = id.split('--')[0].replace(/^core-/, '');
+        entries[id] = {
+          type: 'story',
+          id,
+          title: `Core/${folder}`,
+          name: id.split('--')[1],
+          componentPath: `../../packages/core/src/${folder}/index.ts`,
+          importPath: './stories/fixture.stories.tsx',
+          tags: ['visual-baseline'],
+        };
+      }
+      fs.writeFileSync(
+        path.join(storybook, 'index.json'),
+        JSON.stringify({v: 5, entries}),
+      );
+      folders = [
+        ...new Set(Object.values(entries).map(entry => entry.title.slice(5))),
+      ];
+    });
+
+    const gate = (command, ...args) =>
+      spawnSync(
+        process.execPath,
+        [
+          SCRIPT,
+          command,
+          '--storybook-dir',
+          storybook,
+          '--baseline',
+          baselineDir,
+          '--out',
+          output,
+          '--tiers',
+          'component',
+          '--no-scout',
+          ...args,
+        ],
+        {encoding: 'utf8'},
+      );
+    const verdict = () =>
+      JSON.parse(fs.readFileSync(path.join(output, 'verdict.json'), 'utf8'));
+
+    it('writes the skipped verdict for an over-budget plan with reverse dependents, which the workflow answers with the whole plan', () => {
+      const result = gate(
+        'check',
+        '--components',
+        folders[0],
+        '--dependents',
+        folders.join(','),
+      );
+      expect(result.stderr).not.toMatch(/ReferenceError/);
+      expect(result.status).toBe(0);
+      expect(verdict().status).toBe('skipped');
+    });
+
+    it('writes the same skipped verdict for an over-budget plan of touched components alone', () => {
+      const result = gate('check', '--components', folders.join(','));
+      expect(result.status).toBe(0);
+      expect(verdict().status).toBe('skipped');
+    });
+
+    it('plans the touched component and each dependent folder with a stable story, and reports the rest', () => {
+      const touched = gate('plan', '--json', '--components', folders[0]);
+      const scoped = gate(
+        'plan',
+        '--json',
+        '--components',
+        folders[0],
+        '--dependents',
+        `${folders[1]},nosuchfolder`,
+      );
+      expect(scoped.status).toBe(0);
+      expect(scoped.stdout).toContain(
+        'Reverse dependents with no stable story: nosuchfolder',
+      );
+      const planned = text => JSON.parse(text.slice(text.indexOf('[')));
+      expect(planned(scoped.stdout).length).toBeGreaterThan(
+        planned(touched.stdout).length,
+      );
+    });
+
+    it('asks for the whole plan (exit 3) when nothing the scope reaches has a stable story', () => {
+      const result = gate(
+        'plan',
+        '--components',
+        '',
+        '--dependents',
+        'nosuchfolder',
+      );
+      expect(result.status).toBe(3);
+    });
+  },
+);

@@ -26,7 +26,8 @@
  * - docs root: the type the doc's `type` names (`ReferenceDoc` when it names
  *   none), and a `<topic>.doc.<lang>.mjs` overlay against
  *   `ReferenceTranslationDoc`;
- * - themes root: `ThemeDoc`.
+ * - themes root: `ThemeDoc`;
+ * - iconSets root: `IconSetDoc`.
  * Every finding is a warning, names the field, and says how to fix it.
  *
  * @input Doc files with the root each was found in, the package root, and the
@@ -41,11 +42,13 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
   resolveProjectTypeScript,
+  TYPESCRIPT_FIX,
   unusableTypeScriptReason,
 } from './project-typescript.mjs';
+import {keepSourceFiles} from './source-file-cache.mjs';
 
 /**
- * @typedef {'components' | 'hooks' | 'templates' | 'docs' | 'docs-overlay' | 'themes'} DocRoot
+ * @typedef {'components' | 'hooks' | 'templates' | 'docs' | 'docs-overlay' | 'themes' | 'icon-sets'} DocRoot
  */
 
 /**
@@ -91,8 +94,7 @@ import {
  */
 
 /** The line both surfaces print when the compiler is missing. */
-export const DOC_TYPES_TYPESCRIPT_MISSING_REASON =
-  'TypeScript is not installed in this project, so docs were not checked against the authoring types. Install typescript and run this check again.';
+export const DOC_TYPES_TYPESCRIPT_MISSING_REASON = `TypeScript is not installed in this project, so docs were not checked against the authoring types. ${TYPESCRIPT_FIX}`;
 
 const AUTHORING = '@astryxdesign/cli/authoring';
 const AUTHORING_TYPES = path.resolve(
@@ -113,6 +115,7 @@ const MAIN_EXPORTS = {
   docs: ['docs', 'default'],
   'docs-overlay': [],
   themes: ['default', 'doc', 'docs'],
+  'icon-sets': ['default'],
 };
 
 /** The type a docs-root doc's `type` stamp names. */
@@ -308,6 +311,9 @@ function expectedType(ts, root, exportName, node, core = false) {
   if (root === 'themes') {
     return {typeExpr: authoring('ThemeDoc'), typeName: 'ThemeDoc'};
   }
+  if (root === 'icon-sets') {
+    return {typeExpr: authoring('IconSetDoc'), typeName: 'IconSetDoc'};
+  }
   if (translation) {
     return {
       typeExpr: authoring('ReferenceTranslationDoc'),
@@ -421,7 +427,7 @@ function targetsOf(ts, sf, root, core = false) {
   const names = [];
   const main = MAIN_EXPORTS[root].find(name => exported.has(name));
   if (main) names.push(main);
-  if (root !== 'templates' && root !== 'themes') {
+  if (root !== 'templates' && root !== 'themes' && root !== 'icon-sets') {
     for (const name of TRANSLATIONS) if (exported.has(name)) names.push(name);
   }
   /** @type {Target[]} */
@@ -827,16 +833,23 @@ function findingsFor(ts, diagnostic, astPath, where) {
       named != null && /^[A-Za-z_$][\w$]*$/.test(named)
         ? named
         : where.typeName;
+    // One diagnostic can list several missing fields; each finding's message
+    // names only its own field, so two findings never share one message.
+    const source = /^Type '(.*)' is missing the following properties/.exec(
+      leaf,
+    )?.[1];
     return missing.map(name => {
-      const field = formatPath([
-        ...parts,
-        unquote(/** @type {string} */ (name)),
-      ]);
+      const key = unquote(/** @type {string} */ (name));
+      const field = formatPath([...parts, key]);
+      const message =
+        missing.length > 1
+          ? `Property '${key}' is missing${source == null ? '' : ` in type '${source}'`} but required in type '${ownerType}'.`
+          : leaf;
       return {
         ...base,
         field,
         problem: /** @type {const} */ ('missing_field'),
-        message: shorten(leaf),
+        message: shorten(message),
         fix: `Add \`${field}\`: ${shorten(ownerType)} requires it.`,
       };
     });
@@ -933,7 +946,7 @@ export async function checkDocTypes(files, options) {
   if (major < needMajor || (major === needMajor && minor < needMinor)) {
     return {
       status: 'skipped',
-      reason: `TypeScript ${version} cannot check ${hasJs ? 'a JavaScript doc' : 'a doc'} against its type (that needs TypeScript ${needMajor}.${needMinor} or later), so docs were not checked. Upgrade typescript and run this check again.`,
+      reason: `TypeScript ${version} cannot check ${hasJs ? 'a JavaScript doc' : 'a doc'} against its type (that needs TypeScript ${needMajor}.${needMinor} or later), so docs were not checked. ${TYPESCRIPT_FIX}`,
       docs: 0,
       findings: [],
       unchecked: [],
@@ -1023,8 +1036,9 @@ export async function checkDocTypes(files, options) {
     paths: {[AUTHORING]: [AUTHORING_TYPES]},
   };
   const host = ts.createCompilerHost(options_);
-  const getSourceFile = host.getSourceFile.bind(host);
-  // Every other file is parsed once, so a later pass reuses it.
+  // Every other file is parsed once, so a later pass reuses it; and once per
+  // process for these options, so a later check does too.
+  const getSourceFile = keepSourceFiles(ts, host, options_);
   /** @type {Map<string, any>} */
   const parsed = new Map();
   host.getSourceFile = (

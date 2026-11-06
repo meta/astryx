@@ -304,7 +304,7 @@ export const docs = {
           name: 'disabledMessage',
           type: 'string',
           description:
-            'Explains why the selector is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the trigger focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled MultiSelector in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+            'Explains why the selector is disabled. With isDisabled, shows the reason as a tooltip on hover and keyboard focus of the trigger, which stays focusable (aria-disabled) like every disabled selector; activation stays blocked. Use this instead of wrapping a disabled MultiSelector in Tooltip.',
         },
         {
           name: 'isLabelHidden',
@@ -511,7 +511,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Wrap a disabled MultiSelector in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled MultiSelector in Tooltip to explain why it is disabled. Use the disabledMessage prop, which attaches the reason to the trigger itself.',
       },
     ],
   },
@@ -552,7 +552,7 @@ export const docsZh = {
         htmlName:
           '用于表单提交的 HTML name 属性。为每个已选值渲染一个隐藏输入，类似原生多选。',
         disabledMessage:
-          '解释选择器被禁用的原因。与 isDisabled 一起使用时，悬停/键盘聚焦时显示工具提示，并通过 aria-disabled 保持触发器可聚焦（仍无法激活）。请使用此属性，而不是用 Tooltip 包裹被禁用的选择器。',
+          '解释选择器被禁用的原因。与 isDisabled 一起使用时，悬停/键盘聚焦时显示工具提示，触发器与所有被禁用的选择器一样通过 aria-disabled 保持可聚焦（仍无法激活）。请使用此属性，而不是用 Tooltip 包裹被禁用的选择器。',
         isLabelHidden: '视觉上隐藏标签同时保持其可访问性。',
         description: '标签下方显示的辅助文本。',
         isOptional: '将字段标记为可选。',
@@ -619,7 +619,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          'Wrap a disabled MultiSelector in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled MultiSelector in Tooltip to explain why it is disabled. Use the disabledMessage prop, which attaches the reason to the trigger itself.',
       },
     ],
   },
@@ -674,7 +674,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Wrap a disabled MultiSelector in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled MultiSelector in Tooltip to explain why it is disabled. Use the disabledMessage prop, which attaches the reason to the trigger itself.',
       },
     ],
   },

@@ -5,7 +5,8 @@
 /**
  * @file List.tsx
  * @input Uses React, ReactNode, StyleXStyles, theme tokens, useDevWarning,
- *   and ListContext with the row edge treatment
+ *   and ListContext with the row edge treatment. Numbered rows share one
+ *   intrinsic marker column, including when a counter changes digit count.
  * @output Exports List component, ListProps, ListDensity, ListEdge, ListStyle
  *   types
  * @position Core implementation; consumed by index.ts, tested by List.test.tsx
@@ -28,7 +29,7 @@ import {
   type ListEdge,
   type ListMarkerStyle,
 } from './ListContext';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {useDevWarning} from '../hooks/useDevWarning';
 
@@ -147,6 +148,21 @@ const styles = stylex.create({
     // `hidden`: hidden makes a scroll container, which fights the list's
     // vertical scroller. (StyleX emits the physical longhand of this axis.)
     overflowInline: 'clip',
+    // Under a finger, the isolation boundary for what rises inside the list.
+    // A row's touch band and a swipeable row order above the rows after them.
+    // They stay below a page-level sticky header at the same z-index. With a
+    // mouse nothing rises, so the list keeps its stacking.
+    isolation: {default: null, '@media (pointer: coarse)': 'isolate'},
+  },
+  // Subgridded numbered rows contribute their marker's intrinsic width to
+  // one column, so text and nested lists never move with an individual number.
+  numberColumns: {
+    display: {
+      default: 'flex',
+      '@supports (grid-template-columns: subgrid)': 'grid',
+    },
+    gridTemplateColumns: 'max-content minmax(0, 1fr)',
+    columnGap: spacingVars['--spacing-2'],
   },
   // 'outset' and 'bleed' rows reach into the container's padding. The list
   // reaches the container's padding edge on each inline edge first, so its
@@ -265,6 +281,7 @@ export function List({
         themeProps('list', {density, listStyle}),
         stylex.props(
           styles.list,
+          isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,
           reachesContainerPadding && styles.reachesContainerPadding,
           listStyle !== 'none' &&

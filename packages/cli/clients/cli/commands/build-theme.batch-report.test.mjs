@@ -91,12 +91,24 @@ function count(text, pattern) {
 
 /** @param {string} stdout */
 function lines(stdout) {
-  return stdout.split('\n').filter(Boolean);
+  return bareRecipe(stdout).split('\n').filter(Boolean);
+}
+
+/**
+ * The font recipe names `docs typography` with the project's CLI invocation,
+ * which depends on where the test runs; compare it as bare `astryx`.
+ * @param {string} stdout
+ */
+function bareRecipe(stdout) {
+  return stdout.replace(
+    /(recipe: |guidance: )\S.*? docs typography/g,
+    '$1astryx docs typography',
+  );
 }
 
 /** @param {string} stdout The sizes follow Core's CSS, so goldens keep the shape. */
 function normalized(stdout) {
-  return stdout.replace(/\d+(\.\d+)? KB/g, '<size> KB');
+  return bareRecipe(stdout).replace(/\d+(\.\d+)? KB/g, '<size> KB');
 }
 
 /** Bytes of the full report printed by one invocation per theme. */

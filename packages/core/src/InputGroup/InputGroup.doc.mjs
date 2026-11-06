@@ -24,7 +24,7 @@ export const docs = {
     ],
   },
   description:
-    'Groups an input with prefix/suffix addons in a visually connected container with shared border and focus ring.',
+    'Groups an input with prefix and suffix addons in one connected row. A focused member stays above its neighbours, so its focus ring shows in full.',
   props: [
     {
       name: 'children',
@@ -59,7 +59,7 @@ export const docs = {
     {
       name: 'isOptional',
       type: 'boolean',
-      description: 'Show "(optional)" indicator.',
+      description: 'Show the "Optional" indicator after the label.',
       default: 'false',
     },
     {
@@ -77,7 +77,8 @@ export const docs = {
     {
       name: 'status',
       type: "{type: 'warning' | 'error' | 'success', message?: string}",
-      description: 'Status indicator applied to the group border.',
+      description:
+        'Validation status. Its message shows below the group. The group border does not change; a theme can style the row from `data-status`.',
     },
     {
       name: 'labelTooltip',

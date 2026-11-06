@@ -25,7 +25,7 @@ const CORE_PACKAGE = path.resolve(CLI, '..', 'core', 'package.json');
 /** Command modules whose printed text shows app code. */
 const OUTPUT_MODULES = [
   'api/init/run/run.mjs',
-  'clients/cli/commands/build-theme.mjs',
+  'clients/cli/commands/theme.mjs',
   'api/theme/build/build.mjs',
   'api/doctor/theme-checks.mjs',
   'api/build/help/help.mjs',

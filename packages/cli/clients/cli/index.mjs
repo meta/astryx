@@ -3,30 +3,45 @@
 /**
  * @file Astryx CLI — Commander program setup
  *
- * Registers all commands via lazy loading. If one command fails to load
- * (bad import, syntax error), the other commands still work.
+ * Commands load lazily: a bin run loads only the one its arguments name.
+ * One that fails to load (bad import, syntax error) leaves the rest working.
  *
  * The program is built by {@link createProgram} — a factory so tests can drive
  * a FRESH program in-process (via parseAsync) instead of spawning `node
- * bin/astryx.mjs` per assertion. `bin/astryx.mjs` and legacy importers use the
- * eager {@link program} singleton, which is just `await createProgram()`.
+ * bin/astryx.mjs` per assertion. Code that reads every command at once uses
+ * the full program in program.mjs.
  */
 
 import {Command, Option} from 'commander';
 import {fileURLToPath} from 'node:url';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
+import {formatCliCommand, getCliInvocation, quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
+import {hasRecordedProject} from '../../foundation/env/cli-command.mjs';
+import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
+import {findConfigPath} from '../../foundation/config/config-path.mjs';
 import {API_VERSION, setJsonMode} from '../../foundation/response/json.mjs';
+import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
+import {cliInstallAdvice, installFolder} from '../../foundation/release/notices.mjs';
 import {buildManifest} from './lib/manifest.mjs';
 import {cliError} from './lib/cli-error.mjs';
-import {emit, section, text, records} from './formatters/index.mjs';
+import {section, text, records} from './formatters/index.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {installJsonShim} from './lib/json-shim.mjs';
-import {addDocHelp, markReportsResult} from './lib/define-command.mjs';
-import {doc as manifestDoc} from './commands/manifest.doc.mjs';
-import {isAstryxInitialized} from '../../foundation/agent-docs/agent-docs.mjs';
+import {markReportsResult} from './lib/define-command.mjs';
+// The light modules, not agent-docs.mjs: that one loads discovery and the
+// project config, which every run would pay for at startup.
+import {
+  agentDocsTargetDir,
+  assertAgentDocsTarget,
+} from '../../foundation/agent-docs/agent-docs-target.mjs';
+import {CLI_ROOT} from '../../foundation/fs/paths.mjs';
+import {
+  isAstryxInitialized,
+  isAstryxPromptInReach,
+  setupNudge,
+} from '../../foundation/agent-docs/agent-doc-state.mjs';
 import * as debug from '../../foundation/debug/index.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -63,7 +78,7 @@ export function handleVersionJsonPreflight(argv = process.argv.slice(2)) {
   // reports the same shape Commander's own `--version` path does.
   debug.recordCommandResult(debug.NO_RESULT_SET);
   debug.setOutcome('ok', {exitCode: 0});
-  console.log(JSON.stringify({apiVersion: API_VERSION, type: 'version', data: {version: pkg.version}}, null, 2));
+  console.log(JSON.stringify({apiVersion: API_VERSION, type: 'version', data: {version: pkg.version}, meta: {answeredBy: answeredBy()}}, null, 2));
   process.exit(0);
 }
 
@@ -83,6 +98,13 @@ export const JSON_SUPPORTED = new Set([
   'blog',
   'discover',
   'search',
+  'experimental icon',
+  'experimental icon add',
+  'experimental icon map',
+  'experimental icon use',
+  'experimental icon new-set',
+  'experimental icon new-definition',
+  'experimental render',
   'build',
   'swizzle',
   'gap-report',
@@ -169,9 +191,6 @@ function fullCommandName(actionCommand, root) {
  */
 export async function loadProjectDebugHandler() {
   try {
-    const {findConfigPath, Project} = await import(
-      '../../foundation/config/project.mjs'
-    );
     const configPath = findConfigPath(process.cwd());
     if (!configPath) return;
     const text = fs.readFileSync(configPath, 'utf-8');
@@ -179,9 +198,37 @@ export async function loadProjectDebugHandler() {
       debug.noteConfigGateSkipped();
       return;
     }
+    // Only now: a run in a folder with no such config never loads the project
+    // module and its discovery.
+    const {Project} = await import('../../foundation/config/project.mjs');
     await Project.load(process.cwd());
   } catch {
     // A broken config is the command's problem to report, not ours.
+  }
+}
+
+/**
+ * Load the project's integrations before a help run, so help prints commands
+ * with the `cliCommand` they declare (spec:AST-081 FR5). Help is printed while
+ * Commander parses, before any hook, so the preAction load cannot reach it.
+ * `Project.load` reads astryx.config and each integration's manifest; it does
+ * no discovery. Skipped when the debug preload already loaded the project, and
+ * outside a package. Called from the bin before Commander parses.
+ *
+ * @param {string[]} [argv] arguments after the binary.
+ * @returns {Promise<void>}
+ */
+export async function loadProjectForHelp(argv = process.argv.slice(2)) {
+  const help =
+    argv.includes('--help') || argv.includes('-h') || argv[0] === 'help';
+  if (!help) return;
+  try {
+    const cwd = process.cwd();
+    if (hasRecordedProject(cwd)) return;
+    const {Project} = await import('../../foundation/config/project.mjs');
+    await Project.load(cwd);
+  } catch {
+    // Help prints with the package-manager guess.
   }
 }
 
@@ -259,7 +306,7 @@ function captureInvocation(actionCommand, root) {
  */
 const commands = [
   {name: 'init', path: './commands/init.mjs', register: 'registerInit'},
-  {name: 'component', path: './commands/component/index.mjs', register: 'registerComponent'},
+  {name: 'component', path: './commands/component.mjs', register: 'registerComponent'},
   {name: 'docs', path: './commands/docs.mjs', register: 'registerDocs'},
   {name: 'blog', path: './commands/blog.mjs', register: 'registerBlog'},
   {name: 'swizzle', path: './commands/swizzle.mjs', register: 'registerSwizzle'},
@@ -267,16 +314,93 @@ const commands = [
   // agent-docs folded into init — functions still importable from agent-docs.mjs
   {name: 'template', path: './commands/template.mjs', register: 'registerTemplate'},
   {name: 'upgrade', path: './commands/upgrade.mjs', register: 'registerUpgrade'},
-  {name: 'theme', path: './commands/build-theme.mjs', register: 'registerTheme'},
+  {name: 'theme', path: './commands/theme.mjs', register: 'registerTheme'},
   {name: 'integration', path: './commands/integration.mjs', register: 'registerIntegration'},
-  {name: 'hook', path: './commands/hook/index.mjs', register: 'registerHook'},
+  {name: 'hook', path: './commands/hook.mjs', register: 'registerHook'},
   {name: 'discover', path: './commands/discover.mjs', register: 'registerDiscover'},
   {name: 'search', path: './commands/search.mjs', register: 'registerSearch'},
   {name: 'build', path: './commands/build.mjs', register: 'registerBuild'},
   {name: 'doctor', path: './commands/doctor.mjs', register: 'registerDoctor'},
+  // Experimental commands (spec:AST-017 FR27): last, so every stable command
+  // keeps its place in help.
+  {
+    name: 'experimental',
+    path: './commands/experimental/index.mjs',
+    register: 'registerExperimental',
+  },
+  // Registered after every other command: the manifest lists the commands in
+  // registration order.
+  {name: 'manifest', path: './commands/manifest.mjs', register: 'registerManifest'},
+  {name: 'postinstall', path: './commands/postinstall.mjs', register: 'registerPostinstall'},
 ];
 
+/** The name each registry entry registers, in registration order. */
+export const COMMAND_NAMES = Object.freeze(commands.map(cmd => cmd.name));
+
+/** Commands whose run reads every other command: the manifest lists them. */
+const READS_EVERY_COMMAND = new Set(['manifest']);
+
+/**
+ * The commands a run of the bin loads. Commander dispatches a run to its
+ * first operand after the root's own options, so this reads the arguments the
+ * same way. It returns that one command, no command for a run that only
+ * prints the version, or null for every command. These runs load every
+ * command: help, the manifest, `help <command>`, an unknown word, and a flag
+ * the root does not declare. They print or read the whole list.
+ *
+ * @param {import('commander').Command} program the root, with its options
+ * @param {string[]} argv the arguments after `astryx`
+ * @returns {Set<string> | null}
+ */
+export function commandsForArgs(program, argv) {
+  let printsVersion = false;
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    // Commander reads a lone `-` as an operand, as it reads any word.
+    if (arg.length < 2 || arg[0] !== '-') {
+      return commands.some(cmd => cmd.name === arg) && !READS_EVERY_COMMAND.has(arg)
+        ? new Set([arg])
+        : null;
+    }
+    const equals = arg.startsWith('--') ? arg.indexOf('=') : -1;
+    const flag = equals === -1 ? arg : arg.slice(0, equals);
+    const option = program.options.find(o => o.long === flag || o.short === flag);
+    // Help flags, `--`, combined short flags and unknown flags read the whole
+    // list, or make Commander stop dispatching by name.
+    if (option == null) return null;
+    const takesValue = option.required || option.optional;
+    if (equals !== -1 && !takesValue) return null;
+    if (equals === -1 && option.required) i += 1;
+    const next = argv[i + 1];
+    if (equals === -1 && option.optional && next != null && !(next.length > 1 && next[0] === '-')) {
+      i += 1;
+    }
+    if (option.long === '--version') printsVersion = true;
+  }
+  return printsVersion ? new Set() : null;
+}
+
 const SETUP_NUDGE_EXEMPT = new Set(['init', 'agent-docs']);
+
+/**
+ * Is `cwd` inside the CLI's own source checkout while the CLI runs from it?
+ * An installed CLI always lives under `node_modules`; a CLI running from source
+ * does not, and its checkout is the pnpm workspace that holds it. Developing
+ * Astryx is not an app to set up, so the setup nudge stays quiet there.
+ * @param {string} cwd
+ * @returns {boolean}
+ */
+function inOwnSourceCheckout(cwd) {
+  if (CLI_ROOT.split(path.sep).includes('node_modules')) return false;
+  let checkout = CLI_ROOT;
+  while (!fs.existsSync(path.join(checkout, 'pnpm-workspace.yaml'))) {
+    const parent = path.dirname(checkout);
+    if (parent === checkout) return false;
+    checkout = parent;
+  }
+  const rel = path.relative(checkout, path.resolve(cwd));
+  return rel !== '..' && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
+}
 /** An integration package's manifest: the package is not an app to set up. */
 const INTEGRATION_MANIFEST_FILES = [
   'astryx.integration.ts',
@@ -290,9 +414,12 @@ const INTEGRATION_MANIFEST_FILES = [
  * lazy-imported. Each call returns an independent Command so tests can
  * parseAsync repeatedly without commander state leaking between runs.
  *
+ * @param {{argv?: string[]}} [options] `argv`, the arguments after `astryx`:
+ *   load only the commands a run of them needs (commandsForArgs). Without
+ *   it, every command loads.
  * @returns {Promise<import('commander').Command>}
  */
-export async function createProgram() {
+export async function createProgram({argv} = {}) {
   const program = new Command();
 
   // Deterministic, single-line help. Commander wraps each option/command
@@ -308,7 +435,8 @@ export async function createProgram() {
   // kit in clients/cli/formatters.
   program.addHelpText(
     'after',
-    '\n' +
+    // A function, so the example names the invocation when help is printed.
+    () => '\n' +
       [
         section(
           'Output format',
@@ -331,8 +459,12 @@ export async function createProgram() {
           {fields: ['block', 'shape']},
         ),
         text(
-          'Grep a field across records, e.g.  astryx search button | grep "^command:". ' +
+          `Grep a field across records, e.g.  ${formatCliCommand('search button')} | grep "^command:". ` +
             'Errors/warnings go to stderr; use --json for structured parsing.',
+        ),
+        text(
+          "Global mode: in a project, the project's own CLI answers (this copy hands the run to it); a copy installed for the computer checks for updates once a day and keeps an agent skill in your home folder. " +
+            `See ${formatCliCommand('docs global')}.`,
         ),
       ]
         .map(block => block.toString())
@@ -430,6 +562,7 @@ export async function createProgram() {
             // Enriched, self-describing surface (the full manifest payload).
             manifest,
           },
+          meta: {answeredBy: answeredBy()},
         }, null, 2));
         debug.recordCommandResult(
           debug.resultSet({
@@ -527,9 +660,28 @@ export async function createProgram() {
   });
 
   /**
+   * Load the project's integrations before any command runs, so every command
+   * it prints starts with the `cliCommand` they declare (the picker reads them
+   * synchronously; see foundation/env/cli-command.mjs). Skipped when this
+   * process already loaded the project, such as the bin's debug preload. A
+   * project that cannot load is the command's to report, never this hook's.
+   */
+  program.hook('preAction', async () => {
+    try {
+      const cwd = process.cwd();
+      if (hasRecordedProject(cwd)) return;
+      const {Project} = await import('../../foundation/config/project.mjs');
+      await Project.load(cwd);
+    } catch {
+      // Best-effort: the picker falls back to its package-manager guess.
+    }
+  });
+
+  /**
    * Enforcement layer 3 — setup nudge. If this project hasn't run `astryx init`
-   * yet (no Astryx marker in any agent-doc file — see isAstryxInitialized), remind
-   * the user/agent that setup is missing.
+   * yet (no Astryx marker in any agent-doc file between the project and its
+   * repository root — see isAstryxPromptInReach), remind the user/agent that
+   * setup is missing.
    *
    * Uses `preAction` (not postAction) so it fires for EVERY valid command — even
    * ones whose action errors or calls process.exit (postAction is skipped then).
@@ -539,7 +691,9 @@ export async function createProgram() {
    * consumers parse stdout, not stderr — a stderr nudge would not reach them anyway.
    * The core/cli postinstall layers already nudge at install time regardless of
    * --json; a machine-readable nudge could later be an envelope field. Also skipped
-   * for the installer commands themselves and outside a project (no package.json).
+   * for the installer commands themselves, outside a project (no package.json,
+   * or one that neither installs nor declares Astryx), and inside the CLI's own
+   * source checkout when it runs from there.
    */
   program.hook('preAction', (thisCommand, actionCommand) => {
     try {
@@ -547,24 +701,73 @@ export async function createProgram() {
       if (SETUP_NUDGE_EXEMPT.has(actionCommand.name())) return;
       const cwd = process.cwd();
       if (!fs.existsSync(path.join(cwd, 'package.json'))) return; // not a project
+      // A package.json that neither installs nor declares Astryx is outside a
+      // project: `init` would set up a project the folder does not have
+      // (spec AST-081 FR3).
+      if (isOutsideProject(cwd)) return;
       // An integration package is not an app: `init` is not its next step.
       if (INTEGRATION_MANIFEST_FILES.some(file => fs.existsSync(path.join(cwd, file)))) return;
-      if (isAstryxInitialized(cwd)) return; // already set up — stay quiet
-      // Same wording as the core/cli postinstall nudges. #4151's getCliInvocation()
-      // renders the correct form for THIS project — scoped `npx @astryxdesign/cli`
-      // one-off, or `<pm> astryx` when installed — never the bare `npx astryx` footgun.
-      console.error(
-        `\nNext step: run \`${getCliInvocation(cwd)} init\` to finish setup and install the Astryx agent prompt.`,
-      );
+      if (inOwnSourceCheckout(cwd)) return; // developing Astryx itself, not an app
+      if (isAstryxPromptInReach(cwd)) return; // already set up — stay quiet
+      // Where init writes the docs, by init's own rule: the project root, which
+      // can sit above a nested package such as functions/. Inside a git
+      // repository the walk above already reaches it (the root never lies
+      // above the repository root), so this changes nothing there; outside a
+      // repository the walk checks only cwd, and this finds the root.
+      if (isAstryxInitialized(agentDocsTargetDir(cwd))) return;
+      // In the home folder, or at the top of a settings folder in it, init
+      // writes no agent docs, so naming it would repeat on every command.
+      try {
+        assertAgentDocsTarget(agentDocsTargetDir(cwd));
+      } catch {
+        return;
+      }
+      // Same wording as the core/cli postinstall nudges. getCliInvocation()
+      // renders the correct form for THIS project — an integration's cliCommand,
+      // scoped `npx @astryxdesign/cli` one-off, or `<pm> astryx` when installed —
+      // never npx with the unscoped name, which fetches an unrelated package.
+      // A project with no CLI of its own, answered by another release than its
+      // Core's: add the CLI at Core's version first, as the daily hint says,
+      // then run that CLI's init (spec AST-081 FR2).
+      // A folder that belongs to no project spec:AST-040 FR9 defines gets no
+      // reminder, as outside a project.
+      const target = installFolder(cwd);
+      if (target == null) return;
+      // From a folder inside the project whose package.json is not the
+      // project's, init runs from the project's folder. Only `cd` comes
+      // before it, so the command is the picker's for that folder, never the
+      // bare `astryx` name a package runner would fetch from the registry
+      // (spec AST-081 FR5).
+      if (target.moved) {
+        console.error(
+          setupNudge(getCliInvocation(target.dir), {before: `cd ${quoteCommandArgument(target.dir)}`}).trimEnd(),
+        );
+        return;
+      }
+      const choice = runChoice(cwd);
+      if (choice.copy === 'starting' && choice.coreVersion && choice.coreVersion !== choice.version) {
+        // The daily hint's comparison and command: add the CLI at Core's
+        // version, then run that CLI's init.
+        const add = cliInstallAdvice({cwd, core: choice.coreVersion});
+        if (add?.command) {
+          console.error(
+            setupNudge(getCliInvocation(add.root, {installed: true}), {before: add.command}).trimEnd(),
+          );
+          return;
+        }
+      }
+      console.error(setupNudge(getCliInvocation(cwd)).trimEnd());
     } catch {
       // Never let the nudge break a command.
     }
   });
 
+  const loads = argv == null ? null : commandsForArgs(program, argv);
   for (const cmd of commands) {
+    if (loads != null && !loads.has(cmd.name)) continue;
     try {
       const mod = await import(cmd.path);
-      mod[cmd.register](program);
+      mod[cmd.register](program, {jsonSupported: JSON_SUPPORTED, version: pkg.version});
     } catch (e) {
       // Command fails to load but CLI still works
       const reason = /** @type {any} */ (e).message;
@@ -584,84 +787,6 @@ export async function createProgram() {
     }
   }
 
-  // Capability manifest — a single, self-describing view of the whole CLI so
-  // agents can discover every command, argument, flag, and response type without
-  // scraping `--help`. `astryx manifest --json` is the dedicated surface; the bare
-  // `xds --json` embeds the same payload under data.manifest for convenience.
-  // Intentionally CLI-special — no `api/manifest`. It introspects the live
-  // Commander `program`, so extracting it to `api/` would create the `api → cli`
-  // cycle from #4302. `buildManifest(program)` lives in lib/; see its header.
-  const manifestCommand = program
-    .command('manifest')
-    .description('Print the full CLI capability manifest (use with --json)')
-    .action(() => {
-      const manifest = buildManifest(program, {
-        jsonSupported: JSON_SUPPORTED,
-        version: pkg.version,
-      });
-      // The manifest IS a result set: one entry per command the CLI ships.
-      debug.recordCommandResult(
-        debug.resultSet({
-          count: manifest.commands.length,
-          resultKind: 'command',
-        }),
-      );
-      if (program.opts().json) {
-        process.__xdsJsonHandled = true;
-        console.log(JSON.stringify({apiVersion: API_VERSION, type: 'manifest', data: manifest}, null, 2));
-        return;
-      }
-      // Human-readable summary as greppable records (agents should use --json).
-      // One record per command: name, whether it supports --json, and the
-      // description. Field names are the manifest entry's own keys.
-      emit(
-        section(`${manifest.name} v${manifest.version} (${manifest.commands.length} commands)`),
-        records(
-          manifest.commands.map(c => ({
-            name: c.name,
-            json: c.json ? 'yes' : '',
-            description: c.description || '',
-          })),
-          {fields: ['name', 'json', 'description']},
-        ),
-        text(`Run \`${getCliInvocation()} manifest --json\` for the full structured manifest.`),
-      );
-    });
-  addDocHelp(manifestCommand, manifestDoc);
-  markReportsResult(manifestCommand);
-
-  // Hidden command used by package.json postinstall scripts
-  const postinstallCommand = program
-    .command('postinstall', {hidden: true})
-    .action(() => {
-      // Prints the welcome box. Nothing is looked up.
-      debug.recordCommandResult(debug.NO_RESULT_SET);
-      const r = getCliInvocation();
-      const pad = (/** @type {string} */ s, /** @type {number} */ len) => s + ' '.repeat(Math.max(0, len - s.length));
-      const W = 49; // inner width of the box
-      const line = (/** @type {string} */ s) => `  │ ${pad(s, W)}│`;
-      console.log(`
-  ╭${'─'.repeat(W + 2)}╮
-${line('')}
-${line('  Design system installed!')}
-${line('')}
-${line('  Get started:')}
-${line(`    ${r} init          Setup + AI agent docs`)}
-${line(`    ${r} --help        See all commands`)}
-${line('')}
-${line('  Or run directly:')}
-${line(`    ${r} init           Setup + AI agent docs`)}
-${line(`    ${r} component     Browse component docs`)}
-${line(`    ${r} hook          Browse hook docs`)}
-${line(`    ${r} docs          Design system reference`)}
-${line(`    ${r} swizzle       Customize a component`)}
-${line(`    ${r} template      Add a page template`)}
-${line('')}
-  ╰${'─'.repeat(W + 2)}╯
-`);
-    });
-  markReportsResult(postinstallCommand);
-
   // Install the JSON shim AFTER all commands are registered so we can
   // patch outputHelp on every command (root + subcommands). The shim
   // extends the --json contract to cover Commander's parse-time short
@@ -671,9 +796,3 @@ ${line('')}
 
   return program;
 }
-
-/**
- * Eager singleton program for `bin/astryx.mjs` and legacy importers. Tests
- * should call {@link createProgram} to get an isolated instance.
- */
-export const program = await createProgram();

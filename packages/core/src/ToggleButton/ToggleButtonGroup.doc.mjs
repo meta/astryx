@@ -6,6 +6,10 @@ export const docs = {
   name: 'ToggleButtonGroup',
   subComponentOf: 'ToggleButton',
   displayName: 'Toggle Button Group',
+  keywords: [
+    'togglegroup',
+    'buttontogglegroup',
+  ],
   description: 'Groups toggle buttons for exclusive (single) or multi-select behavior. Uses discriminated union on type for type-safe value/onChange.',
   props: [
     {

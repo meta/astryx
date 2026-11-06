@@ -46,7 +46,7 @@ export function typeTextTooOld(ts) {
   const [major, minor] = String(ts.version).split('.').map(Number);
   return major > 4 || (major === 4 && minor >= 8)
     ? null
-    : `TypeScript ${ts.version} is older than 4.8, the oldest the type comparison reads`;
+    : `TypeScript ${ts.version} is older than 4.8, the oldest the type comparison reads; install TypeScript 5.0 through 6 (\`npm install -D typescript@6\`), or on TypeScript 7 add \`@typescript/typescript6\`, to judge them`;
 }
 
 /** How tightly a printed type binds: a slot needs at least its level. */
