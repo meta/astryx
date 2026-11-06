@@ -529,6 +529,19 @@ describe('the folders that render a touched component (spec:AST-030 FR12)', () =
         "import {Button, Spinner as Busy} from '@astryxdesign/core';\n",
       'packages/lab/src/Rating/Rating.tsx':
         "import {Button} from '@astryxdesign/core';\n",
+      // A lazy import is an edge; a barrel's names reach only their own files.
+      'packages/core/src/Tooltip/Tooltip.tsx':
+        "const Busy = lazy(() => import('../Spinner/Spinner'));\n",
+      'packages/core/src/hooks/index.ts':
+        "export {useAnnounce} from './useAnnounce';\nexport {useSpin} from './useSpin';\n",
+      'packages/core/src/hooks/useAnnounce.ts':
+        'export function useAnnounce() {}\n',
+      'packages/core/src/hooks/useSpin.ts':
+        "import {Spinner} from '../Spinner/Spinner';\nexport function useSpin() {}\n",
+      'packages/core/src/Kbd/Kbd.tsx':
+        "import {useAnnounce} from '../hooks';\n",
+      'packages/core/src/Meter/Meter.tsx':
+        "import {useSpin} from '../hooks';\n",
     };
     for (const [file, text] of Object.entries(files)) write(root, file, text);
     return root;
@@ -539,7 +552,9 @@ describe('the folders that render a touched component (spec:AST-030 FR12)', () =
     try {
       expect(renderingFolders(importerGraph(root), ['core/Spinner'])).toEqual([
         {folder: 'core/Banner', depth: 1},
+        {folder: 'core/Meter', depth: 1},
         {folder: 'core/TextInput', depth: 1},
+        {folder: 'core/Tooltip', depth: 1},
         {folder: 'lab/Schedule', depth: 1},
         {folder: 'core/CommandPalette', depth: 2},
       ]);
@@ -555,13 +570,14 @@ describe('the folders that render a touched component (spec:AST-030 FR12)', () =
   it('reads value imports and re-exports, never type-only ones', () => {
     expect(
       valueImports(
-        "import type {A} from './a';\nimport {type B} from './b';\nimport {type C, D} from './c';\nexport {E} from './e';\nexport type {F} from './f';\nimport G from './g';\nimport './h';",
+        "import type {A} from './a';\nimport {type B} from './b';\nimport {type C, D} from './c';\nexport {E} from './e';\nexport type {F} from './f';\nimport G from './g';\nimport './h';\nconst I = lazy(() => import('./i'));",
       ),
     ).toEqual([
       {specifier: './c', names: ['D']},
       {specifier: './e', names: ['E']},
       {specifier: './g', names: []},
       {specifier: './h', names: []},
+      {specifier: './i', names: []},
     ]);
   });
 

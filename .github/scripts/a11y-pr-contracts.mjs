@@ -397,7 +397,7 @@ const SOURCE = /\.(?:[cm]?[jt]sx?)$/;
 const NOT_RENDERED =
   /(?:^|\/)__tests__\/|\.(?:test|stories|doc)\.[^/]+$|\.spec\.[^/]+$|\.d\.ts$/;
 const STATEMENT =
-  /(?:^|[\n;])\s*(import|export)\s+(type\s+)?([^'";]*?)\s*from\s*['"]([^'"]+)['"]|(?:^|[\n;])\s*import\s*['"]([^'"]+)['"]/g;
+  /(?:^|[\n;])\s*(import|export)\s+(type\s+)?([^'";]*?)\s*from\s*['"]([^'"]+)['"]|(?:^|[\n;])\s*import\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
 const RESOLVE_SUFFIXES = [
   '',
   '.ts',
@@ -440,8 +440,9 @@ function sourceFiles(root, dir) {
 export function valueImports(text) {
   const out = [];
   for (const match of text.matchAll(STATEMENT)) {
-    if (match[5]) {
-      out.push({specifier: match[5], names: []});
+    // A bare `import './x'` or a dynamic `import('./x')` takes the module.
+    if (match[5] || match[6]) {
+      out.push({specifier: match[5] ?? match[6], names: []});
       continue;
     }
     if (match[2]) continue;
@@ -491,15 +492,14 @@ export function importerGraph(root) {
     }
     return null;
   };
-  // Each package root's named exports, through its folder barrels.
-  const barrelOf = new Map();
-  const exportsOf = pkg => {
-    if (barrelOf.has(pkg)) return barrelOf.get(pkg);
+  // A barrel's named exports (`index.ts`): each name to the file it comes
+  // from, one `export *` level deep.
+  const barrels = new Map();
+  const namesOf = index => {
+    if (barrels.has(index)) return barrels.get(index);
     const names = new Map();
-    const index = resolve(`packages/${pkg}/src/index`);
-    for (const {specifier, names: own} of index
-      ? valueImports(texts.get(index))
-      : []) {
+    barrels.set(index, names);
+    for (const {specifier, names: own} of valueImports(texts.get(index))) {
       if (!specifier.startsWith('.')) continue;
       const target = resolve(
         path.posix.normalize(`${path.posix.dirname(index)}/${specifier}`),
@@ -517,22 +517,30 @@ export function importerGraph(root) {
         }
       }
     }
-    barrelOf.set(pkg, names);
     return names;
   };
+  const isBarrel = file => /\/index\.[cm]?[jt]sx?$/.test(file ?? '');
   const importers = new Map();
   const add = (imported, importer) => {
     if (!imported || imported === importer) return;
     if (!importers.has(imported)) importers.set(imported, new Set());
     importers.get(imported).add(importer);
   };
+  // Named imports from a barrel reach only the files those names come from.
+  const link = (target, names, file) => {
+    if (!target) return;
+    if (!isBarrel(target) || names.length === 0) return add(target, file);
+    const barrel = namesOf(target);
+    for (const name of names) add(barrel.get(name) ?? target, file);
+  };
   for (const file of files) {
     for (const {specifier, names} of valueImports(texts.get(file))) {
       if (specifier.startsWith('.')) {
-        add(
+        link(
           resolve(
             path.posix.normalize(`${path.posix.dirname(file)}/${specifier}`),
           ),
+          names,
           file,
         );
         continue;
@@ -540,12 +548,15 @@ export function importerGraph(root) {
       const match = /^@astryxdesign\/([^/]+)(?:\/(.+))?$/.exec(specifier);
       if (!match || !packages.includes(match[1])) continue;
       const [, pkg, subpath] = match;
-      if (subpath) {
-        add(resolve(`packages/${pkg}/src/${subpath}`), file);
-        continue;
-      }
-      const barrel = exportsOf(pkg);
-      for (const name of names) add(barrel.get(name), file);
+      link(
+        resolve(
+          subpath
+            ? `packages/${pkg}/src/${subpath}`
+            : `packages/${pkg}/src/index`,
+        ),
+        names,
+        file,
+      );
     }
   }
   return importers;
@@ -761,7 +772,7 @@ export function summaryMarkdown({
   if (rendering.length) {
     lines.push(
       '',
-      `Folders that render a touched component: ${rendering.length}; their specs run, nearest first, within ${DEPENDENT_SHARE_MS / 60000} minutes of the time left.`,
+      `Folders that render a touched component: ${rendering.length}; their specs run, nearest first, within ${DEPENDENT_SHARE_MS === 60 * 1000 ? 'one minute' : `${DEPENDENT_SHARE_MS / 60000} minutes`} of the time left.`,
     );
   }
   lines.push('');
