@@ -2799,9 +2799,9 @@ jobs:
             --leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }} \
             -- "${SPEC_PATHS[@]}"
 
-      - name: Leave the proofs to the first leg
+      - name: Leave the proofs to the other legs
         if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs != 'true'
-        run: echo "One leg holds this run's WebKit proofs (${{ steps.legs.outputs.count }} leg planned), so this leg runs none."
+        run: echo "This run's WebKit proofs fit ${{ steps.legs.outputs.count }} legs, so this leg runs none."
 
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
