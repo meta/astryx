@@ -592,7 +592,16 @@ export function Carousel({
     const delta = isRtlElement(el)
       ? itemRect.right - containerRect.right
       : itemRect.left - containerRect.left;
-    if (moveSnapPaging(el, at => at + (isRtlElement(el) ? -delta : delta))) {
+    // Under snap paging the row goes to the item's stop, inside the scroll
+    // padding, so the hand-back's snap does not pull it back.
+    if (
+      moveSnapPaging(el, (at, end) =>
+        nearestStop(
+          snapStops(el, at, end),
+          at + (isRtlElement(el) ? -delta : delta),
+        ),
+      )
+    ) {
       return;
     }
     el.scrollBy({

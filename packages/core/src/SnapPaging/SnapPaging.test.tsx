@@ -249,7 +249,7 @@ describe('Carousel with hasSnap', () => {
   describe('a scroll call under snap paging', () => {
     // A paging value that records each move it is asked for.
     function renderMoves() {
-      const moves: Array<(at: number, end: number) => number> = [];
+      const moves: ((at: number, end: number) => number)[] = [];
       const value = makeSnapPaging(() => ({
         ...attachment(),
         move: target => {
@@ -287,6 +287,20 @@ describe('Carousel with hasSnap', () => {
       expect(moves).toHaveLength(1);
       expect(scrollTo).not.toHaveBeenCalled();
       expect(scrollBy).not.toHaveBeenCalled();
+    });
+
+    it('moves a scroll to an item onto its snap stop, inside the scroll padding', () => {
+      const {moves, handle} = renderMoves();
+      const row = scroller();
+      // Three 100 px items in a 300 px row with 16 px of scroll padding.
+      row.style.setProperty('scroll-padding-left', '16px');
+      row.getBoundingClientRect = () => new DOMRect(0, 0, 300, 100);
+      Array.from(row.children).forEach((child, i) => {
+        child.getBoundingClientRect = () => new DOMRect(i * 100, 0, 100, 100);
+      });
+      act(() => handle.current?.scrollTo(2));
+      // The stop is the item's start less the padding, not its border edge.
+      expect(moves[0](0, 500)).toBe(184);
     });
   });
 

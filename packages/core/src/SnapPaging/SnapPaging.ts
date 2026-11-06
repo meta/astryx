@@ -135,8 +135,9 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
       (child): child is HTMLElement => child instanceof HTMLElement,
     );
   const isRtl = () => isRtlElement(element);
-  // The pager's x for a position, and what a child's translate adds to it.
-  const sign = () => (isRtl() ? -1 : 1);
+  // The pager's x for a position, and what a child's translate adds to it. A
+  // held row keeps the direction it was taken over with.
+  const sign = () => (isMoving ? heldSign : isRtl() ? -1 : 1);
   const xOf = (position: number) => -sign() * position;
   const nativePosition = () => Math.abs(element.scrollLeft);
   const padding = () => {
@@ -187,8 +188,14 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
   }
 
   function place(at: number): void {
+    const x = toChild(xOf(at));
     for (const child of children()) {
-      animatorFor(child).set({x: toChild(xOf(at))});
+      const animator = animatorFor(child);
+      // A set reads the element's style back, so a child already there
+      // gets none.
+      if (animator.get('x') !== x) {
+        animator.set({x});
+      }
     }
   }
 
@@ -196,27 +203,33 @@ function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
     if (isMoving) {
       return;
     }
-    heldOffset = nativePosition();
-    heldTravel = Math.max(0, element.scrollWidth - element.clientWidth);
+    // Every read comes before the first write, so the takeover forces no
+    // layout of its own.
+    const offset = nativePosition();
+    const rowTravel = Math.max(0, element.scrollWidth - element.clientWidth);
+    const rowSign = isRtl() ? -1 : 1;
+    // A flick moves one view at most: the items within a view of the
+    // viewport get their own layers, and no others.
+    const box = element.getBoundingClientRect();
+    const items = children();
+    const layered = items.filter(child => {
+      const rect = child.getBoundingClientRect();
+      return (
+        rect.right >= box.left - box.width && rect.left <= box.right + box.width
+      );
+    });
+    heldOffset = offset;
+    heldTravel = rowTravel;
+    heldSign = rowSign;
+    lead = items[0] ?? null;
     isMoving = true;
     // A snap type would snap the row again as its children move.
     ownSnapType = element.style.getPropertyValue('scroll-snap-type');
     element.style.setProperty('scroll-snap-type', 'none');
-    // A flick moves one view at most: the items within a view of the
-    // viewport get their own layers, and no others.
-    const box = element.getBoundingClientRect();
-    for (const child of children()) {
-      const rect = child.getBoundingClientRect();
-      if (
-        rect.right >= box.left - box.width &&
-        rect.left <= box.right + box.width
-      ) {
-        child.style.setProperty('will-change', 'transform');
-      }
+    for (const child of layered) {
+      child.style.setProperty('will-change', 'transform');
     }
     place(heldOffset);
-    heldSign = sign();
-    lead = children()[0] ?? null;
     follow();
   }
 
@@ -324,24 +337,37 @@ function attachPaging(
   onHeld?: HeldRowListener,
 ): SnapPagingAttachment {
   const track = childTrack(element, onHeld);
+  // A child's animator reads its stylesheet's will-change in a later task. So
+  // a press that moves the row reads no style in its own task.
+  for (const child of Array.from(element.children)) {
+    if (child instanceof HTMLElement) {
+      animatorFor(child);
+    }
+  }
   // The stop that view pages count from, set when a gesture takes over.
   let anchor = 0;
-  // Takes the row over where it is shown, on the page nearest it.
-  const takeOverShown = () => {
-    const at = track.position();
+  // The row's stops and view width, read before a takeover's first write.
+  let measured: {stops: number[]; viewWidth: number} | null = null;
+  // Takes the row over where it is shown, at `at`, on the page nearest it.
+  const takeOverShown = (at: number) => {
+    // Every read comes before the takeover's first write.
     const stops = track.stops();
+    const viewWidth = track.viewWidth();
     anchor = stops.reduce(
       (best, stop, i) =>
         Math.abs(stop - at) < Math.abs(stops[best] - at) ? i : best,
       0,
     );
-    track.takeOver();
+    measured = {stops, viewWidth};
     pager.setOptions({});
+    measured = null;
+    // The pager learns its page while the row is at rest, which moves
+    // nothing. The takeover then holds the row where it is shown.
     pager.goTo(pager.nearestPage(at), {
       animated: false,
       reason: 'controlled',
     });
-    track.place(at);
+    track.takeOver();
   };
   const pager = createPager(
     {
@@ -351,19 +377,19 @@ function attachPaging(
       // the pointer kinds.
       panOptions: {allowedPointerTypes: ['touch', 'pen']},
       measurePages: () => {
-        const stops = track.stops();
+        const stops = measured?.stops ?? track.stops();
         return (options.pages ?? 'view') === 'item'
           ? stops
           : viewPages(
               stops,
               Math.min(anchor, stops.length - 1),
-              track.viewWidth(),
+              measured?.viewWidth ?? track.viewWidth(),
             );
       },
       shouldBeginPan: () => {
         // The finger catches the row where it is shown.
         if (!track.isMoving) {
-          takeOverShown();
+          takeOverShown(track.position());
         }
         return true;
       },
@@ -387,13 +413,16 @@ function attachPaging(
       if (pager.isDragging) {
         return;
       }
+      // The target reads the row too, so every read comes before the
+      // takeover's first write.
+      const at = track.position();
+      const end = track.travel();
+      const to = Math.min(Math.max(target(at, end), 0), end);
       // A move from rest is the pager's own too. So a touch catches it as it
       // catches a settle, and the release rests on a page.
       if (!track.isMoving) {
-        takeOverShown();
+        takeOverShown(at);
       }
-      const end = track.travel();
-      const to = Math.min(Math.max(target(track.position(), end), 0), end);
       pager.goTo(pager.nearestPage(to), {offset: to});
     },
     moveHeld: target => {
