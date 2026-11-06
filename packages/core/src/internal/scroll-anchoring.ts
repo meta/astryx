@@ -3,7 +3,7 @@
  * @file scroll-anchoring.ts
  * @input The scroll-anchoring owner module
  * @output `@astryxdesign/core/internal/scroll-anchoring`: setScrollAnchoringOff,
- *   re-exported by name for Lab's ChatVirtualizer
+ *   re-exported by name for Lab
  * @position An internal entry reserved for Astryx's own packages. It is
  *   undocumented, outside the public API and its compatibility promise, and
  *   versioned in lockstep with Core. The `@astryx/no-core-internal-import`

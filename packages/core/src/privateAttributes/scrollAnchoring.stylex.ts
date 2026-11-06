@@ -7,7 +7,7 @@
  *   off on an element and back on
  * @position Owner module of the private scroll-anchoring attribute: the only
  *   file that writes its name or its rule. Core's useChatStreamScroll calls
- *   it while it follows the end; Lab's ChatVirtualizer reaches it through
+ *   it while it follows the end; Lab reaches the writer through
  *   `@astryxdesign/core/internal/scroll-anchoring`. No public entry exports
  *   it.
  */
