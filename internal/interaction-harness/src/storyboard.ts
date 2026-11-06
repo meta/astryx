@@ -267,21 +267,31 @@ export interface AnimationStoryboardOptions extends StoryboardOptions {
    * each animation at its own offset (a held end value is not filmed).
    */
   readonly times?: readonly number[];
-  /** Restrict to animations inside this element. */
+  /** Restrict to animations inside this element (when `held` is not passed). */
   readonly scope?: Locator;
+  /**
+   * What an armed hold already took (`armHold`'s `held()`): filmed instead of
+   * holding now, for an animation an action starts that a hold sent after
+   * the action could miss on a loaded runner.
+   */
+  readonly held?: readonly HeldAnimation[];
   /** Measurements per frame (runs after the seek). */
   readonly measure?: () => Promise<Readonly<Record<string, unknown>>>;
 }
 
 /**
  * Holds every running animation, then seeks them together to each time and
- * photographs the clip. Call it right after starting the animation under test.
+ * photographs the clip. Call it right after starting the animation under test,
+ * or pass `held`, what an armed hold took (`armHold`): the film then uses that
+ * held set instead of holding now, and `scope` plays no part.
  */
 export async function animationStoryboard(
   page: Page,
   options: AnimationStoryboardOptions,
 ): Promise<{storyboard: Storyboard; held: HeldAnimation[]}> {
-  const held = await holdAnimations(page, options.scope);
+  const held = options.held
+    ? [...options.held]
+    : await holdAnimations(page, options.scope);
   if (held.length === 0) {
     throw new Error(`storyboard ${options.name}: no running animation to hold`);
   }
@@ -336,7 +346,8 @@ export interface TouchStoryboardOptions extends StoryboardOptions {
  * photograph per event, about 100 ms between moves instead of the script's
  * 16.7. Its release velocity is that much lower, so a flick that dismisses
  * when played can settle back when filmed: a storyboard cannot show such a
- * gesture; record it in real time instead.
+ * gesture; record it in real time instead (`startScreencast`,
+ * `castStoryboard`).
  */
 export async function touchStoryboard(
   page: Page,
@@ -363,4 +374,66 @@ export async function touchStoryboard(
     },
   });
   return storyboard;
+}
+
+/**
+ * A filmstrip of screencast frames (real presented frames, e.g. the frames of
+ * a busy-main-thread window), labelled with their time relative to `zero`.
+ * Evidence for what the compositor presented, not a deterministic storyboard.
+ */
+export async function castStoryboard(
+  page: Page,
+  frames: readonly {
+    readonly t: number;
+    readonly data: string;
+    readonly format: 'png' | 'jpeg';
+  }[],
+  // A cast is already the screen's frames: no clip is applied to them.
+  options: Omit<StoryboardOptions, 'clip'> & {
+    readonly zero: number;
+    readonly from?: number;
+    readonly to?: number;
+    readonly data?: (t: number) => Readonly<Record<string, unknown>>;
+  },
+): Promise<Storyboard> {
+  const storyboard = new Storyboard(page, options);
+  for (const frame of frames) {
+    if (options.from != null && frame.t < options.from) {
+      continue;
+    }
+    if (options.to != null && frame.t > options.to) {
+      continue;
+    }
+    const png =
+      frame.format === 'png'
+        ? Buffer.from(frame.data, 'base64')
+        : await toPng(page, frame.data);
+    const t = frame.t - options.zero;
+    storyboard.frames.push({
+      label: `t=${t.toFixed(1)} ms`,
+      t,
+      data: options.data?.(frame.t) ?? {},
+      png,
+    });
+  }
+  return storyboard;
+}
+
+async function toPng(page: Page, jpegBase64: string): Promise<Buffer> {
+  const scratch = await page.context().newPage();
+  try {
+    const url = await scratch.evaluate(async data => {
+      const bitmap = await createImageBitmap(
+        await (await fetch(`data:image/jpeg;base64,${data}`)).blob(),
+      );
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      canvas.getContext('2d')?.drawImage(bitmap, 0, 0);
+      return canvas.toDataURL('image/png');
+    }, jpegBase64);
+    return Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
+  } finally {
+    await scratch.close();
+  }
 }

@@ -15,15 +15,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {
-  PRESS_FADE_MS,
   PRESS_FLASH_MS,
   PRESS_ONSET_MS,
   PRESS_SCROLL_BRAKE_MS,
 } from '../../utils/pressGesture';
+import * as uikit from '.';
 import {scroll, springs, timing} from '.';
+import {CLICK_GUARD_WINDOW_MS} from '../../utils/clickGuard';
+import {UIKIT_GESTURES} from './gestures';
 
-// Modules in this folder that hold no table of their own (none yet).
-const NON_TABLE_FILES: string[] = [];
+// Modules in this folder that hold no table of their own: longPress.ts holds
+// only the long-press numbers, whose sources gestures.ts's entries carry.
+const NON_TABLE_FILES: string[] = ['longPress.ts'];
 // Every domain file carries its sources as JSDoc tags: a new one is enforced
 // the moment it lands.
 const TABLE_FILES = fs
@@ -68,7 +71,12 @@ function leavesOf(file: string): Leaf[] {
   // of them is checked where it is declared.
   const exported = new Set<string>();
   lines.forEach((line, index) => {
-    const match = /^export const (\w+) = \{/.exec(line);
+    // A spring role row is built by `springRole(name, {...})`, which
+    // registers it as it loads.
+    const match =
+      /^export const (\w+) = (?:\{|\/\* @__PURE__ \*\/ springRole\()/.exec(
+        line,
+      );
     if (match == null) {
       return;
     }
@@ -274,6 +282,24 @@ function expectSourced(key: string, doc: string) {
 }
 
 describe('UIKit constants table: values', () => {
+  it('carries no stray-click guess: the click guard owns its window (M-G17)', () => {
+    // CLICK_GUARD_WINDOW_MS (utils/clickGuard.ts) bounds the stray click; the
+    // table's 1000 ms guess had no reader left once the guard replaced the
+    // host's swallower.
+    expect(Object.keys(UIKIT_GESTURES)).not.toContain('click');
+    expect(
+      Object.values(UIKIT_GESTURES).some(group => 'strayClickWindow' in group),
+    ).toBe(false);
+  });
+
+  it("keeps UIKIT_CLICK in the barrel for importers written before the click guard, with the guard's window", () => {
+    // internal/motion.ts and its importers read it from the barrel.
+    expect(uikit.UIKIT_CLICK.strayClickWindow.value).toBe(
+      CLICK_GUARD_WINDOW_MS,
+    );
+    expect(Object.values(UIKIT_GESTURES)).not.toContain(uikit.UIKIT_CLICK);
+  });
+
   it('names each platform preset for its use, not its source', () => {
     // spec AST-094 FR4: a role is named for its use; the source stays in the
     // JSDoc (SwiftUI .smooth, UISpringTimingParameters(), Core Animation's
@@ -351,7 +377,6 @@ describe('UIKit constants table: values', () => {
   it('press clocks agree with the touch press model they were measured for', () => {
     expect(scroll.delaysContentTouchesMs).toBe(PRESS_ONSET_MS);
     expect(timing.press.flashMs).toBe(PRESS_FLASH_MS);
-    expect(timing.press.highlightOutMs).toBe(PRESS_FADE_MS);
     expect(timing.press.scrollBrakeMs).toBe(PRESS_SCROLL_BRAKE_MS);
   });
 

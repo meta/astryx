@@ -126,7 +126,7 @@ describe('DropdownMenuSubMenu', () => {
     expect(popover).toHaveStyle({minWidth: 'var(--x-minWidth)'});
     expect(popover?.getAttribute('style')).toContain('min(640px, calc(100vw');
     expect(flyout).toHaveStyle(
-      'max-height: min(300px,calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))))',
+      'max-height: min(300px,min(calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))), var(--_layer-keyboard-max-block-size, 100dvb)))',
     );
     expect(flyout).not.toHaveStyle({overflowY: 'auto'});
     expect(flyout).toHaveAttribute('tabindex', '-1');
@@ -645,6 +645,40 @@ describe('DropdownMenu data-driven submenus', () => {
       await screen.findByRole('menuitem', {name: 'Folder B', hidden: true}),
     );
     expect(onMove).toHaveBeenCalledWith('b');
+  });
+
+  it('renders a submenu for an item with nested items inside a section', async () => {
+    const user = userEvent.setup();
+    const onWork = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Share'}}
+        items={[
+          {
+            type: 'section',
+            title: 'Send',
+            items: [
+              {label: 'Copy link', onClick: () => {}},
+              {
+                label: 'Email',
+                items: [
+                  {label: 'Work', onClick: onWork},
+                  {label: 'Personal', onClick: () => {}},
+                ],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /Share/}));
+    const trigger = screen.getByRole('menuitem', {name: /Email/, hidden: true});
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    await user.click(trigger);
+    await user.click(
+      await screen.findByRole('menuitem', {name: 'Work', hidden: true}),
+    );
+    expect(onWork).toHaveBeenCalled();
   });
 
   it('keyboard-reaches an item positioned after a submenu row', async () => {

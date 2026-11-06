@@ -3,7 +3,9 @@
 import {describe, expect, it} from 'vitest';
 import {createRequire} from 'node:module';
 
-const {inline, num, safeUrl} = createRequire(import.meta.url)('./report-text.js');
+const {inline, num, safeUrl} = createRequire(import.meta.url)(
+  './report-text.js',
+);
 
 describe('inline', () => {
   it('passes ordinary values through', () => {
@@ -51,7 +53,9 @@ describe('safeUrl', () => {
     expect(safeUrl('https://dequeuniversity.com/rules/axe/4.10/list')).toBe(
       'https://dequeuniversity.com/rules/axe/4.10/list',
     );
-    expect(safeUrl('  https://example.com/a?b=c#d  ')).toBe('https://example.com/a?b=c#d');
+    expect(safeUrl('  https://example.com/a?b=c#d  ')).toBe(
+      'https://example.com/a?b=c#d',
+    );
   });
 
   it('rejects anything that is not one', () => {
@@ -62,5 +66,46 @@ describe('safeUrl', () => {
     expect(safeUrl('https://example.com/a)b')).toBeNull();
     expect(safeUrl('https://example.com/a b')).toBeNull();
     expect(safeUrl(null)).toBeNull();
+  });
+});
+
+describe('fitToBudget', () => {
+  const {fitToBudget: fit} = createRequire(import.meta.url)('./report-text.js');
+
+  it('returns markdown within the budget unchanged', () => {
+    expect(fit('a\nb\n', 100)).toBe('a\nb\n');
+  });
+
+  it('cuts at a line, closes an open disclosure, ends a table, and counts what did not fit', () => {
+    const rows = Array.from(
+      {length: 40},
+      (_, i) => `| row ${i} | ${'x'.repeat(40)} |`,
+    );
+    const markdown = `Intro\n\n<details>\n<summary>Rows</summary>\n\n| A | B |\n|---|---|\n${rows.join('\n')}\n\n</details>\n`;
+    const out = fit(markdown, 1000);
+    expect(out.length).toBeLessThanOrEqual(1000);
+    expect(out).toMatch(
+      /\| row \d+ \| x+ \|\n\n_\d+ more lines did not fit GitHub's comment limit; the run's full report has them._\n\n<\/details>\n/,
+    );
+    expect((out.match(/<details/g) || []).length).toBe(
+      (out.match(/<\/details>/g) || []).length,
+    );
+  });
+
+  it('backs a cut inside a nested disclosure up to before it, so the note shows in the outer section', () => {
+    const parts = Array.from(
+      {length: 30},
+      (_, i) =>
+        `<details>\n<summary>Part${i} - 1 issue(s)</summary>\n\n${'issue text '.repeat(6)}\n\n</details>\n`,
+    );
+    const markdown = `<details>\n<summary>Accessibility</summary>\n\n${parts.join('\n')}\n</details>\n`;
+    const out = fit(markdown, 1500);
+    expect(out.length).toBeLessThanOrEqual(1500);
+    // The note follows a closed component, at the outer level.
+    expect(out).toMatch(/<\/details>\n+_\d+ more lines did not fit/);
+    expect(out.trimEnd().endsWith('</details>')).toBe(true);
+    expect((out.match(/<details/g) || []).length).toBe(
+      (out.match(/<\/details>/g) || []).length,
+    );
   });
 });

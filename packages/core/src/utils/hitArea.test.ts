@@ -16,6 +16,7 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   clampedHitInsets,
+  groupGrowth,
   HIT_INSET_PROPERTIES,
   type HitInsets,
   type HitRect,
@@ -29,6 +30,47 @@ import {
 function rect(left: number, top: number, width: number, height: number) {
   return {left, top, right: left + width, bottom: top + height};
 }
+
+describe('groupGrowth', () => {
+  it('grows each side of a row as far as the member on that edge would, and a wide group by its narrow end members', () => {
+    // Three 32 px toggles in a 104 × 32 row, 4 px apart.
+    const row = rect(0, 100, 104, 32);
+    const members = [
+      rect(0, 100, 32, 32),
+      rect(36, 100, 32, 32),
+      rect(72, 100, 32, 32),
+    ];
+    expect(groupGrowth(row, members)).toEqual({
+      top: 6,
+      right: 6,
+      bottom: 6,
+      left: 6,
+    });
+    // A column of wide members grows only at its top and bottom.
+    const column = rect(0, 0, 120, 64);
+    expect(
+      groupGrowth(column, [rect(0, 0, 120, 32), rect(0, 32, 120, 32)]),
+    ).toEqual({top: 6, right: 0, bottom: 6, left: 0});
+    // A row wider than its members shrinks past its last member, so it
+    // covers only their targets: 32 px buttons ending 160 px short.
+    expect(groupGrowth(rect(0, 100, 264, 32), members)).toEqual({
+      top: 6,
+      right: -154,
+      bottom: 6,
+      left: 6,
+    });
+    expect(groupGrowth(row, [])).toEqual(NO_HIT_INSETS);
+    // The full growth it gives stops at a neighbour, as a control's does.
+    expect(
+      clampedHitInsets(
+        row,
+        [rect(-8, 100, 4, 32)],
+        44,
+        groupGrowth(row, members),
+      ).left,
+    ).toBe(2);
+  });
+});
 
 describe('clampedHitInsets', () => {
   it('grows a lone 24 px target to 44 px, centered', () => {
@@ -188,6 +230,18 @@ describe('watchHitArea', () => {
     };
   }
 
+  /** Give `element` the whole-pixel layout size that jsdom leaves at 0. */
+  function layOut(element: HTMLElement, width: number, height: number): void {
+    Object.defineProperty(element, 'offsetWidth', {
+      configurable: true,
+      value: width,
+    });
+    Object.defineProperty(element, 'offsetHeight', {
+      configurable: true,
+      value: height,
+    });
+  }
+
   function show(...elements: Element[]): void {
     intersection?.(
       elements.map(
@@ -264,6 +318,87 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  it('measures a control in an opening layer by its layout box, so its insets hold once the layer settles', () => {
+    // The layer opens from half size about the page origin, so every rect on
+    // screen is half its layout box during the first pass.
+    const half = ({left, top, right, bottom}: HitRect) => ({
+      left: left / 2,
+      top: top / 2,
+      right: right / 2,
+      bottom: bottom / 2,
+    });
+    const control = byId('switch');
+    Object.assign(control.style, {
+      width: '24px',
+      height: '24px',
+      boxSizing: 'border-box',
+    });
+    layOut(control, 24, 24);
+    place(control, half(rect(100, 100, 24, 24)));
+    place(byId('link'), half(rect(132, 100, 60, 24)));
+    place(byId('other'), half(rect(400, 400, 24, 24)));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    // The same insets as the page at full size gives.
+    expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+    stop();
+  });
+
+  it('reads no computed style for a control at its layout size', () => {
+    const control = byId('switch');
+    const other = byId('other');
+    layOut(control, 24, 24);
+    place(control, rect(100, 100, 24, 24));
+    place(other, rect(400, 400, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    const getComputedStyle = vi.spyOn(window, 'getComputedStyle');
+    const stops = [control, other].map(element =>
+      watchHitArea(element, () => {}),
+    );
+    show(control, other);
+    flush();
+    // One control is at its layout size and the other has none, so neither
+    // resolves style in the measuring pass.
+    expect(getComputedStyle).not.toHaveBeenCalled();
+    stops.forEach(stop => stop());
+  });
+
+  it("reads a group's growth from its members in its layout px, so a group in an opening layer keeps its insets", () => {
+    // As above, the layer opens from half size about the page origin.
+    const half = ({left, top, right, bottom}: HitRect) => ({
+      left: left / 2,
+      top: top / 2,
+      right: right / 2,
+      bottom: bottom / 2,
+    });
+    const group = byId('other');
+    Object.assign(group.style, {
+      width: '68px',
+      height: '32px',
+      boxSizing: 'border-box',
+    });
+    layOut(group, 68, 32);
+    place(group, half(rect(200, 300, 68, 32)));
+    place(byId('switch'), half(rect(100, 100, 24, 24)));
+    place(byId('link'), half(rect(132, 100, 60, 24)));
+    // Two 32 px members, each 6 px short of 44 on each axis.
+    const members = [
+      half(rect(200, 300, 32, 32)),
+      half(rect(236, 300, 32, 32)),
+    ];
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(group, insets => heard.push(insets), {
+      growth: (box, toLayout) => groupGrowth(box, members.map(toLayout)),
+    });
+    show(group);
+    flush();
+    // At half size the members would read 16 px and grow 14 px.
+    expect(heard).toEqual([{top: 6, right: 6, bottom: 6, left: 6}]);
+    stop();
+  });
+
   it('measures nothing off screen', () => {
     const control = byId('switch');
     place(control, rect(100, 100, 24, 24));
@@ -276,6 +411,9 @@ describe('watchHitArea', () => {
   });
 
   it('batches every pending control into one frame: all reads, then all writes', () => {
+    // The clock holds still, so a slow machine cannot spend the frame budget
+    // and split the batch. The budget has its own case below.
+    vi.spyOn(performance, 'now').mockReturnValue(0);
     const first = byId('switch');
     const second = byId('other');
     place(first, rect(100, 100, 24, 24));
@@ -443,6 +581,31 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  it('reads nothing on the page at a finger’s press, and swallows no click, for a watch whose owner reads its own targets (checkAtPress off)', () => {
+    const control = byId('switch');
+    const link = byId('link');
+    place(control, rect(100, 100, 24, 24));
+    place(link, rect(400, 100, 60, 24));
+    const stop = watchHitArea(control, () => {}, {checkAtPress: false});
+    show(control);
+    flush();
+    // The link moved to 8 px away with nothing re-measuring yet.
+    place(link, rect(132, 100, 60, 24));
+    const read = vi.spyOn(link, 'getBoundingClientRect');
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 130, clientY: 112});
+    control.dispatchEvent(press);
+    expect(read).not.toHaveBeenCalled();
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    control.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+    stop();
+  });
+
   it('runs no observer or window listener for hit areas while the primary pointer is fine', () => {
     coarse = false;
     const constructed = vi.fn();
@@ -463,6 +626,77 @@ describe('watchHitArea', () => {
     expect(constructed).not.toHaveBeenCalled();
     expect(onWindow).not.toHaveBeenCalled();
     expect(onElement).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it('leaves a touch on content that the element paints past its own box to that content, however near a neighbour is', () => {
+    // A row moved aside, its panel's entry painted beside it, and the next
+    // row 2 px below the touch.
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<div id="row"><button id="entry">Read</button></div>' +
+        '<a id="next" href="#next">Next</a>',
+    );
+    const row = byId('row');
+    const entry = byId('entry');
+    place(row, rect(88, 16, 388, 60));
+    place(entry, rect(16, 16, 72, 60));
+    place(byId('next'), rect(16, 78, 388, 60));
+    const stop = watchHitArea(row, () => {}, {ownsDescendantTouches: true});
+    show(row);
+    flush();
+    // On the entry: 36 px from the row's box, 32 px from the next row.
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 52, clientY: 46});
+    entry.dispatchEvent(press);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    entry.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+    // The same touch on the row itself, in its band, is still checked.
+    const bandPress = new Event('pointerdown', {bubbles: true});
+    Object.assign(bandPress, {
+      pointerType: 'touch',
+      clientX: 52,
+      clientY: 46,
+    });
+    row.dispatchEvent(bandPress);
+    const bandClick = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    row.dispatchEvent(bandClick);
+    expect(bandClick.defaultPrevented).toBe(true);
+    stop();
+  });
+
+  it('still swallows a touch on a control’s own grown input that a neighbour is nearer, unless the watch owns its descendants’ touches', () => {
+    // A switch whose invisible input grows past its track, as its coarse hit
+    // area. A link moved to 2 px past the switch.
+    const control = byId('switch');
+    control.insertAdjacentHTML('beforeend', '<input id="input" />');
+    const input = byId('input');
+    place(control, rect(100, 100, 24, 24));
+    place(input, rect(100, 100, 28, 24));
+    place(byId('link'), rect(126, 100, 60, 24));
+    const stop = watchHitArea(control, () => {});
+    show(control);
+    flush();
+    // On the input, 2.5 px past the switch and 0.5 px from the link.
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 126.5, clientY: 112});
+    input.dispatchEvent(press);
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    input.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
     stop();
   });
 
@@ -614,6 +848,17 @@ describe('watchHitArea', () => {
     stop();
     flush();
     expect(heard).toEqual([]);
+  });
+
+  it('stops a watch whose window closed before it, as a removed iframe’s', () => {
+    const iframe = document.body.appendChild(document.createElement('iframe'));
+    const frameDocument = iframe.contentDocument as Document;
+    const control = frameDocument.body.appendChild(
+      frameDocument.createElement('button'),
+    );
+    const stop = watchHitArea(control, () => {});
+    iframe.remove();
+    expect(() => stop()).not.toThrow();
   });
 });
 

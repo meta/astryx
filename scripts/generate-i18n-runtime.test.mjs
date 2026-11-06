@@ -5,7 +5,7 @@ import {once} from 'node:events';
 import {mkdtempSync, rmSync, symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import {
   createRuntimeCatalog,
@@ -14,12 +14,16 @@ import {
   getGeneratedModuleName,
   isSourceLocaleFile,
   renderRuntimeCatalogModule,
+  watchRuntimeCatalogs,
 } from './generate-i18n-runtime.mjs';
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const GENERATOR = fileURLToPath(
   new URL('./generate-i18n-runtime.mjs', import.meta.url),
 );
+// Windows runs a watch command through cmd.exe, which takes only shell-safe
+// tokens: a bare `node` and no spaces or parentheses.
+const EXIT_3_COMMAND = ['node', '-e', 'process.exitCode=3'];
 
 function waitForMatch(stream, pattern, timeoutMs = 5_000) {
   return new Promise((resolve, reject) => {
@@ -60,6 +64,30 @@ describe('generator CLI', () => {
     } finally {
       rmSync(temp, {recursive: true, force: true});
     }
+  });
+
+  it('--watch runs the command after generation and returns its exit code', async ({
+    signal,
+  }) => {
+    // An asynchronous spawn leaves the test timeout free to fire, and the
+    // test's signal then stops a `--watch` that never exits.
+    const cli = spawn(
+      process.execPath,
+      [GENERATOR, '--watch', '--', ...EXIT_3_COMMAND],
+      {cwd: REPO_ROOT, signal, stdio: ['ignore', 'pipe', 'pipe']},
+    );
+    let stdout = '';
+    let stderr = '';
+    cli.stdout.on('data', chunk => {
+      stdout += chunk;
+    });
+    cli.stderr.on('data', chunk => {
+      stderr += chunk;
+    });
+    const [code] = await once(cli, 'exit');
+
+    expect(code, stderr).toBe(3);
+    expect(stdout).toMatch(/Generated \d+ runtime locale modules/);
   });
 });
 
@@ -168,6 +196,41 @@ describe('locale source watcher', () => {
     ).toThrow('cannot contain spaces or shell metacharacters');
   });
 
+  it('runs the command only once its catalogs are current, then closes both watchers', async () => {
+    const events = [];
+    const watch = () => ({close: () => events.push('close watcher')});
+    const code = await watchRuntimeCatalogs(['tool', 'argument'], {
+      generate: async () => {
+        events.push('generation starts');
+        await Promise.resolve();
+        events.push('generation ends');
+      },
+      run: async command => {
+        events.push(`run ${command.join(' ')}`);
+        return 7;
+      },
+      watch,
+    });
+
+    expect(code).toBe(7);
+    expect(events).toEqual([
+      'generation starts',
+      'generation ends',
+      'run tool argument',
+      'close watcher',
+      'close watcher',
+    ]);
+  });
+
+  it('runs the command through the forwarding runner by default and returns its exit code', async () => {
+    const code = await watchRuntimeCatalogs(EXIT_3_COMMAND, {
+      generate: async () => {},
+      watch: () => ({close: () => {}}),
+    });
+
+    expect(code).toBe(3);
+  });
+
   it.skipIf(process.platform === 'win32')(
     'forwards repeated termination signals until the child exits',
     async () => {
@@ -180,9 +243,16 @@ describe('locale source watcher', () => {
         console.log('child-ready:' + process.pid);
         setInterval(() => {}, 1_000);
       `;
+      // The runner that `--watch` starts once its catalogs are current. Run
+      // alone, the wait for the child's ready line covers the child's start,
+      // not a full catalog generation.
+      const runnerCode = `
+        import {runForwardingSignals} from ${JSON.stringify(pathToFileURL(GENERATOR).href)};
+        process.exitCode = await runForwardingSignals(${JSON.stringify([process.execPath, '-e', childCode])});
+      `;
       const wrapper = spawn(
         process.execPath,
-        [GENERATOR, '--watch', '--', process.execPath, '-e', childCode],
+        ['--input-type=module', '-e', runnerCode],
         {
           cwd: REPO_ROOT,
           stdio: ['ignore', 'pipe', 'pipe'],
