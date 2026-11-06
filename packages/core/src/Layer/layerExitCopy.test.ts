@@ -132,6 +132,33 @@ describe('placeLayerExitCopy', () => {
     expect(copy.style.getPropertyValue('color-scheme')).toBe('dark');
   });
 
+  it("reads what the outer layer's parent passes before it inserts the copy there, so no style read follows that write", () => {
+    popoverApi(true);
+    const element = layer();
+    const host = element.parentElement as HTMLElement;
+    const outer = document.createElement('div');
+    outer.setAttribute('popover', 'auto');
+    host.append(outer);
+    outer.append(element);
+    const order: string[] = [];
+    const read = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((node, pseudo) => {
+      if (node === host) {
+        order.push('read the host');
+      }
+      return read(node, pseudo);
+    });
+    const insert = outer.after.bind(outer);
+    outer.after = (...nodes: (Node | string)[]) => {
+      order.push('insert the copy');
+      insert(...nodes);
+    };
+    const copy = place(element);
+    expect(copy.parentElement).toBe(host);
+    expect(order).toContain('read the host');
+    expect(order.at(-1)).toBe('insert the copy');
+  });
+
   it('takes the copy out of every form and radio group, so the live selection stays', () => {
     popoverApi(true);
     const element = layer();
