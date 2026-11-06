@@ -82,6 +82,12 @@ const FORGET_AFTER_MS = 30 * 24 * 60 * 60_000;
 const LATEST = '@astryxdesign/cli@latest';
 
 /**
+ * The key prefix of the once-a-day setup reminder. It is no update notice, so
+ * no skip is recorded for it and doctor's update line never names it.
+ */
+export const SETUP_REMINDER_KEY = 'setup:';
+
+/**
  * Whether notice `key` may print now; when it may, its time is recorded
  * first, and a time that cannot be recorded keeps it from printing.
  * @param {string} key
@@ -104,7 +110,9 @@ export function takeNotice(
     const shown = state.notifiedAt ?? {};
     const last = shown[key];
     if (typeof last === 'number' && now - last < NOTICE_INTERVAL_MS) {
-      const skips = withSkip(state.noticeSkips, key, 'already-shown', now);
+      const skips = key.startsWith(SETUP_REMINDER_KEY)
+        ? null
+        : withSkip(state.noticeSkips, key, 'already-shown', now);
       if (skips) writeGlobalState({...state, noticeSkips: skips}, stateDir);
       return /** @type {const} */ ('already-shown');
     }
@@ -198,6 +206,7 @@ export function lastNoticeSkip({stateDir = userConfigDir()} = {}) {
     readGlobalState(stateDir).noticeSkips ?? {},
   )) {
     if (
+      !key.startsWith(SETUP_REMINDER_KEY) &&
       skip &&
       typeof skip.at === 'number' &&
       (!newest || skip.at > newest.at)
@@ -547,11 +556,10 @@ export function projectLag({cwd, current: given, stateDir = userConfigDir()}) {
   const target = installFolder(cwd);
   if (target == null) return null;
   const root = target.moved ? target.dir : (projectRootOf(facts) ?? cwd);
-  // From a folder inside the project, the project's own release: its CLI's,
-  // else its Core's, so the project gets one notice and one --from.
-  const projectFacts = target.moved ? readReleaseFacts(root) : null;
-  const current = projectFacts
-    ? (projectFacts.cli?.version ?? coreVersionOf(projectFacts) ?? given)
+  // From a folder inside the project, the project's own release, as the
+  // setup reminder names it, so the project gets one notice and one --from.
+  const current = target.moved
+    ? (projectRelease(root)?.version ?? given)
     : given;
   if (!isBehind(current, latest.version)) return null;
   const newest = latest.version;

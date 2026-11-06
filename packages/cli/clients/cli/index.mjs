@@ -22,7 +22,7 @@ import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
 import {findConfigPath} from '../../foundation/config/config-path.mjs';
 import {API_VERSION, setJsonMode} from '../../foundation/response/json.mjs';
 import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
-import {cliInstallAdvice, installFolder, projectRelease, takeNotice} from '../../foundation/release/notices.mjs';
+import {cliInstallAdvice, installFolder, projectRelease, SETUP_REMINDER_KEY, takeNotice} from '../../foundation/release/notices.mjs';
 import {isCi} from '../../foundation/release/update-notice-env.mjs';
 import {buildManifest} from './lib/manifest.mjs';
 import {cliError} from './lib/cli-error.mjs';
@@ -714,7 +714,7 @@ export async function createProgram({argv} = {}) {
       const reminder = setupReminder;
       setupReminder = null;
       if (reminder == null || process.exitCode || isCi(process.env)) return;
-      if (takeNotice(`setup:${reminder.root}`)) console.error(reminder.line);
+      if (takeNotice(`${SETUP_REMINDER_KEY}${reminder.root}`)) console.error(reminder.line);
     } catch {
       // Never let the nudge break a command.
     }

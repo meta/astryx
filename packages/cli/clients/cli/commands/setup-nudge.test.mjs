@@ -218,6 +218,19 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
     expect((await runCli(['docs', 'tokens'], tmp)).stderr).toMatch(NUDGE);
   });
 
+  it("a reminder kept to once a day is no update notice: doctor's update line never names it", async () => {
+    asProject();
+    await runCli(['docs', 'tokens'], tmp);
+    await runCli(['docs', 'tokens'], tmp);
+    const state = JSON.parse(fs.readFileSync(stateFile(), 'utf8'));
+    expect(Object.keys(state.noticeSkips ?? {}).filter(k => k.startsWith('setup:'))).toEqual([]);
+    const r = await runCli(['--json', 'doctor'], tmp);
+    const newest = JSON.parse(r.stdout).data.checks.find(
+      (/** @type {any} */ c) => c.id === 'newest-release',
+    );
+    expect(newest?.message ?? '').not.toContain('setup:');
+  });
+
   it('doctor reports the missing setup in its own check, every time', async () => {
     asProject();
     for (let i = 0; i < 2; i++) {
@@ -284,9 +297,9 @@ describe('enforcement layer 3 — per-command setup nudge', () => {
   });
 
   // A tool folder that installs its own Core: the command runs in the
-  // project's folder at the project's release, never at the Core the tool
-  // installs.
-  it("in a tool folder with its own Core, names the project's Core, not the tool's", async () => {
+  // project's folder at the project's release, never at the release of the
+  // CLI that answered the run.
+  it("in a tool folder with its own Core, names the project's Core, not the answering CLI's release", async () => {
     write('package.json', JSON.stringify({name: 'app', dependencies: {'@astryxdesign/core': '^0.7.0'}}));
     write('package-lock.json', '{}');
     write('node_modules/@astryxdesign/core/package.json', JSON.stringify({name: '@astryxdesign/core', version: '0.7.3'}));
