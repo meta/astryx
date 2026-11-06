@@ -77,8 +77,8 @@ import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
 import {returnFocusForLastInput} from '../utils/focusReturn';
+import {PressGroupContext} from '../hooks/pressGroupContext';
 import {useMenuOverflow} from './useMenuOverflow';
-import {MenuRegionsContext} from './menuRegionsContext';
 import {moveRegionsTab} from './menuRegionStops';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useMenuDrillIn} from './useMenuDrillIn';
@@ -1257,11 +1257,16 @@ function DropdownMenuPopover({
       // A submenu flyout renders inline inside this menu; its key events bubble
       // up here. Let that level own them — only handle events from this level.
       if (!ownsEvent(e)) {
-        // Except Tab with a header or footer: each open flyout has closed
-        // itself as the key bubbled up, and the root moves focus on as Tab
-        // from one of its own rows would.
-        if (e.key === 'Tab' && hasRegions) {
-          moveDialogTab(e, true);
+        // Except Tab: each open flyout has closed itself as the key bubbled
+        // up, and the root moves on as Tab from one of its own rows would.
+        // With a header or footer that walks the regions; otherwise the menu
+        // closes and focus moves on from the trigger (APG menu button).
+        if (e.key === 'Tab') {
+          if (hasRegions) {
+            moveDialogTab(e, true);
+          } else {
+            closeMenu();
+          }
         }
         return;
       }
@@ -1764,15 +1769,13 @@ function DropdownMenuPopover({
               className,
               style,
             )}>
-            <MenuRegionsContext value={hasRegions}>
-              <DropdownMenuContext value={contextValue}>
-                <DropdownMenuSurfaceContext value={surfaceValue}>
-                  <DropdownMenuRootOpenContext value={isOpen}>
-                    {menuContent}
-                  </DropdownMenuRootOpenContext>
-                </DropdownMenuSurfaceContext>
-              </DropdownMenuContext>
-            </MenuRegionsContext>
+            <DropdownMenuContext value={contextValue}>
+              <DropdownMenuSurfaceContext value={surfaceValue}>
+                <DropdownMenuRootOpenContext value={isOpen}>
+                  {menuContent}
+                </DropdownMenuRootOpenContext>
+              </DropdownMenuSurfaceContext>
+            </DropdownMenuContext>
           </div>,
         ),
         {
@@ -1828,19 +1831,25 @@ export function DropdownMenu(props: DropdownMenuProps) {
     props.items !== undefined
   ) {
     return (
-      <DropdownMenuBottomSheet
-        {...(sharedProps as DropdownMenuDataProps)}
-        presentation="bottom-sheet"
-      />
+      <PressGroupContext value={null}>
+        <DropdownMenuBottomSheet
+          {...(sharedProps as DropdownMenuDataProps)}
+          presentation="bottom-sheet"
+        />
+      </PressGroupContext>
     );
   }
 
+  // In a group that tracks presses, the trigger keeps its own press and
+  // opening, whatever its `aria-haspopup`.
   return (
-    <DropdownMenuPopover
-      {...sharedProps}
-      presentation="popover"
-      pressTouchModel={props.presentation === 'popover' ? 'pointer' : 'uikit'}
-    />
+    <PressGroupContext value={null}>
+      <DropdownMenuPopover
+        {...sharedProps}
+        presentation="popover"
+        pressTouchModel={props.presentation === 'popover' ? 'pointer' : 'uikit'}
+      />
+    </PressGroupContext>
   );
 }
 

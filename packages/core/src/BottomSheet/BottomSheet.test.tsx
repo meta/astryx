@@ -18,7 +18,7 @@ import {
   afterEach,
   onTestFinished,
 } from 'vitest';
-import {act, render, screen, fireEvent} from '@testing-library/react';
+import {act, cleanup, render, screen, fireEvent} from '@testing-library/react';
 import {Profiler, createRef, useState, type ReactNode} from 'react';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
@@ -240,6 +240,25 @@ function mockResizeObserverInstances(): ResizeObserverRecord[] {
   }
   vi.stubGlobal('ResizeObserver', ResizeObserverMock);
   return observers;
+}
+
+/**
+ * Lays a sheet out `height` px tall, as the browser's resize observer would.
+ * A touch release lands by the sheet's geometry, so a touch dismissal needs
+ * one.
+ */
+function layOutSheet(
+  observers: ResizeObserverRecord[],
+  sheet: HTMLElement,
+  height = 400,
+) {
+  const observer = observers.find(instance => instance.observed.has(sheet));
+  act(() => {
+    observer?.callback(
+      [resizeEntry(height)],
+      observer as unknown as ResizeObserver,
+    );
+  });
 }
 
 function finishSheetExit() {
@@ -1112,6 +1131,7 @@ describe('BottomSheet', () => {
     it("a sheet opened from inside another sheet's content drags to dismiss by its own handle, and the covered host neither drags nor takes the pointer (FR6, FR7)", () => {
       const onInnerOpenChange = vi.fn();
       const onOuterOpenChange = vi.fn();
+      const observers = mockResizeObserverInstances();
       render(
         <BottomSheet isOpen onOpenChange={onOuterOpenChange} label="Outer">
           Outer content
@@ -1135,6 +1155,10 @@ describe('BottomSheet', () => {
       const innerHandle = innerDialog.querySelector<HTMLElement>(
         '.astryx-bottom-sheet > [aria-hidden="true"]',
       )!;
+      layOutSheet(
+        observers,
+        innerDialog.querySelector<HTMLElement>('.astryx-bottom-sheet')!,
+      );
       // `setPointerCapture` is a prototype stub here, so record who captures.
       const captured: Element[] = [];
       const capture = vi
@@ -4132,6 +4156,111 @@ describe('BottomSheet', () => {
     });
   });
 
+  describe('data-autofocus eligibility on open (AR4)', () => {
+    function openWith(content: ReactNode, hasScrim = true) {
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Filters"
+          hasScrim={hasScrim}>
+          {content}
+        </BottomSheet>,
+      );
+    }
+    const own = () => screen.getByRole('textbox', {name: 'Own'});
+
+    it('focuses the field over a control placed before it, modal or not', () => {
+      // Land on the first control, as Firefox's native focusing steps do, so
+      // the test shows that the native landing does not count as placed.
+      const landOnFirstControl = function (this: HTMLElement) {
+        this.setAttribute('open', '');
+        this.querySelector<HTMLElement>('button')?.focus();
+      };
+      HTMLDialogElement.prototype.showModal = vi.fn(landOnFirstControl);
+      HTMLElement.prototype.showPopover = vi.fn(landOnFirstControl);
+      for (const hasScrim of [true, false]) {
+        openWith(
+          <>
+            <button type="button">First action</button>
+            <input data-autofocus aria-label="Own" />
+          </>,
+          hasScrim,
+        );
+        expect(document.activeElement).toBe(own());
+        cleanup();
+      }
+    });
+
+    it('skips a field that belongs to a sheet nested in the content', () => {
+      openWith(
+        <>
+          <dialog>
+            <input data-autofocus aria-label="Nested" />
+          </dialog>
+          <input data-autofocus aria-label="Own" />
+        </>,
+      );
+      expect(document.activeElement).toBe(own());
+    });
+
+    it('skips an inert field', () => {
+      openWith(
+        <>
+          <div inert>
+            <input data-autofocus aria-label="Inert" />
+          </div>
+          <input data-autofocus aria-label="Own" />
+        </>,
+      );
+      expect(document.activeElement).toBe(own());
+    });
+
+    it('skips a field that is not rendered', () => {
+      // jsdom has no layout, so the visibility check reads `hidden` here.
+      const original = Object.getOwnPropertyDescriptor(
+        HTMLElement.prototype,
+        'checkVisibility',
+      );
+      Object.defineProperty(HTMLElement.prototype, 'checkVisibility', {
+        configurable: true,
+        value(this: HTMLElement) {
+          return this.closest('[hidden]') == null;
+        },
+      });
+      try {
+        openWith(
+          <>
+            <input data-autofocus aria-label="Hidden" hidden />
+            <input data-autofocus aria-label="Own" />
+          </>,
+        );
+        expect(document.activeElement).toBe(own());
+      } finally {
+        if (original) {
+          Object.defineProperty(
+            HTMLElement.prototype,
+            'checkVisibility',
+            original,
+          );
+        } else {
+          delete (HTMLElement.prototype as {checkVisibility?: unknown})
+            .checkVisibility;
+        }
+      }
+    });
+
+    it('moves on from a candidate that refuses focus', () => {
+      openWith(
+        <>
+          <div data-autofocus>Not focusable</div>
+          <input data-autofocus aria-label="Own" />
+        </>,
+      );
+      expect(document.activeElement).toBe(own());
+    });
+  });
+
   describe('accessible name', () => {
     it('warns in development when label is empty', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -4203,8 +4332,10 @@ describe('BottomSheet', () => {
 
     it("a touch swipe dismissal under reduced motion fades out in place on a fine pointer (design:reduced-motion DR2, a touch drag's release)", () => {
       stubReducedMotion(false);
+      const observers = mockResizeObserverInstances();
       render(<Controlled />);
       const dialog = screen.getByRole('dialog');
+      layOutSheet(observers, getSheet());
       drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
       // Exiting: a transform end does not close the dialog, the fade does.
       fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
@@ -4233,8 +4364,10 @@ describe('BottomSheet', () => {
           </>
         );
       }
+      const observers = mockResizeObserverInstances();
       render(<Reopenable />);
       const dialog = screen.getByRole('dialog');
+      layOutSheet(observers, getSheet());
       drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
       fireEvent.transitionEnd(getSheet(), {propertyName: 'opacity'});
       expect(dialog).not.toHaveAttribute('open');

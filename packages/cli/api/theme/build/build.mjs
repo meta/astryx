@@ -925,17 +925,28 @@ async function loadKnownValuesIndex() {
     return result;
   };
 
+  // A component can appear in more than one doc: its own doc declares its
+  // props, and a parent doc can list it by name only. Merge every entry, so
+  // the result does not depend on the order the docs load in.
   /** @type {Record<string, Record<string, Set<string>>>} */
   const valuesByOwner = {};
+  /**
+   * @param {string} name
+   * @param {any[]} props
+   */
+  const addOwnerValues = (name, props) => {
+    const owner = (valuesByOwner[targetName(name)] ??= {});
+    for (const [prop, values] of Object.entries(valuesFromProps(props))) {
+      owner[prop] = new Set([...(owner[prop] ?? []), ...values]);
+    }
+  };
   for (const doc of docs) {
     if (typeof doc?.name === 'string') {
-      valuesByOwner[targetName(doc.name)] = valuesFromProps(doc.props);
+      addOwnerValues(doc.name, doc.props);
     }
     for (const component of /** @type {any[]} */ (doc?.components ?? [])) {
       if (typeof component?.name === 'string') {
-        valuesByOwner[targetName(component.name)] = valuesFromProps(
-          component.props,
-        );
+        addOwnerValues(component.name, component.props);
       }
     }
   }
@@ -1973,7 +1984,6 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     // A frozen require(esm) namespace cannot be patched, so retain that gap and
     // let the selected lineage decide whether it matters.
     const commonJsPatch = interception.patchCommonJs(filePath);
-    degraded.commonJs = !commonJsPatch.covered;
     try {
       try {
         mod = jiti(filePath);
@@ -1995,6 +2005,8 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
         });
       }
     } finally {
+      // Read after the load: the root is wrapped when the load requires it.
+      degraded.commonJs = !commonJsPatch.covered;
       commonJsPatch.undo();
     }
   } else {
