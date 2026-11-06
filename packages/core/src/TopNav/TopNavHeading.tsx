@@ -58,8 +58,8 @@ registerEnglishFallback(english);
 // =============================================================================
 
 const styles = stylex.create({
-  // The root is a grid, so one-line text adds nothing to its narrowest width.
-  // A crowded bar narrows the text first and never shrinks the logo.
+  // The text track can shrink to zero. The logo and the chevron row keep
+  // their width.
   root: {
     display: 'grid',
     gridAutoFlow: 'column',

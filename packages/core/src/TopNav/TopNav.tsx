@@ -64,8 +64,8 @@ const styles = stylex.create({
     flex: '1 1 0%',
     minWidth: 0,
   },
-  // Text in the track can shrink to zero. The logo and the chevron row keep
-  // their width.
+  // The heading shrinks only to its own narrowest width. TopNavHeading keeps
+  // its logo there.
   heading: {
     display: 'flex',
     alignItems: 'center',
