@@ -206,12 +206,6 @@ const styles = stylex.create({
   toastWrapperInnerSettled: {
     overflow: 'visible',
   },
-  // The card's starting style reads these. Once the entrance starts, a move
-  // renders the card at rest.
-  toastWrapperInnerEntered: {
-    '--_toast-start-opacity': 1,
-    '--_toast-start-slide': '0px',
-  },
 });
 
 export interface ToastViewportProps {
@@ -290,8 +284,8 @@ function ToastRow({
   const isAutoHide = o.isAutoHide ?? (type === 'error' ? false : true);
   const dur = o.autoHideDuration ?? 5000;
   const [isSettled, setIsSettled] = useState(false);
-  // Each move between modal outlets renders the row again. Its starting style
-  // must not apply then.
+  // Each move between modal outlets renders the row and its card again. Their
+  // starting styles must not apply then.
   const [hasEntryStarted, setHasEntryStarted] = useState(false);
   // React's transition run and cancel events have no propertyName field.
   const watchEntry = useCallback((row: HTMLDivElement | null) => {
@@ -352,7 +346,6 @@ function ToastRow({
         {...stylex.props(
           styles.toastWrapperInner,
           isSettled && !isExiting && styles.toastWrapperInnerSettled,
-          hasEntryStarted && styles.toastWrapperInnerEntered,
         )}>
         <ToastSurface
           type={type}
@@ -366,6 +359,7 @@ function ToastRow({
           renderContent={o.renderContent}
           timerKey={entry.id}
           isLiveRegion={isLiveRegion}
+          hasEntryStarted={hasEntryStarted}
         />
       </div>
     </div>
