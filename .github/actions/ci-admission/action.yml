@@ -254,6 +254,26 @@ runs:
               }
               if (next > 0 && looked < MAX_LOOKS) await new Promise(resolve => setTimeout(resolve, next + Math.floor(Math.random() * JITTER_MS)));
             }
+            // This run's own wait start on GitHub's clock (whole seconds), the
+            // clock other runs' starts are read on: its first wait step as
+            // GitHub recorded it, else its own clock floored to the second.
+            // Read once, and only by a `main` run that sees another waiting.
+            let ownStart;
+            const ownWaitStart = async () => {
+              if (ownStart !== undefined) return ownStart;
+              ownStart = Math.floor(started / 1000) * 1000;
+              try {
+                calls += 1;
+                const {data: {jobs: own}} = await github.rest.actions.listJobsForWorkflowRun({
+                  ...context.repo, run_id: context.runId, filter: 'latest', per_page: 100,
+                });
+                const began = waitSpan(own.flatMap(job => job.steps ?? []).filter(step => step.name === STEP)).began;
+                if (Number.isFinite(began)) ownStart = began;
+              } catch {
+                // The floored clock stands.
+              }
+              return ownStart;
+            };
             // Looks that found no room; a look that only yielded to `main` is
             // not one of them.
             let spent = looked;
@@ -313,10 +333,12 @@ runs:
                     // peak, ahead of this one. A pull-request run holds what
                     // it runs: the job that waits and its Storybook build,
                     // which starts beside it. `main` runs queue by when they
-                    // began waiting: a `main` run that began after this one
-                    // holds only what it runs, so two waiting `main` runs
-                    // never each count the other's peak and wait for ever.
-                    const ahead = !main || !(span.began > started || (span.began === started && run.id > context.runId));
+                    // began waiting, both read on GitHub's clock, a tie going
+                    // to the lower run id: a `main` run that began after this
+                    // one holds only what it runs, so of two waiting `main`
+                    // runs exactly one counts the other's peak.
+                    const mine = main && isMain(run) ? await ownWaitStart() : NaN;
+                    const ahead = !main || !(span.began > mine || (span.began === mine && run.id > context.runId));
                     const holds = isMain(run) && ahead ? estimate(run) : Math.max(1, jobs.filter(job => LIVE.includes(job.status)).length);
                     if (isMain(run) && !main && !(Date.now() - span.began >= MAIN_YIELD_MS)) mainWaiting = true;
                     large += holds;

@@ -1500,6 +1500,46 @@ describe('ci admission', () => {
     );
   });
 
+  it('compares two main runs that began waiting in the same second on one clock, the lower run id first', async () => {
+    // GitHub records wait starts in whole seconds, after this run's own clock
+    // read them: compared on that one clock, a tie goes to the lower run id.
+    const sameSecond = new Date(NOW - 3_000).toISOString();
+    const own = {
+      ...waitingRun(OWN, {event: 'workflow_dispatch'}),
+      status: 'queued',
+    };
+    own.jobs[0].steps[0].started_at = sameSecond;
+    const other = id => {
+      const run = waitingRun(id, {event: 'workflow_dispatch'});
+      run.jobs[0].steps[0].started_at = sameSecond;
+      return run;
+    };
+    const first = await admit({
+      active: [own, ...prs(2), other(70)],
+      peak: 37,
+      isMain: true,
+      maxWait: 120,
+      maxLooks: 30,
+    });
+    expect(first.info.find(line => line.startsWith('Look 1:'))).toContain(
+      'ci 70 workflow_dispatch: 1 waiting',
+    );
+    expect(first.outputs.fits).toBe('true');
+    const second = await admit({
+      active: look =>
+        look < 2
+          ? [own, ...prs(2), other(0)]
+          : [own, ...prs(2), admittedRun(0, 1, {event: 'workflow_dispatch'})],
+      peak: 37,
+      isMain: true,
+      maxWait: 120,
+      maxLooks: 30,
+    });
+    expect(second.info.find(line => line.startsWith('Look 1:'))).toContain(
+      'ci 0 workflow_dispatch: 39 waiting',
+    );
+  });
+
   it("still counts a waiting main run's whole peak for a pull-request run", async () => {
     const run = waitingRun(70, {event: 'workflow_dispatch'});
     run.jobs[0].steps[0].started_at = new Date(NOW + 60_000).toISOString();
