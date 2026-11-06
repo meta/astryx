@@ -1041,6 +1041,24 @@ describe('DateInput — calendar surface', () => {
     }
   });
 
+  it('moves focus to the other arrow when the focused arrow reaches the end of the range and hides', () => {
+    renderAndOpen(
+      <Controlled initial="2026-03-10" min="2026-02-01" max="2026-04-30" />,
+    );
+    const previous = screen.getByRole('button', {name: 'Previous month'});
+    act(() => previous.focus());
+    fireEvent.click(previous);
+    // February is the first month: the arrow hides, and focus stays in the
+    // sheet, on the other arrow.
+    expect(screen.getByRole('button', {name: 'Next month'})).toHaveFocus();
+
+    const next = screen.getByRole('button', {name: 'Next month'});
+    fireEvent.click(next);
+    fireEvent.click(next);
+    // April is the last month.
+    expect(screen.getByRole('button', {name: 'Previous month'})).toHaveFocus();
+  });
+
   it('shows both arrows when there is somewhere to go in each direction', () => {
     renderAndOpen(
       <Controlled initial="2026-03-10" min="2026-01-01" max="2026-12-31" />,

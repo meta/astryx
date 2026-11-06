@@ -679,6 +679,9 @@ export function TouchDateField({
   );
   const [isWheelOpen, setIsWheelOpen] = useState(false);
   const scrollerHandleRef = useRef<MonthScrollerHandle | null>(null);
+  const previousArrowRef = useRef<HTMLButtonElement | null>(null);
+  const nextArrowRef = useRef<HTMLButtonElement | null>(null);
+  const monthYearButtonRef = useRef<HTMLButtonElement | null>(null);
   // Pending focus handoff from the clear button; see handleClear.
   const clearFocusTimerRef = useRef<number | null>(null);
   // Releases the focus timer on unmount.
@@ -896,6 +899,34 @@ export function TouchDateField({
     [monthIndex, minMonthIndex, maxMonthIndex],
   );
 
+  // An arrow steps a month. An arrow that reaches the end of the range is
+  // hidden, and a hidden element loses focus. So if this arrow holds focus
+  // and the step reaches its end, focus moves first to the other arrow, or
+  // to the month-and-year button when both arrows hide.
+  const stepMonthFromArrow = useCallback(
+    (delta: -1 | 1, arrow: HTMLButtonElement) => {
+      const target = clampIndex(
+        monthIndex + delta,
+        minMonthIndex,
+        maxMonthIndex,
+      );
+      const reachesEnd =
+        delta < 0 ? target <= minMonthIndex : target >= maxMonthIndex;
+      if (reachesEnd && arrow.ownerDocument.activeElement === arrow) {
+        const otherArrowStays =
+          delta < 0 ? target < maxMonthIndex : target > minMonthIndex;
+        const destination = otherArrowStays
+          ? delta < 0
+            ? nextArrowRef.current
+            : previousArrowRef.current
+          : monthYearButtonRef.current;
+        destination?.focus();
+      }
+      stepMonth(delta);
+    },
+    [monthIndex, minMonthIndex, maxMonthIndex, stepMonth],
+  );
+
   // A wheel commit steers the scroller immediately, even though it is behind
   // the wheels: it keeps its layout box while hidden, so by the time the
   // wheels close it is already resting on the new month.
@@ -989,6 +1020,7 @@ export function TouchDateField({
     <div {...stylex.props(styles.surface)}>
       <div {...stylex.props(styles.header)}>
         <button
+          ref={monthYearButtonRef}
           type="button"
           onClick={() => setIsWheelOpen(open => !open)}
           aria-expanded={isWheelOpen}
@@ -1048,8 +1080,9 @@ export function TouchDateField({
               styles.monthArrow,
               !canStepBack && styles.monthArrowUnavailable,
             ]}
+            ref={previousArrowRef}
             isDisabled={!canStepBack}
-            onClick={() => stepMonth(-1)}
+            onClick={e => stepMonthFromArrow(-1, e.currentTarget)}
             label={t('@astryx.calendar.previousMonth')}
             icon={
               <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>
@@ -1064,8 +1097,9 @@ export function TouchDateField({
               styles.monthArrow,
               !canStepForward && styles.monthArrowUnavailable,
             ]}
+            ref={nextArrowRef}
             isDisabled={!canStepForward}
-            onClick={() => stepMonth(1)}
+            onClick={e => stepMonthFromArrow(1, e.currentTarget)}
             label={t('@astryx.calendar.nextMonth')}
             icon={
               <span {...stylex.props(styles.monthArrowIcon, rtlStyles.mirror)}>
