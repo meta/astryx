@@ -100,3 +100,10 @@ export {useInteractionModalityTracking} from '../utils/interactionModality';
 // scroll is a finger's, and act when that scroll ends.
 export {useFingerScroll} from '../gestures/useFingerScroll';
 export type {UseFingerScrollOptions} from '../gestures/useFingerScroll';
+
+// Lab's NavigationStack scroll edge effect reads the finger-scroll hook
+// above, and drops the veil's compositing layer when a finger's scroll ends.
+// It reads the gesture host for a finger's landing. The stack's bars read the
+// coarse-pointer check.
+export {getGestureHost} from '../gestures/GestureHost';
+export {isCoarsePointer} from '../utils/coarsePointer';
