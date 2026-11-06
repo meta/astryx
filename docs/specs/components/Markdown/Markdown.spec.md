@@ -81,7 +81,7 @@ streaming behavior is the released one.
 - Released default preserved: `yes`, except the default Code block path for `diff` fences (FR29, below), its long-line wrap (below), its headerless layout (below), and per-block text direction (below)
 - Compatibility class: additive, opt-in public API, with four visible
   default-path rendering changes (the FR29 diff layer, the fenced-code wrap,
-  the headerless layout, and per-block text direction, below); existing parser nodes, DOM, styling, targets,
+  the headerless layout, and per-block text direction, below); existing parser nodes, DOM (apart from the direction markup below), styling, targets,
   dollar-delimited text, `components`, and `inlinePlugins` remain unchanged unless
   the caller supplies `plugins`, supplies `components.math`, supplies
   `codeLanguages`, or passes the matching explicit parser option.
@@ -108,9 +108,12 @@ streaming behavior is the released one.
   direction of its own text rather than the Internationalization provider's,
   so a Hebrew paragraph in a left-to-right document starts at the right edge.
   A block whose text carries no strongly directional character keeps the
-  provider's direction, and a list, table, or fence orders its contents in
-  the provider's as before. Parsing, DOM, styling targets, and a supplied
-  renderer's contract are unchanged. Fenced code lines keep the frame's
+  direction around it. A list, table, or fence orders its contents in its
+  parent's direction: the provider's at the top level, its item's when
+  nested. The text in each table cell reads in its own direction. Each prose
+  block and table cell whose text has a direction carries it as a `dir`
+  attribute; that markup is the only DOM change. Parsing, styling targets, and
+  a supplied renderer's contract are unchanged. Fenced code lines keep the frame's
   direction; FR6's per-line rule is a gap this record does not yet close.
 - Default-path headerless layout (`component:CodeBlock` FR11), visual and not
   breaking: a fence with no language label shows Copy in its own column beside
