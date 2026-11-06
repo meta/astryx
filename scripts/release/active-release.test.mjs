@@ -694,7 +694,25 @@ describe('published release merge-back (FR50)', () => {
     ).toEqual([]);
   });
 
-  it('rejects changed post-cut Changesets and missing frozen bytes', () => {
+  it('preserves a changed frozen path as post-cut work', () => {
+    expect(
+      mergeBack({
+        base: mainAt('0.7.0'),
+        head: mainAt('0.7.0'),
+        entries: ['M\tpackages/core/CHANGELOG.md'],
+        baseChangesets: new Map([
+          ['.changeset/frozen.md', digest('z')],
+          ['.changeset/post-cut.md', digest('c')],
+        ]),
+        headChangesets: new Map([
+          ['.changeset/frozen.md', digest('z')],
+          ['.changeset/post-cut.md', digest('c')],
+        ]),
+      }),
+    ).toEqual([]);
+  });
+
+  it('rejects changed post-cut Changesets', () => {
     expect(
       mergeBack({
         base: mainAt('0.7.0'),
@@ -709,7 +727,7 @@ describe('published release merge-back (FR50)', () => {
     ).toEqual(
       expect.arrayContaining([
         'release merge-back may only delete frozen Changesets: .changeset/post-cut.md',
-        'release merge-back cannot verify frozen Changeset on current main: .changeset/frozen.md',
+        'release merge-back changed post-cut Changeset: .changeset/frozen.md',
         'release merge-back changed post-cut Changeset: .changeset/post-cut.md',
       ]),
     );
