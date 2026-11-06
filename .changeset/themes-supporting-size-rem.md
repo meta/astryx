@@ -5,6 +5,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[fix] The Butter, Stone and Y2K themes set supporting text (`--text-supporting-size`) in rem instead of a fixed 12px, so it grows with a larger browser text size, zoom or Android font scale like the rest of the text. At the default size it is still 12px. The CLI's copies of these themes match.
+[fix] The Butter, Stone and Y2K themes set supporting text (`--text-supporting-size`) in rem instead of a fixed 12px, so it grows when a reader raises the browser's default font size, like the rest of the text. At the default size it is still 12px. The CLI's copies of these themes match.
 
 @cixzhang
