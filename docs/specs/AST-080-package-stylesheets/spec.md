@@ -205,8 +205,9 @@ first.
     `@layer reset, astryx-base, astryx-theme`: Core's `reset.css` in `reset`,
     each package's compiled block in `astryx-base`, and the theme in
     `astryx-theme`. Each compiled block begins with the FR3 order registration
-    (FR7). Product CSS, including the product's own StyleX output, stays
-    unlayered and wins over every Astryx rule in any chunk or load order. A
+    (FR7). Product CSS, including the product's own StyleX output other than
+    a marked swizzled copy's (FR7), stays unlayered and wins over every Astryx
+    rule in any chunk or load order. A
     non-Core block relies on Core's variables and keyframes as under FR2.
   - **Stylesheet entry (Turbopack).** The product lists the PostCSS plugin
     `@astryxdesign/build/next/postcss` in its PostCSS config and puts one
