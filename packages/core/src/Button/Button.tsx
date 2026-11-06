@@ -65,6 +65,8 @@ import {
 } from '../InputGroup/groupStyles';
 import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useTouchHitArea} from '../utils/touchHitArea';
+import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
 import {themeProps} from '../utils/themeProps';
@@ -733,6 +735,11 @@ export function Button({
   const isBusyOnlyDisabled =
     !isTrueDisabled && isLoadingState && !isInterruptible;
   const buttonDisabled = isTrueDisabled || isBusyOnlyDisabled;
+  // Under a finger the button's target grows toward 44 px, where its
+  // neighbors leave room. A grouped button takes the group's band instead,
+  // and a button that takes no tap gets none.
+  const hasHitArea = buttonGroup == null && !buttonDisabled;
+  const hitAreaRef = useTouchHitArea(hasHitArea);
   // isIconOnly prop is the source of truth for icon-only rendering.
   // When false (default), label is always rendered as visible text.
 
@@ -840,6 +847,7 @@ export function Button({
     // by the ButtonGroup so the shared surface lifts as one unit.
     !buttonGroup && elevationStyles[elevation],
     width != null && dynamicStyles.width(width),
+    hasHitArea && touchHitAreaStyles.layer,
     // AFTER the shared focus outline: the outline supplies width/style/offset
     // for every variant, and `destructive` re-colors just the ring to match
     // its own surface. Ordering is the mechanism — StyleX is last-wins.
@@ -952,6 +960,7 @@ export function Button({
   const mergedButtonRef = useMergedRefs(
     ref,
     tooltip != null ? tooltipHook.ref : undefined,
+    hitAreaRef,
   );
 
   let element: ReactNode;

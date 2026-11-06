@@ -347,7 +347,6 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // generated at all — `inset` and `content` on a pseudo-element are not
   // properties a theme author sets on the component.
   '--_thumbnail-hit-inset',
-  '--_input-clear-hit-inset',
   '--_power-search-sheet-hit-inset',
   // The border width a host draws where its touch hit layer reaches past,
   // such as a divided ListItem's divider (0 on the last row).
@@ -371,7 +370,6 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // A CheckboxList row's own press paint, handed to its checkbox's box:
   // written by the row's own press arms, never a value a theme author sets.
   '--_checkbox-row-press-paint',
-  '--_input-clear-hit-content',
   '--_power-search-sheet-hit-content',
   // Placement and swipe lifecycle values are private Toast behavior. A theme
   // author controls the surface transform/opacity as a whole, not these values.
