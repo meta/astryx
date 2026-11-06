@@ -1233,3 +1233,41 @@ existing. Each wants a token decision rather
 than a mechanical substitution, so they are tracked separately; promote a
 package to `error` once it reaches zero, the same path
 `no-physical-properties` took.
+
+### `@astryx/no-prevent-default-in-passive-react-handler`
+
+Reports `preventDefault()` on the event inside a React `onWheel`,
+`onTouchStart` or `onTouchMove` handler, or their capture forms. React attaches
+its root `wheel`, `touchstart` and `touchmove` listeners as passive, and the
+browser ignores `preventDefault()` in a passive listener: the page still
+scrolls or zooms, and `event.defaultPrevented` stays `false`. A handler that
+must cancel the default uses a native listener added with `{passive: false}`,
+in an Effect or a ref callback.
+
+```tsx
+// flagged
+<div
+  onWheel={e => {
+    e.preventDefault();
+    zoom(e.deltaY);
+  }}
+/>;
+const handleWheel = useCallback(event => event.preventDefault(), []);
+<div onWheel={handleWheel} />;
+
+// fine
+<div onTouchEnd={e => e.preventDefault()} />;
+useEffect(() => {
+  const node = ref.current;
+  const onWheel = event => event.preventDefault();
+  node.addEventListener('wheel', onWheel, {passive: false});
+  return () => node.removeEventListener('wheel', onWheel);
+}, []);
+```
+
+It follows an inline function, or an identifier that names a function in the
+same file (a declaration, a function or arrow, or a `useCallback` of one), and
+reports `<event>.preventDefault()` and `<event>.nativeEvent.preventDefault()`
+on the handler's first parameter. It does not follow a handler imported from
+another module or a function the handler calls. The repo config turns it on at
+`error` for `packages/*/src`, outside tests, stories and test helpers.

@@ -9,6 +9,7 @@
  */
 
 export {
+  applyLayoutChangeTransition,
   createAnimatedLayout,
   holdLayoutEdge,
   holdLayoutExit,

@@ -504,6 +504,7 @@ export function Carousel({
     if (el.scrollWidth <= el.clientWidth) {
       return;
     }
+    // eslint-disable-next-line @astryx/no-prevent-default-in-passive-react-handler -- passive React handler: preventDefault() is ignored; a native non-passive listener replaces it
     event.preventDefault();
     el.scrollBy({left: event.deltaY, behavior: 'auto'});
   }, []);
