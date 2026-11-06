@@ -11,7 +11,8 @@
  *   dims, a preview follows and an insertion line marks the drop position. A
  *   flick on a handle scrolls and moves nothing. A cancelled drag puts the
  *   row back. With Reduce Motion the drop takes its place without travel. A
- *   flush row's handle stays inside the list
+ *   flush row's handle stays inside the list. A finger held on a handle
+ *   refuses text selection on the list until it lifts
  * @position Interaction evidence for List's reorder (List/listReorderEngine.tsx,
  *   List/ListReorderTouch.ts, List/ListReorderHandle.tsx) in the touch phone
  *   context
@@ -376,6 +377,48 @@ test.describe('a row that reorders and has a menu', () => {
         element => element.getBoundingClientRect().height > 0,
       ),
     );
+
+  test('a finger held on a handle refuses a text selection on the list from its touch-down until it lifts', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'the held finger lifts through Chromium CDP',
+    );
+    const {at} = await handleOf(page, 'Inbox');
+    // A selection that starts on another row: the lock covers the whole list.
+    const refused = async () =>
+      page.evaluate(() => {
+        const row = Array.from(
+          document.querySelectorAll('#storybook-root li'),
+        ).find(element => element.textContent?.trim() === 'Sent');
+        const event = new Event('selectstart', {
+          bubbles: true,
+          cancelable: true,
+        });
+        row?.dispatchEvent(event);
+        return event.defaultPrevented;
+      });
+    expect(await refused()).toBe(false);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [
+        {x: at.x, y: at.y, id: 0, radiusX: 1, radiusY: 1, force: 1},
+      ],
+    });
+    // Before the hold claims the drag, as when iOS starts its own selection.
+    expect(await refused()).toBe(true);
+    await page.waitForTimeout(HOLD_MS);
+    expect(await refused()).toBe(true);
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    });
+    await page.waitForTimeout(SETTLE_MS);
+    expect(await refused()).toBe(false);
+  });
 
   test('a hold on the reorder handle picks the row up and opens no menu', async ({
     page,

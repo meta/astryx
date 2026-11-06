@@ -1024,6 +1024,7 @@ export class ListReorderController implements ListReorderSession {
           });
         }
       },
+      target => this.handleOf(target) != null,
     );
   }
 
