@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useState} from 'react';
+import {useRef, useState} from 'react';
+import {flushSync} from 'react-dom';
 import type {Meta, StoryObj} from '@storybook/react';
 import {expect, userEvent, waitFor, within} from 'storybook/test';
 import * as stylex from '@stylexjs/stylex';
@@ -594,6 +595,7 @@ const NO_SELECTION: MatchingSelection = {
 function SelectAllMatchingExample() {
   const [page, setPage] = useState(1);
   const [selection, setSelection] = useState<MatchingSelection>(NO_SELECTION);
+  const archiveRef = useRef<HTMLButtonElement>(null);
   const rows = fetchMatchingPage(page);
 
   const isSelected = (row: User) =>
@@ -664,21 +666,34 @@ function SelectAllMatchingExample() {
         selection={toolbarSelection}
         renderSelectionLabel={renderSelectionLabel}
         startContent={
-          !selection.isAllMatching && isPageSelected ? (
+          <>
             <Button
-              label={`Select all ${MATCHING_TOTAL} matching`}
+              ref={archiveRef}
+              label="Archive"
               variant="ghost"
-              onClick={() =>
-                setSelection({
-                  isAllMatching: true,
-                  picked: new Set(),
-                  excluded: new Set(),
-                })
-              }
+              onClick={() => {}}
             />
-          ) : (
-            <Button label="Archive" variant="ghost" onClick={() => {}} />
-          )
+            {/* Beside the action, not in its place: a second press on the
+                offer must never run Archive. */}
+            {!selection.isAllMatching && isPageSelected ? (
+              <Button
+                key="select-all-matching"
+                label={`Select all ${MATCHING_TOTAL} matching`}
+                variant="ghost"
+                onClick={() => {
+                  // The offer leaves once used; keep focus in the toolbar.
+                  flushSync(() =>
+                    setSelection({
+                      isAllMatching: true,
+                      picked: new Set(),
+                      excluded: new Set(),
+                    }),
+                  );
+                  archiveRef.current?.focus();
+                }}
+              />
+            ) : null}
+          </>
         }
       />
       <Table
@@ -717,6 +732,11 @@ export const SelectAllMatching: Story = {
     await expect(
       canvas.getByText('All 248 matching selected'),
     ).toBeInTheDocument();
+    // The offer is gone, and focus moved to the action beside it.
+    await expect(
+      canvas.queryByRole('button', {name: 'Select all 248 matching'}),
+    ).not.toBeInTheDocument();
+    await expect(canvas.getByRole('button', {name: 'Archive'})).toHaveFocus();
 
     await userEvent.click(canvas.getByLabelText('Select Record 2'));
     await expect(
