@@ -1011,14 +1011,40 @@ function outsidePoint(page: Page) {
 }
 
 /**
+ * Whether `target` itself runs a held motion, so a motion on another element
+ * cannot stand in for the one the test reads. It waits for nothing: a missing
+ * element counts as no.
+ */
+async function holdsOn(target: Locator): Promise<boolean> {
+  return target.evaluateAll(elements =>
+    elements.some(element =>
+      element
+        .getAnimations()
+        .some(animation => animation.playState === 'paused'),
+    ),
+  );
+}
+
+/**
  * Arms a hold for the exit copy before the action that closes the popover.
- * The copy does not exist yet, so the hold arms on the layer's parent, where
- * the dismissal places it. Only motions that start after arming count.
+ * The copy does not exist yet, so the hold arms on the layer's parent. The
+ * dismissal places it there for a popover in no other layer. Only motions
+ * that start after arming count, and the held motion must be the copy's.
  */
 async function armExitCopyHold(story: OpenStory) {
-  return armHold(story.layer.page(), story.layer.locator('xpath=..'), {
+  const page = story.layer.page();
+  const armed = await armHold(page, story.layer.locator('xpath=..'), {
     newOnly: true,
   });
+  return {
+    async held() {
+      const held = await armed.held();
+      expect(await holdsOn(exitCopyOf(page)), 'held on the exit copy').toBe(
+        true,
+      );
+      return held;
+    },
+  };
 }
 
 /**
@@ -1029,7 +1055,9 @@ async function armExitCopyHold(story: OpenStory) {
 async function openHeldWhileGrowing(page: Page, story: OpenStory) {
   const armed = await armHold(page, story.layer);
   await openWithTap(story);
-  return armed.held();
+  const held = await armed.held();
+  expect(await holdsOn(story.layer), 'held on the popover').toBe(true);
+  return held;
 }
 
 const focusedElement = async (page: Page) =>
