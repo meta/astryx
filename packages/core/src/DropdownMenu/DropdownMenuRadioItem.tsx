@@ -112,9 +112,9 @@ export interface DropdownMenuRadioItemProps extends Omit<
   icon?: ReactNode | IconType;
   /**
    * Whether this individual radio item is disabled. A disabled item stays in
-   * the accessibility tree as disabled (`aria-disabled`) but takes no focus:
-   * the arrow keys, typeahead, and the pointer highlight skip it, and
-   * selection is blocked.
+   * the accessibility tree as disabled (`aria-disabled`), and the arrow keys
+   * and typeahead reach it so keyboard users find it. The pointer highlight
+   * skips it, and selection is blocked.
    * @default false
    */
   isDisabled?: boolean;

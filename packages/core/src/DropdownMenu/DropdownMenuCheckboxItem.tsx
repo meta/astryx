@@ -119,8 +119,9 @@ export interface DropdownMenuCheckboxItemProps extends Omit<
   onChange?: (checked: boolean) => void;
   /**
    * Whether the item is disabled. A disabled item stays in the accessibility
-   * tree as disabled (`aria-disabled`) but takes no focus: the arrow keys,
-   * typeahead, and the pointer highlight skip it, and activation is blocked.
+   * tree as disabled (`aria-disabled`), and the arrow keys and typeahead reach
+   * it so keyboard users find it. The pointer highlight skips it, and
+   * activation is blocked.
    * @default false
    */
   isDisabled?: boolean;
