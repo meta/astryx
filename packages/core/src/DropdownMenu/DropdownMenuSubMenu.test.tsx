@@ -126,7 +126,7 @@ describe('DropdownMenuSubMenu', () => {
     expect(popover).toHaveStyle({minWidth: 'var(--x-minWidth)'});
     expect(popover?.getAttribute('style')).toContain('min(640px, calc(100vw');
     expect(flyout).toHaveStyle(
-      'max-height: min(300px,calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))))',
+      'max-height: min(300px,min(calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))), var(--_layer-keyboard-max-block-size, 100dvb)))',
     );
     expect(flyout).not.toHaveStyle({overflowY: 'auto'});
     expect(flyout).toHaveAttribute('tabindex', '-1');
@@ -645,6 +645,40 @@ describe('DropdownMenu data-driven submenus', () => {
       await screen.findByRole('menuitem', {name: 'Folder B', hidden: true}),
     );
     expect(onMove).toHaveBeenCalledWith('b');
+  });
+
+  it('renders a submenu for an item with nested items inside a section', async () => {
+    const user = userEvent.setup();
+    const onWork = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Share'}}
+        items={[
+          {
+            type: 'section',
+            title: 'Send',
+            items: [
+              {label: 'Copy link', onClick: () => {}},
+              {
+                label: 'Email',
+                items: [
+                  {label: 'Work', onClick: onWork},
+                  {label: 'Personal', onClick: () => {}},
+                ],
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /Share/}));
+    const trigger = screen.getByRole('menuitem', {name: /Email/, hidden: true});
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    await user.click(trigger);
+    await user.click(
+      await screen.findByRole('menuitem', {name: 'Work', hidden: true}),
+    );
+    expect(onWork).toHaveBeenCalled();
   });
 
   it('keyboard-reaches an item positioned after a submenu row', async () => {
@@ -2404,5 +2438,80 @@ describe('DropdownMenuSubMenu header and footer', () => {
       fireEvent.keyDown(create(), {key: 'Tab'});
       expect(field()).toHaveFocus();
     });
+  });
+});
+
+describe('DropdownMenuSubMenu: Tab from a flyout leaves the whole menu (APG menu button)', () => {
+  function TabMenu({onOpenChange}: {onOpenChange: (open: boolean) => void}) {
+    return (
+      <>
+        <DropdownMenu button={{label: 'File'}} onOpenChange={onOpenChange}>
+          <DropdownMenuItem label="Open" onClick={() => {}} />
+          <DropdownMenuSubMenu label="Export">
+            <DropdownMenuItem label="PDF" onClick={() => {}} />
+            <DropdownMenuSubMenu label="Image">
+              <DropdownMenuItem label="PNG" onClick={() => {}} />
+              <DropdownMenuItem label="JPEG" onClick={() => {}} />
+            </DropdownMenuSubMenu>
+          </DropdownMenuSubMenu>
+        </DropdownMenu>
+        <button type="button">After</button>
+      </>
+    );
+  }
+
+  const row = (name: string | RegExp) =>
+    screen.getByRole('menuitem', {name, hidden: true});
+
+  async function openExport(onOpenChange: (open: boolean) => void) {
+    const user = userEvent.setup();
+    render(<TabMenu onOpenChange={onOpenChange} />);
+    const trigger = screen.getByRole('button', {name: /File/});
+    await user.click(trigger);
+    const menu = screen.getByRole('menu', {name: 'File', hidden: true});
+    await waitFor(() => expect(menu).toHaveFocus());
+    act(() => row(/Export/).focus());
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() => expect(row('PDF')).toHaveFocus());
+    return {user, trigger, menu};
+  }
+
+  it('Tab on a flyout row closes every level and returns focus to the trigger, once', async () => {
+    const onOpenChange = vi.fn();
+    const {trigger, menu} = await openExport(onOpenChange);
+    onOpenChange.mockClear();
+    const tab = fireEvent.keyDown(row('PDF'), {key: 'Tab'});
+    // Not prevented: the browser's Tab moves on from the trigger.
+    expect(tab).toBe(true);
+    expect(row(/Export/)).toHaveAttribute('aria-expanded', 'false');
+    expect(menu.closest('[popover]')).not.toHaveAttribute('popover-open');
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(trigger).toHaveFocus();
+  });
+
+  it('Shift+Tab on a flyout row closes every level too', async () => {
+    const onOpenChange = vi.fn();
+    const {menu} = await openExport(onOpenChange);
+    onOpenChange.mockClear();
+    fireEvent.keyDown(row('PDF'), {key: 'Tab', shiftKey: true});
+    expect(menu.closest('[popover]')).not.toHaveAttribute('popover-open');
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('Tab two levels down closes every level', async () => {
+    const onOpenChange = vi.fn();
+    const {user, trigger, menu} = await openExport(onOpenChange);
+    act(() => row(/Image/).focus());
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() => expect(row('PNG')).toHaveFocus());
+    onOpenChange.mockClear();
+    fireEvent.keyDown(row('PNG'), {key: 'Tab'});
+    expect(row(/Image/)).toHaveAttribute('aria-expanded', 'false');
+    expect(row(/Export/)).toHaveAttribute('aria-expanded', 'false');
+    expect(menu.closest('[popover]')).not.toHaveAttribute('popover-open');
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+    expect(trigger).toHaveFocus();
   });
 });

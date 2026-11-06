@@ -21,12 +21,16 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from './Button';
+import {Icon} from '../Icon/Icon';
 import * as stylex from '@stylexjs/stylex';
 import {
   hasPressedArm,
-  hasReleaseFade,
-  readsPressStrength,
+  keepsPressOutsideCoarse,
+  layerOnlyWhilePressed,
+  releasesOnLayer,
+  showsLayerPress,
 } from '../__tests__/pressState';
+import {PRESS_FADE_MS} from '../utils/pressGesture';
 import {Badge} from '../Badge/Badge';
 import {ButtonGroup} from '../ButtonGroup';
 import {InputGroup} from '../InputGroup';
@@ -490,6 +494,101 @@ describe('Button', () => {
     expect(screen.getByRole('button')).toHaveAttribute('type', 'submit');
   });
 
+  describe('tooltip as description (FR12)', () => {
+    it('describes the button by a tooltip that adds to its name', () => {
+      render(<Button label="Save" tooltip="Save your changes" />);
+      const button = screen.getByRole('button', {name: 'Save'});
+      expect(button).toHaveAccessibleDescription('Save your changes');
+    });
+
+    it('adds no description when the tooltip repeats the visible name', () => {
+      render(<Button label="Close" tooltip=" Close " />);
+      const button = screen.getByRole('button', {name: 'Close'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('adds no description when an icon-only tooltip repeats its label', () => {
+      render(
+        <Button
+          label="Close"
+          tooltip="Close"
+          icon={<span>x</span>}
+          isIconOnly
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Close'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('keeps a caller description when the tooltip repeats the name', () => {
+      render(
+        <>
+          <span id="hint">Closes the panel</span>
+          <Button label="Close" tooltip="Close" aria-describedby="hint" />
+        </>,
+      );
+      const button = screen.getByRole('button', {name: 'Close'});
+      expect(button).toHaveAttribute('aria-describedby', 'hint');
+    });
+
+    it('keeps the description when aria-labelledby names the button', () => {
+      render(
+        <>
+          <span id="close-name">Close the editor</span>
+          <Button
+            label="Close"
+            tooltip="Close"
+            icon={<span>x</span>}
+            isIconOnly
+            aria-labelledby="close-name"
+          />
+        </>,
+      );
+      const button = screen.getByRole('button', {name: 'Close the editor'});
+      expect(button).toHaveAccessibleDescription('Close');
+    });
+
+    it('adds no description when a decorative Icon sits beside a repeated label', () => {
+      render(
+        <Button label="Edit" icon={<Icon icon="close" />} tooltip="Edit" />,
+      );
+      const button = screen.getByRole('button', {name: 'Edit'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('adds no description when a decorative Icon ends a repeated label', () => {
+      render(
+        <Button
+          label="Sort"
+          endContent={<Icon icon="close" />}
+          tooltip="Sort"
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Sort'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('keeps the description when endContent adds to the name', () => {
+      render(
+        <Button
+          label="Messages"
+          tooltip="Messages"
+          endContent={<span>3</span>}
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Messages 3'});
+      expect(button).toHaveAccessibleDescription('Messages');
+    });
+
+    it('compares with a caller aria-label, not the visible text', () => {
+      render(
+        <Button label="Clear" aria-label="Clear Search" tooltip="Clear" />,
+      );
+      const button = screen.getByRole('button', {name: 'Clear Search'});
+      expect(button).toHaveAccessibleDescription('Clear');
+    });
+  });
+
   it('uses aria-disabled instead of disabled when tooltip is present and button is disabled', () => {
     render(<Button label="Test" tooltip="Reason disabled" isDisabled />);
     const button = screen.getByRole('button');
@@ -849,16 +948,32 @@ describe('Button', () => {
 });
 
 describe('Button pressed state (touch)', () => {
-  it('fades the touch press out over the release, painting the pressed token at its strength on both arms', () => {
+  it('paints the touch press on a compositor layer and releases it on the press clock', () => {
     render(<Button label="Save" />);
     const button = screen.getByRole('button', {name: 'Save'});
-    // The touch arms the controller writes: `on` paints the pressed token at
-    // strength 1 on the first frame; `fading` keeps the paint and runs the
-    // release animation on the machine's clock. A mouse keeps `:active`.
+    // The touch arms the controller writes, under a coarse primary pointer:
+    // `on` shows the pressed token on the button's `::before` layer on the
+    // first frame; `fading` runs the layer's opacity release on the press
+    // clock. A mouse keeps `:active`.
     expect(button).toHaveAttribute('data-astryx-pressable');
     expect(hasPressedArm(button)).toBe(true);
-    expect(readsPressStrength(button, '[data-astryx-press="on"]')).toBe(true);
-    expect(readsPressStrength(button)).toBe(true);
-    expect(hasReleaseFade(button)).toBe(true);
+    expect(showsLayerPress(button)).toBe(true);
+    expect(releasesOnLayer(button, '::before', PRESS_FADE_MS)).toBe(true);
+  });
+
+  it('has no press layer and no isolation at rest under a coarse pointer, only while a press is on or fading', () => {
+    render(<Button label="Save" />);
+    const button = screen.getByRole('button', {name: 'Save'});
+    // At rest the button is no stacking context, and a `::before` a caller
+    // styles through `xstyle` keeps its own opacity, z-index and position.
+    expect(layerOnlyWhilePressed(button, '::before')).toBe(true);
+  });
+
+  it('keeps the press it always had under any other pointer: no layer, no isolation, the strength’s release', () => {
+    render(<Button label="Save" />);
+    const button = screen.getByRole('button', {name: 'Save'});
+    // A finger on a touch screen beside a mouse, and the mouse itself, see
+    // what they always saw.
+    expect(keepsPressOutsideCoarse(button, '::before')).toBe(true);
   });
 });

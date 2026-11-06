@@ -21,6 +21,7 @@ import {
   globalCli,
   packedCli,
   placeCli,
+  recyclePlacedCopies,
   seedPackedRelease,
   startRegistry,
 } from '../test-utils/global-local-fixtures.mjs';
@@ -47,7 +48,26 @@ const OFFLINE = 'http://127.0.0.1:9/';
 beforeAll(() => {
   packedCli();
 }, 120_000);
-afterEach(cleanupFixtures);
+/**
+ * Every private computer the running test made, settled before cleanup.
+ * @type {ReturnType<typeof computer>[]}
+ */
+const computers = [];
+// The hook's own limit is above the wait's 60 s, so a stuck step fails with
+// the message below and its folders are still removed.
+afterEach(async () => {
+  const busy = await settleBackgroundSteps(computers.splice(0));
+  try {
+    recyclePlacedCopies({keep: busy.length === 0});
+  } finally {
+    cleanupFixtures();
+  }
+  if (busy.length > 0) {
+    throw new Error(
+      `A background step was still writing into ${busy.join(', ')} 60 s after the test: it is stuck.`,
+    );
+  }
+}, 90_000);
 afterAll(() => {
   fs.rmSync(path.dirname(packedCli()), {recursive: true, force: true});
 });
@@ -68,13 +88,53 @@ function computer(options = {}) {
   if (POSIX && npm.prefix.length > 0) {
     fs.symlinkSync(npm.prefix[0], path.join(nodeBin, 'npm'));
   }
-  return {
+  const pc = {
     home,
     cache,
     /** The `astryx` cache folder global mode uses. */
     astryxCache: path.join(cache, 'astryx'),
     path: [...(options.path ?? []), nodeBin],
   };
+  computers.push(pc);
+  return pc;
+}
+
+/**
+ * Wait until no background step a run started still writes into these
+ * computers' home folders: one that outlived its test would put the removed
+ * home folder back, left behind in the system temp directory. A step is done
+ * once it has released the state file's locks and, for the computer-level
+ * agent text, recorded the release it wrote. The CLI starts each step
+ * detached and keeps no handle to it, so this reads what the step records.
+ * @param {ReturnType<typeof computer>[]} pcs
+ * @returns {Promise<string[]>} the home folders a step still writes into
+ *   after 60 s
+ */
+async function settleBackgroundSteps(pcs) {
+  const deadline = Date.now() + 60_000;
+  /** @type {string[]} */
+  const busy = [];
+  for (const pc of pcs) {
+    const stateDir = path.join(pc.home, '.config', 'astryx');
+    const writing = () => {
+      if (
+        fs.existsSync(path.join(stateDir, '.lock-check')) ||
+        fs.existsSync(path.join(stateDir, '.lock-state'))
+      ) {
+        return true;
+      }
+      const {agentText} = readState(pc);
+      return (
+        agentText?.attemptFor !== undefined &&
+        agentText.writtenBy !== agentText.attemptFor
+      );
+    };
+    while (writing() && Date.now() < deadline) {
+      await new Promise(done => setTimeout(done, 50));
+    }
+    if (writing()) busy.push(pc.home);
+  }
+  return busy;
 }
 
 /**
@@ -393,6 +453,10 @@ describe.skipIf(!POSIX)(
       globalState(pc, {
         latest: '9.0.5',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check: one would ask
+        // the unreachable test registry, and its failure, recorded whenever
+        // npm gives up, would join doctor's newest-release line.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       const dir = makeProject({declare: {'@astryxdesign/core': '^9.0.0'}});
@@ -434,6 +498,8 @@ describe.skipIf(!POSIX)(
       globalState(pc, {
         latest: '9.0.7',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       const app = makeProject({core: '9.0.1'});
@@ -504,6 +570,8 @@ describe.skipIf(!POSIX)(
       globalState(pc, {
         latest: '9.0.7',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       writeJson(path.join(pc.home, 'package.json'), {
@@ -551,6 +619,8 @@ describe.skipIf(!POSIX)(
       globalState(pc, {
         latest: '9.0.7',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       const tool = tempDir('tool');
@@ -582,6 +652,8 @@ describe.skipIf(!POSIX)(
       globalState(pc, {
         latest: '9.0.7',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       const root = makeProject({core: '9.0.1'});
@@ -656,6 +728,8 @@ describe.skipIf(!POSIX)(
       globalState(pc2, {
         latest: '9.0.7',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       const app = makeProject({core: '9.0.1'});
@@ -808,13 +882,14 @@ describe.skipIf(!POSIX)(
       ).toBe('warn');
     });
 
-    it('the skill outlives the CLI installed for the computer: it repeats the step that installed it, and doctor names it too', () => {
-      for (const [layout, step] of /** @type {const} */ ([
-        // The npm layout is a prefix in the home folder, so the step names it.
-        ['npm', 'npm i -g --prefix ~/.npm-global @astryxdesign/cli'],
-        ['pnpm', 'pnpm add -g @astryxdesign/cli'],
-        ['bun', 'bun add -g @astryxdesign/cli'],
-      ])) {
+    // One test for each layout: each starts the CLI three times.
+    for (const [layout, step] of /** @type {const} */ ([
+      // The npm layout is a prefix in the home folder, so the step names it.
+      ['npm', 'npm i -g --prefix ~/.npm-global @astryxdesign/cli'],
+      ['pnpm', 'pnpm add -g @astryxdesign/cli'],
+      ['bun', 'bun add -g @astryxdesign/cli'],
+    ])) {
+      it(`the skill outlives the CLI installed for the computer (${layout}): it repeats the step that installed it, and doctor names it too`, () => {
         const pc = computer();
         let g;
         if (layout === 'bun') {
@@ -890,8 +965,8 @@ describe.skipIf(!POSIX)(
           );
         }
         pc.path.shift();
-      }
-    });
+      });
+    }
 
     // Volta's command is a shim of its own, not a link into the package, so
     // the search-path scan cannot trace it; an astryx on the search path that
@@ -1265,6 +1340,8 @@ describe.skipIf(!POSIX)(
       globalState(pc, {
         latest: '9.0.5',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       const dir = makeProject({core: '9.0.0'});
@@ -1575,7 +1652,13 @@ describe.skipIf(!POSIX)(
       // A failed command prints no notice.
       const pc = computer();
       const g = globalCli('npm', '9.0.0', {root: pc.home});
-      globalState(pc, {latest: '9.0.5', checkOkAt: Date.now(), firstRunAt: 0});
+      globalState(pc, {
+        latest: '9.0.5',
+        checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
+        firstRunAt: 0,
+      });
       const failed = run(g.bin, ['no-such-command'], {
         cwd: tempDir('empty'),
         pc,
@@ -1676,15 +1759,38 @@ describe.skipIf(!POSIX)(
       });
     });
 
-    it("from a tool folder inside a project (as G36), discover and doctor point an integration installed for the computer at the project's folder, where its command adds it for good; with no project, discover names no command", () => {
+    /**
+     * The global npm copy on the search path, with `@acme/widgets` installed
+     * beside it for the computer.
+     */
+    function computerWithWidgets() {
       const pc = computer();
       const g = globalCli('npm', '9.0.0', {root: pc.home});
       acmeWidgets(path.resolve(g.dir, '..', '..', '..'), {
         topic: 'acme-deploying',
       });
       pc.path.unshift(g.binDir);
+      /** @param {string} cwd */
+      const integrationsCheck = cwd =>
+        JSON.parse(
+          run(g.bin, ['doctor', '--json'], {cwd, pc}).stdout,
+        ).data.checks.find(
+          (/** @type {any} */ c) => c.id === 'computer-integrations',
+        );
+      return {pc, g, integrationsCheck};
+    }
+
+    /** A project with Core and the CLI, installed with npm. */
+    function npmProject() {
       const dir = makeProject({core: '9.0.0', cli: '9.0.0'});
       writeJson(path.join(dir, 'package-lock.json'), {lockfileVersion: 3});
+      return dir;
+    }
+
+    // As G36, in four cases; each runs the CLI at most twice.
+    it("from a tool folder inside a project (as G36), discover and doctor point an integration installed for the computer at the project's folder", () => {
+      const {pc, g, integrationsCheck} = computerWithWidgets();
+      const dir = npmProject();
       const tool = path.join(dir, 'tools', 'codegen');
       writeJson(path.join(tool, 'package.json'), {name: 'codegen'});
       const discover = JSON.parse(
@@ -1702,16 +1808,12 @@ describe.skipIf(!POSIX)(
           source: 'installed for this computer',
         },
       ]);
-      const integrationsCheck = (/** @type {string} */ cwd) =>
-        JSON.parse(
-          run(g.bin, ['doctor', '--json'], {cwd, pc}).stdout,
-        ).data.checks.find(
-          (/** @type {any} */ c) => c.id === 'computer-integrations',
-        );
       expect(integrationsCheck(tool).fix).toBe(DOCTOR_RUN_FROM_PROJECT);
+    });
 
-      // Followed: from the project's folder, the command adds it there, and
-      // once it is installed nothing is offered any more.
+    it("from the project's folder (as G36), discover and doctor give the command that adds an integration installed for the computer", () => {
+      const {pc, g, integrationsCheck} = computerWithWidgets();
+      const dir = npmProject();
       const fromProject = JSON.parse(
         run(g.bin, ['discover', '--json'], {cwd: dir, pc}).stdout,
       );
@@ -1721,6 +1823,11 @@ describe.skipIf(!POSIX)(
       expect(integrationsCheck(dir).fix).toBe(
         'To use one in this project, run `npm install @acme/widgets`.',
       );
+    });
+
+    it('once the project installs it (as G36), discover and doctor no longer offer an integration installed for the computer', () => {
+      const {pc, g, integrationsCheck} = computerWithWidgets();
+      const dir = npmProject();
       const pkg = JSON.parse(
         fs.readFileSync(path.join(dir, 'package.json'), 'utf8'),
       );
@@ -1734,7 +1841,10 @@ describe.skipIf(!POSIX)(
       );
       expect(notOfficial(after)).toEqual([]);
       expect(integrationsCheck(dir)).not.toHaveProperty('fix');
+    });
 
+    it('with no project (as G36), discover names no command for an integration installed for the computer', () => {
+      const {pc, g} = computerWithWidgets();
       // A folder that installs Core but belongs to no project.
       const alone = tempDir('alone');
       writeJson(path.join(alone, 'package.json'), {name: 'alone'});
@@ -2068,7 +2178,13 @@ describe.skipIf(!POSIX)(
       fs.symlinkSync(cli.bin, path.join(prefix, 'bin', 'astryx'));
       pc.path.unshift(path.join(prefix, 'bin'));
       acmeWidgets(path.join(prefix, 'lib'), {topic: 'acme-prefix'});
-      globalState(pc, {latest: '9.0.5', checkOkAt: Date.now(), firstRunAt: 0});
+      globalState(pc, {
+        latest: '9.0.5',
+        checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
+        firstRunAt: 0,
+      });
       const empty = tempDir('empty');
       const docs = run(cli.bin, ['docs', '--json'], {cwd: empty, pc});
       expect(
@@ -2202,56 +2318,92 @@ describe.skipIf(!POSIX)(
       });
     });
 
-    it('G49 offline, a release that failed to install is retried after 2 minutes, then after 10 once it fails again, by any copy sharing the cache; a success forgets it', () => {
-      const pc = computer();
-      const g = globalCli('npm', '9.0.0', {root: pc.home});
-      const dir = makeProject({core: '9.0.3', brokenCli: '9.0.3'});
-      const record = path.join(
-        pc.astryxCache,
-        'releases',
-        '.failed-9.0.3.json',
-      );
+    // One row of the table, in three cases: each replays only the installs it
+    // needs, and a failed install waits out the CLI's own bounded retry.
+    describe('G49 offline, a release that failed to install is retried after 2 minutes, then after 10 once it fails again, by any copy sharing the cache; a success forgets it', () => {
+      /**
+       * G49's world: a global CLI and a project whose own CLI cannot start and
+       * whose Core release cannot be installed (the registry is unreachable),
+       * with the record of that release's failed installs. Each case below
+       * replays only the installs it needs: a failed one waits out the CLI's
+       * own bounded retry, a few seconds each.
+       */
+      const g49 = () => {
+        const pc = computer();
+        const g = globalCli('npm', '9.0.0', {root: pc.home});
+        const dir = makeProject({core: '9.0.3', brokenCli: '9.0.3'});
+        const record = path.join(
+          pc.astryxCache,
+          'releases',
+          '.failed-9.0.3.json',
+        );
+        const read = () => JSON.parse(fs.readFileSync(record, 'utf8'));
+        return {
+          pc,
+          g,
+          dir,
+          record,
+          read,
+          /** Runs `astryx --version` with `bin`; the global copy by default. */
+          version: (bin = g.bin) => run(bin, ['--version'], {cwd: dir, pc}),
+          /** Move the last failure `minutes` into the past. @param {number} minutes */
+          age: (/** @type {number} */ minutes) => {
+            const old = read();
+            fs.writeFileSync(
+              record,
+              JSON.stringify({...old, at: old.at - minutes * 60_000}),
+            );
+          },
+        };
+      };
       const installs = (/** @type {{lines: string[]}} */ r) =>
         r.lines.filter(l => l.includes('installing')).length;
-      /** Move the last failure `minutes` into the past. @param {number} minutes */
-      const age = minutes => {
-        const old = JSON.parse(fs.readFileSync(record, 'utf8'));
-        fs.writeFileSync(
-          record,
-          JSON.stringify({...old, at: old.at - minutes * 60_000}),
-        );
-      };
-      expect(installs(run(g.bin, ['--version'], {cwd: dir, pc}))).toBe(1);
-      expect(JSON.parse(fs.readFileSync(record, 'utf8')).failures).toBe(1);
-      // Within 2 minutes, from this copy or another, no install starts.
-      const other = globalCli('npm', '9.0.1', {
-        root: path.join(pc.home, 'other'),
+
+      it('the first failure is recorded, and neither this copy nor another sharing the cache tries again within 2 minutes', () => {
+        const {pc, version, read} = g49();
+        expect(installs(version())).toBe(1);
+        expect(read().failures).toBe(1);
+        const other = globalCli('npm', '9.0.1', {
+          root: path.join(pc.home, 'other'),
+        });
+        for (const bin of [undefined, other.bin]) {
+          const again = version(bin);
+          expect(again.status).toBe(0);
+          expect(installs(again)).toBe(0);
+          expect(again.lines).toEqual([
+            expect.stringMatching(
+              /^astryx: could not get Astryx 9\.0\.3 to match this project's Core \(.+; last tried 1 minute ago, tried again after 2 minutes\); answering with CLI 9\.0\.[01] instead$/u,
+            ),
+          ]);
+        }
       });
-      for (const bin of [g.bin, other.bin]) {
-        const again = run(bin, ['--version'], {cwd: dir, pc});
-        expect(again.status).toBe(0);
-        expect(installs(again)).toBe(0);
-        expect(again.lines).toEqual([
-          expect.stringMatching(
-            /^astryx: could not get Astryx 9\.0\.3 to match this project's Core \(.+; last tried 1 minute ago, tried again after 2 minutes\); answering with CLI 9\.0\.[01] instead$/u,
-          ),
-        ]);
-      }
-      // After 2 minutes it tries again; a second failure waits 10.
-      age(3);
-      expect(installs(run(g.bin, ['--version'], {cwd: dir, pc}))).toBe(1);
-      expect(JSON.parse(fs.readFileSync(record, 'utf8')).failures).toBe(2);
-      age(3);
-      const waiting = run(g.bin, ['--version'], {cwd: dir, pc});
-      expect(installs(waiting)).toBe(0);
-      expect(waiting.lines[0]).toMatch(/tried again after 10 minutes\)/u);
-      age(8);
-      expect(installs(run(g.bin, ['--version'], {cwd: dir, pc}))).toBe(1);
-      // A success forgets the record.
-      seedPackedRelease(pc.astryxCache, '9.0.3');
-      age(11);
-      expect(run(g.bin, ['--version'], {cwd: dir, pc}).stdout).toBe('9.0.3');
-      expect(fs.existsSync(record)).toBe(false);
+
+      it('after 2 minutes it is tried again, and a second failure in a row waits 10', () => {
+        const {version, read, age} = g49();
+        expect(installs(version())).toBe(1);
+        age(3);
+        expect(installs(version())).toBe(1);
+        expect(read().failures).toBe(2);
+        age(3);
+        const waiting = version();
+        expect(installs(waiting)).toBe(0);
+        expect(waiting.lines[0]).toMatch(/tried again after 10 minutes\)/u);
+      });
+
+      it('after 10 minutes two failures in a row are tried again, and a success forgets them', () => {
+        const {pc, record, version, read, age} = g49();
+        expect(installs(version())).toBe(1);
+        // A second failure in a row, recorded as the CLI records it.
+        fs.writeFileSync(record, JSON.stringify({...read(), failures: 2}));
+        // Past 10 minutes it installs again, for real, and fails a third time.
+        age(11);
+        expect(installs(version())).toBe(1);
+        expect(read().failures).toBe(3);
+        // A release installed by then answers, and forgets the failures.
+        seedPackedRelease(pc.astryxCache, '9.0.3');
+        expect(version().stdout).toBe('9.0.3');
+        expect(fs.existsSync(record)).toBe(false);
+      });
     });
 
     it('G50 a global copy in a Bun global folder moved with BUN_INSTALL: global only while BUN_INSTALL names it; an app under a folder named install/global is not', () => {
@@ -2604,7 +2756,11 @@ describe.skipIf(!POSIX)(
               "const log = process.cwd() + '/interrupts.log';",
               "fs.writeFileSync(log, '');",
               onInterrupt,
-              "fs.writeFileSync(process.cwd() + '/child.pid', String(process.pid));",
+              // Written whole under another name, then renamed into place:
+              // a reader never finds the file empty.
+              "const pidFile = process.cwd() + '/child.pid';",
+              "fs.writeFileSync(pidFile + '.tmp', String(process.pid));",
+              "fs.renameSync(pidFile + '.tmp', pidFile);",
               'setInterval(() => {}, 1000);',
             ].join('\n'),
           );
@@ -2628,11 +2784,21 @@ describe.skipIf(!POSIX)(
             detached: true,
           });
           const pidFile = path.join(dir, 'child.pid');
-          for (let i = 0; i < 100 && !fs.existsSync(pidFile); i++) {
-            await new Promise(resolve => setTimeout(resolve, 100));
+          // The CLI writes its pid once it handles interrupts. Wait for that,
+          // or for the run to end without it, however long a busy machine
+          // takes to get there.
+          while (
+            !fs.existsSync(pidFile) &&
+            child.exitCode === null &&
+            child.signalCode === null
+          ) {
+            await new Promise(resolve => setTimeout(resolve, 50));
           }
           expect(fs.existsSync(pidFile)).toBe(true);
           const childPid = Number(fs.readFileSync(pidFile, 'utf8'));
+          // A pid of 0 would make the checks below ask about this process's
+          // own process group.
+          expect(childPid).toBeGreaterThan(0);
           const started = Date.now();
           if (target === 'group') {
             process.kill(-(/** @type {number} */ (child.pid)), 'SIGINT');
@@ -2712,7 +2878,9 @@ describe.skipIf(!POSIX)(
 it('names every row of the table exactly once', () => {
   const text = fs.readFileSync(new URL(import.meta.url), 'utf8');
   const rows = [
-    ...text.matchAll(/^\s+it(?:\.skipIf\([^)]*\)\()?\(?\s*['"](G\d+) /gmu),
+    ...text.matchAll(
+      /^\s+(?:it|describe)(?:\.skipIf\([^)]*\)\()?\(?\s*['"](G\d+) /gmu,
+    ),
   ].map(m => m[1]);
   expect(rows).toEqual(Array.from({length: 58}, (_, i) => `G${i + 1}`));
   expect(os.EOL).toBeTypeOf('string');

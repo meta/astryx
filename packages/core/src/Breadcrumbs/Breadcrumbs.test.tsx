@@ -17,6 +17,15 @@ import {
 } from './index';
 import type {BreadcrumbMenuDividerProps, BreadcrumbMenuOption} from './index';
 import {LinkProvider} from '../Link/LinkProvider';
+import {AppShellMobileContext} from '../AppShell/AppShellMobileContext';
+import {
+  SideNavRenderContext,
+  type SideNavRenderMode,
+} from '../SideNav/SideNavRenderContext';
+import {
+  TopNavRenderContext,
+  type TopNavRenderMode,
+} from '../TopNav/TopNavRenderContext';
 
 function CustomLink({
   children,
@@ -371,6 +380,122 @@ describe('BreadcrumbItem', () => {
   });
 });
 
+describe('BreadcrumbItem in the AppShell mobile drawer', () => {
+  function renderInDrawer(
+    crumbs: React.ReactNode,
+    {
+      topNavMode = 'drawer',
+      sideNavMode = 'default',
+    }: {
+      topNavMode?: TopNavRenderMode;
+      sideNavMode?: SideNavRenderMode;
+    } = {},
+  ) {
+    const calls: string[] = [];
+    const closeMobileNav = vi.fn(() => calls.push('close'));
+    render(
+      <AppShellMobileContext
+        value={{
+          isMobile: true,
+          isMobileNavOpen: true,
+          toggleMobileNav: () => {},
+          openMobileNav: () => {},
+          closeMobileNav,
+          isMobileNavEnabled: true,
+          hasAutoToggle: true,
+        }}>
+        <SideNavRenderContext value={sideNavMode}>
+          <TopNavRenderContext value={topNavMode}>
+            <Breadcrumbs>{crumbs}</Breadcrumbs>
+          </TopNavRenderContext>
+        </SideNavRenderContext>
+      </AppShellMobileContext>,
+    );
+    return {calls, closeMobileNav};
+  }
+
+  it('a crumb link calls onClick and then closes the drawer', () => {
+    const {calls} = renderInDrawer(
+      <>
+        <BreadcrumbItem
+          href="#/projects"
+          onClick={event => {
+            event.preventDefault();
+            calls.push('onClick');
+          }}>
+          Projects
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}));
+    expect(calls).toEqual(['onClick', 'close']);
+  });
+
+  it('a crumb button calls onClick and then closes the drawer', () => {
+    const {calls} = renderInDrawer(
+      <>
+        <BreadcrumbItem onClick={() => calls.push('onClick')}>
+          Projects
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Projects'}));
+    expect(calls).toEqual(['onClick', 'close']);
+  });
+
+  it('a crumb marked isCurrent leaves the drawer open', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <>
+        <BreadcrumbItem href="#/projects">Projects</BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByText('Detail'));
+    expect(closeMobileNav).not.toHaveBeenCalled();
+  });
+
+  it('a last crumb that is current only by position is still a link and closes the drawer', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <>
+        <BreadcrumbItem href="#/projects">Projects</BreadcrumbItem>
+        <BreadcrumbItem
+          href="#/projects/detail"
+          onClick={e => e.preventDefault()}>
+          Detail
+        </BreadcrumbItem>
+      </>,
+    );
+    const last = screen.getByRole('link', {name: 'Detail'});
+    expect(last).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(last);
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
+  });
+
+  it('a crumb link in the side navigation drawer closes it too', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <BreadcrumbItem href="#/projects" onClick={e => e.preventDefault()}>
+        Projects
+      </BreadcrumbItem>,
+      {topNavMode: 'default', sideNavMode: 'drawer-content'},
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}));
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
+  });
+
+  it('a crumb outside the drawer does not touch it', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <BreadcrumbItem href="#/projects" onClick={e => e.preventDefault()}>
+        Projects
+      </BreadcrumbItem>,
+      {topNavMode: 'mobile-bar'},
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}));
+    expect(closeMobileNav).not.toHaveBeenCalled();
+  });
+});
+
 describe('BreadcrumbItem menu', () => {
   // Mock the native Popover API — jsdom doesn't implement showPopover/
   // hidePopover or the :popover-open match. Mirrors DropdownMenu's test setup.
@@ -692,6 +817,14 @@ describe('BreadcrumbItem menu', () => {
     await user.click(trigger);
     const menu = screen.getByRole('menu', {hidden: true});
     const outside = screen.getByRole('button', {name: 'Outside action'});
+    // The menu takes focus in the frame after it opens. Wait for it: jsdom
+    // does not hide a closed popover, so a later frame could still focus an
+    // item in it, where a browser cannot.
+    await waitFor(() => {
+      expect(menu).toContainElement(
+        document.activeElement as HTMLElement | null,
+      );
+    });
 
     outside.focus();
     expect(outside).toHaveFocus();
@@ -777,6 +910,53 @@ describe('BreadcrumbItem menu', () => {
     expect(
       screen.getByRole('menuitem', {name: 'Delete', hidden: true}),
     ).toHaveFocus();
+  });
+
+  it('closes the whole breadcrumb menu on Tab from a submenu flyout row', async () => {
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem
+          menu={[
+            {label: 'Rename', onClick: vi.fn()},
+            {
+              label: 'Move to',
+              items: [
+                {label: 'Folder A', onClick: vi.fn()},
+                {label: 'Folder B', onClick: vi.fn()},
+              ],
+            },
+          ]}>
+          Teams
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Teams'});
+    trigger.focus();
+    fireEvent.keyDown(trigger, {key: 'ArrowDown'});
+    const submenuTrigger = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', {name: 'Rename', hidden: true}),
+      ).toHaveFocus();
+    });
+    act(() => submenuTrigger.focus());
+    fireEvent.keyDown(submenuTrigger, {key: 'ArrowRight'});
+    const folderA = await screen.findByRole('menuitem', {
+      name: 'Folder A',
+      hidden: true,
+    });
+    await waitFor(() => expect(folderA).toHaveFocus());
+
+    fireEvent.keyDown(folderA, {key: 'Tab'});
+
+    await waitFor(() =>
+      expect(trigger).toHaveAttribute('aria-expanded', 'false'),
+    );
+    expect(submenuTrigger).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('allows menu together with isCurrent (both aria-current and aria-haspopup)', () => {

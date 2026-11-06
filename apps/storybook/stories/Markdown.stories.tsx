@@ -270,6 +270,30 @@ export const NestedLists: Story = {
   },
 };
 
+export const LongNumberMarkers: Story = {
+  args: {
+    children: [
+      '8. Eight',
+      '   1. Nested under eight',
+      '9. Nine',
+      '   1. Nested under nine',
+      '10. Ten',
+      '    1. Nested under ten',
+      '11. Eleven',
+      '12. Twelve',
+      '',
+      '## Roman counters',
+      '',
+      '1. Outer',
+      '   1. Middle',
+      ...Array.from(
+        {length: 8},
+        (_, index) => `      ${index + 1}. Roman item ${index + 1}`,
+      ),
+    ].join('\n'),
+  },
+};
+
 export const ShiftedHeadings: Story = {
   name: 'Shifted Headings (start at h3)',
   args: {

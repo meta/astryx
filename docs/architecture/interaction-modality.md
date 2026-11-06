@@ -13,6 +13,7 @@ applies_to:
   [
     packages/core/src/utils/interactionModality.ts,
     packages/core/src/utils/focusOutline.stylex.ts,
+    packages/core/src/privateAttributes/focusOwner.stylex.ts,
     packages/core/src/hooks/useFocusReturnVisibility.ts,
     packages/core/src/hooks/useIndicatorFocusRing.tsx,
     packages/core/src/Layer/useTouchTrigger.ts,
@@ -37,6 +38,30 @@ deciding_specs: [spec:AST-100/DEC-1, spec:AST-094/DEC-17]
   "scope": "global",
   "triggers": {
     "interaction": ["INV1", "INV2", "INV3", "INV4", "INV7", "INV8", "INV11"]
+  },
+  "concerns": {
+    "modality-tracking": {
+      "names": [
+        "useInteractionModalityTracking",
+        "useInteractionModalityTrackingFor",
+        "trackInteractionModalityIn",
+        "getInteractionModality"
+      ],
+      "patterns": ["addEventListener\\(\\s*['\"](?:pointerdown|keydown)['\"]"],
+      "claims": ["INV1", "INV2", "INV3"]
+    },
+    "focus-return": {
+      "names": [
+        "focusForLastInput",
+        "isFocusDetached",
+        "useFocusReturnVisibility"
+      ],
+      "claims": ["INV1"]
+    },
+    "press-tracking": {
+      "names": ["createActionGroupTracker", "useMenuPress"],
+      "claims": ["INV13"]
+    }
   }
 }
 ```
@@ -108,13 +133,25 @@ work.
 
 - **INV1 — Last input owns programmatic focus visibility.** Programmatic focus
   preserves the current modality. After pointer input it does not show the shared
-  focus indicator; after keyboard input it does.
+  focus indicator; after keyboard input it does. A wrapper whose content would
+  cover a ring it draws, such as a masked scroller that is its own stacking
+  context, draws the shared ring as the focus-owner overlay
+  (`focusWithinOwnerOverlay` in `privateAttributes/focusOwner.stylex.ts`), keyed
+  on the owner attribute as INV3 says.
 - **INV2 — Modality and focus ownership stay separate.** Shared modality decides
   visibility. Each component family decides the semantic focus owner and the
   element that paints on its behalf.
 - **INV3 — One focus move has one owning indicator.** A wrapper or visual proxy
   may paint for the semantic owner, but sibling controls paint their own focus
-  and replacement content cannot silently remove the owner's indicator.
+  and replacement content cannot silently remove the owner's indicator. A Core
+  wrapper that paints the ring for one primary control among other tab stops
+  takes the one shared focus-owner style and owner attribute from
+  `privateAttributes/focusOwner.stylex.ts`, so the wrapper rings only while that control
+  has keyboard focus, and a nested owner or a sibling control rings itself;
+  no component writes the attribute or its selector itself. Implementation
+  gap: Item, Token, the clickable and selectable cards, Thumbnail,
+  MultiSelector, SideNavItem, and ChatComposer's body write their own ring
+  conditions.
 - **INV4 — Every modality has an operable path.** Keyboard, pointer, and touch or
   pen can reach each supported interaction. Hover is never the only discovery or
   activation path. A tooltip's scrolling overflow is the one exception, as
@@ -122,7 +159,12 @@ work.
   tooltip pattern, so content too tall for the viewport scrolls inside it with
   no keyboard path; its full content stays available to assistive technology
   through the trigger's accessible description, and long or essential content
-  belongs in a HoverCard or Popover.
+  belongs in a HoverCard or Popover. A tooltip that labels an action trigger
+  whose accessible name already carries its text is not a separate
+  interaction, so a tap on that trigger performs the action and does not open
+  the tooltip; a hint-only trigger that performs no action opens its tooltip
+  on a tap under the default `touchTrigger="auto"`, and help behind an info
+  icon pins through `component:InfoTip` (`component:Tooltip` DEC-1).
 - **INV5 — Existing state semantics win.** Disabled controls do not become
   interactive because of modality. Read-only and busy controls preserve their
   documented focus and activation behavior.
@@ -223,7 +265,9 @@ control sizing, sticky behavior, caller-owned layout, and new visual representat
 remain with their direct current owner unless evidence proves that exact mechanism is
 necessary to restore the invariant and representative unaffected paths remain
 unchanged. A separable delta is removed or split before this interaction restoration
-is asked to carry a new decision.
+is asked to carry a new decision, except an undeclared public API row, which goes
+to human review for an owner's decision rather than being removed or split by
+review (`architecture:knowledge-contracts` change coupling step 6).
 
 ## Change coupling
 
@@ -251,6 +295,9 @@ is asked to carry a new decision.
   modality.
 - `utils/focusOutline.stylex.ts` and focus tokens — provide the shared focus
   indicator mechanics and theme seam without choosing component ownership.
+- `privateAttributes/focusOwner.stylex.ts` — owns the private focus-owner attribute, its
+  selector, and the one shared wrapper ring for INV3's primary-control owners;
+  it is not exported from the package.
 - `hooks/useFocusReturnVisibility.ts` — applies last-input visibility when focus
   returns from adaptive surfaces.
 - `hooks/useIndicatorFocusRing.tsx` — lets the semantic owner guarantee paint on
@@ -284,20 +331,20 @@ reachability, newer-intent precedence, and the evidence/scope guard were approve
 
 ## Verification
 
-| Invariant  | Evidence                                                                                                                                                                                                                                       | Failure signal                                                                                                                                                                                                                                                                                              |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV2 | Programmatic-focus cases after keyboard and pointer input in representative component tests                                                                                                                                                    | Programmatic focus invents a modality, or pointer history paints the keyboard indicator                                                                                                                                                                                                                     |
-| INV3       | Direct-owner, wrapper-owner, replaceable-indicator, and nested-action cases                                                                                                                                                                    | No indicator, two indicators, or replacement content can opt out                                                                                                                                                                                                                                            |
-| INV4       | Keyboard, mouse, touch, and pen browser paths where applicable                                                                                                                                                                                 | Hover-only behavior, sticky touch hover, or unreachable action                                                                                                                                                                                                                                              |
-| INV5       | Disabled, busy, and read-only DOM and activation assertions                                                                                                                                                                                    | Inactive control reacts, eligible control loses focus, or state changes with modality                                                                                                                                                                                                                       |
-| INV6       | Public API review and representative source inspection                                                                                                                                                                                         | A component adds caller-controlled modality without a separate API decision                                                                                                                                                                                                                                 |
-| INV7       | Rendered-browser affected-state checks across geometry, clipping, scrolling, hit testing, built-in and custom-renderer paths                                                                                                                   | At an offered interaction point one modality loses every essential path, or evidence substitutes class equality for reachability/perceptibility                                                                                                                                                             |
-| INV8       | Owner-defined intent order, pending, close, cancellation, disablement, and unmount mutations                                                                                                                                                   | Older work changes current content, selection, status or announcement, visibility, focus, or activation after owner-defined supersession                                                                                                                                                                    |
-| INV9       | Concrete-harm reproduction, representative normal/legacy/no-new-prop paths, and coincident public-delta inventory                                                                                                                              | Unsupported or aesthetic preference is treated as harm, unaffected behavior changes, or an API, layout, sizing, default, sticky, or exception delta escapes direct authority                                                                                                                                |
-| INV10      | Source boundary check over Core and Lab, a Lab-to-Core comparison on one recorded stream, and release-filter unit tests over recorded iOS pan and scroll-view streams                                                                          | A Core component with its own sample buffer, velocity math, or release filter; a Lab component with its own sample buffer, velocity math, or release filter; a Lab component reporting a different velocity than Core for the same stream; an export of the tracker; a non-zero release after a still pause |
-| INV11      | Evidence gap: not implemented yet; the shared hover recognizer and its adopters' move onto it are pending. Then: unit tests of the hover recognizer's intent and browser tests of its adopters with a mouse, a pen, a finger, and the keyboard | A show without the owner's entry delay, a missed handoff within a group, a delayed keyboard show, a hover-shown surface that closes before the pointer reaches it, a finger served by it, or a second hover-timing implementation fails                                                                     |
-| INV12      | Unit tests of native scroll's progress and real-browser proofs of its adopters                                                                                                                                                                 | Progress routed through React state, a missing edge, travel under Reduce Motion, use where native scroll-driven animation is supported, or a public export fails                                                                                                                                            |
-| INV13      | Source boundary check over Core and each family member's pointer-stream tests                                                                                                                                                                  | A member outside menus and Selector's and MultiSelector's options that tracks a held pointer across its actions with its own code, or a public export of the tracker, fails                                                                                                                                 |
+| Invariant  | Evidence                                                                                                                                                                                                                                                                              | Failure signal                                                                                                                                                                                                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1, INV2 | Programmatic-focus cases after keyboard and pointer input in representative component tests                                                                                                                                                                                           | Programmatic focus invents a modality, or pointer history paints the keyboard indicator                                                                                                                                                                                                                     |
+| INV3       | Direct-owner, wrapper-owner, replaceable-indicator, and nested-action cases, including a Token inside an Item and a control inside a card; `FocusRingOwner.a11y.chromium.spec.ts` covers the shared module in Selector, and the other wrappers that the gap names are not covered yet | No indicator, two indicators, replacement content that can opt out, or a component that writes the focus-owner attribute or selector itself                                                                                                                                                                 |
+| INV4       | Keyboard, mouse, touch, and pen browser paths where applicable; tap cases on an action trigger with a label tooltip and on a hint-only trigger under `touchTrigger="auto"`                                                                                                            | Hover-only behavior, sticky touch hover, unreachable action, a tap on an action trigger that opens its label tooltip, or hint-only information with no touch path                                                                                                                                           |
+| INV5       | Disabled, busy, and read-only DOM and activation assertions                                                                                                                                                                                                                           | Inactive control reacts, eligible control loses focus, or state changes with modality                                                                                                                                                                                                                       |
+| INV6       | Public API review and representative source inspection                                                                                                                                                                                                                                | A component adds caller-controlled modality without a separate API decision                                                                                                                                                                                                                                 |
+| INV7       | Rendered-browser affected-state checks across geometry, clipping, scrolling, hit testing, built-in and custom-renderer paths                                                                                                                                                          | At an offered interaction point one modality loses every essential path, or evidence substitutes class equality for reachability/perceptibility                                                                                                                                                             |
+| INV8       | Owner-defined intent order, pending, close, cancellation, disablement, and unmount mutations                                                                                                                                                                                          | Older work changes current content, selection, status or announcement, visibility, focus, or activation after owner-defined supersession                                                                                                                                                                    |
+| INV9       | Concrete-harm reproduction, representative normal/legacy/no-new-prop paths, and coincident public-delta inventory                                                                                                                                                                     | Unsupported or aesthetic preference is treated as harm, unaffected behavior changes, or an API, layout, sizing, default, sticky, or exception delta escapes direct authority                                                                                                                                |
+| INV10      | Source boundary check over Core and Lab, a Lab-to-Core comparison on one recorded stream, and release-filter unit tests over recorded iOS pan and scroll-view streams                                                                                                                 | A Core component with its own sample buffer, velocity math, or release filter; a Lab component with its own sample buffer, velocity math, or release filter; a Lab component reporting a different velocity than Core for the same stream; an export of the tracker; a non-zero release after a still pause |
+| INV11      | Evidence gap: not implemented yet; the shared hover recognizer and its adopters' move onto it are pending. Then: unit tests of the hover recognizer's intent and browser tests of its adopters with a mouse, a pen, a finger, and the keyboard                                        | A show without the owner's entry delay, a missed handoff within a group, a delayed keyboard show, a hover-shown surface that closes before the pointer reaches it, a finger served by it, or a second hover-timing implementation fails                                                                     |
+| INV12      | Unit tests of native scroll's progress and real-browser proofs of its adopters                                                                                                                                                                                                        | Progress routed through React state, a missing edge, travel under Reduce Motion, use where native scroll-driven animation is supported, or a public export fails                                                                                                                                            |
+| INV13      | Source boundary check over Core and each family member's pointer-stream tests                                                                                                                                                                                                         | A member outside menus and Selector's and MultiSelector's options that tracks a held pointer across its actions with its own code, or a public export of the tracker, fails                                                                                                                                 |
 
 Real-browser evidence is required when the behavior depends on
 `:focus-visible`, pointer capability, touch or pen synthesis, rendered focus

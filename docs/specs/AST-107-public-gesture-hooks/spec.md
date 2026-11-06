@@ -85,7 +85,7 @@ const {settleTo} = useDragToSnapPoints(ref, {
   onSettle: index => {},
 });
 
-const {ref: animatedRef, animator} = useAnimator();
+const animator = useAnimator(ref);
 animator.animate({x: 120});
 
 // Without React:
@@ -108,7 +108,8 @@ animator2.destroy();
   `{state, translation, velocity}` as a drag on the element begins, changes,
   ends, or is cancelled. `axis` limits the drag to `'x'` or `'y'`. A finger,
   a mouse, and a pen all drive it (`spec:AST-094` FR43). It never
-  hands out a recognizer object, and it recognizes no press or long press.
+  hands out a recognizer object, and it recognizes no press or long press. A
+  cancelled pan reports `velocity` {0, 0}, so nothing flings on cancel.
 - **FR2 — `useDragToSnapPoints` settles an element on snap points.**
   `useDragToSnapPoints(ref, {axis, snapPoints, flickThreshold?, onSettle})`
   lets a drag move the element along `axis`, under
@@ -134,9 +135,10 @@ animator2.destroy();
   development. It calls `onSettle(index)` once the element settles. It returns
   `{settleTo(index)}`, which settles the element on a snap point without a
   drag and is the keyboard path.
-- **FR3 — `useAnimator` animates one element.** `useAnimator()` returns
-  `{ref, animator}` for the one element `ref` attaches to. `animator` is a
-  public handle, `AnimatorHandle`, over the channels `x`, `y`, `scale`,
+- **FR3 — `useAnimator` animates one element.** `useAnimator(ref)` returns
+  `animator` for the element behind `ref`, the element ref `usePanGesture` and
+  `useDragToSnapPoints` take, so a drag and an animation share one element; it
+  hands out no ref of its own. `animator` is a public handle, `AnimatorHandle`, over the channels `x`, `y`, `scale`,
   `rotate`, and `opacity`, distinct from the internal animator module:
   `animate(target, {velocity?}) → Promise<void>` springs the given channels to
   `target`; `decay(velocity) → Promise<void>` coasts them from a velocity;
@@ -149,7 +151,8 @@ animator2.destroy();
   curve is not offered. `animate` on a channel it does not know, any call
   before `ref` attaches, and any call after `destroy` do nothing and resolve at
   once. A later `animate`, `decay`, `set`, or `stop` on a channel resolves that
-  channel's earlier promise where it stopped.
+  channel's earlier promise where it stopped. A remount starts from the
+  element's resting values; no animator values are kept after an unmount.
 - **FR4 — One hook per job.** `usePanGesture` does not do presses or long
   presses, which `useLongPress` owns. `useAnimator` animates one element, and
   `useAnimatedLayout` animates an area (`spec:AST-105`). A component's own
@@ -168,7 +171,10 @@ onSettle}) → {settleTo(index), destroy}`, and `createAnimator(element) →
   its factory and has no behavior of its own. `destroy` removes every
   listener the factory added, and importing a factory does no DOM work, so it
   is safe on the server. No internal factory shares a public factory's name
-  (`architecture:react-component-runtime` INV13).
+  (`architecture:react-component-runtime` INV13). `createPanGesture`'s
+  `destroy()` during a drag reports `cancelled` once; `usePanGesture`'s
+  unmount reports nothing (no callback after unmount). `decay` on `opacity`
+  stops at 0 or 1.
 - **FR7 — Core and Lab use the public layer.** Wherever a public gesture or
   motion API covers a component's job (the factories and hooks here,
   `createReorderable`, and `useAnimatedLayout`), Core and Lab components MUST
@@ -221,16 +227,16 @@ onOpenChange?, presentation?}) → {open(at?), close(), destroy()}`
 
 ## Verification
 
-| Contract | Verification                                                                                                                  | Representative states                                                                                                                                                           | Mutation or failure expectation                                                                                                                                                   |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Unit and browser tests of `usePanGesture`                                                                                     | a drag on each axis, a cancel, a press, a long press                                                                                                                            | a recognizer in the result, a missing state, a drag off its axis, or a press or long press reported as a pan fails                                                                |
-| FR2      | Unit and browser tests of `useDragToSnapPoints`                                                                               | a slow release, a flick past `flickThreshold` and the default flick speed, a release moving back, `settleTo` from a key                                                         | a settle on the wrong snap point, a reversed drag that settles elsewhere, or a missing `onSettle` fails                                                                           |
-| FR3      | Unit and browser tests of `useAnimator`                                                                                       | each method, Reduce Motion, an unattached ref, an unknown channel, a call after `destroy`                                                                                       | a missing method or channel, an `animate` off `springs.stateChange`, or motion that ignores Reduce Motion or a throw on an unknown channel or after `destroy` fails               |
-| FR4      | Export check of `@astryxdesign/core` and its hooks                                                                            | the public exports                                                                                                                                                              | a recognizer, the arena, the internal animator module, or the resolver reachable from a public export fails                                                                       |
-| FR6      | Unit tests of each factory and its hook, server-render and import checks, and listener counts after `destroy`                 | each factory without React; each hook; a server import; `destroy` mid-drag                                                                                                      | a hook with behavior its factory lacks, a listener left after `destroy`, or DOM work at import fails                                                                              |
-| FR7      | Source boundary check over Core and Lab against the known public-API gap list in `architecture:react-component-runtime` INV13 | every Core and Lab component that drags, snaps, animates one element, reorders, or animates layout                                                                              | a component reaching internals for a job the public layer covers, or an internal use whose job is not in the gap list, fails                                                      |
-| FR8      | Unit and browser tests of `createContextMenu` and `useContextMenu`, and ContextMenu's tests over them                         | a long press, a right click, and Shift+F10 on a plain element; `open(at)`; `close`; `destroy` while open; `items` and `render`; an outside press with a mouse and with a finger | a context request that opens nothing, a listener left after `destroy`, a hook with behavior of its own, or a ContextMenu that bypasses the factory fails                          |
-| FR5      | Docsite review of each hook's page and the playing-cards example                                                              | each hook's and factory's page; the playing-cards demo in plain JavaScript and in React                                                                                         | a hook without usage, options, a keyboard path, Reduce Motion, a component-prop note, or a live example, or a demo that imports anything but the public factories or hooks, fails |
+| Contract | Verification                                                                                                                  | Representative states                                                                                                                                                           | Mutation or failure expectation                                                                                                                                                                   |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Unit and browser tests of `usePanGesture`                                                                                     | a drag on each axis, a cancel, a press, a long press                                                                                                                            | a recognizer in the result, a missing state, a drag off its axis, or a press or long press reported as a pan fails                                                                                |
+| FR2      | Unit and browser tests of `useDragToSnapPoints`                                                                               | a slow release, a flick past `flickThreshold` and the default flick speed, a release moving back, `settleTo` from a key                                                         | a settle on the wrong snap point, a reversed drag that settles elsewhere, or a missing `onSettle` fails                                                                                           |
+| FR3      | Unit and browser tests of `useAnimator`                                                                                       | each method, Reduce Motion, an unattached ref, an unknown channel, a call after `destroy`, a pan and an animator on one ref                                                     | a missing method or channel, a ref handed out by the hook, an `animate` off `springs.stateChange`, or motion that ignores Reduce Motion or a throw on an unknown channel or after `destroy` fails |
+| FR4      | Export check of `@astryxdesign/core` and its hooks                                                                            | the public exports                                                                                                                                                              | a recognizer, the arena, the internal animator module, or the resolver reachable from a public export fails                                                                                       |
+| FR6      | Unit tests of each factory and its hook, server-render and import checks, and listener counts after `destroy`                 | each factory without React; each hook; a server import; `destroy` mid-drag                                                                                                      | a hook with behavior its factory lacks, a listener left after `destroy`, or DOM work at import fails                                                                                              |
+| FR7      | Source boundary check over Core and Lab against the known public-API gap list in `architecture:react-component-runtime` INV13 | every Core and Lab component that drags, snaps, animates one element, reorders, or animates layout                                                                              | a component reaching internals for a job the public layer covers, or an internal use whose job is not in the gap list, fails                                                                      |
+| FR8      | Unit and browser tests of `createContextMenu` and `useContextMenu`, and ContextMenu's tests over them                         | a long press, a right click, and Shift+F10 on a plain element; `open(at)`; `close`; `destroy` while open; `items` and `render`; an outside press with a mouse and with a finger | a context request that opens nothing, a listener left after `destroy`, a hook with behavior of its own, or a ContextMenu that bypasses the factory fails                                          |
+| FR5      | Docsite review of each hook's page and the playing-cards example                                                              | each hook's and factory's page; the playing-cards demo in plain JavaScript and in React                                                                                         | a hook without usage, options, a keyboard path, Reduce Motion, a component-prop note, or a live example, or a demo that imports anything but the public factories or hooks, fails                 |
 
 ## Decision log
 
@@ -270,6 +276,19 @@ factory that attaches to the element itself, with a thin hook, and
 `<ContextMenu>` is built on the same factory.
 
 Rejected: a context menu reachable only through the `<ContextMenu>` wrapper.
+
+### DEC-4 — Edge behaviors of the public animator and pan gesture
+
+**Reference:** `spec:AST-107/DEC-4`
+**Decider:** `cixzhang`, `2026-11-02`
+
+A cancelled pan reports zero velocity; the factory's destroy() mid-drag
+reports cancelled once and the hook's unmount reports nothing; an opacity
+decay is clamped to 0–1; a remount starts from resting values.
+
+Rejected: reporting the last velocity on cancel; callbacks after unmount;
+unclamped opacity; keeping values across an unmount (a new keyed element
+could inherit an off-screen position while still taking keyboard focus).
 
 ## Open questions
 

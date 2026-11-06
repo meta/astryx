@@ -27,7 +27,6 @@ const REQUIRED_CONTEXT_WORKFLOWS = [
   'ci.yml',
   'lint.yml',
   'review-signal.yml',
-  'spec-owner-gate.yml',
 ];
 // `**`, `**/*`, `**/**`: a glob that matches every path is no allowlist.
 const MATCH_ALL = /^\*\*(\/\*+)*$/;

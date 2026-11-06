@@ -10,8 +10,14 @@ stable package is built from an immutable release tag and published with provena
 ## Release sequence
 
 1. Run the canonical full-scope `release-check` on an exact commit from current
-   `main`. Cut only from that checked SHA while it remains in current `main`
-   history. A minor cut additionally requires Cindy, the release owner, to
+   `main`. That commit also needs a passing full unit run of the Main workflow:
+   main's scheduler dispatches one with every release-check of main's tip, a
+   person's included, within about 15 minutes while that commit is still the
+   tip. A release owner can also dispatch the Main workflow beside their own
+   check with `sha` set to the checked commit, which tests exactly that
+   commit; a dispatch without `sha` tests whatever is main's tip when it
+   starts and is no receipt. Cut only from a SHA with both while it remains in current `main`
+   history; the stable publish refuses a cut commit without both. A minor cut additionally requires Cindy, the release owner, to
    explicitly sign off on the exact `vX.Y.0` immediately before the branch is
    created; scheduled or standing authority never substitutes for that sign-off.
 2. Create the single marked `release/vX.Y.Z` branch. Its version is the fixed-group
@@ -71,7 +77,8 @@ one trusted GitHub workflow per package.
 
 - **Stable:** explicit dispatch from the immutable `vX.Y.Z` tag with the exact
   release branch, version, head, tag, and plan digest. It publishes `latest`.
-- **Canary:** automatic main push. It publishes
+- **Canary:** at most hourly from main's tip, or on demand from `main` (a
+  dispatch with `channel: canary`). It publishes
   `<declared-version>-canary.<short-sha>` to `canary` only while the declaration is
   strictly above the newest stable tag. It never authorizes or mutates stable release
   state.
@@ -120,8 +127,9 @@ finish: add a GitHub Actions publisher with owner `meta`, repository
 `astryx`, workflow `release.yml`, no environment, and `npm publish` allowed.
 
 npm expires a new trusted publisher that no publish has validated within 48
-hours. The next push to `main` publishes the package's canary and validates it.
-If no canary publishes in that window, recreate the publisher.
+hours. The next canary (the hourly run, or a canary dispatch from `main`)
+publishes the package's canary and validates it. If no canary publishes in that
+window, recreate the publisher.
 
 Registry reads can keep reporting a just-created package as missing for a few
 minutes. A re-run of `--bootstrap` in that window gets `409` for the placeholder

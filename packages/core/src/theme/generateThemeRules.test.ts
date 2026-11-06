@@ -328,6 +328,15 @@ describe('generateThemeRules', () => {
     expect(
       rules.some(r => r.includes('.astryx-text[data-color="accent"]')),
     ).toBe(true);
+    // A Link's label is a Text with color="inherit": a theme that styles the
+    // text target's color must not split it from the link's own color.
+    expect(
+      rules.some(
+        r =>
+          r.includes('.astryx-text[data-color="inherit"]') &&
+          r.includes('color: inherit'),
+      ),
+    ).toBe(true);
   });
 
   // --- Size-prop overrides (so `size` beats a themed `type`) ---
@@ -982,18 +991,20 @@ describe('derived var expansion', () => {
     expect(spaciousRule).toContain('--_item-inset-inline: var(--spacing-4)');
   });
 
-  it('emits internal vars for chat composer', () => {
+  it('emits internal vars for the chat-composer target', () => {
     const theme = defineTheme({
-      name: 'test-derived-chat',
+      name: 'test-derived-chat-composer',
       components: {
-        chat: {
+        'chat-composer': {
           base: {borderRadius: '24px', padding: '12px'},
         },
       },
     });
     const rules = generateThemeRules(theme);
-    const rule = rules.find(r => r.includes('.astryx-chat'));
+    const rule = rules.find(r => r.includes('.astryx-chat-composer'));
     expect(rule).toBeDefined();
+    expect(rule).toMatch(/^\s*border-radius: 24px;/m);
+    expect(rule).toMatch(/^\s*padding: 12px;/m);
     expect(rule).toContain('--_chat-composer-radius: 24px');
     expect(rule).toContain('--_chat-composer-padding: 12px');
   });

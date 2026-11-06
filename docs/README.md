@@ -12,31 +12,43 @@ it governs. Consumer documentation remains in component `.doc.mjs` files and
 - `themes/`: guidance and index for package-local theme specifications.
 - `families/`: contracts shared by sibling components.
 - `specs/`: consequential proposed or shipped system changes and their decisions.
+- `specs/components/`: component and module contracts, one folder per component.
 - `templates/knowledge/`: authoring templates. Templates never live among records.
 - `schemas/knowledge/`: versioned structural requirements for templates and records.
 
-Component contracts live beside the public component in every component-bearing
-package registered by `scripts/component-packages.cjs`:
+Every component's records, for every package and platform, live together in
+one folder, `specs/components/<ComponentRoot>/`, named after the folder that
+holds the component's code. The tree mirrors the source tree of the package
+registered by `scripts/component-packages.cjs`:
 
-- directory-layout packages (`core`, `lab`) use
-  `packages/<package>/src/<ComponentRoot>/<PublicName>.spec.md`;
-- flat packages (`charts`, `richtext`, `vega`) use
-  `packages/<package>/src/<PublicName>.spec.md`.
+- a directory-layout package (`core`, `lab`) keeps
+  `packages/<package>/src/<ComponentRoot>/`, and its records are
+  `specs/components/<ComponentRoot>/<PublicName>.spec.md`;
+- a flat package (`charts`, `richtext`, `vega`) keeps
+  `packages/<package>/src/<PublicName>.tsx`, and its record is
+  `specs/components/<PublicName>/<PublicName>.spec.md`;
+- a platform implementation's record sits beside the core record as
+  `specs/components/<ComponentRoot>/<PublicName>.<language>.spec.md`, for
+  example `specs/components/Avatar/Avatar.swift.spec.md`.
 
-In a directory-layout package, `<PublicName>` normally matches the root directory;
-a public member such as `NavMenu/NavHeadingMenu.spec.md` is valid only when an
-exact top-level or full inline consumer-doc entry in that root declares the same
-public name. In a flat package, the public named export and matching TSX module
-define the component boundary.
+`<PublicName>` normally matches the root; a public member such as
+`NavMenu/NavHeadingMenu.spec.md` is valid only when an exact top-level or full
+inline consumer-doc entry in that root declares the same public name. In a flat
+package, the public named export and matching TSX module define the component
+boundary. When two packages keep a folder with the same name, the record belongs
+to the package that holds its code.
 
 Independently contractible public hooks, plugins, utilities, and subsystems use
 `kind: module` records named `<PublicName>.spec.md` at least one directory below
-the same component root. Their canonical id is
+the same component folder, usually in `modules/` (`specs/components/Dialog/modules/DialogHeader.spec.md`)
+or in a plugin's own folder (`specs/components/Table/plugins/rowStatus/useTableRowStatus.spec.md`).
+The subdirectory need not match where the module's code sits; lookup reaches the
+record by the code's file name or its `verified_by` evidence. Their canonical id is
 `module:<ParentComponent>/<PublicName>`; the module's `parent_component` and the
 parent component's `modules` list must agree. Private transform helpers do not
 require records.
 
-Component-local discovery and PR routing ignore hidden path segments,
+Component record discovery and PR routing ignore hidden path segments,
 `*.generated.spec.md`, and fixture, test, generated, build-output, coverage, and
 `node_modules` directories. Those files are not knowledge records or spec-only
 changes. Theme contracts live beside the package as
@@ -54,13 +66,9 @@ Every knowledge record declares `authority: draft | current | archived`.
   accept current `.github/DESIGNOWNERS` members. Legacy v1 `owners` metadata is
   descriptive and does not grant approval rights.
 - Pull requests that create, change, or archive a `current` record wait on the
-  `spec-owner-approval` status for their exact current head. Draft-only records
-  pass that status after validation without an owner review.
-- Any ENGOWNER can approve another author's current-record PR through GitHub
-  review. A DESIGNOWNER may do the same for current design or theme records and
-  normative design assets. When an eligible approver is also the PR author, they
-  comment `/approve-spec <full-head-sha>`. Any new commit invalidates that
-  approval.
+  review gate, `review-required`, until an owner approves their content with
+  `/approve-spec <full-sha>` or a review (`architecture:knowledge-contracts`
+  DEC-14). Draft-only records need no owner approval.
 - Only `current` documents guide implementation and review.
 - A specification describes durable ideal behavior independently of any one pull
   request. Pull requests and issues may appear only as clearly non-authoritative
@@ -135,7 +143,11 @@ inherit. Only visible records are followed, so a draft never adds a link unless
 decision (`spec:AST-NNN/FR3`) lists that claim, not the whole record. The specs that
 decided a linked record are listed separately, as are the global claims the
 matched component and module triggers route (the same selection as
-`review-global-baselines.mjs`). A path with no linked record is reported as
+`review-global-baselines.mjs`). With `--diff origin/main` (or
+`--diff <base>..<head>`) it reads the change, lists its files when none are
+named, and puts first the claims whose owning record's `concerns` the added
+lines match. The default view lists the claims and the linked record ids; `--records`
+shows how each record links. A path with no linked record is reported as
 such. Records are read from the working tree, so on a pull-request branch the
 result includes that branch's proposed records and is not review authority.
 `pnpm specs:for --unrouted` lists tracked files with no governing record;
