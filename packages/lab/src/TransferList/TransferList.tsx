@@ -129,6 +129,11 @@ export interface TransferListProps<T extends string = string> extends Omit<
   description?: string;
   /** Complete option catalog. Option values must be unique. */
   options: readonly TransferListOption<T>[];
+  /**
+   * Disables every transfer, reorder, Clear, Add all and search control. The
+   * row controls and the search field stay focusable. @default false
+   */
+  isDisabled?: boolean;
   /** Ordered selected values. This array is the single source of truth. */
   value: readonly T[];
   /** Called with the next ordered selection after a committed change. */
@@ -389,7 +394,8 @@ export function TransferList<T extends string = string>({
   label,
   isLabelHidden = false,
   description,
-  options,
+  options: optionsFromProps,
+  isDisabled = false,
   value,
   onChange,
   selectedLabel: selectedLabelFromProps,
@@ -458,6 +464,21 @@ export function TransferList<T extends string = string>({
       setReorderSessionState(nextSession);
     },
     [],
+  );
+
+  // A disabled list treats every option as fixed. An option's own message
+  // describes its own constraint, so it does not apply here.
+  const options = useMemo(
+    () =>
+      isDisabled
+        ? optionsFromProps.map(option => ({
+            ...option,
+            isTransferDisabled: true,
+            isReorderDisabled: true,
+            disabledMessage: undefined,
+          }))
+        : optionsFromProps,
+    [isDisabled, optionsFromProps],
   );
 
   const optionByValue = useMemo(() => {
@@ -1241,6 +1262,7 @@ export function TransferList<T extends string = string>({
             hasClear
             width="100%"
             controlXstyle={styles.search}
+            isDisabled={isDisabled}
             onChange={handleSearch}
           />
         </div>

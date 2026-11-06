@@ -14,14 +14,7 @@
  * - /packages/lab/src/TransferList/index.ts
  */
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import {useCallback, useEffect, useRef, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
 import {
@@ -243,21 +236,6 @@ export function TransferListSelector<T extends string = string>({
     setDraftValue([...value]);
   }
 
-  // A disabled selector keeps its controls focusable (no native `disabled`,
-  // which would blur a focused control): every row's transfer and reorder
-  // controls take their own focusable disabled state instead.
-  const listOptions = useMemo(
-    () =>
-      isDisabled
-        ? options.map(option => ({
-            ...option,
-            isTransferDisabled: true,
-            isReorderDisabled: true,
-          }))
-        : options,
-    [isDisabled, options],
-  );
-
   const resolvedWidth =
     typeof width === 'number'
       ? `${width}px`
@@ -302,7 +280,8 @@ export function TransferListSelector<T extends string = string>({
               <TransferList
                 label={label}
                 isLabelHidden
-                options={listOptions}
+                options={options}
+                isDisabled={isDisabled}
                 value={transferListValue}
                 onChange={nextValue => {
                   if (isDisabled) {

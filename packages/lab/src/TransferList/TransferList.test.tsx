@@ -131,6 +131,36 @@ afterEach(() => {
 });
 
 describe('TransferList', () => {
+  it('disables every control while keeping them focusable, without option-specific messages', () => {
+    const onChange = vi.fn();
+    render(
+      <TransferList
+        label="Columns"
+        options={LOCKED_OPTIONS}
+        value={['name', 'owner']}
+        onChange={onChange}
+        hasSearch
+        isDisabled
+      />,
+    );
+    const remove = screen.getByRole('button', {name: 'Remove Name'});
+    expect(remove).toHaveAttribute('aria-disabled', 'true');
+    expect(remove).not.toHaveAttribute('disabled');
+    remove.focus();
+    expect(remove).toHaveFocus();
+    fireEvent.click(remove);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole('button', {name: 'Remove Owner'}),
+    ).not.toHaveAccessibleDescription(
+      'Owner is required and fixed in position.',
+    );
+    expect(screen.getByRole('searchbox')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
   describe('semantics and content', () => {
     it('renders a labelled pair of semantic lists without listbox roles', () => {
       render(
