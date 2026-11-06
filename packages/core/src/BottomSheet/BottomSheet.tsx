@@ -320,7 +320,8 @@ function writeScrimFadeDuration(
   }
   const current = dialog.style.getPropertyValue('--_sheet-scrim-duration');
   if (ms == null) {
-    // Only its own value: a stack's 0s pin in the meantime stays.
+    // Remove only the value this host wrote. A stack's 0s pin written since
+    // then stays.
     if (written.current != null && current === written.current) {
       dialog.style.removeProperty('--_sheet-scrim-duration');
     }
