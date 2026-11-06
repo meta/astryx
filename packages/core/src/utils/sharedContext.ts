@@ -24,14 +24,23 @@ export function sharedKey(name: string, version: number): symbol {
 /**
  * The value under `key` in this JavaScript realm, created on first use. Every
  * copy of Core that asks for the same key gets the same value.
+ *
+ * The key names the protocol version, so a value found under it has this
+ * protocol's shape. `accepts` guards against a key collision: a value it
+ * rejects is left in place, and this copy keeps a value of its own.
  */
-export function realmValue<T>(key: symbol, create: () => T): T {
+export function realmValue<T>(
+  key: symbol,
+  create: () => T,
+  accepts: (value: unknown) => boolean = () => true,
+): T {
   const realm = globalThis as typeof globalThis & {[key: symbol]: unknown};
   if (Object.hasOwn(realm, key)) {
-    return realm[key] as T;
+    const existing = realm[key];
+    return accepts(existing) ? (existing as T) : create();
   }
   const value = create();
-  Object.defineProperty(realm, key, {value});
+  realm[key] = value;
   return value;
 }
 

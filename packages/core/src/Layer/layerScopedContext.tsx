@@ -18,8 +18,8 @@ import {
 
 type Reset = (children: ReactNode) => ReactNode;
 /**
- * Every layer-scoped context by its key, from every copy of Core, so a layer
- * boundary resets a swizzled copy's contexts as well as the package's.
+ * The reset of each layer-scoped context from every copy of Core. A layer
+ * boundary from any copy resets them all.
  */
 const resets = realmValue(
   sharedKey('layer-scoped-context-resets', 1),

@@ -52,6 +52,7 @@
 
 import {notifyTopLayerEntry} from '../Layer/modalOutlet';
 import {focusForLastInput, returnFocusForLastInput} from '../utils/focusReturn';
+import {realmValue} from '../utils/sharedContext';
 
 export interface BottomSheetStackView {
   /** Another modal sheet is presented alongside this one. */
@@ -340,20 +341,11 @@ function createStackState(): StackState {
   };
 }
 
-function acquireStackState(): StackState {
-  const holder = globalThis as {[STACK_STATE_KEY]?: StackState};
-  const shared = holder[STACK_STATE_KEY];
-  if (shared != null) {
-    // The key names the version, so a state found under it is this
-    // protocol's; the shape check is the guard against a key collision.
-    return shared.shape === STACK_STATE_SHAPE ? shared : createStackState();
-  }
-  const created = createStackState();
-  holder[STACK_STATE_KEY] = created;
-  return created;
-}
-
-const state = acquireStackState();
+const state = realmValue(
+  STACK_STATE_KEY,
+  createStackState,
+  shared => (shared as StackState | null)?.shape === STACK_STATE_SHAPE,
+);
 
 function takeRank(): Rank {
   state.isBatchDirty = true;

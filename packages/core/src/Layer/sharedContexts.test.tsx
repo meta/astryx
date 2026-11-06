@@ -105,10 +105,27 @@ describe('every Core context is registered under a versioned key', () => {
       if (FACTORIES.has(file)) {
         continue;
       }
-      const text = fs.readFileSync(file, 'utf-8');
-      for (const m of text.matchAll(
-        /\bcreate(?:Shared|LayerScoped)Context\b[^(]*\(\s*'([^']+)',\s*\d+\s*,/g,
-      )) {
+      const text = fs
+        .readFileSync(file, 'utf-8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+      const calls =
+        text.match(/\bcreate(?:Shared|LayerScoped)Context\b/g) ?? [];
+      const keyed = [
+        ...text.matchAll(
+          /\bcreate(?:Shared|LayerScoped)Context\b(?:<[\s\S]*?>)?\(\s*'([^']+)',\s*\d+\s*,/g,
+        ),
+      ];
+      // Every call names its key and version; imports name the factory too.
+      const imports = (
+        text.match(
+          /import[^;]*\bcreate(?:Shared|LayerScoped)Context\b[^;]*;/g,
+        ) ?? []
+      ).length;
+      expect(keyed.length, path.relative(SRC, file)).toBe(
+        calls.length - imports,
+      );
+      for (const m of keyed) {
         owners.set(m[1], [
           ...(owners.get(m[1]) ?? []),
           path.relative(SRC, file),
