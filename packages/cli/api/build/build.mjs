@@ -30,16 +30,44 @@ import {BUILD_TREE} from './tree.mjs';
 export {buildHelp, buildKit};
 
 /**
+ * The domains a build kit can be narrowed to with `type`. A kit has no doc or
+ * theme group; those are found with search's own `type`.
+ */
+export const BUILD_DOMAINS = Object.freeze(['component', 'hook', 'template']);
+
+/**
  * The page-building assistant. No query → the playbook signal; a query → the
  * grouped composition kit.
  *
  * @param {string} [query] what you're building (e.g. "analytics dashboard")
- * @param {{cwd?: string, type?: import('../search/search.type.mjs').SearchDomain, limit?: number}} [options]
+ * @param {{cwd?: string, type?: 'component' | 'hook' | 'template', limit?: number}} [options]
  * @returns {Promise<import('./build.type.mjs').BuildHelpResponse | import('./build.type.mjs').BuildKitResponse>}
  */
 export async function build(query, options = {}) {
   if (!query || !String(query).trim()) {
     return buildHelp();
+  }
+  const {type} = options;
+  if (type != null && !BUILD_DOMAINS.includes(type)) {
+    const asked = String(type);
+    const searchable = asked === 'doc' || asked === 'theme';
+    throw new AstryxError(
+      searchable
+        ? `--type "${asked}" is not a build kind; find ${asked}s with search`
+        : `Unknown --type "${asked}"`,
+      [
+        ...BUILD_DOMAINS.map(d => ({name: d, reason: 'valid type'})),
+        ...(searchable
+          ? [
+              {
+                name: `astryx search <query> --type ${type}`,
+                reason: `find ${type}s`,
+              },
+            ]
+          : []),
+      ],
+      ERROR_CODES.ERR_INVALID_ARGUMENT,
+    );
   }
   if (
     options.limit != null &&

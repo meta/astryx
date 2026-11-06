@@ -44,7 +44,7 @@ export const doc = {
     },
     {
       name: 'options.type',
-      type: "'component' | 'hook' | 'doc' | 'template' | 'theme'",
+      type: "'component' | 'hook' | 'template'",
       description: 'Restrict the underlying search to a single domain.',
     },
     {

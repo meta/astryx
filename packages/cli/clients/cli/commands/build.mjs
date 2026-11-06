@@ -74,7 +74,7 @@ export function registerBuild(program) {
     fn: buildFn,
     action: async (
       /** @type {string | undefined} */ query,
-      /** @type {{type?: import('../../../api/search/search.type.mjs').SearchDomain, limit?: string, verbose?: boolean}} */ options,
+      /** @type {{type?: 'component' | 'hook' | 'template', limit?: string, verbose?: boolean}} */ options,
     ) => {
       const run = getCliInvocation();
       const json = program.opts().json || false;

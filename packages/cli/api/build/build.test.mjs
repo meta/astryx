@@ -107,7 +107,8 @@ describe('build API', () => {
   });
 
   it('keeps raw matches when every result is filtered out of the kit', async () => {
-    const r = await build('color', {cwd: REPO, type: 'doc'});
+    // Components match `color`, but none clears the kit's score floor.
+    const r = await build('color', {cwd: REPO, type: 'component'});
     expect(r.type).toBe('build.kit');
     if (r.type !== 'build.kit') return;
     expect(r.data.hasResults).toBe(true);

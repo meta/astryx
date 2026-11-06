@@ -143,15 +143,15 @@ describe('DebugEvent result summary', () => {
         'build',
         'color',
         '--type',
-        'doc',
+        'component',
       ]);
       expect(run.status).toBe(0);
       expect(run.stdout).toContain('Build kit for');
       expect(event.output).toMatchObject({
         emptyResult: false,
         // Every raw match was filtered out of the printed kit, so the kind
-        // falls back to what was asked for — `--type doc`.
-        resultKind: 'doc',
+        // falls back to what was asked for — `--type component`.
+        resultKind: 'component',
         directMatch: false,
       });
       expect(event.output.resultCount).toBeGreaterThan(0);
