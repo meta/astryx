@@ -253,6 +253,9 @@ Consumer data, columns, props, module signatures and usage remain documented in
   positions of the gliding row, the two parts round to different pixels. The step
   lasts only while the row glides; at rest the divider is level. This contract
   records the gap and does not correct it.
+- Expanded panel rows keep the moving clip, so on iOS WebKit they can drift
+  from the rows below for a few frames; AST-105 FR9's slide doesn't apply to an
+  element that paints its own box.
 
 ### Allowed variation
 

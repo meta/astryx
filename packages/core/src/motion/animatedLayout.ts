@@ -1721,6 +1721,124 @@ function extentOf(element: Element, edge: LayoutEdge): number {
 }
 
 /**
+ * The parts that slide inside an element revealed or concealed from a block
+ * edge by `extent` px. They are its child elements that the band can show:
+ * the area's visible part plus one viewport, or `extent` if larger, above and
+ * below. A part past the band cannot come into view while it moves, so it
+ * stays. The
+ * walk stops at the first child below the band, so its cost grows with the
+ * changed size, never with the length of a list. A translation cannot move
+ * text on its own, so an element with text of its own keeps the clip (null).
+ */
+function slidingParts(
+  element: Element,
+  edge: LayoutEdge,
+  area: Element,
+  extent: number,
+): Element[] | null {
+  if (!edge.startsWith('block') || !(extent > 0)) {
+    return null;
+  }
+  const view = element.ownerDocument.defaultView;
+  // A box the element paints itself would show whole from the first frame
+  // under a still clip, so such an element keeps the moving clip. So does one
+  // with a generated box, which stays still while its parts slide.
+  if (
+    view == null ||
+    paintsOwnBox(view.getComputedStyle(element)) ||
+    ['::before', '::after'].some(pseudo => {
+      const {content} = view.getComputedStyle(element, pseudo);
+      return content !== '' && content !== 'none' && content !== 'normal';
+    })
+  ) {
+    return null;
+  }
+  const visible = visibleRect(area);
+  const band = bandFor(visible, Math.max(view.innerHeight, extent));
+  const parts: Element[] = [];
+  for (let node = element.firstChild; node != null; node = node.nextSibling) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if ((node.textContent ?? '').trim() !== '') {
+        return null;
+      }
+      continue;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) {
+      continue;
+    }
+    // A translation moves neither an inline box nor a boxless one.
+    const {display} = view.getComputedStyle(node as Element);
+    if (display === 'inline' || display === 'contents') {
+      return null;
+    }
+    // Each part's place, read once per reveal, before anything moves.
+    const box = (node as Element).getBoundingClientRect();
+    if (box.top > band.end) {
+      break;
+    }
+    if (box.bottom >= band.start) {
+      parts.push(node as Element);
+    }
+  }
+  return parts.length > 0 ? parts : null;
+}
+
+/**
+ * Whether a style paints a box of its own: a fill, a border, a shadow, an
+ * outline or a filter.
+ */
+function paintsOwnBox(style: CSSStyleDeclaration): boolean {
+  const isClear = (color: string) =>
+    color === '' || color === 'transparent' || /^rgba\(.*,\s*0\)$/.test(color);
+  return (
+    !isClear(style.backgroundColor) ||
+    (style.backgroundImage !== '' && style.backgroundImage !== 'none') ||
+    ['Top', 'Right', 'Bottom', 'Left'].some(
+      side =>
+        style.getPropertyValue(`border-${side.toLowerCase()}-style`) !==
+          'none' &&
+        Number.parseFloat(
+          style.getPropertyValue(`border-${side.toLowerCase()}-width`),
+        ) > 0,
+    ) ||
+    (style.boxShadow !== '' && style.boxShadow !== 'none') ||
+    (style.borderImageSource !== '' && style.borderImageSource !== 'none') ||
+    (style.filter !== '' && style.filter !== 'none') ||
+    (style.outlineStyle !== '' &&
+      style.outlineStyle !== 'none' &&
+      Number.parseFloat(style.outlineWidth) > 0)
+  );
+}
+
+/**
+ * Where the parts sit when the element hides `hidden` px from `edge`. They
+ * move that far towards it, so their far edge meets the content that rides
+ * the same edge.
+ */
+function slideFrame(edge: LayoutEdge, hidden: number): Keyframe {
+  return {translate: `0px ${edge === 'block-end' ? -hidden : hidden}px`};
+}
+
+/**
+ * Clips `element` to its own box while its parts slide, and returns what puts
+ * its own `clip-path` back. The clip does not move, so it stays in step with
+ * the parts and the content beside them on every engine.
+ */
+function holdSlideClip(element: Element): () => void {
+  const {style} = element as HTMLElement;
+  const value = style.getPropertyValue('clip-path');
+  const priority = style.getPropertyPriority('clip-path');
+  style.setProperty('clip-path', 'inset(0px)');
+  return () => {
+    if (value === '') {
+      style.removeProperty('clip-path');
+    } else {
+      style.setProperty('clip-path', value, priority);
+    }
+  };
+}
+
+/**
  * The last element before `element` in the area that takes part in layout:
  * its previous sibling, or its nearest ancestor's below the area (the mirror
  * of `nextInFlow`, for a start edge).
@@ -1792,6 +1910,10 @@ interface EdgeMotion {
   readonly animation: Animation;
   /** The fraction of the element it shows `t` ms in (1: all of it). */
   shownAt: (t: number) => number;
+  /** The parts that slide under the element's clip, and their motions. */
+  readonly slides: ReadonlyArray<Animation>;
+  /** Puts back what the motion set on the element, once. */
+  readonly release: () => void;
 }
 
 /** Each element's running one-state reveal or conceal. */
@@ -1828,6 +1950,7 @@ function shownAtStart(element: Element, atRest: number): number {
     edgeMotions.delete(element);
     const fraction = shownNow(running);
     running.animation.cancel();
+    stopSlides(running);
     return fraction;
   }
   const stopped = stoppedShown.get(element);
@@ -1838,21 +1961,54 @@ function shownAtStart(element: Element, atRest: number): number {
   return atRest;
 }
 
+/** Stops `motion`'s sliding parts and puts back the element's clip, once. */
+function stopSlides(motion: EdgeMotion): void {
+  motion.release();
+}
+
 /** Records `animation` as `element`'s running one-state motion. */
 function trackEdgeMotion(
   element: Element,
   animation: Animation,
   shownAt: (t: number) => number,
+  slides: ReadonlyArray<Animation> = [],
+  release: () => void = () => {},
+  isHeldToRelease = false,
 ): EdgeMotion {
-  const motion: EdgeMotion = {animation, shownAt};
+  let isReleased = false;
+  const motion: EdgeMotion = {
+    animation,
+    shownAt,
+    slides,
+    release: () => {
+      if (!isReleased) {
+        isReleased = true;
+        for (const slide of slides) {
+          slide.cancel();
+        }
+        release();
+      }
+    },
+  };
   edgeMotions.set(element, motion);
+  if (isHeldToRelease) {
+    heldSlides.set(element, motion);
+  }
+  // A reveal's parts have landed at its end. An exit's parts hold where they
+  // end until `releaseLayoutExit`.
   animation.addEventListener?.('finish', () => {
     if (edgeMotions.get(element) === motion) {
       edgeMotions.delete(element);
+      if (!isHeldToRelease) {
+        motion.release();
+      }
     }
   });
   return motion;
 }
+
+/** Each exit's motion, whose parts hold their slides until its release. */
+const heldSlides = new WeakMap<Element, EdgeMotion>();
 
 /**
  * After this commit's glides start (the batch flushes in a microtask queued
@@ -1874,7 +2030,7 @@ function rideNeighbour(
   isCurrent: () => boolean,
   hiddenAt: (towards: number) => number,
   frame: (hidden: number) => Keyframe,
-  onRide: (hidden: (t: number) => number) => void,
+  onRide: (hidden: (t: number) => number, durationMs: number) => void,
 ): void {
   const effect = animation.effect as KeyframeEffect | null;
   if (effect == null || typeof effect.setKeyframes !== 'function') {
@@ -1913,7 +2069,7 @@ function rideNeighbour(
     };
     effect.setKeyframes(sampleOver(durationMs, t => frame(hidden(t))));
     effect.updateTiming?.({duration: durationMs});
-    onRide(hidden);
+    onRide(hidden, durationMs);
   });
 }
 
@@ -1945,12 +2101,21 @@ function rideEdge(
     () => edgeMotions.get(element) === motion,
     towards =>
       Math.min(extent, Math.max(0, isConceal ? extent - towards : -towards)),
-    hidden => ({
-      opacity: 1 - hidden / extent,
-      clipPath: pxClip(edge, hidden, rtl),
-    }),
-    hiddenAt => {
+    hidden =>
+      motion.slides.length > 0
+        ? {opacity: 1 - hidden / extent}
+        : {opacity: 1 - hidden / extent, clipPath: pxClip(edge, hidden, rtl)},
+    (hiddenAt, durationMs) => {
       motion.shownAt = t => 1 - hiddenAt(t) / extent;
+      // The parts ride the same frames, so their edge and the content's move
+      // on one clock.
+      for (const slide of motion.slides) {
+        const effect = slide.effect as KeyframeEffect | null;
+        effect?.setKeyframes?.(
+          sampleOver(durationMs, t => slideFrame(edge, hiddenAt(t))),
+        );
+        effect?.updateTiming?.({duration: durationMs});
+      }
     },
   );
 }
@@ -2004,24 +2169,68 @@ export function playLayoutChange(
   }
   const {progress} = motion;
   const rtl = edge.startsWith('inline') && isRtl(element);
+  // A block edge's parts slide in under the element's clip, on the frames the
+  // content after them glides on. A clip that moved would be painted on its
+  // own clock in WebKit, and the edge would part from that content.
+  const extent = edge.startsWith('block') ? extentOf(element, edge) : 0;
+  const partMotions = slideParts(
+    slidingParts(element, edge, area, extent) ?? [],
+    progress,
+    change,
+    remaining => slideFrame(edge, (1 - from) * remaining * extent),
+  );
   const animation = safeAnimate(
     element,
     sampleKeyframes(progress, remaining => {
       const hidden = (1 - from) * remaining;
-      return {opacity: 1 - hidden, clipPath: fractionClip(edge, hidden, rtl)};
+      return partMotions.length > 0
+        ? {opacity: 1 - hidden}
+        : {opacity: 1 - hidden, clipPath: fractionClip(edge, hidden, rtl)};
     }),
     {duration: progress.durationMs, easing: 'linear'},
     change,
   );
-  if (animation != null) {
+  if (animation == null) {
+    for (const part of partMotions) {
+      part.cancel();
+    }
+  } else {
     const tracked = trackEdgeMotion(
       element,
       animation,
       t => 1 - (1 - from) * progress.remaining(t),
+      partMotions,
+      partMotions.length > 0 ? holdSlideClip(element) : undefined,
     );
     rideEdge(element, area, edge, rtl, tracked, false);
   }
   return animation;
+}
+
+/**
+ * Plays each part's slide on the change's start, sampled like the glide.
+ * `frame` turns the share of the motion still to come into a keyframe.
+ */
+function slideParts(
+  parts: ReadonlyArray<Element>,
+  progress: GlideProgress,
+  change: ChangeStart | undefined,
+  frame: (remaining: number) => Keyframe,
+  fill?: FillMode,
+): Animation[] {
+  const motions: Animation[] = [];
+  for (const part of parts) {
+    const motion = safeAnimate(
+      part,
+      sampleKeyframes(progress, frame),
+      {duration: progress.durationMs, easing: 'linear', fill},
+      change,
+    );
+    if (motion != null) {
+      motions.push(motion);
+    }
+  }
+  return motions;
 }
 
 /** The inline properties an exit sets, so a release removes exactly them. */
@@ -2306,20 +2515,38 @@ export function holdLayoutExit(
     );
   } else {
     const {progress} = motion;
+    // As in a reveal, a block edge's parts slide out under its clip.
+    const extent = edge.startsWith('block') ? extentOf(element, edge) : 0;
+    const partMotions = slideParts(
+      slidingParts(element, edge, area, extent) ?? [],
+      progress,
+      change,
+      remaining => slideFrame(edge, (1 - from * remaining) * extent),
+      'forwards',
+    );
     animation = safeAnimate(
       element,
       sampleKeyframes(progress, remaining => {
         const shown = from * remaining;
-        return {opacity: shown, clipPath: fractionClip(edge, 1 - shown, rtl)};
+        return partMotions.length > 0
+          ? {opacity: shown}
+          : {opacity: shown, clipPath: fractionClip(edge, 1 - shown, rtl)};
       }),
       {duration: progress.durationMs, easing: 'linear', fill: 'forwards'},
       change,
     );
-    if (animation != null) {
+    if (animation == null) {
+      for (const part of partMotions) {
+        part.cancel();
+      }
+    } else {
       const tracked = trackEdgeMotion(
         element,
         animation,
         t => from * progress.remaining(t),
+        partMotions,
+        partMotions.length > 0 ? holdSlideClip(element) : undefined,
+        true,
       );
       rideEdge(element, area, edge, rtl, tracked, true);
     }
@@ -2357,6 +2584,12 @@ export function releaseLayoutExit(element: HTMLElement): void {
       fraction: shownNow(running),
       at: timelineNow(element),
     });
+    stopSlides(running);
+  }
+  const held = heldSlides.get(element);
+  heldSlides.delete(element);
+  if (held != null) {
+    stopSlides(held);
   }
   exits.get(element)?.cancel();
   exits.delete(element);
