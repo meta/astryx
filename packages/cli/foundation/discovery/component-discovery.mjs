@@ -381,6 +381,22 @@ export function familyMember(docs, name) {
  * @returns {Record<string, string[]>}
  */
 export function discoverComponents(coreDir) {
+  // The component matcher calls this for each name it resolves, so one
+  // operation reads the docs once. Each caller gets its own copy to change.
+  const found = oncePerListing(`components\0${coreDir}`, () =>
+    readComponentGroups(coreDir),
+  );
+  return Object.fromEntries(
+    Object.entries(found).map(([key, names]) => [key, [...names]]),
+  );
+}
+
+/**
+ * The component groups under `coreDir`, read from disk.
+ * @param {string} coreDir
+ * @returns {Record<string, string[]>}
+ */
+function readComponentGroups(coreDir) {
   const srcDir = path.join(coreDir, 'src');
   /** @type {Map<string, string|null>} componentName → group */
   const componentGroups = new Map();
