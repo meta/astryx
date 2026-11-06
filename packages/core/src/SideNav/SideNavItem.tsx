@@ -72,12 +72,23 @@ import {
   SideNavCollapseContext,
 } from './SideNavCollapseContext';
 import {useSideNavRenderMode} from './SideNavRenderContext';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {themeProps} from '../utils/themeProps';
-import {disabledInteractionProps} from '../utils/disabledInteraction';
-import {useTranslator} from '../i18n';
+import {
+  disabledInteractionProps,
+  withholdCallerHandlers,
+} from '../utils/disabledInteraction';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {SideNavFocusTargetsContext} from './SideNavFocusTargetsContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/SideNav/SideNavItem.generated';
+import {isRenderable} from '../utils/isRenderable';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Styles
 // =============================================================================
@@ -354,14 +365,13 @@ function NavItemElement({
       ref={ref as React.Ref<HTMLButtonElement>}
       type="button"
       onClick={onClick}
-      {...rest}
+      // A disabled item keeps its tab stop, so the browser still sends it events.
+      // It runs no caller handler except `onFocus` and `onBlur`.
+      {...withholdCallerHandlers(rest, !!isDisabled)}
       {...(isDisabled
         ? {
             'aria-disabled': true,
-            ...disabledInteractionProps(
-              rest.onKeyDown as
-                React.KeyboardEventHandler<HTMLButtonElement> | undefined,
-            ),
+            ...disabledInteractionProps<HTMLButtonElement>(),
           }
         : null)}>
       {children}
@@ -524,11 +534,11 @@ export function SideNavItem({
   // The row (or, collapsed, the trigger/link/button) is the pressable; the
   // expand toggle inside it is its own.
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {isCollapsed} = useSideNavCollapse();
   const renderMode = useSideNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
   const isInDrawer = renderMode === 'drawer' || renderMode === 'drawer-content';
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(isInDrawer);
   const id = useId();
   const hasChildren = !!children;
   const depth = use(SideNavItemDepthContext);
@@ -558,6 +568,21 @@ export function SideNavItem({
     isOpen: isRailLeaf ? undefined : false,
   });
   const railLeafRef = useMergedRefs(ref, railTooltip.ref);
+
+  // The row's root registers with its SideNav, so a collapse that removes the
+  // focused row can hand focus to the toggle or the nearest row still in the
+  // rail (`component:SideNav` AR3).
+  const focusTargets = use(SideNavFocusTargetsContext);
+  // The collapsed rail renders a top-level row with an icon (FR2).
+  const isKeptInRail = !!icon && depth === 0;
+  const rowRef = useCallback(
+    (element: HTMLDivElement | null) =>
+      element == null || focusTargets == null
+        ? undefined
+        : focusTargets.registerRow(element, isKeptInRail),
+    [focusTargets, isKeptInRail],
+  );
+  const rowTooltipRef = useMergedRefs(rowRef, railTooltip.ref);
 
   // Collapse state for items with children
   const itemCollapsibleConfig = useMemo(
@@ -602,11 +627,7 @@ export function SideNavItem({
       toggleItemCollapse();
       return;
     }
-    onClick?.(e);
-    // Close the mobile nav when a nav item is activated inside the drawer
-    if (isInDrawer) {
-      closeMobileNav();
-    }
+    closeDrawerAfter(onClick)?.(e);
   };
 
   const handleToggleClick = (e: React.MouseEvent) => {
@@ -684,7 +705,7 @@ export function SideNavItem({
     // Items with children: popover trigger + popover
     if (hasChildren) {
       return (
-        <div {...stylex.props(styles.root, xstyle)}>
+        <div ref={rowRef} {...stylex.props(styles.root, xstyle)}>
           <button
             ref={mergedTriggerRef}
             type="button"
@@ -749,7 +770,7 @@ export function SideNavItem({
 
     return (
       <div
-        ref={isRowTrigger ? railTooltip.ref : undefined}
+        ref={isRowTrigger ? rowTooltipRef : rowRef}
         {...stylex.props(styles.root, xstyle)}>
         {collapsedElement}
         {railTooltip.renderTooltip(label)}
@@ -766,7 +787,7 @@ export function SideNavItem({
           color: isSelected ? 'inherit' : isDisabled ? 'disabled' : 'secondary',
         })}
       {!isCollapsed && <span {...stylex.props(styles.label)}>{label}</span>}
-      {!isCollapsed && endContent && (
+      {!isCollapsed && isRenderable(endContent) && (
         <span {...stylex.props(styles.endContent)}>{endContent}</span>
       )}
       {!isCollapsed && isItemCollapsible && !hasIndependentToggle && (
@@ -942,7 +963,7 @@ export function SideNavItem({
   }
 
   const item = (
-    <div {...stylex.props(styles.root, xstyle)}>
+    <div ref={rowRef} {...stylex.props(styles.root, xstyle)}>
       {itemElement}
       {hasChildren && !isCollapsed && (
         <div

@@ -24,6 +24,7 @@ import React, {
   useCallback,
   useEffect,
   useId,
+  useInsertionEffect,
   useMemo,
   useRef,
   useState,
@@ -33,16 +34,24 @@ import React, {
 import * as stylex from '@stylexjs/stylex';
 import {useBusyIndicatorLane} from './busyIndicatorLane';
 import {useTrailingKeyDown} from './trailingKeyDown';
+import {useCommittedChoices} from './committedChoicesKey';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {
+  isFocusInsideOwnedLayer,
+  isPressInsideOwnedLayer,
+  noteOutsideDismissal,
+  useOutsidePress,
+} from '../Layer/outsidePress';
 import {isImeKeyEvent} from '../utils/ime';
 import {TypeaheadItem} from './TypeaheadItem';
 import {Icon} from '../Icon';
 import {Spinner} from '../Spinner';
+import {SpinnerOwnerContext} from '../Spinner/SpinnerOwnerContext';
 import {
   borderVars,
   colorVars,
@@ -63,12 +72,19 @@ import {warnOnce} from '../utils/devWarning';
 import type {BaseProps} from '../BaseProps';
 import type {SearchContext, SearchableItem, SearchSource} from './types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {clampInlineSize} from '../Layer/clampInlineSize';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Typeahead/BaseTypeahead.generated';
+import {textEntryTraitAttributes} from '../Field/textEntryTraits';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Types
 // =============================================================================
@@ -154,10 +170,10 @@ export interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<
   isDisabled?: boolean;
 
   /**
-   * When disabled with a reason, keeps the input focusable via `aria-disabled`
-   * (instead of the native `disabled` attribute) and `readOnly` so an
-   * associated disabled-reason tooltip stays discoverable by keyboard and
-   * assistive technology. Query and text mutation, opening the list, and a
+   * When disabled, keeps the input focusable via `aria-disabled` (instead of
+   * the native `disabled` attribute) and `readOnly`, so the field keeps its
+   * tab stop and any disabled-reason tooltip stays discoverable by keyboard
+   * and assistive technology (`spec:AST-085` FR1). Query and text mutation, opening the list, and a
    * pick by Enter or a press are blocked, also from a list that was open
    * before this state applied; Escape or Tab still closes it. Consumers
    * (Typeahead) own the tooltip and wrapper.
@@ -300,8 +316,13 @@ const styles = stylex.create({
   },
   dropdown: {
     boxSizing: 'border-box',
-    // Matches DROPDOWN_MAX_HEIGHT, which the room-below cap uses.
-    maxHeight: '300px',
+    // Matches DROPDOWN_MAX_HEIGHT, which the room-below cap uses. It is no
+    // taller than its layer's block-size cap either, which folds in the
+    // software keyboard: the list ends above the keyboard with the layer.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     padding: spacingVars['--spacing-1'],
   },
@@ -529,7 +550,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   ref,
   ...rest
 }: BaseTypeaheadProps<T>) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const placeholder =
     placeholderFromProps ?? t('@astryx.typeahead.searchPlaceholder');
   const emptySearchText =
@@ -593,6 +614,37 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     () => displayOrder(results, queryEntryCount),
     [results, queryEntryCount],
   );
+  // Committed values (Tokenizer's tokens) leave the shown rows in the same
+  // render that commits them, before any reload answers, so a list never
+  // offers a token (component:Tokenizer FR13). Until the reload answers, the
+  // highlight stays on its item when that item remains; the reloaded list
+  // highlights its first row. The previous key is remembered in state, like
+  // `sourceOfState` below.
+  const committedChoices = useCommittedChoices();
+  const committedChoicesKey = committedChoices?.key;
+  const isAtCommitLimit = committedChoices?.isAtLimit === true;
+  const [committedKeyOfState, setCommittedKeyOfState] =
+    useState(committedChoicesKey);
+  if (committedKeyOfState !== committedChoicesKey) {
+    setCommittedKeyOfState(committedChoicesKey);
+    const committedIds = committedChoices?.ids;
+    const kept =
+      committedIds == null
+        ? results
+        : results.filter(item => !committedIds.has(item.id));
+    if (kept.length !== results.length) {
+      const highlightedId = displayedResults[highlightedIndex]?.id;
+      const keptOrder = displayOrder(kept, queryEntryCount);
+      const keptIndex =
+        highlightedId == null
+          ? -1
+          : keptOrder.findIndex(item => item.id === highlightedId);
+      setResults(kept);
+      setHighlightedIndex(
+        keptIndex >= 0 ? keptIndex : keptOrder.length > 0 ? 0 : -1,
+      );
+    }
+  }
   // The popup's listbox, measured when a later list arrives so the appended
   // rows scroll instead of moving the shown rows or flipping the popup to
   // the other side of the field (spec:AST-092 FR6).
@@ -692,10 +744,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     onLoadingChangeRef.current?.(next);
   }, []);
 
-  // Track active pointer to defer popover.show() past click events.
-  // With popover="auto", showing the popover between pointerdown and
-  // pointerup/click causes the browser's light-dismiss to immediately
-  // close it (the click is seen as "outside" the newly-opened popover).
+  // Track active pointer to defer popover.show() past click events, so a
+  // list that opens during a press starts its outside-press watch after that
+  // press ends and never judges it.
   const pointerActiveRef = useRef(false);
 
   // Whether the input was ALREADY the active element the moment the current
@@ -732,15 +783,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // source: they can never be re-shown, so focus bootstraps the new source.
   const sourceGenRef = useRef(0);
 
-  // Results still arriving from a replaced source must not land in the new
-  // one's menu.
-  const prevSearchSourceRef = useRef(searchSource);
-  if (prevSearchSourceRef.current !== searchSource) {
-    prevSearchSourceRef.current.cancel?.();
-    prevSearchSourceRef.current = searchSource;
-    sourceGenRef.current = ++searchGenRef.current;
-  }
-
   // The previous source is remembered in state, not a ref, so a render React
   // discards cannot consume the comparison without its state updates.
   const [sourceOfState, setSourceOfState] = useState(searchSource);
@@ -750,40 +792,108 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setIsLoading(false);
       setHasSearched(false);
     }
-    loadingRef.current = false;
+  }
+  // A field that becomes disabled stops showing a search as busy in the same
+  // render, and the dropped query shows no outcome, so no empty state; the
+  // layout effect below drops the work itself.
+  const [disabledOfState, setDisabledOfState] = useState(isDisabled);
+  if (disabledOfState !== isDisabled) {
+    setDisabledOfState(isDisabled);
+    if (isDisabled && isLoading) {
+      setIsLoading(false);
+      setHasSearched(false);
+    }
   }
 
-  // When the search source is replaced, any in-flight load from the previous
-  // source is abandoned (generation bumped above). Notify the wrapper's busy lane
-  // in an effect so external store listeners run safely after commit.
-  const isInitialMountRef = useRef(true);
-  useEffect(() => {
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
+  // Results that arrive from a replaced source must not land in the new
+  // source's menu, so the replacement starts a new generation. That happens
+  // when the replacement commits, not in render. React can render a
+  // replacement and then discard it, for example when a transition suspends
+  // and a newer update replaces it. The source that stays then keeps its read.
+  // An insertion effect runs before every layout effect and ref callback of
+  // its commit. A read that one of them starts against the replacement gets a
+  // later generation, after the replaced source stopped its requests.
+  const prevSearchSourceRef = useRef(searchSource);
+  const isSourceReplacedRef = useRef(false);
+  useInsertionEffect(() => {
+    if (prevSearchSourceRef.current === searchSource) {
       return;
     }
+    prevSearchSourceRef.current.cancel?.();
+    prevSearchSourceRef.current = searchSource;
+    sourceGenRef.current = ++searchGenRef.current;
+    // The replacing render cleared the busy state.
+    loadingRef.current = false;
+    isSourceReplacedRef.current = true;
+  }, [searchSource]);
+  // Syncs the wrapper's busy lane. A read of the replacement that already
+  // started keeps the lane busy.
+  useIsomorphicLayoutEffect(() => {
+    if (!isSourceReplacedRef.current) {
+      return;
+    }
+    isSourceReplacedRef.current = false;
     if (!loadingRef.current) {
       onLoadingChangeRef.current?.(false);
     }
   }, [searchSource]);
 
-  // Layer for dropdown
+  // True from the moment the list is asked to open until it closes, including
+  // a show deferred past the active click, so committed values that change in
+  // the same event that opened the list still reload it.
+  const isShowingRef = useRef(false);
+
+  // Layer for dropdown. The list is a manual popover (see usePopover below):
+  // while it is open, a press on the combobox itself (its input or its
+  // buttons) or in the list is inside, and a press anywhere else closes it
+  // (component:BaseTypeahead FR12). The watch starts when the list shows and
+  // stops when it hides or the field unmounts (useOutsidePress owns that).
+  // An outside press hides the
+  // popover element directly, which useLayer reconciles like the browser's
+  // own light dismiss.
+  const outsidePress = useOutsidePress();
   const handleLayerShow = useCallback(() => {
+    isShowingRef.current = true;
     onOpenChange?.(true);
-  }, [onOpenChange]);
+    const anchorEl = anchorRef?.current ?? fallbackAnchorRef.current;
+    if (anchorEl == null) {
+      outsidePress.stop();
+      return;
+    }
+    // The list's own element sits inside the popover element.
+    const findLayer = () =>
+      dropdownRef.current?.closest<HTMLElement>('[popover]') ?? null;
+    outsidePress.start(
+      anchorEl,
+      path =>
+        isPressInsideOwnedLayer(
+          path,
+          anchorRef?.current ?? fallbackAnchorRef.current ?? anchorEl,
+          findLayer()?.id ?? '',
+        ),
+      () => findLayer()?.hidePopover(),
+    );
+  }, [onOpenChange, anchorRef, outsidePress]);
 
   const handleLayerHide = useCallback(() => {
+    isShowingRef.current = false;
+    outsidePress.stop();
     onOpenChange?.(false);
     setHighlightedIndex(-1);
     closedGenRef.current = searchGenRef.current;
     setHeldHeight(null);
     searchSource.cancel?.();
-  }, [onOpenChange, searchSource]);
+  }, [onOpenChange, searchSource, outsidePress]);
 
   const popover = usePopover({
     onShow: handleLayerShow,
     onHide: handleLayerHide,
-    hasLightDismiss: true,
+    // A manual popover: the browser's light dismiss counts a press in the
+    // input as outside (a text input cannot be an invoker), so it would close
+    // the list on every press in the field. handleLayerShow watches for a
+    // press outside instead (architecture:layer-runtime); Escape stays on the
+    // shared layer stack.
+    hasLightDismiss: false,
     hasCloseButton: false,
     hasAutoFocus: false,
     // The popup's own role="listbox" is the exposed semantics; the input keeps
@@ -791,19 +901,36 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     role: 'none',
   });
 
-  // Show the layer, deferring past the active click if a pointer is down.
-  // Without this, popover="auto" light-dismiss immediately closes the
-  // dropdown when it opens between pointerdown and pointerup/click.
+  // Show the layer, deferring past the active click if a pointer is down
+  // (see pointerActiveRef).
   // Read at show time, so a search or bootstrap that settles after the field
   // became disabled does not open the list (spec:AST-085 FR2).
   const isDisabledRef = useRef(isDisabled);
   useIsomorphicLayoutEffect(() => {
     isDisabledRef.current = isDisabled;
+    if (!isDisabled) {
+      return;
+    }
+    // Search work scheduled or in flight when the field became disabled is
+    // dropped: a later answer lists, announces and spins nothing
+    // (spec:AST-085 FR2). Bumping the generation fails its checks.
+    searchGenRef.current++;
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+    prevSearchSourceRef.current.cancel?.();
+    // The busy state itself cleared in the render that disabled the field.
+    if (loadingRef.current) {
+      loadingRef.current = false;
+      onLoadingChangeRef.current?.(false);
+    }
   }, [isDisabled]);
   const showLayer = useCallback(() => {
     if (isDisabledRef.current) {
       return;
     }
+    isShowingRef.current = true;
     if (pointerActiveRef.current) {
       document.addEventListener(
         'click',
@@ -1011,11 +1138,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       resultsGenRef.current = gen;
       const shown = bootstrapResults.slice(0, maxMenuItems);
       const nextHighlightedIndex = shown.length > 0 ? 0 : -1;
+      // A focus load that yields no choice, or fails (it arrives here empty),
+      // closes the list rather than leaving it open and empty. A typed
+      // query's empty search is not a focus load and keeps its empty-search
+      // message.
       if (
         results.length === 0 &&
         shown.length === 0 &&
         highlightedIndex === -1
       ) {
+        popover.hide();
         return;
       }
       setHeldHeight(null);
@@ -1023,9 +1155,18 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setHighlightedIndex(nextHighlightedIndex);
       if (bootstrapResults.length > 0) {
         showLayer();
+      } else {
+        popover.hide();
       }
     },
-    [highlightedIndex, maxMenuItems, results.length, showLayer, replaceResults],
+    [
+      highlightedIndex,
+      maxMenuItems,
+      results.length,
+      showLayer,
+      replaceResults,
+      popover,
+    ],
   );
 
   // Perform bootstrap
@@ -1035,8 +1176,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     try {
       bootstrapResult = searchSource.bootstrap();
     } catch {
+      // A failed request offers nothing: an open list closes (FR15).
+      applyBootstrapResults([], gen);
       if (searchGenRef.current === gen) {
-        replaceResults([]);
         setLoading(false);
       }
       return;
@@ -1052,15 +1194,90 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     try {
       applyBootstrapResults(await bootstrapResult, gen);
     } catch {
-      if (searchGenRef.current === gen) {
-        replaceResults([]);
-      }
+      applyBootstrapResults([], gen);
     } finally {
       if (searchGenRef.current === gen) {
         setLoading(false);
       }
     }
-  }, [searchSource, applyBootstrapResults, setLoading, replaceResults]);
+  }, [searchSource, applyBootstrapResults, setLoading]);
+
+  // A list shown before the caller's committed values changed is no longer
+  // current (component:Tokenizer FR13, spec:AST-092 FR4). While the list is
+  // open, it reloads the same query, its typed text or the focus list, from
+  // the source those values now filter. A closed list stays closed; opening it
+  // loads that source.
+  // Decided from the state at the moment the committed values change, with
+  // no remembered outcome (the state table in the pull request):
+  // - at the limit: close, whatever the query (FR15);
+  // - a closed list with no search waiting: stays closed, and opening it
+  //   loads the current source;
+  // - typed text: search it again, also replacing a search still waiting
+  //   for its debounce; an empty answer shows the empty-search message;
+  // - a focus list the commit emptied (no row left, no load waiting): close
+  //   (FR15); with rows left, or a load waiting: load the focus list again;
+  //   an empty or failed answer closes (FR15);
+  // - a focus list with focus entries off: close.
+  const reloadForCommittedChoices = useCallback(() => {
+    // A search waiting for its debounce would use the source from before the
+    // commit, so the reload replaces it.
+    const hadPendingSearch = searchTimeoutRef.current != null;
+    if (searchTimeoutRef.current != null) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+    if (isDisabled || !isMountedRef.current) {
+      return;
+    }
+    if (isAtCommitLimit) {
+      popover.hide();
+      return;
+    }
+    if (!isShowingRef.current && !hadPendingSearch) {
+      return;
+    }
+    if (query.length > 0) {
+      if (!isBelowMinQueryLength(query, minQueryLength)) {
+        void performSearch(query);
+      }
+      return;
+    }
+    if (!hasEntriesOnFocus || (results.length === 0 && !hadPendingSearch)) {
+      popover.hide();
+      return;
+    }
+    void performBootstrap();
+  }, [
+    isDisabled,
+    isAtCommitLimit,
+    query,
+    minQueryLength,
+    hasEntriesOnFocus,
+    results.length,
+    performSearch,
+    performBootstrap,
+    popover,
+  ]);
+  // The latest reload, read when the key changes, as an effect event.
+  const reloadForCommittedChoicesRef = useRef(reloadForCommittedChoices);
+  useIsomorphicLayoutEffect(() => {
+    reloadForCommittedChoicesRef.current = reloadForCommittedChoices;
+  });
+  const reloadedKeyRef = useRef(committedChoicesKey);
+  useIsomorphicLayoutEffect(() => {
+    if (reloadedKeyRef.current === committedChoicesKey) {
+      return;
+    }
+    reloadedKeyRef.current = committedChoicesKey;
+    // The reload is a source request, started after the commit like one a
+    // keystroke starts. Queued from a layout effect, it runs before paint, so
+    // a list the commit emptied closes without showing empty.
+    queueMicrotask(() => {
+      if (reloadedKeyRef.current === committedChoicesKey) {
+        reloadForCommittedChoicesRef.current();
+      }
+    });
+  }, [committedChoicesKey]);
 
   // Handle query change
   const handleQueryChange = useCallback(
@@ -1116,7 +1333,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       if (debounceMs <= 0) {
         triggerSearch();
       } else {
-        searchTimeoutRef.current = setTimeout(triggerSearch, debounceMs);
+        searchTimeoutRef.current = setTimeout(() => {
+          searchTimeoutRef.current = null;
+          triggerSearch();
+        }, debounceMs);
       }
     },
     [
@@ -1161,6 +1381,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       searchSource.cancel?.();
       onChange(item);
       setQuery('');
+      // The pick empties the input, which is a change to the query like any
+      // typed one. A query that was already empty (a pick from the focus list)
+      // did not change.
+      if (query !== '') {
+        onChangeQuery?.('');
+      }
       replaceResults([]);
       setHeldHeight(null);
       setHasSearched(false);
@@ -1171,7 +1397,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       popover.hide();
       inputRef.current?.focus();
     },
-    [isDisabled, onChange, popover, searchSource, setLoading, replaceResults],
+    [
+      isDisabled,
+      onChange,
+      onChangeQuery,
+      query,
+      popover,
+      searchSource,
+      setLoading,
+      replaceResults,
+    ],
   );
 
   // Shared by handleFocus and handleClick: bootstrap entries if none are
@@ -1245,10 +1480,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
 
   // Handle blur — close the dropdown when focus leaves the input for an
   // element that is neither inside the field wrapper (anchor) nor inside the
-  // dropdown popover. The native popover="auto" light-dismiss only fires on
-  // outside pointer clicks and Escape; it does not close when focus moves away
-  // via the keyboard (Tab) or programmatically, which would otherwise leave an
-  // orphaned open menu. Clicking a result moves focus onto the option (it is
+  // dropdown popover. The outside-press watch only answers pointer presses
+  // and Escape stays on the layer stack; neither closes the list when focus
+  // moves away via the keyboard (Tab) or programmatically, which would
+  // otherwise leave an orphaned open menu. Clicking a result moves focus onto the option (it is
   // tabIndex={-1}, so it lives inside the popover) and selection re-focuses the
   // input, so this only closes on a genuine focus-out of the whole field.
   const handleBlur = useCallback(
@@ -1256,14 +1491,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       if (!popover.isOpen) {
         return;
       }
-      const next = e.relatedTarget as Node | null;
-      if (next) {
-        const anchorEl = anchorRef?.current ?? fallbackAnchorRef.current;
-        const popoverEl = document.getElementById(popover.id);
-        if (anchorEl?.contains(next) || popoverEl?.contains(next)) {
-          return;
-        }
+      const anchorEl = anchorRef?.current ?? fallbackAnchorRef.current;
+      if (isFocusInsideOwnedLayer(e.relatedTarget, anchorEl, popover.id)) {
+        return;
       }
+      noteOutsideDismissal(e.currentTarget.ownerDocument);
       popover.hide();
     },
     [popover, anchorRef],
@@ -1525,6 +1757,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         autoFocus={hasAutoFocus}
         data-autofocus={hasAutoFocus || undefined}
         autoComplete="off"
+        // Autocorrect would rewrite names and identifiers. The key is only a
+        // label: Enter still commits the highlighted option.
+        {...textEntryTraitAttributes({
+          enterKeyHint: 'search',
+          hasAutoCorrect: false,
+        })}
         {...mergeProps(
           stylex.props(
             styles.input,
@@ -1538,11 +1776,14 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       />
       {isLoading && busyLane == null && (
         <span {...stylex.props(styles.loadingStatus)}>
-          <Spinner
-            size="sm"
-            aria-label={t('@astryx.typeahead.loading')}
-            role="img"
-          />
+          {/* Named, never live: the typeahead announces its search. */}
+          <SpinnerOwnerContext value={true}>
+            <Spinner
+              size="sm"
+              aria-label={t('@astryx.typeahead.loading')}
+              role="img"
+            />
+          </SpinnerOwnerContext>
         </span>
       )}
       {popover.render(

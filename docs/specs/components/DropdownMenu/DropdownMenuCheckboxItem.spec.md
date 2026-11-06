@@ -38,7 +38,7 @@ system_specs: [spec:AST-020]
 | Behavior                | The row is one `menuitemcheckbox` whose `aria-checked` is its `value`; an enabled activation reports `!value` and keeps the menu open unless asked to close; a disabled row is inert.                                  |
 | End-user impact         | People toggle options without the menu closing on each change, and screen-reader users hear one checkbox per row.                                                                                                      |
 | Builder impact          | Builders own the value; the row composes their click and pointer-move handlers with its own activation and hover focus.                                                                                                |
-| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. Enter keeping the menu open is listed under Current-state impact (OQ1).                                                                                      |
+| Compatibility/readiness | Records shipped behavior; no API change; a disabled row gains `tabindex="-1"` (FR3). Enter keeping the menu open is listed under Current-state impact (OQ1).                                                           |
 | Review checks           | Reject a nested announced checkbox, a row that closes by default, a dropped caller handler, or an activation while disabled.                                                                                           |
 | Governing rules         | `spec:AST-020` FR15; `architecture:public-component-api` INV5–INV8; `architecture:interaction-modality`.                                                                                                               |
 
@@ -54,8 +54,8 @@ close lifecycle.
 ## Compatibility and migration
 
 - Released default preserved: yes (`hasCloseOnSelect=false`).
-- Compatibility class: records shipped behavior; no public prop, default,
-  export, or DOM change.
+- Compatibility class: records shipped behavior; no public prop or export
+  change; a disabled row gains `tabindex="-1"` (FR3).
 - Controlled/uncontrolled behavior: controlled; `value` is caller-owned.
 - Migration decision: none.
 
@@ -77,8 +77,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Focus entry, roving focus, typeahead, and Enter/Space click synthesis — owned
   by `component:DropdownMenu`.
 - Checkbox chrome — delegated to `component:Indicator`.
-- Whether disabled rows stay keyboard-discoverable — `component:DropdownMenu`
-  OQ1.
+- How the keyboard reaches a disabled row — `component:DropdownMenu` FR17.
 
 ## Public concepts
 
@@ -94,10 +93,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | FR1 | The row renders one element with `role="menuitemcheckbox"` whose `aria-checked` equals `value`; the checkbox marker is decorative (`aria-hidden`), so the row is the only announced control.                                                                                                                                                                                                                                                                                             | `spec:AST-020` FR15; current source and tests                                |
 | FR2 | An enabled activation, by pointer or by the parent's synthesized Enter/Space click, calls `onChange(!value)`, then closes the menu when `hasCloseOnSelect` is set, then calls the caller's `onClick`; without `hasCloseOnSelect` the menu stays open. The APG Menu pattern's Enter closes the menu, and `spec:AST-020` FR15 requires this record to name any required part it does not adopt. Implementation gap: Enter keeps the menu open by default, and no exception is named (OQ1). | `spec:AST-020` FR15; `architecture:public-component-api` INV7; current tests |
-| FR3 | A disabled row exposes `aria-disabled="true"`, renders no `tabindex`, and on activation calls neither `onChange` nor the caller's activation handlers.                                                                                                                                                                                                                                                                                                                                   | Current source and tests                                                     |
+| FR3 | A disabled row exposes `aria-disabled="true"`, carries `tabindex="-1"` like an enabled row so the parent's keyboard model reaches it (`component:DropdownMenu` FR17), and on any activation calls neither `onChange` nor the caller's activation handlers and does not close the menu. Implementation gap: a disabled row renders no `tabindex` today.                                                                                                                                   | Current source and tests                                                     |
 | FR4 | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` reach or compose on the row root; caller `onPointerMove` composes with the row's hover focus.                                                                                                                                                                                                                                                                                                            | `architecture:public-component-api` INV5–INV8; current tests                 |
 | FR5 | The marker is the shared checkbox Indicator, `sm` in a small menu; the row carries the `dropdown-menu-item` target with the menu size.                                                                                                                                                                                                                                                                                                                                                   | `architecture:component-theming-surface`; current source and tests           |
-| FR6 | The row adds no key handler or tab stop of its own: enabled rows are `tabindex="-1"` for the parent's roving focus, and the parent's arrow keys skip a disabled row (`component:DropdownMenu` FR17).                                                                                                                                                                                                                                                                                     | `architecture:interaction-modality`; parent tests                            |
+| FR6 | The row adds no key handler or tab stop of its own: every row, disabled included, is `tabindex="-1"` for the parent's roving focus, and the parent's keyboard reaches a disabled row (`component:DropdownMenu` FR17).                                                                                                                                                                                                                                                                    | `architecture:interaction-modality`; parent tests                            |
 
 ### Allowed variation
 
@@ -131,10 +130,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   accessible name, checked state, focus, and activation; the marker is
   decorative.
 - **AR2 — Disabled state.** A disabled row is inert.
-- **AR3 — Focus visibility.** Keyboard focus paints only the menu overlay
-  tint, about 1.1:1 against the menu surface in the default themes, with no
-  outline, and nothing under forced colors. The shared row treatment is
-  `component:DropdownMenuItem` OQ2.
+- **AR3 — Focus visibility.** Keyboard focus draws the shared focus ring
+  inside the row, inset by the ring's own width, in every color mode, forced
+  colors included; after pointer input the row shows only the overlay tint
+  (`architecture:interaction-modality` INV1, INV3). The shared row treatment is
+  `component:DropdownMenuItem` FR8.
 
 ## Design relationships
 
@@ -159,18 +159,17 @@ anatomy-theming map.
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | FR1, AR1  | `DropdownMenuSelectable.test.tsx` "keeps the checkbox indicator decorative (row is the only announced control)"; "a ref reaches the menuitemcheckbox element"                                                                                                                                                                                                                       | Checked and unchecked                  | An announced marker or a row that is not `menuitemcheckbox` fails.                                                                                    | `audit:DropdownMenuCheckboxItem/semantics`     |
 | FR2, ORD1 | `DropdownMenuSelectable.test.tsx` "calls onChange with the toggled value on click", "composes the caller click handler with the checked-state change", "composes the caller click handler on keyboard activation", "closes after a successful toggle only when requested"; `DropdownMenu.test.tsx` "activates a focused menuitemradio with Enter and a menuitemcheckbox with Space" | Pointer and keyboard; close on and off | A wrong value, a dropped caller `onClick`, or a close without the opt-in fails. Evidence gap: no test asserts the `onChange`, close, `onClick` order. | `audit:DropdownMenuCheckboxItem/behavior`      |
-| FR3, AR2  | `DropdownMenuSelectable.test.tsx` "does not call consumer activation handlers when disabled" and "does not toggle when disabled"                                                                                                                                                                                                                                                    | Disabled                               | A toggle or caller handler while disabled fails. Evidence gap: no test asserts the absent `tabindex`.                                                 | `audit:DropdownMenuCheckboxItem/behavior`      |
+| FR3, AR2  | `DropdownMenuSelectable.test.tsx` "does not call consumer activation handlers when disabled" and "does not toggle when disabled"                                                                                                                                                                                                                                                    | Disabled                               | A toggle, a close, or a caller handler while disabled fails. Evidence gap: no test asserts the disabled row's `tabindex="-1"`.                        | `audit:DropdownMenuCheckboxItem/behavior`      |
 | FR4       | `DropdownMenuSelectable.test.tsx` "composes the caller pointer-move handler with menu hover focus" and "a ref reaches the menuitemcheckbox element"                                                                                                                                                                                                                                 | Ref; pointer move                      | A dropped ref or handler fails. Evidence gap: no test asserts host attributes, `className`, `style`, or `xstyle` on the row.                          | `audit:DropdownMenuCheckboxItem/api`           |
 | FR5       | `DropdownMenuSelectable.test.tsx` "maps a small menu to the small shared checkbox marker"                                                                                                                                                                                                                                                                                           | Small menu                             | A marker that ignores the menu size fails. Evidence gap: no test asserts the `dropdown-menu-item` target on this row.                                 | `audit:DropdownMenuCheckboxItem/theming`       |
-| FR6       | `DropdownMenu.test.tsx` "arrow navigation reaches consumer-rendered menuitemradio and menuitemcheckbox items" and "skips aria-disabled menuitemradio and menuitemcheckbox items during arrow navigation"                                                                                                                                                                            | Enabled and disabled rows              | A row the arrows miss, or a disabled row they land on, fails.                                                                                         | `audit:DropdownMenuCheckboxItem/accessibility` |
-| AR3, PR1  | Evidence gap: no test asserts the focus paint or the listener bound                                                                                                                                                                                                                                                                                                                 | —                                      | —                                                                                                                                                     | `audit:DropdownMenuCheckboxItem/behavior`      |
+| FR6       | `DropdownMenu.test.tsx` "arrow navigation reaches consumer-rendered menuitemradio and menuitemcheckbox items" and the disabled-row keyboard cases (`component:DropdownMenu` FR17)                                                                                                                                                                                                   | Enabled and disabled rows              | A row the arrows miss, a disabled row they skip, or a disabled row that toggles or closes the menu fails.                                             | `audit:DropdownMenuCheckboxItem/accessibility` |
+| AR3, PR1  | `DropdownMenuForcedColors.test.tsx` (the row's `:focus-visible` ring and token inset); `DropdownMenuAudit.a11y.chromium.spec.ts` forced-colors frames. Evidence gap: no test asserts the listener bound                                                                                                                                                                             | —                                      | —                                                                                                                                                     | `audit:DropdownMenuCheckboxItem/behavior`      |
 
 ## Current-state impact
 
-- **Focus visibility (AR3).** Keyboard focus on a checkbox row shows only an
-  overlay tint about 1.1:1 against the menu surface, and no indicator in
-  forced-colors mode; the shared row treatment is `component:DropdownMenuItem`
-  OQ2.
+- **Disabled rows skipped (FR3, FR6).** A disabled row renders no `tabindex`, so
+  the parent's arrow keys and type-ahead skip it instead of reaching it as
+  `component:DropdownMenu` FR17 and DEC-11 state.
 - **Enter keeps the menu open (FR2).** Enter on a checkbox row toggles it and
   leaves the menu open by default, against the Menu pattern's Enter that
   `spec:AST-020` FR15 adopts, with no named exception (OQ1).

@@ -19,7 +19,7 @@ import {mergeProps} from '../utils';
 import {isApplePlatform} from '../utils/isApplePlatform';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator, type TranslatorFn} from '../i18n';
+import type {TranslatorFn} from '../i18n';
 import {
   colorVars,
   spacingVars,
@@ -28,6 +28,13 @@ import {
   fontWeightVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Kbd/Kbd.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   wrapper: {
@@ -42,6 +49,9 @@ const styles = stylex.create({
     justifyContent: 'center',
     minWidth: spacingVars['--spacing-5'],
     height: spacingVars['--spacing-5'],
+    // The theme height holds while one line of text fits. A taller line
+    // grows the badge.
+    minHeight: '1lh',
     paddingInline: spacingVars['--spacing-1'],
     borderRadius: radiusVars['--radius-inner'],
     backgroundColor: colorVars['--color-neutral'],
@@ -90,7 +100,9 @@ function getKeyDisplay(key: string, isMac: boolean, t: TranslatorFn): string {
   if (key === 'mod') {
     return isMac ? '\u2318' : t('@astryx.kbd.key.controlShort');
   }
-  if (key === 'escape') return t('@astryx.kbd.key.escapeShort');
+  if (key === 'escape') {
+    return t('@astryx.kbd.key.escapeShort');
+  }
   return KEY_DISPLAY.get(key) ?? key.toUpperCase();
 }
 
@@ -166,7 +178,7 @@ export interface KbdProps extends BaseProps<HTMLSpanElement> {
  * ```
  */
 export function Kbd({keys, ref, xstyle, className, style, ...rest}: KbdProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const isMac = useSyncExternalStore(
     subscribeToPlatformChanges,
     isApplePlatform,

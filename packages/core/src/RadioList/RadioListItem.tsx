@@ -26,13 +26,25 @@ import {RadioListContext} from './RadioList';
 import {RadioListReasonContext} from './RadioListReasonContext';
 import {joinAriaIDs} from '../utils/inputAria';
 import {colorVars, radiusVars} from '../theme/tokens.stylex';
-import {mergeProps, isRenderable, rtlStyles} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
+import {rtlStyles} from '../utils/rtlStyles';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useIndicator} from '../Indicator';
-import {Item, type ItemAlign} from '../Item';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useTouchHitArea} from '../utils/touchHitArea';
+import {pressBoxProps} from '../privateAttributes/pressBox.stylex';
+import {registerBoxHold} from '../utils/boxHold';
+import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {useIndicator} from '../Indicator/useIndicator';
+import {Item, type ItemAlign} from '../Item/Item';
 import {themeProps} from '../utils/themeProps';
+import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
+
+// Registered here, not in the press controller, so a page with no box carries
+// none of its code.
+registerBoxHold();
 
 // The touch press's paint, declared by the shared overlay styles on the
 // element the controller writes to (`pressedAlpha`) at the press's strength,
@@ -145,11 +157,6 @@ const rowStyles = stylex.create({
     // Suppress Item's interactive hover/press background so the resting and
     // hovered row look identical by default (a theme can restyle either).
     backgroundColor: 'transparent',
-    // ...and the touch press's overlay image, for the same reason: under a
-    // finger only the radio circle paints, as under a mouse. The press's
-    // strength still lands on the row, which is where the layer over the
-    // circle reads it.
-    backgroundImage: 'none',
   },
   // The mouse press (a finger's lives on `data-astryx-press`): the row is
   // pressed, but not through a nested link or button, which keep their own
@@ -307,8 +314,19 @@ export function RadioListItem({
   // `<label htmlFor>` would double-fire under delegation.
   const radioRef = useRef<HTMLInputElement>(null);
 
+  // Under a coarse pointer an option's row grows toward 44 px through an
+  // invisible band, and the row keeps its size. A tap on the band lands on
+  // the row, which hands it to the radio. The band's insets stay live while
+  // the row takes taps, and clear when it stops.
+  const watchRowHitArea = useTouchHitArea(!isDisabled);
+  const mergedRowRef = useMergedRefs(ref, watchRowHitArea);
+
   const radioCircle = (
     <div
+      // iOS answers a long hold on the circle with a text selection and no
+      // click. The press controller holds the row's selection for a press on
+      // the marked circle, and picks the option if no click comes.
+      {...(isDisabled ? undefined : pressBoxProps)}
       {...stylex.props(
         styles.radioWrapper,
         wrapperSizeStyles[size],
@@ -389,7 +407,7 @@ export function RadioListItem({
 
   return (
     <Item
-      ref={ref}
+      ref={mergedRowRef}
       {...(isDisabled ? undefined : pressable)}
       startContent={mediaContent}
       // Delegate row-surface clicks (label text, description, and the empty
@@ -412,12 +430,16 @@ export function RadioListItem({
           // the painting row element (Item), the same element that carries the
           // theme target, so a theme's hover styling stays in step with the tint.
           !isDisabled && indicatorScope,
+          // The row keeps no press paint of its own: the circle paints, and
+          // reads the strength whose release the row keeps.
+          rowPressLayerStyles.cellWithoutLayer,
           // Restore the bare default look: zero Item's padding/radius and its
           // interactive hover/press background. Applied after Item's own base
           // styles so it wins within the base layer; a `radio-list-item` theme
           // still overrides it from the higher `astryx-theme` layer.
           rowStyles.root,
           !isDisabled && rowStyles.press,
+          !isDisabled && touchHitAreaStyles.layer,
           xstyle,
         ] as StyleXStyles
       }

@@ -118,6 +118,7 @@ export type {
   SingleComponentDoc,
   MultiComponentDoc,
   ComponentEntry,
+  ComponentDeprecation,
   ComponentGroupDoc,
   ComponentTranslationDoc,
   ComponentPropDoc,
@@ -137,6 +138,8 @@ export type {
   ComponentThemingTarget,
   ComponentThemingVar,
   ComponentThemingDerivedVar,
+  ComponentIconSlotDoc,
+  ComponentIconSlotStateDoc,
   UsageDoc,
   // hook
   HookParamDoc,

@@ -15,6 +15,7 @@ verified_by:
     packages/core/src/List/List.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
     scripts/check-knowledge.mjs,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: [family:navigation-destinations]
@@ -33,15 +34,15 @@ system_specs: [spec:AST-057, spec:AST-103]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Public contract         | `ListItem` with `label`, `description`, `startContent`, `endContent`, `onClick`, `interactiveRef`, `href`, `target`, `rel`, `align`, `isDisabled`, `isSelected`, `swipeActions`, `swipeBehavior`, `xstyle`, `className`, `style`, and `ref`; the row carries `component:List`'s `list-item` target. `itemKey` (`spec:AST-103` DEC-4) is specified but not shipped. |
-| Behavior                | One `<li>` row rendered by `component:Item`, which receives every row prop. Inside a List the row takes the list's density, dividers, edge treatment, and marker; outside a List it uses Item's defaults and draws no marker.                                                                                                                                      |
-| End-user impact         | Each list entry reads as one list item, with the list's bullet, number, or task checkbox before it and the same interaction Item gives any row.                                                                                                                                                                                                                    |
-| Builder impact          | None.                                                                                                                                                                                                                                                                                                                                                              |
-| Compatibility/readiness | Records shipped behavior; no public change. Two implementation gaps, listed under Current-state impact.                                                                                                                                                                                                                                                            |
-| Review checks           | Reject a row that is not an `<li>`, a ListItem-level edge, density, or divider prop, a marker drawn outside a marked List, or a dropped Item prop.                                                                                                                                                                                                                 |
-| Governing rules         | `component:Item` (`align` for start and end content); `component:List`; `family:navigation-destinations`; `spec:AST-057`; `spec:AST-103`; `architecture:component-theming-surface`; `architecture:component-style-authoring` INV7.                                                                                                                                 |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `ListItem` with `label`, `description`, `startContent`, `endContent`, `onClick`, `interactiveRef`, `href`, `target`, `rel`, `align`, `isDisabled`, `isSelected`, `swipe`, `xstyle`, `className`, `style`, and `ref`, with the deprecated `swipeActions` and `swipeBehavior` until `spec:AST-057` CLN-0025; the row carries `component:List`'s `list-item` target. `itemKey` (`spec:AST-103` DEC-4) is specified but not shipped. |
+| Behavior                | One `<li>` row rendered by `component:Item`, which receives every row prop. Inside a List the row takes the list's density, dividers, edge treatment, and marker; outside a List it uses Item's defaults and draws no marker.                                                                                                                                                                                                    |
+| End-user impact         | Each list entry reads as one list item, with the list's bullet, number, or task checkbox before it and the same interaction Item gives any row.                                                                                                                                                                                                                                                                                  |
+| Builder impact          | The deprecated `swipeActions` and `swipeBehavior` move to `swipe={createSwipe(…)}` under `spec:AST-057` DEP-0017; its `astryx upgrade` codemod is an opt-in early migration from the deprecating release and runs again in 0.8.0's upgrade with CLN-0025's removal.                                                                                                                                                              |
+| Compatibility/readiness | Records shipped behavior; no public change. Three implementation gaps, listed under Current-state impact.                                                                                                                                                                                                                                                                                                                        |
+| Review checks           | Reject a row that is not an `<li>`, a ListItem-level edge, density, or divider prop, a marker drawn outside a marked List, or a dropped Item prop.                                                                                                                                                                                                                                                                               |
+| Governing rules         | `component:Item` (`align` for start and end content); `component:List`; `family:navigation-destinations`; `spec:AST-057`; `spec:AST-103`; `architecture:component-theming-surface`; `architecture:component-style-authoring` INV7.                                                                                                                                                                                               |
 
 This table is a review projection; the body below is authoritative.
 
@@ -58,7 +59,10 @@ from `component:Item`. Consumer usage lives in `ListItem.doc.mjs`.
 - Compatibility class: records shipped behavior; no public change
 - Controlled/uncontrolled behavior: not applicable; `isSelected` and
   `isDisabled` are caller-owned
-- Migration decision: none
+- Migration decision: `spec:AST-057` DEP-0017, whose `astryx upgrade` codemod
+  rewrites `swipeActions` and `swipeBehavior` to `swipe={createSwipe(…)}`; it
+  is an opt-in early migration from the deprecating release and runs again in 0.8.0's upgrade with
+  `spec:AST-057` CLN-0025's removal
 
 Consumer migration instructions belong in consumer docs and release notes.
 
@@ -72,6 +76,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **ListItem has no `itemKey` yet.** `spec:AST-103` DEC-4 and `component:List`
   FR12 have each reorderable row name its item through an `itemKey` prop;
   ListItem does not accept one yet.
+- **ListItem has no `swipe` yet.** `spec:AST-057` FR1 has ListItem pass
+  `swipe` through to `Item`, which replaces the deprecated `swipeActions`
+  and `swipeBehavior` (`spec:AST-057` DEP-0017); `swipe` is not built, so
+  `ListItemProps` has no `swipe` yet and FR1's pass-through of it is not
+  current source.
 
 ## Ownership boundary
 
@@ -108,7 +117,7 @@ No component-local concept beyond the consumer props; row props are
 
 | ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                               | Basis                    |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| FR1 | ListItem renders `component:Item` as an `<li>` and passes `label`, `description`, `startContent`, `endContent`, `onClick`, `interactiveRef`, `href`, `target`, `rel`, `align`, `isDisabled`, `isSelected`, `swipeActions`, `swipeBehavior`, and `ref` to it unchanged, with other DOM and data props reaching the row.                                                                                                                                  | Current source and tests |
+| FR1 | ListItem renders `component:Item` as an `<li>` and passes `label`, `description`, `startContent`, `endContent`, `onClick`, `interactiveRef`, `href`, `target`, `rel`, `align`, `isDisabled`, `isSelected`, `swipe`, the deprecated `swipeActions` and `swipeBehavior` (`spec:AST-057` DEP-0017), and `ref` to it unchanged, with other DOM and data props reaching the row.                                                                             | Current source and tests |
 | FR2 | Inside a List, the row takes the list's `density`, its `hasDividers` setting, which draws a divider between rows with no extra element and square corners, and its `edge` treatment.                                                                                                                                                                                                                                                                    | Current source and tests |
 | FR3 | Outside a List, the row uses `balanced` density, no dividers, the `padded` treatment, and no marker, keeping Item's inline inset.                                                                                                                                                                                                                                                                                                                       | Current source and tests |
 | FR4 | In a List whose `listStyle` is `disc`, `circle`, or `decimal`, the row draws that marker before its content: a disc or circle shape, or a counter number. A task state set for the row draws a read-only, labelled checkbox in the marker's place. Each marker and the task checkbox sit on the label's first line. A List whose `listStyle` is `none` draws neither. Other markers, set internally for Markdown's nested lists, are uncontracted here. | Current source and tests |
@@ -173,13 +182,14 @@ migration, so the map is deferred.
 
 ## Verification map
 
-| Contract | Verification                                                                     | Representative states                          | Mutation or failure expectation                        | Audit section                  |
-| -------- | -------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------ | ------------------------------ |
-| FR1, AR1 | `List.test.tsx` row element, align, data attribute, and swipe pass-through tests | Static and interactive rows                    | A row that is not an `<li>`, or a dropped prop, fails. | `audit:ListItem/behavior`      |
-| FR2      | `List.test.tsx` density, divider, radius, and edge treatment tests               | Each density; dividers on and off; each edge   | A row that ignores its List's settings fails.          | `audit:ListItem/layout`        |
-| FR3      | `List.test.tsx` "keeps the inset of a ListItem outside a List"                   | Row outside a List                             | A row outside a List that loses its inset fails.       | `audit:ListItem/layout`        |
-| FR4, AR3 | `List.test.tsx` marker and ListMarkerScope tests                                 | Presence of a marker, none, scope marker, task | A missing, extra, or unlabelled marker fails.          | `audit:ListItem/anatomy`       |
-| AR2      | `List.test.tsx` invisible button, anchor, disabled, and selection tests          | Click, href, disabled, selected                | Lost row semantics fail.                               | `audit:ListItem/accessibility` |
+| Contract     | Verification                                                                                  | Representative states                          | Mutation or failure expectation                                              | Audit section                  |
+| ------------ | --------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------ |
+| FR1, AR1     | `List.test.tsx` row element, align, data attribute, and swipe pass-through tests              | Static and interactive rows                    | A row that is not an `<li>`, or a dropped prop, fails.                       | `audit:ListItem/behavior`      |
+| FR2          | `List.test.tsx` density, divider, radius, and edge treatment tests                            | Each density; dividers on and off; each edge   | A row that ignores its List's settings fails.                                | `audit:ListItem/layout`        |
+| FR3          | `List.test.tsx` "keeps the inset of a ListItem outside a List"                                | Row outside a List                             | A row outside a List that loses its inset fails.                             | `audit:ListItem/layout`        |
+| FR4, AR3     | `List.test.tsx` marker and ListMarkerScope tests                                              | Presence of a marker, none, scope marker, task | A missing, extra, or unlabelled marker fails.                                | `audit:ListItem/anatomy`       |
+| AR2          | `List.test.tsx` invisible button, anchor, disabled, and selection tests                       | Click, href, disabled, selected                | Lost row semantics fail.                                                     | `audit:ListItem/accessibility` |
+| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `List / Interactive` | Start icon and end chevron; LTR and RTL        | A start content that is not at the inline start of the end content fails D2. | `audit:ListItem/i18n-rtl`      |
 
 Read from source, with no focused test yet:
 

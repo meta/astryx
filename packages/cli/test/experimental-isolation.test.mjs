@@ -47,6 +47,8 @@ import * as path from 'node:path';
 import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
+import {runCli} from '../test-utils/run-cli.mjs';
+import {startCliSequence} from '../test-utils/run-cli-sequence.mjs';
 import {writeIconSetProject} from '../test-utils/icon-set-fixture.mjs';
 
 const REPO_ROOT = path.resolve(CLI_ROOT, '..', '..');
@@ -178,6 +180,14 @@ const PROJECTS_ROOT = REGENERATING ? GOLDEN_REPO : REPO_ROOT;
 /** @type {string} */
 let project;
 
+/** The environment the CLI runs in. */
+const CLI_ENV = {
+  ...process.env,
+  NO_COLOR: '1',
+  FORCE_COLOR: '0',
+  COLUMNS: '100',
+};
+
 /**
  * Run the CLI in the project; machine paths and the CLI's release version
  * become placeholders.
@@ -187,7 +197,7 @@ function astryx(args, cwd = project) {
   const result = spawnSync(process.execPath, [CLI_BIN, ...args], {
     cwd,
     encoding: 'utf8',
-    env: {...process.env, NO_COLOR: '1', FORCE_COLOR: '0', COLUMNS: '100'},
+    env: CLI_ENV,
   });
   // A golden is main's own answer, never one main handed to this checkout.
   if (REGENERATING && /handed over from CLI/u.test(result.stderr)) {
@@ -195,21 +205,27 @@ function astryx(args, cwd = project) {
       `main's CLI handed \`astryx ${args.join(' ')}\` over to another CLI: ${result.stderr.trim()}`,
     );
   }
-  /** @param {string} text */
-  const clean = text =>
-    text
-      .split(cwd)
-      .join('<project>')
-      .split(REPO_ROOT)
-      .join('<repo>')
-      .split(GOLDEN_REPO)
-      .join('<repo>')
-      .replace(VERSION_PATTERN, '$1<version>');
   return {
     status: result.status,
-    stdout: clean(result.stdout),
-    stderr: clean(result.stderr),
+    stdout: placeholders(result.stdout, cwd),
+    stderr: placeholders(result.stderr, cwd),
   };
+}
+
+/**
+ * CLI output with machine paths and the CLI's release version as placeholders.
+ * @param {string} text
+ * @param {string} cwd the folder the CLI ran in
+ */
+function placeholders(text, cwd) {
+  return text
+    .split(cwd)
+    .join('<project>')
+    .split(REPO_ROOT)
+    .join('<repo>')
+    .split(GOLDEN_REPO)
+    .join('<repo>')
+    .replace(VERSION_PATTERN, '$1<version>');
 }
 
 /** Doctor checks that read the computer, not the project. */
@@ -397,15 +413,42 @@ function textShape(text, keep = []) {
 }
 
 /**
+ * One CLI run for a golden. Outside regeneration it runs in this process, as
+ * the docs topics do. So the runs share one read of the catalog, and no run
+ * starts a new process.
+ * @param {string[]} args
+ * @param {string} cwd
+ */
+async function cliRun(args, cwd) {
+  if (REGENERATING) return astryx(args, cwd);
+  const result = await runCli(args, cwd);
+  return {
+    status: result.status,
+    stdout: placeholders(result.stdout, cwd),
+    stderr: placeholders(result.stderr, cwd),
+  };
+}
+
+/**
+ * The arguments of `astryx search <query>`, for JSON or for text.
+ * @param {string} query
+ * @param {boolean} json
+ */
+function searchArgs(query, json) {
+  return ['search', ...query.split(' '), ...(json ? ['--json'] : [])];
+}
+
+/**
  * `astryx search` as a golden: the count, and each result's identity and
  * order, with the sentences that name an experimental surface (the stable
  * icons topic names "the icon set" a theme swaps). No result is experimental,
  * an icon, or an icon definition.
  * @param {string} query
  * @param {string} cwd
+ * @param {typeof cliRun} [run] how the CLI runs: in this process by default
  */
-function searchGolden(query, cwd) {
-  const json = astryx(['search', ...query.split(' '), '--json'], cwd);
+async function searchGolden(query, cwd, run = cliRun) {
+  const json = await run(searchArgs(query, true), cwd);
   expect(json.status).toBe(0);
   const body = JSON.parse(json.stdout);
   // The one stable addition FR18 makes: the field reference's `stability`
@@ -429,7 +472,7 @@ function searchGolden(query, cwd) {
     ...skeleton(result),
     mentions: leakMentions(result),
   }));
-  const text = astryx(['search', ...query.split(' ')], cwd);
+  const text = await run(searchArgs(query, false), cwd);
   // The same addition left out of the text: its block, and its count.
   const blocks = text.stdout
     .split('\n\n')
@@ -504,11 +547,18 @@ describe('with no icon set, stable output is unchanged', () => {
   // listing, each topic's sections, a digest of each topic's JSON skeleton
   // (its fields, blocks, and identities, not its prose), and the leak fields.
   it('every stable docs topic: the listing, its sections, and its JSON', async () => {
-    const list = JSON.parse(astryx(['docs', '--json']).stdout);
+    const listed = astryx(['docs', '--json']);
+    // Outside regeneration, this process reads every topic, one CLI run each,
+    // instead of a new process per topic. Those runs print what the bin
+    // prints, as the listing checks.
+    /** @param {string[]} args */
+    const read = args => cliRun(args, project);
+    expect((await read(['docs', '--json'])).stdout).toBe(listed.stdout);
+    const list = JSON.parse(listed.stdout);
     /** @type {Record<string, any>} */
     const topics = {};
     for (const {topic} of list.data) {
-      const doc = JSON.parse(astryx(['docs', topic, '--json']).stdout);
+      const doc = JSON.parse((await read(['docs', topic, '--json'])).stdout);
       topics[topic] = {
         sections: (doc.data.sections ?? []).map(
           (/** @type {any} */ section) => section.id ?? section.key,
@@ -729,13 +779,23 @@ describe('with no icon set, stable output is unchanged', () => {
     'icon set',
   ])('search %s, text and JSON', async query => {
     const slug = query.replace(/\s+/g, '-');
-    const {json, text} = searchGolden(query, project);
+    const {json, text} = await searchGolden(query, project);
     await expect(json).toMatchFileSnapshot(
       path.join(GOLDEN, `search-${slug}.json`),
     );
     await expect(text).toMatchFileSnapshot(
       path.join(GOLDEN, `search-${slug}.txt`),
     );
+  });
+
+  it('an in-process search prints what the bin prints', async () => {
+    const args = ['search', 'close', '--json'];
+    const bin = astryx(args);
+    const inProcess = await cliRun(args, project);
+    expect({status: inProcess.status, stdout: inProcess.stdout}).toEqual({
+      status: bin.status,
+      stdout: bin.stdout,
+    });
   });
 
   it('search --type icon is an unknown type, offering only the stable domains', async () => {
@@ -971,10 +1031,23 @@ export default {
 describe.skipIf(REGENERATING)(
   'with an icon set installed and configured, search is unchanged',
   () => {
+    const queries = [
+      'delete',
+      'close',
+      'trash can',
+      'experimental',
+      'icon set',
+    ];
     /** @type {string} */
     let root;
     /** @type {string} */
     let withSet;
+    /**
+     * Each search's result from the process that runs them, by its arguments.
+     * @type {Map<string, Promise<import('../test-utils/run-cli-sequence.mjs').CliResult>>}
+     */
+    const searches = new Map();
+    let stopSearches = () => {};
     beforeAll(() => {
       root = fs.mkdtempSync(
         path.join(PROJECTS_ROOT, '.astryx-icon-set-search-'),
@@ -989,10 +1062,38 @@ describe.skipIf(REGENERATING)(
         path.join(withSet, 'node_modules', '.bin', 'astryx'),
         '',
       );
+      // One new process runs every search here, so nothing this process read
+      // for the project without icon sets can answer for this one. The
+      // searches share that process, so the CLI reads the catalog once.
+      const invocations = queries.flatMap(query => [
+        searchArgs(query, true),
+        searchArgs(query, false),
+      ]);
+      const sequence = startCliSequence(withSet, invocations, CLI_ENV);
+      invocations.forEach((args, index) =>
+        searches.set(args.join(' '), sequence.results[index]),
+      );
+      stopSearches = sequence.stop;
     });
     afterAll(() => {
+      stopSearches();
       fs.rmSync(root, {recursive: true, force: true});
     });
+
+    /**
+     * A search's result from the process that runs the searches.
+     * @param {string[]} args
+     * @param {string} cwd
+     */
+    async function search(args, cwd) {
+      const result = await searches.get(args.join(' '));
+      if (!result) throw new Error(`No search runs \`${args.join(' ')}\`.`);
+      return {
+        status: result.status,
+        stdout: placeholders(result.stdout, cwd),
+        stderr: placeholders(result.stderr, cwd),
+      };
+    }
 
     it('the set is loaded', () => {
       const list = JSON.parse(
@@ -1003,11 +1104,11 @@ describe.skipIf(REGENERATING)(
 
     // Icon words: icon lookup by meaning is only `astryx experimental icon`;
     // `astryx search` joins it only at promotion (spec:AST-084 FR11).
-    it.each(['delete', 'close', 'trash can', 'experimental', 'icon set'])(
+    it.each(queries)(
       'search %s equals the output without icon sets, text and JSON',
       async query => {
         const slug = query.replace(/\s+/g, '-');
-        const {json, text} = searchGolden(query, withSet);
+        const {json, text} = await searchGolden(query, withSet, search);
         await expect(json).toMatchFileSnapshot(
           path.join(GOLDEN, `search-${slug}.json`),
         );
@@ -1016,6 +1117,16 @@ describe.skipIf(REGENERATING)(
         );
       },
     );
+
+    it('a search in that process prints what the bin prints', async () => {
+      const args = searchArgs('close', true);
+      const bin = astryx(args, withSet);
+      const inProcess = await search(args, withSet);
+      expect({status: inProcess.status, stdout: inProcess.stdout}).toEqual({
+        status: bin.status,
+        stdout: bin.stdout,
+      });
+    });
 
     it('search --type icon stays an unknown type', () => {
       const res = astryx(
@@ -1130,22 +1241,30 @@ describe('with icon sets installed but no experimental.iconSet, stable output is
   // manifest key `experimental` in the CLI without icon sets; this CLI prints
   // none, so its stderr equals what that CLI prints for the package with the
   // key removed. The theme writers have no dry run and print the nudge only
-  // after they succeed, so they run in this test's own project: two themes
+  // after they succeed, so they run in this block's own project: two themes
   // are forked and their built files stubbed, then added, used, and removed.
   // `upgrade` runs without `--apply`, a dry run, against the repo's Core.
-  it('every command that prints the integration-issue nudge prints none', async () => {
-    const cwd = installed('nudge');
-    const pkgFile = path.join(cwd, 'package.json');
-    const pkgJson = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
-    pkgJson.dependencies['@astryxdesign/core'] = '*';
-    fs.writeFileSync(pkgFile, JSON.stringify(pkgJson));
-    fs.mkdirSync(path.join(cwd, 'src'));
-    fs.mkdirSync(path.join(cwd, 'node_modules', '@astryxdesign'));
-    fs.symlinkSync(
-      path.join(PROJECTS_ROOT, 'packages', 'core'),
-      path.join(cwd, 'node_modules', '@astryxdesign', 'core'),
-      'dir',
-    );
+  // Each command is its own test, in this order, since the theme commands
+  // build on the ones before them; the last test compares what they printed.
+  describe('every command that prints the integration-issue nudge prints none', () => {
+    /** @type {string} */
+    let cwd;
+    /** @type {string[]} */
+    const printed = [];
+    beforeAll(() => {
+      cwd = installed('nudge');
+      const pkgFile = path.join(cwd, 'package.json');
+      const pkgJson = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+      pkgJson.dependencies['@astryxdesign/core'] = '*';
+      fs.writeFileSync(pkgFile, JSON.stringify(pkgJson));
+      fs.mkdirSync(path.join(cwd, 'src'));
+      fs.mkdirSync(path.join(cwd, 'node_modules', '@astryxdesign'));
+      fs.symlinkSync(
+        path.join(PROJECTS_ROOT, 'packages', 'core'),
+        path.join(cwd, 'node_modules', '@astryxdesign', 'core'),
+        'dir',
+      );
+    });
     /** @type {Record<string, () => void>} */
     const setup = {
       'theme add': () => {
@@ -1168,21 +1287,28 @@ describe('with icon sets installed but no experimental.iconSet, stable output is
         );
       },
     };
-    const stderr = NUDGE_COMMANDS.map(({name, args}) => {
-      setup[name]?.();
-      const res = astryx(args, cwd);
-      expect(res.status, `astryx ${args.join(' ')}: ${res.stderr}`).toBe(0);
-      if (!REGENERATING) {
-        expect(res.stderr).not.toMatch(/integration issue/u);
-      }
-      return `$ astryx ${args.join(' ')}\n${textShape(res.stderr, [
-        /^(?:Warning|Error):/u,
-        /^package: /u,
-      ])}`;
-    }).join('\n');
-    await expect(stderr).toMatchFileSnapshot(
-      path.join(GOLDEN, 'installed-set-stderr.txt'),
-    );
+    for (const {name, args} of NUDGE_COMMANDS) {
+      it(`astryx ${args.join(' ')}`, () => {
+        setup[name]?.();
+        const res = astryx(args, cwd);
+        expect(res.status, `astryx ${args.join(' ')}: ${res.stderr}`).toBe(0);
+        if (!REGENERATING) {
+          expect(res.stderr).not.toMatch(/integration issue/u);
+        }
+        printed.push(
+          `$ astryx ${args.join(' ')}\n${textShape(res.stderr, [
+            /^(?:Warning|Error):/u,
+            /^package: /u,
+          ])}`,
+        );
+      });
+    }
+    it('prints what the CLI without icon sets prints for the package without the key', async () => {
+      expect(printed).toHaveLength(NUDGE_COMMANDS.length);
+      await expect(printed.join('\n')).toMatchFileSnapshot(
+        path.join(GOLDEN, 'installed-set-stderr.txt'),
+      );
+    });
   });
 
   // The list is every caller of the nudge: a new caller fails here until it
@@ -1289,8 +1415,26 @@ describe('with icon sets installed but no experimental.iconSet, stable output is
     expect(readers.sort()).toEqual(Object.keys(ICON_SET_READERS).sort());
   });
 
+  // Doctor looks for Core's peers in the node_modules of a fixed number of
+  // folders above the project, and that search can leave the checkout. In a
+  // checkout nested inside another checkout's folder, it finds the outer
+  // install. So the project installs each peer itself, from Core's own
+  // install, and the result does not depend on where the checkout is.
   it('doctor reports nothing about an invalid installed set', async () => {
     const cwd = installed('doctor', '{nope');
+    const core = path.join(PROJECTS_ROOT, 'packages', 'core');
+    const {peerDependencies} = JSON.parse(
+      fs.readFileSync(path.join(core, 'package.json'), 'utf8'),
+    );
+    for (const name of Object.keys(peerDependencies)) {
+      const link = path.join(cwd, 'node_modules', ...name.split('/'));
+      fs.mkdirSync(path.dirname(link), {recursive: true});
+      fs.symlinkSync(
+        fs.realpathSync(path.join(core, 'node_modules', ...name.split('/'))),
+        link,
+        'dir',
+      );
+    }
     const res = astryx(['doctor', '--json'], cwd);
     expect(res.stdout).not.toMatch(/icon/i);
     await expect(withoutComputerChecks(res.stdout)).toMatchFileSnapshot(

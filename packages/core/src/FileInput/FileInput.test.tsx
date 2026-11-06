@@ -17,6 +17,7 @@ import {
   createEvent,
   waitFor,
   act,
+  within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {FileInput} from './FileInput';
@@ -1124,6 +1125,49 @@ describe('FileInput', () => {
       expect(screen.getByText('Drop files here')).toBeInTheDocument();
     });
 
+    it.each([
+      ['busy', {isLoading: true}],
+      ['disabled', {isDisabled: true}],
+    ])(
+      'refuses the drag with the no-drop effect while %s, and still cancels it',
+      (_state, state) => {
+        render(
+          <FileInput
+            label="Upload"
+            value={null}
+            onChange={vi.fn()}
+            mode="dropzone"
+            {...state}
+          />,
+        );
+        const trigger = screen.getByRole('button', {name: 'Upload'});
+        for (const type of ['dragEnter', 'dragOver'] as const) {
+          const dataTransfer = {dropEffect: 'copy', files: []};
+          const event = createEvent[type](trigger, {dataTransfer});
+          fireEvent(trigger, event);
+          expect(dataTransfer.dropEffect).toBe('none');
+          expect(event.defaultPrevented).toBe(true);
+        }
+      },
+    );
+
+    it('keeps the copy effect for an idle dropzone', () => {
+      render(
+        <FileInput
+          label="Upload"
+          value={null}
+          onChange={vi.fn()}
+          mode="dropzone"
+        />,
+      );
+      const trigger = screen.getByRole('button', {name: 'Upload'});
+      for (const type of ['dragEnter', 'dragOver'] as const) {
+        const dataTransfer = {dropEffect: 'copy', files: []};
+        fireEvent(trigger, createEvent[type](trigger, {dataTransfer}));
+        expect(dataTransfer.dropEffect).toBe('copy');
+      }
+    });
+
     it('blocks a second pick while changeAction is pending and allows picking again after settlement', async () => {
       let finish: () => void = () => {};
       const pending = new Promise<void>(resolve => {
@@ -1666,6 +1710,36 @@ describe('FileInput statusVariant forwarding', () => {
         />,
       );
       expectReachableTooltipStatus('File must be under 10MB');
+    },
+  );
+});
+
+// component:Tooltip FR11: the status tooltip renders inside the clickable
+// surface, so a click on its text must stay in the tooltip.
+describe('FileInput status tooltip press', () => {
+  it.each(['input', 'dropzone'] as const)(
+    'a click on the tooltip text does not open the picker in %s mode',
+    mode => {
+      render(
+        <FileInput
+          label="Upload"
+          mode={mode}
+          value={null}
+          onChange={() => {}}
+          status={{type: 'error', message: 'File must be under 10MB'}}
+          statusVariant="tooltip"
+        />,
+      );
+      const openPicker = vi.spyOn(fileInputEl(), 'click');
+      fireEvent.click(
+        within(screen.getByRole('tooltip', h)).getByText(
+          'File must be under 10MB',
+        ),
+      );
+      expect(openPicker).not.toHaveBeenCalled();
+      // Positive control: a click on the surface itself still opens it.
+      fireEvent.click(screen.getByRole('button', {name: 'Upload'}));
+      expect(openPicker).toHaveBeenCalledTimes(1);
     },
   );
 });

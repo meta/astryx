@@ -165,6 +165,72 @@ export const TruncatedInConstrainedLine: Story = {
   ),
 };
 
+/**
+ * An anchor Link and a button Link whose text wraps, in a start-aligned
+ * line, a right-to-left line and a centred line: each form lines up its
+ * wrapped lines the same way.
+ */
+export const WrappedLines: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <div style={{display: 'grid', gap: 16, width: 180}}>
+      {(
+        [
+          ['start', 'ltr', undefined],
+          ['rtl', 'rtl', undefined],
+          ['center', 'ltr', 'center'],
+        ] as const
+      ).map(([alignment, dir, textAlign]) =>
+        (['anchor', 'button'] as const).map(form => (
+          <p
+            key={`${alignment}-${form}`}
+            dir={dir}
+            data-wrapped-line={`${alignment}-${form}`}
+            style={{margin: 0, textAlign}}>
+            <Link
+              href={form === 'anchor' ? '/invitations/phone' : undefined}
+              onClick={form === 'button' ? () => {} : undefined}>
+              Send the phone interview invitation now
+            </Link>
+          </p>
+        )),
+      )}
+    </div>
+  ),
+};
+
+/**
+ * A long Link inside `<Text maxLines={2}>` or `<Text maxLines={1}>` clamps
+ * with the ancestor text and keeps an inset focus ring, while a composed Link
+ * outside a clamp keeps its own box and focus ring.
+ */
+export const ClampedByAncestorText: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <div style={{display: 'grid', gap: 24, width: 220}}>
+      <Text maxLines={2} data-testid="ancestor-clamp-text">
+        <Link href="/changelog">
+          Quarterly planning review with the product and research teams across
+          every region, plus the follow up retrospective notes and the rollout
+          summary
+        </Link>{' '}
+        and the closing remarks that follow the link in the same paragraph
+      </Text>
+      <Text maxLines={1} data-testid="ancestor-clamp-one-line">
+        <Link href="/roadmap">
+          Roadmap for the next two quarters with every milestone
+        </Link>{' '}
+        and the owners
+      </Text>
+      <p style={{margin: 0}} data-testid="composed-host">
+        <Link href="/team" data-testid="composed-link">
+          <strong>Team</strong> directory and roster listing for the whole org
+        </Link>
+      </p>
+    </div>
+  ),
+};
+
 export const AllVariants: Story = {
   render: () => (
     <div

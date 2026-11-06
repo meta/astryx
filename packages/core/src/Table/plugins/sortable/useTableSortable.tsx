@@ -4,7 +4,8 @@
 
 /**
  * @file useTableSortable.tsx
- * @input React, types, Icon, theme tokens, i18n (useTranslator)
+ * @input React, types, Icon, the theme's `table-sort-indicator` icon slot,
+ *   theme tokens, i18n (useComponentTranslator)
  * @output Exports useTableSortable hook and sort-related types
  * @position Sortable plugin; consumed by Table via plugins prop
  *
@@ -18,14 +19,21 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../../../theme/tokens.stylex';
 import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
+import {ComponentIcon} from '../../../Icon/ComponentIcon';
 import {resolveContextActions} from '../../tableContextMenu';
-import {useTranslator} from '../../../i18n';
 import type {
   TablePlugin,
   HeaderCellRenderProps,
   TableColumn,
   TableContextAction,
 } from '../../types';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/sortable/useTableSortable.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Sort Types
@@ -147,22 +155,27 @@ const sortStyles = stylex.create({
   buttonAlignEnd: {
     justifyContent: 'flex-end',
   },
+  // The wrapper takes no block size, so a theme's larger glyph overflows it
+  // instead of growing the Sort control or the header row. When the slot
+  // hides the glyph, the empty wrapper collapses, so the button's gap does
+  // not offset an end-aligned label.
+  iconWrapper: {
+    display: {default: 'inline-flex', ':empty': 'none'},
+    alignItems: 'center',
+    blockSize: 0,
+  },
   iconWrapperUnsorted: {
-    display: 'inline-flex',
     opacity: {
       default: 0.35,
       ':is(th:hover *)': 1,
       ':focus-visible': 1,
     },
   },
-  iconWrapperActive: {
-    display: 'inline-flex',
-  },
   rank: {
     fontSize: 10,
     // eslint-disable-next-line @astryx/no-hardcoded-styles -- no token for lineHeight:1 (tight badge)
     lineHeight: '1',
-    color: colorVars['--color-accent'],
+    color: colorVars['--color-text-accent'],
   },
 });
 
@@ -210,7 +223,7 @@ function SortHeaderButton<T extends Record<string, unknown>>({
   children: ReactNode;
   configRef: React.RefObject<UseTableSortableConfig>;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const config = configRef.current;
   const sortKey = resolveSortKey(column) ?? '';
   const entryIndex = config.sort.findIndex(e => e.sortKey === sortKey);
@@ -221,7 +234,7 @@ function SortHeaderButton<T extends Record<string, unknown>>({
     config.isMultiSortEnabled === true && config.sort.length > 1;
   const rank = isMultiSort && entryIndex >= 0 ? entryIndex + 1 : null;
 
-  const iconName =
+  const indicator =
     direction === 'ascending'
       ? 'arrowUp'
       : direction === 'descending'
@@ -293,13 +306,13 @@ function SortHeaderButton<T extends Record<string, unknown>>({
         <span>{children}</span>
         <span
           {...stylex.props(
-            direction != null
-              ? sortStyles.iconWrapperActive
-              : sortStyles.iconWrapperUnsorted,
+            sortStyles.iconWrapper,
+            direction == null && sortStyles.iconWrapperUnsorted,
           )}>
-          <Icon
-            icon={iconName}
-            size="xsm"
+          <ComponentIcon
+            slot="table-sort-indicator"
+            state={{direction: direction ?? 'none'}}
+            fallback={{icon: indicator, size: 'xsm'}}
             color={direction != null ? 'accent' : 'secondary'}
           />
         </span>
@@ -351,7 +364,7 @@ export function useTableSortable<
   T extends Record<string, unknown>,
   TSortKey extends string = string,
 >(config: UseTableSortableConfig<TSortKey>): TablePlugin<T> {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const configRef = useRef(config);
   configRef.current = config;
 

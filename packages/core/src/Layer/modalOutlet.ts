@@ -188,6 +188,8 @@ export function useModalOutlet(
   const isLatestRef = useRef(isLatest);
   isLatestRef.current = isLatest;
   const suppliedRef = useRef<HTMLDialogElement | null>(null);
+  // Syncs the module registry of modal outlets with this dialog while it is
+  // active. It also follows the dialog's native `close` event.
   useEffect(() => {
     const element = ref.current;
     if (!isActive || element == null) {
@@ -233,15 +235,19 @@ export function useModalOutlet(
     raiseWithinGroup(element);
   }, [ref, isActive, isLatest, hostKey]);
 
-  // Unmounting removes the dialog without a close event, and a passive
-  // cleanup runs after React has detached it. A layout cleanup runs before,
-  // so hosts leave while still in the document and keep their focus.
+  // Syncs the outlet registry in the commit that closes or unmounts the modal.
+  // That commit hides the dialog, so a host still inside it paints nothing. A
+  // passive cleanup can run after the next paint, or after React detaches the
+  // dialog.
   useLayoutEffect(() => {
-    const element = ref.current;
+    if (!isActive) {
+      return;
+    }
     return () => {
-      if (element != null) {
-        removeOutlet(element);
+      const supplied = suppliedRef.current;
+      if (supplied != null) {
+        removeOutlet(supplied);
       }
     };
-  }, [ref]);
+  }, [isActive]);
 }

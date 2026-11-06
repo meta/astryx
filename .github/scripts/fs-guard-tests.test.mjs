@@ -6,7 +6,16 @@ import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import {fsGuardTests, scopedExtraTests} from './fs-guard-tests.mjs';
+import {
+  fsGuardTests,
+  readTestList,
+  scopedExtraTests,
+  specReaderTests,
+  uiTestRoots,
+  withoutAlreadyRun,
+} from './fs-guard-tests.mjs';
+import os from 'node:os';
+import yaml from 'yaml';
 
 const sources = {
   'packages/core/src/Button/Button.test.tsx':
@@ -167,6 +176,364 @@ describe('scopedExtraTests on this repository (contract)', () => {
       'scripts/check-status-text-contrast.test.mjs',
     ]) {
       expect(tests).toContain(expected);
+    }
+  });
+});
+
+describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)', () => {
+  const sources = {
+    // Reads one record by a path relative to itself.
+    'packages/core/src/motion/roles.test.ts':
+      "import {readFileSync} from 'node:fs';\nconst spec = readFileSync(resolve(import.meta.dirname, '../../../../docs/specs/AST-094-x/spec.md'), 'utf8');",
+    // Reads the component tree through a helper it imports.
+    'scripts/components.test.mjs': "import {records} from './lib/records.mjs';",
+    'scripts/lib/records.mjs':
+      "import fs from 'node:fs';\nexport const records = () => fs.readdirSync('docs/specs/components');",
+    // A computed record path names the whole tree.
+    'scripts/any.test.mjs':
+      "import fs from 'node:fs';\nconst read = id => fs.readFileSync(`docs/specs/${id}/spec.md`, 'utf8');",
+    // So does path.join(root, 'docs', 'specs', …).
+    'scripts/joined.test.mjs':
+      "import fs from 'node:fs';\nconst dir = path.join(root, 'docs', 'specs');",
+    // Names a record only in prose.
+    'packages/core/src/Button/Button.a11y.test.tsx':
+      "import fs from 'node:fs';\n/**\n * The contract (`docs/specs/AST-021/spec.md` FR5).\n */\n// see docs/specs/AST-021/spec.md\nexport {};",
+    // Reads family and design contracts through a helper.
+    'scripts/contracts.test.mjs': "import {load} from './lib/contracts.mjs';",
+    'scripts/lib/contracts.mjs':
+      "import fs from 'node:fs';\nexport const load = () => [fs.readdirSync(path.join(root, 'docs/families')), fs.readdirSync(path.join(root, 'docs', 'design'))];",
+    // Reads theme specs: the theme root and a spec file name.
+    'scripts/theme-records.test.mjs':
+      "import fs from 'node:fs';\nconst read = name => fs.readFileSync(path.join('packages/themes', name, `${name}.spec.md`), 'utf8');",
+    // Reads theme sources, not their specs.
+    'scripts/theme-sources.test.mjs':
+      "import fs from 'node:fs';\nconst dirs = fs.readdirSync('packages/themes');",
+    // A computed segment: the prefix ends inside a directory name.
+    'scripts/segment.test.mjs':
+      "import fs from 'node:fs';\nconst read = n => fs.readFileSync(`docs/specs/AST-${n}/spec.md`, 'utf8');",
+    // Globs over the tree, with `**` and with `*`.
+    'scripts/glob-deep.test.mjs':
+      "import fs from 'node:fs';\nconst records = fs.globSync('docs/specs/**/spec.md');",
+    'scripts/glob-star.test.mjs':
+      "import fs from 'node:fs';\nconst records = fs.globSync('docs/specs/*/spec.md');",
+    // Names a record as data but reads no files.
+    'scripts/classify.test.mjs':
+      "const path = 'docs/specs/AST-094-x/spec.md';\nexpect(classify(path)).toBe(true);",
+  };
+  // The records themselves are tracked too: a named path that is neither a
+  // tracked file nor a directory is cut back to its last `/`.
+  const files = [
+    ...Object.keys(sources),
+    'docs/specs/AST-094-x/spec.md',
+    'docs/specs/AST-001/spec.md',
+    'docs/specs/components/Button/Button.spec.md',
+    'docs/families/action-groups.md',
+    'docs/design/motion.md',
+    'packages/themes/butter/butter.spec.md',
+  ];
+  const read = file => sources[file] ?? '';
+
+  it('lists every test whose imports read files and name a spec path in code', () => {
+    expect(specReaderTests(files, read)).toEqual([
+      'packages/core/src/motion/roles.test.ts',
+      'scripts/components.test.mjs',
+      'scripts/any.test.mjs',
+      'scripts/joined.test.mjs',
+      'scripts/contracts.test.mjs',
+      'scripts/theme-records.test.mjs',
+      'scripts/segment.test.mjs',
+      'scripts/glob-deep.test.mjs',
+      'scripts/glob-star.test.mjs',
+    ]);
+  });
+
+  it('narrows to the readers of a changed record: the record, a directory above it, or the whole tree', () => {
+    expect(
+      specReaderTests(files, read, ['docs/specs/AST-094-x/spec.md']),
+    ).toEqual([
+      'packages/core/src/motion/roles.test.ts',
+      'scripts/any.test.mjs',
+      'scripts/joined.test.mjs',
+      'scripts/segment.test.mjs',
+      'scripts/glob-deep.test.mjs',
+      'scripts/glob-star.test.mjs',
+    ]);
+    expect(
+      specReaderTests(files, read, [
+        'docs/specs/components/Button/Button.spec.md',
+      ]),
+    ).toEqual([
+      'scripts/components.test.mjs',
+      'scripts/any.test.mjs',
+      'scripts/joined.test.mjs',
+      'scripts/segment.test.mjs',
+      'scripts/glob-deep.test.mjs',
+      'scripts/glob-star.test.mjs',
+    ]);
+    // A record no test names at all still runs the whole-tree readers.
+    expect(
+      specReaderTests(files, read, ['docs/specs/AST-001/spec.md']),
+    ).toEqual([
+      'scripts/any.test.mjs',
+      'scripts/joined.test.mjs',
+      'scripts/segment.test.mjs',
+      'scripts/glob-deep.test.mjs',
+      'scripts/glob-star.test.mjs',
+    ]);
+  });
+
+  it('covers every record a spec-only change may touch: family, design and theme spec records', () => {
+    expect(
+      specReaderTests(files, read, ['docs/families/action-groups.md']),
+    ).toEqual(['scripts/contracts.test.mjs']);
+    expect(specReaderTests(files, read, ['docs/design/motion.md'])).toEqual([
+      'scripts/contracts.test.mjs',
+    ]);
+    // A theme spec runs the theme-spec reader, not the theme-source reader.
+    expect(
+      specReaderTests(files, read, ['packages/themes/butter/butter.spec.md']),
+    ).toEqual(['scripts/theme-records.test.mjs']);
+  });
+
+  it('lists none for a change outside the spec tree', () => {
+    expect(specReaderTests(files, read, ['packages/core/src/x.ts'])).toEqual(
+      [],
+    );
+  });
+});
+
+describe('spec readers on this repository (contract)', () => {
+  const root = path.resolve(import.meta.dirname, '../..');
+  const files = execFileSync('git', ['ls-files', '-z'], {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+    .split('\0')
+    .filter(Boolean);
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+
+  it('a spec-only change to AST-094 runs the motion roles test that reads its FR4 table', () => {
+    expect(
+      specReaderTests(files, read, [
+        'docs/specs/AST-094-touch-presentations/spec.md',
+      ]),
+    ).toContain('packages/core/src/motion/roles.test.ts');
+  });
+
+  it('a change to AST-084 runs the icon-set checks that read it', () => {
+    expect(
+      specReaderTests(files, read, ['docs/specs/AST-084-icon-sets/spec.md']),
+    ).toContain('packages/cli/foundation/discovery/icon-set-checks.test.mjs');
+  });
+
+  it("each leg lists only its own Vitest project's readers", () => {
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-readers-'));
+    const git = (...args) =>
+      execFileSync('git', args, {cwd: work, encoding: 'utf8'});
+    const write = (file, text) => {
+      fs.mkdirSync(path.join(work, path.dirname(file)), {recursive: true});
+      fs.writeFileSync(path.join(work, file), text);
+    };
+    const list = project =>
+      execFileSync(
+        process.execPath,
+        [
+          path.join(root, '.github/scripts/fs-guard-tests.mjs'),
+          '--spec-readers',
+          '--project',
+          project,
+          '--changed',
+          'HEAD^1',
+        ],
+        {cwd: work, encoding: 'utf8'},
+      )
+        .trim()
+        .split('\n');
+    try {
+      git('init', '-q');
+      git('config', 'user.email', 'test@example.com');
+      git('config', 'user.name', 'test');
+      write('vitest.config.ts', read('vitest.config.ts'));
+      write('docs/specs/AST-1/spec.md', '# Record\n');
+      const reader =
+        "import fs from 'node:fs';\nfs.readFileSync('docs/specs/AST-1/spec.md');\n";
+      write('packages/core/src/x.test.ts', reader);
+      write('scripts/y.test.mjs', reader);
+      git('add', '-A');
+      git('commit', '-qm', 'base');
+      write('docs/specs/AST-1/spec.md', '# Record, changed\n');
+      git('commit', '-qam', 'change');
+      expect(list('ui')).toEqual(['packages/core/src/x.test.ts']);
+      expect(list('node')).toEqual(['scripts/y.test.mjs']);
+    } finally {
+      fs.rmSync(work, {recursive: true, force: true});
+    }
+  });
+
+  it("a renamed record runs the readers of its old name: the lister's diff turns renames off", () => {
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-readers-'));
+    const git = (...args) =>
+      execFileSync('git', args, {cwd: work, encoding: 'utf8'});
+    const write = (file, text) => {
+      fs.mkdirSync(path.join(work, path.dirname(file)), {recursive: true});
+      fs.writeFileSync(path.join(work, file), text);
+    };
+    try {
+      git('init', '-q');
+      git('config', 'user.email', 'test@example.com');
+      git('config', 'user.name', 'test');
+      write('docs/specs/AST-1-old/spec.md', '# Record\n');
+      write(
+        'packages/core/src/x.test.ts',
+        "import fs from 'node:fs';\nfs.readFileSync('docs/specs/AST-1-old/spec.md');\n",
+      );
+      git('add', '-A');
+      git('commit', '-qm', 'base');
+      git('mv', 'docs/specs/AST-1-old', 'docs/specs/AST-1-new');
+      git('commit', '-qm', 'rename');
+      const listed = execFileSync(
+        process.execPath,
+        [
+          path.join(root, '.github/scripts/fs-guard-tests.mjs'),
+          '--spec-readers',
+          '--changed',
+          'HEAD^1',
+        ],
+        {cwd: work, encoding: 'utf8'},
+      );
+      expect(listed.trim().split('\n')).toEqual([
+        'packages/core/src/x.test.ts',
+      ]);
+    } finally {
+      fs.rmSync(work, {recursive: true, force: true});
+    }
+  });
+
+  it('splits the readers by Vitest project as vitest.config.ts collects them', () => {
+    const roots = uiTestRoots(read('vitest.config.ts'));
+    expect(roots).toContain('packages/core/src/');
+    const all = specReaderTests(files, read);
+    const ui = all.filter(test => roots.some(root => test.startsWith(root)));
+    expect(ui).toContain('packages/core/src/motion/roles.test.ts');
+    expect(ui).not.toContain('scripts/check-knowledge.test.mjs');
+    expect(() =>
+      uiTestRoots("name: 'ui', include: ['packages/core/**/*.spec.ts']"),
+    ).toThrow(/unexpected ui include/);
+    expect(() => uiTestRoots("name: 'node'")).toThrow(/no ui project/);
+  });
+
+  const ci = yaml.parse(read('.github/workflows/ci.yml'));
+  it.each([
+    ['test-ui', 'test:ui', 'ui'],
+    ['test-node', 'test:node', 'node'],
+  ])(
+    "%s runs its own project's readers of a changed record on a spec-only change, on one leg",
+    (id, script, project) => {
+      const steps = ci.jobs[id].steps;
+      const index = name => steps.findIndex(step => step.name === name);
+      const SPEC_LEG =
+        "matrix.shard == 1 && steps.scope.outputs.spec_only == 'true'";
+      const checkout =
+        steps[
+          index('Check out the change for the tests that read its records')
+        ];
+      expect(checkout).toMatchObject({
+        if: SPEC_LEG,
+        uses: 'actions/checkout@v7',
+        with: {'fetch-depth': 2},
+      });
+      const list = steps[index('List the tests that read a changed record')];
+      expect(list.if).toBe(SPEC_LEG);
+      expect(list.run).toContain(
+        `node .github/scripts/fs-guard-tests.mjs --spec-readers --project ${project} --changed HEAD^1`,
+      );
+      const setup =
+        steps[index('List the tests that read a changed record') + 1];
+      expect(setup).toEqual({
+        uses: './.github/actions/setup',
+        if: "steps.spec-readers.outputs.any == 'true'",
+      });
+      const runner = steps.find(
+        step =>
+          step.name?.startsWith('Run the ') &&
+          step.name.endsWith(' tests that read a changed record'),
+      );
+      expect(runner.if).toBe("steps.spec-readers.outputs.any == 'true'");
+      expect(runner.run).toContain(`pnpm ${script} "\${READERS[@]}"`);
+      // A run that finds no test fails: the list is this project's own.
+      expect(runner.run).not.toContain('--passWithNoTests');
+      // Before the steps a spec-only change skips.
+      expect(steps.indexOf(runner)).toBeLessThan(
+        steps.findIndex(
+          step =>
+            step.uses === 'actions/checkout@v7' &&
+            String(step.if).includes("spec_only != 'true'"),
+        ),
+      );
+    },
+  );
+});
+
+describe('a test the --changed run already ran runs once', () => {
+  const root = '/repo';
+
+  it('reads Vitest list JSON and plain lines as repository paths', () => {
+    expect(
+      readTestList(
+        JSON.stringify([
+          {file: '/repo/scripts/a.test.mjs', projectName: 'node'},
+          {file: '/repo/packages/cli/b.test.mjs', projectName: 'node'},
+        ]),
+        root,
+      ),
+    ).toEqual(['scripts/a.test.mjs', 'packages/cli/b.test.mjs']);
+    expect(
+      readTestList('./scripts/a.test.mjs\nscripts/c.test.mjs\n', root),
+    ).toEqual(['scripts/a.test.mjs', 'scripts/c.test.mjs']);
+    expect(readTestList('', root)).toEqual([]);
+    expect(readTestList('[]', root)).toEqual([]);
+  });
+
+  it('leaves out only the tests already run', () => {
+    expect(
+      withoutAlreadyRun(
+        ['scripts/a.test.mjs', 'scripts/guard.test.mjs'],
+        ['scripts/a.test.mjs', 'scripts/other.test.mjs'],
+      ),
+    ).toEqual(['scripts/guard.test.mjs']);
+  });
+
+  it('the lister drops a guard the changed run listed, and keeps the rest', () => {
+    const repoRoot = path.resolve(import.meta.dirname, '../..');
+    const script = path.join(repoRoot, '.github/scripts/fs-guard-tests.mjs');
+    const lines = text => text.split('\n').filter(Boolean);
+    const all = lines(
+      execFileSync(process.execPath, [script, '--changed', 'HEAD'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+      }),
+    );
+    expect(all.length).toBeGreaterThan(1);
+    const [ran, ...rest] = all;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'already-run-'));
+    try {
+      const list = path.join(dir, 'already-run.json');
+      fs.writeFileSync(
+        list,
+        JSON.stringify([{file: path.join(repoRoot, ran), projectName: 'node'}]),
+      );
+      const guards = lines(
+        execFileSync(
+          process.execPath,
+          [script, '--changed', 'HEAD', '--already-run', list],
+          {cwd: repoRoot, encoding: 'utf8'},
+        ),
+      );
+      expect(guards).not.toContain(ran);
+      expect(guards).toEqual(rest);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
     }
   });
 });

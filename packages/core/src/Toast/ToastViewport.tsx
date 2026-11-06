@@ -4,8 +4,10 @@
 
 /**
  * @file ToastViewport.tsx
- * @input Uses React state/effects, ToastContext, content-provider boundary, useAnnounce, viewport tokens,
- *   shared layer text reset, the active modal outlet, and placement-derived motion variables
+ * @input Uses React state and effects, ToastContext, the content-provider
+ *   boundary, useAnnounce and viewport tokens. It also uses the shared layer
+ *   text reset, the active modal outlet, the layer toast host registry and
+ *   placement-derived motion variables
  * @output Exports the ToastViewport provider, stack, live announcement dispatch,
  *   focus handoff, safe-area-aware edge gutters, modal rehosting, and motion context
  * @position Core provider/imperative viewport for useToast()
@@ -21,6 +23,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import type {ReactNode} from 'react';
 import {createPortal} from 'react-dom';
@@ -28,11 +31,17 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars, durationVars, easeVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {getNodeText} from '../utils/getNodeText';
+import {
+  moveFocusLeftBehind,
+  noteFocusWithin,
+  type FocusWithin,
+} from '../utils/focusReturn';
 import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {
   getActiveModalOutlet,
   subscribeModalOutlets,
@@ -41,14 +50,27 @@ import {
 import {ToastSurface} from './Toast';
 import {ToastContext, type ToastContextValue} from './ToastContext';
 import type {ToastEntry, ToastPosition, ToastDismissReason} from './types';
-import {useTranslator} from '../i18n';
 import {layerInsetProperties} from '../Layer/layerInset';
+import {findToastNamesake, registerToastHost} from '../Layer/toastHost';
 import type {LayerInset} from '../Layer/LayerContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Toast/ToastViewport.generated';
+
+registerEnglishFallback(english);
 
 const SAFE_AREA_INLINE_START = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-left, 0px))`;
 const SAFE_AREA_INLINE_END = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-right, 0px))`;
 const SAFE_AREA_BLOCK_START = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-top, 0px))`;
-const SAFE_AREA_BLOCK_END = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-bottom, 0px))`;
+// On an iPhone, a downward swipe that starts in the bottom inset can pull the
+// whole screen down. Keep the toast clear of that inset.
+const SAFE_AREA_BLOCK_END = `calc(${spacingVars['--spacing-4']} + env(safe-area-inset-bottom, 0px))`;
+// Safari reports the inset only to a page with `viewport-fit=cover`. Under a
+// coarse pointer the gutter clears 34 px anyway: a Face ID iPhone's bottom
+// inset in portrait.
+const SAFE_AREA_BLOCK_END_TOUCH = `calc(${spacingVars['--spacing-4']} + max(env(safe-area-inset-bottom, 0px), 34px))`;
 const TOAST_EDGE_DRIFT = spacingVars['--spacing-2'];
 const TOAST_EDGE_DRIFT_NEGATIVE = `calc(-1 * ${TOAST_EDGE_DRIFT})`;
 
@@ -63,7 +85,10 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     flexDirection: 'column',
     paddingBlockStart: SAFE_AREA_BLOCK_START,
-    paddingBlockEnd: SAFE_AREA_BLOCK_END,
+    paddingBlockEnd: {
+      default: SAFE_AREA_BLOCK_END,
+      '@media (pointer: coarse)': SAFE_AREA_BLOCK_END_TOUCH,
+    },
     paddingInlineStart: {
       default: SAFE_AREA_INLINE_START,
       ':is([dir="rtl"] *)': SAFE_AREA_INLINE_END,
@@ -92,6 +117,13 @@ const styles = stylex.create({
     borderStyle: 'none',
     backgroundColor: 'transparent',
     overflow: 'visible',
+  },
+  // iOS Safari colors its toolbar from a fixed element at the bottom edge. A
+  // toast that a swipe sends through that edge gives the viewport its color.
+  // Safari keeps that color while the viewport has a box, so an empty
+  // viewport has none.
+  viewportEmpty: {
+    display: 'none',
   },
   // The viewport sits at the inset the app declared on LayerProvider for a
   // bar floating over that edge (spec:AST-059 FR6); unset, each reads 0px.
@@ -131,6 +163,10 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce)': '0.01ms',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
+  },
+  // A row opens from a closed track only when it first renders. A move to
+  // another modal outlet renders it again, and it must not open again.
+  toastWrapperEntering: {
     '@starting-style': {
       gridTemplateRows: '0fr',
       paddingBlockEnd: 0,
@@ -217,6 +253,8 @@ interface ToastRowProps {
   isReversed: boolean;
   onExited: (id: string) => void;
   onDismiss: (id: string, reason: ToastDismissReason) => void;
+  /** Whether the card carries its own live region (see ToastViewport). */
+  isLiveRegion: boolean;
 }
 
 /**
@@ -239,18 +277,47 @@ function ToastRow({
   isReversed,
   onExited,
   onDismiss,
+  isLiveRegion,
 }: ToastRowProps) {
   const o = entry.options;
   const type = o.type ?? 'info';
   const isAutoHide = o.isAutoHide ?? (type === 'error' ? false : true);
   const dur = o.autoHideDuration ?? 5000;
   const [isSettled, setIsSettled] = useState(false);
+  // Each move between modal outlets renders the row and its card again. Their
+  // starting styles must not apply then.
+  const [hasEntryStarted, setHasEntryStarted] = useState(false);
+  // React's transition run and cancel events have no propertyName field.
+  const watchEntry = useCallback((row: HTMLDivElement | null) => {
+    if (row == null) {
+      return;
+    }
+    const onTransition = (event: TransitionEvent) => {
+      if (event.target !== row || event.propertyName !== 'grid-template-rows') {
+        return;
+      }
+      setHasEntryStarted(true);
+      // A move cancels the entry, and the row then renders fully open. No
+      // transition ends, so the row settles here.
+      if (event.type === 'transitioncancel') {
+        setIsSettled(true);
+      }
+    };
+    row.addEventListener('transitionrun', onTransition);
+    row.addEventListener('transitioncancel', onTransition);
+    return () => {
+      row.removeEventListener('transitionrun', onTransition);
+      row.removeEventListener('transitioncancel', onTransition);
+    };
+  }, []);
 
   return (
     <div
+      ref={watchEntry}
       data-toast-id={entry.id}
       {...stylex.props(
         styles.toastWrapper,
+        !hasEntryStarted && styles.toastWrapperEntering,
         isReversed ? styles.toastWrapperFromTop : styles.toastWrapperFromBottom,
         isReversed ? styles.toastWrapperGapReversed : styles.toastWrapperGap,
         isExiting && styles.toastWrapperExiting,
@@ -273,6 +340,7 @@ function ToastRow({
         // still owns pointer events and restores the clip synchronously when
         // dismissal starts.
         setIsSettled(true);
+        setHasEntryStarted(true);
       }}>
       <div
         {...stylex.props(
@@ -289,12 +357,18 @@ function ToastRow({
           gestureDirection={isReversed ? -1 : 1}
           onDismiss={reason => onDismiss(entry.id, reason)}
           renderContent={o.renderContent}
+          timerKey={entry.id}
+          isLiveRegion={isLiveRegion}
+          hasEntryStarted={hasEntryStarted}
         />
       </div>
     </div>
   );
 }
 ToastRow.displayName = 'ToastRow';
+
+const hasActiveModalOutlet = (): boolean => getActiveModalOutlet() != null;
+const hasNoModalOutlet = (): boolean => false;
 
 /**
  * Container that renders and manages toast notifications. Place at the root
@@ -316,7 +390,7 @@ export function ToastViewport({
   isTopLayer = true,
   children,
 }: ToastViewportProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
   const [exitingIds, setExitingIds] = useState<Set<string>>(new Set());
   const toastsRef = useRef(toasts);
@@ -356,6 +430,13 @@ export function ToastViewport({
   // The next toast id that should receive focus once the dismissed toast has
   // unmounted, or 'restore' to fall back to the previously-focused element.
   const pendingFocusRef = useRef<string | 'restore' | null>(null);
+  // The id of a toast whose overwrite updated a row that held focus. If the
+  // update removed the focused control, the commit hands focus off.
+  const overwriteFocusRef = useRef<{id: string; note: FocusWithin} | null>(
+    null,
+  );
+  // Where focus was inside a toast whose dismissal hands focus off.
+  const dismissFocusNoteRef = useRef<FocusWithin | null>(null);
 
   // Collect a focusable control within a toast node, if any.
   // Reuses the canonical INTERACTIVE_SELECTORS list (native controls plus
@@ -385,13 +466,9 @@ export function ToastViewport({
     [],
   );
 
-  // Announce toasts through the persistent singleton live regions. Each
-  // <Toast> also renders its own role="status"/"alert" region, but that region
-  // is "born with content" — mounted together with its text — which many
-  // screen readers do not announce (see useAnnounce.ts); the singleton regions
-  // are mounted empty and only mutated afterwards, so they are what actually
-  // guarantees the announcement (the per-toast markup is kept for browse-mode
-  // discoverability). The announcement happens in addToast — the imperative
+  // Announce toasts through the persistent singleton live regions. They are
+  // mounted empty and only mutated afterwards, which screen readers announce
+  // (see useAnnounce.ts). The announcement happens in addToast — the imperative
   // dispatch path invoked once per useToast() call from an event handler,
   // never from render — so each toast is announced exactly once by
   // construction, independent of the React render lifecycle (StrictMode
@@ -399,23 +476,32 @@ export function ToastViewport({
   // re-renders never re-announce). It is client-only (addToast never runs
   // during SSR), so it is SSR-safe.
   const announce = useAnnounce();
+  // An open native modal hides the body-level channel above from assistive
+  // technology, so while the viewport is hosted in one, each card announces
+  // itself through its own live region instead. Outside a modal the cards
+  // carry none, so a card updated in place is announced once.
+  const hasModalOutlet = useSyncExternalStore(
+    subscribeModalOutlets,
+    hasActiveModalOutlet,
+    hasNoModalOutlet,
+  );
+  const isModalHosted = isTopLayer && hasModalOutlet;
 
   const addToast = useCallback(
     (entry: ToastEntry) => {
-      const {uniqueID, collisionBehavior = 'overwrite'} = entry.options;
+      const {uniqueID} = entry.options;
       // A toast holds its uniqueID until it unmounts, leaving included
       // (Toast.spec.md FR8): an overwrite replaces it in place, and an ignored
       // namesake is dropped.
-      const holdsUniqueID = (t: ToastEntry) => t.options.uniqueID === uniqueID;
+      const {namesake: overwritten, isDropped} = findToastNamesake(
+        toastsRef.current,
+        entry,
+      );
       // Resolve an ignored collision synchronously against the committed list
       // so a suppressed toast is neither shown nor announced. The remaining
       // announce + setToasts run outside the setToasts updater, which React may
       // invoke more than once — keeping the announcement exactly-once.
-      if (
-        uniqueID &&
-        collisionBehavior === 'ignore' &&
-        toastsRef.current.some(holdsUniqueID)
-      ) {
+      if (isDropped) {
         return;
       }
       // Only text is announced; interactive endContent is reachable via F6.
@@ -430,13 +516,32 @@ export function ToastViewport({
       // already reported onHide); otherwise its row would come back collapsed
       // when the window reached it again, holding a slot and the landmark.
       const committed = toastsRef.current;
-      const overwritten = uniqueID ? committed.find(holdsUniqueID) : undefined;
       if (overwritten && renderedToastsRef.current.includes(overwritten)) {
         replacedRef.current.set(overwritten.id, overwritten);
       }
+      // An overwrite of a toast that is not leaving keeps its row, so the card
+      // updates in place and focus inside it stays. A leaving namesake
+      // is replaced by a new row, which enters again.
+      const keepsRow =
+        overwritten != null && !exitingIdsRef.current.has(overwritten.id);
+      const placed: ToastEntry = keepsRow
+        ? {...entry, rowKey: overwritten.rowKey ?? overwritten.id}
+        : entry;
+      if (keepsRow) {
+        // If the update removes the focused control, the commit hands focus
+        // off as a dismissal does.
+        const note = noteFocusWithin(
+          viewportRef.current?.querySelector<HTMLElement>(
+            `[data-toast-id="${overwritten.id}"]`,
+          ),
+        );
+        if (note != null) {
+          overwriteFocusRef.current = {id: placed.id, note};
+        }
+      }
       const projected = overwritten
-        ? committed.map(t => (t === overwritten ? entry : t))
-        : [...committed, entry];
+        ? committed.map(t => (t === overwritten ? placed : t))
+        : [...committed, placed];
       // `maxVisible={0}` shows every toast (FR7): nothing leaves the window.
       const firstVisible = maxVisible > 0 ? projected.length - maxVisible : 0;
       const cutIds = new Set(
@@ -463,7 +568,7 @@ export function ToastViewport({
           }
         }
       }
-      pending.set(entry.id, entry);
+      pending.set(entry.id, placed);
       // An overwrite swaps a new entry, with a new id, into the replaced
       // toast's place, so the old row leaves the DOM without ever being
       // dismissed. Its settled id is dropped by the prune below, which covers
@@ -475,8 +580,8 @@ export function ToastViewport({
         // overwrite into an append. An ignored collision already returned.
         const kept = prev.filter(t => !cutIds.has(t.id));
         return overwritten && kept.includes(overwritten)
-          ? kept.map(t => (t === overwritten ? entry : t))
-          : [...kept, entry];
+          ? kept.map(t => (t === overwritten ? placed : t))
+          : [...kept, placed];
       });
     },
     [announce, maxVisible],
@@ -505,14 +610,23 @@ export function ToastViewport({
     // focused before the user entered the viewport) rather than <body>.
     const el = viewportRef.current;
     const active = document.activeElement;
-    const dismissedNode =
-      el?.querySelector<HTMLElement>(`[data-toast-id="${id}"]`) ?? null;
+    // A toast an overwrite replaced in place no longer owns its row: the
+    // replacement does, so dismissing the replaced toast leaves the row, and
+    // focus in it, to the replacement.
+    const rowKey = entry.rowKey ?? entry.id;
+    const isReplacedInPlace =
+      !toastsRef.current.some(t => t.id === id) &&
+      toastsRef.current.some(t => t.rowKey === rowKey);
+    const dismissedNode = isReplacedInPlace
+      ? null
+      : (el?.querySelector<HTMLElement>(`[data-toast-id="${id}"]`) ?? null);
     if (
       dismissedNode &&
       active instanceof Node &&
       dismissedNode.contains(active)
     ) {
       focusHandoffIdRef.current = id;
+      dismissFocusNoteRef.current = noteFocusWithin(dismissedNode);
       // Pick the toast to receive focus while the DOM is still intact: the
       // nearest one after it, then before it, that shows once it is gone
       // (FR10), else restore. The list may already run ahead of the render
@@ -580,6 +694,41 @@ export function ToastViewport({
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  // Moves focus to a control in the target toast, else in another toast that
+  // shows (newest first), else back to the element focused before focus
+  // entered the viewport, so a handoff never drops focus to <body>.
+  const handOffFocus = useCallback(
+    (note: FocusWithin | null, targetId: string | null) => {
+      const el = viewportRef.current;
+      const rowFor = (id: string) =>
+        el?.querySelector<HTMLElement>(`[data-toast-id="${id}"]`) ?? null;
+      const shownIds = toastsRef.current
+        .slice(maxVisibleRef.current > 0 ? -maxVisibleRef.current : 0)
+        .map(t => t.id)
+        .reverse();
+      const candidates =
+        targetId == null
+          ? []
+          : [targetId, ...shownIds.filter(id => id !== targetId)];
+      let target: HTMLElement | null = null;
+      for (const id of candidates) {
+        target = getFocusable(rowFor(id));
+        if (target != null) {
+          break;
+        }
+      }
+      const prev = prevFocusRef.current;
+      const isReturning = target == null && prev != null && prev.isConnected;
+      if (target == null) {
+        target = isReturning ? prev : el;
+      }
+      if (moveFocusLeftBehind(note, target) && isReturning) {
+        prevFocusRef.current = null;
+      }
+    },
+    [getFocusable],
+  );
+
   // After a dismissed toast unmounts, hand focus off so it never falls to
   // <body>. Runs in a layout effect once the toast list no longer contains
   // the dismissed toast.
@@ -595,27 +744,21 @@ export function ToastViewport({
     }
     focusHandoffIdRef.current = null;
     pendingFocusRef.current = null;
-    const el = viewportRef.current;
-    if (target !== 'restore' && el) {
-      const nextNode = el.querySelector<HTMLElement>(
-        `[data-toast-id="${target}"]`,
-      );
-      const focusable = getFocusable(nextNode) ?? nextNode;
-      if (focusable) {
-        focusable.focus();
-        return;
-      }
+    const note = dismissFocusNoteRef.current;
+    dismissFocusNoteRef.current = null;
+    handOffFocus(note, target === 'restore' ? null : target);
+  }, [toasts, handOffFocus]);
+
+  // After an overwrite updated a row that held focus: focus stays on the same
+  // control, or, if the update removed it, moves as a dismissal hands it off.
+  useLayoutEffect(() => {
+    const overwrite = overwriteFocusRef.current;
+    if (overwrite == null) {
+      return;
     }
-    // No remaining toast to receive focus — restore the previously-focused
-    // element if it's still connected, else fall back to the container.
-    const prev = prevFocusRef.current;
-    prevFocusRef.current = null;
-    if (prev && prev.isConnected) {
-      prev.focus();
-    } else if (el) {
-      el.focus();
-    }
-  }, [toasts, getFocusable]);
+    overwriteFocusRef.current = null;
+    handOffFocus(overwrite.note, overwrite.id);
+  }, [toasts, handOffFocus]);
 
   const findByUniqueID = useCallback((uid: string) => {
     return toastsRef.current.find(t => t.options.uniqueID === uid);
@@ -665,6 +808,8 @@ export function ToastViewport({
     };
   }, [isTopLayer]);
 
+  // Syncs the host's place with the modal outlet registry. The host moves into
+  // the latest open modal, and back when that modal closes.
   useLayoutEffect(() => {
     if (!isTopLayer || host == null) {
       return;
@@ -813,20 +958,24 @@ export function ToastViewport({
           styles.viewport,
           styles.viewportInlineSpan,
           posStyle,
+          !hasToasts && styles.viewportEmpty,
         ),
         {
           style: Object.keys(insetStyle).length > 0 ? insetStyle : undefined,
         },
-      )}>
+      )}
+      // Presses on toasts do not reach handlers around the viewport.
+      {...layerClickBoundary()}>
       <LayerContentBoundary>
         {visibleToasts.map(entry => (
           <ToastRow
-            key={entry.id}
+            key={entry.rowKey ?? entry.id}
             entry={entry}
             isExiting={exitingIds.has(entry.id)}
             isReversed={isReversed}
             onExited={handleExited}
             onDismiss={removeToast}
+            isLiveRegion={isModalHosted}
           />
         ))}
       </LayerContentBoundary>
@@ -848,3 +997,7 @@ export function ToastViewport({
   );
 }
 ToastViewport.displayName = 'ToastViewport';
+
+// LayerProvider renders the viewport once this module loads. So an app that
+// never imports Toast carries none of its code.
+registerToastHost(ToastViewport);

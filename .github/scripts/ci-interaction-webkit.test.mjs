@@ -14,7 +14,9 @@
  * context. The scope step's own behavior is in test-scope-action.test.mjs.
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {build} from 'esbuild';
@@ -56,9 +58,15 @@ describe('WebKit interaction proof routing', () => {
   it('always reports, behind the same pull-request gate as the Chromium proofs', () => {
     expect(webkit.if).toBe(chromium.if);
     expect(ungated(webkit.if)).toBe(
-      "github.event_name != 'workflow_dispatch' && always() && !cancelled()",
+      "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
     );
-    expect(webkit.needs).toEqual(['build-storybook']);
+    // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
+    expect(webkit.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'build-storybook',
+    ]);
   });
 
   it('stays on a standard runner within the 15-minute budget', () => {
@@ -67,7 +75,8 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('decides its own scope first, skips visibly, and gates every later step on it', () => {
-    expect(webkit.steps[0].with['sparse-checkout']).toBe(
+    // The scope action first; the leg planner shares the checkout.
+    expect(webkit.steps[0].with['sparse-checkout'].trim().split('\n')[0]).toBe(
       '.github/actions/test-scope',
     );
     expect(decide(webkit).uses).toBe(
@@ -87,15 +96,26 @@ describe('WebKit interaction proof routing', () => {
     const guards = new Set([
       "Require this pull request's Storybook build",
       'Skip the WebKit proofs outside their scope',
+      'Leave the proofs to the first leg',
     ]);
-    for (const candidate of webkit.steps.slice(2)) {
-      if (guards.has(candidate.name)) continue;
+    // Every step after the leg count also waits for this leg to have a share.
+    const counted = webkit.steps.indexOf(
+      step(webkit, "Count this run's WebKit legs"),
+    );
+    const share = "steps.legs.outputs.runs == 'true'";
+    for (const [index, candidate] of webkit.steps.entries()) {
+      if (index < 2 || guards.has(candidate.name)) continue;
+      const gate = index <= counted ? applies : `${applies} && ${share}`;
+      // A leg whose plan holds no spec file runs no proofs.
       expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
         new RegExp(
-          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}$`,
+          `^(always\\(\\) && )?${gate.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
         ),
       );
     }
+    expect(step(webkit, 'Leave the proofs to the first leg').if).toBe(
+      `${applies} && steps.legs.outputs.runs != 'true'`,
+    );
   });
 
   it('runs the interaction config in WebKit against the exact PR head', () => {
@@ -107,13 +127,74 @@ describe('WebKit interaction proof routing', () => {
     expect(checkout?.with?.ref).toBe(
       '${{ github.event.pull_request.head.sha }}',
     );
-    expect(step(webkit, 'Install Playwright WebKit').run).toContain(
-      'npx playwright install --with-deps webkit',
+    // The image already holds WebKit and its system libraries: no apt step.
+    expect(step(webkit, 'Install Playwright WebKit').run).toBe(
+      'pnpm install --frozen-lockfile && npx playwright install webkit chromium-headless-shell',
     );
     const run = step(webkit, 'Run WebKit interaction proofs').run;
     expect(run).toContain('--config playwright.interaction.config.ts');
     expect(run).toContain('--project webkit');
     expect(run).not.toContain('--project chromium');
+  });
+
+  it("installs Chromium's headless shell when an interaction spec launches Chromium", () => {
+    // A changed interaction spec runs in the WebKit legs too, so a spec that
+    // launches Chromium (to decode a WebKit recording) needs the shell there.
+    const launchesChromium = source => /\bchromium\.launch\(/.test(source);
+    expect(launchesChromium('const decoder = await chromium.launch();')).toBe(
+      true,
+    );
+    expect(launchesChromium('await webkit.launch();')).toBe(false);
+    const specs = execFileSync(
+      'git',
+      ['ls-files', '*.interaction.browser.spec.ts'],
+      {cwd: root, encoding: 'utf8'},
+    )
+      .split('\n')
+      .filter(Boolean);
+    const launchers = specs.filter(file =>
+      launchesChromium(fs.readFileSync(path.join(root, file), 'utf8')),
+    );
+    if (launchers.length > 0) {
+      expect(
+        step(webkit, 'Install Playwright WebKit').run.split(/\s+/),
+        launchers.join(', '),
+      ).toContain('chromium-headless-shell');
+    }
+  });
+
+  it("runs in Playwright's image for exactly the Playwright version the lockfile resolves", () => {
+    expect(webkit['runs-on']).toBe('ubuntu-latest');
+    expect(webkit.container).toEqual({
+      image: expect.stringMatching(
+        /^mcr\.microsoft\.com\/playwright:v\d+\.\d+\.\d+-noble$/,
+      ),
+      options: '--ipc=host',
+    });
+    // Steps keep the runner's bash, and git trusts the root-owned checkout
+    // before the head check reads it.
+    expect(webkit.defaults).toEqual({run: {shell: 'bash'}});
+    const trust = step(webkit, 'Trust the checkout in the container');
+    expect(trust.run).toBe(
+      'git config --global --add safe.directory "$GITHUB_WORKSPACE"',
+    );
+    expect(webkit.steps.indexOf(trust)).toBe(
+      webkit.steps.indexOf(step(webkit, 'Verify evidence checkout')) - 1,
+    );
+    const tag = /:v(\d+\.\d+\.\d+)-/.exec(webkit.container.image)[1];
+    const lock = fs.readFileSync(path.join(root, 'pnpm-lock.yaml'), 'utf8');
+    // Every resolved copy of the three packages, so a bump of any one of them
+    // fails here until the image tag moves with it.
+    for (const name of ['@playwright/test', 'playwright', 'playwright-core']) {
+      const pattern = new RegExp(
+        `^  '?${name.replace(/[/.]/g, '\\$&')}@(\\d+\\.\\d+\\.\\d+)'?:`,
+        'gm',
+      );
+      const versions = new Set(
+        [...lock.matchAll(pattern)].map(match => match[1]),
+      );
+      expect([...versions], name).toEqual([tag]);
+    }
   });
 
   it("caps llvmpipe's threads at the job's cgroup CPU quota before Playwright runs", async () => {
@@ -152,11 +233,16 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('runs only the specs whose code its scope covers', () => {
-    const run = step(webkit, 'Run WebKit interaction proofs').run;
+    // Each leg plans its share from these paths and runs only that share.
+    const run = webkit.env.WEBKIT_SPEC_PATHS;
+    expect(
+      step(webkit, "Plan this leg's WebKit interaction proofs").run,
+    ).toContain('"${SPEC_PATHS[@]}"');
     const targets = [
       'packages/core/src/gestures/',
       'packages/core/src/motion/__tests__/animatedLayout.interaction',
       'packages/core/src/motion/__tests__/animator.interaction',
+      'packages/core/src/hooks/__tests__/usePager.interaction',
       'internal/interaction-harness/',
     ];
     for (const target of targets) {
@@ -168,18 +254,121 @@ describe('WebKit interaction proof routing', () => {
     // SideNav) stay with the Chromium proofs.
     expect(run).not.toContain('animatedLayoutAdopters');
     expect(run).not.toMatch(/motion\/ /);
+    // Carousel paging renders its Storybook story, so it stays there too: its
+    // code starts no WebKit run. A change to its spec does (see below).
+    expect(run).not.toContain('CarouselPaging');
+    expect(inScope('packages/core/src/Carousel/useCarouselPaging.ts')).toBe(
+      false,
+    );
     for (const component of ['DateInput', 'TabList', 'TreeList', 'SideNav']) {
       expect(run).not.toContain(component);
     }
   });
 
+  // A pull request that changes an interaction spec, outside a Lab-only pull
+  // request (which runs no interaction proofs, spec:AST-030 FR26), runs that
+  // spec in both lanes, wherever it lives: the Chromium legs plan every spec,
+  // and the WebKit plan adds the changed ones to its paths.
+  describe('a changed interaction spec', () => {
+    const spec =
+      'packages/core/src/List/__tests__/ListRowPress.interaction.browser.spec.ts';
+
+    it('starts both lanes', () => {
+      expect(inScope(spec)).toBe(true);
+      expect(new RegExp(decide(chromium).with.paths).test(spec)).toBe(true);
+      expect(
+        inScope(
+          'packages/core/src/Carousel/__tests__/CarouselPaging.interaction.browser.spec.ts',
+        ),
+      ).toBe(true);
+      // Only spec files: the component's code still starts no WebKit run.
+      expect(inScope('packages/core/src/List/ListRow.tsx')).toBe(false);
+      expect(inScope('packages/core/src/List/__tests__/ListRow.test.tsx')).toBe(
+        false,
+      );
+    });
+
+    it('lists the changed files for the WebKit plan', () => {
+      expect(decide(webkit).with['component-audit']).toBe('true');
+      expect(
+        step(webkit, "Plan this leg's WebKit interaction proofs").env
+          .CHANGED_FILES,
+      ).toBe('${{ steps.scope.outputs.changed_files_path }}');
+      // The Chromium legs plan every spec file, with no path filter.
+      expect(
+        step(chromium, "Plan this leg's interaction proofs").run,
+      ).not.toContain(' -- ');
+    });
+
+    // Runs the plan step with a stub `node` that prints its arguments.
+    function planArgs(changed, present) {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'webkit-plan-'));
+      try {
+        for (const file of present) {
+          fs.mkdirSync(path.join(dir, path.dirname(file)), {recursive: true});
+          fs.writeFileSync(path.join(dir, file), '');
+        }
+        const list = changed == null ? '' : path.join(dir, 'changed.txt');
+        if (list)
+          fs.writeFileSync(list, changed.map(file => `${file}\n`).join(''));
+        const bin = path.join(dir, 'bin');
+        fs.mkdirSync(bin);
+        fs.writeFileSync(
+          path.join(bin, 'node'),
+          '#!/usr/bin/env bash\nprintf "%s\\n" "$@"\n',
+          {mode: 0o755},
+        );
+        const script = step(webkit, "Plan this leg's WebKit interaction proofs")
+          .run.replaceAll('${{ steps.legs.outputs.leg }}', '1')
+          .replaceAll('${{ steps.legs.outputs.count }}', '2');
+        const out = execFileSync('bash', ['-e', '-c', script], {
+          cwd: dir,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${bin}:${process.env.PATH}`,
+            RUNNER_TEMP: dir,
+            CHANGED_FILES: list,
+            WEBKIT_SPEC_PATHS: webkit.env.WEBKIT_SPEC_PATHS,
+          },
+        });
+        return out.trim().split('\n');
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    }
+
+    it("adds the changed spec to the WebKit plan's paths", () => {
+      const args = planArgs(
+        [spec, 'packages/core/src/List/ListRow.tsx'],
+        [spec],
+      );
+      const paths = args.slice(args.indexOf('--') + 1);
+      expect(paths).toContain(spec);
+      expect(paths).toContain('packages/core/src/gestures/');
+      expect(paths).not.toContain('packages/core/src/List/ListRow.tsx');
+    });
+
+    it('leaves out a spec the pull request deletes', () => {
+      const deleted =
+        'packages/core/src/List/__tests__/Old.interaction.browser.spec.ts';
+      const args = planArgs([deleted], []);
+      expect(args).not.toContain(deleted);
+      expect(args.at(-1)).toBe('internal/interaction-harness/');
+    });
+
+    it('plans only its own paths, and warns, when the scope step lists no files', () => {
+      const args = planArgs(null, []);
+      expect(args.at(-1)).toBe('internal/interaction-harness/');
+      expect(args.join('\n')).toContain(
+        '::warning title=Changed specs not planned::',
+      );
+    });
+  });
+
   // Every source file the WebKit specs bundle into their pages is in scope,
   // so a change that reaches the run always runs it.
-  it.each([
-    'packages/core/src/gestures/__tests__/browser/fixture.ts',
-    'packages/core/src/motion/__tests__/animatedLayoutBundle.ts',
-    'packages/core/src/motion/__tests__/motionBundle.ts',
-  ])('keeps everything %s bundles in scope', async entry => {
+  async function expectBundleInScope(entry) {
     const {metafile} = await build({
       absWorkingDir: root,
       entryPoints: [entry],
@@ -200,7 +389,21 @@ describe('WebKit interaction proof routing', () => {
     for (const source of sources) {
       expect(inScope(source), source).toBe(true);
     }
-  });
+  }
+
+  it.each([
+    'packages/core/src/gestures/__tests__/browser/fixture.ts',
+    'packages/core/src/motion/__tests__/animatedLayoutBundle.ts',
+    'packages/core/src/motion/__tests__/motionBundle.ts',
+  ])('keeps everything %s bundles in scope', expectBundleInScope);
+
+  // The pager's page arrives with the pager; until then there is nothing to
+  // bundle, and from then on its next import is checked like the others.
+  const pagerBundle = 'packages/core/src/hooks/__tests__/pagerBundle.ts';
+  it.skipIf(!fs.existsSync(path.join(root, pagerBundle)))(
+    'keeps everything the pager bundle bundles in scope',
+    () => expectBundleInScope(pagerBundle),
+  );
 
   it('runs for gesture, motion, touch, press-feedback and menu-press code, and their harness', () => {
     for (const touched of [
@@ -215,10 +418,27 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/utils/touchPresentation.ts',
       'packages/core/src/utils/primaryClick.ts',
       'packages/core/src/utils/isApplePlatform.ts',
+      // The gesture host asks the Layer module's input hold about each touch,
+      // so the gesture specs' fixture bundles it.
+      'packages/core/src/Layer/inputHold.ts',
+      // The input hold is moving to read the modal outlet's host checks, which
+      // brings the outlet into the gesture fixtures and the pager bundle; the
+      // scope covers it before that import lands.
+      'packages/core/src/Layer/modalOutlet.ts',
+      // The animated-layout glide reads its timing through the theme-timing
+      // reader, which resolves token references, so its bundle carries them.
+      'packages/core/src/theme/tokenReferences.ts',
       'packages/core/src/hooks/useMenuPress.ts',
       'packages/core/src/hooks/menuPressGesture.ts',
       'packages/core/src/hooks/useLongPress.ts',
       'packages/core/src/hooks/usePressFeedback.ts',
+      'packages/core/src/hooks/usePager.ts',
+      'packages/core/src/hooks/useIsomorphicLayoutEffect.ts',
+      'packages/core/src/hooks/useAttachment.ts',
+      'packages/core/src/utils/sharedResizeObserver.ts',
+      'packages/core/src/utils/scrollView.ts',
+      'packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts',
+      'packages/core/src/hooks/__tests__/pagerBundle.ts',
       'internal/interaction-harness/src/webInput.ts',
       'playwright.interaction.config.ts',
       // Shared setup, as pr-interaction keeps (spec:AST-030 FR13): a
@@ -241,7 +461,7 @@ describe('WebKit interaction proof routing', () => {
     for (const untouched of [
       'packages/core/src/Toast/Toast.tsx',
       'packages/core/src/Selector/useSelectorPresentation.ts',
-      'packages/core/src/utils/clickGuard.ts',
+      'packages/core/src/utils/focusReturn.ts',
       'packages/core/src/internal/focus.ts',
       'packages/core/src/DateInput/DateInput.tsx',
       'packages/core/locales/en.json',

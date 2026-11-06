@@ -33,7 +33,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {readFileSync} from 'node:fs';
-import React, {useRef} from 'react';
+import React, {useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Popover} from './Popover';
 import {usePopover} from './usePopover';
@@ -874,6 +874,119 @@ describe('Popover', () => {
       );
     });
 
+    // iOS raises its keyboard only for a focus made while the browser still
+    // handles the tap, so initial focus lands within the opening event, not a
+    // frame later.
+    it('focuses the first content control within the click that opens it', () => {
+      const frames: FrameRequestCallback[] = [];
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        (callback: FrameRequestCallback) => {
+          frames.push(callback);
+          return frames.length;
+        },
+      );
+      vi.stubGlobal('cancelAnimationFrame', () => {});
+      try {
+        render(
+          <Popover content={<input aria-label="Discount" />} label="Discount">
+            <button type="button">Open discount</button>
+          </Popover>,
+        );
+
+        act(() => {
+          fireEvent.click(screen.getByRole('button', {name: 'Open discount'}), {
+            detail: 1,
+          });
+        });
+
+        // No frame has run.
+        expect(
+          screen.getByRole('textbox', {name: 'Discount', hidden: true}),
+        ).toHaveFocus();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('still focuses the content when the opening handler swaps it in', async () => {
+      function Swapped() {
+        const [mode, setMode] = useState<'view' | 'edit'>('view');
+        const popover = usePopover({dialogLabel: 'Details'});
+        return (
+          <>
+            <button
+              type="button"
+              ref={popover.triggerRef}
+              {...popover.triggerProps}
+              onClick={() => {
+                setMode('edit');
+                popover.show();
+              }}>
+              Edit details
+            </button>
+            {popover.render(
+              mode === 'view' ? (
+                <button type="button">View</button>
+              ) : (
+                <input aria-label="Name" />
+              ),
+            )}
+          </>
+        );
+      }
+      render(<Swapped />);
+
+      fireEvent.click(screen.getByRole('button', {name: 'Edit details'}), {
+        detail: 1,
+      });
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole('textbox', {name: 'Name', hidden: true}),
+        ).toHaveFocus(),
+      );
+    });
+
+    it('keeps focus that onShow moves inside the popover', async () => {
+      function Fields() {
+        const secondRef = useRef<HTMLInputElement>(null);
+        const popover = usePopover({
+          dialogLabel: 'Fields',
+          onShow: () => secondRef.current?.focus(),
+        });
+        return (
+          <>
+            <button
+              type="button"
+              ref={popover.triggerRef}
+              {...popover.triggerProps}
+              onClick={popover.toggle}>
+              Open fields
+            </button>
+            {popover.render(
+              <>
+                <input aria-label="First" />
+                <input aria-label="Second" ref={secondRef} />
+              </>,
+            )}
+          </>
+        );
+      }
+      render(<Fields />);
+
+      fireEvent.click(screen.getByRole('button', {name: 'Open fields'}), {
+        detail: 1,
+      });
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
+
+      expect(
+        screen.getByRole('textbox', {name: 'Second', hidden: true}),
+      ).toHaveFocus();
+    });
+
     it('focuses the dialog container when content has no controls', async () => {
       render(
         <Popover content={<span>Read-only content</span>} label="Read only">
@@ -962,6 +1075,76 @@ describe('Popover', () => {
       fireEvent.keyDown(document, {key: 'Escape'});
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
       expect(trigger).toHaveFocus();
+    });
+
+    it('leaves focus on a control inside that took it before the first frame', () => {
+      // Auto-focus waits a frame for content that is not mounted yet. Focus an
+      // app or a press put on a later control in that frame is not the first
+      // control's to take back.
+      const frames = new Map<number, FrameRequestCallback>();
+      let nextFrame = 0;
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        (callback: FrameRequestCallback) => {
+          nextFrame += 1;
+          frames.set(nextFrame, callback);
+          return nextFrame;
+        },
+      );
+      vi.stubGlobal('cancelAnimationFrame', (frame: number) => {
+        frames.delete(frame);
+      });
+      try {
+        render(
+          <Popover
+            content={
+              <>
+                <button type="button">First</button>
+                <button type="button" data-testid="second">
+                  Second
+                </button>
+              </>
+            }
+            label="Test">
+            <button type="button">Open</button>
+          </Popover>,
+        );
+        fireEvent.click(screen.getByRole('button', {name: 'Open'}));
+
+        const second = screen.getByTestId('second');
+        second.focus();
+        for (const callback of [...frames.values()]) {
+          callback(0);
+        }
+
+        expect(second).toHaveFocus();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('still moves focus to the first control when focus is not inside', async () => {
+      render(
+        <Popover
+          content={
+            <>
+              <button type="button">First</button>
+              <button type="button">Second</button>
+            </>
+          }
+          label="Test">
+          <button type="button">Open</button>
+        </Popover>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Open'});
+      trigger.focus();
+      fireEvent.click(trigger);
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', {name: 'First', hidden: true}),
+        ).toHaveFocus(),
+      );
     });
 
     it('does not move focus into a popover that closed before its first frame', () => {
@@ -1266,12 +1449,10 @@ describe('Popover', () => {
 
   describe('surface padding', () => {
     // StyleX's dev runtime names the style object a class came from
-    // ("padding__paddingStyles.3"), which is the padding rung the surface
-    // was handed.
+    // ("paddingStyles__paddingStyles.3", after its module), which is the
+    // padding rung the surface was handed.
     function paddingRungOf(surface: Element | null): string | null {
-      const match = surface?.className.match(
-        /padding__paddingStyles\.([\d.]+)/,
-      );
+      const match = surface?.className.match(/__paddingStyles\.([\d.]+)/);
       return match ? match[1] : null;
     }
 
@@ -1366,6 +1547,148 @@ describe('Popover', () => {
     expect(target).toHaveStyle({padding: '0'});
     expect(target).toContainElement(screen.getByTestId('content'));
     expect(screen.getByTestId('popover')).not.toHaveClass('consumer-popover');
+  });
+});
+
+describe('Popover touch presentation', () => {
+  interface RecordedAnimation {
+    target: Element;
+    keyframes: Keyframe[];
+    cancelled: boolean;
+  }
+  let recorded: RecordedAnimation[] = [];
+  let isCoarse = true;
+  const originalMatchMedia = window.matchMedia;
+  const originalShow = HTMLElement.prototype.showPopover;
+  const originalHide = HTMLElement.prototype.hidePopover;
+  const originalRequestFrame = window.requestAnimationFrame;
+  const originalCancelFrame = window.cancelAnimationFrame;
+  // The animation frames asked for, run by `frame()`: the touch
+  // presentation reads its geometry in the next one.
+  const frames = new Map<number, FrameRequestCallback>();
+  let lastFrame = 0;
+  const frame = () =>
+    act(() => {
+      const due = [...frames.values()];
+      frames.clear();
+      for (const callback of due) {
+        callback(performance.now());
+      }
+    });
+
+  beforeAll(() => {
+    window.requestAnimationFrame = callback => {
+      lastFrame += 1;
+      frames.set(lastFrame, callback);
+      return lastFrame;
+    };
+    window.cancelAnimationFrame = handle => {
+      frames.delete(handle);
+    };
+    // The shared resolver reads the primary pointer (one touch model on every
+    // touch device); Reduce Motion is off.
+    window.matchMedia = (query: string) => ({
+      matches: query.includes('pointer: coarse') ? isCoarse : false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    });
+    // The browser announces a close with `beforetoggle` while the popover is
+    // still shown, then hides it.
+    HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+      const before = new Event('beforetoggle');
+      Object.defineProperty(before, 'newState', {value: 'closed'});
+      this.dispatchEvent(before);
+      popoverOpenState.set(this, false);
+      const event = new Event('toggle');
+      Object.defineProperty(event, 'newState', {value: 'closed'});
+      this.dispatchEvent(event);
+    });
+    HTMLElement.prototype.animate = function (keyframes) {
+      const animation = {
+        target: this,
+        keyframes: keyframes as Keyframe[],
+        cancelled: false,
+        // Started at once, as the browser commits it (the animator holds a
+        // curve's start until it has one).
+        startTime: performance.now() as number | null,
+        finished: new Promise(() => {}),
+        cancel() {
+          this.cancelled = true;
+        },
+      };
+      recorded.push(animation);
+      return animation as unknown as Animation;
+    };
+  });
+
+  afterAll(() => {
+    window.requestAnimationFrame = originalRequestFrame;
+    window.cancelAnimationFrame = originalCancelFrame;
+    window.matchMedia = originalMatchMedia;
+    HTMLElement.prototype.showPopover = originalShow;
+    HTMLElement.prototype.hidePopover = originalHide;
+    Reflect.deleteProperty(HTMLElement.prototype, 'animate');
+  });
+
+  const open = () => {
+    recorded = [];
+    render(
+      <Popover content={<span>Filters</span>} label="Filters">
+        <button type="button">Filter</button>
+      </Popover>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Filter'}));
+    // The touch presentation reads its geometry in the next frame.
+    frame();
+    const layer = screen
+      .getByRole('dialog', {name: 'Filters', hidden: true})
+      .closest<HTMLElement>('[popover]');
+    expect(layer).not.toBeNull();
+    return layer!;
+  };
+
+  it('under a finger, grows the popover out of its trigger in place of the layer\u2019s entrance', () => {
+    isCoarse = true;
+    const layer = open();
+    expect(layer.style.getPropertyValue('animation-name')).toBe('none');
+    expect(layer.style.getPropertyValue('transform-origin')).not.toBe('');
+    const scale = recorded.find(
+      animation =>
+        animation.target === layer && 'scale' in animation.keyframes[0],
+    );
+    expect(scale).toBeDefined();
+    expect(String(scale!.keyframes[0].scale).split(' ')[0]).toBe('0.01');
+  });
+
+  it('under a finger, shrinks back into its trigger on a copy that outlives the close', () => {
+    isCoarse = true;
+    const layer = open();
+    fireEvent.click(screen.getByRole('button', {name: 'Filter'}));
+    const copy = layer.parentElement!.querySelector<HTMLElement>(
+      '[data-astryx-popover-exit]',
+    );
+    expect(copy).not.toBeNull();
+    expect(copy!.getAttribute('aria-hidden')).toBe('true');
+    expect(copy!.hasAttribute('inert')).toBe(true);
+  });
+
+  it('under a mouse, keeps the layer\u2019s own entrance, plays nothing and closes at once', () => {
+    isCoarse = false;
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const layer = open();
+    expect(layer.style.getPropertyValue('animation-name')).toBe('');
+    expect(recorded.filter(animation => animation.target === layer)).toEqual(
+      [],
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Filter'}));
+    expect(
+      layer.parentElement!.querySelector('[data-astryx-popover-exit]'),
+    ).toBeNull();
   });
 });
 
@@ -1485,13 +1808,22 @@ describe('usePopover trigger ref', () => {
     function Trigger({count}: {count: number}) {
       const popover = usePopover({onShow: () => {}, onHide: () => {}});
       return (
-        <button type="button" ref={popover.triggerRef}>
-          Open {count}
-        </button>
+        <>
+          <button
+            type="button"
+            ref={popover.triggerRef}
+            onClick={() => popover.show()}>
+            Open {count}
+          </button>
+          {popover.render(<span>Details</span>)}
+        </>
       );
     }
     const {rerender} = render(<Trigger count={0} />);
     const trigger = screen.getByRole('button', {name: /^Open/});
+    // A closed popover's trigger is no anchor; a shown one's is.
+    expect(trigger.style.getPropertyValue('anchor-name')).toBe('');
+    fireEvent.click(trigger);
     const anchorName = trigger.style.getPropertyValue('anchor-name');
     expect(anchorName).toMatch(/^--astryx-layer-/);
     const records: MutationRecord[] = [];

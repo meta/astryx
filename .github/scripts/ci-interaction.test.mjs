@@ -47,13 +47,20 @@ describe('interaction proof routing', () => {
     // Behind the pull-request gate (spec:AST-030 FR17).
     expect(proofs.if).toMatch(/^\$\{\{ \(github\.event_name != 'pull_request'/);
     expect(ungated(proofs.if)).toBe(
-      "github.event_name != 'workflow_dispatch' && always() && !cancelled()",
+      "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
     );
-    expect(proofs.needs).toEqual(['build-storybook']);
+    // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
+    expect(proofs.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'build-storybook',
+    ]);
   });
 
   it('decides its own scope first, and gates every later step on it', () => {
-    expect(proofs.steps[0].with['sparse-checkout']).toBe(
+    // The scope action first; the leg planner shares the checkout.
+    expect(proofs.steps[0].with['sparse-checkout'].trim().split('\n')[0]).toBe(
       '.github/actions/test-scope',
     );
     expect(decide().uses).toBe('./.test-scope/.github/actions/test-scope');
@@ -61,15 +68,26 @@ describe('interaction proof routing', () => {
     const guards = new Set([
       "Require this pull request's Storybook build",
       'Skip the proofs outside their scope',
+      'Leave the proofs to the other legs',
     ]);
-    for (const candidate of proofs.steps.slice(2)) {
-      if (guards.has(candidate.name)) continue;
+    // Every step after the leg count also waits for this leg to have a share.
+    const counted = proofs.steps.indexOf(step(proofs, "Count this run's legs"));
+    for (const [index, candidate] of proofs.steps.entries()) {
+      if (index < 2 || guards.has(candidate.name)) continue;
+      const gate =
+        index <= counted
+          ? applies
+          : `${applies} && steps.legs.outputs.runs == 'true'`;
+      // A leg whose plan holds no spec file runs no proofs.
       expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
         new RegExp(
-          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}$`,
+          `^((always|failure)\\(\\) && )?${gate.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
         ),
       );
     }
+    expect(step(proofs, 'Leave the proofs to the other legs').if).toBe(
+      `${applies} && steps.legs.outputs.runs != 'true'`,
+    );
   });
 
   it('fails closed when Storybook did not build for proofs that apply', () => {

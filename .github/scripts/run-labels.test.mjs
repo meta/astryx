@@ -17,6 +17,7 @@ import {ungated} from './ci-pr-gate.mjs';
 const require = createRequire(import.meta.url);
 const {
   SUITE_LABELS,
+  decideRunLabel,
   decideRunLabels,
   notRunSentence,
 } = require('./run-labels.cjs');
@@ -196,11 +197,87 @@ describe('run-labels decision', () => {
   });
 });
 
+// A suite in its own workflow (the nightly perf lane) asks about one label
+// under the same rule and sets no output of its own (spec:AST-030 FR18).
+describe('decideRunLabel', () => {
+  async function decideOne({
+    labels,
+    permission = 'write',
+    eventName = 'pull_request',
+  }) {
+    const outputs = {};
+    const notices = [];
+    const core = {
+      setOutput: (name, value) => {
+        outputs[name] = value;
+      },
+      notice: message => notices.push(message),
+      warning: message => notices.push(message),
+    };
+    const github = {
+      graphql: async () => ({
+        repository: {
+          pullRequest: {
+            timelineItems: {
+              nodes: labels.map(name => ({
+                actor: {login: 'maintainer'},
+                label: {name},
+              })),
+            },
+          },
+        },
+      }),
+      rest: {
+        repos: {
+          getCollaboratorPermissionLevel: async () => ({data: {permission}}),
+        },
+      },
+    };
+    const context = {
+      eventName,
+      repo: {owner: 'meta', repo: 'astryx'},
+      payload: {
+        pull_request: {number: 7, labels: labels.map(name => ({name}))},
+      },
+    };
+    const runs = await decideRunLabel({
+      github,
+      context,
+      core,
+      suite: 'perf',
+      label: 'ci:run-perf',
+    });
+    return {runs, outputs, notices};
+  }
+
+  it('runs for its label from write access, and sets no output', async () => {
+    const {runs, outputs} = await decideOne({labels: ['ci:run-perf']});
+    expect(runs).toBe(true);
+    expect(outputs).toEqual({});
+  });
+
+  it('does not run for read access, another suite label, or outside a pull request', async () => {
+    expect(
+      (await decideOne({labels: ['ci:run-perf'], permission: 'read'})).runs,
+    ).toBe(false);
+    expect((await decideOne({labels: ['ci:run-visual']})).runs).toBe(false);
+    expect(
+      (await decideOne({labels: ['ci:run-perf'], eventName: 'push'})).runs,
+    ).toBe(false);
+  });
+
+  it('leaves the CI suites unchanged', () => {
+    expect(Object.values(SUITE_LABELS)).not.toContain('ci:run-perf');
+  });
+});
+
 // Replay: each label's decision through every heavy owner's condition on a
 // pull request whose other needs succeeded.
 describe('each label runs only its own suite', () => {
+  // pr-visual runs on every pull request for its default touched check; its
+  // full check's step needs ci:run-visual (ci-heavy-lanes.test.mjs).
   const OWNERS = {
-    visual: ['visual-scout', 'pr-visual'],
+    visual: ['visual-scout'],
     a11y: ['pr-a11y-guards', 'pr-a11y-specs', 'pr-a11y'],
     rtl: ['pr-rtl-shard', 'pr-rtl-merge', 'pr-rtl'],
   };

@@ -31,7 +31,7 @@ component RichTextEditor(props: RichTextEditorProps)
   prop ref?: Ref<RichTextEditorRef>
   prop size?: RichTextEditorSize = 'md'
   prop status?: RichTextEditorStatus
-  prop statusVariant?: FieldStatusVariant = 'attached'
+  prop statusVariant?: FieldStatusVariant | 'tooltip' = 'attached'
   prop tabEscapeHint?: string = 'Press Escape then Tab to move focus out of the editor.', translated for the active locale
   prop toolbar?: ReactNode
   prop transformers?: ReadonlyArray<Transformer>

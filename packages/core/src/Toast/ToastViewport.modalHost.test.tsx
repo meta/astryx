@@ -16,15 +16,26 @@
  *   BottomSheet/__tests__/BottomSheetToastOutlet.a11y.chromium.spec.ts).
  */
 
-import {useState, type ReactNode} from 'react';
+import {useLayoutEffect, useRef, useState, type ReactNode} from 'react';
 import {describe, it, expect, vi, afterEach, beforeEach} from 'vitest';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {ToastViewport} from './ToastViewport';
 import {useToast} from './useToast';
 import {BottomSheet, BottomSheetSwitcher} from '../BottomSheet';
 import {Dialog} from '../Dialog';
+import {Drawer} from '../Drawer/Drawer';
 import {getActiveModalOutlet} from '../Layer/modalOutlet';
 import type {ToastDismissReason} from './types';
+
+// jsdom reports no window focus until an element is focused, but a test page
+// stands for a focused window: a toast raised while the window is blurred
+// starts held (FR2), which the blur tests set up on purpose.
+beforeEach(() => {
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+});
+afterEach(() => {
+  vi.mocked(document.hasFocus).mockRestore?.();
+});
 
 // jsdom does not implement the native dialog methods.
 beforeEach(() => {
@@ -75,6 +86,49 @@ function DialogFixture({
       </Dialog>
     </>
   );
+}
+
+/**
+ * A Dialog with a probe after it. The probe calls `onClosingCommit` in the
+ * layout phase of the commit that closes the Dialog. That is after every
+ * layout cleanup and before the browser can paint.
+ */
+function ClosingCommitFixture({
+  onClosingCommit,
+}: {
+  onClosingCommit: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setIsOpen(true)}>
+        Open Edit
+      </button>
+      <Dialog isOpen={isOpen} onOpenChange={setIsOpen} aria-label="Edit">
+        <button type="button" onClick={() => setIsOpen(false)}>
+          Close Edit
+        </button>
+      </Dialog>
+      <ClosingCommitProbe isOpen={isOpen} onClosingCommit={onClosingCommit} />
+    </>
+  );
+}
+
+function ClosingCommitProbe({
+  isOpen,
+  onClosingCommit,
+}: {
+  isOpen: boolean;
+  onClosingCommit: () => void;
+}) {
+  const wasOpenRef = useRef(false);
+  useLayoutEffect(() => {
+    if (wasOpenRef.current && !isOpen) {
+      onClosingCommit();
+    }
+    wasOpenRef.current = isOpen;
+  }, [isOpen, onClosingCommit]);
+  return null;
 }
 
 function NonModalSheetFixture({label}: {label: string}) {
@@ -171,6 +225,35 @@ function SheetFixture({label, hasScrim}: {label: string; hasScrim?: boolean}) {
   );
 }
 
+function DrawerFixture({
+  label,
+  hasScrim,
+  children,
+}: {
+  label: string;
+  hasScrim?: boolean;
+  children?: ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setIsOpen(true)}>
+        {`Open ${label}`}
+      </button>
+      <Drawer
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        label={label}
+        hasScrim={hasScrim}>
+        <button type="button" onClick={() => setIsOpen(false)}>
+          {`Close ${label}`}
+        </button>
+        {children}
+      </Drawer>
+    </>
+  );
+}
+
 /**
  * jsdom's popover stand-ins are stateless: track which elements are shown so
  * `:popover-open` answers as a browser would.
@@ -201,6 +284,39 @@ function trackPopoverState() {
 }
 
 describe('ToastViewport modal hosting', () => {
+  // spec:AST-086 FR10: an open modal hides the body-level channel, so while
+  // the viewport is hosted in one each card announces itself; outside a modal
+  // the cards carry no live region and the viewport's channel announces once.
+  it('gives each card its own live region only while a modal hosts the viewport', () => {
+    render(
+      <ToastViewport>
+        <ToastButton />
+        <DialogFixture label="Edit">
+          <ToastButton label="Show toast from dialog" />
+        </DialogFixture>
+      </ToastViewport>,
+    );
+    // The live region the toast's own text sits in, inside its row.
+    const liveRegionOf = (text: string) => {
+      const node = screen.getByText(text);
+      const row = node.closest('[data-toast-id]');
+      const region = node.closest(
+        '[aria-live], [role="status"], [role="alert"]',
+      );
+      return region != null && row?.contains(region) ? region : null;
+    };
+
+    fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
+    expect(liveRegionOf('Saved')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', {name: 'Toggle Edit'}));
+    expect(getDialog('Edit').contains(getViewport())).toBe(true);
+    expect(liveRegionOf('Saved')).toHaveAttribute('aria-live', 'polite');
+
+    fireEvent.click(screen.getByRole('button', {name: 'Close Edit'}));
+    expect(liveRegionOf('Saved')).toBeNull();
+  });
+
   it('moves into an open Dialog and back when it closes, keeping the toast', () => {
     const {container} = render(
       <ToastViewport>
@@ -371,6 +487,30 @@ describe('ToastViewport modal hosting', () => {
     expect(getDialog('Outer').contains(getViewport())).toBe(true);
   });
 
+  it('returns to its place in the commit that closes the Dialog, before anything paints', () => {
+    // The closing commit stops displaying the dialog. After a close outside a
+    // click, the browser can paint before passive effects run. A viewport
+    // still inside the dialog then paints nothing.
+    const isInDialogAtClose: boolean[] = [];
+    const {container} = render(
+      <ToastViewport>
+        <ToastButton />
+        <ClosingCommitFixture
+          onClosingCommit={() => {
+            isInDialogAtClose.push(getDialog('Edit').contains(getViewport()));
+          }}
+        />
+      </ToastViewport>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Open Edit'}));
+    expect(getDialog('Edit').contains(getViewport())).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', {name: 'Close Edit'}));
+    expect(isInDialogAtClose).toEqual([false]);
+    expect(container.contains(getViewport())).toBe(true);
+  });
+
   it('returns to its place when the open Dialog unmounts', () => {
     const {container} = render(
       <ToastViewport>
@@ -494,10 +634,10 @@ describe('ToastViewport above a BottomSheet', () => {
     expect(viewport.closest('dialog')).toBe(getDialog('Filters'));
 
     fireEvent.click(screen.getByRole('button', {name: 'Close Filters'}));
-    // The sheet stays an open modal through its exit animation, but inert and
-    // hidden; toasts must not go down with it.
+    // The sheet stays an open dialog through its exit animation, no longer
+    // modal and taking no presses; toasts must not go down with it.
     expect(getDialog('Filters')).toHaveAttribute('open');
-    expect(getDialog('Filters')).toHaveAttribute('inert');
+    expect(getDialog('Filters')).not.toHaveAttribute('aria-modal');
     expect(viewport.closest('dialog')).toBe(getDialog('Edit'));
     expect(viewport.closest('[inert], [aria-hidden="true"]')).toBeNull();
   });
@@ -664,6 +804,91 @@ describe('ToastViewport above a BottomSheet', () => {
     const toast = screen.getByText('Saved');
     expect(toast.closest('dialog')).toBe(getDialog('B'));
     expect(toast.closest('[inert]')).toBeNull();
+  });
+});
+
+describe('ToastViewport above a Drawer', () => {
+  beforeEach(() => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+  });
+
+  it('moves into an open modal drawer and back to its place when it closes', () => {
+    const {container} = render(
+      <ToastViewport>
+        <ToastButton />
+        <DrawerFixture label="Candidate" />
+      </ToastViewport>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
+    const toast = screen.getByText('Saved');
+
+    fireEvent.click(screen.getByRole('button', {name: 'Open Candidate'}));
+    expect(getViewport().closest('dialog')).toBe(getDialog('Candidate'));
+    expect(getActiveModalOutlet()).toBe(getDialog('Candidate'));
+    // Same node: the rows were moved, not remounted.
+    expect(screen.getByText('Saved')).toBe(toast);
+
+    fireEvent.click(screen.getByRole('button', {name: 'Close Candidate'}));
+    // The drawer stops supplying as soon as it starts to close, so toasts do
+    // not slide out with it.
+    expect(getViewport().closest('dialog')).toBeNull();
+    expect(container.contains(getViewport())).toBe(true);
+    expect(screen.getByText('Saved')).toBe(toast);
+  });
+
+  it('hosts a toast raised from inside it', () => {
+    render(
+      <ToastViewport>
+        <DrawerFixture label="Candidate">
+          <ToastButton label="Move to Interview" />
+        </DrawerFixture>
+      </ToastViewport>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Open Candidate'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Move to Interview'}));
+    expect(screen.getByText('Saved').closest('dialog')).toBe(
+      getDialog('Candidate'),
+    );
+  });
+
+  it('re-enters the top layer in place when a drawer without a scrim opens after it', () => {
+    // A `hasScrim={false}` drawer is a manual popover: it enters the top
+    // layer above the viewport and blocks nothing, so the viewport stays
+    // where it is and leaves and re-enters to paint above the drawer again.
+    const {showPopover, hidePopover} = trackPopoverState();
+    const {container} = render(
+      <ToastViewport>
+        <ToastButton />
+        <DrawerFixture label="Candidate" hasScrim={false} />
+      </ToastViewport>,
+    );
+    const viewport = getViewport();
+    const onViewport = (spy: typeof showPopover) =>
+      spy.mock.contexts.filter(context => context === viewport).length;
+    fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
+    expect(onViewport(showPopover)).toBe(1);
+
+    fireEvent.click(screen.getByRole('button', {name: 'Open Candidate'}));
+    expect(getDialog('Candidate')).toHaveAttribute('popover', 'manual');
+    // Re-entered (hide, then show) after the drawer's own showPopover, and
+    // not moved: a non-modal drawer is not an outlet.
+    expect(onViewport(hidePopover)).toBe(1);
+    expect(onViewport(showPopover)).toBe(2);
+    const drawerShow = showPopover.mock.contexts.indexOf(
+      getDialog('Candidate'),
+    );
+    expect(drawerShow).toBeGreaterThan(-1);
+    expect(showPopover.mock.contexts.lastIndexOf(viewport)).toBeGreaterThan(
+      drawerShow,
+    );
+    expect(getViewport().closest('dialog')).toBeNull();
+    expect(container.contains(getViewport())).toBe(true);
+    expect(getActiveModalOutlet()).toBeNull();
+
+    // Closing the drawer moves nothing and re-enters nothing.
+    fireEvent.click(screen.getByRole('button', {name: 'Close Candidate'}));
+    expect(onViewport(hidePopover)).toBe(1);
+    expect(onViewport(showPopover)).toBe(2);
   });
 });
 

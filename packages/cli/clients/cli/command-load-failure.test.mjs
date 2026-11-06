@@ -80,4 +80,11 @@ describe('a command that fails to load', () => {
     expect(status).toBe(0);
     expect(JSON.parse(stdout).type).toMatch(/^docs\./);
   });
+
+  it('is listed in help, which loads every command, beside the others', () => {
+    const {status, stdout} = run(['--help']);
+    expect(status).toBe(0);
+    expect(stdout).toMatch(/blog\s+\(failed to load: simulated load failure\)/);
+    expect(stdout).toMatch(/\bdocs\b/);
+  });
 });

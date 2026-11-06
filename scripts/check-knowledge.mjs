@@ -15,6 +15,7 @@ import {createHash} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {collectThemingTargets} from '../packages/cli/foundation/discovery/theming-targets.mjs';
+import {readObjects} from './lib/git-objects.mjs';
 
 const require = createRequire(import.meta.url);
 const {
@@ -31,9 +32,13 @@ const {
 } = require('../.github/scripts/component-design-decisions.cjs');
 const {
   COMPONENT_SPEC_ROOT,
+  PLATFORM_SOURCE_ROOTS,
+  classifyPackageArchitectureRecordPath,
+  classifyPlatformComponentSpecPath,
   componentSpecPathForSource,
   isComponentSpecRecordPath,
   isIgnoredComponentKnowledgeSegment,
+  isKnowledgeRecordPath,
   isPlatformComponentSpecPath,
   locateComponentKnowledgePath,
 } = require('../.github/scripts/knowledge-paths.cjs');
@@ -525,20 +530,6 @@ function repositoryFileList(root) {
   }
 }
 
-function isKnowledgeRecordPath(filePath) {
-  if (/^docs\/(?:architecture|design|families)\/[^/]+\.md$/.test(filePath)) {
-    return !filePath.endsWith('/README.md');
-  }
-  if (/^docs\/specs\/[^/]+\/(?:spec|plan)\.md$/.test(filePath)) {
-    return true;
-  }
-  const themeMatch = /^packages\/themes\/([^/]+)\/([^/]+)\.spec\.md$/.exec(
-    filePath,
-  );
-  if (themeMatch) return themeMatch[1] === themeMatch[2];
-  return isComponentSpecRecordPath(filePath);
-}
-
 const REVIEW_CONCERN_NAME_PATTERN = REVIEW_TRIGGER_PATTERN;
 const IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
 
@@ -802,21 +793,36 @@ export function readKnowledgeRecordsAtAuthority(
   authorityCommit,
   reviewHead,
 ) {
-  const resolvedCommit = execFileSync(
+  // One process resolves both commits, and fails when either does not.
+  const resolved = execFileSync(
     'git',
-    ['-C', root, 'rev-parse', '--verify', `${authorityCommit}^{commit}`],
+    [
+      '-C',
+      root,
+      'rev-parse',
+      `${authorityCommit}^{commit}`,
+      `${reviewHead}^{commit}`,
+    ],
     {encoding: 'utf8'},
-  ).trim();
+  )
+    .trim()
+    .split('\n');
+  // Without --verify, rev-parse echoes an option and expands a range, so
+  // only two object ids count as a resolution.
+  if (
+    resolved.length !== 2 ||
+    !resolved.every(line => /^[0-9a-f]{40,64}$/.test(line))
+  ) {
+    throw new Error(
+      `cannot resolve ${authorityCommit} and ${reviewHead} to two commits.`,
+    );
+  }
+  const [resolvedCommit, resolvedHead] = resolved;
   if (resolvedCommit !== authorityCommit) {
     throw new Error(
       `authority commit must be the full resolved commit ${resolvedCommit}.`,
     );
   }
-  const resolvedHead = execFileSync(
-    'git',
-    ['-C', root, 'rev-parse', '--verify', `${reviewHead}^{commit}`],
-    {encoding: 'utf8'},
-  ).trim();
   if (resolvedHead !== reviewHead) {
     throw new Error(
       `review head must be the full resolved commit ${resolvedHead}.`,
@@ -855,14 +861,17 @@ export function readKnowledgeRecordsAtAuthority(
   )
     .split(/\r?\n/)
     .filter(isKnowledgeRecordPath);
-  const records = paths.map(filePath => ({
-    path: filePath,
-    content: execFileSync(
-      'git',
-      ['-C', root, 'show', `${resolvedCommit}:${filePath}`],
-      {encoding: 'utf8'},
-    ),
-  }));
+  const objects = readObjects(
+    root,
+    paths.map(filePath => `${resolvedCommit}:${filePath}`),
+  );
+  const records = paths.map(filePath => {
+    const content = objects.get(`${resolvedCommit}:${filePath}`);
+    if (!content) {
+      throw new Error(`cannot read ${filePath} at ${resolvedCommit}.`);
+    }
+    return {path: filePath, content: content.toString('utf8')};
+  });
   return {records, authority: resolvedCommit};
 }
 
@@ -941,6 +950,25 @@ export function discoverThemeRecordCandidates(root = DEFAULT_ROOT) {
   return {records: records.sort(), problems};
 }
 
+/**
+ * Every package's own architecture records:
+ * `packages/<package>/specs/…/<slug>.spec.md`.
+ */
+export function discoverPackageArchitectureRecords(root = DEFAULT_ROOT) {
+  return immediateDirectories(path.join(root, 'packages'))
+    .flatMap(packageDirectory =>
+      matchingFilesRecursively(
+        path.join(packageDirectory, 'specs'),
+        (_name, candidate) =>
+          classifyPackageArchitectureRecordPath(
+            path.relative(root, candidate).split(path.sep).join('/'),
+          ) !== null,
+        {skipDirectory: isIgnoredComponentKnowledgeSegment},
+      ),
+    )
+    .sort();
+}
+
 export function discoverKnowledgeRecords(root = DEFAULT_ROOT) {
   const records = [];
 
@@ -969,6 +997,7 @@ export function discoverKnowledgeRecords(root = DEFAULT_ROOT) {
   );
 
   records.push(...discoverThemeRecordCandidates(root).records);
+  records.push(...discoverPackageArchitectureRecords(root));
 
   records.push(
     ...matchingFilesRecursively(
@@ -982,6 +1011,96 @@ export function discoverKnowledgeRecords(root = DEFAULT_ROOT) {
   );
 
   return records.sort();
+}
+
+/**
+ * Platform implementation records:
+ * `docs/specs/components/<ComponentRoot>/<PublicName>.<language>.spec.md`.
+ */
+export function discoverPlatformComponentRecords(root = DEFAULT_ROOT) {
+  return matchingFilesRecursively(
+    path.join(root, COMPONENT_SPEC_ROOT),
+    (_name, candidate) =>
+      isPlatformComponentSpecPath(
+        path.relative(root, candidate).split(path.sep).join('/'),
+      ),
+    {skipDirectory: isIgnoredComponentKnowledgeSegment},
+  ).sort();
+}
+
+/**
+ * What only a platform record has, checked after the record loop has read every
+ * id: `platform_of` names the core component, the core record beside it
+ * declares that id, and its `verified_by` paths exist. `ids` maps every record
+ * id to its path and authority.
+ */
+export function validatePlatformComponentRecords(root, {ids, repositoryFiles}) {
+  const problems = [];
+  const tracked = repositoryFiles ? new Set(repositoryFiles) : null;
+  for (const absolutePath of discoverPlatformComponentRecords(root)) {
+    const filePath = path
+      .relative(root, absolutePath)
+      .split(path.sep)
+      .join('/');
+    const {componentRoot, publicName} =
+      classifyPlatformComponentSpecPath(filePath);
+    const {frontmatter} = parseKnowledgeDocument(
+      fs.readFileSync(absolutePath, 'utf8'),
+      filePath,
+    );
+    if (frontmatter.get('kind') !== 'component') {
+      problems.push(`${filePath}: a platform record must be kind: component.`);
+    }
+    const coreId = `component:${publicName}`;
+    if (frontmatter.get('platform_of') !== coreId) {
+      problems.push(
+        `${filePath}: platform_of must name the core component, ${coreId}.`,
+      );
+    }
+    const corePath = `${COMPONENT_SPEC_ROOT}/${componentRoot}/${publicName}.spec.md`;
+    // Placed like the core record it implements, whether or not that record
+    // exists yet.
+    const location = componentRecordLocation(root, path.join(root, corePath));
+    if (!location) {
+      problems.push(
+        `${filePath}: platform records must live at ${COMPONENT_SPEC_ROOT}/<ComponentRoot>/, where exactly one registered component package owns <ComponentRoot>.`,
+      );
+    } else {
+      const placement = componentNamePlacement(root, location, publicName);
+      if (placement.missingFlatExport) {
+        problems.push(
+          `${filePath}: platform record for ${publicName} must match a public named export and TSX module in packages/${location.packageName}/src.`,
+        );
+      }
+      if (placement.outsideRoot) {
+        problems.push(
+          `${filePath}: platform record for ${publicName} must match component root ${JSON.stringify(componentRoot)} or an exact public component entry in that root's consumer docs.`,
+        );
+      }
+    }
+    if (fs.existsSync(path.join(root, corePath))) {
+      const core = ids.get(coreId);
+      if (!core || core.filePath.split(path.sep).join('/') !== corePath) {
+        problems.push(
+          `${filePath}: the core record beside it, ${corePath}, must declare id ${coreId}.`,
+        );
+      }
+    }
+    const verifiedBy = frontmatter.get('verified_by');
+    for (const entry of Array.isArray(verifiedBy) ? verifiedBy : []) {
+      const cited = String(entry).replace(/\/+$/, '');
+      const exists = tracked
+        ? tracked.has(cited) ||
+          [...tracked].some(file => file.startsWith(`${cited}/`))
+        : fs.existsSync(path.join(root, cited));
+      if (!exists) {
+        problems.push(
+          `${filePath}: verified_by path ${entry} is not in the repository.`,
+        );
+      }
+    }
+  }
+  return problems;
 }
 
 /**
@@ -1014,7 +1133,7 @@ export function discoverMisplacedComponentSpecs(root = DEFAULT_ROOT) {
     }
   }
 
-  const nativeSources = path.join(root, 'packages/native/apple/Sources');
+  const nativeSources = path.join(root, PLATFORM_SOURCE_ROOTS.swift);
   for (const candidate of matchingFilesRecursively(
     nativeSources,
     name => isSpecFile(name) && !name.startsWith('.'),
@@ -1095,6 +1214,25 @@ export function consumerDocPublicNames(docPath) {
     }
   }
   return [...names].sort();
+}
+
+/**
+ * Whether a component record's public name fits where its folder places it: a
+ * flat package exports it, and it is the component root or an exact public
+ * component entry in that root's consumer docs.
+ */
+function componentNamePlacement(root, location, publicName) {
+  return {
+    missingFlatExport:
+      location.layout === 'flat' &&
+      !packageHasPublicComponent(root, location.packageName, publicName),
+    outsideRoot:
+      publicName !== location.componentRoot &&
+      !componentRootDefinesPublicComponent(
+        location.componentSourcePath,
+        publicName,
+      ),
+  };
 }
 
 function componentRootDefinesPublicComponent(componentRootPath, publicName) {
@@ -1178,21 +1316,13 @@ export function validateComponentModuleRelationships(
           `${record.filePath}: component record id must be ${expectedId} to match its filename.`,
         );
       }
-      if (
-        location.layout === 'flat' &&
-        !packageHasPublicComponent(root, location.packageName, publicName)
-      ) {
+      const placement = componentNamePlacement(root, location, publicName);
+      if (placement.missingFlatExport) {
         problems.push(
           `${record.filePath}: flat-package component record ${expectedId} must match a public named export and TSX module in packages/${location.packageName}/src.`,
         );
       }
-      if (
-        publicName !== location.componentRoot &&
-        !componentRootDefinesPublicComponent(
-          location.componentSourcePath,
-          publicName,
-        )
-      ) {
+      if (placement.outsideRoot) {
         problems.push(
           `${record.filePath}: flat component record ${expectedId} must match component root ${JSON.stringify(location.componentRoot)} or an exact public component entry in that root's consumer docs.`,
         );
@@ -1767,6 +1897,7 @@ function validateAgainstSchema(
   currentTemplateVersion,
   designApprovalOwners = [],
   engineeringApprovalOwners = [],
+  {idPattern = null} = {},
 ) {
   const problems = [...document.problems];
   const {frontmatter, sections} = document;
@@ -1845,12 +1976,13 @@ function validateAgainstSchema(
   }
 
   const id = frontmatter.get('id');
+  const expectedIdPattern = idPattern ?? kindSchema.idPattern;
   if (
-    kindSchema.idPattern &&
-    (typeof id !== 'string' || !new RegExp(kindSchema.idPattern).test(id))
+    expectedIdPattern &&
+    (typeof id !== 'string' || !new RegExp(expectedIdPattern).test(id))
   ) {
     problems.push(
-      `${filePath}: id must match ${JSON.stringify(kindSchema.idPattern)}.`,
+      `${filePath}: id must match ${JSON.stringify(expectedIdPattern)}.`,
     );
   }
 
@@ -2123,10 +2255,19 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
     }
   }
 
-  for (const absolutePath of discoverKnowledgeRecords(root)) {
+  const platformRecordPaths = new Set(discoverPlatformComponentRecords(root));
+  for (const absolutePath of [
+    ...discoverKnowledgeRecords(root),
+    ...platformRecordPaths,
+  ]) {
     const filePath = path.relative(root, absolutePath);
     const content = fs.readFileSync(absolutePath, 'utf8');
     const document = parseKnowledgeDocument(content, filePath);
+    // A platform record is checked like any record, with its
+    // language-qualified id (`component:<language>/<PublicName>`).
+    const platform = platformRecordPaths.has(absolutePath)
+      ? classifyPlatformComponentSpecPath(filePath.split(path.sep).join('/'))
+      : null;
     const pathApplicability = parsePathApplicabilityBlock(content, filePath);
     problems.push(
       ...pathApplicability.problems,
@@ -2166,6 +2307,11 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
         templateVersions[document.frontmatter.get('kind')],
         designApprovalOwners,
         engineeringApprovalOwners,
+        platform
+          ? {
+              idPattern: `^component:${platform.language}/${platform.publicName}$`,
+            }
+          : {},
       ),
     );
     const authority = document.frontmatter.get('authority');
@@ -2178,6 +2324,21 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
         `${filePath}: active ${kind} records must use latest schema_version ${latestKindVersion} for that kind.`,
       );
     }
+    const packageRecord = classifyPackageArchitectureRecordPath(
+      filePath.split(path.sep).join('/'),
+    );
+    if (packageRecord) {
+      if (kind !== 'architecture') {
+        problems.push(
+          `${filePath}: a record under packages/${packageRecord.packageName}/specs/ must be kind: architecture.`,
+        );
+      }
+      if (document.frontmatter.get('id') !== packageRecord.id) {
+        problems.push(
+          `${filePath}: id must be ${packageRecord.id} to match its path.`,
+        );
+      }
+    }
     if (kind === 'component' || kind === 'module') {
       const designDecisions = parseDesignDecisionsBlock(content, filePath);
       problems.push(
@@ -2185,7 +2346,9 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
       );
       const parsed = parseAnatomyThemingBlock(content, filePath);
       problems.push(...parsed.problems);
-      if (parsed.mapping != null) {
+      // Theme targets map a core component's anatomy; a platform record's
+      // block is parsed but has no core contract to check against.
+      if (parsed.mapping != null && !platform) {
         if (isActiveRecord) {
           delegations.push(...collectDelegations(parsed.mapping, filePath));
         }
@@ -2223,10 +2386,11 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
         });
       }
     }
-    records.push({filePath, absolutePath, document});
+    if (!platform) records.push({filePath, absolutePath, document});
   }
 
   problems.push(
+    ...validatePlatformComponentRecords(root, {ids, repositoryFiles}),
     ...validateComponentModuleRelationships(
       root,
       records,
@@ -2259,8 +2423,9 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
 
   for (const {filePath, document} of records) {
     if (document.frontmatter.get('authority') !== 'current') continue;
+    // An unknown kind is already reported above.
     const kindSchema = schema.kinds[document.frontmatter.get('kind')];
-    for (const field of kindSchema.referenceFields ?? []) {
+    for (const field of kindSchema?.referenceFields ?? []) {
       const references = document.frontmatter.get(field);
       if (!Array.isArray(references)) continue;
       for (const reference of references) {

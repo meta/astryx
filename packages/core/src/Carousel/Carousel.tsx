@@ -30,6 +30,7 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useState,
   Children,
   isValidElement,
 } from 'react';
@@ -41,19 +42,40 @@ import {
   radiusVars,
   durationVars,
   easeVars,
+  focusVars,
 } from '../theme/tokens.stylex';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwnerOverlay,
+} from '../privateAttributes/focusOwner.stylex';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useLayer} from '../Layer';
+import {useAttachment} from '../hooks/useAttachment';
 import {useScrollOverflow} from '../hooks/useScrollOverflow';
 import {isRtlElement} from '../hooks/isRtlElement';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps, rtlStyles} from '../utils';
 import type {SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  attachSnapPaging,
+  isSnapPaging,
+  moveHeldSnapPaging,
+  nearestStop,
+  type SnapPaging,
+  snapStops,
+} from '../SnapPaging/snapPagingValue';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Carousel/Carousel.generated';
+
+registerEnglishFallback(english);
 /**
  * Imperative control surface for the Carousel, accessed via the `handleRef`
  * prop. Methods drive the same native-scroll machinery as the built-in
@@ -126,10 +148,14 @@ export interface CarouselProps extends BaseProps<HTMLDivElement> {
    */
   hasLoop?: boolean;
   /**
-   * Enable scroll-snap on items. Each direct child snaps to the start edge.
+   * Snap each item to the start edge. `true` (written `hasSnap`) uses native
+   * CSS scroll snap. A `useSnapPaging()` value adds iOS paging on the same
+   * stops, under a finger and on a trackpad swipe. A flick moves one view, or
+   * one item with `useSnapPaging({pages: 'item'})`. Only that value loads the
+   * paging code.
    * @default false
    */
-  hasSnap?: boolean;
+  hasSnap?: boolean | SnapPaging;
   /**
    * Inline padding on the scroll container. Applied as padding-inline
    * so the gutter is inside the scrollable area — items can scroll fully
@@ -301,6 +327,38 @@ const paddingStyles = stylex.create({
   },
 });
 
+/**
+ * Where an edge press under snap paging goes from offset `at`: about one view
+ * on, to the nearest stop and at least one stop on. With `wraps`, a press past
+ * an edge goes to the opposite edge.
+ */
+function pagingStep(
+  el: HTMLElement,
+  at: number,
+  end: number,
+  direction: -1 | 1,
+  wraps: boolean,
+): number {
+  if (wraps && (direction === 1 ? at >= end - 0.5 : at <= 0.5)) {
+    return direction === 1 ? 0 : end;
+  }
+  const firstChild = el.firstElementChild as HTMLElement | null;
+  const itemWidth = firstChild ? firstChild.offsetWidth : 0;
+  const amount = el.clientWidth - itemWidth * 0.5;
+  const stops = snapStops(el, at, end);
+  const nearest = nearestStop(
+    stops,
+    at + direction * Math.max(amount, itemWidth),
+  );
+  if (direction === 1 && nearest <= at + 0.5) {
+    return stops.find(stop => stop > at + 0.5) ?? nearest;
+  }
+  if (direction === -1 && nearest >= at - 0.5) {
+    return [...stops].reverse().find(stop => stop < at - 0.5) ?? nearest;
+  }
+  return nearest;
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -340,7 +398,7 @@ export function Carousel({
   'data-testid': testId,
   ...htmlProps
 }: CarouselProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.carousel.label');
   const scrollElRef = useRef<HTMLElement | null>(null);
   const startButtonRef = useRef<HTMLButtonElement>(null);
@@ -363,6 +421,7 @@ export function Carousel({
     lightDismiss: false,
   });
 
+  // Syncs the layer with `hasButtons`.
   useEffect(() => {
     if (hasButtons) {
       layer.show();
@@ -379,35 +438,80 @@ export function Carousel({
     [scrollRef],
   );
 
-  // Map Shift + vertical wheel to horizontal scroll. Trackpads emit
-  // horizontal deltas natively, but a standard mouse only produces deltaY —
-  // so mouse users can't wheel-scroll a horizontal container. Shift + wheel
-  // is the long-established convention for horizontal scroll containers; we
-  // honor it by translating the vertical delta into a horizontal scroll.
+  // Snap paging attaches once, with the first value. A new value on a later
+  // render does not restart a settle or attach again.
+  const snapPaging = isSnapPaging(hasSnap) ? hasSnap : null;
+  const isPaging = snapPaging != null;
+  const [attachedPaging, setAttachedPaging] = useState(snapPaging);
+  if ((attachedPaging != null) !== isPaging) {
+    setAttachedPaging(snapPaging);
+  }
+  // Attaches snap paging to the scroll area, and follows a replaced one.
+  useAttachment(
+    scrollElRef,
+    scroller =>
+      attachedPaging == null
+        ? () => {}
+        : attachSnapPaging(attachedPaging, scroller),
+    attachedPaging,
+  );
+  // React's wheel listener is passive, so it can't stop the browser's own
+  // scroll; this native one can. While a flick holds the row, the paging takes
+  // a wheel the gesture host leaves to the stop nearest its travel.
   //
-  // Only kicks in when Shift is held and the wheel is purely vertical
-  // (deltaX === 0), so native trackpad horizontal scrolling is untouched.
-  const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
-    if (!event.shiftKey || event.deltaY === 0 || event.deltaX !== 0) {
-      return;
-    }
-    const el = scrollElRef.current;
-    if (!el) {
-      return;
-    }
-    // Nothing to scroll horizontally — let the event fall through so the page
-    // can scroll as it normally would.
-    if (el.scrollWidth <= el.clientWidth) {
-      return;
-    }
-    event.preventDefault();
-    el.scrollBy({left: event.deltaY, behavior: 'auto'});
-  }, []);
+  // A mouse wheel gives only deltaY. Shift + wheel is the convention for a
+  // horizontal scroll. A trackpad gives deltaX, so the browser scrolls the row.
+  // A row that fits gets no listener, so a page scroll over it does not wait
+  // for script. The listener reads no style or layout unless a flick holds
+  // the row.
+  useAttachment(
+    scrollElRef,
+    el => {
+      if (!hasOverflow) {
+        return () => {};
+      }
+      const onWheel = (event: WheelEvent) => {
+        if (event.defaultPrevented) {
+          return;
+        }
+        const delta = event.deltaX || (event.shiftKey ? event.deltaY : 0);
+        if (
+          delta !== 0 &&
+          moveHeldSnapPaging(el, (at, end) =>
+            nearestStop(
+              snapStops(el, at, end),
+              at + (isRtlElement(el) ? -delta : delta),
+            ),
+          )
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        if (!event.shiftKey || event.deltaY === 0 || event.deltaX !== 0) {
+          return;
+        }
+        event.preventDefault();
+        el.scrollBy({left: event.deltaY, behavior: 'auto'});
+      };
+      el.addEventListener('wheel', onWheel, {passive: false});
+      return () => el.removeEventListener('wheel', onWheel);
+    },
+    hasOverflow,
+  );
 
   const scrollBy = useCallback(
     (direction: -1 | 1) => {
       const el = scrollElRef.current;
       if (!el) {
+        return;
+      }
+      // While a flick's drag or settle holds the row, the paging moves it.
+      if (
+        moveHeldSnapPaging(el, (at, end) =>
+          pagingStep(el, at, end, direction, hasLoop && hasOverflow),
+        )
+      ) {
         return;
       }
       // Respect the user's reduced-motion preference — mirrors the CSS
@@ -439,6 +543,20 @@ export function Carousel({
       const firstChild = el.firstElementChild as HTMLElement | null;
       const itemWidth = firstChild ? firstChild.offsetWidth : 0;
       const amount = el.clientWidth - itemWidth * 0.5;
+      if (isPaging) {
+        // Snap paging lands the step on the nearest stop, at least one stop
+        // on, in every engine. A native snap after scrollBy picks its own.
+        const end = Math.max(0, el.scrollWidth - el.clientWidth);
+        const next = pagingStep(
+          el,
+          Math.abs(el.scrollLeft),
+          end,
+          direction,
+          false,
+        );
+        el.scrollTo({left: rtlSign * next, behavior});
+        return;
+      }
       el.scrollBy({
         // `direction` is the logical intent (-1 = toward content start, +1 =
         // toward content end).
@@ -446,7 +564,7 @@ export function Carousel({
         behavior,
       });
     },
-    [hasLoop, hasOverflow, overflowStart, overflowEnd],
+    [hasLoop, hasOverflow, overflowStart, overflowEnd, isPaging],
   );
 
   const scrollToIndex = useCallback((index: number) => {
@@ -471,6 +589,11 @@ export function Carousel({
     const delta = isRtlElement(el)
       ? itemRect.right - containerRect.right
       : itemRect.left - containerRect.left;
+    if (
+      moveHeldSnapPaging(el, at => at + (isRtlElement(el) ? -delta : delta))
+    ) {
+      return;
+    }
     el.scrollBy({
       left: delta,
       behavior: prefersReducedMotion ? 'auto' : 'smooth',
@@ -584,7 +707,13 @@ export function Carousel({
       {...htmlProps}
       {...mergeProps(
         themeProps('carousel'),
-        stylex.props(styles.root, xstyle),
+        stylex.props(
+          styles.root,
+          // The scroller is the focus owner. Its edge-fade mask would cover a
+          // ring the root draws itself.
+          focusWithinOwnerOverlay,
+          xstyle,
+        ),
         className,
         style,
       )}
@@ -600,7 +729,7 @@ export function Carousel({
         role="group"
         aria-label={ariaLabel}
         tabIndex={hasOverflow ? 0 : -1}
-        onWheel={handleWheel}
+        {...focusOwnerProps}
         {...mergeProps(
           themeProps('carousel-scroller', {
             gap,
@@ -610,6 +739,8 @@ export function Carousel({
           }),
           stylex.props(
             styles.scroller,
+            // A tab stop whose shared ring the root paints.
+            focusOutlineStyles.suppressed,
             gapStyles[gap],
             padding != null && paddingStyles[padding],
             hasSnap && styles.snap,

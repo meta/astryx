@@ -4,7 +4,8 @@
 
 /**
  * @file DateRangeInput.tsx
- * @input Uses React, Field, Calendar (range mode), VisuallyHidden, usePopover
+ * @input Uses React, Field, Calendar (range mode), the resolved calendar,
+ *   VisuallyHidden, usePopover
  * @output Exports DateRangeInput component, DateRangeInputProps
  * @position Core implementation; consumed by index.ts, tested by DateRangeInput.test.tsx
  *
@@ -25,14 +26,22 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   plainDateFromISO,
   plainDateToday,
-  plainDateFormat,
   plainDateDiffDays,
+  type PlainDate,
   DATE_FORMAT_SHORT,
   DATE_FORMAT_SHORT_WITH_YEAR,
 } from '../utils/plainDate';
+import {
+  type CalendarSystem,
+  calendarMonthOf,
+  calendarYearMonthOf,
+  formatCalendarDate,
+} from '../utils/calendarSystem';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {
   colorVars,
   sizeVars,
@@ -79,9 +88,17 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import type {Locale} from '../i18n/types';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateRangeInput/DateRangeInput.generated';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
+
+registerEnglishFallback(english);
 
 export type {DateRange} from '../Calendar';
 
@@ -98,18 +115,6 @@ export type {
 } from '../Field';
 
 const styles = stylex.create({
-  // The shared disabled style drops the focus ring; restore it while a
-  // control inside the field holds focus (spec:AST-085 FR6). Defaults repeat it.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':focus-within': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   trigger: {
     display: 'block',
     flex: 1,
@@ -164,8 +169,28 @@ const styles = stylex.create({
   iconButtonDisabled: {
     cursor: 'default',
   },
+  // The popover content scrolls inside the layer's block cap, so a stacked
+  // calendar stays reachable on a short screen.
+  popoverScroll: {
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
+    maxBlockSize: stylex.firstThatWorks(
+      `calc(${layerViewportInset.maxBlockSize})`,
+      `calc(${layerViewportInset.maxBlockSizeFallback})`,
+    ),
+  },
+  // When the presets and a one-month calendar do not fit side by side, the
+  // row wraps and the presets stack above the calendar, in DOM order. The
+  // preset group draws a divider on its inline end and its block end. A
+  // negative margin moves each divider 1 border width past the group's margin
+  // box, and this row clips at its edges. Thus only the divider between the
+  // two parts shows: the inline-end one side by side, the block-end one when
+  // stacked. The row clips, not the scroller, so the overhang is never
+  // scrollable overflow.
   popoverLayout: {
     display: 'flex',
+    flexWrap: 'wrap',
+    overflow: 'clip',
   },
   presetSidebar: {
     display: 'flex',
@@ -175,7 +200,25 @@ const styles = stylex.create({
     borderInlineEndWidth: borderVars['--border-width'],
     borderInlineEndStyle: 'solid',
     borderInlineEndColor: colorVars['--color-border-emphasized'],
+    borderBlockEndWidth: borderVars['--border-width'],
+    borderBlockEndStyle: 'solid',
+    borderBlockEndColor: colorVars['--color-border-emphasized'],
+    marginInlineEnd: `calc(-1 * ${borderVars['--border-width']})`,
+    marginBlockEnd: `calc(-1 * ${borderVars['--border-width']})`,
+    // Alone on its line, the group fills the line, so its inline-end divider
+    // reaches the clipped edge.
+    flexGrow: 1,
     minWidth: 140,
+  },
+  calendarPane: {
+    // Gives back the border width the preset group's margin takes, so the
+    // calendar keeps its side-by-side position.
+    marginInlineStart: borderVars['--border-width'],
+    // The row wraps on the calendar's one-month width, and the calendar then
+    // takes the free space, so its months sit in a row where they fit. The
+    // large factor keeps the preset group at its own width beside it.
+    flexBasis: 'min-content',
+    flexGrow: 1_000_000,
   },
   presetButton: {
     display: 'block',
@@ -203,7 +246,7 @@ const styles = stylex.create({
   },
   presetButtonActive: {
     backgroundColor: colorVars['--color-accent-muted'],
-    color: colorVars['--color-accent'],
+    color: colorVars['--color-text-accent'],
   },
   presetButtonDisabled: {
     color: colorVars['--color-text-disabled'],
@@ -227,17 +270,24 @@ const sizeStyles = stylex.create({
   },
 });
 
-function formatRangeDisplay(range: DateRange | null, locale: Locale): string {
+function formatRangeDisplay(
+  range: DateRange | null,
+  locale: Locale,
+  calendar: CalendarSystem,
+): string {
   if (!range) {
     return '';
   }
   const start = plainDateFromISO(range.start);
   const end = plainDateFromISO(range.end);
-  const currentYear = plainDateToday().year;
-  const sameYear = start.year === end.year && start.year === currentYear;
+  const yearOf = (pd: PlainDate) =>
+    calendarYearMonthOf(calendar, calendarMonthOf(calendar, pd)).year;
+  const currentYear = yearOf(plainDateToday());
+  const sameYear =
+    yearOf(start) === yearOf(end) && yearOf(start) === currentYear;
 
   const fmt = sameYear ? DATE_FORMAT_SHORT : DATE_FORMAT_SHORT_WITH_YEAR;
-  return `${plainDateFormat(start, fmt, locale)} – ${plainDateFormat(end, fmt, locale)}`;
+  return `${formatCalendarDate(calendar, start, fmt, locale)} – ${formatCalendarDate(calendar, end, fmt, locale)}`;
 }
 
 function isRangeEqual(a: DateRange | null, b: DateRange | null): boolean {
@@ -463,6 +513,22 @@ export interface DateRangeInputProps extends Omit<
   numberOfMonths?: 1 | 2;
 
   /**
+   * The calendar the trigger text and the popover calendar show, such as
+   * `'persian'`, `'hebrew'`, or `'buddhist'`. `value`, `onChange`, `min`,
+   * `max`, and presets stay Gregorian ISO dates in every calendar. Calendars
+   * other than `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese` need
+   * `Temporal`, native or a polyfill the application loads; without it the
+   * field shows Gregorian dates.
+   *
+   * @default the InternationalizationProvider's calendar, else `'gregory'`
+   * @example
+   * ```
+   * <DateRangeInput label="Stay" calendar="persian" value={range} onChange={setRange} />
+   * ```
+   */
+  calendar?: CalendarSystem;
+
+  /**
    * First day of week in the calendar. Accepts a number
    * (0 = Sunday … 6 = Saturday) or a three-letter day name ('sun'–'sat',
    * case-insensitive).
@@ -518,6 +584,7 @@ export function DateRangeInput({
   labelTooltip,
   numberOfMonths = 2,
   weekStartsOn,
+  calendar: calendarProp,
   width,
   containerXstyle,
   containerClassName,
@@ -541,8 +608,9 @@ export function DateRangeInput({
     onClick: onClickProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(calendarProp, 'DateRangeInput');
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.dateRangeInput.placeholder');
@@ -597,8 +665,8 @@ export function DateRangeInput({
       .join(' ') || undefined;
 
   const displayValue = useMemo(
-    () => formatRangeDisplay(optimisticValue, locale),
-    [optimisticValue, locale],
+    () => formatRangeDisplay(optimisticValue, locale, calendar),
+    [optimisticValue, locale, calendar],
   );
 
   const popover = usePopover({
@@ -720,7 +788,7 @@ export function DateRangeInput({
             inputWrapperStyles.base,
             sizeStyles[size],
             isEffectivelyDisabled && inputWrapperStyles.disabled,
-            isEffectivelyDisabled && styles.disabledFocusRing,
+            isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
             status && inputStatusBorderStyles[status.type],
             status &&
               !isEffectivelyDisabled &&
@@ -809,79 +877,87 @@ export function DateRangeInput({
         </VisuallyHidden>
       )}
       {popover.render(
-        <div {...stylex.props(styles.popoverLayout)}>
-          {presets && presets.length > 0 && (
-            <div
-              role="group"
-              aria-label={t('@astryx.dateRangeInput.presetDateRanges')}
-              {...mergeProps(
-                themeProps('date-range-input-presets'),
-                stylex.props(styles.presetSidebar),
-              )}>
-              {presets.map(preset => {
-                const presetRange = preset.getRange();
-                const isActive = isRangeEqual(value, presetRange);
-                const isPresetDisabled =
-                  isDisabled ||
-                  !isRangeWithinSpan(presetRange, maxRangeSpan, minRangeSpan) ||
-                  isDateDisabled(plainDateFromISO(presetRange.start)) ||
-                  isDateDisabled(plainDateFromISO(presetRange.end));
-                return (
-                  <button
-                    key={preset.label}
-                    type="button"
-                    // These presets are independent action buttons navigated by
-                    // Tab, not a single-tab-stop listbox — so they are a labeled
-                    // group of buttons, and the currently-applied preset is
-                    // marked with aria-current (not aria-selected, a listbox
-                    // concept that contradicted the Tab interaction) (forms-5).
-                    aria-current={isActive ? 'true' : undefined}
-                    // Focusable while disabled (AR3, spec:AST-085 FR1).
-                    aria-disabled={isPresetDisabled || undefined}
-                    aria-describedby={
-                      showsDisabledMessage
-                        ? disabledMessageTooltip.describedBy
-                        : undefined
-                    }
-                    onClick={() => {
-                      if (!isPresetDisabled) {
-                        handleRangeSelect(presetRange);
+        <div {...stylex.props(styles.popoverScroll)}>
+          <div {...stylex.props(styles.popoverLayout)}>
+            {presets && presets.length > 0 && (
+              <div
+                role="group"
+                aria-label={t('@astryx.dateRangeInput.presetDateRanges')}
+                {...mergeProps(
+                  themeProps('date-range-input-presets'),
+                  stylex.props(styles.presetSidebar),
+                )}>
+                {presets.map(preset => {
+                  const presetRange = preset.getRange();
+                  const isActive = isRangeEqual(value, presetRange);
+                  const isPresetDisabled =
+                    isDisabled ||
+                    !isRangeWithinSpan(
+                      presetRange,
+                      maxRangeSpan,
+                      minRangeSpan,
+                    ) ||
+                    isDateDisabled(plainDateFromISO(presetRange.start)) ||
+                    isDateDisabled(plainDateFromISO(presetRange.end));
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      // These presets are independent action buttons navigated by
+                      // Tab, not a single-tab-stop listbox — so they are a labeled
+                      // group of buttons, and the currently-applied preset is
+                      // marked with aria-current (not aria-selected, a listbox
+                      // concept that contradicted the Tab interaction) (forms-5).
+                      aria-current={isActive ? 'true' : undefined}
+                      // Focusable while disabled (AR3, spec:AST-085 FR1).
+                      aria-disabled={isPresetDisabled || undefined}
+                      aria-describedby={
+                        showsDisabledMessage
+                          ? disabledMessageTooltip.describedBy
+                          : undefined
                       }
-                    }}
-                    {...mergeProps(
-                      themeProps('date-range-input-preset', {
-                        selected: isActive ? 'selected' : null,
-                        disabled: isPresetDisabled ? 'disabled' : null,
-                      }),
-                      stylex.props(
-                        focusOutlineStyles.focusVisible,
-                        styles.presetButton,
-                        isActive && styles.presetButtonActive,
-                        isPresetDisabled && styles.presetButtonDisabled,
-                      ),
-                    )}>
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {/* The layer renders its children open or closed, so mount the
+                      onClick={() => {
+                        if (!isPresetDisabled) {
+                          handleRangeSelect(presetRange);
+                        }
+                      }}
+                      {...mergeProps(
+                        themeProps('date-range-input-preset', {
+                          selected: isActive ? 'selected' : null,
+                          disabled: isPresetDisabled ? 'disabled' : null,
+                        }),
+                        stylex.props(
+                          focusOutlineStyles.focusVisible,
+                          styles.presetButton,
+                          isActive && styles.presetButtonActive,
+                          isPresetDisabled && styles.presetButtonDisabled,
+                        ),
+                      )}>
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {/* The layer renders its children open or closed, so mount the
               calendar only while it is open. */}
-          {popover.isOpen && (
-            <Calendar
-              mode="range"
-              value={optimisticValue}
-              onChange={handleRangeSelect}
-              min={min}
-              max={max}
-              dateConstraints={dateConstraints}
-              maxRangeSpan={maxRangeSpan}
-              minRangeSpan={minRangeSpan}
-              numberOfMonths={numberOfMonths}
-              weekStartsOn={weekStartsOn}
-            />
-          )}
+            {popover.isOpen && (
+              <Calendar
+                calendar={calendar}
+                mode="range"
+                value={optimisticValue}
+                onChange={handleRangeSelect}
+                min={min}
+                max={max}
+                dateConstraints={dateConstraints}
+                maxRangeSpan={maxRangeSpan}
+                minRangeSpan={minRangeSpan}
+                numberOfMonths={numberOfMonths}
+                weekStartsOn={weekStartsOn}
+                xstyle={presets && presets.length > 0 && styles.calendarPane}
+              />
+            )}
+          </div>
         </div>,
         {placement: 'below', alignment: 'start'},
       )}
