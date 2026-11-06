@@ -131,14 +131,14 @@ function matches(element: Element, query: string): boolean {
 }
 
 /**
- * The theme's move curve over its shortest medium duration where `area` is:
+ * The theme's move curve over its medium duration where `area` is:
  * one value for the glide, the changed element and the indicator. The tokens
  * carry the theme's `character` and `tempo`. Null when the duration is zero
  * or the browser plays no such easing, and then the change lands at once.
  */
 function glideProgress(area: Element): GlideProgress | null {
   const curve = readThemeTiming(area, {
-    duration: '--duration-medium-min',
+    duration: '--duration-medium',
     easing: '--ease-move',
   });
   const easing = readThemeTokenText(area, '--ease-move');
