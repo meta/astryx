@@ -53,6 +53,7 @@ function press(
   x: number,
   y: number,
   pointerType = 'touch',
+  timeStamp?: number,
 ): void {
   const event = new Event(type, {bubbles: true, cancelable: true});
   Object.assign(event, {
@@ -62,6 +63,9 @@ function press(
     pointerId: 1,
     pointerType,
   });
+  if (timeStamp != null) {
+    Object.defineProperty(event, 'timeStamp', {value: timeStamp});
+  }
   element.dispatchEvent(event);
 }
 
@@ -545,6 +549,52 @@ describe('a finger waits only inside a scroller (spec:AST-094 FR11)', () => {
     expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
     vi.advanceTimersByTime(PRESS_ONSET_MS);
     expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it("counts the content-touch delay from the touch's own timestamp, so a listener that runs late still paints on time", () => {
+    const control = pressable('button');
+    scroller.appendChild(control);
+    // The page has run a while, so the touch's time is past zero.
+    vi.advanceTimersByTime(1000);
+    // A busy main thread runs the listener 60 ms after the touch.
+    press(control, 'pointerdown', 10, 10, 'touch', performance.now() - 60);
+    vi.advanceTimersByTime(PRESS_ONSET_MS - 60 - 1);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('paints at once when the listener runs later than the content-touch delay', () => {
+    const control = pressable('button');
+    scroller.appendChild(control);
+    vi.advanceTimersByTime(1000);
+    press(
+      control,
+      'pointerdown',
+      10,
+      10,
+      'touch',
+      performance.now() - PRESS_ONSET_MS - 40,
+    );
+    vi.advanceTimersByTime(0);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it("counts from the listener when the touch's timestamp is not on the page's clock", () => {
+    // Zero, ahead of now, or an epoch time, as a synthetic event carries.
+    vi.advanceTimersByTime(1000);
+    for (const timeStamp of [0, performance.now() + 500, Date.now()]) {
+      const control = pressable('button');
+      scroller.appendChild(control);
+      press(control, 'pointerdown', 10, 10, 'touch', timeStamp);
+      vi.advanceTimersByTime(PRESS_ONSET_MS - 1);
+      expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+      vi.advanceTimersByTime(1);
+      expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+      press(control, 'pointerup', 10, 10, 'touch');
+      vi.advanceTimersByTime(PRESS_FADE_MS * 2);
+      control.remove();
+    }
   });
 
   it('is cancelled by travel past the slop, with no fade', () => {
