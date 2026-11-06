@@ -2,18 +2,19 @@
 
 /**
  * @file presentationWithoutMatchMedia.test.tsx
- * @input vitest, React Testing Library, ContextMenu and DropdownMenu, and a
- *   window with no matchMedia, as in a plain test DOM
+ * @input vitest, React Testing Library, ContextMenu, DropdownMenu and
+ *   Popover, and a window with no matchMedia, as in a plain test DOM
  * @output Components that resolve a presentation render their default
  *   surface where the window has no matchMedia, and do not throw
- * @position Unit tests of utils/presentation.ts and
- *   hooks/useAdaptivePresentation.ts
+ * @position Unit tests of utils/presentation.ts,
+ *   hooks/useAdaptivePresentation.ts and Popover's own resolver
  */
 
 import {render, screen} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {ContextMenu} from '../ContextMenu/ContextMenu';
 import {DropdownMenu} from '../DropdownMenu/DropdownMenu';
+import {Popover} from '../Popover/Popover';
 
 beforeEach(() => {
   // The shared test setup gives jsdom a matchMedia. An app's test DOM may
@@ -44,5 +45,17 @@ describe('a window with no matchMedia', () => {
       />,
     );
     expect(screen.getByRole('button', {name: 'Actions'})).toBeTruthy();
+  });
+
+  it('renders an adaptive Popover with its trigger', () => {
+    render(
+      <Popover
+        presentation="adaptive"
+        content={<span>Content</span>}
+        label="Details">
+        <button type="button">Open</button>
+      </Popover>,
+    );
+    expect(screen.getByRole('button', {name: 'Open'})).toBeTruthy();
   });
 });
