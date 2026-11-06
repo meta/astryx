@@ -232,29 +232,30 @@ export function createPopoverSurfaceMotion(
 
   const enter = (measure: () => PopoverSurfaceGeometry) => {
     cancelPending();
-    // A dismissal let the element go (exit, below).
-    animator.attach(element);
-    let from: SurfaceState | null = null;
-    if (exiting != null && collapsed != null) {
+    if (exiting != null && collapsed != null && measured != null) {
       // Shown again during the dismissal: turn back from the frame on
-      // screen, about the same point.
-      from = readState(exiting.animator, collapsed.axis);
-    }
-    endExit();
-    if (from != null && measured != null) {
-      present(from, measured);
+      // screen, about the same point. Both reads come before this task's
+      // first write.
+      const from = readState(exiting.animator, collapsed.axis);
+      const timing = timingOn(element, POPOVER_ENTRANCE_TOKENS);
+      // A dismissal let the element go (exit, below).
+      animator.attach(element);
+      endExit();
+      present(from, measured, timing);
       return;
     }
+    animator.attach(element);
+    endExit();
     let presented = false;
     const frame = scheduleFrame(() => {
       presented = true;
       pendingPresentFrame = null;
-      // Full size and invisible for the read. The box must not include a
-      // scale from the last dismissal, nor the first keyframe of the layer's
-      // CSS entrance. The curves below replace these before anything paints.
-      element.style.setProperty('animation-name', 'none');
-      animator.set({scaleX: 1, scaleY: 1, opacity: 0});
-      present(null, measure());
+      // One read pass before this frame's first write. The box is already
+      // at full size: the opening task took the CSS entrance off, and a
+      // dismissal leaves the element unscaled.
+      const geometry = measure();
+      const timing = timingOn(element, POPOVER_ENTRANCE_TOKENS);
+      present(null, geometry, timing);
     });
     // Without animation frames the presentation has already run: no frame
     // is left to wait for, so a close plays the shrink.
@@ -275,6 +276,7 @@ export function createPopoverSurfaceMotion(
   const present = (
     from: SurfaceState | null,
     geometry: PopoverSurfaceGeometry,
+    timing: MotionCurve,
   ) => {
     const next =
       from != null && collapsed != null
@@ -282,21 +284,18 @@ export function createPopoverSurfaceMotion(
         : popoverCollapsedState(geometry);
     collapsed = next;
     measured = geometry;
+    const start = from ?? {scale: next.scale, length: next.length, opacity: 0};
+    // The start frame goes first. The motion engine may read the element's
+    // will-change as it sets it, before any write of ours.
+    animator.set(frameOf(start, next.axis));
     // The layer's own CSS entrance belongs to the pointer presentation.
     element.style.setProperty('animation-name', 'none');
     element.style.setProperty(
       'transform-origin',
       `${next.originX}px ${next.originY}px`,
     );
-    const start = from ?? {scale: next.scale, length: next.length, opacity: 0};
-    animator.set(frameOf(start, next.axis));
     const handle = animator.play(
-      surfaceCurves(
-        start,
-        PRESENTED,
-        next.axis,
-        timingOn(element, POPOVER_ENTRANCE_TOKENS),
-      ),
+      surfaceCurves(start, PRESENTED, next.axis, timing),
     );
     presentHandle = handle;
     endHold();
