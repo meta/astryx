@@ -5,7 +5,8 @@
  * @input A scroller (an element, or the document for the page's own scroll),
  *   its document's scroll and scrollend events, and the gesture host's
  *   finger record
- * @output Exports watchFingerScrolls and isFingerScroll
+ * @output Exports watchFingerScrolls and isFingerScroll; a watcher can ask to
+ *   be told when a finger's scroll ends
  * @position Finger-scroll watch of packages/core/src/gestures (useFingerScroll
  *   reads it), in its own module so a page that never asks never ships it;
  *   internal to the touch module, not in the gestures barrel
@@ -40,10 +41,26 @@ interface Watch {
   readonly fingerScrollers: Set<Node>;
   /** Finger scrolls whose `scrollend` came while the finger still rested. */
   readonly endedWhileDown: Set<Node>;
+  /** Per scroller, the watchers to tell when its finger scroll ends. */
+  readonly endListeners: Map<Node, Set<() => void>>;
   stop: (() => void) | null;
 }
 
 const watches = new WeakMap<GestureHost, Watch>();
+
+/**
+ * A scroller's finger scroll is over: it stops counting as the finger's, and
+ * then its end listeners hear of it, so a listener that reads
+ * isFingerScroll already reads false.
+ */
+function endFingerScroll(watch: Watch, scroller: Node): void {
+  if (!watch.fingerScrollers.delete(scroller)) {
+    return;
+  }
+  for (const listener of [...(watch.endListeners.get(scroller) ?? [])]) {
+    listener();
+  }
+}
 
 function start(host: GestureHost, watch: Watch): () => void {
   const doc = host.document;
@@ -61,7 +78,7 @@ function start(host: GestureHost, watch: Watch): () => void {
       // The finger still rests there: the scroll is its until the lift.
       watch.endedWhileDown.add(scroller);
     } else {
-      watch.fingerScrollers.delete(scroller);
+      endFingerScroll(watch, scroller);
     }
   };
   const scrollEndFallbacks = new Map<Node, ReturnType<typeof setTimeout>>();
@@ -113,7 +130,7 @@ function start(host: GestureHost, watch: Watch): () => void {
     for (const scroller of watch.endedWhileDown) {
       if (!host.isFingerDownIn(scroller)) {
         watch.endedWhileDown.delete(scroller);
-        watch.fingerScrollers.delete(scroller);
+        endFingerScroll(watch, scroller);
       }
     }
   };
@@ -139,8 +156,12 @@ function start(host: GestureHost, watch: Watch): () => void {
       for (const scroller of [...scrollEndFallbacks.keys()]) {
         clearScrollEndFallback(scroller);
       }
-      watch.fingerScrollers.clear();
+      // No finger scrolls once the pointer is no longer coarse: each one in
+      // progress ends here.
       watch.endedWhileDown.clear();
+      for (const scroller of [...watch.fingerScrollers]) {
+        endFingerScroll(watch, scroller);
+      }
     }
   };
   const stopWatchingPointer = watchCoarsePointer(view, listen);
@@ -158,12 +179,17 @@ function start(host: GestureHost, watch: Watch): () => void {
 /**
  * Keep track of whether the scrolls of `scroller` (an element in `host`'s
  * document, or the document itself) are a finger's, for isFingerScroll,
- * until the returned function runs.
+ * until the returned function runs. `onEnd`, when given, runs each time a
+ * finger's scroll on the scroller ends (its `scrollend` after the lift, the
+ * lift after a `scrollend` that came while the finger rested, the quiet
+ * fallback, or the pointer turning fine), after isFingerScroll turns false.
+ * Stopping the watch does not call it.
  * Internal: not exported from the package.
  */
 export function watchFingerScrolls(
   host: GestureHost,
   scroller: Node,
+  onEnd?: () => void,
 ): () => void {
   let watch = watches.get(host);
   if (watch == null) {
@@ -171,12 +197,21 @@ export function watchFingerScrolls(
       scrollers: new Map(),
       fingerScrollers: new Set(),
       endedWhileDown: new Set(),
+      endListeners: new Map(),
       stop: null,
     };
     watches.set(host, watch);
   }
   const owned = watch;
   owned.scrollers.set(scroller, (owned.scrollers.get(scroller) ?? 0) + 1);
+  // Each watch registers its own listener, so two watchers of one scroller
+  // each hear every end once.
+  const listener = onEnd == null ? null : () => onEnd();
+  if (listener != null) {
+    const listeners = owned.endListeners.get(scroller) ?? new Set();
+    listeners.add(listener);
+    owned.endListeners.set(scroller, listeners);
+  }
   owned.stop ??= start(host, owned);
   let isWatching = true;
   return () => {
@@ -184,6 +219,13 @@ export function watchFingerScrolls(
       return;
     }
     isWatching = false;
+    if (listener != null) {
+      const listeners = owned.endListeners.get(scroller);
+      listeners?.delete(listener);
+      if (listeners?.size === 0) {
+        owned.endListeners.delete(scroller);
+      }
+    }
     const count = (owned.scrollers.get(scroller) ?? 1) - 1;
     if (count > 0) {
       owned.scrollers.set(scroller, count);
