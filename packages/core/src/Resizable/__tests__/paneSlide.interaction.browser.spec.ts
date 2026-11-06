@@ -42,6 +42,8 @@ interface Frame {
   inside: number;
   /** How far the pane is scrolled down. */
   scrollTop: number;
+  /** Whether a press on the handle where it shows lands on the handle. */
+  pressTaken: boolean;
 }
 
 /** What a collapse or open did, captured at evenly spaced moments. */
@@ -125,27 +127,29 @@ function installFrameReader(): void {
           : parseFloat(value),
     );
     const inside = pane.firstElementChild?.getBoundingClientRect().left ?? 0;
-    return side === 'start'
-      ? {
-          shownEdge: paneRect.right - (insets[1] ?? 0),
-          handleEdge:
-            paneRect.right +
-            (parseFloat(paneStyle.marginInlineEnd) || 0) +
-            glideX,
-          paneWidth: paneRect.width,
-          inside,
-          scrollTop: pane.scrollTop,
-        }
-      : {
-          shownEdge: paneRect.left + (insets[3] ?? 0),
-          handleEdge:
-            paneRect.left -
-            (parseFloat(paneStyle.marginInlineStart) || 0) +
-            glideX,
-          paneWidth: paneRect.width,
-          inside,
-          scrollTop: pane.scrollTop,
-        };
+    const handleEdge =
+      side === 'start'
+        ? paneRect.right + (parseFloat(paneStyle.marginInlineEnd) || 0) + glideX
+        : paneRect.left -
+          (parseFloat(paneStyle.marginInlineStart) || 0) +
+          glideX;
+    // The middle of the handle where it shows, which a finger aims at.
+    const handleRect = handle.getBoundingClientRect();
+    const pressAt = document.elementFromPoint(
+      handleEdge + ((side === 'start' ? 1 : -1) * handle.offsetWidth) / 2,
+      handleRect.top + handleRect.height / 2,
+    );
+    return {
+      shownEdge:
+        side === 'start'
+          ? paneRect.right - (insets[1] ?? 0)
+          : paneRect.left + (insets[3] ?? 0),
+      handleEdge,
+      paneWidth: paneRect.width,
+      inside,
+      scrollTop: pane.scrollTop,
+      pressTaken: pressAt != null && handle.contains(pressAt),
+    };
   };
 }
 
@@ -276,6 +280,71 @@ async function captureMotion(
     {sideArg: side, moments: MOMENTS},
   );
   return {...motion, frames: [rest, ...motion.frames]};
+}
+
+/**
+ * Starts the motion the input `trigger` starts, paused at `atMs` into it, the
+ * way `captureMotion` pauses it. It holds there until `releaseMotion`.
+ */
+async function holdMotionAt(
+  page: Page,
+  atMs: number,
+  trigger: () => Promise<void>,
+): Promise<void> {
+  await page.evaluate(() => {
+    const capture = window as unknown as CaptureWindow;
+    const animations: Animation[] = [];
+    capture.__paneAnimations = animations;
+    const animate = Element.prototype.animate;
+    capture.__paneAnimate = animate;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      const animation = animate.apply(this, args);
+      animation.pause();
+      Object.defineProperty(animation, 'startTime', {
+        configurable: true,
+        get: () => null,
+        set: () => {},
+      });
+      animations.push(animation);
+      return animation;
+    };
+  });
+  await trigger();
+  const held = await page.evaluate(async at => {
+    const capture = window as unknown as CaptureWindow;
+    const animations = capture.__paneAnimations;
+    for (
+      let waited = 0;
+      waited < 1000 && animations.length === 0;
+      waited += 50
+    ) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+    if (capture.__paneAnimate != null) {
+      Element.prototype.animate = capture.__paneAnimate;
+      capture.__paneAnimate = undefined;
+    }
+    for (const animation of animations) {
+      Reflect.deleteProperty(animation, 'startTime');
+      animation.currentTime = at;
+    }
+    return animations.length;
+  }, atMs);
+  expect(held).toBeGreaterThan(0);
+}
+
+/** Lets a held motion finish. */
+async function releaseMotion(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    for (const animation of (window as unknown as CaptureWindow)
+      .__paneAnimations) {
+      animation.finish();
+    }
+    await new Promise(resolve => requestAnimationFrame(resolve));
+  });
 }
 
 /**
@@ -626,6 +695,55 @@ test('a drag past the threshold slides the panel closed, and a drag that reopens
   // The pointer drives the edge: no clip and no glide play.
   expect(reopening.clips).toBe(false);
   expect(reopening.glides).toBe(false);
+  expect((await pane.boundingBox())?.width ?? 0).toBeGreaterThan(100);
+  await expect(pane).not.toHaveAttribute('inert', '');
+});
+
+test('a press where the handle shows lands on it at every moment of a slide, on both sides', async ({
+  page,
+}) => {
+  for (const side of ['start', 'end'] as const) {
+    await openFixture(page, STORY[side]);
+    await expectPresent(page);
+    await page.getByRole('button', {name: 'Toggle panel'}).focus();
+    const closing = await captureMotion(page, side, async () => {
+      await page.keyboard.press('Enter');
+    });
+    const opening = await captureMotion(page, side, async () => {
+      await page.keyboard.press('Enter');
+    });
+    for (const motion of [closing, opening]) {
+      expect(travelling(motion.frames)).toBeGreaterThanOrEqual(MOMENTS / 3);
+      expect(motion.frames.map(frame => frame.pressTaken).indexOf(false)).toBe(
+        -1,
+      );
+    }
+  }
+});
+
+test('a drag that starts on the handle 40 ms into a slide takes the handle and reopens the pane', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const handle = page.getByRole('separator', {name: 'Resize panel'});
+  await holdMotionAt(page, 40, async () => {
+    await page.getByRole('button', {name: 'Toggle panel'}).click();
+  });
+  const box = await handle.boundingBox();
+  if (box == null) {
+    throw new Error('the handle is not laid out');
+  }
+  const frame = await readNow(page, 'start');
+  const x = frame.handleEdge + 0.5;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await expect(handle).toHaveAttribute('data-resizing', 'true');
+  await page.mouse.move(x + 160, y, {steps: 4});
+  await page.mouse.up();
+  await releaseMotion(page);
   expect((await pane.boundingBox())?.width ?? 0).toBeGreaterThan(100);
   await expect(pane).not.toHaveAttribute('inert', '');
 });
