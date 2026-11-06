@@ -15,6 +15,8 @@ import {act, render, renderHook, screen} from '@testing-library/react';
 import {Carousel} from '../Carousel/Carousel';
 import {useSnapPaging} from './SnapPaging';
 import {
+  type HeldRow,
+  type HeldRowListener,
   isSnapPaging,
   makeSnapPaging,
   nearestStop,
@@ -240,5 +242,70 @@ describe('Carousel with hasSnap', () => {
     expect(attached).toEqual(['first']);
     act(() => unmount());
     expect(attached).toEqual(['first', 'first detached']);
+  });
+
+  describe('the edge buttons follow a held row as shown', () => {
+    // A paging value that reports a held row on demand, as the pager does on
+    // each frame of a hold.
+    function renderHeld() {
+      let listener: HeldRowListener | undefined;
+      const value = makeSnapPaging((_element, onHeld) => {
+        listener = onHeld;
+        return attachment();
+      });
+      render(
+        <Carousel aria-label="Items" hasSnap={value}>
+          <div>One</div>
+          <div>Two</div>
+          <div>Three</div>
+        </Carousel>,
+      );
+      const button = (name: string) =>
+        screen.getByRole<HTMLButtonElement>('button', {name, hidden: true});
+      return {
+        report: (held: HeldRow | null) => act(() => listener?.(held)),
+        start: button('Scroll left'),
+        end: button('Scroll right'),
+      };
+    }
+
+    it('enables and disables each button as the held row leaves or reaches its edge, before the hand-back', () => {
+      const {report, start, end} = renderHeld();
+      // jsdom lays nothing out, so at rest the scroll offset gives no room.
+      expect([start.disabled, end.disabled]).toEqual([true, true]);
+      report({shown: 0, travel: 600});
+      expect([start.disabled, end.disabled]).toEqual([true, false]);
+      report({shown: 300, travel: 600});
+      expect([start.disabled, end.disabled]).toEqual([false, false]);
+      report({shown: 599.5, travel: 600});
+      expect([start.disabled, end.disabled]).toEqual([false, true]);
+    });
+
+    it('keeps the held edges for one frame after the hand-back, then reads the scroll offset again', async () => {
+      const {report, start} = renderHeld();
+      report({shown: 300, travel: 600});
+      report({shown: 300, travel: 600});
+      report(null);
+      expect(start.disabled).toBe(false);
+      await act(
+        async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          }),
+      );
+      expect(start.disabled).toBe(true);
+    });
+
+    it('hands focus to the scroll area once, when the held row reaches the edge of the focused button', () => {
+      const {report, end} = renderHeld();
+      report({shown: 300, travel: 600});
+      act(() => end.focus());
+      const focus = vi.spyOn(scroller(), 'focus');
+      report({shown: 600, travel: 600});
+      expect(focus).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(scroller());
+      report({shown: 600, travel: 600});
+      expect(focus).toHaveBeenCalledTimes(1);
+    });
   });
 });

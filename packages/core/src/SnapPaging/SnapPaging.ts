@@ -18,6 +18,7 @@ import {isRtlElement} from '../hooks/isRtlElement';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {animatorFor, type MotionHandle} from '../motion/animator';
 import {
+  type HeldRowListener,
   makeSnapPaging,
   type SnapPaging,
   type SnapPagingAttachment,
@@ -53,7 +54,9 @@ export function useSnapPaging(options: SnapPagingOptions = {}): SnapPaging {
         return optionsRef.current.pages;
       },
     };
-    return makeSnapPaging(element => attachPaging(element, live));
+    return makeSnapPaging((element, onHeld) =>
+      attachPaging(element, live, onHeld),
+    );
   });
   return value;
 }
@@ -116,10 +119,15 @@ function combined(handles: ReadonlyArray<MotionHandle>): MotionHandle {
  * offset holds, and every child moves by the same translate from there. The
  * settle hands the position back to native scrolling.
  */
-function childTrack(element: HTMLElement) {
+function childTrack(element: HTMLElement, onHeld?: HeldRowListener) {
   let isMoving = false;
   let heldOffset = 0;
   let heldTravel = 0;
+  // The direction and the lead child, read at the takeover, so a frame of the
+  // hold reads no style or layout.
+  let heldSign = 1;
+  let lead: HTMLElement | null = null;
+  let followFrame = 0;
   // The row's own inline snap type, back at the hand-back.
   let ownSnapType = '';
   const children = () =>
@@ -145,6 +153,20 @@ function childTrack(element: HTMLElement) {
       return nativePosition();
     }
     return -sign() * (animatorFor(first).get('x') - sign() * heldOffset);
+  }
+
+  // Reports where the held row is shown, once a frame, from the lead child's
+  // own animator.
+  function follow(): void {
+    if (onHeld == null || !isMoving) {
+      return;
+    }
+    const shown =
+      lead == null
+        ? heldOffset
+        : -heldSign * (animatorFor(lead).get('x') - heldSign * heldOffset);
+    onHeld({shown, travel: heldTravel});
+    followFrame = requestAnimationFrame(follow);
   }
 
   // A held row's translate widens its overflow, so its travel is the one it
@@ -193,6 +215,9 @@ function childTrack(element: HTMLElement) {
       }
     }
     place(heldOffset);
+    heldSign = sign();
+    lead = children()[0] ?? null;
+    follow();
   }
 
   function handBack(): void {
@@ -214,6 +239,11 @@ function childTrack(element: HTMLElement) {
       element.style.setProperty('scroll-snap-type', ownSnapType);
     }
     element.scrollTo({left: isRtl() ? -at : at, behavior: 'instant'});
+    if (onHeld != null) {
+      cancelAnimationFrame(followFrame);
+      onHeld({shown: at, travel: heldTravel});
+      onHeld(null);
+    }
   }
 
   const animator: PagerAnimator = {
@@ -291,8 +321,9 @@ function childTrack(element: HTMLElement) {
 function attachPaging(
   element: HTMLElement,
   options: SnapPagingOptions,
+  onHeld?: HeldRowListener,
 ): SnapPagingAttachment {
-  const track = childTrack(element);
+  const track = childTrack(element, onHeld);
   // The stop that view pages count from, set when a gesture takes over.
   let anchor = 0;
   const pager = createPager(
