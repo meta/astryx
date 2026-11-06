@@ -611,7 +611,9 @@ export function moduleExportNames(file) {
  * answers as {@link moduleExportOrigin} for each name, read once per module.
  * Pass one `memo` to calls that read the same package, so a module behind
  * many barrels is read once; a memo keeps value and type reads apart, and
- * nothing is kept between memos.
+ * nothing is kept between memos. One difference follows ESM where
+ * {@link moduleExportOrigin} does not: a name re-exported by name from a
+ * module that cannot be followed is absent, never filled from `export *`.
  * @param {string} file
  * @param {{types?: boolean, memo?: Map<string, Map<string, {file: string, name: string}>>}} [options]
  * @returns {Map<string, {file: string, name: string}>}
@@ -687,7 +689,13 @@ function exportOriginsOf(file, read) {
         let origin = null;
         if (node.source) {
           const target = resolveModuleOrPackage(node.source.value, file);
-          origin = target ? (originsOf(target).get(local) ?? null) : null;
+          // A module still being read has only part of its map, so one name
+          // from it is followed on its own.
+          origin = !target
+            ? null
+            : read.reading.has(`${read.types ? 'type' : 'value'}\0${target}`)
+              ? moduleExportOrigin(target, local, new Set(), {types})
+              : (originsOf(target).get(local) ?? null);
         } else {
           origin = bindingOrigin(ast, file, local, new Set(), types);
         }
