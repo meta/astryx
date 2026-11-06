@@ -44,7 +44,7 @@ system_specs: [spec:AST-005]
 | Behavior                | An accepted source URL renders a native anchor in a new tab. A missing or rejected URL renders the same citation content in an inert span. Label and number variants preserve that navigation decision.                                                                                                                                                         |
 | End-user impact         | Readers receive a consistent citation label or numbered reference without a blocked destination becoming navigation or a decorative source icon being announced twice.                                                                                                                                                                                          |
 | Builder impact          | A builder's explicit `role` or `aria-label` is meant to reach the root; today the component's role and translated name replace them (FR5 gap).                                                                                                                                                                                                                  |
-| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes. One implementation gap is listed under Current-state impact.                                                                                                                                                                                                                         |
+| Compatibility/readiness | Released behavior recorded as current, plus the additive `citation-icon` theme target on the decorative icon wrapper; no API, default, or visual output changes. One implementation gap is listed under Current-state impact.                                                                                                                                   |
 | Review checks           | Reject a blocked URL that becomes navigation, an accepted URL that loses native anchor affordances, an interactive or reference role that Citation adds to an inert citation, a missing inert accessible name when the caller supplies none, an announced decorative icon, dropped passthrough or ref behavior, or a new public theme target without authority. |
 | Governing rules         | `family:navigation-destinations/FR1,FR3–FR5,FR7–FR8`; `architecture:public-component-api/INV1,INV5,INV6,INV8,INV9`; `architecture:component-theming-surface/INV3–INV6`; `architecture:component-test-sufficiency/INV1–INV7,INV10–INV11`.                                                                                                                        |
 
@@ -57,8 +57,9 @@ Present an inline reference to a source as a readable label or compact number wh
 ## Compatibility and migration
 
 - Released default preserved: `yes` — `variant="label"`.
-- Compatibility class: records shipped behavior; no public prop, default, DOM,
-  target, or styling output changes.
+- Compatibility class: records shipped behavior plus one additive theme
+  target, `citation-icon`; no public prop, default, DOM, or styling output
+  changes.
 - Controlled/uncontrolled behavior: not applicable; Citation owns no state.
 - Migration decision: none
 
@@ -76,7 +77,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 **Owns**
 
-- Label and number presentation, accepted-link versus inert-span rendering, accessible citation naming, decorative icon treatment, and the `citation` root target.
+- Label and number presentation, accepted-link versus inert-span rendering, accessible citation naming, decorative icon treatment, the `citation` root target, and the `citation-icon` wrapper target.
 - Supported neutral DOM and styling passthrough, including a ref to the rendered anchor or span.
 
 **Does not own / non-goals**
@@ -104,23 +105,23 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR3 | The label variant presents the source title, an optional decorative source icon, and truncation; the number variant presents the supplied number as the compact visible reference.                                                                                                                                                                                                                                                                                    | shipped source, docs, tests, and stories                                                  |
 | FR4 | A node icon takes precedence over `src`, and `src` over a legacy string `icon`. Every icon path remains decorative inside an `aria-hidden` wrapper.                                                                                                                                                                                                                                                                                                                   | shipped compatibility behavior and tests                                                  |
 | FR5 | Both root branches preserve supported DOM props, `className`, `style`, `xstyle`, `data-*` attributes, and the declared `HTMLElement` ref, and a caller's explicit `role` or `aria-label` reaches the root (`architecture:public-component-api` INV5). Implementation gap: the component's role and translated name replace a caller's values (Current-state impact).                                                                                                  | `architecture:public-component-api/INV5,INV6,INV8`; regression tests                      |
-| FR6 | Citation keeps one public `citation` target on the painted root, reflecting `variant`, and exposes no internal icon or text target without an approved theming-contract change.                                                                                                                                                                                                                                                                                       | shipped docs/source; `architecture:component-theming-surface/INV3–INV6`                   |
+| FR6 | Citation keeps the public `citation` target on the painted root, reflecting `variant`, and the public `citation-icon` target on the decorative icon wrapper, which paints the icon ring and renders only when the label variant has a source icon. Citation exposes no label-text target without an approved theming-contract change.                                                                                                                                 | shipped docs/source; `architecture:component-theming-surface/INV3–INV6`                   |
 | FR7 | Component-owned accessible text comes from the translation catalog; visible source text and numeric content remain caller-supplied data.                                                                                                                                                                                                                                                                                                                              | shipped source and i18n infrastructure                                                    |
 
 ### Allowed variation
 
-- **AV1 — Theme paint.** The `citation` root target may change supported visual paint without changing variant, destination, role, or accessible-name behavior.
+- **AV1 — Theme paint.** The `citation` root target and the `citation-icon` wrapper target may change supported visual paint without changing variant, destination, role, accessible-name, or decorative-icon behavior.
 - **AV2 — Caller content.** Source titles, numeric values, image URLs, and node icons may vary within the released public types.
 - **AV3 — Native destination behavior.** Accepted relative, fragment, protocol-relative, HTTP(S), mailto, tel, and safe custom destinations retain native browser handling and the component’s existing new-tab relationship.
 
 ### Representative states
 
-| State                   | Required invariant                                                                                                                                            | Allowed variation                     |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| linked label            | Native anchor, source title, optional decorative icon, translated accessible name absent a caller `aria-label`.                                               | Source content and root theme paint.  |
-| linked number           | Native anchor, numeric visible reference, translated accessible name absent a caller `aria-label`.                                                            | Number and root theme paint.          |
-| missing or rejected URL | Inert span with the same selected presentation; absent a caller `role`, a supported naming role; Citation adds no navigation or reference role or attributes. | Source content and root theme paint.  |
-| node or image icon      | Icon remains decorative and appears only in the label variant.                                                                                                | Caller-owned artwork or source image. |
+| State                   | Required invariant                                                                                                                                            | Allowed variation                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| linked label            | Native anchor, source title, optional decorative icon, translated accessible name absent a caller `aria-label`.                                               | Source content and root theme paint.                         |
+| linked number           | Native anchor, numeric visible reference, translated accessible name absent a caller `aria-label`.                                                            | Number and root theme paint.                                 |
+| missing or rejected URL | Inert span with the same selected presentation; absent a caller `role`, a supported naming role; Citation adds no navigation or reference role or attributes. | Source content and root theme paint.                         |
+| node or image icon      | Icon remains decorative, appears only in the label variant, and carries the `citation-icon` target.                                                           | Caller-owned artwork or source image; icon-ring theme paint. |
 
 ### Transformation and precedence order
 
@@ -142,13 +143,28 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Design relationships
 
-| Anatomy or state | Design requirement                                                                 | Representation authority                        | Hierarchy role           | Component contract |
-| ---------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------ | ------------------ |
-| Root             | Paints the label chip or numbered badge and owns the `citation` target.            | observed shipped representation and public docs | supporting reference     | FR1–FR3, FR5–FR6   |
-| Source icon      | Presents optional caller-supplied source identity without accessibility semantics. | observed shipped representation                 | decorative               | FR3–FR4, AR3       |
-| Label or number  | Presents the source title or compact index.                                        | observed shipped representation                 | primary citation content | FR3, FR7           |
+| Anatomy or state | Design requirement                                                                                                     | Representation authority                        | Hierarchy role           | Component contract |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | ------------------------ | ------------------ |
+| Root             | Paints the label chip or numbered badge and owns the `citation` target.                                                | observed shipped representation and public docs | supporting reference     | FR1–FR3, FR5–FR6   |
+| Source icon      | Presents optional caller-supplied source identity without accessibility semantics and owns the `citation-icon` target. | observed shipped representation and public docs | decorative               | FR3–FR4, FR6, AR3  |
+| Label or number  | Presents the source title or compact index.                                                                            | observed shipped representation                 | primary citation content | FR3, FR7           |
 
-Citation exposes only the documented `citation` root target. Internal icon and text parts have no public target.
+Citation exposes the documented `citation` root target and the `citation-icon` wrapper target. The label text has no public target.
+
+### Theming anatomy
+
+<!-- anatomy-theming:v1 -->
+
+```json
+{
+  "Container": {"target": "citation"},
+  "Icon": {"target": "citation-icon"},
+  "Label text": {"inherits": "citation"},
+  "Number": {"inherits": "citation"}
+}
+```
+
+`citation-icon` belongs to the decorative wrapper because the wrapper is what paints the icon ring; the glyph inside it is a caller-supplied node, an `Icon` with its own target, or a source image.
 
 ## Family and system relationships
 
@@ -161,16 +177,17 @@ Citation exposes only the documented `citation` root target. Internal icon and t
 
 ## Verification map
 
-| Contract         | Verification                                                            | Representative states                                                        | Mutation or failure expectation                                                                                                                                                                                                   | Audit section               |
-| ---------------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| FR1–FR2, AR1–AR2 | `Citation.test.tsx` destination suites and `safeUrl.test.ts` matrix     | accepted, missing, blocked schemes, normalized blocked text                  | A blocked URL creates navigation, an accepted URL loses its destination or native affordances, or an inert reference loses its supported naming role when the caller supplies no `role`.                                          | `audit:Citation/navigation` |
-| FR3–FR4, AR3     | `Citation.test.tsx` variant and icon suites                             | label, number, no icon, node icon, `src`, legacy string icon                 | The wrong visible variant renders, icon precedence changes, or decorative source paint reaches the accessibility tree. Gap: no test covers the label's truncation. Gap: no test covers `src` winning over a legacy string `icon`. | `audit:Citation/behavior`   |
-| FR5              | `Citation.test.tsx` root-contract suite and strict type/lint validation | anchor and span roots with ref, DOM props, class, inline style, and `xstyle` | Either root drops supported passthrough or ref behavior. Gap: the root-contract test asserts that the component's role and name replace a caller's `role` and `aria-label`, which pins the FR5 gap.                               | `audit:Citation/api`        |
-| FR6              | `Citation.test.tsx` class-name tests; `themingTargets.test.ts`          | linked and inert roots; both variants                                        | The root target disappearing from the class-name tests fails. `themingTargets.test.ts` catches only a renamed or undocumented target. Gap: no test asserts the `variant` reflection on the target.                                | `audit:Citation/theming`    |
-| FR7              | `Citation.test.tsx` accessible-name assertions                          | linked label and number                                                      | A name that loses the source or number context fails. Gap: no test runs a non-English catalog, so text that bypasses translation passes.                                                                                          | `audit:Citation/i18n`       |
-| RTL N/A          | `verified-not-applicable.json` source-hashed record                     | label and number stories; linked/inert source paths; icon/no-icon            | A direction-sensitive glyph, physical inline placement, ordering, scrolling, overlay, or horizontal keyboard behavior appears without RTL evidence.                                                                               | `audit:Citation/rtl`        |
-| All              | `Citation.stories.tsx`; stable visual baseline `core-citation--label`   | Documented variants and source states                                        | A changed label citation comes back changed for review.                                                                                                                                                                           | `audit:Citation/testing`    |
-| AR4, PR1, PR2    | Source review                                                           | Linked and inert roots; image icon                                           | Gap: no automated check fails if Citation adds a focus owner to the inert span, state, an effect, or a listener, or emits more than one source image.                                                                             | `audit:Citation/behavior`   |
+| Contract            | Verification                                                                     | Representative states                                                                                     | Mutation or failure expectation                                                                                                                                                                                                                                                                                               | Audit section               |
+| ------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| FR1–FR2, AR1–AR2    | `Citation.test.tsx` destination suites and `safeUrl.test.ts` matrix              | accepted, missing, blocked schemes, normalized blocked text                                               | A blocked URL creates navigation, an accepted URL loses its destination or native affordances, or an inert reference loses its supported naming role when the caller supplies no `role`.                                                                                                                                      | `audit:Citation/navigation` |
+| FR3–FR4, AR3        | `Citation.test.tsx` variant and icon suites                                      | label, number, no icon, node icon, `src`, legacy string icon                                              | The wrong visible variant renders, icon precedence changes, or decorative source paint reaches the accessibility tree. Gap: no test covers the label's truncation. Gap: no test covers `src` winning over a legacy string `icon`.                                                                                             | `audit:Citation/behavior`   |
+| FR5                 | `Citation.test.tsx` root-contract suite and strict type/lint validation          | anchor and span roots with ref, DOM props, class, inline style, and `xstyle`                              | Either root drops supported passthrough or ref behavior. Gap: the root-contract test asserts that the component's role and name replace a caller's `role` and `aria-label`, which pins the FR5 gap.                                                                                                                           | `audit:Citation/api`        |
+| FR6                 | `Citation.test.tsx` class-name and theme-target suites; `themingTargets.test.ts` | linked and inert roots; both variants; label with image, legacy string, and node icon; label without icon | The root target disappearing from the class-name tests fails. The icon target missing when an icon renders, present when none does, or landing on the root fails the theme-target suite. `themingTargets.test.ts` catches only a renamed or undocumented target. Gap: no test asserts the `variant` reflection on the target. | `audit:Citation/theming`    |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                    | four anatomy entries and two current targets                                                              | Missing, extra, prefixed, stale, or unclaimed current mappings fail validation.                                                                                                                                                                                                                                               | `audit:Citation/theming`    |
+| FR7                 | `Citation.test.tsx` accessible-name assertions                                   | linked label and number                                                                                   | A name that loses the source or number context fails. Gap: no test runs a non-English catalog, so text that bypasses translation passes.                                                                                                                                                                                      | `audit:Citation/i18n`       |
+| RTL N/A             | `verified-not-applicable.json` source-hashed record                              | label and number stories; linked/inert source paths; icon/no-icon                                         | A direction-sensitive glyph, physical inline placement, ordering, scrolling, overlay, or horizontal keyboard behavior appears without RTL evidence.                                                                                                                                                                           | `audit:Citation/rtl`        |
+| All                 | `Citation.stories.tsx`; stable visual baseline `core-citation--label`            | Documented variants and source states                                                                     | A changed label citation comes back changed for review.                                                                                                                                                                                                                                                                       | `audit:Citation/testing`    |
+| AR4, PR1, PR2       | Source review                                                                    | Linked and inert roots; image icon                                                                        | Gap: no automated check fails if Citation adds a focus owner to the inert span, state, an effect, or a listener, or emits more than one source image.                                                                                                                                                                         | `audit:Citation/behavior`   |
 
 ## Decision log
 

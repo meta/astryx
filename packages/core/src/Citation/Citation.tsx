@@ -5,7 +5,8 @@
 /**
  * @file Citation.tsx
  * @input Uses React, StyleX, theme tokens, and the shared navigation policy
- * @output Exports Citation with safe navigation and named inert-reference states
+ * @output Exports Citation with safe navigation, named inert-reference states,
+ *   and its root/icon theme targets
  * @position Core implementation; consumed by index.ts
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -274,7 +275,12 @@ export function Citation({
         style,
       )}>
       {hasIcon && (
-        <span aria-hidden="true" {...stylex.props(styles.iconWrap)}>
+        <span
+          aria-hidden="true"
+          {...mergeProps(
+            themeProps('citation-icon'),
+            stylex.props(styles.iconWrap),
+          )}>
           {iconNode != null ? (
             renderIconSlot(iconNode, {size: 'sm'})
           ) : (

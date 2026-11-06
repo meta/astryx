@@ -10,7 +10,7 @@ import {createRef} from 'react';
 import {render, screen} from '@testing-library/react';
 import {describe, it, expect} from 'vitest';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars} from '../theme/tokens.stylex';
+import {colorVars, radiusVars} from '../theme/tokens.stylex';
 import {Citation} from './Citation';
 
 // StyleX emits one deterministic atomic class per property/value pair, so an
@@ -22,6 +22,7 @@ const probe = stylex.create({
   accentText: {color: colorVars['--color-text-accent']},
   badgeBackground: {backgroundColor: colorVars['--color-accent-muted']},
   consumerOverride: {color: colorVars['--color-text-accent']},
+  iconRing: {borderRadius: radiusVars['--radius-full']},
   pointerCursor: {
     cursor: {
       default: 'pointer',
@@ -357,5 +358,100 @@ describe('Citation', () => {
     );
     const el = screen.getByTestId('citation');
     expect(el).toHaveAttribute('aria-label', 'Citation 2: GitHub');
+  });
+
+  // --- Theme targets ---------------------------------------------------------
+  // The icon wrapper is the element that paints the icon ring (size, radius,
+  // fill, border). It is the only aria-hidden child Citation renders, which is
+  // what a theme had to key on before it carried a class of its own.
+
+  describe('citation-icon theme target', () => {
+    const iconSources = [
+      ['src', {src: 'https://example.com/logo.png'}],
+      ['legacy string icon', {icon: 'https://example.com/favicon.png'}],
+      ['node icon', {icon: <svg data-testid="custom-icon" />}],
+    ] as const;
+
+    it.each(iconSources)(
+      'renders astryx-citation-icon on the decorative wrapper for a %s',
+      (_label, iconProps) => {
+        const {container} = render(
+          <Citation
+            source={{title: 'GitHub', url: 'https://github.com', ...iconProps}}
+            number={1}
+            data-testid="citation"
+          />,
+        );
+        const wrapper = container.querySelector('.astryx-citation-icon');
+        expect(wrapper).not.toBeNull();
+        expect(wrapper).toHaveAttribute('aria-hidden', 'true');
+        expect(screen.getByTestId('citation').contains(wrapper)).toBe(true);
+        // The rendered icon (img or node) sits inside the targeted wrapper.
+        expect(
+          wrapper!.querySelector('img, [data-testid="custom-icon"]'),
+        ).not.toBeNull();
+      },
+    );
+
+    it('keeps the StyleX ring styles beside the target class', () => {
+      // mergeProps must add the theme class without dropping the wrapper's
+      // own atomic classes — a wrapper that lost its ring would still carry
+      // the target.
+      const {container} = render(
+        <Citation
+          source={{
+            title: 'GitHub',
+            url: 'https://github.com',
+            src: 'https://example.com/logo.png',
+          }}
+          number={1}
+        />,
+      );
+      const wrapper = container.querySelector('.astryx-citation-icon')!;
+      for (const cls of atomicClasses(probe.iconRing)) {
+        expect(wrapper.classList.contains(cls)).toBe(true);
+      }
+    });
+
+    it('stays off the root, which keeps its own citation target', () => {
+      render(
+        <Citation
+          source={{
+            title: 'GitHub',
+            url: 'https://github.com',
+            src: 'https://example.com/logo.png',
+          }}
+          number={1}
+          data-testid="citation"
+        />,
+      );
+      const root = screen.getByTestId('citation');
+      expect(root.classList.contains('astryx-citation')).toBe(true);
+      expect(root.classList.contains('astryx-citation-icon')).toBe(false);
+    });
+
+    it('renders no icon target without a source icon', () => {
+      const {container} = render(<Citation source={source} number={1} />);
+      expect(container.querySelector('.astryx-citation-icon')).toBeNull();
+      expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
+    });
+
+    it('renders no icon target in the number variant', () => {
+      // The number badge never shows a source icon, so an icon passed with
+      // variant="number" produces neither the wrapper nor its target.
+      const {container} = render(
+        <Citation
+          source={{
+            title: 'GitHub',
+            url: 'https://github.com',
+            src: 'https://example.com/logo.png',
+          }}
+          number={1}
+          variant="number"
+        />,
+      );
+      expect(container.querySelector('.astryx-citation-icon')).toBeNull();
+      expect(container.querySelector('img')).toBeNull();
+    });
   });
 });

@@ -6,7 +6,7 @@
 // test fixture. Regenerate with: pnpm visual:probe-theme
 //
 // defineTheme takes six things and this covers all six:
-//   components  275 targets, 874 selectors (generated from the docs)
+//   components  276 targets, 880 selectors (generated from the docs)
 //   tokens      custom properties, read back off the themed element
 //   icons       every registry entry swapped for a marked glyph
 //   indicators  check / radio / checkbox swapped — the swap that reaches furthest
@@ -1268,6 +1268,14 @@ export const probeTheme = defineTheme({
         outlineColor: 'hsl(199.2 78% 25%)',
       },
     },
+    'citation-icon': {
+      base: {
+        backgroundColor: 'hsl(36.9 84% 50%)',
+        color: 'hsl(212.8 88% 12%)',
+        borderColor: 'hsl(11.0 73% 25%)',
+        outlineColor: 'hsl(0.7 82% 25%)',
+      },
+    },
     'clickable-card': {
       base: {
         backgroundColor: 'hsl(323.9 91% 53%)',
@@ -1586,6 +1594,24 @@ export const probeTheme = defineTheme({
         color: 'hsl(222.3 94% 12%)',
         borderColor: 'hsl(269.2 81% 25%)',
         outlineColor: 'hsl(117.7 75% 25%)',
+      },
+      highlighted: {
+        backgroundColor: 'hsl(169.2 74% 49%)',
+        color: 'hsl(181.2 82% 12%)',
+        borderColor: 'hsl(322.7 78% 25%)',
+        outlineColor: 'hsl(238.9 70% 25%)',
+      },
+      selected: {
+        backgroundColor: 'hsl(230.5 73% 61%)',
+        color: 'hsl(92.1 74% 12%)',
+        borderColor: 'hsl(333.6 76% 25%)',
+        outlineColor: 'hsl(261.5 94% 25%)',
+      },
+      disabled: {
+        backgroundColor: 'hsl(202.6 83% 57%)',
+        color: 'hsl(353.7 71% 12%)',
+        borderColor: 'hsl(5.9 75% 25%)',
+        outlineColor: 'hsl(156.6 77% 25%)',
       },
     },
     'command-palette-list': {
@@ -2626,6 +2652,12 @@ export const probeTheme = defineTheme({
         color: 'hsl(250.0 79% 12%)',
         borderColor: 'hsl(50.3 86% 25%)',
         outlineColor: 'hsl(130.6 93% 25%)',
+      },
+      'color:info': {
+        backgroundColor: 'hsl(229.8 71% 64%)',
+        color: 'hsl(170.6 76% 12%)',
+        borderColor: 'hsl(15.3 83% 25%)',
+        outlineColor: 'hsl(314.0 76% 25%)',
       },
       'color:success': {
         backgroundColor: 'hsl(43.1 81% 57%)',
@@ -5529,6 +5561,12 @@ export const probeTheme = defineTheme({
         color: 'hsl(33.3 80% 12%)',
         borderColor: 'hsl(150.9 89% 25%)',
         outlineColor: 'hsl(172.9 70% 25%)',
+      },
+      disabled: {
+        backgroundColor: 'hsl(93.5 86% 47%)',
+        color: 'hsl(358.7 70% 12%)',
+        borderColor: 'hsl(141.7 77% 25%)',
+        outlineColor: 'hsl(265.5 92% 25%)',
       },
     },
     tokenizer: {

@@ -91,6 +91,7 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-citation', visualProps: ['variant']},
+      {className: 'astryx-citation-icon'},
     ],
   },
 };
