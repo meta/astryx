@@ -161,11 +161,6 @@
       "types": "./dist/utils/interactionOverlay.stylex.d.ts",
       "default": "./dist/utils/interactionOverlay.stylex.js"
     },
-    "./utils/touchHitArea.stylex": {
-      "source": "./src/utils/touchHitArea.stylex.ts",
-      "types": "./dist/utils/touchHitArea.stylex.d.ts",
-      "default": "./dist/utils/touchHitArea.stylex.js"
-    },
     "./docs.mjs": "./docs.mjs",
     "./groups.doc.mjs": "./groups.doc.mjs",
     "./locales/*.json": "./locales/*.json",
@@ -833,6 +828,11 @@
       "source": "./src/internal/indicatorPress.stylex.ts",
       "types": "./dist/internal/indicatorPress.stylex.d.ts",
       "default": "./dist/internal/indicatorPress.stylex.js"
+    },
+    "./internal/touchHitArea.stylex": {
+      "source": "./src/internal/touchHitArea.stylex.ts",
+      "types": "./dist/internal/touchHitArea.stylex.d.ts",
+      "default": "./dist/internal/touchHitArea.stylex.js"
     },
     "./internal/touch": {
       "source": "./src/internal/touch.ts",

@@ -19,7 +19,7 @@ import {
   pointerQuery,
 } from '../gestures/__tests__/pointerQuery';
 import {isPressGroupItem} from '../privateAttributes/pressGroupItem.stylex';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {Button} from '../Button/Button';
 import {DropdownMenu} from '../DropdownMenu/DropdownMenu';
 import {ButtonGroup} from './ButtonGroup';

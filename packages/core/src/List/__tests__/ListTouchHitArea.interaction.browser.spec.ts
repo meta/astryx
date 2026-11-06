@@ -8,7 +8,7 @@
  *   target under a finger, with no overlap, layout or paint. A mouse gets no
  *   layer.
  * @position Interaction evidence for ListItem's touch hit area
- *   (utils/touchHitArea.stylex.ts, kept live by utils/touchHitArea.ts)
+ *   (internal/touchHitArea.stylex.ts, kept live by utils/touchHitArea.ts)
  */
 
 // Geometry is read from the layer's computed edges. Chromium's

@@ -13,7 +13,7 @@ import {describe, it, expect, vi} from 'vitest';
 import {act, render, screen} from '@testing-library/react';
 import type * as HitAreaModule from '../utils/hitArea';
 import type {HitInsets} from '../utils/hitArea';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {ButtonGroup} from '../ButtonGroup/ButtonGroup';
 import {Button} from './Button';
 

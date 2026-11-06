@@ -9,7 +9,7 @@
  *   box (spec:AST-094 FR42)
  * @position Browser layer of SegmentedControlItem's hit band and
  *   useSegmentedTouchTracking's lift bounds; the band itself is
- *   utils/touchHitArea.stylex.ts
+ *   internal/touchHitArea.stylex.ts
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';

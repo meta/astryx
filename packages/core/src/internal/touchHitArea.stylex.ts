@@ -15,8 +15,8 @@
  * A tap on the band lands on the host. A host whose children fill its box,
  * such as a press-tracking group, takes `layerBelowChildren`. That band is its
  * `::before`, so its positioned children paint over the clip path's edge, and
- * the pixels on their own edges stay theirs. SYNC: hitArea.ts
- * HIT_INSET_PROPERTIES, touchHitArea.ts and touchHitArea.test.tsx.
+ * the pixels on their own edges stay theirs. SYNC: utils/hitArea.ts
+ * HIT_INSET_PROPERTIES, utils/touchHitArea.ts and utils/touchHitArea.test.tsx.
  */
 
 import * as stylex from '@stylexjs/stylex';

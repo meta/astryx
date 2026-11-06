@@ -13,7 +13,7 @@
  *   press-tracking groups use it, and so can any control whose target outgrows
  *   its box under a finger.
  *
- * SYNC: When modified, update utils/touchHitArea.stylex.ts and
+ * SYNC: When modified, update internal/touchHitArea.stylex.ts and
  * touchHitArea.test.tsx.
  */
 

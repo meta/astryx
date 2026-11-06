@@ -49,7 +49,7 @@ import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
 import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
-import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 
 // =============================================================================
 // Types
@@ -230,7 +230,7 @@ const styles = stylex.create({
       borderBlockEndWidth: 0,
     },
     // The touch hit layer's band starts past the divider, the edge of the box
-    // its insets are measured from (utils/touchHitArea.stylex.ts). The width
+    // its insets are measured from (internal/touchHitArea.stylex.ts). The width
     // sits on the layer itself, so content inside the row never inherits it.
     '::after': {
       '--_hit-border-bottom': {

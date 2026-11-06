@@ -8,7 +8,7 @@
  *   through an invisible band, stops halfway to a neighbor, never takes a
  *   neighbor's tap, and changes no box (spec:AST-094 FR42)
  * @position Browser layer of Button's hit band; the band itself is
- *   utils/touchHitArea.stylex.ts
+ *   internal/touchHitArea.stylex.ts
  */
 
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';

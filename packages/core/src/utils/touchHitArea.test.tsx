@@ -8,7 +8,7 @@
  *   the hook watches, an owner's growth and press check, a measurement while
  *   the parent moves, the stop, and the layer's CSS.
  * @position Unit test for utils/touchHitArea.ts and
- *   utils/touchHitArea.stylex.ts. List/ListItem.hitArea.test.tsx covers the
+ *   internal/touchHitArea.stylex.ts. List/ListItem.hitArea.test.tsx covers the
  *   row wiring.
  */
 
@@ -54,7 +54,7 @@ vi.mock('./hitArea', async importOriginal => {
 });
 
 import {useTouchHitArea} from './touchHitArea';
-import {touchHitAreaStyles} from './touchHitArea.stylex';
+import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 
 function Host({
   enabled,
