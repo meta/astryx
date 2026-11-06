@@ -277,11 +277,19 @@ describe('FieldLabel', () => {
 
     it('leaves a Switch alone when its label’s info button is clicked', async () => {
       const user = userEvent.setup();
-      render(<Switch label="Auto-save" labelTooltip="Saves each change" />);
+      const onChange = vi.fn();
+      render(
+        <Switch
+          label="Auto-save"
+          labelTooltip="Saves each change"
+          value={false}
+          onChange={onChange}
+        />,
+      );
 
       await user.click(infoIcon('Auto-save'));
 
-      expect(screen.getByRole('switch')).not.toBeChecked();
+      expect(onChange).not.toHaveBeenCalled();
     });
 
     it('opens the help on a mouse click of its button and leaves a checkbox alone', async () => {

@@ -82,6 +82,9 @@ const styles = stylex.create({
   labelRow: {
     display: 'inline-flex',
     alignItems: 'center',
+    // In a block label cell, keep the row's top on the cell's top, not on a
+    // text baseline.
+    verticalAlign: 'top',
     gap: spacingVars['--spacing-1'],
   },
   // With a hidden label the row takes no slot in the caller's layout.

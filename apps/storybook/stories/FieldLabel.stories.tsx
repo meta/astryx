@@ -40,6 +40,8 @@ export const HiddenLabelInfo: Story = {
       <Text type="body">Directory</Text>
       <TextInput
         label="Search people"
+        value=""
+        onChange={() => {}}
         isLabelHidden
         labelTooltip="Searches names and teams."
         placeholder="Search people"
@@ -47,6 +49,8 @@ export const HiddenLabelInfo: Story = {
       <FormLayout direction="horizontal-labels">
         <TextInput
           label="Search teams"
+          value=""
+          onChange={() => {}}
           isLabelHidden
           labelTooltip="Searches team names."
           placeholder="Search teams"
@@ -69,6 +73,8 @@ export const HiddenLabelInfoInDialog: Story = {
           <LayoutContent>
             <TextInput
               label="Search files"
+              value=""
+              onChange={() => {}}
               isLabelHidden
               labelTooltip="Searches file names only."
               placeholder="Search files"
