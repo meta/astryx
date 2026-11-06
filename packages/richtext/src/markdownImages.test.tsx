@@ -16,6 +16,7 @@ import {
   CONTROLLED_TEXT_INSERTION_COMMAND,
   SELECTION_CHANGE_COMMAND,
 } from 'lexical';
+import {$createLinkNode} from '@lexical/link';
 import {DEFAULT_NODES} from './editorNodes';
 import {RichTextEditor, type RichTextEditorRef} from './RichTextEditor';
 import {RichTextEditorAutoLinkPlugin} from './RichTextEditorAutoLinkPlugin';
@@ -317,6 +318,19 @@ describe('image Markdown through edits (spec:AST-062)', () => {
       }),
     ).toBe(
       'See ![logo]\\(beta) here\n\n[logo]: https://example.com/logo.png\n',
+    );
+  });
+
+  it('writes a shortcut reference image before a link in its collapsed form, so the link stays a link (FR3)', () => {
+    const source = 'See ![logo] here\n\n[logo]: https://example.com/logo.png\n';
+    expect(
+      editAndExport(source, () => {
+        const link = $createLinkNode('https://example.com/site');
+        link.append($createTextNode('site'));
+        $imageText('![logo]').insertAfter(link);
+      }),
+    ).toBe(
+      'See ![logo][][site](https://example.com/site) here\n\n[logo]: https://example.com/logo.png\n',
     );
   });
 

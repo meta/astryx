@@ -826,6 +826,22 @@ function markedView(
   return node;
 }
 
+// A reference image's label at the end of its source: `[b]` in `![a][b]`.
+const IMAGE_LABEL_END = /\]\[(?:[^\\\]]|\\.)*\]$/;
+
+/**
+ * An image's source as an export writes it. A shortcut reference image
+ * (`![a]`) right before a link writes in its collapsed form (`![a][]`), so
+ * the link's text never reads as its label.
+ */
+function $imageSourceForExport(node: LexicalNode): string {
+  const source = node.getTextContent();
+  const isShortcut = source.endsWith(']') && !IMAGE_LABEL_END.test(source);
+  return isShortcut && $isLinkNode(node.getNextSibling())
+    ? `${source}[]`
+    : source;
+}
+
 /**
  * A placeholder for each inline plugin node among `nodes`, absent from
  * `text`, and the source each placeholder stands for.
@@ -845,7 +861,7 @@ function extensionPlaceholders(
       $isRichTextExtensionNode(node) && node.isInline()
         ? node.getSource()
         : $isImageSource(node)
-          ? node.getTextContent()
+          ? $imageSourceForExport(node)
           : null;
     if (source != null) {
       const placeholder = free.next().value;
