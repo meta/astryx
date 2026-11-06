@@ -7,10 +7,9 @@
  *   deepActiveElement, shadowHostOf, a shadow root's host, and
  *   shadowRootsOutward
  * @position The flat-tree parent the browser scrolls and dispatches
- *   through, shared by the gesture host's native-scroll probe, the
- *   outside-press watch, the selection lock (which the press feedback
- *   controller uses without the gesture system) and the Layer module's input
- *   hold
+ *   through. The gesture host's native-scroll probe, the outside-press watch,
+ *   the selection lock and the Layer module's input hold share it. The press
+ *   feedback controller uses the selection lock without the gesture system
  */
 
 /** The node's parent, crossing out of shadow roots. */
