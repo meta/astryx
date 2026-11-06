@@ -101,6 +101,12 @@ interface Box {
   height: number;
 }
 
+/** When the touch hit areas' new insets were written and drawn, epoch ms. */
+interface HitAreaInsets {
+  written: number;
+  drawn: number;
+}
+
 interface OpenStory {
   driver: TouchDriver;
   trigger: Locator;
@@ -336,6 +342,47 @@ async function contentPromotions(layer: Locator): Promise<string[]> {
         );
     }),
   );
+}
+
+/**
+ * Logs each time the content's touch hit areas take new insets: when the
+ * style write runs, and when the next frame has drawn, epoch ms. The mutation
+ * observer reads no layout, and its one frame callback runs before any window
+ * that waits for it.
+ */
+async function logHitAreaInsets(page: Page) {
+  await page.evaluate(() => {
+    const log: HitAreaInsets[] = [];
+    Object.defineProperty(window, '__popoverHitAreaInsets', {value: log});
+    const isInsets = (style: string | null) =>
+      style?.includes('--astryx-hit-inset-') ?? false;
+    new MutationObserver(records => {
+      if (
+        !records.some(
+          record =>
+            isInsets(record.oldValue) ||
+            isInsets((record.target as Element).getAttribute('style')),
+        )
+      ) {
+        return;
+      }
+      const entry = {
+        written: performance.timeOrigin + performance.now(),
+        drawn: 0,
+      };
+      log.push(entry);
+      requestAnimationFrame(() =>
+        setTimeout(() => {
+          entry.drawn = performance.timeOrigin + performance.now();
+        }),
+      );
+    }).observe(document.body, {
+      attributes: true,
+      attributeFilter: ['style'],
+      attributeOldValue: true,
+      subtree: true,
+    });
+  });
 }
 
 /** The static copy the dismissal plays on. */
@@ -644,31 +691,44 @@ test('the presentation and the dismissal do no Layout or Paint per frame', async
   // reads every animation each frame, so the windows come from when each
   // scale animation starts.
   await story.trigger.focus();
+  await logHitAreaInsets(page);
+  let opened = 0;
+  let closed = 0;
   let present = 0;
   let dismiss = 0;
   const trace = await traceRendering(page, async () => {
-    const opened = await pageNow(page);
+    opened = await pageNow(page);
     await page.keyboard.press('Enter');
     present = await waitPastScaleStart(page, opened, entrance.ms + 150);
-    const closed = await pageNow(page);
+    closed = await pageNow(page);
     await page.keyboard.press('Escape');
     dismiss = await waitPastScaleStart(page, closed, exit.ms + 150);
   });
-  // Each window starts 400 ms in, after the focus ring and the touch hit
-  // areas' first measurement, and ends one frame before its curve does. A
-  // page frame callback makes Chromium lay out this anchored layer every
-  // frame. So these zeros also show that no frame loop runs here, Popover's
-  // own included.
-  for (const [name, base, ms] of [
-    ['present', present, entrance.ms],
-    ['dismiss', dismiss, exit.ms],
+  const insets = await page.evaluate(() => [
+    ...(window as unknown as {__popoverHitAreaInsets: HitAreaInsets[]})
+      .__popoverHitAreaInsets,
+  ]);
+  // Each window starts 400 ms in, after the focus ring, and ends one frame
+  // before its curve does. Each motion's start also measures the content's
+  // touch hit areas: layout reads, then a style write. A stalled machine can
+  // delay that past 400 ms. So a window starts no sooner than the frame that
+  // draws those insets. A page frame callback makes Chromium lay out this
+  // anchored layer every frame. So these zeros also show that no frame loop
+  // runs here, Popover's own included.
+  for (const [name, action, base, ms] of [
+    ['present', opened, present, entrance.ms],
+    ['dismiss', closed, dismiss, exit.ms],
   ] as const) {
-    const from = base + WINDOW_START_MS;
     const end = base + ms - 20;
+    const measured = insets.find(
+      entry => entry.written >= action && entry.written < end,
+    );
+    const from = Math.max(base + WINDOW_START_MS, measured?.drawn ?? 0);
     const during = countBetween(trace, from, end);
     // On failure, every rendering event of the window, in ms after its
     // animation's start.
     const detail = `${name} ${JSON.stringify({
+      from: Math.round(from - base),
       during,
       events: trace.events
         .filter(e => e.t >= from && e.t <= end)
