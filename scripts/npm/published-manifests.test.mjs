@@ -96,7 +96,7 @@ describe('alignmentProblems', () => {
         versions,
       ),
     ).toEqual([
-      '@astryxdesign/cli: peerDependencies names @astryxdesign/gone, which is not a package in this release',
+      '@astryxdesign/cli: peerDependencies names @astryxdesign/gone, which npm does not receive in this release',
     ]);
   });
 });
@@ -134,6 +134,25 @@ describe('the pending exception', () => {
     for (const manifest of cases) {
       expect(alignmentProblems(manifest, versions)).toHaveLength(1);
     }
+  });
+});
+
+describe('releaseVersions', () => {
+  it('counts only packages npm receives, so naming a private one fails', () => {
+    const versions = releaseVersions(ROOT);
+    expect(versions.get('@astryxdesign/core')).toBeDefined();
+    expect(versions.has('@astryxdesign/theme-probe')).toBe(false);
+    expect(
+      alignmentProblems(
+        {
+          name: '@astryxdesign/x',
+          peerDependencies: {'@astryxdesign/theme-probe': '0.5.0'},
+        },
+        versions,
+      ),
+    ).toEqual([
+      '@astryxdesign/x: peerDependencies names @astryxdesign/theme-probe, which npm does not receive in this release',
+    ]);
   });
 });
 
@@ -209,6 +228,12 @@ describe('this repository', () => {
       name: '@astryxdesign/theme-neutral',
       version: '0.7.9',
     });
+    write('packages/themes/probe', {
+      name: '@astryxdesign/theme-probe',
+      version: '0.5.0',
+      private: true,
+    });
+    expect(releaseVersions(root).has('@astryxdesign/theme-probe')).toBe(false);
     expect(releaseVersions(root).get('@astryxdesign/theme-neutral')).toBe(
       '0.7.9',
     );

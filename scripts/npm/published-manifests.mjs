@@ -83,15 +83,14 @@ export function publishedPackages(root) {
   return workspacePackages(root).filter(({manifest}) => isPublished(manifest));
 }
 
-/** Each `@astryxdesign` package under `root`, by name, with its version. */
+/** Each package npm receives from `root`, by name, with its version. */
 export function releaseVersions(root) {
-  const versions = new Map();
-  for (const {manifest} of workspacePackages(root)) {
-    if (manifest.name?.startsWith('@astryxdesign/')) {
-      versions.set(manifest.name, manifest.version);
-    }
-  }
-  return versions;
+  return new Map(
+    publishedPackages(root).map(({manifest}) => [
+      manifest.name,
+      manifest.version,
+    ]),
+  );
 }
 
 /**
@@ -107,7 +106,7 @@ export function alignmentProblems(manifest, versions) {
       const version = versions.get(name);
       if (version == null) {
         problems.push(
-          `${manifest.name}: ${field} names ${name}, which is not a package in this release`,
+          `${manifest.name}: ${field} names ${name}, which npm does not receive in this release`,
         );
       } else if (
         spec !== version &&
