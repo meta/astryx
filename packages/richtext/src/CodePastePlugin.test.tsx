@@ -1,11 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
-import {act, render, waitFor} from '@testing-library/react';
+import {act, render, screen, waitFor} from '@testing-library/react';
 import {useEffect} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {$isCodeNode, type CodeNode} from '@lexical/code';
+import {$createLinkNode} from '@lexical/link';
 import {
+  $createTextNode,
   $getRoot,
   $isLineBreakNode,
   $isTextNode,
@@ -83,7 +85,56 @@ const MENTIONS = createRichTextExtension(
   }),
 );
 
-async function renderEditor(): Promise<LexicalEditor> {
+type FieldNode = MarkdownExtensionNode<
+  'test-fields',
+  'field',
+  {readonly label: string},
+  'inline'
+>;
+
+/** A Markdown plugin that draws `%{name}` as an inline text input. */
+const FIELDS = createRichTextExtension(
+  createMarkdownPlugin<'test-fields', FieldNode>({
+    name: 'test-fields',
+    apiVersion: 1,
+    parseKey: 'v1',
+    syntax: {
+      inline: [
+        {
+          startsWith: ['%{'],
+          maxSpan: 40,
+          tokenize({source, offset, end}) {
+            const close = source.indexOf('}', offset + 2);
+            if (close < 0 || close >= end) {
+              return {status: 'no-match'};
+            }
+            return {
+              status: 'match',
+              end: close + 1,
+              node: {
+                type: 'extension',
+                plugin: 'test-fields',
+                name: 'field',
+                display: 'inline',
+                data: {label: source.slice(offset + 2, close)},
+              },
+            };
+          },
+        },
+      ],
+    },
+    renderers: {
+      field: {
+        render: ({node}) => <input aria-label={node.data.label} />,
+        toText: node => node.data.label,
+      },
+    },
+  }),
+);
+
+async function renderEditor(
+  document: string = DOCUMENT,
+): Promise<LexicalEditor> {
   let captured: LexicalEditor | undefined;
   function CaptureEditor() {
     const [editor] = useLexicalComposerContext();
@@ -95,8 +146,10 @@ async function renderEditor(): Promise<LexicalEditor> {
   render(
     <RichTextEditor
       label="Notes"
-      defaultValue={markdownToEditorStateJSON(DOCUMENT)}
-      markdownExtensions={[MENTIONS]}
+      defaultValue={markdownToEditorStateJSON(document, {
+        extensions: [MENTIONS, FIELDS],
+      })}
+      markdownExtensions={[MENTIONS, FIELDS]}
       plugins={<CaptureEditor />}
     />,
   );
@@ -120,8 +173,15 @@ function caretInCode(editor: LexicalEditor) {
 }
 
 /** Pastes clipboard data of the given types, and commits the paste. */
-function paste(editor: LexicalEditor, data: Record<string, string>) {
+function paste(
+  editor: LexicalEditor,
+  data: Record<string, string>,
+  target?: EventTarget,
+) {
   const event = new ClipboardEvent('paste', {cancelable: true});
+  if (target != null) {
+    Object.defineProperty(event, 'target', {value: target});
+  }
   Object.defineProperty(event, 'clipboardData', {
     value: {
       getData: (type: string) => data[type] ?? '',
@@ -272,5 +332,38 @@ describe('pasting into a code block', () => {
       'paragraph',
       'paragraph',
     ]);
+  });
+
+  it('pastes plain text when the caret is inside a link in a code block', async () => {
+    const editor = await renderEditor();
+    act(() => {
+      editor.update(
+        () => {
+          const url = $createTextNode('https://example.com');
+          const link = $createLinkNode('https://example.com');
+          link.append(url);
+          $codeBlock().append(link);
+          url.select(5, 5);
+        },
+        {discrete: true},
+      );
+    });
+
+    paste(editor, {'text/html': RICH_HTML, 'text/plain': RICH_TEXT});
+    const after = shape(editor);
+    expect(after.blocks).toEqual(['paragraph', 'code', 'paragraph']);
+    expect(after.code).toContain(RICH_TEXT);
+  });
+
+  it('leaves a paste into an input a plugin node draws to that input', async () => {
+    const editor = await renderEditor(
+      'Name %{Inline field}:\n\n```ts\nconst x = 1;\n\n```\n\nDone.\n',
+    );
+    caretInCode(editor);
+    const input = await screen.findByRole('textbox', {name: 'Inline field'});
+    act(() => input.focus());
+
+    paste(editor, {'text/html': RICH_HTML, 'text/plain': RICH_TEXT}, input);
+    expect(shape(editor).code).toBe('const x = 1;\n');
   });
 });
