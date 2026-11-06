@@ -41,14 +41,16 @@
  * component folder changes, or a component it is named after is in scope;
  * never for a `scope` token or an unknown scope.
  *
- * `--changed-only <specs> --changed-files <files> --owned-by <components>`
- * (the default check of the components a pull request touches): run the
- * browser specs the pull request adds or modifies, listed one per line in
- * <specs>, then the `scoped` and `release-only` specs that the comma-separated
- * touched components own (`ownedSpecs`; <files> lists every changed path, one
- * per line, for the folder-change rule). It reads no title, runs no component
- * audit, and runs no spec of a reverse dependent; a changed `audit` spec still
- * waits for its audit pull request. To stay inside the job's 15-minute budget
+ * `--changed-only <specs> --changed-files <files> --owned-by <components>
+ * [--dependents-of <folders>]` (the default check of the components a pull
+ * request touches, a wide change included): run the browser specs the pull
+ * request adds or modifies, listed one per line in <specs>, then the `scoped`
+ * and `release-only` specs that the comma-separated touched components own
+ * (`ownedSpecs`; <files> lists every changed path, one per line, for the
+ * folder-change rule), then the `scoped` and `release-only` specs of the
+ * component folders that render a touched folder (`dependentSpecs`, nearest
+ * first), in the time left. It reads no title and runs no component audit; a
+ * changed `audit` spec still waits for its audit pull request. To stay inside the job's 15-minute budget
  * it takes at most CHANGED_SPEC_LIMIT changed files, starts each file only
  * when the run still fits DEFAULT_CHECK_BUDGET_MS at that file's recorded time
  * (.github/a11y-contract-durations.json), and stops at that budget. Each file
@@ -322,6 +324,13 @@ export const DEFAULT_CHECK_BUDGET_MS = 8 * 60 * 1000;
 export const RECORDED_TIME_MARGIN = 1.25;
 export const STARTUP_MS = 30 * 1000;
 
+/**
+ * The most a run spends on the specs of folders that render a touched
+ * component: their share of the projected time, after the changed and owned
+ * specs.
+ */
+export const DEPENDENT_SHARE_MS = 60 * 1000;
+
 /** The expected time of a file that has no recorded time. */
 const UNRECORDED_FILE_SECONDS = 60;
 
@@ -375,6 +384,264 @@ export function ownedSpecs({specs, components, changedPaths}) {
   });
 }
 
+// The component folders that render a touched component (spec:AST-030 FR12).
+// The CI step runs this file alone from the merge commit, so it imports no
+// repository module. The graph is file by file over value imports and
+// re-exports (`import type` and `export type` put no code on a page): a
+// relative specifier, a package subpath (`@astryxdesign/core/internal/touch`),
+// or a named import from a package root, through that package's folder
+// barrels. Reach crosses shared files (`utils`, `hooks`, `internal`) without
+// counting a step; each step into another component folder counts one.
+
+const SOURCE = /\.(?:[cm]?[jt]sx?)$/;
+const NOT_RENDERED =
+  /(?:^|\/)__tests__\/|\.(?:test|stories|doc)\.[^/]+$|\.spec\.[^/]+$|\.d\.ts$/;
+const STATEMENT =
+  /(?:^|[\n;])\s*(import|export)\s+(type\s+)?([^'";]*?)\s*from\s*['"]([^'"]+)['"]|(?:^|[\n;])\s*import\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
+const RESOLVE_SUFFIXES = [
+  '',
+  '.ts',
+  '.tsx',
+  '.mts',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '/index.ts',
+  '/index.tsx',
+  '/index.js',
+];
+
+const componentFolderOf = file => {
+  const match = /^packages\/([^/]+)\/src\/([A-Z][^/]*)\//.exec(file);
+  return match ? `${match[1]}/${match[2]}` : null;
+};
+
+function sourceFiles(root, dir) {
+  const out = [];
+  const full = path.join(root, dir);
+  if (!fs.existsSync(full)) return out;
+  for (const entry of fs.readdirSync(full, {withFileTypes: true})) {
+    const file = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) {
+      if (entry.name !== 'node_modules' && entry.name !== 'dist')
+        out.push(...sourceFiles(root, file));
+    } else if (SOURCE.test(entry.name) && !NOT_RENDERED.test(file)) {
+      out.push(file);
+    }
+  }
+  return out;
+}
+
+/**
+ * The value imports of one source text: `[{specifier, names}]`, where `names`
+ * lists the named value bindings (empty for a default, namespace or bare
+ * import, which take the whole module).
+ */
+export function valueImports(text) {
+  const out = [];
+  for (const match of text.matchAll(STATEMENT)) {
+    // A bare `import './x'` or a dynamic `import('./x')` takes the module.
+    if (match[5] || match[6]) {
+      out.push({specifier: match[5] ?? match[6], names: []});
+      continue;
+    }
+    if (match[2]) continue;
+    const clause = match[3] ?? '';
+    const braced = /\{([^}]*)\}/.exec(clause);
+    const names = braced
+      ? braced[1]
+          .split(',')
+          .map(part => part.trim())
+          .filter(part => part && !part.startsWith('type '))
+          .map(part => part.split(/\s+as\s+/)[0].trim())
+      : [];
+    const outsideBraces = clause
+      .replace(/\{[^}]*\}/, '')
+      .replace(/,/g, '')
+      .trim();
+    // `import {type A, type B} from` imports no value.
+    if (braced && names.length === 0 && !outsideBraces) continue;
+    out.push({specifier: match[4], names: outsideBraces ? [] : names});
+  }
+  return out;
+}
+
+/**
+ * Edges `imported file -> importing files` over the packages' rendered
+ * sources.
+ * @param {string} root
+ * @returns {Map<string, Set<string>>}
+ */
+export function importerGraph(root) {
+  const packagesDir = path.join(root, 'packages');
+  const packages = fs.existsSync(packagesDir)
+    ? fs
+        .readdirSync(packagesDir)
+        .filter(pkg => fs.existsSync(path.join(packagesDir, pkg, 'src')))
+    : [];
+  const files = packages.flatMap(pkg =>
+    sourceFiles(root, `packages/${pkg}/src`),
+  );
+  const known = new Set(files);
+  const texts = new Map(
+    files.map(file => [file, fs.readFileSync(path.join(root, file), 'utf8')]),
+  );
+  const resolve = target => {
+    for (const suffix of RESOLVE_SUFFIXES) {
+      if (known.has(`${target}${suffix}`)) return `${target}${suffix}`;
+    }
+    return null;
+  };
+  // A barrel's named exports (`index.ts`): each name to the file it comes
+  // from, one `export *` level deep.
+  const barrels = new Map();
+  const namesOf = index => {
+    if (barrels.has(index)) return barrels.get(index);
+    const names = new Map();
+    barrels.set(index, names);
+    for (const {specifier, names: own} of valueImports(texts.get(index))) {
+      if (!specifier.startsWith('.')) continue;
+      const target = resolve(
+        path.posix.normalize(`${path.posix.dirname(index)}/${specifier}`),
+      );
+      if (!target) continue;
+      for (const name of own) names.set(name, target);
+      if (own.length === 0) {
+        for (const inner of valueImports(texts.get(target))) {
+          for (const name of inner.names) names.set(name, target);
+        }
+        for (const match of texts
+          .get(target)
+          .matchAll(/export\s+(?:const|function|class)\s+(\w+)/g)) {
+          names.set(match[1], target);
+        }
+      }
+    }
+    return names;
+  };
+  const isBarrel = file => /\/index\.[cm]?[jt]sx?$/.test(file ?? '');
+  const importers = new Map();
+  const add = (imported, importer) => {
+    if (!imported || imported === importer) return;
+    if (!importers.has(imported)) importers.set(imported, new Set());
+    importers.get(imported).add(importer);
+  };
+  // Named imports from a barrel reach only the files those names come from.
+  const link = (target, names, file) => {
+    if (!target) return;
+    if (!isBarrel(target) || names.length === 0) return add(target, file);
+    const barrel = namesOf(target);
+    for (const name of names) add(barrel.get(name) ?? target, file);
+  };
+  for (const file of files) {
+    for (const {specifier, names} of valueImports(texts.get(file))) {
+      if (specifier.startsWith('.')) {
+        link(
+          resolve(
+            path.posix.normalize(`${path.posix.dirname(file)}/${specifier}`),
+          ),
+          names,
+          file,
+        );
+        continue;
+      }
+      const match = /^@astryxdesign\/([^/]+)(?:\/(.+))?$/.exec(specifier);
+      if (!match || !packages.includes(match[1])) continue;
+      const [, pkg, subpath] = match;
+      link(
+        resolve(
+          subpath
+            ? `packages/${pkg}/src/${subpath}`
+            : `packages/${pkg}/src/index`,
+        ),
+        names,
+        file,
+      );
+    }
+  }
+  return importers;
+}
+
+/**
+ * The component folders that render a touched folder, nearest first, then in
+ * path order. A step from one component folder into another counts one;
+ * steps inside a folder or through shared files count none.
+ * @param {Map<string, Set<string>>} importers
+ * @param {string[]} touched `<pkg>/<Folder>`
+ * @returns {{folder: string, depth: number}[]}
+ */
+export function renderingFolders(importers, touched) {
+  const touchedSet = new Set(touched);
+  const depth = new Map();
+  const deque = [];
+  for (const file of importers.keys()) {
+    if (touchedSet.has(componentFolderOf(file))) {
+      depth.set(file, 0);
+      deque.push(file);
+    }
+  }
+  for (const [, set] of importers) {
+    for (const file of set) {
+      if (touchedSet.has(componentFolderOf(file)) && !depth.has(file)) {
+        depth.set(file, 0);
+        deque.push(file);
+      }
+    }
+  }
+  while (deque.length > 0) {
+    const file = deque.shift();
+    const here = depth.get(file);
+    const folder = componentFolderOf(file);
+    for (const importer of importers.get(file) ?? []) {
+      const target = componentFolderOf(importer);
+      if (touchedSet.has(target)) continue;
+      const step = target && target !== folder ? 1 : 0;
+      const next = here + step;
+      if (depth.has(importer) && depth.get(importer) <= next) continue;
+      depth.set(importer, next);
+      if (step === 0) deque.unshift(importer);
+      else deque.push(importer);
+    }
+  }
+  const folders = new Map();
+  for (const [file, d] of depth) {
+    const folder = componentFolderOf(file);
+    if (!folder || touchedSet.has(folder)) continue;
+    if (!folders.has(folder) || folders.get(folder) > d) folders.set(folder, d);
+  }
+  return [...folders]
+    .map(([folder, d]) => ({folder, depth: d}))
+    .sort((a, b) => a.depth - b.depth || a.folder.localeCompare(b.folder));
+}
+
+/**
+ * The `scoped` and `release-only` specs of the component folders that render a
+ * touched folder, nearest first, then in path order, leaving out `planned`.
+ * @param {{file: string, routing: {mode: string}}[]} specs
+ * @param {{folder: string, depth: number}[]} rendering
+ * @param {Set<string>} planned
+ */
+export function dependentSpecs(specs, rendering, planned) {
+  const depthOf = new Map(rendering.map(({folder, depth}) => [folder, depth]));
+  const folderOf = file => {
+    const match = /^packages\/([^/]+)\/src\/([^/]+)\//.exec(file);
+    return match ? `${match[1]}/${match[2]}` : null;
+  };
+  return specs
+    .filter(
+      ({file, routing}) =>
+        (routing.mode === 'scoped' || routing.mode === 'release-only') &&
+        !planned.has(file) &&
+        depthOf.has(folderOf(file)),
+    )
+    .map(({file}) => ({file, depth: depthOf.get(folderOf(file))}))
+    .sort((a, b) => a.depth - b.depth || a.file.localeCompare(b.file))
+    .map(({file, depth}) => ({
+      file,
+      reason: `renders a touched component${depth > 1 ? ` (${depth} folders away)` : ''}`,
+    }));
+}
+
 /**
  * Recorded seconds per spec file. Test entries (file and title path) are left
  * out.
@@ -416,22 +683,28 @@ function median(values) {
 
 /**
  * The default check's run. First the changed specs, at most the limit, in path
- * order. Then the owned specs, in path order. A file starts only when the run
- * still fits the budget with that file at its recorded time (with the margin).
- * The other files are not run, with the label that runs them.
+ * order. Then the owned specs, in path order. Then the dependents' specs, in
+ * the order given (nearest first), within their own share of the time. A file
+ * starts only when the run still fits the budget with that file at its
+ * recorded time (with the margin). The other files are not run, with the
+ * label that runs them.
  * @param {object} options
  * @param {{file: string, reason: string}[]} options.changed
  * @param {{file: string, reason: string}[]} options.owned
+ * @param {{file: string, reason: string}[]} [options.dependents]
  * @param {Record<string, number>} options.seconds recorded seconds per file
  * @param {number} options.workers
  * @param {number} [options.budgetMs]
+ * @param {number} [options.dependentShareMs]
  */
 export function planDefaultCheck({
   changed,
   owned,
+  dependents = [],
   seconds,
   workers,
   budgetMs = DEFAULT_CHECK_BUDGET_MS,
+  dependentShareMs = DEPENDENT_SHARE_MS,
 }) {
   const {run: changedInLimit, notRun} = withinBudget(changed);
   const fallback = median(Object.values(seconds));
@@ -443,17 +716,38 @@ export function planDefaultCheck({
   const ordered = [...owned]
     .filter(({file}) => !planned.has(file))
     .sort((a, b) => a.file.localeCompare(b.file));
-  for (const entry of [...changedInLimit, ...ordered]) {
+  const ownedFiles = new Set(ordered.map(({file}) => file));
+  const after = dependents.filter(
+    ({file}) => !planned.has(file) && !ownedFiles.has(file),
+  );
+  const tryRun = (entry, fits, limit) => {
     const withFile = [...files, entry.file];
-    if (STARTUP_MS + projectedMs(withFile, msOf, workers) <= budgetMs) {
-      run.push(entry);
-      files.push(entry.file);
-    } else {
+    if (STARTUP_MS + projectedMs(withFile, msOf, workers) > budgetMs) {
       notRun.push({
         file: entry.file,
         reason: `${entry.reason}; its expected ${Math.round(secondsOf(entry.file))} s does not fit the default check's ${budgetMs / 60000}-minute budget; add ci:run-a11y to run it`,
       });
+    } else if (!fits(withFile)) {
+      notRun.push({
+        file: entry.file,
+        reason: `${entry.reason}; its expected ${Math.round(secondsOf(entry.file))} s does not fit the ${limit}; add ci:run-a11y to run it`,
+      });
+    } else {
+      run.push(entry);
+      files.push(entry.file);
     }
+  };
+  for (const entry of [...changedInLimit, ...ordered])
+    tryRun(entry, () => true);
+  const beforeDependents = projectedMs(files, msOf, workers);
+  for (const entry of after) {
+    tryRun(
+      entry,
+      withFile =>
+        projectedMs(withFile, msOf, workers) - beforeDependents <=
+        dependentShareMs,
+      `${dependentShareMs / 60000}-minute share for folders that render a touched component`,
+    );
   }
   return {run, notRun};
 }
@@ -463,13 +757,24 @@ export function planDefaultCheck({
  * run, so it never reads as passed.
  * @param {{components: string[], selected: {file: string, reason: string}[], notRun: {file: string, reason: string}[]}} plan
  */
-export function summaryMarkdown({components, selected, notRun}) {
+export function summaryMarkdown({
+  components,
+  selected,
+  notRun,
+  rendering = [],
+}) {
   const lines = ['### Component accessibility contracts', ''];
   lines.push(
     components.length
       ? `Touched components: ${components.map(c => `\`${c}\``).join(', ')}.`
       : 'No touched component.',
   );
+  if (rendering.length) {
+    lines.push(
+      '',
+      `Folders that render a touched component: ${rendering.length}; their specs run, nearest first, within ${DEPENDENT_SHARE_MS === 60 * 1000 ? 'one minute' : `${DEPENDENT_SHARE_MS / 60000} minutes`} of the time left.`,
+    );
+  }
   lines.push('');
   if (selected.length === 0 && notRun.length === 0) {
     lines.push('No accessibility contract to run.');
@@ -720,11 +1025,17 @@ function main() {
   const changedFilesFile = flagValue(argv, '--changed-files');
   const ownedByValue = flagValue(argv, '--owned-by');
   const ownedBy = (ownedByValue ?? '').split(',').filter(Boolean);
+  const dependentsOfValue = flagValue(argv, '--dependents-of');
+  const dependentsOf = (dependentsOfValue ?? '').split(',').filter(Boolean);
   if (
-    (ownedByValue != null || changedFilesFile != null) &&
+    (ownedByValue != null ||
+      changedFilesFile != null ||
+      dependentsOfValue != null) &&
     changedOnlyFile == null
   ) {
-    throw new Error('--owned-by and --changed-files need --changed-only');
+    throw new Error(
+      '--owned-by, --changed-files and --dependents-of need --changed-only',
+    );
   }
   // Without every changed path the folder rule selects nothing, and the
   // dropped contracts would read as passed.
@@ -733,7 +1044,12 @@ function main() {
       '--owned-by needs --changed-files with the list of changed paths',
     );
   }
-  const flagValues = new Set([changedOnlyFile, changedFilesFile, ownedByValue]);
+  const flagValues = new Set([
+    changedOnlyFile,
+    changedFilesFile,
+    ownedByValue,
+    dependentsOfValue,
+  ]);
   // Outside CI, a run with no base compares with origin/main.
   const base =
     process.env.BASE_SHA ||
@@ -764,19 +1080,27 @@ function main() {
     components,
     title,
   });
-  const budgeted =
-    changedOnlyFile != null
-      ? planDefaultCheck({
-          changed: changedOnly(routed, changedPaths),
-          owned: ownedSpecs({
-            specs,
-            components: ownedBy,
-            changedPaths: readLines(changedFilesFile) ?? changedPaths,
-          }),
-          seconds: readDurations(root, policySha),
-          workers: contractWorkers(),
-        })
-      : {run: routed, notRun: []};
+  const rendering =
+    changedOnlyFile != null && dependentsOf.length > 0
+      ? renderingFolders(importerGraph(root), dependentsOf)
+      : [];
+  const budgeted = (() => {
+    if (changedOnlyFile == null) return {run: routed, notRun: []};
+    const changed = changedOnly(routed, changedPaths);
+    const owned = ownedSpecs({
+      specs,
+      components: ownedBy,
+      changedPaths: readLines(changedFilesFile) ?? changedPaths,
+    });
+    const planned = new Set([...changed, ...owned].map(({file}) => file));
+    return planDefaultCheck({
+      changed,
+      owned,
+      dependents: dependentSpecs(specs, rendering, planned),
+      seconds: readDurations(root, policySha),
+      workers: contractWorkers(),
+    });
+  })();
   const selected = budgeted.run;
   const notRun = budgeted.notRun;
   const [audited] = auditedComponents(title);
@@ -820,7 +1144,7 @@ function main() {
   if (changedOnlyFile != null && process.env.GITHUB_STEP_SUMMARY) {
     fs.appendFileSync(
       process.env.GITHUB_STEP_SUMMARY,
-      summaryMarkdown({components: ownedBy, selected, notRun}),
+      summaryMarkdown({components: ownedBy, selected, notRun, rendering}),
     );
   }
   if (process.argv.includes('--dry-run')) return 0;

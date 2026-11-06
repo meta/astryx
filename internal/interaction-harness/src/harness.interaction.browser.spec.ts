@@ -4050,6 +4050,105 @@ test.describe('animation state', () => {
     expect(started.map(a => a.durationMs)).toEqual([70]);
   });
 
+  test('a run that the page cancels while it plays is reported, ended where the page cancelled it', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    const watch = await watchAnimations(box);
+    // The page retires the run as Core's motion animator does: it writes the
+    // end and cancels the run, so no finish event comes. It cancels on its
+    // first frame past 200 ms of play. A starved page gets there late, but it
+    // gets there.
+    const calledAt = await box.evaluate(el => {
+      const run = el.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 60_000,
+        fill: 'both',
+      });
+      const retire = () => {
+        if (Number(run.currentTime ?? 0) >= 200) {
+          (el as HTMLElement).style.opacity = '1';
+          run.cancel();
+        } else {
+          requestAnimationFrame(retire);
+        }
+      };
+      requestAnimationFrame(retire);
+      return performance.timeOrigin + performance.now();
+    });
+    // The first look comes after the cancel.
+    await expect
+      .poll(() => box.evaluate(el => el.getAnimations().length))
+      .toBe(0);
+    const [run] = await watch.started();
+    expect(run.kind).toBe('Animation');
+    expect(run.durationMs).toBe(60_000);
+    expect(run.from).toBeGreaterThan(calledAt - 17);
+    // It played at least 200 ms, and it ended long before its curve's end.
+    expect(run.finishedAt).not.toBeNull();
+    expect((run.finishedAt ?? 0) - run.from).toBeGreaterThanOrEqual(199);
+    expect(run.finishedAt ?? 0).toBeLessThan(run.to);
+  });
+
+  test('a run that the page cancels before it presented minProgressMs, or in its start delay, is not reported', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Cancelled in the task that made it: it never presented a frame.
+    const unstarted = await watchAnimations(box);
+    await box.evaluate(el => {
+      el.animate([{opacity: 0}, {opacity: 1}], {duration: 60_000}).cancel();
+    });
+    await expect(unstarted.started({timeout: 300})).rejects.toThrow(
+      /no animation started/,
+    );
+    // Cancelled after 200 ms of play, short of the 5 s that the wait asks for.
+    const short = await watchAnimations(box);
+    await box.evaluate(el => {
+      const run = el.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 60_000,
+      });
+      const retire = () => {
+        if (Number(run.currentTime ?? 0) >= 200) {
+          run.cancel();
+        } else {
+          requestAnimationFrame(retire);
+        }
+      };
+      requestAnimationFrame(retire);
+    });
+    await expect
+      .poll(() => box.evaluate(el => el.getAnimations().length))
+      .toBe(0);
+    await expect(
+      short.started({minProgressMs: 5_000, timeout: 300}),
+    ).rejects.toThrow(/no animation started/);
+    // Cancelled in its 30 s start delay: it has a start, but it presented
+    // nothing, even for a wait that asks for no progress.
+    const delayed = await watchAnimations(box);
+    await box.evaluate(el => {
+      const run = el.animate([{opacity: 0}, {opacity: 1}], {
+        duration: 60_000,
+        delay: 30_000,
+      });
+      const retire = () => {
+        if (run.startTime != null) {
+          run.cancel();
+        } else {
+          requestAnimationFrame(retire);
+        }
+      };
+      requestAnimationFrame(retire);
+    });
+    await expect
+      .poll(() => box.evaluate(el => el.getAnimations().length))
+      .toBe(0);
+    await expect(
+      delayed.started({minProgressMs: 0, timeout: 300}),
+    ).rejects.toThrow(/no animation started/);
+  });
+
   test('an entrance the page cancels when it ends keeps its start', async ({
     page,
   }) => {

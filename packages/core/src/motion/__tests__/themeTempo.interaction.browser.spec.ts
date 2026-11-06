@@ -13,7 +13,7 @@
  *   too. Finger tracking draws the same in both. Under three real themes that set only `motion.tempo`, the
  *   animated-layout glide lasts 0.75, 1 and 1.5 times as long, with a
  *   finger or a mouse. A theme with only a duration scale, nested in one at
- *   tempo 1.5, glides at its own pace
+ *   tempo 1.5, glides on its own duration token
  * @position Browser proof for themeTempo.ts and resolveMotion.ts, run by
  *   `pnpm test:interaction`; the unit proofs are resolveMotion.test.ts
  */
@@ -26,6 +26,7 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 import {build} from 'esbuild';
+import {expandMotionScale} from '../../theme/expandMotionScale';
 import type * as MotionBundle from './motionBundle';
 
 declare const Motion: typeof MotionBundle;
@@ -233,16 +234,32 @@ test.describe('with a mouse', () => {
   });
 });
 
-test('a duration scale nested in a tempo theme glides at its own pace', async ({
+test('a duration scale nested in a tempo theme glides on its own duration token', async ({
   page,
 }) => {
   await openStory(page, NESTED_STORY, 3);
-  const plain = await glideMs(page, 'section[data-row="plain"]');
-  expect(plain).toBeGreaterThan(300);
-  expect(
-    (await glideMs(page, 'section[data-row="outer"]')) / plain,
-  ).toBeCloseTo(1.5, 2);
-  expect(
-    (await glideMs(page, 'section[data-row="nested"]')) / plain,
-  ).toBeCloseTo(1, 2);
+  // Each row's `--duration-medium`, in ms, as its theme writes it.
+  const tokenMs = async (row: string) =>
+    page.evaluate(
+      selector =>
+        Number.parseFloat(
+          getComputedStyle(
+            document.querySelector(selector) as Element,
+          ).getPropertyValue('--duration-medium'),
+        ),
+      row,
+    );
+  // Each row glides on the `--duration-medium` of the theme it is in.
+  for (const row of ['plain', 'outer', 'nested']) {
+    const selector = `section[data-row="${row}"]`;
+    expect(await glideMs(page, selector), row).toBeCloseTo(
+      await tokenMs(selector),
+      1,
+    );
+  }
+  // The nested scale's own value: the outer tempo is not on it.
+  const own = expandMotionScale({fast: 130, medium: 310, ratio: 0.75});
+  expect(await tokenMs('section[data-row="nested"]')).toBe(
+    Number.parseFloat(own['--duration-medium']),
+  );
 });
