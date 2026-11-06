@@ -117,11 +117,13 @@ function exportsOf(entry) {
  * and its query, and an element's direction. Lab's NavigationStack reads the
  * screen-edge pan, the spring solver, the motion resolver, UIKit's
  * navigation table and its four navigation springs. It also reads the focus
- * helpers that follow the last input.
+ * helpers that follow the last input. Lab components that watch a finger's
+ * scroll read the finger-scroll watch.
  */
 const LAB_ONLY_NAMES = [
   'PanGestureRecognizer',
   'useGestureRecognizer',
+  'useFingerScroll',
   'createMotionEngine',
   'cubicBezier',
   'mapProgress',
@@ -235,6 +237,8 @@ const GESTURE_USERS = new Set([
   'Toast',
   // The public pan, which the root's createPanGesture shares.
   'hooks: usePanGesture',
+  // The snap-point drag, which moves an element on that pan.
+  'hooks: useDragToSnapPoints',
   // Snap paging: the pager, under a finger and on a trackpad swipe. Carousel
   // imports none of it.
   'SnapPaging',

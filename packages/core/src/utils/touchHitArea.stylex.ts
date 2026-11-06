@@ -7,8 +7,8 @@
  *   under a coarse pointer, and `touchHitAreaStyles.layerBelowChildren`, the
  *   same band drawn below the host's children
  * @position Internal styling utility for CheckboxInput, RadioListItem, List
- *   rows, InfoTip and the press-tracking groups. Each keeps its insets live
- *   with `useTouchHitArea` (utils/touchHitArea.ts).
+ *   rows, InfoTip, SegmentedControl segments and the press-tracking groups.
+ *   Each keeps its insets live with `useTouchHitArea` (utils/touchHitArea.ts).
  *
  * The band is the host's `::after`, grown past each edge by the measured
  * inset. A clip path cuts out the host's box, so its content keeps its taps.
