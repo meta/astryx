@@ -714,19 +714,29 @@ test('the presentation and the dismissal do no Layout or Paint per frame', async
   // Each window starts 400 ms in, after the focus ring, and ends one frame
   // before its curve does. Each motion's start also measures the content's
   // touch hit areas: layout reads, then a style write. A stalled machine can
-  // delay that past 400 ms. So a window starts no sooner than the frame that
-  // draws those insets. A page frame callback makes Chromium lay out this
-  // anchored layer every frame. So these zeros also show that no frame loop
-  // runs here, Popover's own included.
+  // delay that past 400 ms and spread it over frames, a few controls each. So
+  // a window starts no sooner than the frame that draws the last of those
+  // insets. A page frame callback makes Chromium lay out this anchored layer
+  // every frame. So these zeros also show that no frame loop runs here,
+  // Popover's own included.
   for (const [name, action, base, ms] of [
     ['present', opened, present, entrance.ms],
     ['dismiss', closed, dismiss, exit.ms],
   ] as const) {
     const end = base + ms - 20;
-    const measured = insets.find(
-      entry => entry.written >= action && entry.written < end,
-    );
-    const from = Math.max(base + WINDOW_START_MS, measured?.drawn ?? 0);
+    // A write that lands before the previous one has drawn belongs to the
+    // same pass.
+    let drawn = 0;
+    for (const entry of insets) {
+      if (entry.written < action || entry.written >= end) {
+        continue;
+      }
+      if (drawn !== 0 && entry.written > drawn) {
+        break;
+      }
+      drawn = Math.max(drawn, entry.drawn);
+    }
+    const from = Math.max(base + WINDOW_START_MS, drawn);
     // A late setup leaves too short a window to judge, so it fails by name.
     expect(
       end - from,
