@@ -6,7 +6,8 @@
  * @file useTouchTrigger.ts
  * @input Touch trigger mode, layer open state, trigger ref, show/hide callbacks
  * @output Exports useTouchTrigger hook, isActionTrigger, LayerTouchTrigger type,
- *   tapLandsOnDisabledControl, TOUCH_POINTER_TYPES and useTapStop (internal:
+ *   tapLandsOnDisabledControl, TOUCH_POINTER_TYPES, createTapRecognizer and
+ *   useTapStop (internal:
  *   not re-exported from index). Also useTouchTriggerInternal, with the
  *   outside dismissal's arm for useTooltip's hold (Core-internal).
  * @position Layer hook; shared touch behavior for useTooltip and useHoverCard
@@ -48,6 +49,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
@@ -80,33 +82,63 @@ export type LayerTouchTrigger = 'auto' | 'tap' | 'none';
  */
 export const TOUCH_POINTER_TYPES = new Set(['touch', 'pen']);
 
-/**
- * Waits for the tap that a touch or pen press on `trigger` may become: the
- * press's own `click`. A touch the browser takes for a scroll or a pinch
- * (`pointercancel`) is no tap. Call it from the press's `pointerdown`; the
- * returned function forgets the press. Internal.
- */
-export function awaitTap(
-  trigger: Element,
-  onTap: (tapEvent: Event) => void,
-): () => void {
-  // The tap must belong to this press. A key press or a new pointer press
-  // advances the gesture, so a keyboard activation that later fires `click`
-  // on the trigger (Enter on a button) is not mistaken for it.
-  const gesture = currentGesture();
+/** Waits for the tap that a touch or pen press may become. Internal. */
+export interface TapRecognizer {
+  /**
+   * Call on every press. A touch or pen press on `trigger` waits for its tap:
+   * the press's own `click`. A touch the browser takes for a scroll or a
+   * pinch (`pointercancel`) is no tap, and a new press replaces one still
+   * waiting. Returns whether the press is touch or pen.
+   */
+  press(
+    event: PointerEvent,
+    trigger: Element | null,
+    onTap: (tapEvent: Event) => void,
+  ): boolean;
+  /** Stops waiting for a press still waiting for its tap. */
+  forget(): void;
+}
+
+/** One tap recognizer per trigger. */
+export function createTapRecognizer(): TapRecognizer {
+  let stopWaiting: (() => void) | null = null;
   const forget = () => {
-    trigger.removeEventListener('click', handleTap);
-    trigger.removeEventListener('pointercancel', forget);
+    stopWaiting?.();
+    stopWaiting = null;
   };
-  const handleTap = (tapEvent: Event) => {
-    forget();
-    if (currentGesture() === gesture) {
-      onTap(tapEvent);
-    }
+  return {
+    press(event, trigger, onTap) {
+      forget();
+      if (!TOUCH_POINTER_TYPES.has(event.pointerType)) {
+        return false;
+      }
+      if (trigger == null) {
+        return true;
+      }
+      // The tap must belong to this press. A key press or a new pointer press
+      // advances the gesture, so a keyboard activation that later fires
+      // `click` on the trigger (Enter on a button) is not mistaken for it.
+      const gesture = currentGesture();
+      const stop = () => {
+        trigger.removeEventListener('click', handleTap);
+        trigger.removeEventListener('pointercancel', stop);
+        if (stopWaiting === stop) {
+          stopWaiting = null;
+        }
+      };
+      const handleTap = (tapEvent: Event) => {
+        stop();
+        if (currentGesture() === gesture) {
+          onTap(tapEvent);
+        }
+      };
+      trigger.addEventListener('click', handleTap);
+      trigger.addEventListener('pointercancel', stop);
+      stopWaiting = stop;
+      return true;
+    },
+    forget,
   };
-  trigger.addEventListener('click', handleTap);
-  trigger.addEventListener('pointercancel', forget);
-  return forget;
 }
 
 export function useTapStop(event: 'click'): {
@@ -413,9 +445,7 @@ export function useTouchTriggerInternal(
   // The documents the outside dismissal listens on: the page's, and the
   // trigger's own when it renders in another document, such as an iframe.
   const outsideDocumentsRef = useRef<Document[]>([]);
-  // A touch press on the trigger still waiting for its tap: calling it stops
-  // waiting. The next press, a cancel, the tap itself or unmounting calls it.
-  const forgetPendingTapRef = useRef<(() => void) | null>(null);
+  const [tapRecognizer] = useState(createTapRecognizer);
 
   const readModality = useInteractionModalityTrackingFor(triggerRef);
 
@@ -488,7 +518,7 @@ export function useTouchTriggerInternal(
   // Releases the outside-dismiss listener on unmount.
   useEffect(() => disarmOutsideDismiss, [disarmOutsideDismiss]);
   // Releases a pending tap on unmount.
-  useEffect(() => () => forgetPendingTapRef.current?.(), []);
+  useEffect(() => () => tapRecognizer.forget(), [tapRecognizer]);
 
   const isTouchInteraction = useCallback(
     () => isTouchPointerRef.current && readModality() === 'pointer',
@@ -543,31 +573,20 @@ export function useTouchTriggerInternal(
     (event: PointerEvent): boolean => {
       const isTouch = TOUCH_POINTER_TYPES.has(event.pointerType);
       isTouchPointerRef.current = isTouch;
-      // A new press replaces one that never became a tap.
-      forgetPendingTapRef.current?.();
-
       if (!isTouch || isControlled) {
+        tapRecognizer.forget();
         return false;
       }
-
       const trigger =
         event.currentTarget instanceof Element
           ? event.currentTarget
           : triggerRef.current;
-      if (trigger == null) {
-        return true;
-      }
-
-      const forget = awaitTap(trigger, tapEvent => {
-        if (forgetPendingTapRef.current === forget) {
-          forgetPendingTapRef.current = null;
-        }
-        answerTapRef.current(tapEvent);
-      });
-      forgetPendingTapRef.current = forget;
+      tapRecognizer.press(event, trigger, tapEvent =>
+        answerTapRef.current(tapEvent),
+      );
       return true;
     },
-    [isControlled, triggerRef],
+    [isControlled, triggerRef, tapRecognizer],
   );
 
   // A layer closed by any other path (Escape, a consumer, the browser) leaves

@@ -17,6 +17,7 @@ import {
   lazy,
   Suspense,
   useCallback,
+  useEffect,
   useRef,
   useState,
   type FocusEvent,
@@ -25,7 +26,7 @@ import {
   type RefObject,
 } from 'react';
 import type {LayerPlacement} from '../Layer';
-import {awaitTap} from '../Layer/useTouchTrigger';
+import {createTapRecognizer} from '../Layer/useTouchTrigger';
 import {
   TooltipPresentInterestContext,
   type TooltipPresentInterestState,
@@ -63,7 +64,9 @@ export function useTruncationTooltipInterest(
     tapEvent: null,
     isRead: false,
   });
-  const forgetTapRef = useRef<(() => void) | null>(null);
+  const [tapRecognizer] = useState(createTapRecognizer);
+  // Releases a pending tap on unmount.
+  useEffect(() => () => tapRecognizer.forget(), [tapRecognizer]);
   const want = useCallback(
     (interest: 'hover' | 'tap' | 'focus', tapEvent: Event | null = null) => {
       const state = interestRef.current;
@@ -93,21 +96,21 @@ export function useTruncationTooltipInterest(
   const onPointerLeave = useCallback(() => forget('hover'), [forget]);
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
-      forgetTapRef.current?.();
-      forgetTapRef.current = null;
-      if (
-        !isEnabled ||
-        interestRef.current.isRead ||
-        (event.pointerType !== 'touch' && event.pointerType !== 'pen')
-      ) {
+      if (!isEnabled || interestRef.current.isRead) {
+        tapRecognizer.forget();
         return;
       }
-      forgetTapRef.current = awaitTap(event.currentTarget, tapEvent => {
-        forgetTapRef.current = null;
-        want('tap', tapEvent);
-      });
+      const isTouch = tapRecognizer.press(
+        event.nativeEvent,
+        event.currentTarget,
+        tapEvent => want('tap', tapEvent),
+      );
+      // A mouse or pen press cancels a hover show, as a mounted tooltip does.
+      if (!isTouch) {
+        forget('hover');
+      }
     },
-    [isEnabled, want],
+    [isEnabled, tapRecognizer, want, forget],
   );
   const onFocus = useCallback(() => want('focus'), [want]);
   const onBlur = useCallback(() => forget('focus'), [forget]);

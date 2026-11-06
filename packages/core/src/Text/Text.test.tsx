@@ -686,15 +686,45 @@ describe('the truncation tooltip mounts on the first interaction', () => {
         </Text>,
       );
       const text = screen.getByText(LABEL);
+      // A browser follows each pointer event of a mouse with its mouse event.
       fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(text);
       fireEvent.pointerLeave(text, {pointerType: 'mouse'});
+      fireEvent.mouseLeave(text);
       fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(text);
       await waitFor(
         () => {
           expect(showPopover).toHaveBeenCalled();
         },
         {timeout: 3000},
       );
+    } finally {
+      restore();
+    }
+  });
+
+  it('opens nothing after a mouse press made while the tooltip loads', async () => {
+    const {showPopover, restore} = withOverflowAndPopover();
+    try {
+      render(
+        <Text type="body" maxLines={1}>
+          {LABEL}
+        </Text>,
+      );
+      const text = screen.getByText(LABEL);
+      fireEvent.pointerEnter(text, {pointerType: 'mouse'});
+      fireEvent.pointerDown(text, {pointerType: 'mouse'});
+      await waitFor(
+        () => {
+          expect(screen.queryByRole('tooltip', {hidden: true})).not.toBeNull();
+        },
+        {timeout: 3000},
+      );
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+      expect(showPopover).not.toHaveBeenCalled();
     } finally {
       restore();
     }
