@@ -20,31 +20,34 @@ const script = path.join(
 );
 const SPEC = 'some.interaction.browser.spec.ts';
 
-// What macOS gives the script: another platform, and no /proc or /sys.
-const NO_PROC = `data:text/javascript,${encodeURIComponent(`
+/**
+ * A preload that gives the script another host: its platform, and the CPU
+ * lists it reads. Without lists, /proc and /sys cannot be read, as on macOS.
+ * @param {{platform: string, allowed?: string, online?: string}} host
+ */
+const hostHook = ({platform, allowed, online}) =>
+  `data:text/javascript,${encodeURIComponent(`
 import fs from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
-Object.defineProperty(process, 'platform', {value: 'darwin'});
+Object.defineProperty(process, 'platform', {value: ${JSON.stringify(platform)}});
+const lists = ${JSON.stringify(
+    allowed == null
+      ? null
+      : {
+          '/proc/self/status': `Cpus_allowed_list:\t${allowed}\n`,
+          '/sys/devices/system/cpu/online': `${online}\n`,
+        },
+  )};
 const read = fs.readFileSync;
 fs.readFileSync = (file, ...rest) => {
   if (/^\\/(proc|sys)\\//.test(String(file))) {
+    if (lists != null && String(file) in lists) return lists[String(file)];
     throw Object.assign(new Error('ENOENT: ' + file), {code: 'ENOENT'});
   }
   return read(file, ...rest);
 };
 syncBuiltinESMExports();
 `)}`;
-
-/** @param {string} cpus */
-const taskset = cpus => spawnSync('taskset', ['-c', cpus, 'true']).status === 0;
-const online =
-  process.platform === 'linux' &&
-  fs.existsSync('/sys/devices/system/cpu/online')
-    ? fs.readFileSync('/sys/devices/system/cpu/online', 'utf8').trim()
-    : null;
-// A narrower affinity needs `taskset` and more than one CPU.
-const canNarrow = online != null && online !== '0' && taskset('0');
-const canWiden = online != null && taskset(online);
 
 let dir = '';
 
@@ -58,9 +61,9 @@ afterEach(() => {
 
 /**
  * Runs the script once; `args` is the fake engine's `run` line, if any.
- * @param {{env?: Record<string, string>, prefix?: string[], nodeArgs?: string[]}} [options]
+ * @param {{env?: Record<string, string>, nodeArgs?: string[]}} [options]
  */
-function run({env = {}, prefix = [], nodeArgs = []} = {}) {
+function run({env = {}, nodeArgs = []} = {}) {
   const bin = path.join(dir, 'bin');
   const argsFile = path.join(dir, 'run-args.json');
   fs.mkdirSync(bin, {recursive: true});
@@ -82,13 +85,7 @@ if (process.argv[2] !== '--version') {
   delete childEnv.CI;
   delete childEnv.ASTRYX_WEBKIT_CPUS;
   Object.assign(childEnv, env);
-  const [command, ...rest] = [
-    ...prefix,
-    process.execPath,
-    ...nodeArgs,
-    script,
-    SPEC,
-  ];
+  const [command, ...rest] = [process.execPath, ...nodeArgs, script, SPEC];
   const result = spawnSync(command, rest, {env: childEnv, encoding: 'utf8'});
   /** @type {string[] | null} */
   const args = fs.existsSync(argsFile)
@@ -147,28 +144,31 @@ describe('webkit-container.mjs', () => {
     expect(args?.[at + 1]).toBe(SPEC);
   });
 
-  it.skipIf(!canNarrow)(
-    'keeps the CPUs the script may run on, on Linux',
-    () => {
-      const {status, args} = run({prefix: ['taskset', '-c', '0']});
-      expect(status).toBe(0);
-      expect(args).toContain('--cpuset-cpus=0');
-    },
-  );
+  it('keeps the CPUs the script may run on, on Linux', () => {
+    const {status, args} = run({
+      nodeArgs: [
+        '--import',
+        hostHook({platform: 'linux', allowed: '0', online: '0-3'}),
+      ],
+    });
+    expect(status).toBe(0);
+    expect(args).toContain('--cpuset-cpus=0');
+  });
 
-  it.skipIf(!canWiden)(
-    'adds no CPU set when the script may run on every CPU',
-    () => {
-      const {status, args} = run({prefix: ['taskset', '-c', online ?? '']});
-      expect(status).toBe(0);
-      expect(cpuFlags(args)).toEqual([]);
-    },
-  );
+  it('adds no CPU set when the script may run on every CPU', () => {
+    const {status, args} = run({
+      nodeArgs: [
+        '--import',
+        hostHook({platform: 'linux', allowed: '0-3', online: '0-3'}),
+      ],
+    });
+    expect(status).toBe(0);
+    expect(cpuFlags(args)).toEqual([]);
+  });
 
   it('skips the CPU set where there is no /proc, as on macOS', () => {
     const {status, args} = run({
-      prefix: canNarrow ? ['taskset', '-c', '0'] : [],
-      nodeArgs: ['--import', NO_PROC],
+      nodeArgs: ['--import', hostHook({platform: 'darwin'})],
     });
     expect(status).toBe(0);
     expect(cpuFlags(args)).toEqual([]);
