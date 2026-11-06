@@ -71,7 +71,10 @@ function transformOf(style: CSSStyleDeclaration): Matrix2D | null {
   if (isSet(translate)) {
     const [x = '0', y = '0', z] = translate.split(' ');
     // The computed `translate` keeps a percentage, which is not a length.
-    if (z != null || ![x, y].every(value => value.endsWith('px'))) {
+    if (
+      z != null ||
+      !translate.split(' ').every(value => value.endsWith('px'))
+    ) {
       return null;
     }
     matrix = multiply(matrix, [1, 0, 0, 1, parseFloat(x), parseFloat(y)]);

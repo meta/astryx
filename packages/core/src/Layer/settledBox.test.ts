@@ -29,6 +29,8 @@ interface Engine {
    * style already reports, as right after a show in Chromium.
    */
   stale?: boolean;
+  /** The engine paints `matrix` from `translate` alone: `transform` is none. */
+  translateOnly?: boolean;
 }
 
 /** A number as an engine serializes a computed transform: six digits. */
@@ -55,7 +57,7 @@ function layerIn(engine: Engine): HTMLElement {
     const m = applied();
     const values: Record<string, string> = {
       transform:
-        m.join() === '1,0,0,1,0,0'
+        m.join() === '1,0,0,1,0,0' || engine.translateOnly
           ? 'none'
           : `matrix(${m.map(serialized).join(', ')})`,
       translate: isOverridden() ? 'none' : (engine.translate ?? 'none'),
@@ -293,5 +295,22 @@ describe('settledBox', () => {
       expect(edges(settledBox(layer))).toEqual(layoutEdges());
       expect(write).toHaveBeenCalled();
     });
+  });
+
+  it('reads a transitioned layer whose only transform is a one-value translate', () => {
+    // Chromium reports `translate: 8px 0px` as `8px`.
+    const layer = layerIn({
+      layout: LAYOUT,
+      matrix: [1, 0, 0, 1, 8, 0],
+      origin: ORIGIN,
+      translate: '8px',
+      translateOnly: true,
+      transition: {property: 'transform', duration: '200ms'},
+    });
+    const write = vi.spyOn(layer.style, 'setProperty');
+    expect(edges(settledBox(layer))).toEqual(
+      edges(new DOMRect(LAYOUT.left, LAYOUT.top, LAYOUT.width, LAYOUT.height)),
+    );
+    expect(write).not.toHaveBeenCalled();
   });
 });
