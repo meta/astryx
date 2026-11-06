@@ -368,6 +368,41 @@ describe('Carousel', () => {
       expect(scrollBy).not.toHaveBeenCalled();
     });
 
+    it('reads no style or layout on a wheel over the row, with Shift or without', () => {
+      render(
+        <Carousel aria-label="Wheel">
+          <div>Item 1</div>
+          <div>Item 2</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      let reads = 0;
+      for (const [name, value] of [
+        ['scrollWidth', 500],
+        ['clientWidth', 200],
+      ] as const) {
+        Object.defineProperty(scroller, name, {
+          configurable: true,
+          get: () => {
+            reads += 1;
+            return value;
+          },
+        });
+      }
+      fireEvent.scroll(scroller);
+      scroller.scrollBy = vi.fn();
+      reads = 0;
+      const style = vi.spyOn(window, 'getComputedStyle');
+
+      fireEvent.wheel(scroller, {deltaY: 120});
+      fireEvent.wheel(scroller, {shiftKey: true, deltaY: 120});
+      const styles = style.mock.calls.length;
+      style.mockRestore();
+
+      expect({reads, styles}).toEqual({reads: 0, styles: 0});
+      expect(scroller.scrollBy).toHaveBeenCalledTimes(1);
+    });
+
     it('adds no wheel listener to a row with nothing to scroll', () => {
       const addEventListener = vi.spyOn(
         HTMLElement.prototype,

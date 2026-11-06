@@ -462,7 +462,8 @@ export function Carousel({
   // A mouse wheel gives only deltaY. Shift + wheel is the convention for a
   // horizontal scroll. A trackpad gives deltaX, so the browser scrolls the row.
   // A row that fits gets no listener, so a page scroll over it does not wait
-  // for script.
+  // for script. The listener reads no style or layout. Only a held row's move
+  // reads the row's direction.
   useAttachment(
     scrollElRef,
     el => {
@@ -474,23 +475,20 @@ export function Carousel({
           return;
         }
         const delta = event.deltaX || (event.shiftKey ? event.deltaY : 0);
-        const travel = isRtlElement(el) ? -delta : delta;
         if (
           delta !== 0 &&
           moveHeldSnapPaging(el, (at, end) =>
-            nearestStop(snapStops(el, at, end), at + travel),
+            nearestStop(
+              snapStops(el, at, end),
+              at + (isRtlElement(el) ? -delta : delta),
+            ),
           )
         ) {
           event.preventDefault();
           event.stopPropagation();
           return;
         }
-        if (
-          !event.shiftKey ||
-          event.deltaY === 0 ||
-          event.deltaX !== 0 ||
-          el.scrollWidth <= el.clientWidth
-        ) {
+        if (!event.shiftKey || event.deltaY === 0 || event.deltaX !== 0) {
           return;
         }
         event.preventDefault();

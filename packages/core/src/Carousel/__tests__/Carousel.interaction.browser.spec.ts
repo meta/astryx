@@ -60,4 +60,78 @@ test.describe('with a mouse', () => {
     expect(isPrevented).toBe(true);
     expect(last).toBeCloseTo(notch, 0);
   });
+  test('a wheel tick over the row reads no style or layout, with Shift or without', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), 'core-carousel--default');
+    const scroller = page.getByRole('region').getByRole('group').first();
+    // Counts style and layout reads made while the page dispatches a wheel.
+    await page.evaluate(() => {
+      const probe = window as unknown as {reads: number; isCounting: boolean};
+      probe.reads = 0;
+      probe.isCounting = false;
+      const count = () => {
+        if (probe.isCounting) {
+          probe.reads += 1;
+        }
+      };
+      const computedStyle = window.getComputedStyle.bind(window);
+      window.getComputedStyle = (element, pseudo) => {
+        count();
+        return computedStyle(element, pseudo);
+      };
+      const getters: [object, string[]][] = [
+        [
+          Element.prototype,
+          ['scrollWidth', 'scrollHeight', 'scrollLeft', 'scrollTop'],
+        ],
+        [Element.prototype, ['clientWidth', 'clientHeight']],
+        [
+          HTMLElement.prototype,
+          ['offsetWidth', 'offsetHeight', 'offsetLeft', 'offsetTop'],
+        ],
+      ];
+      for (const [prototype, names] of getters) {
+        for (const name of names) {
+          const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
+          const read = descriptor?.get;
+          if (descriptor == null || read == null) {
+            continue;
+          }
+          Object.defineProperty(prototype, name, {
+            ...descriptor,
+            get(this: Element): number {
+              count();
+              return read.call(this) as number;
+            },
+          });
+        }
+      }
+      const rect = Element.prototype.getBoundingClientRect;
+      Element.prototype.getBoundingClientRect = function (this: Element) {
+        count();
+        return rect.call(this);
+      };
+      window.addEventListener(
+        'wheel',
+        () => {
+          probe.reads = 0;
+          probe.isCounting = true;
+        },
+        {capture: true},
+      );
+      window.addEventListener('wheel', () => {
+        probe.isCounting = false;
+      });
+    });
+    const reads = async () =>
+      page.evaluate(() => (window as unknown as {reads: number}).reads);
+    await scroller.hover();
+    await page.mouse.wheel(0, 100);
+    const plain = await reads();
+    await page.keyboard.down('Shift');
+    await page.mouse.wheel(0, 100);
+    await page.keyboard.up('Shift');
+    expect({plain, shift: await reads()}).toEqual({plain: 0, shift: 0});
+  });
 });
