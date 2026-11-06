@@ -219,6 +219,14 @@ Out of coverage, each taking its final place at once:
 - INV12 also produces the edge reveal (FR9). SideNav's rail clip and ride move
   into it from SideNav's own code, and a resizable LayoutPanel's collapse and
   open, which today jump, adopt it; LayoutPanel's docs say a collapse slides.
+- Each running glide that moves a hit-testable element's `translate` reports
+  it to `motion/presentation.ts`, as the animator's moves do. An inert copy or
+  closing element is not reported. So on iOS WebKit, a touch that the gesture
+  host handles goes to what is drawn under the finger (`spec:AST-094` FR11,
+  FR19). Implementation gap: on iOS WebKit, a plain tap that no gesture
+  handles, on an element mid-glide, still goes to what was at that spot before
+  the glide, until the glide ends (glides last at most the theme's move
+  duration).
 
 ## Verification
 
@@ -269,8 +277,8 @@ Rejected: the measured spring as the glide; a platform-measured opt-in, such as 
 
 The glide plays over `--duration-medium`, the middle of the theme's medium
 durations: 300 ms in the Neutral theme and 410 ms with no theme, both scaled
-by `tempo`. Collapsible, TreeList, Table's row expansion, AppShell's content
-area and List share it, as one motion.
+by `tempo`. Collapsible, TreeList, Table's row expansion and AppShell's
+content area share it, as one motion.
 
 Rejected: `--duration-medium-min`.
 
