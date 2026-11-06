@@ -128,8 +128,9 @@ a measured, sourced difference exists.
   measures (0.55 for a scroll view and a sheet), and a release MUST pick its
   rest point by projecting its velocity the way its UIKit counterpart does:
   with a deceleration rate, or with a measured projection time.
-  A paging scroll view (the pager, and Carousel with `hasSnap` where the
-  pager runs) picks its rest page as its UIKit counterpart measures it, with no
+  A paging scroll view (the pager, and a Carousel given
+  `hasSnap={useSnapPaging()}` where the pager runs, an opt-in under
+  `component:Carousel` FR7) picks its rest page as its UIKit counterpart measures it, with no
   projection: the nearest page, or the next page in the release's direction
   when the release is at least `paging.release.advanceSpeed` (300 pt/s) fast,
   at any position on the page. It moves at most
@@ -926,10 +927,11 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   let a scrim or overlay tap close at any time (`spec:AST-003` FR10 and
   `architecture:layer-runtime` INV14 leave dismissal to the component). Toast and a non-modal sheet (`component:BottomSheetSwitcher` FR5 and its
   Non-modal state) do not hold the page: the page behind them stays live, and
-  only the sheet itself holds a tap or a drag while it enters. Dialog, Drawer
-  and MobileNav hold an entrance only under a coarse primary pointer: where
-  the primary pointer is fine and the screen also takes touch (a touchscreen
-  laptop), a finger's tap or drag during the entrance is not held. After a
+  only the sheet itself holds a tap or a drag while it enters. Dialog, Drawer,
+  MobileNav and DropdownMenu hold an entrance only under a coarse primary
+  pointer: where the primary pointer is fine and the screen also takes touch
+  (a touchscreen laptop), a finger's tap or drag during the entrance is not
+  held. After a
   finger, the first press of a mouse that has not moved since lands on the
   entering presentation's shield and does nothing, where FR35 keeps today's
   behavior for a mouse (DEC-16); a move of the mouse lowers the shield first.
@@ -1336,7 +1338,7 @@ Rejected: cancelling moves only after the pan begins.
 **Reference:** `spec:AST-094/DEC-25`
 **Decider:** `cixzhang`, `2026-11-01`
 
-A pager, Carousel with `hasSnap` where the pager runs, and Lightbox's gallery pick the rest page and
+A pager, a Carousel given `hasSnap={useSnapPaging()}` where the pager runs, and Lightbox's gallery pick the rest page and
 start the settle as UIKit's paging scroll view does on iOS 26.2. UIKit
 chooses the page by a speed threshold, the same 300 pt/s at 10, 25 and 40 %
 of a page, not by a projection, and starts a slow release's settle from rest.

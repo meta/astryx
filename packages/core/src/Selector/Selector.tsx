@@ -50,6 +50,7 @@ import {Divider} from '../Divider';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {useKeepLayerOpenProps, type LayerPlacement} from '../Layer/useLayer';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Spinner} from '../Spinner';
 import {PanelSearchInput} from '../Field/PanelSearchInput';
@@ -95,6 +96,10 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
@@ -350,10 +355,31 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
   },
 
+  // A panel with a search field, capped as a whole.
+  searchPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    // No taller than its layer's block-size cap, which folds in the software
+    // keyboard's. The search field's row keeps its height, and the list takes
+    // what is left.
+    maxHeight: stylex.firstThatWorks(
+      `calc(${layerViewportInset.maxBlockSize})`,
+      `calc(${layerViewportInset.maxBlockSizeFallback})`,
+    ),
+  },
+
   // Dropdown container
   dropdown: {
     boxSizing: 'border-box',
-    maxHeight: '300px',
+    // In a search panel, the list shrinks below its content to fit the cap.
+    minHeight: 0,
+    // 300 px, and no taller than its layer's block-size cap, which folds in
+    // the software keyboard's: the list ends above the keyboard with the
+    // layer.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     outline: 'none',
     paddingBlock: spacingVars['--spacing-1'],
@@ -1976,7 +2002,7 @@ export function Selector<T extends SelectorOptionType>(
     );
 
   const panelContent = hasSearch ? (
-    <div>
+    <div {...stylex.props(styles.searchPanel)}>
       {renderSearch()}
       <Divider />
       <div
@@ -2130,7 +2156,11 @@ export function Selector<T extends SelectorOptionType>(
             variant === 'ghost' && styles.triggerGhost,
             variant === 'secondary' && styles.triggerSecondary,
             variant !== 'input' && interactionOverlayStyles.backgroundImage,
-            variant !== 'input' && focusOutlineStyles.focusWithin,
+            // Rings for the trigger button only. The clear and status
+            // buttons ring themselves.
+            variant !== 'input' &&
+              !surface.isTriggerFocusRingSuppressed &&
+              focusWithinOwner,
             surface.isTriggerFocusRingSuppressed &&
               selectorPresentationStyles.pointerRestoredFocus,
             isDisabled && inputWrapperStyles.disabled,
@@ -2173,6 +2203,7 @@ export function Selector<T extends SelectorOptionType>(
         <button
           {...triggerSharedProps}
           ref={triggerButtonRef}
+          {...focusOwnerProps}
           type="button"
           // The read-only trigger stays a combobox even when hasSearch is set:
           // no search input is rendered in that state, and preserving the role

@@ -159,9 +159,9 @@ const styles = stylex.create({
 
 /**
  * The motion tables the wheel resolves its springs from: the scroll bounce
- * and the shared springs. Nothing registers on import (motion/roles.ts) and
- * each register is idempotent, so the wheel calls this right before it
- * resolves a role.
+ * and the shared springs. The spring rows register as their module loads,
+ * but the scroll table does not. Each register is idempotent, so the wheel
+ * calls this right before it resolves a role.
  */
 function registerWheelTables(): void {
   registerScrollTable();
