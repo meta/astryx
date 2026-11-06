@@ -529,6 +529,43 @@ function exitAnimations(layer: HTMLElement | null): Animation[] {
 }
 
 /**
+ * Whether the closed state's transition keeps `layer` shown after it hides.
+ * Only a discrete `display` transition holds a hidden layer shown, until it
+ * ends. Read it while the layer is closed: the close takes its values from
+ * the closed state's style.
+ */
+function closeTransitionKeepsShown(layer: HTMLElement): boolean {
+  const style = layer.ownerDocument.defaultView?.getComputedStyle(layer);
+  if (style == null) {
+    return false;
+  }
+  const list = (name: string) =>
+    style
+      .getPropertyValue(name)
+      .split(',')
+      .map(value => value.trim());
+  const behaviors = list('transition-behavior');
+  const durations = list('transition-duration').map(parseFloat);
+  const delays = list('transition-delay').map(parseFloat);
+  return list('transition-property').some((name, index) => {
+    const behavior = behaviors[index % behaviors.length];
+    const duration = durations[index % durations.length] || 0;
+    const delay = delays[index % delays.length] || 0;
+    return (
+      (name === 'all' || name === 'display') &&
+      behavior === 'allow-discrete' &&
+      duration + Math.max(0, delay) > 0
+    );
+  });
+}
+
+/** The keyframe animations that `layer`'s style declares, or `none`. */
+function animationNames(layer: HTMLElement): string {
+  const style = layer.ownerDocument.defaultView?.getComputedStyle(layer);
+  return style?.getPropertyValue('animation-name').trim() || 'none';
+}
+
+/**
  * Whether the standard list has failed a layer that must keep its anchor
  * clear: its box covers the anchor or, while the anchor is in view, leaves the
  * viewport on the block axis. Only a box that overlaps the anchor counts; a
@@ -1199,6 +1236,9 @@ function useLayerImplementation(
   // again during it. Null once it has ended.
   const exitRef = useRef<object | null>(null);
 
+  // Read at the last show, from the closed state's style.
+  const closeKeepsShownRef = useRef(false);
+
   // A closed trigger is no anchor, once the layer stops painting. A show
   // during the exit keeps the name, and so does a later exit.
   const releaseAnchor = useCallback(
@@ -1215,7 +1255,9 @@ function useLayerImplementation(
           removeAnchorName(trigger, anchorId);
         }
       };
-      const running = exitAnimations(layer);
+      // The animation read lays out the page between the writes of the close.
+      // Skip it when the layer stops painting as it hides.
+      const running = closeKeepsShownRef.current ? exitAnimations(layer) : [];
       if (running.length === 0) {
         release();
         return;
@@ -1426,6 +1468,10 @@ function useLayerImplementation(
         replayWhenSettled();
         return;
       }
+      // The close takes its values from the closed state's style. Read it
+      // before the writes of the show, so the read lays nothing out.
+      const closeTransitionHolds = closeTransitionKeepsShown(popover);
+      const closedAnimations = animationNames(popover);
       popover.removeAttribute(LAYER_CLEARS_ANCHOR_ATTRIBUTE);
       popover.removeAttribute(LAYER_SCROLLS_ATTRIBUTE);
       applyDeferredWritingContext(popover);
@@ -1450,6 +1496,13 @@ function useLayerImplementation(
         replayWhenSettled();
         return;
       }
+      // A keyframe animation that only the closed state declares starts at
+      // the close, and it can animate `display`. One that both states declare
+      // is the entrance, and the hide stops it.
+      const closeStartsAnimation =
+        closedAnimations !== 'none' &&
+        closedAnimations !== animationNames(popover);
+      closeKeepsShownRef.current = closeTransitionHolds || closeStartsAnimation;
       if (keepsAnchorClear) {
         keepAnchorClear(popover, triggerRef.current);
       }
