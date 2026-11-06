@@ -16,6 +16,7 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   clampedHitInsets,
+  groupGrowth,
   HIT_INSET_PROPERTIES,
   type HitInsets,
   type HitRect,
@@ -29,6 +30,47 @@ import {
 function rect(left: number, top: number, width: number, height: number) {
   return {left, top, right: left + width, bottom: top + height};
 }
+
+describe('groupGrowth', () => {
+  it('grows each side of a row as far as the member on that edge would, and a wide group by its narrow end members', () => {
+    // Three 32 px toggles in a 104 × 32 row, 4 px apart.
+    const row = rect(0, 100, 104, 32);
+    const members = [
+      rect(0, 100, 32, 32),
+      rect(36, 100, 32, 32),
+      rect(72, 100, 32, 32),
+    ];
+    expect(groupGrowth(row, members)).toEqual({
+      top: 6,
+      right: 6,
+      bottom: 6,
+      left: 6,
+    });
+    // A column of wide members grows only at its top and bottom.
+    const column = rect(0, 0, 120, 64);
+    expect(
+      groupGrowth(column, [rect(0, 0, 120, 32), rect(0, 32, 120, 32)]),
+    ).toEqual({top: 6, right: 0, bottom: 6, left: 0});
+    // A row wider than its members shrinks past its last member, so it
+    // covers only their targets: 32 px buttons ending 160 px short.
+    expect(groupGrowth(rect(0, 100, 264, 32), members)).toEqual({
+      top: 6,
+      right: -154,
+      bottom: 6,
+      left: 6,
+    });
+    expect(groupGrowth(row, [])).toEqual(NO_HIT_INSETS);
+    // The full growth it gives stops at a neighbour, as a control's does.
+    expect(
+      clampedHitInsets(
+        row,
+        [rect(-8, 100, 4, 32)],
+        44,
+        groupGrowth(row, members),
+      ).left,
+    ).toBe(2);
+  });
+});
 
 describe('clampedHitInsets', () => {
   it('grows a lone 24 px target to 44 px, centered', () => {
@@ -323,6 +365,40 @@ describe('watchHitArea', () => {
     stops.forEach(stop => stop());
   });
 
+  it("reads a group's growth from its members in its layout px, so a group in an opening layer keeps its insets", () => {
+    // As above, the layer opens from half size about the page origin.
+    const half = ({left, top, right, bottom}: HitRect) => ({
+      left: left / 2,
+      top: top / 2,
+      right: right / 2,
+      bottom: bottom / 2,
+    });
+    const group = byId('other');
+    Object.assign(group.style, {
+      width: '68px',
+      height: '32px',
+      boxSizing: 'border-box',
+    });
+    layOut(group, 68, 32);
+    place(group, half(rect(200, 300, 68, 32)));
+    place(byId('switch'), half(rect(100, 100, 24, 24)));
+    place(byId('link'), half(rect(132, 100, 60, 24)));
+    // Two 32 px members, each 6 px short of 44 on each axis.
+    const members = [
+      half(rect(200, 300, 32, 32)),
+      half(rect(236, 300, 32, 32)),
+    ];
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(group, insets => heard.push(insets), {
+      growth: (box, toLayout) => groupGrowth(box, members.map(toLayout)),
+    });
+    show(group);
+    flush();
+    // At half size the members would read 16 px and grow 14 px.
+    expect(heard).toEqual([{top: 6, right: 6, bottom: 6, left: 6}]);
+    stop();
+  });
+
   it('measures nothing off screen', () => {
     const control = byId('switch');
     place(control, rect(100, 100, 24, 24));
@@ -502,6 +578,31 @@ describe('watchHitArea', () => {
     touch(130);
     link.dispatchEvent(new Event('pointerdown', {bubbles: true}));
     expect(click()).toBe(false);
+    stop();
+  });
+
+  it('reads nothing on the page at a finger’s press, and swallows no click, for a watch whose owner reads its own targets (checkAtPress off)', () => {
+    const control = byId('switch');
+    const link = byId('link');
+    place(control, rect(100, 100, 24, 24));
+    place(link, rect(400, 100, 60, 24));
+    const stop = watchHitArea(control, () => {}, {checkAtPress: false});
+    show(control);
+    flush();
+    // The link moved to 8 px away with nothing re-measuring yet.
+    place(link, rect(132, 100, 60, 24));
+    const read = vi.spyOn(link, 'getBoundingClientRect');
+    const press = new Event('pointerdown', {bubbles: true});
+    Object.assign(press, {pointerType: 'touch', clientX: 130, clientY: 112});
+    control.dispatchEvent(press);
+    expect(read).not.toHaveBeenCalled();
+    const click = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    control.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
     stop();
   });
 

@@ -56,6 +56,7 @@ export const docs = {
           ['components', 'Deep-merged: child component rules override matching keys from the base.'],
           ['icons', 'Shallow-merged: child icons override matching names from the base.'],
           ['iconVariants', 'Replaced, never merged: a child that sets iconVariants replaces the base list; a child that omits it inherits the list.'],
+          ['componentIcons', 'Merged by slot: a child entry replaces the base entry for that slot whole; an omitted or undefined entry keeps the inherited one.'],
           ['indicators', 'Shallow-merged: child indicators override matching names from the base.'],
           ['onDark, onLight', "Deep-merged per surface: the base's resolved surface first, then the child's overrides."],
           ['motion', "Field by field: the child's `fast`, `medium` and `ratio` regenerate the fast and medium duration tokens; `slow` and `easing` left unset keep the base theme's tokens, so an inherited slow band stays at the base's ratio. Each knob (`tempo`, `character`) the child leaves unset keeps the base's."],
@@ -138,6 +139,7 @@ export const docs = {
         {type: 'prose', text: 'Keep `react` and the icon library external so the registry does not bundle its own copies of those dependencies.'},
         {type: 'prose', text: "A registry entry can be a function of `{size, variant}`. The built theme keeps the function, so `Icon` asks it for the size and variant it renders, as the runtime theme does, including for entries inherited from a built or package theme. The built theme's `icons` field and the registry its module re-exports are React nodes, with each function read at size `md`. A function written in the theme file itself cannot be carried, so the build fails; move it into the registry module."},
         {type: 'prose', text: "A theme that lists `iconVariants` also writes an `IconVariantMap` augmentation into `<theme>.variants.d.ts`, so `Icon`'s `variant` accepts those names wherever the theme's types load. Its declaration carries the list too, so a theme that extends the built theme types `variant` in its icon entries by that list."},
+        {type: 'prose', text: "A built theme keeps its `componentIcons`. Names, `null` values, and static requests are written into the module. A slot function stays a function: the module imports it from the module the theme source imports it from, so component slots resolve the same for the built theme as for the runtime theme. The built theme's `componentIcons` field leaves out slot functions, as the runtime theme's does. A slot function defined in the theme file fails the build: move it to its own module and import it. In `--family` output, a member supplies its own slot functions through a named import of its whole `componentIcons` map. The module keeps each slot import as the theme source spells it, and `--icons-specifier` does not change it, so with `--out` in another directory, make a module answer to that specifier from the output directory, as for the icon registry."},
       ],
     },
     {

@@ -4,8 +4,8 @@
 /**
  * Real-browser evidence for the ancestor clamp split: a text-only Link inside
  * `<Text maxLines={2}>` participates in the clamped lines, a Link inside a
- * one- or two-line clamp paints its whole keyboard focus ring inside the
- * clamp, and a composed Link keeps its inline-flex root and paints a keyboard
+ * one- or two-line clamp shows the top and bottom edges of its keyboard focus
+ * ring inside the clamp, and a composed Link keeps its inline-flex root and paints a keyboard
  * focus outline.
  */
 
@@ -85,7 +85,7 @@ for (const [testId, tabs] of [
   ['ancestor-clamp-text', 1],
   ['ancestor-clamp-one-line', 2],
 ] as const) {
-  test(`${testId}: a Link inside the clamp paints its whole keyboard focus ring`, async ({
+  test(`${testId}: a Link inside the clamp shows the top and bottom edges of its keyboard focus ring`, async ({
     page,
   }) => {
     await page.goto(
