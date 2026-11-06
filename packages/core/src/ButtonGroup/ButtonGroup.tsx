@@ -211,9 +211,9 @@ export function ButtonGroup({
       boundarySelector: '[role="group"], [popover]',
       orientation,
       hasRovingTabIndex: true,
-      // A group disabled as a whole keeps its one Tab stop, so a keyboard user
+      // A group of disabled buttons keeps its one Tab stop, so a keyboard user
       // still reaches it. Its members are focusable while disabled.
-      tabStopOrder: isDisabled ? keepDisabledGroupStop : undefined,
+      tabStopOrder: keepDisabledGroupStop,
     });
 
   const contextValue = useMemo(

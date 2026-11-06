@@ -1024,6 +1024,31 @@ describe('ButtonGroup', () => {
       expect(screen.getByRole('button', {name: 'after'})).toHaveFocus();
     });
 
+    it('keeps its one tab stop when every member is individually disabled', async () => {
+      // component:ButtonGroup FR8: an enabled group whose members are all
+      // isDisabled keeps its one tab stop.
+      const user = userEvent.setup();
+      render(
+        bracketed(
+          <ButtonGroup label="History">
+            <Button label="Undo" isDisabled />
+            <Button label="Redo" isDisabled />
+          </ButtonGroup>,
+        ),
+      );
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'before'})).toHaveFocus();
+
+      await user.tab();
+      const undo = screen.getByRole('button', {name: 'Undo'});
+      expect(undo).toHaveFocus();
+      expect(undo).toHaveAttribute('aria-disabled', 'true');
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'after'})).toHaveFocus();
+    });
+
     it('leaves the tab stop on its own members when a member owns an open menu', async () => {
       const user = userEvent.setup();
       render(

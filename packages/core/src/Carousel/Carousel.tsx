@@ -669,11 +669,9 @@ export function Carousel({
                 size="sm"
                 isIconOnly
                 // Disabled when there's nothing to scroll toward. Keeps the
-                // button mounted (stable layout); the inert pill takes it out
-                // of the tab order and a11y tree while it's visually hidden, so
-                // keyboard users don't land on an invisible control. The Effect
-                // above hands focus to the scroll area when the state behind
-                // this one flips it disabled.
+                // button mounted (stable layout). The Effect above hands focus
+                // to the scroll area when the state behind this one flips it
+                // disabled.
                 isDisabled={!canScrollStart}
                 onFocus={() => {
                   focusedNavRef.current = 'start';
@@ -713,7 +711,7 @@ export function Carousel({
                 size="sm"
                 isIconOnly
                 // See "Scroll left" — disabled while visually hidden so the
-                // button stays mounted but out of the tab order / a11y tree.
+                // button stays mounted.
                 isDisabled={!canScrollEnd}
                 onFocus={() => {
                   focusedNavRef.current = 'end';
