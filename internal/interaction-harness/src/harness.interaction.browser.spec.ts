@@ -80,11 +80,13 @@ import {
   freezeTimers,
   HARNESS_READ,
   holdAnimations,
+  holdInputUntil,
   installInputLog,
   type InputRecord,
   installLongTaskLog,
   installPageFreeze,
   installTimerGate,
+  LiftPlacementError,
   markElement,
   merge,
   parseTransform,
@@ -5509,6 +5511,135 @@ test.describe('page freeze', () => {
     // The 300 ms frozen span counts for neither the run nor the page's clock.
     expect(elapsed - moved).toBeGreaterThan(250);
     expect(elapsed - (thawed.now - frozen.now)).toBeGreaterThan(250);
+  });
+
+  test("a held lift reaches the page early, and its handling waits for its time after the thaw: the page's own listener runs then", async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    const driver = await touchDriver(page);
+    // The page's own lift listener, added after the install's.
+    await page.evaluate(() => {
+      const w = window as unknown as {liftHandledAt?: number};
+      addEventListener(
+        'pointerup',
+        () => {
+          w.liftHandledAt ??= performance.now();
+        },
+        {capture: true, passive: true},
+      );
+    });
+    await freezePage(page);
+    const hold = await holdInputUntil(page, {afterResumeMs: 200});
+    await thawPage(page);
+    const resumeMs = await hold.resumed();
+    await driver.play([
+      {t: 0, fingers: [{id: 0, x: 20, y: 60}]},
+      {t: 30, fingers: []},
+    ]);
+    const held = await hold.landed();
+    expect(held.resumeMs).toBe(resumeMs);
+    expect(held.intendedMs).toBeCloseTo(resumeMs + 200, 6);
+    // It reached the page after the first frame and before its time...
+    expect(held.arrivedMs).toBeGreaterThan(resumeMs);
+    expect(held.arrivedMs).toBeLessThan(held.intendedMs);
+    // ...and the page handled it at its time, late only by as long as its
+    // main thread did not run (a floating-point margin).
+    expect(held.releasedMs).toBeGreaterThanOrEqual(held.intendedMs);
+    expect(held.releasedMs - held.intendedMs).toBeLessThanOrEqual(
+      held.stalledMs + 1e-6,
+    );
+    const handledAt = await page.evaluate(
+      () => (window as unknown as {liftHandledAt?: number}).liftHandledAt,
+    );
+    expect(handledAt).toBeGreaterThanOrEqual(held.intendedMs);
+    // A hold takes a positive time and only the inputs the install listens for.
+    await expect(holdInputUntil(page, {afterResumeMs: 0})).rejects.toThrow(
+      /positive number/,
+    );
+    await expect(
+      holdInputUntil(page, {afterResumeMs: 50, on: ['focus']}),
+    ).rejects.toThrow(/takes only/);
+  });
+
+  test('a lift that reaches the page more than a frame after its time fails by name, with the numbers', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    const driver = await touchDriver(page);
+    await freezePage(page);
+    const hold = await holdInputUntil(page, {afterResumeMs: 20});
+    await thawPage(page);
+    await hold.resumed();
+    // Sent well after its time: the page cannot hold back what it has not had.
+    await page.waitForTimeout(200);
+    await driver.play([
+      {t: 0, fingers: [{id: 0, x: 20, y: 60}]},
+      {t: 30, fingers: []},
+    ]);
+    const error = await hold.landed().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(LiftPlacementError);
+    const {numbers, message} = error as LiftPlacementError;
+    expect(message).toMatch(/ms after its time/);
+    expect(
+      (numbers.arrivedMs ?? 0) - (numbers.intendedMs ?? 0),
+    ).toBeGreaterThan(1000 / 60);
+  });
+
+  test('a lift that reaches the page before its first frame after the thaw fails by name', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    const driver = await touchDriver(page);
+    await freezePage(page);
+    const hold = await holdInputUntil(page, {afterResumeMs: 50});
+    // Still frozen: the page has drawn no frame unfrozen, so no held run has
+    // resumed.
+    await driver.play([
+      {t: 0, fingers: [{id: 0, x: 20, y: 60}]},
+      {t: 30, fingers: []},
+    ]);
+    const error = await hold.landed().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(LiftPlacementError);
+    expect((error as Error).message).toMatch(
+      /before its first frame after the thaw/,
+    );
+    await thawPage(page);
+  });
+
+  test('a lift that reaches the page while it is frozen again after the thaw fails by name, and the page still answers', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    const driver = await touchDriver(page);
+    await freezePage(page);
+    const hold = await holdInputUntil(page, {afterResumeMs: 200});
+    await thawPage(page);
+    await hold.resumed();
+    // Frozen again before the lift: the page's clock stands still.
+    await freezePage(page);
+    await driver.play([
+      {t: 0, fingers: [{id: 0, x: 20, y: 60}]},
+      {t: 30, fingers: []},
+    ]);
+    const error = await hold.landed().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(LiftPlacementError);
+    expect((error as Error).message).toMatch(/while it was frozen again/);
+    // The hold did not keep the page busy: it answers within a second.
+    const answered = await Promise.race([
+      page.evaluate(() => true),
+      new Promise<boolean>(resolve => setTimeout(() => resolve(false), 1_000)),
+    ]);
+    expect(answered).toBe(true);
+    await thawPage(page);
   });
 
   test("a freeze armed on an input lands before the page's own listeners for it, so a slow handler's run is held at its start", async ({
