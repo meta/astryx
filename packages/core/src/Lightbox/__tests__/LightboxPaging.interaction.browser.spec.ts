@@ -20,9 +20,10 @@ import {
   type Page,
 } from '@astryxdesign/a11y-spec/playwright';
 import {
+  type BlockedWindow,
   blockMainThread,
+  type BusyRun,
   BusyWindowTooLateError,
-  busyWindowProof,
   castStoryboard,
   CONTROL_RGB,
   drag,
@@ -30,6 +31,7 @@ import {
   markElement,
   openStory,
   pinch,
+  pooledBusyProof,
   startBusyControl,
   startScreencast,
   touchDriver,
@@ -493,11 +495,18 @@ test('a pinch zooms the photo and never pages', async ({page}) => {
  * A drag by 60 % of a page. It holds still 300 ms before the lift, so the
  * settle starts at rest on a loaded runner too.
  */
-function swipeAtRest(g: Gallery): TouchScript {
-  const from = {x: g.box.x + g.box.width * 0.8, y: g.box.y + g.box.height / 2};
+function swipeAtRest(
+  g: Gallery,
+  toward: 'next' | 'previous' = 'next',
+): TouchScript {
+  const sign = toward === 'next' ? 1 : -1;
+  const from = {
+    x: g.box.x + g.box.width * (0.5 + sign * 0.3),
+    y: g.box.y + g.box.height / 2,
+  };
   return drag(
     from,
-    {x: from.x - g.box.width * 0.6, y: from.y},
+    {x: from.x - sign * g.box.width * 0.6, y: from.y},
     {durationMs: 600, restMs: 300},
   );
 }
@@ -564,129 +573,315 @@ async function recordTrackRuns(
     );
 }
 
+/** The slowed tempo the busy page-settle proofs play the viewer at. */
+const SETTLE_TEMPO = 5;
+
+/**
+ * Where a run's judgment starts. It is the block's start, or just after the
+ * block's first presented frame when that frame shows the photo unmoved. A
+ * compositor can present a frame it began before the block. Only that one
+ * frame is skipped, so a settle that stays still for two frames or more
+ * still fails.
+ */
+function afterInFlightFrame(
+  tracked: BusyRun['tracked'],
+  blockFrom: number,
+): number {
+  const before = tracked.filter(f => f.box != null && f.t <= blockFrom).at(-1);
+  const first = tracked.find(f => f.box != null && f.t > blockFrom);
+  if (before?.box == null || first?.box == null) {
+    return blockFrom;
+  }
+  return Math.abs(first.box.x - before.box.x) < 1 ? first.t + 1 : blockFrom;
+}
+
+/**
+ * Blocks the main thread for `ms` once the track's settle shows on screen.
+ * The rendering update that first sees the settle hands it to the
+ * compositor. A starved compositor can draw a frame or two before it applies
+ * it. WebKit runs the next rendering update only once its compositor has
+ * drawn the last one. So the block starts after that update, with the settle
+ * already moving on screen.
+ */
+async function blockOnceShown(
+  track: Locator,
+  ms: number,
+): Promise<BlockedWindow> {
+  return track.evaluate(
+    async (element, {duration}) =>
+      new Promise<BlockedWindow>((resolve, reject) => {
+        const deadline = performance.now() + 5_000;
+        const spin = () => {
+          const start = performance.now();
+          let now = start;
+          while (now - start < duration) {
+            now = performance.now();
+          }
+          resolve({
+            from: performance.timeOrigin + start,
+            to: performance.timeOrigin + now,
+            spanMs: now - start,
+          });
+        };
+        const tick = () => {
+          const isRunning = element
+            .getAnimations()
+            .some(
+              a =>
+                a.playState === 'running' &&
+                !a.pending &&
+                Number(a.currentTime ?? 0) >= 16,
+            );
+          if (!isRunning) {
+            if (performance.now() > deadline) {
+              reject(new Error('blockOnceShown: no settle started'));
+            } else {
+              requestAnimationFrame(tick);
+            }
+            return;
+          }
+          // This frame's rendering update hands the settle over. The block
+          // starts from a task after the next one.
+          requestAnimationFrame(() => {
+            setTimeout(spin, 0);
+          });
+        };
+        requestAnimationFrame(tick);
+      }),
+    {duration: ms},
+  );
+}
+
+/** The slowed settles a pooled proof judged, and what it read off them. */
+interface PooledSettles {
+  readonly proof: ReturnType<typeof pooledBusyProof>;
+  readonly blocks: ReadonlyArray<BlockedWindow>;
+  /** Each settle's run on the track, in order. */
+  readonly settles: ReadonlyArray<TrackRun>;
+}
+
+/**
+ * Plays a page settle toward each of `toward`, with the main thread blocked
+ * in each, and judges the runs pooled against the control. `shown` blocks
+ * once the settle shows on screen. `after-lift` blocks a moment after the
+ * lift, for a settle that never runs on the compositor. `onFirst` gets the
+ * first run's cast, for its storyboard.
+ */
+async function pooledSettleProof(
+  page: Page,
+  g: Gallery,
+  toward: ReadonlyArray<'next' | 'previous'>,
+  {
+    start = 'shown',
+    onFirst,
+  }: {
+    start?: 'shown' | 'after-lift';
+    onFirst?: (
+      castFrames: Parameters<typeof castStoryboard>[1],
+      tracked: BusyRun['tracked'],
+      block: BlockedWindow,
+    ) => Promise<void>;
+  } = {},
+): Promise<PooledSettles> {
+  const trackRuns = await recordTrackRuns(g.track);
+  const runs: BusyRun[] = [];
+  const blocks: BlockedWindow[] = [];
+  const settles: TrackRun[] = [];
+  for (const direction of toward) {
+    // The tracked photo keeps its left edge on screen as the page settles.
+    // Toward the next page it is the next photo, which slides in from the
+    // right. Back, it is the current one, which slides out to the right. A box
+    // clipped at the screen's edge reads as settled at once, and so does the
+    // track, which is wider than the screen.
+    const unmark = await markElement(
+      g.dialog.locator(
+        direction === 'next'
+          ? '[data-current] + [data-lightbox-page] img'
+          : '[data-current] img',
+      ),
+      {mode: 'outline'},
+    );
+    // A touch on a settle's held end catches it, and the block would start
+    // at that touch. So each run starts once the track runs no animation.
+    await expect
+      .poll(async () =>
+        g.track.evaluate(el =>
+          el.getAnimations().some(a => a.playState === 'running'),
+        ),
+      )
+      .toBe(false);
+    const cast = await startScreencast(page);
+    let block: BlockedWindow;
+    if (start === 'shown') {
+      // The page itself waits for the settle and blocks. A round trip from
+      // the test would start the block later still.
+      const blocking = blockOnceShown(g.track, 600);
+      await g.driver.play(swipeAtRest(g, direction));
+      block = await blocking;
+    } else {
+      await g.driver.play(swipeAtRest(g, direction));
+      await page.waitForTimeout(150);
+      block = await blockMainThread(page, 750);
+    }
+    // A few frames after the block, so the screencast holds its end.
+    await frames(page, 6);
+    const castFrames = await cast.stop();
+    const settle = (await trackRuns()).at(-1);
+    if (settle == null) {
+      throw new Error('no settle recorded');
+    }
+    const tracked = await trackMarker(page, castFrames);
+    runs.push({
+      tracked,
+      control: await trackMarker(page, castFrames, {rgb: CONTROL_RGB}),
+      window: {
+        from: afterInFlightFrame(tracked, block.from),
+        to: Math.min(block.to, settle.from + settle.curveMs),
+      },
+    });
+    blocks.push(block);
+    settles.push(settle);
+    if (runs.length === 1) {
+      await onFirst?.(castFrames, tracked, block);
+    }
+    await waitForRest(g.track);
+    await unmark();
+  }
+  // The settle slows at its end. Near the end a 60 Hz frame moves less than
+  // one cast step, so the cast shows plateaus there. Judging stops 12 cast
+  // steps from the end.
+  return {
+    proof: pooledBusyProof(runs, {axis: 'x', settledWithinSteps: 12}),
+    blocks,
+    settles,
+  };
+}
+
 test('the page settle keeps advancing every frame while the main thread is blocked', async ({
   page,
 }, testInfo) => {
   const g = await openGallery(page);
-  // The photo that slides in from the right as the next page settles. The
-  // track itself is wider than the screen, so its tracked box stays pinned to
-  // the screen's edge and reads as settled at once.
-  const nextPhoto = g.dialog
-    .locator('[data-lightbox-page]')
-    .nth(1)
-    .locator('img');
-  await markElement(nextPhoto, {mode: 'outline'});
-  // A compositor-only control animation in the same window: what the
+  // A compositor-only control animation in the same windows: what the
   // compositor presented while the main thread spun, on this machine.
   await startBusyControl(page);
-  // With the main thread blocked, a loaded runner's compositor presents a
-  // frame every 100 to 135 ms. The settle moves for a third of a second,
-  // which leaves too few frames to judge. So it plays at tempo 3. That has a
-  // floor too. With four more busy loops inside the CI profile's four CPUs,
-  // a frame comes about every 200 ms. The settle's tail moves under a cast
-  // step after about 550 ms. So the control moves on 2 frames in the judged
-  // part, under the proof's 4, and the proof fails: too little to judge.
-  const restoreTempo = await slowViewer(page);
-  const trackRuns = await recordTrackRuns(g.track);
-  const cast = await startScreencast(page);
-  // The page itself waits for the settle and blocks a frame or more into it.
-  // A round trip from the test would start the block later still. This
-  // settle is the track's first. A touch on a settle's held end catches it,
-  // and the block would start at that touch.
-  const blocking = blockMainThread(page, 600, {during: g.track});
-  await g.driver.play(swipeAtRest(g));
-  const block = await blocking;
-  // A few frames after the block, so the screencast holds its end.
-  await frames(page, 6);
-  const castFrames = await cast.stop();
-  const [settle] = await trackRuns();
-  const settleEnd = settle.from + settle.curveMs;
-  const tracked = await trackMarker(page, castFrames);
-  const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
-  // The settle slows at its end. At tempo 3, each 60 Hz frame near the end
-  // moves about a tenth of what remains. So within about 11 cast steps of
-  // its end a frame moves less than one step, and the cast shows plateaus
-  // there. Judging stops 12 cast steps from the end.
-  const proof = busyWindowProof(
-    tracked,
-    {from: block.from, to: Math.min(block.to, settleEnd)},
-    {axis: 'x', settledWithinSteps: 12, control},
+  // While the main thread is blocked, a starved runner's compositor presents
+  // a frame only every 100 to 200 ms. At tempo 1 the settle moves for a
+  // third of a second, which leaves too few frames to judge. At tempo 5 it
+  // moves visibly for about 900 ms. A block of 600 ms that starts once the
+  // settle shows then ends well before the settle does. Six settles, to page
+  // 4 and back, are judged as one pool. A run whose control presented
+  // nothing is left out by name, and the pool needs three judged runs.
+  const restoreTempo = await slowViewer(page, SETTLE_TEMPO);
+  const {proof, blocks, settles} = await pooledSettleProof(
+    page,
+    g,
+    ['next', 'next', 'next', 'previous', 'previous', 'previous'],
+    {
+      onFirst: async (castFrames, tracked, block) => {
+        const film = await castStoryboard(page, castFrames, {
+          name: 'lightbox-page-settle-busy-main-thread',
+          zero: block.from,
+          from: block.from - 40,
+          to: block.to + 40,
+          columns: 8,
+          cellScale: 0.35,
+          data: t => ({x: tracked.find(f => f.t === t)?.box?.x ?? -1}),
+        });
+        await film.write(testInfo, {block});
+      },
+    },
   );
-  // The same settle at the default tempo, to compare the slowed one with.
-  await waitForRest(g.track);
+  expect(await g.counter()).toBe('1 / 4');
+  // The same settle at the default tempo, to compare the slowed ones with.
   await restoreTempo();
+  const trackRuns = await recordTrackRuns(g.track);
   await g.driver.play(swipeAtRest(g));
   await waitForRest(g.track);
-  expect(await g.counter()).toBe('3 / 4');
-  const runs = await trackRuns();
-  const atTempo1 = runs[runs.length - 1];
-  const ratio = settle.curveMs / atTempo1.curveMs;
+  expect(await g.counter()).toBe('2 / 4');
+  const atTempo1 = (await trackRuns()).at(-1);
+  if (atTempo1 == null) {
+    throw new Error('no settle recorded at tempo 1');
+  }
+  const ratios = settles.map(settle => settle.curveMs / atTempo1.curveMs);
   await writeEvidence(
     'busy-main-thread/lightbox-page-settle',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
-        {block, settle, atTempo1, ratio, proof, control},
+        {blocks, settles, atTempo1, ratios, summary: proof.summary},
         null,
         1,
       ),
     },
     testInfo,
   );
-  const film = await castStoryboard(page, castFrames, {
-    name: 'lightbox-page-settle-busy-main-thread',
-    zero: block.from,
-    from: block.from - 40,
-    to: Math.min(block.to, settleEnd) + 40,
-    columns: 8,
-    cellScale: 0.35,
-    data: t => ({x: tracked.find(f => f.t === t)?.box?.x ?? -1}),
-  });
-  await film.write(testInfo, {block, settle});
-  // The pager's own settle at tempo 3: three times as long as at tempo 1,
-  // and still running on the compositor when the block ends.
-  expect(ratio, JSON.stringify(runs)).toBeGreaterThan(2.9);
-  expect(ratio, JSON.stringify(runs)).toBeLessThan(3.1);
-  expect(settleEnd).toBeGreaterThan(block.to);
+  // The pager's own settle at tempo 5: five times as long as at tempo 1,
+  // and still running on the compositor when each block ends.
+  for (const [index, settle] of settles.entries()) {
+    expect(ratios[index], JSON.stringify(settles)).toBeGreaterThan(
+      SETTLE_TEMPO - 0.1,
+    );
+    expect(ratios[index], JSON.stringify(settles)).toBeLessThan(
+      SETTLE_TEMPO + 0.1,
+    );
+    expect(settle.from + settle.curveMs).toBeGreaterThan(blocks[index].to);
+  }
   // Judged against the control. A two-core runner's software compositor and
   // the screencast share the core the block spins on. So every compositor
   // animation presents fewer frames there, the control's too. The photo keeps
-  // pace with the control, and a main-thread animation would not. A window
-  // too short to judge fails too.
-  expect(proof.verdict.failures).toEqual([]);
-  expect(proof.monotonic).toBe(true);
+  // pace with the control, and a main-thread animation would not. A pool too
+  // short to judge fails too.
+  expect(proof.verdict.failures, proof.summary).toEqual([]);
+  for (const [index, run] of proof.runs.entries()) {
+    if (proof.judged[index]) {
+      expect(run.monotonic, proof.summary).toBe(true);
+    }
+  }
 });
 
 /**
  * Breaks the page settle for the busy proof's controls. `main-thread` pauses
  * the track's animation and moves its time from frame callbacks, and
- * `frozen` pauses it.
+ * `frozen` pauses it. `delayed` holds it still on the compositor for
+ * `delayMs` before it moves.
  */
 async function breakSettle(
   g: Gallery,
-  pace: 'main-thread' | 'frozen',
+  pace: 'main-thread' | 'frozen' | 'delayed',
+  delayMs = 0,
 ): Promise<void> {
-  await g.track.evaluate((track, mode) => {
-    const animate = Element.prototype.animate;
-    Element.prototype.animate = function (keyframes, options) {
-      const animation = animate.call(this, keyframes, options);
-      if (this !== track) {
+  await g.track.evaluate(
+    (track, {mode, delay}) => {
+      const animate = Element.prototype.animate;
+      Element.prototype.animate = function (keyframes, options) {
+        if (this === track && mode === 'delayed') {
+          const timing =
+            typeof options === 'number' ? {duration: options} : {...options};
+          return animate.call(this, keyframes, {
+            ...timing,
+            delay: (timing.delay ?? 0) + delay,
+          });
+        }
+        const animation = animate.call(this, keyframes, options);
+        if (this !== track) {
+          return animation;
+        }
+        animation.pause();
+        if (mode === 'main-thread') {
+          const from = performance.now();
+          const start = Number(animation.currentTime ?? 0);
+          const step = (now: number) => {
+            if (animation.playState !== 'idle') {
+              animation.currentTime = start + now - from;
+              requestAnimationFrame(step);
+            }
+          };
+          requestAnimationFrame(step);
+        }
         return animation;
-      }
-      animation.pause();
-      if (mode === 'main-thread') {
-        const from = performance.now();
-        const start = Number(animation.currentTime ?? 0);
-        const step = (now: number) => {
-          if (animation.playState !== 'idle') {
-            animation.currentTime = start + now - from;
-            requestAnimationFrame(step);
-          }
-        };
-        requestAnimationFrame(step);
-      }
-      return animation;
-    };
-  }, pace);
+      };
+    },
+    {mode: pace, delay: delayMs},
+  );
 }
 
 for (const pace of ['main-thread', 'frozen'] as const) {
@@ -694,36 +889,47 @@ for (const pace of ['main-thread', 'frozen'] as const) {
     page,
   }) => {
     const g = await openGallery(page);
-    const nextPhoto = g.dialog
-      .locator('[data-lightbox-page]')
-      .nth(1)
-      .locator('img');
-    await markElement(nextPhoto, {mode: 'outline'});
     await startBusyControl(page);
-    await slowViewer(page);
+    await slowViewer(page, SETTLE_TEMPO);
     await breakSettle(g, pace);
-    const cast = await startScreencast(page);
-    await g.driver.play(swipeAtRest(g));
-    // Neither runs on the compositor, so the block starts after the lift.
-    await page.waitForTimeout(150);
-    const block = await blockMainThread(page, 750);
-    await frames(page, 6);
-    const castFrames = await cast.stop();
-    const tracked = await trackMarker(page, castFrames);
-    const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
     let failures: ReadonlyArray<string>;
     try {
-      failures = busyWindowProof(tracked, block, {
-        axis: 'x',
-        settledWithinSteps: 12,
-        control,
-      }).verdict.failures;
+      // Neither runs on the compositor, so the block starts after the lift.
+      const {proof} = await pooledSettleProof(page, g, ['next', 'next'], {
+        start: 'after-lift',
+      });
+      failures = proof.verdict.failures;
     } catch (error) {
       // A settle that never moved has settled before the window: a red too.
       expect(error).toBeInstanceOf(BusyWindowTooLateError);
       failures = [(error as Error).message];
     }
     expect(failures.length).toBeGreaterThan(0);
+  });
+}
+
+for (const late of ['two frames', '450 ms'] as const) {
+  test(`the busy proof fails a slowed page settle that stays still ${late} into the block`, async ({
+    page,
+  }) => {
+    const g = await openGallery(page);
+    await startBusyControl(page);
+    await slowViewer(page, SETTLE_TEMPO);
+    // A settle judged first gives this machine's numbers: how long after a
+    // settle starts its block starts, and the cast's frame interval. The
+    // delayed settle then stays still for that long, then for two frames and
+    // a little more or for 450 ms. That is past the one frame the proof
+    // skips.
+    const first = await pooledSettleProof(page, g, ['next']);
+    const blockAfterMs = first.blocks[0].from - first.settles[0].from;
+    const stillMs =
+      late === 'two frames' ? 2.2 * first.proof.runs[0].cadenceMs : 450;
+    await breakSettle(g, 'delayed', blockAfterMs + stillMs);
+    const {proof} = await pooledSettleProof(page, g, ['next', 'next']);
+    // The photo misses a frame the control moved on, past the in-flight one.
+    expect(proof.verdict.failures.join('\n'), proof.summary).toMatch(
+      /moved on \d+ of the \d+ frames the control moved/,
+    );
   });
 }
 
