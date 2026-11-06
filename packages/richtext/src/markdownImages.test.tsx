@@ -114,6 +114,22 @@ describe('image Markdown through edits (spec:AST-062)', () => {
     });
   }
 
+  it.each([
+    ['full', '![A chart][chart]'],
+    ['collapsed', '![chart][]'],
+    ['shortcut', '![chart]'],
+  ])(
+    'keeps a %s reference image as written when its paragraph changes (FR5)',
+    (_form, image) => {
+      const source = `Before ${image} after\n\n[chart]: https://example.com/chart.png\n`;
+      expect(
+        editAndExport(source, () => $appendToBlockContaining('Before', ' now')),
+      ).toBe(
+        `Before ${image} after now\n\n[chart]: https://example.com/chart.png\n`,
+      );
+    },
+  );
+
   it('keeps an image inside a link, and the link around it, through an edit (FR5)', () => {
     const badge =
       '[![Build](https://example.com/badge.svg)](https://example.com/ci)';
