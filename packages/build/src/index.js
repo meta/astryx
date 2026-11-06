@@ -246,26 +246,25 @@ function createPlugin() {
           // A swizzled copy is Astryx source too: it compiles in the library pass.
           const markerMemo = new Map();
           for (const filePath of files) {
-            // Classify every file on each pass: a marker added while a dev
-            // server runs moves an unchanged copy to the library pass.
-            const isLibrary =
-              libraryPatterns.some(p => filePath.includes(p)) ||
-              isSwizzledSource(filePath, markerMemo);
-            const rulesMap = isLibrary ? libraryRulesMap : productRulesMap;
-            const otherRulesMap = isLibrary ? productRulesMap : libraryRulesMap;
-            const movedSides = otherRulesMap.delete(filePath);
-
             const mtimeMs = fs.existsSync(filePath)
               ? fs.statSync(filePath).mtimeMs
               : -Infinity;
+            // An unchanged file keeps the side of its last compile, which is
+            // the side of the class names the bundler still serves for it.
             if (
-              !movedSides &&
               fileModifiedMap.has(filePath) &&
               mtimeMs === fileModifiedMap.get(filePath)
             ) {
               continue;
             }
             fileModifiedMap.set(filePath, mtimeMs);
+
+            const isLibrary =
+              libraryPatterns.some(p => filePath.includes(p)) ||
+              isSwizzledSource(filePath, markerMemo);
+            const rulesMap = isLibrary ? libraryRulesMap : productRulesMap;
+            // A recompiled file whose side changed leaves the other layer.
+            (isLibrary ? productRulesMap : libraryRulesMap).delete(filePath);
 
             const contents = fs.readFileSync(filePath, 'utf-8');
             if (!contents.includes(STYLEX_IMPORT_SOURCE)) continue;
