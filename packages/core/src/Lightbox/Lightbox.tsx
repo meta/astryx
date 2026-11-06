@@ -874,6 +874,8 @@ export function Lightbox({
     },
     onDragStart,
     isTouchPresentation: isTouch,
+    // Only a gallery's touch pager takes a drag past a zoomed photo's edge.
+    hasOuterPager: isGallery && isTouch,
     // A pinch whose first finger lands on a gallery's caption is the page's.
     shouldBeginPinch: recognizer =>
       !startsOnCaption(recognizer.trackedTouches[0]),

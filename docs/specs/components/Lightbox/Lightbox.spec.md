@@ -104,9 +104,7 @@ the requirement it misses and the person it affects.
   knows the system's double-click speed.
 - **Press tracker (FR14).** The viewer's own `pointerdown` handler records
   each press's pointer type and point, which the browser's `dblclick` and
-  `click` do not carry, and clears the flag a drag leaves for its click. The
-  zoom stage's own capture `pointerdown` listener sets the pan's start
-  threshold for each press.
+  `click` do not carry, and clears the flag a drag leaves for its click.
 - **Touch exit (FR16).** On a touch screen the viewer disappears at once when
   it closes.
 

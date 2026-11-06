@@ -79,6 +79,11 @@ export interface UseZoomStageOptions {
    * tracked touches. False leaves the fingers to the page's zoom.
    */
   shouldBeginPinch?: (recognizer: GestureRecognizer) => boolean;
+  /**
+   * An outer pager takes a one-finger drag that heads past the zoomed photo's
+   * edge. Without one, the pan begins there and gives past the edge.
+   */
+  hasOuterPager?: boolean;
 }
 
 interface PinchSession {
@@ -122,10 +127,11 @@ const TAP_POINTERS = ['touch'] as const;
  *   down after the pinch keeps panning.
  * - pan: one or two fingers, a mouse's or a pen's drag, or a trackpad's
  *   scroll. It moves a zoomed photo. In the touch presentation, its release
- *   carries a scroll view's velocity. As UIScrollView's, it begins only when
- *   the photo can move that way. That is with two fingers down, or on a
- *   zoomed photo short of its edge on the side the drag heads to. Any other
- *   drag is left to an outer pager.
+ *   carries a scroll view's velocity. With two fingers down it begins when
+ *   the pinch may. With one, it begins on a zoomed photo. Where an outer
+ *   pager takes the drag, it begins only short of the photo's edge on the
+ *   side the drag heads to. UIKit's paging scroll view does the same.
+ *   Elsewhere it gives past that edge.
  * - double tap, a finger's: it fills the viewer, at least 2×, and keeps the
  *   point in place. When zoomed it goes back to the fitted size. A mouse's or
  *   a pen's double-click is the browser's `dblclick` (the core's
@@ -197,10 +203,10 @@ export function useZoomStage(
     );
   };
 
-  // UIScrollView's pan begins only when the content can move that way. That is
-  // with two fingers down for a pinch, or on a zoomed photo short of its edge
-  // on the side the drag heads to. Any other drag is left to an outer pager,
-  // or to nothing.
+  // The pan begins with two fingers down when a pinch may, or on a zoomed
+  // photo. Where an outer pager takes the drag, it begins only short of the
+  // photo's edge on the side the drag heads to. UIScrollView's pan in a
+  // paging scroll view does the same, and the pager takes the rest.
   const panShouldBeginRef = useRef<(pan: PanGestureRecognizer) => boolean>(
     () => true,
   );
@@ -208,7 +214,7 @@ export function useZoomStage(
   const pinchShouldBeginRef = useRef<
     (recognizer: GestureRecognizer) => boolean
   >(() => true);
-  const {shouldBeginPinch} = options;
+  const {shouldBeginPinch, hasOuterPager = false} = options;
   useIsomorphicLayoutEffect(() => {
     pinchShouldBeginRef.current = shouldBeginPinch ?? (() => true);
     panShouldBeginRef.current = pan => {
@@ -221,6 +227,7 @@ export function useZoomStage(
       }
       const {x, y} = pan.totalTranslation();
       return !(
+        hasOuterPager &&
         Math.abs(x) >= Math.abs(y) &&
         isAtEdgeOf(geometry, x < 0 ? 'left' : 'right')
       );

@@ -771,6 +771,51 @@ test('a zoomed pan tracks the finger, rubber-bands past the edge and returns', a
   expect(back.scale).toBeCloseTo(zoomed.scale, 6);
 });
 
+test("a single zoomed photo's drag outward from the edge it rests at rubber-bands and returns", async ({
+  page,
+}) => {
+  const {driver, photo, state} = await openViewer(page);
+  const before = await state();
+  const mid = {x: 201, y: before.stage.y + before.stage.height / 2};
+  await driver.play(doubleTap(mid));
+  await waitForAnimation(photo);
+  await waitForRest(photo);
+  const zoomed = await state();
+  // First the photo comes to rest with its left edge on the screen's.
+  const room = -(zoomed.fit.x + zoomed.x);
+  await driver.play(
+    drag(mid, {x: mid.x + room + 10, y: mid.y}, {durationMs: 400, restMs: 150}),
+  );
+  await waitForRest(photo);
+  const atEdge = await state();
+  expect(atEdge.fit.x + atEdge.x).toBeCloseTo(0, 1);
+  // Then a drag that starts there and heads outward. With no pager to take
+  // it, the pan begins and gives past the edge, as on main.
+  const overshoot = 120;
+  const xs: number[] = [];
+  await driver.play(
+    drag(
+      mid,
+      {x: mid.x + overshoot + 10, y: mid.y},
+      {durationMs: 500, restMs: 150},
+    ),
+    {
+      onEvent: async step => {
+        if (step.type === 'touchMove') {
+          xs.push((await state()).x);
+        }
+      },
+    },
+  );
+  const d = zoomed.stage.width;
+  const banded = (1 - 1 / ((overshoot * 0.55) / d + 1)) * d;
+  expect(xs.at(-1)).toBeCloseTo(atEdge.x + banded, 0);
+  await waitForRest(photo);
+  const back = await state();
+  expect(back.fit.x + back.x).toBeCloseTo(0, 1);
+  expect(back.scale).toBeCloseTo(zoomed.scale, 6);
+});
+
 test('a zoomed flick coasts and stops at the far edge', async ({page}) => {
   const {driver, photo, state} = await openViewer(page);
   const before = await state();
