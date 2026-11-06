@@ -170,8 +170,8 @@ for (const surface of SURFACES) {
       page,
     }) => {
       const {center, cdp, order} = await openStory(page, surface);
-      // The first finger slides 24 px on the grip right away, as a pinch
-      // often starts, before the second lands; the release must not drop the
+      // The first finger slides 24 px on the grip right away, before the
+      // second lands, as a pinch often starts. The release must not drop the
       // row. (A finger held still past core List's hold claims the drag
       // instead, and a second finger then changes nothing: List's own spec.)
       await touch(cdp, 'touchStart', [center]);
