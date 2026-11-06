@@ -16,6 +16,7 @@ applies_to:
     packages/charts/src/,
     packages/richtext/src/,
     packages/vega/src/,
+    internal/interaction-harness/,
   ]
 verified_by: [component verification maps and their linked test evidence]
 deciding_specs: []
@@ -119,7 +120,10 @@ rows, or inventory entries.
   when its promised behavior is removed, inverted, routed to the wrong owner, or
   otherwise materially broken. An assertion that recomputes the implementation,
   repeats a type/source declaration, checks a constant against itself, or snapshots
-  unrelated output does not prove the promise.
+  unrelated output does not prove the promise. A motion judgement holds and
+  asserts the judged motion itself, named by its target element and animated
+  property; a held count alone does not prove it, since other animations can fill
+  the count.
 - **INV7 — Coverage remains bounded and intentional.** Test volume has a named
   behavioral, evidence-layer, or risk reason. Multiple evidence layers are not
   duplicates when each observes a distinct required contract boundary, such as
@@ -348,7 +352,7 @@ behavior.
 | INV2–INV3         | Critical-promise, behavior-defect, documentation-correction, and historical-regression fixtures                      | A primary, accessibility, callback, compatibility, composition, or previously fixed behavior defect loses its only mutation-sensitive evidence and still passes, or an unchanged prose-only documentation correction is required to add a regression test                                                                                 |
 | INV4              | Rational-partition fixtures                                                                                          | Proven-equivalent values require duplicate tests, private implementation identity is required to establish equivalence, or behaviorally different states collapse into one case                                                                                                                                                           |
 | INV5              | Public/runtime/compile-time seam replacement fixtures                                                                | Incidental private assertions pass while the promised user or consumer outcome is broken, contractual DOM/type/class/target evidence is incorrectly rejected, a DOM/class assertion is credited for pixels it cannot observe, or selector/state behavior is misclassified as a value-only visual change                                   |
-| INV6              | Tautology, declaration-copy, snapshot-noise, and behavior mutations                                                  | An insensitive assertion receives credit, or a meaningful behavior mutation leaves the credited test green                                                                                                                                                                                                                                |
+| INV6              | Tautology, declaration-copy, snapshot-noise, and behavior mutations; a held set missing the named motion             | An insensitive assertion receives credit, a meaningful behavior mutation leaves the credited test green, or a motion judgement passes on unrelated animations                                                                                                                                                                             |
 | INV7              | Same-partition duplicates, justified multi-layer evidence, exhaustive Cartesian, and broad defensive matrix fixtures | Distinct required evidence layers are collapsed as duplicates, or volume without a named distinct risk is credited as sufficiency                                                                                                                                                                                                         |
 | INV8              | Verification-map relationship fixtures                                                                               | Every audit row mechanically becomes a test, evidence cannot be traced to authority, or one test cannot satisfy inseparable requirements                                                                                                                                                                                                  |
 | INV9              | Pull-request and audit-run red/green trace fixtures                                                                  | Audit-authored remediation lacks a failing pre-change case, production remediation precedes the new case, or horizontal test generation replaces one observable vertical slice                                                                                                                                                            |
