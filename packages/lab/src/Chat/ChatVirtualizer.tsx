@@ -42,6 +42,7 @@
 import * as React from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useScrollableArea} from '@astryxdesign/core/hooks';
+import {observeResize} from '@astryxdesign/core/utils';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {setScrollAnchoringOff} from '@astryxdesign/core/internal/scroll-anchoring';
 import {useFingerScroll} from '@astryxdesign/core/internal/touch';
@@ -978,43 +979,76 @@ export function ChatVirtualizer<T>(
   // In 'sync' mode the RO is only a backstop for out-of-commit size changes
   // (images, fonts). In 'ro' mode it IS the measurement pipeline: sizes come
   // from the observed border-box (no forced layout anywhere).
-  const roRef = React.useRef<ResizeObserver | null>(null);
-  if (roRef.current === null && typeof ResizeObserver !== 'undefined') {
-    roRef.current = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        const key = (entry.target as HTMLElement).dataset.pkey;
-        if (key === undefined) {
-          // The scroll CONTAINER (observed in the listener effect): its
-          // resize changes clientHeight, which moves the end-mode target and
-          // the window coverage with zero row-size changes — without marking
-          // the geometry dirty here, a window resize or a growing composer
-          // would leave the pinned bottom stranded.
-          geoChanged.current = true;
-          continue;
-        }
-        if (measureModeRef.current !== 'ro') {
-          continue;
-        }
-        // Border box, the same box the sync path reads with offsetHeight —
-        // one cache, one definition of a row's size. contentRect is NOT that
-        // box (it drops padding and border), so a padded row would be cached
-        // short for as long as the fallback is the writer.
-        const px =
-          entry.borderBoxSize?.[0]?.blockSize ??
-          (entry.target as HTMLElement).offsetHeight;
-        const prev = sizes.current.get(key);
-        if (px > 0 && prev !== px) {
-          noteMeasured(key, prev, px);
-          sizes.current.set(key, px);
-          geoChanged.current = true;
-        }
+  // Sizes come through Core's shared resize observer, one callback per entry;
+  // the sync they trigger runs once per batch, after the last entry.
+  const syncQueued = React.useRef(false);
+  const onResizeRef = React.useRef<
+    ((entry: ResizeObserverEntry) => void) | null
+  >(null);
+  if (onResizeRef.current === null) {
+    onResizeRef.current = entry => {
+      // The registration's own synchronous call carries no box: the observer's
+      // first real entry follows, so reading the size here would only force a
+      // layout.
+      if (
+        entry.borderBoxSize === undefined &&
+        entry.contentRect === undefined
+      ) {
+        return;
       }
-      syncRef.current();
-    });
+      // One sync for the whole batch: the microtask runs after the shared
+      // observer has delivered its last entry.
+      if (!syncQueued.current) {
+        syncQueued.current = true;
+        queueMicrotask(() => {
+          syncQueued.current = false;
+          syncRef.current();
+        });
+      }
+      const key = (entry.target as HTMLElement).dataset.pkey;
+      if (key === undefined) {
+        // The scroll CONTAINER (observed in the listener effect): its
+        // resize changes clientHeight, which moves the end-mode target and
+        // the window coverage with zero row-size changes — without marking
+        // the geometry dirty here, a window resize or a growing composer
+        // would leave the pinned bottom stranded.
+        geoChanged.current = true;
+        return;
+      }
+      if (measureModeRef.current !== 'ro') {
+        return;
+      }
+      // Border box, the same box the sync path reads with offsetHeight —
+      // one cache, one definition of a row's size. contentRect is NOT that
+      // box (it drops padding and border), so a padded row would be cached
+      // short for as long as the fallback is the writer.
+      const px =
+        entry.borderBoxSize?.[0]?.blockSize ??
+        (entry.target as HTMLElement).offsetHeight;
+      const prev = sizes.current.get(key);
+      if (px > 0 && prev !== px) {
+        noteMeasured(key, prev, px);
+        sizes.current.set(key, px);
+        geoChanged.current = true;
+      }
+    };
   }
+  const unobserveByEl = React.useRef(new Map<Element, () => void>());
+  const observeSize = (el: Element): void => {
+    if (!unobserveByEl.current.has(el)) {
+      unobserveByEl.current.set(el, observeResize(el, onResizeRef.current!));
+    }
+  };
+  const unobserveSize = (el: Element): void => {
+    unobserveByEl.current.get(el)?.();
+    unobserveByEl.current.delete(el);
+  };
   React.useEffect(
     () => () => {
-      roRef.current?.disconnect();
+      for (const unobserve of unobserveByEl.current.values()) {
+        unobserve();
+      }
+      unobserveByEl.current.clear();
       if (rafRetry.current !== null) {
         cancelAnimationFrame(rafRetry.current);
       }
@@ -1255,7 +1289,7 @@ export function ChatVirtualizer<T>(
     // window resize or a growing composer moves the end-mode target and the
     // window coverage without any row changing size. Container entries have
     // no data-pkey — the RO callback marks the geometry dirty for them.
-    roRef.current?.observe(el);
+    observeSize(el);
     return () => {
       setScrollAnchoringOff(el, false);
       el.removeEventListener('scroll', scrollHandler);
@@ -1272,7 +1306,7 @@ export function ChatVirtualizer<T>(
       gestureActive.current = false;
       gestureMoved.current = false;
       gestureAdj.current = 0;
-      roRef.current?.unobserve(el);
+      unobserveSize(el);
     };
   }, [scrollElement]);
 
@@ -1290,11 +1324,11 @@ export function ChatVirtualizer<T>(
       cb = el => {
         if (el) {
           rowEls.current.set(key, el);
-          roRef.current?.observe(el);
+          observeSize(el);
         } else {
           const prev = rowEls.current.get(key);
           if (prev) {
-            roRef.current?.unobserve(prev);
+            unobserveSize(prev);
           }
           rowEls.current.delete(key);
           rowRefCbs.current.delete(key);
