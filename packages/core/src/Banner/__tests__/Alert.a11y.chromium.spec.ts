@@ -116,17 +116,29 @@ async function runState(
   });
 }
 
-test('all Banner alert states have no unmatched known failure', async ({
-  page,
-}) => {
-  const cdp = await page.context().newCDPSession(page);
+// Checking known failures runs every state again, which on a loaded runner
+// passes the per-test timeout as one test. It runs as one serial part per
+// state, sharing their results, then one check over all of them.
+test.describe('all Banner alert states have no unmatched known failure', () => {
+  test.describe.configure({mode: 'serial'});
   const results: BindingResult[] = [];
+
   for (const state of BANNER_ALERT_BINDING_STATES) {
-    results.push(await runState(page, cdp, state));
+    test(`runs ${state.id}`, async ({page}) => {
+      const cdp = await page.context().newCDPSession(page);
+      results.push(await runState(page, cdp, state));
+    });
   }
-  expect(unmatchedKnownFailures(BANNER_ALERT_KNOWN_FAILURES, results)).toEqual(
-    [],
-  );
+
+  test('no known failure is unmatched', () => {
+    // Every part ran in this worker; this test alone proves nothing.
+    expect(results.map(result => result.state).sort()).toEqual(
+      BANNER_ALERT_BINDING_STATES.map(state => state.id).sort(),
+    );
+    expect(
+      unmatchedKnownFailures(BANNER_ALERT_KNOWN_FAILURES, results),
+    ).toEqual([]);
+  });
 });
 
 for (const state of BANNER_ALERT_BINDING_STATES) {
