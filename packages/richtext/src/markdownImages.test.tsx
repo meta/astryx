@@ -2,7 +2,16 @@
 
 import {describe, it, expect} from 'vitest';
 import {createHeadlessEditor} from '@lexical/headless';
-import {$createTextNode, $getRoot, $isElementNode} from 'lexical';
+import {
+  $createTextNode,
+  $getRoot,
+  $isElementNode,
+  $isRangeSelection,
+  $isTextNode,
+  $parseSerializedNode,
+  $getSelection,
+  type TextNode,
+} from 'lexical';
 import {DEFAULT_NODES} from './editorNodes';
 import {
   editorStateJSONToMarkdown,
@@ -44,10 +53,23 @@ function $appendToBlockContaining(needle: string, text: string): void {
   block.append($createTextNode(text));
 }
 
+/** The text node holding the image source `image`. */
+function $imageText(image: string): TextNode {
+  const node = $getRoot()
+    .getAllTextNodes()
+    .find(candidate => candidate.getTextContent() === image);
+  if (node == null) {
+    throw new Error(`no text holds ${image}`);
+  }
+  return node;
+}
+
 const IMAGES = {
   named: '![A chart](https://example.com/chart.png)',
   emptyAlt: '![](https://example.com/chart.png)',
   titled: '![A chart](https://example.com/chart.png "Weekly chart")',
+  quotedTitle: `![A (chart)](https://example.com/chart.png "Weekly \\"chart\\" (draft)")`,
+  angleDestination: "![A chart](<https://example.com/my chart.png> 'Weekly')",
 };
 
 describe('image Markdown through edits (spec:AST-062)', () => {
@@ -86,4 +108,111 @@ describe('image Markdown through edits (spec:AST-062)', () => {
       ).toBe(`${image} caption\n`);
     });
   }
+
+  it('keeps an image inside a link, and the link around it, through an edit (FR5)', () => {
+    const badge =
+      '[![Build](https://example.com/badge.svg)](https://example.com/ci)';
+    expect(
+      editAndExport(`${badge} status\n`, () =>
+        $appendToBlockContaining('status', ' now'),
+      ),
+    ).toBe(`${badge} status now\n`);
+  });
+
+  it('leaves an escaped image marker and an image in code as they were (FR3)', () => {
+    const source =
+      '\\![not an image](https://example.com/a.png) and `![code](x)`\n';
+    expect(
+      editAndExport(source, () => $appendToBlockContaining('code', ' now')),
+    ).toBe(
+      '\\![not an image](https://example.com/a.png) and `![code](x)` now\n',
+    );
+  });
+
+  it('shows an image as its source text, one token a person deletes whole (FR5)', () => {
+    const state = JSON.parse(
+      markdownToEditorStateJSON(`Before ${IMAGES.emptyAlt} after\n`),
+    ) as {
+      root: {
+        children: Array<{children: Array<{text?: string; mode?: string}>}>;
+      };
+    };
+    const texts = state.root.children[0].children;
+    expect(texts.map(node => node.text)).toEqual([
+      'Before ',
+      IMAGES.emptyAlt,
+      ' after',
+    ]);
+    expect(texts[1].mode).toBe('token');
+  });
+
+  it('copies an image within the editor as the same source (FR5)', () => {
+    const source = `Before ${IMAGES.titled} after\n\nTarget\n`;
+    expect(
+      editAndExport(source, () => {
+        const copy = $parseSerializedNode(
+          $imageText(IMAGES.titled).exportJSON(),
+        );
+        const target = $getRoot().getChildren()[1];
+        if (!$isElementNode(target)) {
+          throw new Error('no target paragraph');
+        }
+        target.append($createTextNode(' '), copy);
+      }),
+    ).toBe(`Before ${IMAGES.titled} after\n\nTarget ${IMAGES.titled}\n`);
+  });
+
+  it('deletes an image whole with Backspace, and keeps the text around it (FR5)', () => {
+    const source = `Before ${IMAGES.named} after\n`;
+    expect(
+      editAndExport(source, () => {
+        $imageText(IMAGES.named).selectEnd();
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) {
+          throw new Error('no range selection');
+        }
+        selection.deleteCharacter(true);
+      }),
+    ).toBe('Before  after\n');
+  });
+
+  it('keeps an image whole when Enter splits its paragraph before or after it (FR5)', () => {
+    const source = `Before ${IMAGES.emptyAlt} after\n`;
+    const splitAt = (atStart: boolean) =>
+      editAndExport(source, () => {
+        const image = $imageText(IMAGES.emptyAlt);
+        const neighbour = atStart
+          ? image.getPreviousSibling()
+          : image.getNextSibling();
+        if (!$isTextNode(neighbour)) {
+          throw new Error('no text beside the image');
+        }
+        if (atStart) {
+          neighbour.selectEnd();
+        } else {
+          neighbour.selectStart();
+        }
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) {
+          throw new Error('no range selection');
+        }
+        selection.insertParagraph();
+      });
+    expect(splitAt(true)).toBe(`Before \n\n${IMAGES.emptyAlt} after\n`);
+    expect(splitAt(false)).toBe(`Before ${IMAGES.emptyAlt}\n\n after\n`);
+  });
+
+  it('keeps an image whole when its paragraph joins the one before (FR5)', () => {
+    const source = `Lead\n\n${IMAGES.emptyAlt} after\n`;
+    expect(
+      editAndExport(source, () => {
+        const [lead, imageParagraph] = $getRoot().getChildren();
+        if (!$isElementNode(lead) || !$isElementNode(imageParagraph)) {
+          throw new Error('no paragraphs');
+        }
+        lead.append($createTextNode(' '), ...imageParagraph.getChildren());
+        imageParagraph.remove();
+      }),
+    ).toBe(`Lead ${IMAGES.emptyAlt} after\n`);
+  });
 });
