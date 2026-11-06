@@ -11,6 +11,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parse} from '@babel/parser';
+import * as os from 'node:os';
+import {requireNatively, stubBuiltin} from './native-require.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(HERE, '..');
@@ -122,5 +124,38 @@ describe('requireNatively', () => {
         '19: vi.resetModules',
       ],
     });
+  });
+});
+
+describe('stubBuiltin', () => {
+  it('reaches natively loaded code, by name and by namespace, until restored', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-stub-builtin-'));
+    try {
+      const file = path.join(dir, 'uses-os.mjs');
+      fs.writeFileSync(
+        file,
+        [
+          "import {hostname} from 'node:os';",
+          "import * as osModule from 'node:os';",
+          'export const named = () => hostname();',
+          'export const viaNamespace = () => osModule.hostname();',
+          '',
+        ].join('\n'),
+      );
+      /** @type {{named: () => string, viaNamespace: () => string}} */
+      const uses = requireNatively(import.meta.url)(file);
+      const restore = stubBuiltin('node:os', () => ({hostname: () => 'stub'}));
+      try {
+        expect([uses.named(), uses.viaNamespace()]).toEqual(['stub', 'stub']);
+      } finally {
+        restore();
+      }
+      expect([uses.named(), uses.viaNamespace()]).toEqual([
+        os.hostname(),
+        os.hostname(),
+      ]);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 });

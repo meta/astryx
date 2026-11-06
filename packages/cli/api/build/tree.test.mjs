@@ -7,42 +7,73 @@
  * block count is build's own, and the blocks it names are pinned per phrase.
  */
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it} from 'vitest';
+import {
+  requireNatively,
+  stubBuiltin,
+} from '../../test-utils/native-require.mjs';
 
-// vi.mock calls are hoisted above the imports; the stub maker is hoisted with them.
-const {blocked} = vi.hoisted(() => ({
-  /** @param {string} name */
-  blocked: name => async (/** @type {() => Promise<any>} */ load) => {
-    const real = await load();
-    /** @type {Record<string, unknown>} */
-    const stub = {};
-    for (const [key, value] of Object.entries(real)) {
-      stub[key] =
-        typeof value === 'function'
-          ? () => {
-              throw new Error(`build reached ${name}.${key}`);
-            }
-          : value;
-    }
-    return {...stub, default: stub};
-  },
-}));
-vi.mock('node:http', blocked('http'));
-vi.mock('node:https', blocked('https'));
-vi.mock('node:net', blocked('net'));
-vi.mock('node:dns', blocked('dns'));
-vi.mock('node:child_process', blocked('child_process'));
-vi.mock('http', blocked('http'));
-vi.mock('https', blocked('https'));
-vi.mock('net', blocked('net'));
-vi.mock('dns', blocked('dns'));
-vi.mock('child_process', blocked('child_process'));
+/** The built-ins build must not reach: the network and subprocesses. */
+const OFFLINE = ['http', 'https', 'net', 'dns', 'child_process'];
 
-const {build} = await import('./build.mjs');
-const {buildKit} = await import('./kit/kit.mjs');
-const {loadBlockPicker, withListingCache} = await import('./_adapter.mjs');
+/** @param {string} what */
+const reached = what => () => {
+  throw new Error(`build reached ${what}`);
+};
+
+// From before build loads, every function they export throws, so a function
+// build keeps from its first load throws too. Their classes stay, because
+// Node builds on them, but each class's connect, listen, spawn and query
+// throws.
+const restoreOffline = OFFLINE.map(name =>
+  stubBuiltin(`node:${name}`, real =>
+    Object.fromEntries(
+      Object.entries(real)
+        .filter(
+          ([key, value]) => typeof value === 'function' && !/^[A-Z]/u.test(key),
+        )
+        .map(([key]) => [key, reached(`${name}.${key}`)]),
+    ),
+  ),
+);
+
+const require = requireNatively(import.meta.url);
+const {Socket, Server} = require('node:net');
+const {ChildProcess} = require('node:child_process');
+const {Resolver} = require('node:dns');
+/** @type {[string, any, string][]} */
+const STARTS = [
+  ['net.Socket.prototype.connect', Socket.prototype, 'connect'],
+  ['net.Server.prototype.listen', Server.prototype, 'listen'],
+  [
+    'child_process.ChildProcess.prototype.spawn',
+    ChildProcess.prototype,
+    'spawn',
+  ],
+  ...Object.getOwnPropertyNames(Resolver.prototype)
+    .filter(key => /^(?:resolve|reverse)/u.test(key))
+    .map(
+      key =>
+        /** @type {[string, any, string]} */ ([
+          `dns.Resolver.prototype.${key}`,
+          Resolver.prototype,
+          key,
+        ]),
+    ),
+];
+const ownStarts = STARTS.map(([, target, key]) => target[key]);
+for (const [what, target, key] of STARTS) target[key] = reached(what);
+
+/** @type {typeof import('./build.mjs')} */
+const {build} = require('./build.mjs');
+/** @type {typeof import('./kit/kit.mjs')} */
+const {buildKit} = require('./kit/kit.mjs');
+/** @type {typeof import('./_adapter.mjs')} */
+const {loadBlockPicker, withListingCache} = require('./_adapter.mjs');
 
 const REPO = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -122,6 +153,49 @@ beforeAll(() => {
 });
 afterAll(() => {
   globalThis.fetch = realFetch;
+  for (const restore of restoreOffline) restore();
+  STARTS.forEach(([, target, key], index) => {
+    target[key] = ownStarts[index];
+  });
+});
+
+describe('the offline guard', () => {
+  it('throws on each network and subprocess call that natively loaded code makes', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-offline-'));
+    try {
+      const file = path.join(dir, 'calls.mjs');
+      fs.writeFileSync(
+        file,
+        [
+          "import {request} from 'node:http';",
+          "import {get} from 'node:https';",
+          "import {connect} from 'node:net';",
+          "import {lookup} from 'node:dns';",
+          "import {ChildProcess, spawnSync} from 'node:child_process';",
+          "import {Socket} from 'node:net';",
+          'export const calls = {',
+          "  'http.request': () => request('http://127.0.0.1:9'),",
+          "  'https.get': () => get('https://127.0.0.1:9'),",
+          "  'net.connect': () => connect(9, '127.0.0.1'),",
+          "  'dns.lookup': () => lookup('localhost', () => {}),",
+          "  'child_process.spawnSync': () => spawnSync('true'),",
+          "  'net.Socket.prototype.connect': () =>",
+          "    new Socket().connect(9, '127.0.0.1'),",
+          "  'child_process.ChildProcess.prototype.spawn': () =>",
+          "    new ChildProcess().spawn({file: 'true', args: ['true']}),",
+          '};',
+          '',
+        ].join('\n'),
+      );
+      /** @type {{calls: Record<string, () => unknown>}} */
+      const {calls} = require(file);
+      for (const [name, call] of Object.entries(calls)) {
+        expect(call, name).toThrow(`build reached ${name}`);
+      }
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
 });
 
 describe('build tree', () => {
