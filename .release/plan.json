@@ -6,7 +6,7 @@
   "changesets": [
     {
       "path": ".changeset/animated-layout-curve-tokens.md",
-      "sha256": "3ee0e7cccdc864f77a2f3c45835aa022bfc77ec3cb607062c3ae2106017e2c80",
+      "sha256": "eccc8d86fccb3b75d56161ae6f3b3ffadf77ea629cb0974c43ea5b0f87ccfaf3",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -14,7 +14,7 @@
         }
       ],
       "category": "fix",
-      "headline": "Animated layout: the glide, the in-place swap and the edge reveal play the theme's move curve (`--ease-move`) over `--duration-medium-min` instead of a spring, so they follow the theme's `character` and `tempo` and land with the motion around them. Reduce Motion is unchanged: a cross-fade under a coarse pointer, an immediate change otherwise. The glides of AppShell's content area, Collapsible, Table's row expansion and TreeList change feel: 225 ms in the Neutral theme, 310 ms with no theme, instead of about 735 ms. A theme whose move easing is a `linear()` or `steps()` function glides on it, as the browser plays it. The segmented control's selection, which reads its timing the same way, now plays such an easing too instead of moving at once.",
+      "headline": "Animated layout: the glide, the in-place swap and the edge reveal play the theme's move curve (`--ease-move`) over `--duration-medium-min` instead of a spring, so they follow the theme's `character` and `tempo` and land with the motion around them. Reduce Motion is unchanged: a cross-fade under a coarse pointer, an immediate change otherwise. The glides of AppShell's content area, Collapsible, Table's row expansion and TreeList change feel: 225 ms in the Neutral theme, 310 ms with no theme, instead of about 735 ms. A theme whose move easing is a `linear()` or `steps()` function glides on it, as the browser plays it. The segmented control's selection, which reads its timing the same way, now plays such an easing too instead of moving at once. (#10236)",
       "contributors": [
         "vjeux"
       ],
@@ -22,7 +22,7 @@
     },
     {
       "path": ".changeset/appshell-unique-main-id.md",
-      "sha256": "9c216398388424d20964db89a56e5a74292a0ab2445486b7c09aac0f3e29a0a0",
+      "sha256": "eb4d109359d0379ce9f41dbb1d693478aa82130d299438dc941102d65ebd6d6a",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -30,7 +30,7 @@
         }
       ],
       "category": "fix",
-      "headline": "Two `AppShell`s on one page no longer share the main region's id. The first mounted shell keeps `id=\"astryx-app-shell-main\"`, so single-shell pages, skip links and selectors that name it keep working. Each other shell's main region gets its own generated id, which its skip link targets.",
+      "headline": "Two `AppShell`s on one page no longer share the main region's id. The first mounted shell keeps `id=\"astryx-app-shell-main\"`, so single-shell pages, skip links and selectors that name it keep working. Each other shell's main region gets its own generated id, which its skip link targets. (#10199)",
       "contributors": [
         "cixzhang"
       ],
@@ -38,7 +38,7 @@
     },
     {
       "path": ".changeset/bottom-sheet-drag-close.md",
-      "sha256": "2db64ea8407164ad493518b782cd69fc5514ce5b523e67732d639f631b4d9ab5",
+      "sha256": "661a183a08bc597c9aa16b5d7fa8ea43613d8eb9f9ae98e188216e18a3985b4d",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -46,7 +46,7 @@
         }
       ],
       "category": "fix",
-      "headline": "BottomSheet: a sheet a touch drag closes leaves on its close spring, starting at the speed of the drag, and its scrim fades out with it on one clock, at the theme's tempo. A BottomSheetSwitcher flow's scrim does too. A mouse or pen drag is unchanged.",
+      "headline": "BottomSheet: a sheet a touch drag closes leaves on its close spring, starting at the speed of the drag, and its scrim fades out with it on one clock, at the theme's tempo. A BottomSheetSwitcher flow's scrim does too. A mouse or pen drag is unchanged. (#8105)",
       "contributors": [
         "vjeux"
       ],
@@ -54,7 +54,7 @@
     },
     {
       "path": ".changeset/bottom-sheet-lone-autofocus.md",
-      "sha256": "b109373cf823c9928ce509ceb167da197fa422214d90e6674f93f6fbf1e4de87",
+      "sha256": "bb5843df63527908346b48b9547fe806aaa4fbc140ba1e687721da780eda0fbc",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -62,7 +62,7 @@
         }
       ],
       "category": "fix",
-      "headline": "A `BottomSheet` that opens, on its own or pushed over another sheet, modal or not, now focuses its `data-autofocus` field (a `TextInput` with `hasAutoFocus`) in every browser; for example, a pushed \"Edit delivery note\" sheet opens on its note field. A `BottomSheetSwitcher` step with such a field opens on it too. Before, Chromium left focus on the sheet's panel, so on Android a person had to tap the field before typing. A sheet with no such field still focuses where the browser's own dialog focusing puts it.",
+      "headline": "A `BottomSheet` that opens, on its own or pushed over another sheet, modal or not, now focuses its `data-autofocus` field (a `TextInput` with `hasAutoFocus`) in every browser; for example, a pushed \"Edit delivery note\" sheet opens on its note field. A `BottomSheetSwitcher` step with such a field opens on it too. Before, Chromium left focus on the sheet's panel, so on Android a person had to tap the field before typing. A sheet with no such field still focuses where the browser's own dialog focusing puts it. (#10156)",
       "contributors": [
         "cixzhang"
       ],
@@ -70,7 +70,7 @@
     },
     {
       "path": ".changeset/box-hold-no-selection.md",
-      "sha256": "ad6ed754083073d109b07bde857dbfd4cbb8672859cd1f9b8772bc7fae73ed6e",
+      "sha256": "f0d4fa763fbcca5933d2ce28646f382f7d7f32ceef867e9828d34cfac4697abc",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -78,7 +78,7 @@
         }
       ],
       "category": "fix",
-      "headline": "Under a finger or a pen, holding the box of a CheckboxInput, a CheckboxList row, a RadioList option or a Switch no longer selects the text beside it, and lifting it activates the control as a tap does. On iOS such a hold selected the label's text and, except on a Switch, toggled nothing. A long press that opens a ContextMenu or runs a row's own long press no longer also toggles a box under it, and a row that opens its own menu from its contextmenu keeps its box unchanged. A long press on the label still selects its text, and a mouse is unchanged.",
+      "headline": "Under a finger or a pen, holding the box of a CheckboxInput, a CheckboxList row, a RadioList option or a Switch no longer selects the text beside it, and lifting it activates the control as a tap does. On iOS such a hold selected the label's text and, except on a Switch, toggled nothing. A long press that opens a ContextMenu or runs a row's own long press no longer also toggles a box under it, and a row that opens its own menu from its contextmenu keeps its box unchanged. A long press on the label still selects its text, and a mouse is unchanged. (#10091)",
       "contributors": [
         "vjeux"
       ],
@@ -86,7 +86,7 @@
     },
     {
       "path": ".changeset/buttongroup-docs-no-skip-promise.md",
-      "sha256": "cd196409e5a3558f7209798172358ea0fa36a8589a6bb6f05ecd004cec819c88",
+      "sha256": "dadc5a16e3c5f7edda34fb56cc0ecce0af285900d5a91efd3700ed4bd9f34b27",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -94,7 +94,7 @@
         }
       ],
       "category": "docs",
-      "headline": "`ButtonGroup`'s docs no longer promise that arrow keys skip disabled members. Arrow keys still move between members, Home and End still jump to the ends, and the group is still one Tab stop.",
+      "headline": "`ButtonGroup`'s docs no longer promise that arrow keys skip disabled members. Arrow keys still move between members, Home and End still jump to the ends, and the group is still one Tab stop. (#10203)",
       "contributors": [
         "cixzhang"
       ],
@@ -102,7 +102,7 @@
     },
     {
       "path": ".changeset/calendar-listener-without-focus-date.md",
-      "sha256": "5d2146c33df7c01dcca470bf20efd56c6a454a790e7997f89e03ea0c28eb59d0",
+      "sha256": "7c39062e473c9c7ab6febbaf12e89e8824720485b6958fc0b8966cd2f864bbbd",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -110,7 +110,7 @@
         }
       ],
       "category": "fix",
-      "headline": "`Calendar` and `useCalendarNavigation` keep moving the visible month when `onFocusDateChange` is given without `focusDate`. The focus date is controlled only when both props are present, as the imperative `navigateTo` handle already treated it; but the Previous/Next buttons and keyboard month crossing switched on the callback alone, so a listener-only calendar reported the new month and then stayed on the old one, with no way to move. The callback still fires in every mode.",
+      "headline": "`Calendar` and `useCalendarNavigation` keep moving the visible month when `onFocusDateChange` is given without `focusDate`. The focus date is controlled only when both props are present, as the imperative `navigateTo` handle already treated it; but the Previous/Next buttons and keyboard month crossing switched on the callback alone, so a listener-only calendar reported the new month and then stayed on the old one, with no way to move. The callback still fires in every mode. (#10180)",
       "contributors": [
         "thecodebasedot"
       ],
@@ -118,7 +118,7 @@
     },
     {
       "path": ".changeset/carousel-passive-wheel-lint-note.md",
-      "sha256": "be03ba0bf5bd875131926c03e26f456dd4002928737aa6b5ff320527c1cb17d4",
+      "sha256": "fa764564ac80b12f8b12cbafe14c70aebf18c2e36e5268e910ba38896edef3ae",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -126,7 +126,7 @@
         }
       ],
       "category": "chore",
-      "headline": "Internal: Carousel's Shift+wheel handler carries a lint suppression for the new passive-handler rule until it moves to a native listener. Apps see no change.",
+      "headline": "Internal: Carousel's Shift+wheel handler carries a lint suppression for the new passive-handler rule until it moves to a native listener. Apps see no change. (#10248)",
       "contributors": [
         "cixzhang"
       ],
@@ -134,7 +134,7 @@
     },
     {
       "path": ".changeset/carousel-snap-paging.md",
-      "sha256": "e6ed108f7ad291f250864d57463855b62e248251ab74754eae23fce371c79a49",
+      "sha256": "991b4a65ae8545fc95bc58586ab779c8e805fd405b417d9d77a5d3f078c39dbd",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -142,7 +142,7 @@
         }
       ],
       "category": "feat",
-      "headline": "Carousel's `hasSnap` also takes `useSnapPaging()`, from `@astryxdesign/core/SnapPaging`: iOS paging on native snap's stops, under a finger and on a trackpad swipe. A flick moves one view, or one item with `useSnapPaging({pages: 'item'})`. A mouse wheel keeps native snapping. Only a carousel given the hook's value loads the pager, and `hasSnap` alone is unchanged.",
+      "headline": "Carousel's `hasSnap` also takes `useSnapPaging()`, from `@astryxdesign/core/SnapPaging`: iOS paging on native snap's stops, under a finger and on a trackpad swipe. A flick moves one view, or one item with `useSnapPaging({pages: 'item'})`. A mouse wheel keeps native snapping. Only a carousel given the hook's value loads the pager, and `hasSnap` alone is unchanged. (#8153)",
       "contributors": [
         "vjeux"
       ],
@@ -150,7 +150,7 @@
     },
     {
       "path": ".changeset/chat-insert-token-onchange.md",
-      "sha256": "36e3b88b018e8690c22dd8997751f575045be8a4e51d9cd197a860c62d255979",
+      "sha256": "98ad3f0a590685243b0480def4c498435026ae330bcaa1ba1bfc98171407ae2b",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -162,7 +162,7 @@
         }
       ],
       "category": "fix",
-      "headline": "Inserting a token through `ChatComposerInput`'s handle (`insertToken`) now reports the new value through `onChange` once, as typing does, and hides the placeholder. Before, a controlled host's Send button stayed disabled or sent a stale prompt. The `ai-chat-landing` page template drops the input-event workaround it used to sync the composer after an insert.",
+      "headline": "Inserting a token through `ChatComposerInput`'s handle (`insertToken`) now reports the new value through `onChange` once, as typing does, and hides the placeholder. Before, a controlled host's Send button stayed disabled or sent a stale prompt. The `ai-chat-landing` page template drops the input-event workaround it used to sync the composer after an insert. (#10167)",
       "contributors": [
         "cixzhang"
       ],
@@ -170,7 +170,7 @@
     },
     {
       "path": ".changeset/cli-core-only-peer.md",
-      "sha256": "d7f3679aaf4cce5ed92bc532c53810d8b1564f2bf7ca2bb0e7d6375bf6311b56",
+      "sha256": "edef1723d12202e9df4eb2519d79343a8e773e49c77aca57e83bce094f7a4240",
       "packages": [
         {
           "name": "@astryxdesign/cli",
@@ -178,7 +178,7 @@
         }
       ],
       "category": "fix",
-      "headline": "The CLI no longer lists `@astryxdesign/theme-neutral`, `@astryxdesign/lab` or `@astryxdesign/charts` as optional peers. Before, a package manager could keep a theme from an older release as the CLI's peer after an app removed the theme and upgraded Core, and then warn that the theme's Core peer was not met. `@astryxdesign/core` stays the CLI's one optional peer. In a Yarn Plug'n'Play workspace member, or a pnpm workspace member with `hoist: false`, a legacy `package.json#astryx.theme` of `neutral` now makes `astryx component` warn that it cannot resolve the theme. Add the theme to the app with `astryx theme add neutral` instead.",
+      "headline": "The CLI no longer lists `@astryxdesign/theme-neutral`, `@astryxdesign/lab` or `@astryxdesign/charts` as optional peers. Before, a package manager could keep a theme from an older release as the CLI's peer after an app removed the theme and upgraded Core, and then warn that the theme's Core peer was not met. `@astryxdesign/core` stays the CLI's one optional peer. In a Yarn Plug'n'Play workspace member, or a pnpm workspace member with `hoist: false`, a legacy `package.json#astryx.theme` of `neutral` now makes `astryx component` warn that it cannot resolve the theme. Add the theme to the app with `astryx theme add neutral` instead. (#10232)",
       "contributors": [
         "cixzhang"
       ],
@@ -186,7 +186,7 @@
     },
     {
       "path": ".changeset/cli-discover-page-control.md",
-      "sha256": "3b54cfc05a5c44afad3373170b023781f6820b285d09ffd9c6dd8e51b3d1a514",
+      "sha256": "28ea938767db214134037d59812dcfc78c9ccef561c16e03aefe6e60c8d95243",
       "packages": [
         {
           "name": "@astryxdesign/cli",
@@ -194,7 +194,7 @@
         }
       ],
       "category": "feat",
-      "headline": "`astryx discover` lists the experimental PageControl component from `@astryxdesign/lab`.",
+      "headline": "`astryx discover` lists the experimental PageControl component from `@astryxdesign/lab`. (#9684)",
       "contributors": [
         "vjeux"
       ],
@@ -202,7 +202,7 @@
     },
     {
       "path": ".changeset/code-size-theme-reflection.md",
-      "sha256": "0cc3924955189066ad341d997214c67a5453ff5d3f4f47794790362c9997a14d",
+      "sha256": "8c90a924ae22cb619596a3f73b64c4cd9c5c6e5f846f432bc9a6fad1148854b8",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -210,7 +210,7 @@
         }
       ],
       "category": "fix",
-      "headline": "Code: the `code` theme target now reflects `size` as `data-size`, so a theme can restyle code that inherits the surrounding text size (`size=\"inherit\"`) differently from code at the default code size. When `size` is omitted, no `data-size` attribute is rendered.",
+      "headline": "Code: the `code` theme target now reflects `size` as `data-size`, so a theme can restyle code that inherits the surrounding text size (`size=\"inherit\"`) differently from code at the default code size. When `size` is omitted, no `data-size` attribute is rendered. (#10186)",
       "contributors": [
         "cixzhang"
       ],
@@ -218,7 +218,7 @@
     },
     {
       "path": ".changeset/codeblock-carousel-focus-ring.md",
-      "sha256": "bc0e195fb0d28ff2fb271effb211103c372cae840695a79a4696cd7c569a2232",
+      "sha256": "18f07c1c5d768dd910ec2aa61ff74b8a386ea1f0f53c016f4d711097be282b87",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -226,7 +226,7 @@
         }
       ],
       "category": "fix",
-      "headline": "`CodeBlock` and `Carousel`: the code viewport (while the code overflows) and the carousel scroller draw the theme's focus ring instead of the browser's default, and a theme's `--focus-outline-*` tokens reach them. Both rings sit inside their component's clipped box, so they show whole. The Carousel ring is painted by the carousel itself rather than the scroller, so the scroller's edge-fade mask no longer fades it, at rest or mid-scroll. The Carousel ring is drawn by an internal shared overlay.",
+      "headline": "`CodeBlock` and `Carousel`: the code viewport (while the code overflows) and the carousel scroller draw the theme's focus ring instead of the browser's default, and a theme's `--focus-outline-*` tokens reach them. Both rings sit inside their component's clipped box, so they show whole. The Carousel ring is painted by the carousel itself rather than the scroller, so the scroller's edge-fade mask no longer fades it, at rest or mid-scroll. The Carousel ring is drawn by an internal shared overlay. (#8875)",
       "contributors": [
         "cixzhang"
       ],
@@ -234,7 +234,7 @@
     },
     {
       "path": ".changeset/core-internal-entries-lab-scroll-edge.md",
-      "sha256": "dffc4a00715f34b1f6abd16954d4087ca053de5113340d28f363cda52e990559",
+      "sha256": "e406d7cf445e2853d170f39d5ceacd0250e612636e6b3090529d8e91520a05ba",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -242,7 +242,7 @@
         }
       ],
       "category": "chore",
-      "headline": "Internal: Core's internal touch entry also names, for Lab's NavigationStack, the gesture host and the coarse-pointer check. Its scroll edge effect reads the internal finger-scroll hook and its end call. Apps import nothing new.",
+      "headline": "Internal: Core's internal touch entry also names, for Lab's NavigationStack, the gesture host and the coarse-pointer check. Its scroll edge effect reads the internal finger-scroll hook and its end call. Apps import nothing new. (#8396)",
       "contributors": [
         "vjeux"
       ],
@@ -250,7 +250,7 @@
     },
     {
       "path": ".changeset/core-internal-entries-page-control.md",
-      "sha256": "cd79692b7a3b6892ac7dd1a5c5adf9f35db3405485e12ff3ff42b5f646738845",
+      "sha256": "e23a9d10be9fad2062175703b613ed77b62aa92112a42e34dd70bb0048cd08bd",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -258,7 +258,7 @@
         }
       ],
       "category": "chore",
-      "headline": "Internal: `@astryxdesign/core/internal/touch` also re-exports an element's shared animator, the Reduce Motion cross-fade, and the coarse-pointer touch hit area's hook and layer, for Lab's PageControl. It is an internal entry reserved for Astryx's own packages, outside the public API.",
+      "headline": "Internal: `@astryxdesign/core/internal/touch` also re-exports an element's shared animator, the Reduce Motion cross-fade, and the coarse-pointer touch hit area's hook and layer, for Lab's PageControl. It is an internal entry reserved for Astryx's own packages, outside the public API. (#9669)",
       "contributors": [
         "vjeux"
       ],
@@ -298,7 +298,7 @@
     },
     {
       "path": ".changeset/field-status-repeated-submit.md",
-      "sha256": "888ed84ac8d9dc12725a594d616235f64d519117f2bcd4746646845883c02904",
+      "sha256": "b8aec59bc9de097724f9aecd9c12f530e0ab5556d3d1737c4fa3cf3c6b7577d3",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -306,7 +306,7 @@
         }
       ],
       "category": "docs",
-      "headline": "FieldStatus: the guidance now says that a field's status is announced when its message or type changes, not again when a repeated submit fails with the same errors, and shows how the form announces such a repeated submit, with unchanged errors, once with `useAnnounce` (the error count and the first error) and moves focus to the first invalid field.",
+      "headline": "FieldStatus: the guidance now says that a field's status is announced when its message or type changes, not again when a repeated submit fails with the same errors, and shows how the form announces such a repeated submit, with unchanged errors, once with `useAnnounce` (the error count and the first error) and moves focus to the first invalid field. (#10122)",
       "contributors": [
         "cixzhang"
       ],
@@ -314,7 +314,7 @@
     },
     {
       "path": ".changeset/fieldlabel-infotip.md",
-      "sha256": "1dfe48629e21cf7a5e5e3764a3b7bb4a1ec2d768a8ea83d298cb7e0406732521",
+      "sha256": "444117b534418e5661783aeb65df95e871279f82f09cfc15d44ac3a5242d0203",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -322,7 +322,7 @@
         }
       ],
       "category": "fix",
-      "headline": "`FieldLabel`'s `labelTooltip` is now an info button after the label, named \"About {label}\", so keyboard and screen-reader users can reach the help (WCAG 2.2 2.1.1, 4.1.2), and a click or key press on it opens the help without focusing or toggling the field.",
+      "headline": "`FieldLabel`'s `labelTooltip` is now an info button after the label, named \"About {label}\", so keyboard and screen-reader users can reach the help (WCAG 2.2 2.1.1, 4.1.2), and a click or key press on it opens the help without focusing or toggling the field. (#6414)",
       "contributors": [
         "GuillaumeMMM",
         "cixzhang"
@@ -331,7 +331,7 @@
     },
     {
       "path": ".changeset/finger-scroll-end.md",
-      "sha256": "78b79ffeb2f690ce12abd8b4b336a8dc874a203e91142e8f292e882002d90264",
+      "sha256": "710a9121550566c5838b38d845ae6ff24eb9533e0877802283c03b54d543c5ec",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -339,7 +339,7 @@
         }
       ],
       "category": "chore",
-      "headline": "Internal: `useFingerScroll(scroller, {onEnd})` calls `onEnd` each time a finger's scroll on the scroller ends, and the hook is re-exported from the internal touch subpath for Lab components that watch a finger's scroll. Internal entries are outside the public API and its compatibility promise; the hook is not exported from the package entry point or the gestures barrel.",
+      "headline": "Internal: `useFingerScroll(scroller, {onEnd})` calls `onEnd` each time a finger's scroll on the scroller ends, and the hook is re-exported from the internal touch subpath for Lab components that watch a finger's scroll. Internal entries are outside the public API and its compatibility promise; the hook is not exported from the package entry point or the gestures barrel. (#10172)",
       "contributors": [
         "cixzhang"
       ],
@@ -347,7 +347,7 @@
     },
     {
       "path": ".changeset/gesture-host-own-scroller.md",
-      "sha256": "5c1fe3f164a16c1c4e0c48d382920059de3972d0e330609de331a0da5eb06e32",
+      "sha256": "871c98458a88575a98ff37680edc1334c7d3bccbff64edc435e9b09c20eaadcc",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -355,7 +355,7 @@
         }
       ],
       "category": "fix",
-      "headline": "Gestures: a pan on its own scroller takes a trackpad's scroll on the axis its touch-action keeps, as it takes a finger's; a scroller inside it still takes the wheel first. A recognizer attached with `manageStyle: false` leaves the element's styles to its caller for that recognizer only.",
+      "headline": "Gestures: a pan on its own scroller takes a trackpad's scroll on the axis its touch-action keeps, as it takes a finger's; a scroller inside it still takes the wheel first. A recognizer attached with `manageStyle: false` leaves the element's styles to its caller for that recognizer only. (#10212)",
       "contributors": [
         "vjeux"
       ],
@@ -363,7 +363,7 @@
     },
     {
       "path": ".changeset/gestures-another-window.md",
-      "sha256": "9c9016f5ad1dffea67e5f097daeaa9f5fb70ad3d143e14e8e5cfc165a4841f40",
+      "sha256": "682c1e5d7bfc1e969f8d3002eb7c6cb4311905d205d3eed0db82799d2cb384d9",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -371,7 +371,7 @@
         }
       ],
       "category": "fix",
-      "headline": "Touch gestures work on a component rendered into another window's document, such as a same-origin iframe or a Document Picture-in-Picture window. The gesture host checked nodes and touches against this window's classes, so it ignored that window's own. A finger's scroll, a layer's input hold, the press delay inside a scroll view and the iOS selection lock read that window's nodes too.",
+      "headline": "Touch gestures work on a component rendered into another window's document, such as a same-origin iframe or a Document Picture-in-Picture window. The gesture host checked nodes and touches against this window's classes, so it ignored that window's own. A finger's scroll, a layer's input hold, the press delay inside a scroll view and the iOS selection lock read that window's nodes too. (#10224)",
       "contributors": [
         "vjeux"
       ],
@@ -379,7 +379,7 @@
     },
     {
       "path": ".changeset/glide-touch-lands-where-drawn.md",
-      "sha256": "378c245844e5eda5daeaf0548477df09992d2d2e45b3ca05058ae0769f2eb461",
+      "sha256": "2cb8450fdb91b809eecab1c9ff5bc86b533964905fb289a333645a8d975754b4",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -387,7 +387,7 @@
         }
       ],
       "category": "fix",
-      "headline": "Animated layout: on iOS Safari, an Astryx gesture on gliding content goes to what is drawn under the finger. Gestures here are gesture recognizers, long presses, and Switch, Slider and SegmentedControl presses. Before, such a touch went to the element that sat under the finger when the glide started. A plain tap that no Astryx gesture handles still goes to that element until the glide ends, at most the theme's move duration.",
+      "headline": "Animated layout: on iOS Safari, an Astryx gesture on gliding content goes to what is drawn under the finger. Gestures here are gesture recognizers, long presses, and Switch, Slider and SegmentedControl presses. Before, such a touch went to the element that sat under the finger when the glide started. A plain tap that no Astryx gesture handles still goes to that element until the glide ends, at most the theme's move duration. (#10239)",
       "contributors": [
         "vjeux"
       ],
@@ -395,7 +395,7 @@
     },
     {
       "path": ".changeset/hit-area-candidate-list.md",
-      "sha256": "c678e372259783e57680868b905064017b862e89478ad652c8c307a871b422c2",
+      "sha256": "1fcb965c7e9f7977c15672128ec36b728110e8e33200f8a903455c8e69681712",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -403,7 +403,7 @@
         }
       ],
       "category": "perf",
-      "headline": "On a touch screen, a control that grows its touch target toward 44 px (CheckboxInput, RadioList, Switch, List rows, InfoTip, action groups) measures its neighbours in a shared pass. Each pass used to match every element on the page against the list of interactive selectors. The pass now keeps that list until an element is added, removed or moved, an attribute the list reads changes, or a control starts or stops its watch. It still reads every neighbour's box in each pass, so the touch targets are the same. Measured in Chromium at 4× CPU slowdown on a page with 240 interactive elements, a pass during a scroll took about 70% less time.",
+      "headline": "On a touch screen, a control that grows its touch target toward 44 px (CheckboxInput, RadioList, Switch, List rows, InfoTip, action groups) measures its neighbours in a shared pass. Each pass used to match every element on the page against the list of interactive selectors. The pass now keeps that list until an element is added, removed or moved, an attribute the list reads changes, or a control starts or stops its watch. It still reads every neighbour's box in each pass, so the touch targets are the same. Measured in Chromium at 4× CPU slowdown on a page with 240 interactive elements, a pass during a scroll took about 70% less time. (#10242)",
       "contributors": [
         "cixzhang"
       ],
@@ -427,7 +427,7 @@
     },
     {
       "path": ".changeset/layer-move-observer-entry-box.md",
-      "sha256": "82a2873f7cb1226a10796706e8fe8c6bc6467a5f055327b64aca56c636166e4c",
+      "sha256": "1654f7f92bbfcdcf216f16ca7c9e60beb904cb9496d0b741b0de825c3e802db5",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -435,7 +435,7 @@
         }
       ],
       "category": "perf",
-      "headline": "While a Tooltip is open, the observer that follows its trigger through a scroll no longer reads layout to re-arm. It used to read the trigger's box once or twice and the viewport's size on each frame of a scroll. It now takes them from its own report. The Tooltip still checks its placement once per move, on the same frames as before.",
+      "headline": "While a Tooltip is open, the observer that follows its trigger through a scroll no longer reads layout to re-arm. It used to read the trigger's box once or twice and the viewport's size on each frame of a scroll. It now takes them from its own report. The Tooltip still checks its placement once per move, on the same frames as before. (#10235)",
       "contributors": [
         "cixzhang"
       ],
@@ -443,7 +443,7 @@
     },
     {
       "path": ".changeset/layer-toast-comment-sentences.md",
-      "sha256": "24a7111866c78b058be0a2d07f600814794e00442cfd0ee23bed9481cf7d4215",
+      "sha256": "f2d7bff8e10375580ed3e1ca9550a3643a40a9a56e409439513d1ea941445a8c",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -451,7 +451,7 @@
         }
       ],
       "category": "chore",
-      "headline": "Two source comments, LayerProvider's inset note and ToastViewport's file header, are split into shorter sentences. Nothing that runs changes.",
+      "headline": "Two source comments, LayerProvider's inset note and ToastViewport's file header, are split into shorter sentences. Nothing that runs changes. (#10244)",
       "contributors": [
         "vjeux"
       ],
@@ -459,7 +459,7 @@
     },
     {
       "path": ".changeset/lightbox-double-click-point.md",
-      "sha256": "6567e0603dae1745ccd26f8af0ad3bfe02136c77d00b7cd6124873650308c469",
+      "sha256": "1963370c2088608a01b97b039092771d1c86b145ba9c7881c373a5d6fa227862",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -467,7 +467,7 @@
         }
       ],
       "category": "fix",
-      "headline": "Lightbox: a double-click now zooms 2× about the clicked point instead of about the centre, and the next goes back; the keyboard keeps its 2× zoom about the centre.",
+      "headline": "Lightbox: a double-click now zooms 2× about the clicked point instead of about the centre, and the next goes back; the keyboard keeps its 2× zoom about the centre. (#8148)",
       "contributors": [
         "vjeux"
       ],
@@ -475,7 +475,7 @@
     },
     {
       "path": ".changeset/lightbox-every-pointer.md",
-      "sha256": "b143d9f7f8ea6c6f773ee4862ded799a493aa01fee511059eee9e24b317efab2",
+      "sha256": "4d093c706079b3e406306f7820f51af11851741469826e8c2d79ca60f81c00d1",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -483,7 +483,7 @@
         }
       ],
       "category": "feat",
-      "headline": "Lightbox: a ctrl-wheel or a trackpad pinch now zooms a photo, and a trackpad's scroll pans a zoomed photo.",
+      "headline": "Lightbox: a ctrl-wheel or a trackpad pinch now zooms a photo, and a trackpad's scroll pans a zoomed photo. (#8148)",
       "contributors": [
         "vjeux"
       ],
@@ -491,7 +491,7 @@
     },
     {
       "path": ".changeset/lightbox-touch-zoom.md",
-      "sha256": "c9c841c51d2abbb1e93f27c462afc4eadeb9fe2d0aeb6f542c2cc927c8fa07c6",
+      "sha256": "b4b3ac8714cbf1b5ea311609cb06be6fee8f7ae507ae71b20c8542edb0895b63",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -499,7 +499,7 @@
         }
       ],
       "category": "feat",
-      "headline": "Lightbox's zoom now works under a finger the way the iOS Photos viewer does, on a phone, a tablet or a touchscreen laptop. Pinch the photo to zoom around your fingers, and move them to pan while you zoom. Past the zoom limits the photo gives way, then springs back when you let go, at the speed your fingers had. Double-tap zooms until the photo fills the screen, at least 2×, and keeps the tapped point under your finger; double-tap again to go back. On a phone or a tablet, a zoomed photo pans with momentum, stretches past its edges and settles back. The keyboard keeps the zoom it had, 2× about the centre, and keyboard panning now stops at the photo's edges instead of carrying it out of view. Every zoom, a double tap's and a key's included, settles on the same spring.",
+      "headline": "Lightbox's zoom now works under a finger the way the iOS Photos viewer does, on a phone, a tablet or a touchscreen laptop. Pinch the photo to zoom around your fingers, and move them to pan while you zoom. Past the zoom limits the photo gives way, then springs back when you let go, at the speed your fingers had. Double-tap zooms until the photo fills the screen, at least 2×, and keeps the tapped point under your finger; double-tap again to go back. On a phone or a tablet, a zoomed photo pans with momentum, stretches past its edges and settles back. The keyboard keeps the zoom it had, 2× about the centre, and keyboard panning now stops at the photo's edges instead of carrying it out of view. Every zoom, a double tap's and a key's included, settles on the same spring. (#8148)",
       "contributors": [
         "vjeux"
       ],
@@ -523,7 +523,7 @@
     },
     {
       "path": ".changeset/mobilenav-navigation-landmark.md",
-      "sha256": "d060d930c3f0c9a5f91ae3117f632d20de61590acaf6711925cb7ed7a23cc3dd",
+      "sha256": "0a0c04d6e71aec8d462ee3215c18d2bcce81a5358d18c099a511a5e59790d6b6",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -531,7 +531,7 @@
         }
       ],
       "category": "fix",
-      "headline": "MobileNav: the drawer's content region is now a navigation landmark (`<nav>`) named like the drawer's dialog, so someone moving by landmarks on a phone finds the drawer's links, as they find SideNav's on a wide screen. SideNav items and a TopNav's drawer content both sit inside that one landmark.",
+      "headline": "MobileNav: the drawer's content region is now a navigation landmark (`<nav>`) named like the drawer's dialog, so someone moving by landmarks on a phone finds the drawer's links, as they find SideNav's on a wide screen. SideNav items and a TopNav's drawer content both sit inside that one landmark. (#10130)",
       "contributors": [
         "cixzhang"
       ],
@@ -539,7 +539,7 @@
     },
     {
       "path": ".changeset/motion-settle-clock.md",
-      "sha256": "32f0d40174beb669ab3be2d196104eb7bdef1ecdf292d65babf8a97dcf5c3a1d",
+      "sha256": "241aee18c96fae237c30c7acfa93f2224b60e52d89656232bbb2d72bb05690ae",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -547,7 +547,7 @@
         }
       ],
       "category": "chore",
-      "headline": "Internal: the motion foundation's `resolveSettleMs` gives a spring role's settling time at the theme's tempo, so a CSS part that plays with the spring can start and land with it. Not exported from the package entry point.",
+      "headline": "Internal: the motion foundation's `resolveSettleMs` gives a spring role's settling time at the theme's tempo, so a CSS part that plays with the spring can start and land with it. Not exported from the package entry point. (#8105)",
       "contributors": [
         "vjeux"
       ],
@@ -555,7 +555,7 @@
     },
     {
       "path": ".changeset/press-release-compositor.md",
-      "sha256": "d5a50ce135b39e29ab0b86c5e64d99cf1999d518772f1d39623a82cee1b34fe3",
+      "sha256": "a7e26b9aed8fb9d2338ebff28fed8038c6fa3caf19d28768a457039c20e7cbb9",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -563,7 +563,7 @@
         }
       ],
       "category": "fix",
-      "headline": "Under a coarse primary pointer (a touch screen as the main input), a button's touch press release now runs on the compositor. It keeps fading while the page's script is busy, instead of freezing at full strength and snapping off, and it paints nothing per frame. The release keeps the theme's exit motion timing. With any other pointer, a finger on a touch screen beside a mouse included, nothing changes. Under a coarse primary pointer, while a press is on or fading, Button paints it on its own `::before` and sets `isolation: isolate`. At rest it adds neither, so a `::before` you style, through `xstyle` or a `className` rule, merges into that layer only during a press. Style a child element to keep it unchanged.",
+      "headline": "Under a coarse primary pointer (a touch screen as the main input), a button's touch press release now runs on the compositor. It keeps fading while the page's script is busy, instead of freezing at full strength and snapping off, and it paints nothing per frame. The release keeps the theme's exit motion timing. With any other pointer, a finger on a touch screen beside a mouse included, nothing changes. Under a coarse primary pointer, while a press is on or fading, Button paints it on its own `::before` and sets `isolation: isolate`. At rest it adds neither, so a `::before` you style, through `xstyle` or a `className` rule, merges into that layer only during a press. Style a child element to keep it unchanged. (#9783)",
       "contributors": [
         "vjeux"
       ],
@@ -571,7 +571,7 @@
     },
     {
       "path": ".changeset/public-drag-to-snap-points.md",
-      "sha256": "af01db3f0a9476b142deffafcf294faa5a49781d6c9346d724bf308325f40985",
+      "sha256": "22bb6807b2f165a24c384f220f23fd9eeed4a400a35c3f4cce7f6a63a6035b1a",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -583,7 +583,7 @@
         }
       ],
       "category": "feat",
-      "headline": "`createDragToSnapPoints` and its hook `useDragToSnapPoints` let a drag move an element along one axis and settle it on snap points (px offsets from its resting position) at the release: the nearest one, the next one in its direction after a flick faster than `flickThreshold` (default 1008 px/s), or the one it started from when the release moves back. The settle continues the release velocity, `settleTo(index)` settles without a drag, and `onSettle(index)` reports where it landed. `createDragToSnapPoints` is exported from the package root and `useDragToSnapPoints` from `@astryxdesign/core/hooks`; the CLI's templates gain a playing-card example of each.",
+      "headline": "`createDragToSnapPoints` and its hook `useDragToSnapPoints` let a drag move an element along one axis and settle it on snap points (px offsets from its resting position) at the release: the nearest one, the next one in its direction after a flick faster than `flickThreshold` (default 1008 px/s), or the one it started from when the release moves back. The settle continues the release velocity, `settleTo(index)` settles without a drag, and `onSettle(index)` reports where it landed. `createDragToSnapPoints` is exported from the package root and `useDragToSnapPoints` from `@astryxdesign/core/hooks`; the CLI's templates gain a playing-card example of each. (#8658)",
       "contributors": [
         "vjeux"
       ],
@@ -591,7 +591,7 @@
     },
     {
       "path": ".changeset/segmented-touch-target.md",
-      "sha256": "6d5a9f510a907edb0fb4bd8aee9a001b048f172a26e89e05aad6d783921d4d4e",
+      "sha256": "e9a8200f9d8d3f37e9cb8dfbfc061cbd949d9004a44b96a34c864aec0c36b252",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -599,7 +599,7 @@
         }
       ],
       "category": "fix",
-      "headline": "Under a coarse pointer, a `SegmentedControl` segment's touch target grows toward 44 px through an invisible hit area, stopping halfway to a neighbor. No segment changes size, and nothing changes under a mouse.",
+      "headline": "Under a coarse pointer, a `SegmentedControl` segment's touch target grows toward 44 px through an invisible hit area, stopping halfway to a neighbor. No segment changes size, and nothing changes under a mouse. (#10137)",
       "contributors": [
         "cixzhang"
       ],
@@ -607,7 +607,7 @@
     },
     {
       "path": ".changeset/sidenav-collapse-copy-stacking.md",
-      "sha256": "b0c9d6a41bab7762615fe83f51f484f0db4b5871641e229e93182621ed0cdff1",
+      "sha256": "00f116e267ef028431ace524bd6be9ea3ab5bf64bd8438efb455fbd16fd9d461",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -615,7 +615,7 @@
         }
       ],
       "category": "fix",
-      "headline": "SideNav: during a collapse, the copy of the expanded rail now paints at the rail's own level, just below the rail, instead of at `z-index: 1` with the rail raised to `2`. Page content stacks against the leaving rail as it does against the nav: a positioned sibling with no `z-index` no longer sits under the copy, and content positioned above the nav also covers the copy. The motion's timing and curve are unchanged, and Reduce Motion stays instant.",
+      "headline": "SideNav: during a collapse, the copy of the expanded rail now paints at the rail's own level, just below the rail, instead of at `z-index: 1` with the rail raised to `2`. Page content stacks against the leaving rail as it does against the nav: a positioned sibling with no `z-index` no longer sits under the copy, and content positioned above the nav also covers the copy. The motion's timing and curve are unchanged, and Reduce Motion stays instant. (#10145)",
       "contributors": [
         "cixzhang"
       ],
@@ -623,7 +623,7 @@
     },
     {
       "path": ".changeset/slider-tooltip-follows-thumb.md",
-      "sha256": "e14fbcb40edd577edcd1b663629fcb2bcd6e7c6fc93dfde6f2554a40f895c3f6",
+      "sha256": "1622f14fdce0d3f25db3b890f1548a45fbda4e67a66178ca69c2d14856123397",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -631,7 +631,7 @@
         }
       ],
       "category": "fix",
-      "headline": "`Slider`'s value tooltip stays on its thumb in every frame of a drag and of the coast after a finger lifts. It trailed the thumb by up to 14 px, because it was anchored to a box that moved only when the owner rendered the new value. The tooltip now moves with the thumb by the same translate, and its anchor box keeps its place until the drag ends.",
+      "headline": "`Slider`'s value tooltip stays on its thumb in every frame of a drag and of the coast after a finger lifts. It trailed the thumb by up to 14 px, because it was anchored to a box that moved only when the owner rendered the new value. The tooltip now moves with the thumb by the same translate, and its anchor box keeps its place until the drag ends. (#10228)",
       "contributors": [
         "vjeux"
       ],
@@ -639,7 +639,7 @@
     },
     {
       "path": ".changeset/submenu-tab-closes-menu.md",
-      "sha256": "4de1e345ebc84841022b53bc69015c11cc640ac0454d2fad5d38a642c7e43c78",
+      "sha256": "e4291f17db32f01ea42c330bfe7177cdf401d289e4704f2ac5e40fd1bf2f2d5c",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -647,7 +647,7 @@
         }
       ],
       "category": "fix",
-      "headline": "`DropdownMenu`, `ContextMenu` and `BreadcrumbItem` menus without a `header` or `footer`: Tab or Shift+Tab on a row inside an open sub-menu flyout now closes every open level and the menu, calls `onOpenChange(false)` once, and lets focus move on from the trigger, as Tab already did from a top-level row (WAI-ARIA Menu Button). Before, the menu stayed open. A menu or sub-menu with a `header` or `footer` keeps its Tab cycle.",
+      "headline": "`DropdownMenu`, `ContextMenu` and `BreadcrumbItem` menus without a `header` or `footer`: Tab or Shift+Tab on a row inside an open sub-menu flyout now closes every open level and the menu, calls `onOpenChange(false)` once, and lets focus move on from the trigger, as Tab already did from a top-level row (WAI-ARIA Menu Button). Before, the menu stayed open. A menu or sub-menu with a `header` or `footer` keeps its Tab cycle. (#8870)",
       "contributors": [
         "cixzhang"
       ],
@@ -655,7 +655,7 @@
     },
     {
       "path": ".changeset/table-state-hooks-committed-refs.md",
-      "sha256": "d8c46a753470996bee231aeba3a43990d9cb3971a0d263c66009501edc2e368a",
+      "sha256": "8acb376e273a973187d4bd9f42afd148b17e8d94ca52c844e1f6269e6daedf23",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -663,7 +663,7 @@
         }
       ],
       "category": "fix",
-      "headline": "`useTableSelectionState`, `useTableTreeState`, `useTableColumnSettingsState` and `useTableColumnResize` read their latest values as last committed. A render that React discards, as a suspended transition does, no longer reaches their handlers. \"Select all rows\" now selects the rows on screen, not those of a page still loading. A row's expand toggle, a column toggle and a keyboard resize also start from what is on screen.",
+      "headline": "`useTableSelectionState`, `useTableTreeState`, `useTableColumnSettingsState` and `useTableColumnResize` read their latest values as last committed. A render that React discards, as a suspended transition does, no longer reaches their handlers. \"Select all rows\" now selects the rows on screen, not those of a page still loading. A row's expand toggle, a column toggle and a keyboard resize also start from what is on screen. (#10176)",
       "contributors": [
         "vjeux"
       ],
@@ -671,7 +671,7 @@
     },
     {
       "path": ".changeset/timestamp-card-dl.md",
-      "sha256": "a1c853403ba55105567870f1ae55f65ea5aad2fd34604813fd7bb33751ed95cc",
+      "sha256": "2cef45d32b1cade74d3e32c53edce05da7df44bf288dd10b11261d651f45d61e",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -679,7 +679,7 @@
         }
       ],
       "category": "fix",
-      "headline": "Timestamp: every value in the hover card now has a name for screen readers (WCAG 2.2 1.3.1). A copy button sits inside its row's value, so the card passes the description-list check, and a row without a label is named by its time zone's long name, which is visually hidden.",
+      "headline": "Timestamp: every value in the hover card now has a name for screen readers (WCAG 2.2 1.3.1). A copy button sits inside its row's value, so the card passes the description-list check, and a row without a label is named by its time zone's long name, which is visually hidden. (#9041)",
       "contributors": [
         "cixzhang"
       ],
@@ -687,7 +687,7 @@
     },
     {
       "path": ".changeset/toast-clears-home-indicator.md",
-      "sha256": "e778a4ffcd2e06ac5efb1296514e2a112baf54b65425b605c214c1c319f48ef3",
+      "sha256": "8328b0f1e0854d806b2572e2807ed80b5beec725e84387f5c53ebf4ddf3e0b63",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -695,7 +695,7 @@
         }
       ],
       "category": "fix",
-      "headline": "A bottom toast now keeps its 16 px gap above the bottom safe-area inset instead of sitting on the inset's edge. Under a coarse pointer it clears at least 34 px plus that gap, even on a page that reports no inset (Safari reports one only with `viewport-fit=cover`).",
+      "headline": "A bottom toast now keeps its 16 px gap above the bottom safe-area inset instead of sitting on the inset's edge. Under a coarse pointer it clears at least 34 px plus that gap, even on a page that reports no inset (Safari reports one only with `viewport-fit=cover`). (#8047)",
       "contributors": [
         "vjeux"
       ],
@@ -703,7 +703,7 @@
     },
     {
       "path": ".changeset/toast-empty-viewport.md",
-      "sha256": "4a70ff694e867414e1f4279dd1e26fd02ba044b69f6502f694910e549a0df38b",
+      "sha256": "d26639f11a4a396e435133e219b8e89629410ca16459f6314307d4cec7a6a7bc",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -711,7 +711,7 @@
         }
       ],
       "category": "fix",
-      "headline": "An empty toast viewport now has no box, so iOS Safari's bottom toolbar returns to the page color once the last toast leaves. Before, a toast swiped out through the bottom edge left its color on the toolbar until the page reloaded.",
+      "headline": "An empty toast viewport now has no box, so iOS Safari's bottom toolbar returns to the page color once the last toast leaves. Before, a toast swiped out through the bottom edge left its color on the toolbar until the page reloaded. (#8047)",
       "contributors": [
         "vjeux"
       ],
@@ -719,7 +719,7 @@
     },
     {
       "path": ".changeset/toast-first-move-claim.md",
-      "sha256": "a58be264c662d2443b75f8a67d58e3d3b1a099b83997a74bc7de17f799aee2db",
+      "sha256": "af9eb151076a3abb4123b988c451780b690edc4af667f16e5ec23367ee85c20a",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -727,7 +727,7 @@
         }
       ],
       "category": "fix",
-      "headline": "A touch on a toast is now decided by its first move. A first move toward the toast's edge belongs to the swipe and never scrolls the page; any other first move leaves the page its scroll. The shared gesture host makes that claim, so importing Toast now brings in the host: about 24 KB gzip on its own (Toast from about 74 KB to 99 KB), and nothing more on a page whose other touch components already load it. LayerProvider without a Toast import is unchanged.",
+      "headline": "A touch on a toast is now decided by its first move. A first move toward the toast's edge belongs to the swipe and never scrolls the page; any other first move leaves the page its scroll. The shared gesture host makes that claim, so importing Toast now brings in the host: about 24 KB gzip on its own (Toast from about 74 KB to 99 KB), and nothing more on a page whose other touch components already load it. LayerProvider without a Toast import is unchanged. (#8047)",
       "contributors": [
         "vjeux"
       ],
@@ -735,7 +735,7 @@
     },
     {
       "path": ".changeset/toast-flick-any-height.md",
-      "sha256": "f4913eb930d01a7d9269c2cf47c1ecd30bc4a2cad085abcee1f6a7e81229e601",
+      "sha256": "a153ef89d0d8ac2f716f20a4c9e0bfcc967a1239bc04c133dcfe25d477c71eec",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -743,7 +743,7 @@
         }
       ],
       "category": "fix",
-      "headline": "A quick flick toward a toast's edge now dismisses it whatever its height. Before, a flick also had to travel 48 px (the distance that already dismisses a one-line toast), so on any toast up to 120 px tall a flick could only snap back; and its speed was timed by when the browser handled the touches rather than when they happened, which in browsers that deliver moves on the next frame made a quick flick look up to twice as slow.",
+      "headline": "A quick flick toward a toast's edge now dismisses it whatever its height. Before, a flick also had to travel 48 px (the distance that already dismisses a one-line toast), so on any toast up to 120 px tall a flick could only snap back; and its speed was timed by when the browser handled the touches rather than when they happened, which in browsers that deliver moves on the next frame made a quick flick look up to twice as slow. (#8047)",
       "contributors": [
         "vjeux"
       ],
@@ -751,7 +751,7 @@
     },
     {
       "path": ".changeset/toast-moved-card-still.md",
-      "sha256": "e97621e65f1a0d0f52f3ec3260560ac36fa2964b9f739b19093ee28d9bd7775f",
+      "sha256": "6f9b9b8146e4a71559d368642dd7c61e902a14d4ddccbf5d4faa3ec20d80613c",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -759,7 +759,7 @@
         }
       ],
       "category": "chore",
-      "headline": "A toast's card no longer runs a hidden `transform` transition, with its `transitionrun` and `transitionend` events, when a Dialog, a modal Drawer or a scrim sheet opens or closes over it. The toast already stayed in place.",
+      "headline": "A toast's card no longer runs a hidden `transform` transition, with its `transitionrun` and `transitionend` events, when a Dialog, a modal Drawer or a scrim sheet opens or closes over it. The toast already stayed in place. (#10223)",
       "contributors": [
         "vjeux"
       ],
@@ -767,7 +767,7 @@
     },
     {
       "path": ".changeset/uikit-zoom-media.md",
-      "sha256": "a67dd6f57d804e193b01470ecbafe3767e6f5ca7dc14f21e8ad8452c2e129b5a",
+      "sha256": "1d71db9dedf571851a42f1643870714b3593c6f2e037ba060c2a795f0616edee",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -775,7 +775,7 @@
         }
       ],
       "category": "chore",
-      "headline": "Internal: the UIKit constants table gains UIScrollView zooming for a photo viewer, measured on iOS 26.2. It holds the give past the zoom limits and Photos' aspect-fill double tap and maximum zoom. The zoom stage geometry that Lightbox's touch zoom is built on comes with it. Neither is exported from the package entry point, and Lightbox's touch zoom reads them.",
+      "headline": "Internal: the UIKit constants table gains UIScrollView zooming for a photo viewer, measured on iOS 26.2. It holds the give past the zoom limits and Photos' aspect-fill double tap and maximum zoom. The zoom stage geometry that Lightbox's touch zoom is built on comes with it. Neither is exported from the package entry point, and Lightbox's touch zoom reads them. (#8147)",
       "contributors": [
         "vjeux"
       ],
@@ -783,7 +783,7 @@
     },
     {
       "path": ".changeset/use-image-mode-inline-region.md",
-      "sha256": "c46d903e87df8afeae14ae8fe1f7ed9f09731e5059e01802be9350951adc2ce6",
+      "sha256": "abb208dfb996b027b318aedd4a789144872101741e2e46b008f476fa07e86af1",
       "packages": [
         {
           "name": "@astryxdesign/core",
@@ -791,7 +791,7 @@
         }
       ],
       "category": "fix",
-      "headline": "`useImageMode` samples the image once for a `region` written inline. The effect depended on the region object's identity, so the documented call shape (a fresh object literal each render) re-fetched and re-decoded the image on every render, and each result re-rendered, without end. The effect now depends on the region's four numbers.",
+      "headline": "`useImageMode` samples the image once for a `region` written inline. The effect depended on the region object's identity, so the documented call shape (a fresh object literal each render) re-fetched and re-decoded the image on every render, and each result re-rendered, without end. The effect now depends on the region's four numbers. (#10183)",
       "contributors": [
         "thecodebasedot"
       ],
@@ -799,7 +799,7 @@
     },
     {
       "path": ".changeset/use-multi-combobox-issue-labels-example.md",
-      "sha256": "d7445d12b57be94eef3537769ab09ee8c481e23fcbe819a3b560ae62a65864ab",
+      "sha256": "5c561225d4bec0596ddee15d71c096800862be9477fba714289b343f36b09db1",
       "packages": [
         {
           "name": "@astryxdesign/cli",
@@ -807,7 +807,7 @@
         }
       ],
       "category": "docs",
-      "headline": "A new `useMultiCombobox — Issue Labels` example block builds a Labels field on `useMultiCombobox`: typing filters the labels, the arrow keys move the active option while focus stays in the field, Enter or a click toggles a label and the list stays open, and selected labels show as removable tokens above the field. Copy it with `astryx template useMultiComboboxHookUsage <path>`.",
+      "headline": "A new `useMultiCombobox — Issue Labels` example block builds a Labels field on `useMultiCombobox`: typing filters the labels, the arrow keys move the active option while focus stays in the field, Enter or a click toggles a label and the list stays open, and selected labels show as removable tokens above the field. Copy it with `astryx template useMultiComboboxHookUsage <path>`. (#9578)",
       "contributors": [
         "kyu-rong"
       ],
@@ -815,7 +815,7 @@
     },
     {
       "path": ".changeset/use-snap-paging-example.md",
-      "sha256": "9776dc8002429211639aba7fa134dd0311a0b17be3647692056f4535c5014063",
+      "sha256": "5fa02c163e4112efacdb8c7fdc311b2bea1cd87d8917772e8f8de5dd5c1bc4c5",
       "packages": [
         {
           "name": "@astryxdesign/cli",
@@ -823,7 +823,7 @@
         }
       ],
       "category": "docs",
-      "headline": "A `useSnapPaging — Onboarding Pages` example block: onboarding cards in a Carousel with `hasSnap={useSnapPaging()}` move one view per flick, and a switch moves one card per flick through the hook's `pages` option. Copy it with `astryx template CarouselSnapPaging <path>`.",
+      "headline": "A `useSnapPaging — Onboarding Pages` example block: onboarding cards in a Carousel with `hasSnap={useSnapPaging()}` move one view per flick, and a switch moves one card per flick through the hook's `pages` option. Copy it with `astryx template CarouselSnapPaging <path>`. (#8153)",
       "contributors": [
         "vjeux"
       ],
