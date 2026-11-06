@@ -9,13 +9,13 @@ export const doc = {
   name: 'themeAdd',
   namespace: 'cli/api',
   displayName: 'themeAdd()',
-  summary: 'Copy theme source, or import its built output into the app.',
+  summary: 'Add a built theme to the app.',
   description:
-    'Copies a bundled or package theme into the project by default, preserving the released theme.add response while that path is deprecated. With options.import, records a package or built local theme and regenerates the app theme module with its built module and stylesheets. Import refuses targetPath and overwrite before writing.',
+    'Records a package or built local theme and regenerates the app theme module with its built module and stylesheets. options.import is an accepted compatibility no-op, as is options.overwrite set to false. Passing targetPath or options.overwrite set to true fails before writing and names themeEject, which owns source copying.',
   importPath: '@astryxdesign/cli/api',
   signature:
-    'themeAdd(slug: string, options?: {targetPath?: string, overwrite?: boolean, import?: boolean, cwd?: string, package?: string}): Promise<ThemeAddResponse | ThemeAppResponse>',
-  keywords: ['theme', 'add', 'import', 'copy', 'app', 'default', 'local'],
+    'themeAdd(slug: string, options?: {targetPath?: string, overwrite?: boolean, import?: boolean, cwd?: string, package?: string}): Promise<ThemeAppResponse>',
+  keywords: ['theme', 'add', 'import', 'app', 'default', 'local'],
   params: [
     {
       name: 'slug',
@@ -27,28 +27,26 @@ export const doc = {
       name: 'options.targetPath',
       type: 'string',
       description:
-        'Destination for the deprecated source-copy path. Cannot be combined with import.',
-      default: "'src/themes/<slug>'",
+        'Removed copy destination. Passing it throws ERR_THEME_INVALID. Call themeEject instead.',
     },
     {
       name: 'options.overwrite',
       type: 'boolean',
       description:
-        'Replace copied files instead of refusing. Cannot be combined with import.',
+        'False is a compatibility no-op. True throws ERR_THEME_INVALID. Call themeEject instead.',
       default: 'false',
     },
     {
       name: 'options.import',
       type: 'boolean',
       description:
-        'Import the built theme through the generated app module instead of copying source.',
+        'Compatibility no-op; the built theme is added with or without this option.',
       default: 'false',
     },
     {
       name: 'options.cwd',
       type: 'string',
-      description:
-        'Project directory used for discovery, state, and target paths.',
+      description: 'Project directory used for discovery and app-theme state.',
       default: 'process.cwd()',
     },
     {
@@ -59,14 +57,9 @@ export const doc = {
   ],
   returns: [
     {
-      type: 'theme.add',
-      description:
-        'The released copy receipt plus additive meta.deprecations with DEP-0005 and its replacement commands when import is false.',
-    },
-    {
       type: 'theme.app',
       description:
-        'The complete generated-module state and add change when import is true. Its envelope package names the npm package that owns the added theme, except for a local theme.',
+        'The complete generated-module state and add change. Its envelope package names the npm package that owns the added theme, except for a local theme.',
     },
   ],
   throws: [
@@ -77,27 +70,26 @@ export const doc = {
     {code: 'ERR_AMBIGUOUS_THEME', when: 'more than one package owns the slug'},
     {
       code: 'ERR_THEME_INVALID',
-      when: 'the selected theme is invalid, or import is combined with a copy option',
-    },
-    {code: 'ERR_PATH_TRAVERSAL', when: 'a copy target escapes cwd'},
-    {
-      code: 'ERR_NO_SOURCE',
-      when: 'a copied source file is missing',
+      when: 'the selected theme is invalid, targetPath is passed, or overwrite is true',
     },
     {
       code: 'ERR_FILE_EXISTS',
-      when: 'a destination or generated module path conflicts',
+      when: 'the generated module path conflicts with an authored file',
     },
-    {code: 'ERR_WRITE_FAILED', when: 'copying or module generation fails'},
+    {code: 'ERR_WRITE_FAILED', when: 'module generation fails'},
   ],
   examples: [
     {
-      label: 'Import a built theme',
-      code: "await themeAdd('butter', {import: true});",
+      label: 'Add a built theme',
+      code: "await themeAdd('butter');",
     },
     {
       label: 'Select a package theme over a local theme',
-      code: "await themeAdd('ocean', {import: true, package: '@acme/themes'});",
+      code: "await themeAdd('ocean', {package: '@acme/themes'});",
+    },
+    {
+      label: 'Keep the earlier opt-in spelling',
+      code: "await themeAdd('butter', {import: true});",
     },
   ],
   command: 'theme add',

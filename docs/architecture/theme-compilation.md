@@ -22,8 +22,12 @@ applies_to:
 verified_by:
   [
     packages/core/src/theme/generateThemeRules.test.ts,
+    packages/core/src/theme/defineTheme.test.ts,
     packages/core/src/theme/themeAdaptations.test.ts,
+    packages/core/src/theme/onMediaTokens.test.ts,
+    packages/core/src/theme/Theme.test.tsx,
     packages/core/src/theme/derivedVarRegistry.test.ts,
+    packages/cli/clients/cli/commands/build-theme.adaptations.test.mjs,
     packages/cli/api/theme/build/build.test.mjs,
     packages/cli/api/theme/build/build.public-component-vars.test.mjs,
     packages/cli/api/theme/build/build.adaptation-core-compat.test.mjs,
@@ -35,6 +39,8 @@ deciding_specs:
     spec:AST-006/DEC-4,
     spec:AST-012/DEC-3,
     spec:AST-012/DEC-4,
+    spec:AST-087/DEC-2,
+    spec:AST-087/DEC-9,
   ]
 ---
 
@@ -46,7 +52,16 @@ deciding_specs:
 {
   "scope": "global",
   "triggers": {
-    "theming": ["INV2", "INV3", "INV4", "INV6", "INV9", "INV10"]
+    "theming": [
+      "INV2",
+      "INV3",
+      "INV4",
+      "INV6",
+      "INV9",
+      "INV10",
+      "INV15",
+      "INV16"
+    ]
   }
 }
 ```
@@ -81,6 +96,10 @@ The current web compiler works like this:
 6. A built theme preserves local-token ownership, effective width points,
    generative-axis metadata, and normalized ordered rules, and is marked so the
    provider does not compile or inject it again.
+7. A built theme carries its function icon entries, `componentIcons` functions,
+   and `iconVariants` list in its JavaScript, so built resolution returns the
+   same nodes as the runtime theme. A function the build cannot carry fails the
+   build.
 
 For top-level declarations in base component target rules, the compiler preserves
 generic CSS properties as written. When a guaranteed property needs to reach
@@ -162,6 +181,59 @@ Platform-specific details stay inside that compiler.
   diagnostics schema. A CLI paired with an older core retains that core's existing
   compilation behavior; it does not pretend to detect drops the older core cannot
   report.
+- **INV15 — Built icon resolution matches runtime.** A built theme resolves every
+  icon request and slot request to the same node as its runtime theme, and its
+  public icon and slot exports are the same node-valued and static views. Build
+  tooling that generates or subsets icon artwork enumerates a theme's requests as
+  every entry's key with each of the four sizes and either no variant or one
+  variant that entry can receive under `spec:AST-087` FR4; it never enumerates a
+  variant the entry cannot receive, such as a name only a child theme lists for
+  an entry it inherits.
+- **INV16 — Generated compatibility roles preserve declaration locality and the
+  CSS cascade.** When the web compiler derives a status role from another public
+  token, the alias is emitted inside the theme scope where its semantic source is
+  effective, including reachable adaptation and media combinations. A nested
+  theme derives from its nearest provider rather than retaining its parent's alias.
+  Authored destination roles, source order, `!important`, `inherit`, concrete
+  values, and cycles retain their normal CSS meaning. Runtime and static output
+  use the same derivation.
+- **INV17 — Theme generation establishes every status role.** For each
+  `architecture:theme-tokens` INV11 content or text role a theme does not set,
+  the web compiler derives one in the theme's generated CSS, at runtime and in
+  the theme build, so a theme that sets only its status fills still compiles to
+  a complete status set. The normalized `DefinedTheme` keeps only the tokens
+  the theme sets; non-CSS resolution (`architecture:theme-tokens` INV6) applies
+  the same derivation. A role the theme inherits through `extends` counts as
+  set; a role its parent only derived is derived again from the child's own
+  colours:
+  - `--color-on-<status>` is the theme's light or dark content colour
+    (`--color-on-dark` or `--color-on-light`), whichever contrasts more with
+    the theme's `--color-<status>`; when neither reaches 4.5:1 on it, it is
+    pure white or black, whichever contrasts more.
+  - `--color-text-<status>` is the fill's hue at the lightness that reaches
+    4.5:1 against the theme's default page and card surfaces in each colour
+    mode.
+  - `--color-icon-<status>` and `--color-border-<status>` alias
+    `--color-text-<status>`, so a theme's text value, set or derived, reaches
+    them unless the theme sets them too.
+  - `--color-on-<status>-muted` is the fill's hue at the lightness that reaches
+    4.5:1 on the theme's pale status fill over the default surface.
+
+  Fills are never derived: a `--color-<status>` or `--color-<status>-muted` the
+  theme does not set is Core's. A role is derived again when the theme sets a
+  colour it is measured against: the fill, the pale fill, the default page or
+  card surface, or the light and dark content colours. When the fill is not
+  chromatic, the text and pale-fill content take Core's own hue for that
+  status, so derived text stays chromatic. When a colour these computations
+  measure is not a concrete colour, such as an unresolved reference, it cannot
+  be measured, so for that status the text and pale-fill content roles alias
+  the theme's matching hue text token (`--color-text-blue`, `-green`,
+  `-yellow`, or `-red`) and `--color-on-<status>` keeps the theme's or Core's
+  value. Those aliases carry the theme's own values: they are not derived
+  values, so INV11's floors bind them only in Core and first-party themes,
+  which use concrete colours. A value the theme sets always wins over a derived
+  one. A derived value is emitted in the scope where its source is set
+  (INV16), and runtime and static output derive the same values.
 
 This record does not own:
 
@@ -255,26 +327,37 @@ This record does not own:
 AST-006 decisions 2 and 4, as amended on 2026-09-12, establish
 prefix-independent local-token names and atomic shared validation for enrolled themes.
 AST-012 decisions 3 and 4 establish ordered adaptation blocks and source/built metadata
-parity. The system owner separately selected one definition with platform-specific
+parity. AST-087 decisions 2 and 9 establish function icon entries and the finite,
+theme-level variant list that built resolution and icon-artwork tooling use. The system owner separately selected one definition with platform-specific
 outputs and the guaranteed, best-effort, public-semantic, and private implementation
 tiers.
 
 ## Verification
 
-| Invariant        | Evidence                                                                                                        | Failure signal                                                                                                          |
-| ---------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV2, INV3 | Compiler imports and runtime/build comparison fixtures                                                          | Runtime and build use different theme-to-CSS logic or produce different web rules                                       |
-| INV4             | `generateThemeRules.test.ts` and source/distribution cascade tests                                              | Scope or layer order differs by output path                                                                             |
-| INV5             | Existing per-property fixtures (partial; gap below)                                                             | A guaranteed property compiles but does not produce its promised observable effect                                      |
-| INV6, INV7       | Existing registry and CLI public-variable tests (partial)                                                       | Private variables become authorable, or a reviewed public semantic variable fails build/runtime                         |
-| INV8             | Component target metadata and compatibility review                                                              | Successful generic emission is treated as a guaranteed public behavior                                                  |
-| INV9, INV10      | Platform compiler tests when another compiler ships                                                             | CSS details enter shared authoring, or shared theme intent silently disappears                                          |
-| INV11            | `defineTheme.test.ts` and `build.test.mjs` local-token fixtures                                                 | Runtime/static output rewrites a local name, disagrees, or leaves partial output after failure                          |
-| INV12            | `themeAdaptations.test.ts` and CLI adaptation build fixtures                                                    | Rule blocks merge/reorder/drop, surfaces lose precedence, or runtime/static CSS diverges                                |
-| INV13, INV14     | Declaration scanner, generator, Theme mounting, CLI receipt tests, and the existing theme-family Chromium guard | One unsafe declaration corrupts neighbors, valid CSS changes, legacy token generation crashes, or reporting changes CSS |
-| Built themes     | Theme and CLI build tests                                                                                       | Runtime recompiles a built theme, or built output omits canonical rules                                                 |
+| Invariant        | Evidence                                                                                                                                                                                                                                                                                                                                                                                  | Failure signal                                                                                                                                                                                                                                                                                    |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1, INV2, INV3 | Compiler imports and runtime/build comparison fixtures                                                                                                                                                                                                                                                                                                                                    | Runtime and build use different theme-to-CSS logic or produce different web rules                                                                                                                                                                                                                 |
+| INV4             | `generateThemeRules.test.ts` and source/distribution cascade tests                                                                                                                                                                                                                                                                                                                        | Scope or layer order differs by output path                                                                                                                                                                                                                                                       |
+| INV5             | Existing per-property fixtures (partial; gap below)                                                                                                                                                                                                                                                                                                                                       | A guaranteed property compiles but does not produce its promised observable effect                                                                                                                                                                                                                |
+| INV6, INV7       | Existing registry and CLI public-variable tests (partial)                                                                                                                                                                                                                                                                                                                                 | Private variables become authorable, or a reviewed public semantic variable fails build/runtime                                                                                                                                                                                                   |
+| INV8             | Component target metadata and compatibility review                                                                                                                                                                                                                                                                                                                                        | Successful generic emission is treated as a guaranteed public behavior                                                                                                                                                                                                                            |
+| INV9, INV10      | Platform compiler tests when another compiler ships                                                                                                                                                                                                                                                                                                                                       | CSS details enter shared authoring, or shared theme intent silently disappears                                                                                                                                                                                                                    |
+| INV11            | `defineTheme.test.ts` and `build.test.mjs` local-token fixtures                                                                                                                                                                                                                                                                                                                           | Runtime/static output rewrites a local name, disagrees, or leaves partial output after failure                                                                                                                                                                                                    |
+| INV12            | `themeAdaptations.test.ts` and CLI adaptation build fixtures                                                                                                                                                                                                                                                                                                                              | Rule blocks merge/reorder/drop, surfaces lose precedence, or runtime/static CSS diverges                                                                                                                                                                                                          |
+| INV13, INV14     | Declaration scanner, generator, Theme mounting, CLI receipt tests, and the existing theme-family Chromium guard                                                                                                                                                                                                                                                                           | One unsafe declaration corrupts neighbors, valid CSS changes, legacy token generation crashes, or reporting changes CSS                                                                                                                                                                           |
+| Built themes     | Theme and CLI build tests                                                                                                                                                                                                                                                                                                                                                                 | Runtime recompiles a built theme, or built output omits canonical rules                                                                                                                                                                                                                           |
+| INV15            | CLI build fixtures with function entries, slot functions, a variant list, and an inherited entry under a replaced list, compared with runtime resolution                                                                                                                                                                                                                                  | Built and runtime icons differ, a function is dropped silently, or tooling enumerates a variant an entry cannot receive                                                                                                                                                                           |
+| INV16            | Root, adaptation, media, nested-theme, and CLI-built status-alias fixtures                                                                                                                                                                                                                                                                                                                | A generated role escapes its source scope, overrides an authored role, changes cascade meaning, cycles, or differs by output path                                                                                                                                                                 |
+| INV17            | A minimal custom theme that sets only its four status fills, compiled at runtime and through the CLI build, plus themes that set a light fill, a grey fill, an unresolved fill, an unresolved card surface, only a surface, only a hue text token, a fill only inside an adaptation rule, and one that `extends` a theme setting a status role, each also read through non-CSS resolution | A content or text role is missing, misses an INV11 floor in light or dark mode, is grey, ignores a value the theme set, or differs between runtime, build, and non-CSS resolution; an icon or border role does not follow the text role; a fill is derived; or an inherited role is derived again |
 
 ## Known conformance and verification gaps
+
+Inside an `onDark`/`onLight` media surface, which sits on content the compiler
+cannot measure, a status fill the theme sets there gets its derived content, but
+its text and pale-fill content reach their roles as INV16 aliases rather than
+derived values. Inside adaptation rules, each rule's derived
+values combine the root with that rule alone, so rules that match together and
+each set a measured colour do not yet derive from their combination.
 
 Declaration-boundary enforcement and the warnings-array collector in INV13–INV14
 are accepted but not yet shipped. Their verification obligations above describe

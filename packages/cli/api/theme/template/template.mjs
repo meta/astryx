@@ -4,7 +4,7 @@
  * @file `astryx theme template` leaf — writes the annotated theme template into the
  * consumer's project.
  *
- * `theme add --import` uses an installed built theme without copying source. This command
+ * `theme add` uses an installed built theme without copying source. This command
  * writes the blank annotated reference for a new theme. `theme eject` is the
  * separate path for starting from a complete source fork of an existing theme.
  *

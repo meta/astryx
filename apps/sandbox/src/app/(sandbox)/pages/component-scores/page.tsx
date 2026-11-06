@@ -33,7 +33,8 @@ import {Section} from '@astryxdesign/core/Section';
 import {Table, proportional, pixel} from '@astryxdesign/core/Table';
 import type {TableColumn, TablePlugin} from '@astryxdesign/core/Table';
 import {colorVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
-import {Drawer, DrawerHeader, Stat} from '@astryxdesign/lab';
+import {Drawer, DrawerHeader} from '@astryxdesign/core/Drawer';
+import {Stat} from '@astryxdesign/lab';
 
 import {
   AUDIT_PROMPT,
@@ -909,7 +910,7 @@ export default function ComponentScoresPage() {
                     hasClear
                     variant="ghost"
                     size="sm"
-                    xstyle={styles.filterToken}
+                    controlXstyle={styles.filterToken}
                   />
                   <Selector
                     label="Package"
@@ -923,7 +924,7 @@ export default function ComponentScoresPage() {
                     hasClear
                     variant="ghost"
                     size="sm"
-                    xstyle={styles.filterToken}
+                    controlXstyle={styles.filterToken}
                   />
                   <Text type="supporting" color="secondary">
                     {visible.length}{' '}

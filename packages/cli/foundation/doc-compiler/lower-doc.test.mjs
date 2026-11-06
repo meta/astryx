@@ -386,7 +386,7 @@ describe('parseCompiledDocNode and parseCompiledDocsBundle', () => {
   it('accepts a node of every kind and a bundle, as given', () => {
     const value = bundle();
     expect(parseCompiledDocsBundle(value)).toBe(value);
-    expect(COMPILED_DOC_KINDS).toHaveLength(10);
+    expect(COMPILED_DOC_KINDS).toHaveLength(11);
     // A namespace doc, which the docs tree reads, lowers to a node too.
     const namespace = {...node(), kind: 'namespace'};
     expect(parseCompiledDocNode(namespace)).toBe(namespace);

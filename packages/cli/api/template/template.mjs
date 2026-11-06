@@ -24,11 +24,13 @@ import {
 } from '../../foundation/discovery/template-adapter.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {orderByAffinity} from '../../foundation/text/suggest-order.mjs';
 import {templateList} from './list/list.mjs';
 import {templateShow} from './show/show.mjs';
 import {templateSkeleton} from './skeleton/skeleton.mjs';
 import {templateCopy} from './copy/copy.mjs';
 import {templateCdn} from './cdn/cdn.mjs';
+import {loadTemplateIconSets} from './_adapter.mjs';
 
 // Re-export the shared discovery/IO + cross-command helpers so this module
 // stays the single import surface for the template family (same exports as
@@ -42,6 +44,7 @@ export {
   discoverIntegrationTemplatesForOne,
   stripTemplateAssetRefs,
   replaceDemoMedia,
+  replaceDemoContent,
   listTemplates,
   findRelatedBlocks,
   findShowcase,
@@ -85,6 +88,51 @@ export async function template(name, options = {}) {
     package: packageFilter,
     cwd = process.cwd(),
   } = options;
+
+  if (cdn) {
+    const ignored = [
+      name ? '<name>' : null,
+      list ? '--list' : null,
+      skeleton ? '--skeleton' : null,
+      type ? '--type' : null,
+      packageFilter ? '--package' : null,
+    ].filter(Boolean);
+    if (ignored.length > 0) {
+      throw new AstryxError(
+        `\`--cdn\` cannot be combined with ${ignored.join(', ')}: the CDN starter does not use templates.`,
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+  }
+  if (list) {
+    const ignored = [
+      name ? '<name>' : null,
+      targetPath ? '<path>' : null,
+      skeleton ? '--skeleton' : null,
+      overwrite ? '--overwrite' : null,
+    ].filter(Boolean);
+    if (ignored.length > 0) {
+      throw new AstryxError(
+        `\`--list\` cannot be combined with ${ignored.join(', ')}: it lists templates and does not scaffold.`,
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+  }
+  if (skeleton) {
+    const ignored = [
+      targetPath ? '<path>' : null,
+      overwrite ? '--overwrite' : null,
+    ].filter(Boolean);
+    if (ignored.length > 0) {
+      throw new AstryxError(
+        `\`--skeleton\` cannot be combined with ${ignored.join(', ')}: it prints the skeleton and does not write files.`,
+        undefined,
+        ERROR_CODES.ERR_INVALID_ARGUMENT,
+      );
+    }
+  }
 
   // The CDN starter ships as an asset rather than as a discovered template, so
   // it answers before discovery — nothing here needs a name resolved.
@@ -143,7 +191,12 @@ export async function template(name, options = {}) {
   if (name && candidates.length === 0) {
     throw new AstryxError(
       `Unknown template "${name}"`,
-      templates.map(t => ({name: t.dirName, reason: `${t.type} template`})),
+      orderByAffinity(name, templates, t => [t.dirName, t.name], {
+        closest: true,
+      }).map(t => ({
+        name: t.dirName,
+        reason: `${t.type} template`,
+      })),
       ERROR_CODES.ERR_UNKNOWN_TEMPLATE,
     );
   }
@@ -163,9 +216,12 @@ export async function template(name, options = {}) {
     return templateSkeleton(match, templates);
   }
 
+  // The project's icon set decides how the template's icons are written
+  // (AST-084 FR9): both the printed source and the copied file follow it.
+  const iconSets = await loadTemplateIconSets(cwd);
   if (show || !targetPath) {
-    return templateShow(match);
+    return templateShow(match, {iconSets});
   }
 
-  return templateCopy(match, {targetPath, cwd, overwrite});
+  return templateCopy(match, {targetPath, cwd, overwrite, iconSets});
 }

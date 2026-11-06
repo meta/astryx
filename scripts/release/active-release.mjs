@@ -7,8 +7,8 @@
  * (spec:AST-017 FR47); main publishes canaries only and its versions never move
  * backward (FR46, FR50).
  *
- * @input  .release marker/plan files, release refs, expected branch/head inputs
- * @output fail-closed validation receipts bound to branch + commit + plan digest
+ * @input  .release marker/plan files, authored Changesets, expected branch/head inputs
+ * @output fail-closed receipts plus the cut-time release description frozen in the plan digest
  * @position single authority used by release CI, stable publishing, and branch cleanup
  *
  * CI copies this file and lib/workspace-globs.mjs alone as trusted policy, so
@@ -32,6 +32,39 @@ const PLAN_FILE = 'plan.json';
 const SHA_RE = /^[0-9a-f]{40}$/;
 const VERSION_RE = /^\d+\.\d+\.\d+$/;
 const BRANCH_RE = /^release\/v(\d+\.\d+\.\d+)$/;
+const CHANGESET_CATEGORIES = new Set([
+  'breaking',
+  'experimental',
+  'component',
+  'feat',
+  'fix',
+  'perf',
+  'docs',
+  'chore',
+]);
+const CHANGESET_CATEGORY_ALIASES = {
+  bug: 'fix',
+  bugfix: 'fix',
+  fixes: 'fix',
+  feature: 'feat',
+  features: 'feat',
+  break: 'breaking',
+  major: 'breaking',
+  components: 'component',
+  new: 'component',
+  performance: 'perf',
+  doc: 'docs',
+  refactor: 'chore',
+  internal: 'chore',
+};
+
+function normalizeChangesetCategory(raw) {
+  const category = String(raw ?? '')
+    .trim()
+    .toLowerCase();
+  if (CHANGESET_CATEGORIES.has(category)) return category;
+  return CHANGESET_CATEGORY_ALIASES[category] ?? null;
+}
 
 function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -65,6 +98,54 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+function parseChangesetDescription(contents) {
+  const text = contents.toString('utf8').replace(/\r\n/g, '\n');
+  const parsed = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text);
+  if (!parsed) {
+    return {
+      packages: [],
+      category: null,
+      headline: '',
+      contributors: [],
+      body: text.trim(),
+    };
+  }
+
+  const packages = parsed[1]
+    .split('\n')
+    .map(line =>
+      /^\s*['"]?([^'"]+)['"]?\s*:\s*(major|minor|patch|none)\s*$/.exec(line),
+    )
+    .filter(Boolean)
+    .map(match => ({name: match[1], bump: match[2]}));
+
+  const lines = parsed[2].split('\n');
+  const first = lines.findIndex(line => line.trim() !== '');
+  const headlineMatch =
+    first === -1 ? null : /^\s*\[([^\]]+)\]\s*(.*)$/.exec(lines[first]);
+  const contributors = [];
+  const body = [];
+  for (const line of lines.slice(first + 1)) {
+    if (/^\s*@[-\w]+(?:\s+@[-\w]+)*\s*$/.test(line)) {
+      for (const match of line.matchAll(/@([-\w]+)/g)) {
+        if (!contributors.includes(match[1])) contributors.push(match[1]);
+      }
+    } else {
+      body.push(line);
+    }
+  }
+  while (body.length && body[0].trim() === '') body.shift();
+  while (body.length && body.at(-1).trim() === '') body.pop();
+
+  return {
+    packages,
+    category: normalizeChangesetCategory(headlineMatch?.[1]),
+    headline: headlineMatch?.[2].trim() ?? '',
+    contributors,
+    body: body.join('\n'),
+  };
+}
+
 function changesetEntries(root) {
   const dir = path.join(root, '.changeset');
   return fs
@@ -73,16 +154,18 @@ function changesetEntries(root) {
     .sort()
     .map(name => {
       const relative = `.changeset/${name}`;
+      const contents = fs.readFileSync(path.join(root, relative));
       return {
         path: relative,
-        sha256: sha256(fs.readFileSync(path.join(root, relative))),
+        sha256: sha256(contents),
+        ...parseChangesetDescription(contents),
       };
     });
 }
 
 function buildPlan({root, version, branch, cutSha}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     version,
     branch,
     cutSha,
@@ -116,7 +199,7 @@ function validateIdentity(marker, plan) {
     errors.push('marker cutSha must be a full SHA');
   if (!/^[0-9a-f]{64}$/.test(marker?.planDigest ?? ''))
     errors.push('marker planDigest must be a SHA-256 digest');
-  if (plan?.schemaVersion !== 1) errors.push('plan schemaVersion must be 1');
+  if (plan?.schemaVersion !== 2) errors.push('plan schemaVersion must be 2');
   for (const key of ['version', 'branch', 'cutSha']) {
     if (plan?.[key] !== marker?.[key])
       errors.push(`plan ${key} must match marker`);
@@ -136,6 +219,33 @@ function validateIdentity(marker, plan) {
     seen.add(entry.path);
     if (!/^[0-9a-f]{64}$/.test(entry.sha256 ?? ''))
       errors.push(`plan has an invalid digest for ${entry.path}`);
+    if (!Array.isArray(entry.packages) || entry.packages.length === 0) {
+      errors.push(`plan has no packages for ${entry.path}`);
+    } else {
+      for (const release of entry.packages) {
+        if (
+          !release ||
+          typeof release.name !== 'string' ||
+          !['major', 'minor', 'patch', 'none'].includes(release.bump)
+        ) {
+          errors.push(`plan has an invalid package release for ${entry.path}`);
+        }
+      }
+    }
+    if (!CHANGESET_CATEGORIES.has(entry.category))
+      errors.push(`plan has an invalid category for ${entry.path}`);
+    if (typeof entry.headline !== 'string' || entry.headline.trim() === '')
+      errors.push(`plan has no headline for ${entry.path}`);
+    if (
+      !Array.isArray(entry.contributors) ||
+      entry.contributors.some(
+        value => typeof value !== 'string' || value === '',
+      )
+    ) {
+      errors.push(`plan has invalid contributors for ${entry.path}`);
+    }
+    if (typeof entry.body !== 'string')
+      errors.push(`plan has an invalid body for ${entry.path}`);
   }
   return errors;
 }
@@ -265,9 +375,57 @@ function latestStableVersion(root) {
   return versions.at(-1) ?? null;
 }
 
-function fileDigestAtRef(root, ref, file) {
+// A found object's header line in `git cat-file --batch` output: its id,
+// type and size in bytes.
+const FOUND_OBJECT = /^[0-9a-f]{40,64} [a-z]+ (\d+)$/;
+
+/**
+ * Each file's bytes at `ref`, or null when the ref lacks it, read with one
+ * `git cat-file --batch` instead of one `git show` per file. This module
+ * imports nothing beyond its own lib (see the header), so it carries its own
+ * reader.
+ * @param {string} root
+ * @param {string} ref
+ * @param {string[]} files
+ * @returns {Map<string, Buffer | null>}
+ */
+function filesAtRef(root, ref, files) {
+  const contents = new Map();
+  if (files.length === 0) return contents;
+  const out = execFileSync('git', ['cat-file', '--batch'], {
+    cwd: root,
+    input: files.map(file => `${ref}:${file}\n`).join(''),
+    maxBuffer: 1024 * 1024 * 1024,
+  });
+  let at = 0;
+  for (const file of files) {
+    const end = out.indexOf(0x0a, at);
+    const found = FOUND_OBJECT.exec(out.toString('utf8', at, end));
+    at = end + 1;
+    if (found === null) {
+      contents.set(file, null);
+      continue;
+    }
+    const size = Number(found[1]);
+    contents.set(file, out.subarray(at, at + size));
+    at += size + 1;
+  }
+  return contents;
+}
+
+function fileDigestsAtRef(root, ref, files) {
+  const contents = filesAtRef(root, ref, files);
+  return new Map(
+    files.map(file => {
+      const content = contents.get(file);
+      return [file, content ? sha256(content) : null];
+    }),
+  );
+}
+
+function parseJson(content) {
   try {
-    return sha256(execFileSync('git', ['show', `${ref}:${file}`], {cwd: root}));
+    return content ? JSON.parse(content.toString('utf8')) : null;
   } catch {
     return null;
   }
@@ -282,7 +440,9 @@ function changesetMapAtRef(root, ref) {
     '--',
     '.changeset',
   ]);
-  return new Map(
+  return fileDigestsAtRef(
+    root,
+    ref,
     files
       .split('\n')
       .filter(
@@ -290,8 +450,7 @@ function changesetMapAtRef(root, ref) {
           file.startsWith('.changeset/') &&
           file.endsWith('.md') &&
           file !== '.changeset/README.md',
-      )
-      .map(file => [file, fileDigestAtRef(root, ref, file)]),
+      ),
   );
 }
 
@@ -306,11 +465,12 @@ function releaseOutputPathsAtRef(root, plan, releaseRef) {
 }
 
 function releaseOutputMapAtRef(root, plan, releaseRef) {
-  return new Map(
+  return fileDigestsAtRef(
+    root,
+    releaseRef,
     releaseOutputPathsAtRef(root, plan, releaseRef)
       .filter(isReleaseOutputPath)
-      .filter(file => !isPackageManifestPath(file))
-      .map(file => [file, fileDigestAtRef(root, releaseRef, file)]),
+      .filter(file => !isPackageManifestPath(file)),
   );
 }
 
@@ -329,7 +489,8 @@ function jsonAtRef(root, ref, file) {
 }
 
 function manifestMapAtRef(root, ref, files) {
-  return new Map([...files].map(file => [file, jsonAtRef(root, ref, file)]));
+  const contents = filesAtRef(root, ref, [...files]);
+  return new Map([...files].map(file => [file, parseJson(contents.get(file))]));
 }
 
 function currentManifestMap(root, files) {
@@ -351,6 +512,153 @@ function currentOutputMap(root, files) {
       ];
     }),
   );
+}
+
+/**
+ * The merge-back's changes against `base`: `git diff --name-status` lines.
+ * `base` must be the merge commit's first parent, the main commit the merge
+ * was built on. A later main would show every file it gained as a deletion.
+ */
+function mergeBackEntries(root, base, head = 'HEAD') {
+  const raw = git(root, [
+    'diff',
+    '--name-status',
+    '--find-renames',
+    base,
+    head,
+  ]);
+  return raw ? raw.split('\n') : [];
+}
+
+/**
+ * Validate one merge-back projection against its immutable release tag.
+ *
+ * The live PR path also binds the still-active release branch. A historical
+ * coverage audit has no branch to bind after cleanup, so it replays the same
+ * structural validation against the committed head and immutable tag.
+ */
+function validateMergeBackAtRef(
+  root,
+  {base, head = 'HEAD', releaseRef, activeBranches = null, workingTree = false},
+) {
+  const marker = markerAtRef(root, releaseRef);
+  const plan = JSON.parse(
+    git(root, ['show', `${releaseRef}:${RELEASE_DIR}/${PLAN_FILE}`]),
+  );
+  const errors = validateIdentity(marker, plan);
+  if (releaseRef !== `v${marker.version}`)
+    errors.push('release merge-back must use the immutable version tag');
+
+  const releaseHead = git(root, ['rev-parse', releaseRef]);
+  if (activeBranches !== null) {
+    const branchHead = git(root, ['rev-parse', `origin/${marker.branch}`]);
+    if (releaseHead !== branchHead)
+      errors.push('version tag does not match the active release branch head');
+    const sortedBranches = [...activeBranches].sort();
+    if (sortedBranches.length !== 1 || sortedBranches[0] !== marker.branch)
+      errors.push(
+        'release merge-back requires exactly the marked active branch',
+      );
+  }
+
+  const entries = mergeBackEntries(root, base, head);
+  const releaseDiff = git(root, [
+    'diff',
+    '--name-status',
+    '--find-renames',
+    plan.cutSha,
+    releaseRef,
+  ]);
+  const releaseRenames = new Set(
+    releaseDiff
+      .split('\n')
+      .filter(Boolean)
+      .map(entry => entry.split('\t'))
+      .filter(
+        ([status, ...files]) => status?.startsWith('R') && files.length === 2,
+      )
+      .map(([, ...files]) => files.join('\t')),
+  );
+  const releaseOutputs = releaseOutputMapAtRef(root, plan, releaseRef);
+  const releaseManifestFiles = releaseOutputPathsAtRef(
+    root,
+    plan,
+    releaseRef,
+  ).filter(isPackageManifestPath);
+  const cutManifests = manifestMapAtRef(
+    root,
+    plan.cutSha,
+    releaseManifestFiles,
+  );
+  const releaseManifests = manifestMapAtRef(
+    root,
+    releaseRef,
+    releaseManifestFiles,
+  );
+  const mainManifestFiles = git(root, [
+    'ls-tree',
+    '-r',
+    '--name-only',
+    base,
+    '--',
+    'packages',
+  ])
+    .split('\n')
+    .filter(isPackageManifestPath);
+  const baseManifests = manifestMapAtRef(root, base, mainManifestFiles);
+  const baseConfig = jsonAtRef(root, base, '.changeset/config.json');
+  const headChangesets = workingTree
+    ? new Map(changesetEntries(root).map(entry => [entry.path, entry.sha256]))
+    : changesetMapAtRef(root, head);
+  const headOutputs = workingTree
+    ? currentOutputMap(root, releaseOutputs.keys())
+    : fileDigestsAtRef(root, head, [...releaseOutputs.keys()]);
+  const headManifests = workingTree
+    ? currentManifestMap(root, mainManifestFiles)
+    : manifestMapAtRef(root, head, mainManifestFiles);
+
+  errors.push(
+    ...validateReleaseMergeBack({
+      entries,
+      plan,
+      baseChangesets: changesetMapAtRef(root, base),
+      headChangesets,
+      releaseOutputs,
+      headOutputs,
+      releaseRenames,
+      releaseVersion: marker.version,
+      fixedNames: new Set((baseConfig?.fixed ?? []).flat()),
+      cutManifests,
+      releaseManifests,
+      baseManifests,
+      headManifests,
+    }),
+  );
+  return {
+    errors,
+    receipt: {
+      branch: marker.branch,
+      head: releaseHead,
+      version: marker.version,
+      planDigest: marker.planDigest,
+      base,
+      releaseRef,
+    },
+  };
+}
+
+/** Replay the merge-back validator over a closed, one-parent merge commit. */
+function validateHistoricalReleaseMergeBack(root, {head, releaseRef}) {
+  const lineage = git(root, ['rev-list', '--parents', '-n', '1', head])
+    .trim()
+    .split(/\s+/);
+  if (lineage.length !== 2)
+    return ['historical release merge-back must be a one-parent squash commit'];
+  return validateMergeBackAtRef(root, {
+    base: lineage[1],
+    head,
+    releaseRef,
+  }).errors;
 }
 
 function markerAtRef(root, ref) {
@@ -733,99 +1041,6 @@ function validateReleaseMergeBack({
   return errors;
 }
 
-/**
- * FR46/FR51 — main's fixed-group version on a pull request into main.
- *
- * Main carries a malleable plan until cut. It may move up or down, but always
- * remains one plain version strictly above the newest stable release. When the
- * base still equals that release after merge-back, the first plan may only be
- * its patch successor (default) or its owner-named minor successor.
- *
- * @param {object} input
- * @param {string[]} input.fixed  trusted fixed-group package names
- * @param {string} input.releasedVersion  newest stable vX.Y.Z tag, without v
- * @param {string|null} [input.activeCutVersion]  single active untagged/ongoing cut
- * @param {Map<string, object|null>} input.baseManifests  name -> manifest at base
- * @param {Map<string, object|null>} input.headManifests  name -> manifest at head
- * @returns {string[]}
- */
-function validateMainVersions({
-  fixed,
-  releasedVersion,
-  activeCutVersion = null,
-  baseManifests = new Map(),
-  headManifests,
-}) {
-  const errors = [];
-  if (!VERSION_RE.test(releasedVersion ?? ''))
-    errors.push('main version check needs the newest stable vX.Y.Z tag');
-  const headVersions = new Set();
-  const baseVersions = new Set();
-  for (const name of fixed) {
-    const base = baseManifests.get(name);
-    if (
-      base &&
-      isStableReleasePackage(base) &&
-      VERSION_RE.test(base.version ?? '')
-    )
-      baseVersions.add(base.version);
-    const head = headManifests.get(name);
-    if (!head || !isStableReleasePackage(head)) continue;
-    if (!VERSION_RE.test(head.version ?? '')) {
-      errors.push(`${name} is ${head.version}; main declares an X.Y.Z version`);
-      continue;
-    }
-    headVersions.add(head.version);
-  }
-  if (headVersions.size !== 1) {
-    errors.push(
-      `the fixed group must declare one version on main; found ${[...headVersions].sort().join(', ') || 'none'}`,
-    );
-    return errors;
-  }
-  const [declaredVersion] = headVersions;
-  const order = VERSION_RE.test(releasedVersion ?? '')
-    ? compareVersions(declaredVersion, releasedVersion)
-    : null;
-  if (order === null || order <= 0)
-    errors.push(
-      `main declares ${declaredVersion}; it must stay strictly above newest stable v${releasedVersion}`,
-    );
-  if (
-    activeCutVersion !== null &&
-    compareVersions(declaredVersion, activeCutVersion) < 0
-  )
-    errors.push(
-      `main declares ${declaredVersion}; it must not fall below active cut v${activeCutVersion}`,
-    );
-  if (
-    order > 0 &&
-    baseVersions.size === 1 &&
-    [...baseVersions][0] === releasedVersion &&
-    nextPlannedVersion(releasedVersion, declaredVersion) === null
-  )
-    errors.push(
-      `main's first plan after v${releasedVersion} must be patch successor ${patchSuccessor(releasedVersion)} by default or owner-named minor ${minorSuccessor(releasedVersion)}; found ${declaredVersion}`,
-    );
-  const fixedNames = new Set(fixed);
-  for (const manifest of headManifests.values()) {
-    if (!manifest) continue;
-    for (const field of VERSION_DEPENDENCY_FIELDS) {
-      for (const [name, spec] of Object.entries(manifest[field] ?? {})) {
-        if (
-          fixedNames.has(name) &&
-          EXACT_SPEC_RE.test(spec) &&
-          spec !== declaredVersion
-        )
-          errors.push(
-            `${manifest.name} ${field}.${name} pins ${spec}; main declares ${declaredVersion}`,
-          );
-      }
-    }
-  }
-  return errors;
-}
-
 function canaryEligibility({fixed, releasedVersion, manifests}) {
   const versions = new Set(
     [...manifests.values()]
@@ -913,7 +1128,12 @@ function versionTagExists(root, version) {
  * @returns {{version: string|null, errors: string[]}}
  */
 function declaredVersionAtRef(root, ref) {
-  const config = jsonAtRef(root, ref, '.changeset/config.json');
+  const configFile = '.changeset/config.json';
+  const files = expandWorkspaceDirs(root).map(dir =>
+    path.relative(root, path.join(dir, 'package.json')),
+  );
+  const contents = filesAtRef(root, ref, [configFile, ...files]);
+  const config = parseJson(contents.get(configFile));
   if (!config)
     return {
       version: null,
@@ -921,9 +1141,8 @@ function declaredVersionAtRef(root, ref) {
     };
   const fixed = new Set((config.fixed ?? []).flat());
   const versions = new Map();
-  for (const dir of expandWorkspaceDirs(root)) {
-    const file = path.relative(root, path.join(dir, 'package.json'));
-    const manifest = jsonAtRef(root, ref, file);
+  for (const file of files) {
+    const manifest = parseJson(contents.get(file));
     if (!manifest || !fixed.has(manifest.name)) continue;
     if (!isStableReleasePackage(manifest)) continue;
     if (!versions.has(manifest.version)) versions.set(manifest.version, []);
@@ -1103,154 +1322,25 @@ async function main() {
     );
     return;
   }
-  if (command === 'validate-main-version') {
-    const base = required(values, 'base');
-    const config = jsonAtRef(root, base, '.changeset/config.json');
-    if (!config)
-      throw new Error(`cannot read trusted fixed group from ${base}`);
-    const releasedVersion = latestStableVersion(root);
-    const activeBranches = listActiveBranches(root);
-    const activeCutVersion =
-      activeBranches.length === 1
-        ? markerAtRef(root, `origin/${activeBranches[0]}`).version
-        : null;
-    const errors = [];
-    if (activeBranches.length > 1)
-      errors.push(
-        `main version check requires at most one active cut; found ${activeBranches.join(', ')}`,
-      );
-    errors.push(
-      ...validateMainVersions({
-        fixed: (config.fixed ?? []).flat(),
-        releasedVersion,
-        activeCutVersion,
-        baseManifests: packageManifestsByName(
-          file => jsonAtRef(root, base, file),
-          root,
-        ),
-        headManifests: packageManifestsByName(file => {
-          const absolute = path.join(root, file);
-          return fs.existsSync(absolute) ? readJson(absolute) : null;
-        }, root),
-      }),
-    );
-    if (errors.length) throw new Error(errors.join('\n'));
-    console.log(
-      JSON.stringify({base, releasedVersion, activeCutVersion, valid: true}),
-    );
-    return;
-  }
   if (command === 'validate-merge-back') {
     const base = required(values, 'base');
     const releaseRef = required(values, 'release-ref');
-    const marker = markerAtRef(root, releaseRef);
-    const plan = JSON.parse(
-      git(root, ['show', `${releaseRef}:${RELEASE_DIR}/${PLAN_FILE}`]),
-    );
-    const errors = validateIdentity(marker, plan);
-    if (releaseRef !== `v${marker.version}`)
-      errors.push('release merge-back must use the immutable version tag');
-    const releaseHead = git(root, ['rev-parse', releaseRef]);
-    const branchHead = git(root, ['rev-parse', `origin/${marker.branch}`]);
-    if (releaseHead !== branchHead)
-      errors.push('version tag does not match the active release branch head');
     const activeBranches = required(values, 'active-branches')
       .split(',')
-      .filter(Boolean)
-      .sort();
-    if (activeBranches.length !== 1 || activeBranches[0] !== marker.branch)
-      errors.push(
-        'release merge-back requires exactly the marked active branch',
-      );
-    const raw = git(root, [
-      'diff',
-      '--name-status',
-      '--find-renames',
+      .filter(Boolean);
+    const {errors, receipt} = validateMergeBackAtRef(root, {
       base,
-      'HEAD',
-    ]);
-    const releaseDiff = git(root, [
-      'diff',
-      '--name-status',
-      '--find-renames',
-      plan.cutSha,
       releaseRef,
-    ]);
-    const releaseRenames = new Set(
-      releaseDiff
-        .split('\n')
-        .filter(Boolean)
-        .map(entry => entry.split('\t'))
-        .filter(
-          ([status, ...files]) => status?.startsWith('R') && files.length === 2,
-        )
-        .map(([, ...files]) => files.join('\t')),
-    );
-    const releaseOutputs = releaseOutputMapAtRef(root, plan, releaseRef);
-    const releaseManifestFiles = releaseOutputPathsAtRef(
-      root,
-      plan,
-      releaseRef,
-    ).filter(isPackageManifestPath);
-    const cutManifests = manifestMapAtRef(
-      root,
-      plan.cutSha,
-      releaseManifestFiles,
-    );
-    const releaseManifests = manifestMapAtRef(
-      root,
-      releaseRef,
-      releaseManifestFiles,
-    );
-    // FR50 validates every current-main manifest so the release branch delta
-    // cannot overwrite post-cut main fields or decide the next version.
-    const mainManifestFiles = git(root, [
-      'ls-tree',
-      '-r',
-      '--name-only',
-      base,
-      '--',
-      'packages',
-    ])
-      .split('\n')
-      .filter(isPackageManifestPath);
-    const baseManifests = manifestMapAtRef(root, base, mainManifestFiles);
-    const baseConfig = jsonAtRef(root, base, '.changeset/config.json');
-    errors.push(
-      ...validateReleaseMergeBack({
-        entries: raw ? raw.split('\n') : [],
-        plan,
-        baseChangesets: changesetMapAtRef(root, base),
-        headChangesets: new Map(
-          changesetEntries(root).map(entry => [entry.path, entry.sha256]),
-        ),
-        releaseOutputs,
-        headOutputs: currentOutputMap(root, releaseOutputs.keys()),
-        releaseRenames,
-        releaseVersion: marker.version,
-        fixedNames: new Set((baseConfig?.fixed ?? []).flat()),
-        cutManifests,
-        releaseManifests,
-        baseManifests,
-        headManifests: currentManifestMap(root, mainManifestFiles),
-      }),
-    );
+      activeBranches,
+      workingTree: true,
+    });
     if (errors.length) throw new Error(errors.join('\n'));
-    console.log(
-      JSON.stringify({
-        branch: marker.branch,
-        head: releaseHead,
-        version: marker.version,
-        planDigest: marker.planDigest,
-        base,
-        releaseRef,
-      }),
-    );
+    console.log(JSON.stringify(receipt));
     return;
   }
   if (command !== 'validate')
     throw new Error(
-      'command must be create, refresh, list-active, inspect-ref, validate-diff, next-plan-version, canary-eligibility, validate-main-version, validate-merge-back, or validate',
+      'command must be create, refresh, list-active, inspect-ref, validate-diff, next-plan-version, canary-eligibility, validate-merge-back, or validate',
     );
 
   const marker = readJson(path.join(root, RELEASE_DIR, MARKER_FILE));
@@ -1308,16 +1398,18 @@ export {
   compareVersions,
   computePlanDigest,
   declaredVersionAtRef,
+  filesAtRef,
   nextPlannedVersion,
   isStableReleasePackage,
   latestStableVersion,
   listActiveBranches,
+  mergeBackEntries,
   validateIdentity,
-  validateMainVersions,
   validateRefMarker,
   validateReleaseDiff,
   validateReleaseState,
   validateReleaseMergeBack,
+  validateHistoricalReleaseMergeBack,
   versionTagExists,
   writeAuthority,
 };

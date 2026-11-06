@@ -34,7 +34,8 @@ export interface LayoutSlots {
 /**
  * Default slot state - no slots filled.
  */
-const defaultSlots: LayoutSlots = {
+/** The slots outside any Layout: none rendered (a layout root resets to it). */
+export const DEFAULT_LAYOUT_SLOTS: LayoutSlots = {
   hasHeader: false,
   hasFooter: false,
   hasStart: false,
@@ -46,5 +47,6 @@ const defaultSlots: LayoutSlots = {
  * Content area components use this to determine if they are at an edge
  * (for applying outer padding).
  */
-export const LayoutSlotsContext = createContext<LayoutSlots>(defaultSlots);
+export const LayoutSlotsContext =
+  createContext<LayoutSlots>(DEFAULT_LAYOUT_SLOTS);
 LayoutSlotsContext.displayName = 'LayoutSlotsContext';

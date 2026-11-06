@@ -14,11 +14,11 @@ export const docs = {
   placement: {parent: 'namespace:styling', slot: 'guides', order: 20},
   category: 'guide',
   description:
-    'Compound component styling, data-attribute selectors, deprecated bare prop/state classes, and common anti-patterns.',
+    'Compound component styling, data-attribute selectors, migrating removed theme compatibility selectors, and common anti-patterns.',
   keywords: [
     'compound',
     'data attributes',
-    'deprecated',
+    'removed classes',
     'selector',
     'astryx-button',
     'data-variant',
@@ -114,28 +114,35 @@ const overrides = stylex.create({
     },
     {
       id: 'deprecated-classes',
-      title: 'Deprecated: Bare Prop and State Classes',
+      title: 'Migrating Removed Theme Compatibility Selectors',
       content: [
         {
           type: 'prose',
-          text: 'Astryx still emits the deprecated bare classes (`.primary`, `.sm`, `.level-2`, `.checked`) and will remove them in a later release. Use data attributes for new CSS; `astryx upgrade --from <old version> --apply` rewrites qualified selectors in `.css` files.',
+          text: 'Astryx 0.7 emits canonical `astryx-*` target classes and reflected `data-*` attributes only. Run `{@command upgrade --from <your 0.6 version> --apply --path .}` to rename removed target keys inside theme `components` maps and to migrate CSS selectors. The CSS migration renames removed target classes and replaces target-qualified bare prop/value/state classes such as `.primary`, `.sm`, `.level-2`, and `.checked` with their reflected `data-*` selectors.',
         },
         {
           type: 'code',
           lang: 'css',
-          code: `/* The upgrade preserves old consumer classes and adds the v0.6 prop match */
-.my-app .astryx-button:is(.primary, [data-variant="primary"]) {
-  /* primary buttons or a consumer-supplied .primary class */
-}
+          code: `/* Before */
+.astryx-progressbar.success > .astryx-progressbar-mark.fill {}
+.astryx-selector-clear-icon { color: red; }
 
-/* Numeric values stay literal in data attributes */
-.my-app .astryx-heading:is(.level-2, [data-level="2"]) {
-  /* level 2 headings or a consumer-supplied .level-2 class */
-}`,
+/* After */
+.astryx-progress-bar:is([data-variant="success"]) >
+  .astryx-progress-bar-mark:is([data-placement="fill"]) {}
+.astryx-input-clear-icon:where(.astryx-selector *) { color: red; }`,
         },
         {
           type: 'prose',
-          text: 'The upgrade rewrites a selector only when an `.astryx-*` component class qualifies it, turning the old class into an `:is(...)` union of that class and the data attributes it stood for. The union keeps the selector\'s specificity and your own `className` matches, and keeps matching once the bare classes are gone; the `.astryx-*` classes themselves stay. It leaves unqualified classes (a bare `.primary`), unknown classes, and selectors in JavaScript or TypeScript alone: migrate those by hand, and only where they target Astryx.',
+          text: 'Removed target mappings: `base-table` → `table`; `checkbox` → `checkbox-indicator`; `codeblock` → `code-block`; `codeblock-copy-button` → `code-block-copy-button`; `codeblock-header` → `code-block-header`; `codeblock-title` → `code-block-title`; `date-input-clear-icon`, `date-range-input-clear-icon`, `multi-selector-clear-icon`, and `selector-clear-icon` → `input-clear-icon`; `hovercard` → `hover-card`; `navicon` → `nav-icon`; `popover-surface` → `popover`; `progressbar`, `progressbar-fill`, `progressbar-mark`, and `progressbar-track` → their hyphenated `progress-bar*` forms; `radio` → `radio-indicator`; `radio-dot` → `radio-indicator-dot`; `statusdot` → `status-dot`; `textarea` → `text-area`.',
+        },
+        {
+          type: 'prose',
+          text: '`input-clear-icon` styles the clear icon of every input. In CSS the upgrade keeps each old clear-icon rule on its component with `:where(.astryx-<component> *)`. A theme key cannot carry that scope, so the upgrade renames the key and adds a `TODO(astryx upgrade)` that names the CSS selector to use instead.',
+        },
+        {
+          type: 'prose',
+          text: 'The upgrade treats a `components` map as a theme when it belongs to a `defineTheme()` call imported from Astryx, an object typed as an Astryx theme, or the theme object a same-stem theme descriptor (`<stem>.doc.mjs`) declares: the top-level binding exported as `<stem>`, with a static `name` and component entries that are style objects. A look-alike object anywhere else, such as a theme object from another library in the same file, is not an Astryx theme. It leaves computed theme keys, unqualified classes, unknown consumer classes, declarations, comments, and CSS inside JavaScript or TypeScript strings unchanged. It adds `TODO(astryx upgrade)` when a map has both an old and a canonical key, and when a bare class Astryx once emitted has no known meaning on the target it qualifies. Review each TODO by hand.',
         },
       ],
     },
@@ -150,7 +157,7 @@ const overrides = stylex.create({
             'Hardcoded colors (#fff, rgb(...)). Use var(--color-*) tokens or Tailwind semantic classes (text-primary, bg-surface).',
             'Hardcoded spacing (16px, 1rem). Use var(--spacing-*) tokens or Tailwind spacing utilities (p-4, gap-3).',
             'Wrapping a component in a <div> just to add margin. Use xstyle with stylex.create on the component.',
-            'Using !important. If styles aren\'t applying, check specificity; xstyle is merged last.',
+            "Using !important. If styles aren't applying, check specificity; xstyle is merged last.",
           ],
         },
       ],

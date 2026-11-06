@@ -21,6 +21,7 @@ import {jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSet, resultSetOf} from '../../../foundation/debug/index.mjs';
 import {
   emit,
+  formatDeprecation,
   section,
   text,
   list,
@@ -101,7 +102,7 @@ export function registerBuild(program) {
       // throws ERR_INVALID_ARGUMENT, so we pass NaN through rather than
       // pre-rejecting with a generic code here (parity with `search`).
       const limit =
-        options.limit != null ? Number.parseInt(options.limit, 10) : 60;
+        options.limit != null ? Number(options.limit) : 60;
 
       /** @type {import('../../../api/build/build.type.mjs').BuildKitResponse} */
       let result;
@@ -172,18 +173,23 @@ export function registerBuild(program) {
           'package',
           'domain',
           'displayName',
+          'deprecated',
           'score',
           'reason',
           'import',
           'description',
           'command',
         ],
-        format: {command: formatCliCommand},
+        format: {command: formatCliCommand, deprecated: formatDeprecation},
       };
       /** @param {string[]} fields */
       const brief = fields => ({
         fields,
-        format: {command: formatCliCommand, description: firstSentence},
+        format: {
+          command: formatCliCommand,
+          description: firstSentence,
+          deprecated: formatDeprecation,
+        },
       });
       // Blocks and components are extras: the text names the top few, and
       // says how many more the JSON and --verbose carry.
@@ -277,7 +283,7 @@ export function registerBuild(program) {
           ? [
               records(
                 shown(domain),
-                verbose ? full : brief(['name', 'package', 'description']),
+                verbose ? full : brief(['name', 'package', 'deprecated', 'description']),
               ),
             ]
           : []),

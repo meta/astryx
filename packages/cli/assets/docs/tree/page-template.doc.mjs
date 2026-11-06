@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/templates/document-the-template/page-template`:
+ * @file `astryx docs authoring/building-blocks/templates/document-the-template/page-template`:
  * the page-only fields that help people find a page.
  */
 
@@ -17,7 +17,7 @@ export const docs = {
   title: 'Page template',
   category: 'guide',
   description:
-    'Help people find a page: give it a category for `astryx search` and template listings, and flag a sparse starting shell as a scaffold.',
+    'Help people find a page: give it a category for `{@command search}` and template listings, and flag a sparse starting shell as a scaffold.',
   sections: [
     {
       id: 'start-from-the-generated-page-doc',
@@ -31,7 +31,7 @@ export const docs = {
           type: 'code',
           lang: 'javascript',
           label: 'templates/acme-dashboard.doc.mjs',
-          code: `/** @type {import('@astryxdesign/cli/authoring').TemplateDoc} */
+          code: `/** @type {import('@astryxdesign/cli/authoring').IntegrationTemplateDoc} */
 export default {
   type: 'page',
   name: 'acme-dashboard',
@@ -49,18 +49,14 @@ export default {
       title: 'Help people find the page',
       content: [
         {
-          type: 'reference',
-          target: 'schema:template-doc',
-          projection: {
-            fields: ['category', 'scaffold'],
-          },
-          presentation: 'full',
+          type: 'prose',
+          text: 'Every field is in {@link schema:template-doc}.',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
-            'Set `category` to the most specific supported `{Group} - {Variant}` value. Its words become search terms for `astryx search`, and it appears in the JSON template list.',
+            'Set `category` to the most specific supported `{Group} - {Variant}` value. Its words become search terms for `{@command search}`, and it appears in the JSON template list.',
             'Set `scaffold: true` only for a deliberately sparse starting shell. The JSON template list reports it, so tools and galleries can tell a scaffold from a finished page.',
             "Fields that only Astryx's own gallery reads, such as `isHiddenFromOverview`, have no effect on integration templates.",
           ],

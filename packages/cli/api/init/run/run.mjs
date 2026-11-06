@@ -4,10 +4,12 @@
  * @file init.run leaf — non-interactive project setup + feature installer.
  *
  * `run(options, ctx)` is the default / `--features` / `--all` path behind
- * `astryx init`. It installs the AGENTS.md/CLAUDE.md agent-docs cheat sheet,
- * points at the theme + page-building workflows, and (optionally) scaffolds a
- * starter template — with NO prompts, so it behaves identically for humans,
- * agents, CI, and piped I/O. It performs the side effects and returns an
+ * `astryx init`. It installs the agent-docs cheat sheet at the project root so
+ * every agent reads it (AGENTS.md, a copy in the project's Claude Code file, and
+ * a GEMINI.md import), points at the theme + page-building workflows, and
+ * (optionally) scaffolds a starter template — with NO prompts, so it behaves
+ * identically for humans, agents, CI, and piped I/O. It performs the side
+ * effects and returns an
  * `init.run` receipt. Hard errors (unknown feature/template) throw AstryxError
  * with a stable code. Human output is emitted through the shared `logger`
  * (silent by default) so the CLI keeps its exact plain output and a
@@ -19,9 +21,13 @@ import * as fs from 'node:fs';
 import {CLI_ROOT} from '../../../foundation/fs/paths.mjs';
 import {PathSafetyError, assertWithin} from '../../../foundation/fs/path-safety.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
+import {isOutsideProject} from '../../../foundation/env/project-scope.mjs';
 import {
+  AgentDocsHomeError,
+  assertAgentDocsTarget,
   installAgentDocs,
   renderAgentDocsBlock,
+  agentDocsTargetDir,
 } from '../../../foundation/agent-docs/agent-docs.mjs';
 import {themeTemplate} from '../../theme/template/template.mjs';
 import {listTemplates} from '../../template/template.mjs';
@@ -35,11 +41,11 @@ const VALID_AGENTS = ['claude', 'cursor', 'codex', 'hermes', 'muse', 'all'];
 /**
  * Build the "Next steps" lines printed at the end of `astryx init`.
  *
- * Theme guidance follows the generated app-module workflow. `theme add --import` records
+ * Theme guidance follows the generated app-module workflow. `theme add` records
  * installed built themes and imports their production and font stylesheets. The
  * app imports that module once and passes its default to <Theme>.
  *
- * @param {string} invocation install-aware CLI invocation stem (e.g. `npx astryx`, `pnpm exec astryx`, or `npx @astryxdesign/cli` for one-off runs)
+ * @param {string} invocation install-aware CLI invocation stem (e.g. `pnpm exec astryx`, `yarn astryx`, or `npx @astryxdesign/cli` for one-off runs)
  * @returns {string[]} ordered list of human-facing lines
  */
 export function getNextSteps(invocation) {
@@ -50,17 +56,35 @@ export function getNextSteps(invocation) {
     `       (run \`${invocation} doctor\` to verify)`,
     "    2. Import base styles: import '@astryxdesign/core/reset.css'",
     "       and import '@astryxdesign/core/astryx.css'",
-    "    3. Import components: import { Button } from '@astryxdesign/core'",
+    "    3. Import components: import { Button } from '@astryxdesign/core/Button'",
     '    4. Add and wire a theme:',
     '       npm install @astryxdesign/theme-neutral',
-    `       ${invocation} theme add neutral --import`,
-    "       import { Theme } from '@astryxdesign/core'",
+    `       ${invocation} theme add neutral`,
+    "       import { Theme } from '@astryxdesign/core/theme'",
     "       import { themes, defaultThemeSlug } from './astryx-themes'",
     '       <Theme theme={themes[defaultThemeSlug]}>...</Theme>',
     `       Extend an imported theme to customize it. Run \`${invocation} theme eject <slug>\` only to fork source.`,
     `    5. ${invocation} --help for all commands`,
     '',
   ];
+}
+
+/**
+ * Whether two paths name one folder, links resolved.
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+function sameFolder(a, b) {
+  /** @param {string} p */
+  const real = p => {
+    try {
+      return fs.realpathSync(p);
+    } catch {
+      return path.resolve(p);
+    }
+  };
+  return real(a) === real(b);
 }
 
 /**
@@ -91,14 +115,46 @@ async function applyAgents(cwd, options, invocation, data) {
         ? options.agentDocsPath
         : [options.agentDocsPath]
       : undefined;
-    const renderedBlock = await renderAgentDocsBlock(cwd);
-    const written = installAgentDocs(cwd, {
+    // The docs belong at the project root, not in the subfolder init ran in;
+    // with no project above, they go where init ran, as before. Explicit
+    // --agent-docs-path entries stay relative to where init ran.
+    const root = agentDocsTargetDir(cwd);
+    const targetDir = paths ? cwd : root;
+    // With explicit paths, installAgentDocs checks each file's own folder.
+    if (!paths) assertAgentDocsTarget(targetDir);
+    const renderedBlock = await renderAgentDocsBlock(root);
+    /** @type {string[]} */
+    const skipped = [];
+    const files = installAgentDocs(targetDir, {
       agent: options.agent,
       paths,
       renderedBlock,
+      onSkipped: (rel, reason) => skipped.push(`${rel} (${reason})`),
+      // Below the project root, 0.7.1 wrote in the folder init ran in, so a
+      // project-root file that escapes the project is skipped and reported,
+      // not refused.
+      refuseEscapes: sameFolder(targetDir, cwd),
     });
+    // Each file is reported from where init ran, as before.
+    const written =
+      path.resolve(targetDir) === path.resolve(cwd)
+        ? files
+        : files.map(rel =>
+            path.relative(cwd, path.join(targetDir, rel)).split(path.sep).join('/'),
+          );
     data.docsWritten = written;
     logger.log(`[ok] AI agent docs installed -> ${written.join(', ')}`);
+    // A file 0.7.1 did not write (GEMINI.md, or a project-root file when init
+    // runs below the root) that resolves outside the project is left as it
+    // is, reported in docsError with one note; the exit code stays 0. A file
+    // 0.7.1 wrote whose path escapes the project still fails the run (below).
+    if (skipped.length > 0) {
+      const message =
+        `Left as ${skipped.length === 1 ? 'it is' : 'they are'}: ${skipped.join('; ')}. ` +
+        'To have init write the Astryx block there, make it a regular file inside the project, or copy the block from AGENTS.md by hand.';
+      logger.warn(`Note: ${message}`);
+      data.docsError = {kind: 'install-failed', message};
+    }
   } catch (err) {
     // PathSafetyError carries a precise, user-actionable message — surface it
     // (and flag exit 1) instead of the generic "could not install" warning so
@@ -106,6 +162,14 @@ async function applyAgents(cwd, options, invocation, data) {
     if (err instanceof PathSafetyError) {
       logger.error(`Error: ${err.message}`);
       data.docsError = {kind: 'path-safety', message: err.message};
+      return;
+    }
+    // The home folder, and a settings folder in it outside a project, are
+    // refused: nothing is written, the reason is printed as a note, and the
+    // exit code stays 0.
+    if (err instanceof AgentDocsHomeError) {
+      logger.warn(`Note: ${err.message}`);
+      data.docsError = {kind: 'install-failed', message: err.message};
       return;
     }
     logger.error(
@@ -140,8 +204,11 @@ function applyTheme(cwd, invocation, data) {
     data.themeTemplate = 'failed';
     logger.error('Could not write the theme template.');
   }
+  // Outside a project there is no app to add a theme to (spec AST-081 FR3).
   logger.log(
-    `  Edit the blank template for a new theme, or run \`${invocation} theme add <slug> --import\` to import an installed built theme (\`${invocation} theme list\` to browse). Extend an imported theme for ordinary customization; use \`${invocation} theme eject <slug>\` only to fork source.`,
+    isOutsideProject(cwd)
+      ? `  Edit the blank template for a new theme, or run \`${invocation} theme eject <slug>\` to start from the source of a built theme (\`${invocation} theme list\` to browse).`
+      : `  Edit the blank template for a new theme, or run \`${invocation} theme add <slug>\` to import an installed built theme (\`${invocation} theme list\` to browse). Extend an imported theme for ordinary customization; use \`${invocation} theme eject <slug>\` only to fork source.`,
   );
 }
 
@@ -276,7 +343,10 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
   }
 
   // No flags: TTY-free default — install the AI agent cheat sheet with NO
-  // prompts, then print the getting-started guidance.
+  // prompts, then print the getting-started guidance. Outside a project the
+  // steps would set up a project the folder does not have, so they are left
+  // out (spec AST-081 FR3).
+  const outside = isOutsideProject(cwd);
   /** @type {import('../init.type.mjs').InitRunData} */
   const data = {
     mode: 'default',
@@ -288,13 +358,17 @@ export async function run(options = {}, {cwd = process.cwd()} = {}) {
     themeTemplatePath: null,
     template: null,
     templatePath: null,
-    nextSteps: true,
+    nextSteps: !outside,
   };
   await applyAgents(cwd, options, invocation, data);
   logger.log('');
   logger.log(
     `  Tip: \`${invocation} init --all\` also points you to the theme and page-building workflows.`,
   );
+  if (outside) {
+    logger.log('');
+    return {type: 'init.run', data};
+  }
   for (const line of getNextSteps(invocation)) logger.log(line);
   return {type: 'init.run', data};
 }

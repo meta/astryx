@@ -88,6 +88,26 @@ export const docs = {
             [
               "--color-syntax-background",
               "var(--color-background-muted)"
+            ],
+            [
+              "--color-syntax-added",
+              "color-mix(in srgb, var(--color-success-muted) 25%, transparent)"
+            ],
+            [
+              "--color-syntax-removed",
+              "color-mix(in srgb, var(--color-error-muted) 25%, transparent)"
+            ],
+            [
+              "--color-syntax-diff-header",
+              "var(--color-background-muted)"
+            ],
+            [
+              "--color-syntax-added-marker",
+              "var(--color-text-green)"
+            ],
+            [
+              "--color-syntax-removed-marker",
+              "var(--color-text-red)"
             ]
           ]
         }

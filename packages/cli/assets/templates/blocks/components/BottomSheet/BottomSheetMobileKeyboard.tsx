@@ -51,7 +51,7 @@ export default function BottomSheetMobileKeyboard() {
             event.preventDefault();
             setIsOpen(false);
           }}>
-          <VStack gap={4} style={{padding: 'var(--spacing-4)'}}>
+          <VStack gap={4}>
             <Heading level={3}>Edit profile</Heading>
             <Divider />
             <Text type="supporting" color="secondary">

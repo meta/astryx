@@ -29,6 +29,12 @@ export const docs = {
       required: true,
     },
     {
+      name: 'getRowLabel',
+      type: '(item: T) => string',
+      description:
+        'Derive a human-readable row identity for the chevron accessible name. Astryx combines it with localized expand/collapse wording. Omit it, or return blank text, to keep the generic "Expand row" and "Collapse row" labels.',
+    },
+    {
       name: 'renderExpanded',
       type: '(item: T) => ReactNode',
       description:
@@ -55,6 +61,12 @@ export const docs = {
         'Toggle a row by clicking anywhere on it, not only on its chevron. A pointer-only convenience layered over the chevron, which stays the accessible control for keyboard and assistive tech. Clicks on interactive cell content (buttons, links, form controls) or on a text selection do not toggle, and non-expandable rows stay inert.',
       default: 'false',
     },
+    {
+      name: 'animatedLayout',
+      type: 'AnimatedLayout',
+      description:
+        "A handle from useAnimatedLayout. With it, opening or closing a panel glides the rows after it (and the content after the table) to their new places instead of jumping, the opening panel plays in on the same motion, and each row's divider moves with it. Under Reduce Motion the rows fade in place on a touch screen and change at once with a mouse; in a table with column lines (dividers columns or grid, which do not move yet) they change at once. Without it, rows jump.",
+    },
   ],
   examples: [
     {
@@ -69,6 +81,7 @@ const expansion = useTableRowExpansion({
       return next;
     }),
   getRowKey: item => item.id,
+  getRowLabel: item => item.name,
   renderExpanded: item => <OrderDetails order={item} />,
 });
 
@@ -116,6 +129,8 @@ export const docsDense = {
     expandedKeys: 'Set of currently-expanded row keys. Consumer-owned.',
     onToggle: 'Called with a row key when its expansion is toggled.',
     getRowKey: 'Derive a stable unique key from a row item.',
+    getRowLabel:
+      'Derive a row identity for the localized expand/collapse control label. Blank or omitted values keep the generic row label.',
     renderExpanded:
       'Render the full-width detail panel below an expanded row. Receives the row item.',
     getIsItemExpandable:
@@ -124,5 +139,7 @@ export const docsDense = {
       "Detail panel background: 'transparent' (default) paints nothing, so the panel takes the surface behind the table and leaves a striped table's zebra alone; 'muted' washes it, for a bare table where nothing else separates the panel from the data.",
     hasRowClickExpansion:
       'Toggle a row by clicking anywhere on it, not just the chevron; pointer-only, skips interactive cell content and text selections. Defaults to false.',
+    animatedLayout:
+      'Handle from useAnimatedLayout: opening or closing a panel glides the rows after it instead of jumping them. Under Reduce Motion they fade in place on touch and change at once with a mouse; with column lines they change at once.',
   },
 };

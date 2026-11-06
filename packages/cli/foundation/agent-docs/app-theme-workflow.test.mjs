@@ -9,5 +9,8 @@ describe('generated agent docs app-theme workflow', () => {
 
     expect(result).toContain('astryx docs theme');
     expect(result).toContain('never :root overrides');
+    expect(result).toContain('theme add <slug>');
+    expect(result).toContain('theme eject <slug>');
+    expect(result).not.toContain('theme add <slug> --import');
   });
 });

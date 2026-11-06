@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/templates/document-the-template/block-template`:
+ * @file `astryx docs authoring/building-blocks/templates/document-the-template/block-template`:
  * the block-only fields: component relationships and the preview shape.
  */
 
@@ -31,7 +31,7 @@ export const docs = {
           type: 'code',
           lang: 'javascript',
           label: 'templates/acme-stat-card.doc.mjs',
-          code: `/** @type {import('@astryxdesign/cli/authoring').TemplateDoc} */
+          code: `/** @type {import('@astryxdesign/cli/authoring').IntegrationTemplateDoc} */
 export default {
   type: 'block',
   name: 'acme-stat-card',
@@ -54,18 +54,8 @@ export default {
       title: 'Choose the component relationship',
       content: [
         {
-          type: 'reference',
-          target: 'schema:template-doc',
-          projection: {
-            fields: [
-              'exampleFor',
-              'alsoExampleFor',
-              'alsoShowcaseFor',
-              'componentsUsed',
-              'isShowcase',
-            ],
-          },
-          presentation: 'full',
+          type: 'prose',
+          text: 'Every field is in {@link schema:template-doc}.',
         },
         {
           type: 'prose',
@@ -75,7 +65,7 @@ export default {
           type: 'code',
           lang: 'javascript',
           label: 'templates/acme-status-card-showcase.doc.mjs',
-          code: `/** @type {import('@astryxdesign/cli/authoring').TemplateDoc} */
+          code: `/** @type {import('@astryxdesign/cli/authoring').IntegrationTemplateDoc} */
 export default {
   type: 'block',
   name: 'acme-status-card-showcase',
@@ -92,7 +82,7 @@ export default {
         },
         {
           type: 'prose',
-          text: 'Then check the package-scoped template list ({@link generic:template-doc-overview}) and confirm the entry carries the relationship you set. `astryx component` does not show integration blocks, so the list is where to check.',
+          text: 'Then check the package-scoped template list ({@link generic:template-doc-overview}) and confirm the entry carries the relationship you set. `{@command component}` does not show integration blocks, so the list is where to check.',
         },
       ],
     },
@@ -101,14 +91,12 @@ export default {
       title: 'Choose a useful preview',
       content: [
         {
-          type: 'reference',
-          target: 'schema:template-doc',
-          projection: {fields: ['aspectRatio']},
-          presentation: 'full',
+          type: 'prose',
+          text: 'Every field is in {@link schema:template-doc}.',
         },
         {
           type: 'prose',
-          text: 'Start from the value for the closest shape below, render the block at that ratio, and adjust it until it neither clips nor leaves large empty space. These are starting points, not contract defaults.',
+          text: 'Set `aspectRatio` from the value for the closest shape below, render the block at that ratio, and adjust it until it neither clips nor leaves large empty space. These are starting points, not contract defaults.',
         },
         {
           type: 'table',

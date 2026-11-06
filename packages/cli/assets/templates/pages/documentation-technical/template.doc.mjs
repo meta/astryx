@@ -17,4 +17,9 @@ export const doc = {
   ],
   isReady: true,
   category: 'Content - Documentation Technical',
+  icons: {
+    ChevronDownIcon: 'chevronDown',
+    ClipboardDocumentIcon: 'clipboard',
+    SparklesIcon: 'sparkles',
+  },
 };

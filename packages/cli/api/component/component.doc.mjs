@@ -24,7 +24,8 @@ export const doc = {
     'showcase, or example blocks. An integration component that replaces a Core ' +
     'component (its doc sets replaces, and its package declares the CLI range that ' +
     'turns replacement on) answers to the Core name in detail, batch, and list ' +
-    "results; use options.package '@astryxdesign/core' for the original.",
+    "results; use options.package '@astryxdesign/core' for the original." +
+    " In global mode: with `cwd` outside a project, components from integrations installed next to this CLI package globally resolve too; inside a project, only the project's own integrations count. See {@link namespace:global} and {@link generic:computer-integrations}.",
   importPath: '@astryxdesign/cli/api',
   signature:
     'component(name?: string | string[], options?: ComponentOptions): Promise<ComponentListResponse | ComponentBatchResponse | ComponentDetailResponse | ComponentDetailPropsResponse | ComponentDetailSourceResponse | ComponentDetailShowcaseResponse | ComponentDetailBlocksResponse>',
@@ -165,12 +166,20 @@ export const doc = {
       when: '@astryxdesign/core cannot be resolved from cwd',
     },
     {
+      code: 'ERR_VERSIONS_UNAVAILABLE',
+      when: 'outside a project, or in a project with nothing installed, the Core of the release that answers is not beside it or cached, and cannot be installed into the per-user cache (offline, a registry without it, or an unwritable cache)',
+    },
+    {
       code: 'ERR_UNKNOWN_CATEGORY',
       when: 'options.category is not a string or matches no component group',
     },
     {
       code: 'ERR_UNKNOWN_COMPONENT',
-      when: 'name is not a string, resolves to no known component, is provided by multiple packages (pass options.package), or is absent from the requested options.package',
+      when: 'name is not a string, resolves to no known component, or is absent from the requested options.package',
+    },
+    {
+      code: 'ERR_AMBIGUOUS_COMPONENT',
+      when: 'the component is provided by multiple packages (pass options.package to disambiguate)',
     },
     {
       code: 'ERR_UNKNOWN_PACKAGE',

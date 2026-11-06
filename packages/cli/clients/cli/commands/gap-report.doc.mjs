@@ -16,6 +16,8 @@ export const doc = {
     'Reports a missing component, variant, layout, styling, accessibility, API, or documentation capability to the package that owns it: the --package you name, else the integration whose component replaces it, else the one package that provides the component, else Core. ' +
     'Every configured handler receives the report: the project config handler first, then each integration handler in config order. Public handlers run only with --confirm-public; internal handlers always run. A failing handler does not stop the others. ' +
     "With no handler it files a GitHub issue for the owning package, only with --confirm-public (without it nothing is sent), or returns the package's issues URL when that is not on GitHub. " +
+    "With --to <package>, the report goes only to that integration's issues URL instead, under the same --confirm-public rule. " +
+    'When loaded integrations name their own issues URLs, the output lists every destination: an agent asks the person where to file and passes their choice with --to; it never picks a package itself, and without a choice the default is used. ' +
     'The report records whether an agent or a person ran it.',
   fn: 'gapReport',
   args: [
@@ -55,13 +57,19 @@ export const doc = {
       flag: '--confirm-public',
       param: 'options.confirmPublic',
       description:
-        'Allow public delivery: public handlers run, and with no handler it files a GitHub issue with your gh login',
+        'Allow public delivery: public handlers run, and a GitHub issues URL gets an issue filed with your gh login',
+    },
+    {
+      flag: '--to <package>',
+      param: 'options.to',
+      description:
+        "Send the report only to this loaded integration's issues URL, as the person chose; the destinations the output lists are the choices",
     },
     {
       flag: '--list-categories',
       param: 'options.listCategories',
       description:
-        'List valid report categories without filing; the component and the other gap-report options are ignored',
+        'List valid report categories, and the destinations when there is more than one, without filing; the component and the other gap-report options are refused with ERR_INVALID_ARGUMENT',
     },
   ],
   examples: [
@@ -70,7 +78,12 @@ export const doc = {
       label: 'Prepare a report (nothing public happens without --confirm-public)',
       cli: "astryx gap-report Button --category missing_variant --reason 'Need a compact size'",
     },
+    {
+      label: 'File where the person chose',
+      cli: "astryx gap-report Button --category missing_variant --reason 'Need a compact size' --to @acme/widgets",
+    },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {
       code: 0,

@@ -63,3 +63,4 @@ export function shadcnInstallCommand(
   itemPath: string,
   registryOrigin?: string,
 ): string;
+export function registryNameForPath(registryPath: string): string;

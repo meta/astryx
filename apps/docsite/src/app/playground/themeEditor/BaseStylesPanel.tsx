@@ -17,7 +17,7 @@ import {expandRadiusScale, expandTypeScale} from '@astryxdesign/core/theme';
 import {ColorSwatch} from './ColorSwatch';
 import {SelectableCard} from '@astryxdesign/core/SelectableCard';
 import {FONT_OPTIONS, RATIO_OPTIONS, UNIFIED_PRESETS} from './constants';
-import {getConcentricityWarning} from './helpers';
+import {getConcentricityWarning, spacingToPx} from './helpers';
 import {useLiveNumberInput} from '@/lib/useLiveNumberInput';
 
 const styles = stylex.create({
@@ -238,9 +238,10 @@ export function BaseStylesPanel({
     return keys.every(k => tokens[k] === expected[k]) ? inner : null;
   })();
 
-  // Spacing — linear scale where step N = base × N (base = --spacing-1).
+  // Spacing — linear scale where step N = base × N (base = --spacing-1), read
+  // in px whether a step is written in rem (the defaults) or px (a theme).
   const spacingMatch = (() => {
-    const base = parseInt(tokens['--spacing-1'] ?? '', 10);
+    const base = spacingToPx(tokens['--spacing-1']);
     if (!Number.isFinite(base)) {
       return null;
     }
@@ -262,7 +263,7 @@ export function BaseStylesPanel({
       '--spacing-12': 12,
     };
     const ok = Object.entries(steps).every(
-      ([k, step]) => tokens[k] === `${Math.round(base * step)}px`,
+      ([k, step]) => spacingToPx(tokens[k]) === Math.round(base * step),
     );
     return ok ? base : null;
   })();
@@ -419,7 +420,7 @@ export function BaseStylesPanel({
                 isLabelHidden
                 size="sm"
                 placeholder="Custom"
-                xstyle={styles.fullWidthField}
+                controlXstyle={styles.fullWidthField}
                 options={FONT_OPTIONS}
                 value={fontValue(token)}
                 onChange={(val: string) => onTokenChange(token, val)}
@@ -432,7 +433,7 @@ export function BaseStylesPanel({
               isLabelHidden
               size="sm"
               placeholder="Default"
-              xstyle={styles.fullWidthField}
+              controlXstyle={styles.fullWidthField}
               options={[
                 ...RATIO_OPTIONS.map(opt => ({
                   value: String(opt.value),

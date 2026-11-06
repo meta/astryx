@@ -32,6 +32,7 @@ describe('discover.list leaf', () => {
     expect(res.data).toEqual([
       {
         name: '@acme/widgets',
+        package: '@acme/widgets',
         category: '@acme/widgets',
         components: ['Alpha', 'Beta'],
         version: '1.2.3',
@@ -77,6 +78,7 @@ describe('discover.list leaf with discover sources', () => {
     expect(res.data).toEqual([
       {
         name: '@acme/widgets',
+        package: '@acme/widgets',
         category: '@acme/widgets',
         components: ['Alpha'],
         version: '1.2.3',

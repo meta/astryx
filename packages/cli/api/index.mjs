@@ -23,6 +23,12 @@
 export {component} from './component/component.mjs';
 export {docs} from './docs/docs.mjs';
 export {blog} from './blog/blog.mjs';
+export {icon} from './icon/icon.mjs';
+export {iconAdd} from './icon/add/add.mjs';
+export {iconMap} from './icon/map/map.mjs';
+export {iconUse} from './icon/use/use.mjs';
+export {iconNewSet} from './icon/new-set/new-set.mjs';
+export {iconNewDefinition} from './icon/new-definition/new-definition.mjs';
 export {discover} from './discover/discover.mjs';
 export {template} from './template/template.mjs';
 export {
@@ -48,7 +54,6 @@ export {gapReport} from './gap-report/gap-report.mjs';
 export {upgrade} from './upgrade/upgrade.mjs';
 export {init} from './init/init.mjs';
 export {doctor} from './doctor/doctor.mjs';
-export {layoutExpand, layoutCheck, layoutGrammar} from './layout/layout.mjs';
 export {
   integrationAdd,
   integrationAddAgentDoc,
@@ -68,6 +73,7 @@ export {
   integrationComponentConflicts,
   integrationDocConflicts,
 } from './integration/authoring-checks.mjs';
+export {integrationCheck} from './integration/check/check.mjs';
 export {AstryxError} from './error.mjs';
 // The one shared logger: the `logger` instance side-effecting commands write
 // through, plus its generated `Logger` type. Part of the public surface so an
@@ -97,8 +103,8 @@ export * from './gap-report/gap-report.type.mjs';
 export * from './upgrade/upgrade.type.mjs';
 export * from './init/init.type.mjs';
 export * from './doctor/doctor.type.mjs';
-export * from './layout/layout.type.mjs';
 export * from './integration/integration-authoring.type.mjs';
 export * from './integration/pack-check.type.mjs';
 export * from './integration/validate-integration.type.mjs';
 export * from './integration/authoring-checks.type.mjs';
+export * from './integration/integration-check.type.mjs';

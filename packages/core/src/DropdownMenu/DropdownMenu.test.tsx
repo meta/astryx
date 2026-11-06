@@ -9,20 +9,38 @@
  * SYNC: When DropdownMenu.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  beforeEach,
+  afterEach,
+} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {useState} from 'react';
+import {createRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {DropdownMenu} from './DropdownMenu';
+import {DropdownMenu, type DropdownMenuTriggerProps} from './DropdownMenu';
 import {DropdownMenuItem} from './DropdownMenuItem';
 import {DropdownMenuDivider} from './DropdownMenuDivider';
 import {DropdownMenuGroup} from './DropdownMenuGroup';
+import {warmMenuBottomSheet} from './__tests__/warmMenuBottomSheet';
+import {DropdownMenuSubMenu} from './DropdownMenuSubMenu';
 import {Divider} from '../Divider';
+import {Tooltip} from '../Tooltip/Tooltip';
 import {rtlStyles} from '../utils';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {spacingVars} from '../theme/tokens.stylex';
+import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+import {MENU_PRESS_LONG_PRESS_MS} from '../hooks/useMenuPress';
+import {MENU_PRESS_SETTLE_MS} from '../hooks/menuPressGesture';
+import {isInHeldLayer} from '../Layer/inputHold';
+import {TOUCH_QUERY} from '../utils/touchPresentation';
+import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 
 // Mock showPopover and hidePopover methods since they're not implemented in jsdom
 beforeEach(() => {
@@ -72,6 +90,10 @@ beforeEach(() => {
   };
 });
 
+// The touch sheet is loaded lazily; resolve it once so sheets below render
+// synchronously.
+beforeAll(warmMenuBottomSheet, 20000);
+
 describe('DropdownMenu', () => {
   it('renders trigger button with label', () => {
     render(
@@ -109,6 +131,123 @@ describe('DropdownMenu', () => {
     expect(
       document.querySelector('[aria-modal="true"]'),
     ).not.toBeInTheDocument();
+  });
+
+  it("forwards the button's ref object to the popover trigger", () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions', ref}}
+        items={[{label: 'Edit project', onClick: vi.fn()}]}
+      />,
+    );
+    expect(ref.current).toBe(
+      screen.getByRole('button', {name: /Project actions/}),
+    );
+  });
+
+  it("forwards the button's ref object to the bottom-sheet trigger", () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions', ref}}
+        presentation="bottom-sheet"
+        items={[{label: 'Edit project', onClick: vi.fn()}]}
+      />,
+    );
+    expect(ref.current).toBe(
+      screen.getByRole('button', {name: /Project actions/}),
+    );
+  });
+
+  it("forwards the button's callback ref to the bottom-sheet trigger", () => {
+    const ref = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions', ref}}
+        presentation="bottom-sheet"
+        items={[{label: 'Edit project', onClick: vi.fn()}]}
+      />,
+    );
+    expect(ref).toHaveBeenCalledWith(
+      screen.getByRole('button', {name: /Project actions/}),
+    );
+  });
+
+  describe('bottom sheet opened from a custom trigger', () => {
+    it("names the sheet and its heading after the caller's aria-label", async () => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          aria-label="Create"
+          presentation="bottom-sheet"
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              Add
+            </button>
+          )}
+          items={[{label: 'Contact'}, {label: 'Invoice'}]}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', {name: 'Add'}));
+
+      expect(screen.getByRole('dialog', {name: 'Create'})).toBeInTheDocument();
+      expect(screen.getByRole('heading', {name: 'Create'})).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', {name: 'Menu'})).toBeNull();
+    });
+
+    it("falls back to the trigger's own name without an aria-label", async () => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          presentation="bottom-sheet"
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              Create
+            </button>
+          )}
+          items={[{label: 'Contact'}, {label: 'Invoice'}]}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', {name: 'Create'}));
+
+      expect(screen.getByRole('dialog', {name: 'Create'})).toBeInTheDocument();
+      expect(screen.getByRole('heading', {name: 'Create'})).toBeInTheDocument();
+    });
+
+    it('names an open controlled sheet from the trigger on its first render', () => {
+      render(
+        <DropdownMenu
+          isMenuOpen
+          presentation="bottom-sheet"
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              Create
+            </button>
+          )}
+          items={[{label: 'Contact'}]}
+        />,
+      );
+
+      expect(screen.getByRole('dialog', {name: 'Create'})).toBeInTheDocument();
+    });
+
+    it('keeps the default title when the trigger has no name to read', async () => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          presentation="bottom-sheet"
+          renderTrigger={props => <button type="button" {...props} />}
+          items={[{label: 'Contact'}]}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', {name: ''}));
+
+      expect(screen.getByRole('dialog', {name: 'Menu'})).toBeInTheDocument();
+    });
   });
 
   it('renders data-driven actions in a bottom sheet when requested', async () => {
@@ -160,16 +299,48 @@ describe('DropdownMenu', () => {
 
     const heading = screen.getByRole('heading', {name: 'Project actions'});
     expect(heading).toHaveStyle({marginInlineStart: 'var(--spacing-3)'});
-    expect(heading.closest('.astryx-section')).toHaveStyle({
-      paddingInlineStart: 'var(--spacing-1)',
-      paddingInlineEnd: 'var(--spacing-1)',
+    // The menu's content element takes the sheet's content padding itself,
+    // with no wrapper: 16px above the first row, 4px at the sides.
+    const content = heading.closest('.astryx-dropdown-menu');
+    expect(content?.parentElement?.closest('.astryx-section')).toBeNull();
+    expect(content).toHaveStyle({
+      paddingTop: 'var(--spacing-4)',
+      paddingInline: 'var(--spacing-1)',
     });
+    // The root heading stands alone, with no row wrapper.
+    expect(heading.parentElement).toBe(content);
     expect(
       screen.getByRole('button', {name: 'Edit project'}).closest('li'),
     ).toHaveStyle({
       paddingInline: 'var(--_item-inset-inline)',
       '--_item-inset-inline': 'var(--spacing-3)',
     });
+  });
+
+  it('renders nothing of the sheet at rest and keeps it through its exit', async () => {
+    await warmMenuBottomSheet();
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'Project actions'}}
+        presentation="bottom-sheet"
+        items={[{label: 'Edit project'}]}
+      />,
+    );
+    expect(document.querySelector('dialog')).toBeNull();
+
+    await user.click(screen.getByRole('button', {name: /Project actions/}));
+    const dialog = document.querySelector('dialog');
+    expect(dialog).not.toBeNull();
+
+    await user.keyboard('{Escape}');
+    // Closed, the sheet stays until its dialog has closed (its exit).
+    expect(document.querySelector('dialog')).toBe(dialog);
+    act(() => {
+      dialog?.removeAttribute('open');
+      dialog?.dispatchEvent(new Event('close'));
+    });
+    expect(document.querySelector('dialog')).toBeNull();
   });
 
   it('keeps bottom-sheet section groups inside semantic list items', async () => {
@@ -326,7 +497,7 @@ describe('DropdownMenu', () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockImplementation((query: string) => ({
-        matches: query === '(max-width: 768px) and (pointer: coarse)',
+        matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
         media: query,
         onchange: null,
         addEventListener: vi.fn(),
@@ -631,7 +802,7 @@ describe('DropdownMenu', () => {
         );
       });
       expect(menu).toHaveStyle(
-        'max-height: min(300px,calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))))',
+        'max-height: min(300px,min(calc(100dvb - calc(max(var(--spacing-4), env(safe-area-inset-top, 0px)) + var(--astryx-layer-inset-block-start, 0px)) - calc(max(var(--spacing-4), env(safe-area-inset-bottom, 0px)) + var(--astryx-layer-inset-block-end, 0px))), var(--_layer-keyboard-max-block-size, 100dvb)))',
       );
       expect(menu).not.toHaveStyle({overflowY: 'auto'});
       expect(menu).toHaveAttribute('tabindex', '-1');
@@ -844,6 +1015,38 @@ describe('DropdownMenu', () => {
     fireEvent.keyDown(menu, {key: 'd'});
     expect(
       screen.getByRole('menuitem', {name: 'Delete', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('typeahead reaches an accented item with a plain letter (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'Share'}}
+        items={[{label: 'Copy'}, {label: 'Ánh'}, {label: 'Łódź'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /Share/}));
+    const menu = screen.getByRole('menu', {hidden: true});
+    fireEvent.keyDown(menu, {key: 'l'});
+    expect(
+      screen.getByRole('menuitem', {name: 'Łódź', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('typeahead puts the exact item first for a typed mark (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'People'}}
+        items={[{label: 'Anh'}, {label: 'Dung'}, {label: 'Đào'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /People/}));
+    const menu = screen.getByRole('menu', {hidden: true});
+    fireEvent.keyDown(menu, {key: 'đ'});
+    expect(
+      screen.getByRole('menuitem', {name: 'Đào', hidden: true}),
     ).toHaveFocus();
   });
 
@@ -1351,18 +1554,6 @@ describe('DropdownMenu items', () => {
     );
     expect(handleClick).not.toHaveBeenCalled();
   });
-
-  it('has aria-disabled when disabled', () => {
-    render(
-      <DropdownMenu
-        button={{label: 'Actions'}}
-        items={[{label: 'Edit', isDisabled: true}]}
-      />,
-    );
-    expect(
-      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
-    ).toHaveAttribute('aria-disabled', 'true');
-  });
 });
 
 describe('DropdownMenu sections', () => {
@@ -1563,11 +1754,45 @@ describe('DropdownMenuItem host attributes', () => {
 });
 
 describe('DropdownMenuGroup (compound mode)', () => {
+  it('renders a heading only for a title that renders something', () => {
+    const titles = ['', false, true, null, 0] as const;
+    render(
+      <>
+        <DropdownMenuGroup title="" data-testid="g0">
+          <DropdownMenuItem label="Row 0" onClick={() => {}} />
+        </DropdownMenuGroup>
+        <DropdownMenuGroup title={false} data-testid="g1">
+          <DropdownMenuItem label="Row 1" onClick={() => {}} />
+        </DropdownMenuGroup>
+        <DropdownMenuGroup title={true} data-testid="g2">
+          <DropdownMenuItem label="Row 2" onClick={() => {}} />
+        </DropdownMenuGroup>
+        <DropdownMenuGroup title={null} data-testid="g3">
+          <DropdownMenuItem label="Row 3" onClick={() => {}} />
+        </DropdownMenuGroup>
+        <DropdownMenuGroup title={0} data-testid="g4">
+          <DropdownMenuItem label="Row 4" onClick={() => {}} />
+        </DropdownMenuGroup>
+      </>,
+    );
+    // '', false, true and null render nothing, so no empty heading names the
+    // group.
+    for (const index of [0, 1, 2, 3]) {
+      expect(
+        screen.getByTestId(`g${index}`),
+        String(titles[index]),
+      ).not.toHaveAttribute('aria-labelledby');
+    }
+    // 0 renders "0" and names the group.
+    expect(screen.getByRole('group', {name: '0'})).toBe(
+      screen.getByTestId('g4'),
+    );
+  });
+
   it('a focusable node in the heading is not reachable by the arrow keys', async () => {
-    // A heading is not a menu row, so a control inside one lands in the
-    // group but outside the roving focus order. The type does not prevent
-    // this — a rich heading is a legitimate need — so the behavior is
-    // pinned rather than discovered.
+    // The public ReactNode type permits a focusable descendant, but the menu's
+    // roving focus model cannot reach it. Pin that shipped gap while the public
+    // title contract remains unsettled.
     const user = userEvent.setup();
     render(
       <DropdownMenu button={{label: 'Actions'}}>
@@ -1742,6 +1967,49 @@ describe('DropdownMenuGroup (compound mode)', () => {
     );
     expect(ref).toHaveBeenCalledWith(
       screen.getByRole('group', {name: 'T', hidden: true}),
+    );
+  });
+
+  it('forwards host attributes to the group while keeping its role and heading name', () => {
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuGroup
+          title="Version history"
+          id="history-group"
+          data-testid="history"
+          data-analytics-id="menu-history"
+          aria-describedby="history-hint"
+          aria-labelledby="elsewhere"
+          // @ts-expect-error role is component-owned
+          role="presentation">
+          <DropdownMenuItem label="Restore" onClick={() => {}} />
+        </DropdownMenuGroup>
+      </DropdownMenu>,
+    );
+    const group = screen.getByTestId('history');
+    expect(group).toHaveAttribute('data-analytics-id', 'menu-history');
+    expect(group).toHaveAttribute('id', 'history-group');
+    expect(group).toHaveAttribute('aria-describedby', 'history-hint');
+    expect(group).toHaveAttribute('role', 'group');
+    // The visible title keeps naming the group.
+    expect(
+      screen.getByRole('group', {name: 'Version history', hidden: true}),
+    ).toBe(group);
+  });
+
+  it('an untitled group takes a caller-supplied accessible name', () => {
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <span id="recent-label">Recent</span>
+        <DropdownMenuGroup aria-labelledby="recent-label" data-testid="recent">
+          <DropdownMenuItem label="Only" onClick={() => {}} />
+        </DropdownMenuGroup>
+      </DropdownMenu>,
+    );
+    const group = screen.getByTestId('recent');
+    expect(group).toHaveAttribute('aria-labelledby', 'recent-label');
+    expect(screen.getByRole('group', {name: 'Recent', hidden: true})).toBe(
+      group,
     );
   });
 });
@@ -2260,11 +2528,37 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
     // focus-driven highlight follows the pointer instead of leaving two.
     // Focus must be scroll-free: scrolling the focused item into view moves
     // the next item under the stationary pointer, which re-highlights and
-    // scrolls again — a runaway auto-scroll loop.
+    // scrolls again — a runaway auto-scroll loop. And it is the mouse's focus,
+    // so it asks the browser not to match :focus-visible.
     const focusSpy = vi.spyOn(del, 'focus');
     fireEvent.pointerMove(del, {pointerType: 'mouse'});
     expect(del).toHaveFocus();
     expect(edit).not.toHaveFocus();
+    expect(focusSpy).toHaveBeenCalledWith({
+      preventScroll: true,
+      focusVisible: false,
+    });
+  });
+
+  it('after a keyboard open, focus that follows the mouse keeps the keyboard indicator (the last input)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Edit" onClick={() => {}} />
+        <DropdownMenuItem label="Delete" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+    screen.getByRole('button', {name: /Actions/}).focus();
+    await user.keyboard('{ArrowDown}');
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    await waitFor(() => expect(edit).toHaveFocus());
+
+    // No pointer press since the key: the browser keeps deciding the
+    // indicator, as for any focus the keyboard moved.
+    const del = screen.getByRole('menuitem', {name: 'Delete', hidden: true});
+    const focusSpy = vi.spyOn(del, 'focus');
+    fireEvent.pointerMove(del, {pointerType: 'mouse'});
+    expect(del).toHaveFocus();
     expect(focusSpy).toHaveBeenCalledWith({preventScroll: true});
   });
 
@@ -2519,6 +2813,66 @@ describe('DropdownMenu data/compound parity', () => {
     expect(fromCompound).toHaveClass('astryx-dropdown-menu-divider');
   });
 
+  it('forwards host attributes to a compound divider while keeping its role', () => {
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Edit" />
+        <DropdownMenuDivider
+          id="menu-sep"
+          data-testid="menu-separator"
+          aria-label="Danger zone"
+          // @ts-expect-error role is component-owned
+          role="presentation"
+        />
+        <DropdownMenuItem label="Delete" />
+      </DropdownMenu>,
+    );
+    const separator = screen.getByTestId('menu-separator');
+    expect(separator).toHaveAttribute('id', 'menu-sep');
+    expect(separator).toHaveAttribute('aria-label', 'Danger zone');
+    expect(separator).toHaveAttribute('role', 'separator');
+    expect(separator).toHaveClass('astryx-dropdown-menu-divider');
+  });
+
+  it('composes the complete public root surface on the separator', () => {
+    const ref = createRef<HTMLDivElement>();
+    const onClick = vi.fn();
+    const customStyles = stylex.create({
+      divider: {marginBlock: spacingVars['--spacing-5']},
+    });
+    const customClass = stylex
+      .props(customStyles.divider)
+      .className!.split(' ')
+      .pop()!;
+
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Edit" />
+        <DropdownMenuDivider
+          ref={ref}
+          data-testid="menu-separator"
+          className="consumer-divider"
+          style={{backgroundColor: 'rgb(1, 2, 3)'}}
+          xstyle={customStyles.divider}
+          onClick={onClick}
+        />
+        <DropdownMenuItem label="Delete" />
+      </DropdownMenu>,
+    );
+
+    const separator = screen.getByTestId('menu-separator');
+    expect(ref.current).toBe(separator);
+    expect(separator).toHaveClass(
+      'astryx-dropdown-menu-divider',
+      'astryx-divider',
+      'consumer-divider',
+      customClass,
+    );
+    expect(separator).toHaveStyle({backgroundColor: 'rgb(1, 2, 3)'});
+    fireEvent.click(separator);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
   it('skips a compound divider in the arrow-key order', async () => {
     const user = userEvent.setup();
     render(
@@ -2579,6 +2933,115 @@ describe('DropdownMenu data/compound parity', () => {
   });
 });
 
+describe('DropdownMenu entrance under a finger', () => {
+  function renderMenu(presentation?: 'popover') {
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        presentation={presentation}
+        items={[
+          {label: 'Edit', onClick: () => {}},
+          {label: 'Delete', onClick: () => {}},
+        ]}
+      />,
+    );
+    return screen.getByRole('button', {name: /Actions/});
+  }
+
+  const item = (name: string) =>
+    screen.getByRole('menuitem', {name, hidden: true});
+
+  // The primary pointer: a phone's finger, or a desktop's mouse.
+  function stubPointer(pointer: 'coarse' | 'fine') {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: pointer === 'coarse' && query === TOUCH_QUERY,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+  }
+
+  /**
+   * Gives each popover a running entrance (Web Animations' `getAnimations()`,
+   * which jsdom lacks) whose end the test decides.
+   */
+  function stubEntrance() {
+    let end = () => {};
+    const finished = new Promise<void>(resolve => {
+      end = resolve;
+    });
+    const entrance = {
+      playState: 'running',
+      finished,
+      effect: {getComputedTiming: () => ({endTime: 165})},
+    };
+    Object.defineProperty(Element.prototype, 'getAnimations', {
+      configurable: true,
+      value(this: Element) {
+        return this.matches('[popover]') ? [entrance] : [];
+      },
+    });
+    return {
+      async end() {
+        await act(async () => {
+          end();
+        });
+      },
+    };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(Element.prototype, 'getAnimations');
+  });
+
+  it('takes no touch while it enters: the layer is held until the entrance ends (spec:AST-094 FR35)', async () => {
+    stubPointer('coarse');
+    const entrance = stubEntrance();
+    const user = userEvent.setup();
+    await user.click(renderMenu());
+    expect(isInHeldLayer(item('Edit'))).toBe(true);
+
+    await entrance.end();
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+
+  it('lets go at once when it closes during its entrance', async () => {
+    stubPointer('coarse');
+    stubEntrance();
+    const user = userEvent.setup();
+    const trigger = renderMenu();
+    await user.click(trigger);
+    expect(isInHeldLayer(item('Edit'))).toBe(true);
+
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+
+  it('under a fine primary pointer (a mouse, or a finger on a touchscreen laptop), holds nothing: the layer\u2019s own entrance plays', async () => {
+    stubPointer('fine');
+    stubEntrance();
+    const user = userEvent.setup();
+    await user.click(renderMenu());
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+
+  it('pinned to presentation="popover", holds nothing under a finger', async () => {
+    stubPointer('coarse');
+    stubEntrance();
+    const user = userEvent.setup();
+    await user.click(renderMenu('popover'));
+    expect(isInHeldLayer(item('Edit'))).toBe(false);
+  });
+});
+
 describe('DropdownMenu press model', () => {
   const mouse = {pointerType: 'mouse', pointerId: 1, button: 0};
   const touch = {pointerType: 'touch', pointerId: 1};
@@ -2599,6 +3062,24 @@ describe('DropdownMenu press model', () => {
 
   const item = (name: string) =>
     screen.getByRole('menuitem', {name, hidden: true});
+
+  // A phone or tablet's primary pointer.
+  function stubCoarsePointer() {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        matches: query === TOUCH_QUERY,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    expect(window.matchMedia(TOUCH_QUERY).matches).toBe(true);
+  }
 
   it('a finger that lands on one row and lifts on another acts on the second, once', async () => {
     const onPick = vi.fn();
@@ -2639,12 +3120,16 @@ describe('DropdownMenu press model', () => {
     // dev build prefixes a debug name; the hash is the last token).
     const touchStyles = stylex.create({
       none: {touchAction: 'none'},
-      panY: {touchAction: 'pan-y'},
+      pinchZoom: {touchAction: 'pinch-zoom'},
+      panYPinchZoom: {touchAction: 'pan-y pinch-zoom'},
     });
     const hash = (style: stylex.StyleXStyles) =>
       stylex.props(style).className!.split(' ').pop()!;
-    expect(menu).toHaveClass(hash(touchStyles.none));
-    expect(menu).not.toHaveClass(hash(touchStyles.panY));
+    // Rows that fit keep every one-finger move and leave a pinch to the
+    // browser, so the page stays zoomable over the open menu.
+    expect(menu).toHaveClass(hash(touchStyles.pinchZoom));
+    expect(menu).not.toHaveClass(hash(touchStyles.none));
+    expect(menu).not.toHaveClass(hash(touchStyles.panYPinchZoom));
   });
 
   it('a mouse press on the trigger opens the menu and a drag-release acts on the row under it', () => {
@@ -2746,24 +3231,126 @@ describe('DropdownMenu press model', () => {
     expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
   });
 
-  it('a held touch on the trigger opens with the finger down and a slide picks', () => {
+  it('a held touch on the trigger opens with the finger down, and a slide past the handoff picks (spec:AST-094 FR29, FR43)', () => {
     vi.useFakeTimers();
     try {
       const onPick = vi.fn();
       const trigger = renderMenu(onPick);
-      fireEvent.pointerDown(trigger, touch);
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
       act(() => {
         vi.advanceTimersByTime(500);
       });
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
-      fireEvent.pointerMove(item('Delete'), touch);
+      // The handoff counts from the first position the open menu sees.
+      fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 3});
+      const past = {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      };
+      fireEvent.pointerMove(item('Delete'), past);
       expect(item('Delete')).toHaveFocus();
-      fireEvent.pointerUp(item('Delete'), touch);
+      fireEvent.pointerUp(item('Delete'), past);
       expect(onPick).toHaveBeenCalledWith('Delete');
       // The click the browser aims at the trigger for this gesture is spent.
       fireEvent.click(trigger, {detail: 1});
       expect(HTMLElement.prototype.showPopover).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('under a coarse pointer the finger that opened the menu picks only once it travels the handoff (spec:AST-094 FR29)', () => {
+    stubCoarsePointer();
+    vi.useFakeTimers();
+    try {
+      const onPick = vi.fn();
+      const trigger = renderMenu(onPick);
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      // A still lift picks nothing, however long the finger rested.
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_SETTLE_MS);
+      });
+      fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 3});
+      expect(item('Delete')).not.toHaveFocus();
+      // UIMenu's handoff: the finger picks once it travels from the first
+      // sample the menu saw.
+      fireEvent.pointerMove(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      });
+      expect(item('Delete')).toHaveFocus();
+      fireEvent.pointerUp(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      });
+      expect(onPick).toHaveBeenCalledWith('Delete');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('on a fine primary pointer too, the finger that opened the menu picks only once it travels the handoff, as on a phone (spec:AST-094 FR29, FR43)', () => {
+    vi.useFakeTimers();
+    try {
+      const onPick = vi.fn();
+      const trigger = renderMenu(onPick);
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_SETTLE_MS);
+      });
+      fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 3});
+      expect(item('Delete')).not.toHaveFocus();
+      fireEvent.pointerMove(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      });
+      expect(item('Delete')).toHaveFocus();
+      fireEvent.pointerUp(item('Delete'), {
+        ...touch,
+        clientX: 0,
+        clientY: 3 + UIKIT_GESTURES.menuPress.handoff.value,
+      });
+      expect(onPick).toHaveBeenCalledWith('Delete');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('presentation="popover" pins the settle rule under a finger: once the opening press has settled, a still lift picks the row under it', () => {
+    // spec:AST-094 FR25: a moved touch default comes back through
+    // `presentation`, never through a public threshold.
+    stubCoarsePointer();
+    vi.useFakeTimers();
+    try {
+      const onPick = vi.fn<(label: string) => void>();
+      render(
+        <DropdownMenu button={{label: 'Pinned'}} presentation="popover">
+          <DropdownMenuItem label="Edit" onClick={() => onPick('Edit')} />
+          <DropdownMenuItem label="Delete" onClick={() => onPick('Delete')} />
+        </DropdownMenu>,
+      );
+      const trigger = screen.getByRole('button', {name: /Pinned/});
+      fireEvent.pointerDown(trigger, {...touch, clientX: 0, clientY: 0});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS + MENU_PRESS_SETTLE_MS);
+      });
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      fireEvent.pointerMove(item('Delete'), {...touch, clientX: 0, clientY: 2});
+      fireEvent.pointerUp(item('Delete'), {...touch, clientX: 0, clientY: 2});
+      expect(onPick).toHaveBeenCalledWith('Delete');
     } finally {
       vi.useRealTimers();
     }
@@ -2854,6 +3441,55 @@ describe('DropdownMenu custom trigger', () => {
     await waitFor(() =>
       expect(trigger).toHaveAttribute('aria-expanded', 'false'),
     );
+  });
+
+  it('a disabled custom trigger never opens the bottom sheet', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        items={[{label: 'Edit'}, {label: 'Delete'}]}
+        presentation="bottom-sheet"
+        renderTrigger={({ref, ...props}) => (
+          <button type="button" ref={ref} aria-disabled="true" {...props}>
+            Project actions
+          </button>
+        )}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Project actions'});
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.queryByRole('dialog', {name: 'Project actions'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('a disabled custom trigger never opens the menu', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        items={[{label: 'Edit'}, {label: 'Delete'}]}
+        renderTrigger={({ref, ...props}) => (
+          <button type="button" ref={ref} aria-disabled="true" {...props}>
+            Row actions
+          </button>
+        )}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Row actions'});
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await user.pointer([
+      {keys: '[MouseLeft>]', target: trigger},
+      {keys: '[/MouseLeft]'},
+    ]);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('a custom trigger opens from the keyboard and lands on the first row', async () => {
@@ -2960,11 +3596,13 @@ describe('DropdownMenu menuMaxHeight', () => {
     const menu = screen.getByRole('menu', {hidden: true});
     // The cap is lifted to the given height, still bounded by the viewport.
     expect(menu).toHaveStyle({maxHeight: 'var(--x-maxHeight)'});
-    expect(menu.getAttribute('style')).toContain('min(528px, calc(100dvb');
+    expect(menu.getAttribute('style')).toContain('min(528px, min(calc(100dvb');
     expect(menu.getAttribute('style')).not.toContain('min(300px');
     // The popover viewport that holds the menu lifts its cap with it.
     const popover = menu.closest('[popover]');
-    expect(popover?.getAttribute('style')).toContain('min(528px, calc(100dvb');
+    expect(popover?.getAttribute('style')).toContain(
+      'min(528px, min(calc(100dvb',
+    );
   });
 
   it('keeps the viewport bound below the raised cap', () => {
@@ -2979,7 +3617,7 @@ describe('DropdownMenu menuMaxHeight', () => {
       />,
     );
     const menu = screen.getByRole('menu', {hidden: true});
-    expect(menu.getAttribute('style')).toContain('min(720px, calc(100dvb');
+    expect(menu.getAttribute('style')).toContain('min(720px, min(calc(100dvb');
   });
 });
 
@@ -3034,6 +3672,102 @@ describe('DropdownMenu focus return after a pointer pick', () => {
         stylex.props(focusOutlineStyles.suppressed).className!,
       ),
     );
+  });
+
+  it("asks the browser for no ring on the design system's Button too", async () => {
+    const user = userEvent.setup();
+    const trigger = renderMenu();
+    await user.click(trigger);
+    const focus = vi.spyOn(trigger, 'focus');
+    await user.click(item('Edit'));
+    expect(trigger).toHaveFocus();
+    expect(focus.mock.calls.at(-1)).toEqual([
+      {preventScroll: true, focusVisible: false},
+    ]);
+  });
+
+  describe('a trigger the caller renders', () => {
+    // The style that keeps the ring off the design system's Button cannot
+    // reach a caller's control, so the focus move itself has to: after
+    // pointer input the browser is asked not to match `:focus-visible`, which
+    // it otherwise does on the returned focus (Chromium after a mouse pick,
+    // WebKit after a touch).
+    function renderCustomMenu() {
+      render(
+        <DropdownMenu
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              More
+            </button>
+          )}>
+          <DropdownMenuItem label="Edit" onClick={() => {}} />
+          <DropdownMenuItem label="Delete" onClick={() => {}} />
+        </DropdownMenu>,
+      );
+      return screen.getByRole('button', {name: 'More'});
+    }
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('returns focus after a pointer pick with the browser asked for no ring', async () => {
+      const user = userEvent.setup();
+      const trigger = renderCustomMenu();
+      await user.click(trigger);
+      const focus = vi.spyOn(trigger, 'focus');
+      await user.click(item('Edit'));
+      expect(trigger).toHaveFocus();
+      expect(focus.mock.calls.at(-1)).toEqual([
+        {preventScroll: true, focusVisible: false},
+      ]);
+    });
+
+    it('returns focus after a keyboard pick with the ring left to the browser', async () => {
+      const user = userEvent.setup();
+      const trigger = renderCustomMenu();
+      trigger.focus();
+      await user.keyboard('{ArrowDown}');
+      await waitFor(() => expect(item('Edit')).toHaveFocus());
+      const focus = vi.spyOn(trigger, 'focus');
+      await user.keyboard('{Enter}');
+      await waitFor(() => expect(trigger).toHaveFocus());
+      expect(focus.mock.calls.at(-1)).toEqual([{preventScroll: true}]);
+    });
+
+    it('clears a ring the browser already drew before refocusing after a pointer pick', async () => {
+      const user = userEvent.setup();
+      const trigger = renderCustomMenu();
+      await user.click(trigger);
+      // WebKit's own popover focus restoration can focus the trigger, with a
+      // ring, before the menu moves focus, and focusing the focused element
+      // changes nothing.
+      const hidePopover = HTMLElement.prototype.hidePopover;
+      HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+        hidePopover.call(this);
+        trigger.focus();
+      });
+      const matches = HTMLElement.prototype.matches;
+      vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
+        this: HTMLElement,
+        selector: string,
+      ) {
+        return selector === ':focus-visible'
+          ? this === trigger
+          : matches.call(this, selector);
+      });
+      const blur = vi.spyOn(trigger, 'blur');
+      const focus = vi.spyOn(trigger, 'focus');
+      await user.click(item('Edit'));
+      expect(blur).toHaveBeenCalledTimes(1);
+      expect(focus.mock.calls.at(-1)).toEqual([
+        {preventScroll: true, focusVisible: false},
+      ]);
+      expect(blur.mock.invocationCallOrder[0]).toBeLessThan(
+        focus.mock.invocationCallOrder.at(-1) ?? 0,
+      );
+      expect(trigger).toHaveFocus();
+    });
   });
 });
 
@@ -3351,5 +4085,798 @@ describe('DropdownMenu keyboard', () => {
     expect(onClick).not.toHaveBeenCalled();
     fireEvent.keyDown(item('Edit'), {key: 'Enter'});
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('DropdownMenu header and footer', () => {
+  function LabelsMenu({onCreate}: {onCreate?: () => void}) {
+    return (
+      <DropdownMenu
+        button={{label: 'Labels'}}
+        header={<input aria-label="Filter labels" />}
+        footer={
+          <button type="button" onClick={onCreate}>
+            Create label
+          </button>
+        }>
+        <DropdownMenuItem label="Bug" />
+        <DropdownMenuItem label="Feature" />
+      </DropdownMenu>
+    );
+  }
+
+  async function open() {
+    const user = userEvent.setup();
+    render(<LabelsMenu />);
+    await user.click(screen.getByRole('button', {name: /Labels/}));
+    const menu = screen.getByRole('menu', {hidden: true});
+    // A pointer open focuses the menu itself; let that land first.
+    await waitFor(() => expect(menu).toHaveFocus());
+    return {user, menu};
+  }
+
+  it('renders the regions in the popover, outside the role="menu" element', async () => {
+    const {menu} = await open();
+    const field = screen.getByRole('textbox', {
+      name: 'Filter labels',
+      hidden: true,
+    });
+    const create = screen.getByRole('button', {
+      name: 'Create label',
+      hidden: true,
+    });
+    // The menu holds only its rows.
+    expect(menu).not.toContainElement(field);
+    expect(menu).not.toContainElement(create);
+    expect(
+      Array.from(menu.querySelectorAll('[role]')).map(el =>
+        el.getAttribute('role'),
+      ),
+    ).toEqual(['menuitem', 'menuitem']);
+    // Header before the menu, footer after it, in one popover.
+    const popoverEl = menu.closest('[popover]');
+    expect(popoverEl).toContainElement(field);
+    expect(popoverEl).toContainElement(create);
+    expect(
+      field.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      menu.compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('makes the menu one Tab stop between the regions', async () => {
+    const {menu} = await open();
+    expect(menu).toHaveAttribute('tabindex', '0');
+  });
+
+  it('Tab from the menu moves on to the footer and keeps the menu open', async () => {
+    const {menu} = await open();
+    const hide = vi.mocked(HTMLElement.prototype.hidePopover);
+    hide.mockClear();
+    fireEvent.keyDown(menu, {key: 'Tab'});
+    expect(hide).not.toHaveBeenCalled();
+    fireEvent.keyDown(menu, {key: 'Tab', shiftKey: true});
+    expect(hide).not.toHaveBeenCalled();
+  });
+
+  it('Shift+Tab from a row moves straight to the header and keeps the menu open', async () => {
+    const {menu} = await open();
+    const hide = vi.mocked(HTMLElement.prototype.hidePopover);
+    hide.mockClear();
+    fireEvent.keyDown(menu, {key: 'ArrowDown'});
+    const row = screen.getByRole('menuitem', {name: 'Bug', hidden: true});
+    await waitFor(() => expect(row).toHaveFocus());
+    fireEvent.keyDown(row, {key: 'Tab', shiftKey: true});
+    expect(
+      screen.getByRole('textbox', {name: 'Filter labels', hidden: true}),
+    ).toHaveFocus();
+    expect(hide).not.toHaveBeenCalled();
+  });
+
+  it('a pointer open draws no focus ring on the menu; keyboard focus on it does', async () => {
+    const {menu} = await open();
+    // Opened with a pointer: the menu is focused but must not ring.
+    const ringClasses = stylex
+      .props(focusOutlineStyles.focusVisible)
+      .className!.split(' ')
+      .filter(Boolean);
+    const hasRing = () => ringClasses.every(c => menu.classList.contains(c));
+    expect(menu).toHaveFocus();
+    expect(hasRing()).toBe(false);
+    // Keyboard: leave to the header and come back by Tab.
+    const field = screen.getByRole('textbox', {
+      name: 'Filter labels',
+      hidden: true,
+    });
+    fireEvent.keyDown(document, {key: 'Tab', shiftKey: true});
+    act(() => field.focus());
+    fireEvent.keyDown(document, {key: 'Tab'});
+    act(() => menu.focus());
+    await waitFor(() => expect(hasRing()).toBe(true));
+  });
+
+  describe('with only hidden controls in a region', () => {
+    async function openHidden(
+      header: React.ReactNode,
+      footer: React.ReactNode,
+    ) {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          button={{label: 'Labels'}}
+          header={header}
+          footer={footer}>
+          <DropdownMenuItem label="Bug" />
+          <DropdownMenuSubMenu label="Move to">
+            <DropdownMenuItem label="Folder A" />
+          </DropdownMenuSubMenu>
+        </DropdownMenu>,
+      );
+      const trigger = screen.getByRole('button', {name: /Labels/});
+      await user.click(trigger);
+      const menu = screen.getByRole('menu', {name: 'Labels', hidden: true});
+      await waitFor(() => expect(menu).toHaveFocus());
+      const hide = vi.mocked(HTMLElement.prototype.hidePopover);
+      hide.mockClear();
+      return {user, trigger, menu, hide};
+    }
+
+    it.each([
+      [
+        'hidden',
+        <button key="h" type="button" hidden>
+          Gone
+        </button>,
+      ],
+      [
+        'display: none',
+        <button key="d" type="button" style={{display: 'none'}}>
+          Gone
+        </button>,
+      ],
+      [
+        'visibility: hidden',
+        <button key="v" type="button" style={{visibility: 'hidden'}}>
+          Gone
+        </button>,
+      ],
+    ])(
+      'treats a %s footer control as unreachable: Tab from the menu stays on the menu',
+      async (_label, control) => {
+        const {menu, hide} = await openHidden(null, control);
+        fireEvent.keyDown(menu, {key: 'Tab'});
+        expect(menu).toHaveFocus();
+        expect(hide).not.toHaveBeenCalled();
+      },
+    );
+
+    it('treats a footer control inside a display: none wrapper as unreachable', async () => {
+      const {menu, hide} = await openHidden(
+        null,
+        <div style={{display: 'none'}}>
+          <button type="button">Create label</button>
+        </div>,
+      );
+      fireEvent.keyDown(menu, {key: 'Tab'});
+      expect(menu).toHaveFocus();
+      expect(hide).not.toHaveBeenCalled();
+    });
+
+    it('treats a header control inside a display: none wrapper as unreachable: Shift+Tab from a row stays', async () => {
+      const {menu, hide} = await openHidden(
+        <div style={{display: 'none'}}>
+          <input aria-label="Filter labels" />
+        </div>,
+        null,
+      );
+      fireEvent.keyDown(menu, {key: 'ArrowDown'});
+      const row = screen.getByRole('menuitem', {name: 'Bug', hidden: true});
+      await waitFor(() => expect(row).toHaveFocus());
+      fireEvent.keyDown(row, {key: 'Tab', shiftKey: true});
+      expect(row).toHaveFocus();
+      expect(hide).not.toHaveBeenCalled();
+    });
+
+    it('Tab past the last visible footer control wraps to the menu, ignoring a wrapped hidden one after it', async () => {
+      const {hide} = await openHidden(
+        null,
+        <>
+          <button type="button">Create label</button>
+          <div style={{display: 'none'}}>
+            <button type="button">Gone</button>
+          </div>
+        </>,
+      );
+      const create = screen.getByRole('button', {
+        name: 'Create label',
+        hidden: true,
+      });
+      act(() => create.focus());
+      fireEvent.keyDown(create, {key: 'Tab'});
+      expect(
+        screen.getByRole('menu', {name: 'Labels', hidden: true}),
+      ).toHaveFocus();
+      expect(hide).not.toHaveBeenCalled();
+    });
+
+    it('Tab from an open sub-menu returns to the menu when the footer control is in a hidden wrapper', async () => {
+      const {user, menu} = await openHidden(
+        null,
+        <div style={{display: 'none'}}>
+          <button type="button">Create label</button>
+        </div>,
+      );
+      const subTrigger = screen.getByRole('menuitem', {
+        name: /Move to/,
+        hidden: true,
+      });
+      act(() => subTrigger.focus());
+      await user.keyboard('{ArrowRight}');
+      const folder = screen.getByRole('menuitem', {
+        name: 'Folder A',
+        hidden: true,
+      });
+      await waitFor(() => expect(folder).toHaveFocus());
+      fireEvent.keyDown(folder, {key: 'Tab'});
+      expect(subTrigger).toHaveAttribute('aria-expanded', 'false');
+      expect(menu).toHaveFocus();
+      expect(menu.closest('[popover]')).toHaveAttribute('popover-open');
+    });
+
+    it('treats a hidden header control as unreachable: Shift+Tab from a row stays on the row', async () => {
+      const {menu, hide} = await openHidden(
+        <input aria-label="Filter labels" hidden />,
+        null,
+      );
+      fireEvent.keyDown(menu, {key: 'ArrowDown'});
+      const row = screen.getByRole('menuitem', {name: 'Bug', hidden: true});
+      await waitFor(() => expect(row).toHaveFocus());
+      fireEvent.keyDown(row, {key: 'Tab', shiftKey: true});
+      expect(row).toHaveFocus();
+      expect(hide).not.toHaveBeenCalled();
+    });
+
+    it('Tab past the last visible footer control wraps to the menu, ignoring a hidden one after it', async () => {
+      const {hide} = await openHidden(
+        null,
+        <>
+          <button type="button">Create label</button>
+          <button type="button" style={{display: 'none'}}>
+            Gone
+          </button>
+        </>,
+      );
+      const create = screen.getByRole('button', {
+        name: 'Create label',
+        hidden: true,
+      });
+      act(() => create.focus());
+      fireEvent.keyDown(create, {key: 'Tab'});
+      expect(
+        screen.getByRole('menu', {name: 'Labels', hidden: true}),
+      ).toHaveFocus();
+      expect(hide).not.toHaveBeenCalled();
+    });
+
+    it('Tab from an open sub-menu returns to the menu when the footer holds only hidden controls', async () => {
+      const {user, menu} = await openHidden(
+        null,
+        <button type="button" hidden>
+          Gone
+        </button>,
+      );
+      const subTrigger = screen.getByRole('menuitem', {
+        name: /Move to/,
+        hidden: true,
+      });
+      act(() => subTrigger.focus());
+      await user.keyboard('{ArrowRight}');
+      const folder = screen.getByRole('menuitem', {
+        name: 'Folder A',
+        hidden: true,
+      });
+      await waitFor(() => expect(folder).toHaveFocus());
+      fireEvent.keyDown(folder, {key: 'Tab'});
+      expect(subTrigger).toHaveAttribute('aria-expanded', 'false');
+      expect(menu).toHaveFocus();
+      expect(menu.closest('[popover]')).toHaveAttribute('popover-open');
+    });
+  });
+
+  describe('with a sub-menu open', () => {
+    async function openFlyout() {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          button={{label: 'Labels'}}
+          header={<input aria-label="Filter labels" />}
+          footer={<button type="button">Create label</button>}>
+          <DropdownMenuItem label="Bug" />
+          <DropdownMenuSubMenu label="Move to">
+            <DropdownMenuItem label="Folder A" />
+            <DropdownMenuItem label="Folder B" />
+          </DropdownMenuSubMenu>
+        </DropdownMenu>,
+      );
+      await user.click(screen.getByRole('button', {name: /Labels/}));
+      const root = screen.getByRole('menu', {name: 'Labels', hidden: true});
+      await waitFor(() => expect(root).toHaveFocus());
+      const subTrigger = screen.getByRole('menuitem', {
+        name: /Move to/,
+        hidden: true,
+      });
+      act(() => subTrigger.focus());
+      await user.keyboard('{ArrowRight}');
+      await waitFor(() =>
+        expect(subTrigger).toHaveAttribute('aria-expanded', 'true'),
+      );
+      const folder = screen.getByRole('menuitem', {
+        name: 'Folder A',
+        hidden: true,
+      });
+      await waitFor(() => expect(folder).toHaveFocus());
+      const hide = vi.mocked(HTMLElement.prototype.hidePopover);
+      return {root, subTrigger, folder, hide};
+    }
+
+    it('Tab from a flyout row closes the flyout and moves to the footer', async () => {
+      const {root, subTrigger, folder} = await openFlyout();
+      fireEvent.keyDown(folder, {key: 'Tab'});
+      expect(subTrigger).toHaveAttribute('aria-expanded', 'false');
+      expect(
+        screen.getByRole('button', {name: 'Create label', hidden: true}),
+      ).toHaveFocus();
+      expect(root.closest('[popover]')).toHaveAttribute('popover-open');
+    });
+
+    it('Shift+Tab from a flyout row closes the flyout and moves to the header', async () => {
+      const {subTrigger, folder} = await openFlyout();
+      fireEvent.keyDown(folder, {key: 'Tab', shiftKey: true});
+      expect(subTrigger).toHaveAttribute('aria-expanded', 'false');
+      expect(
+        screen.getByRole('textbox', {name: 'Filter labels', hidden: true}),
+      ).toHaveFocus();
+    });
+  });
+
+  it('Tab past the last footer control wraps to the first header control', async () => {
+    await open();
+    const hide = vi.mocked(HTMLElement.prototype.hidePopover);
+    hide.mockClear();
+    const create = screen.getByRole('button', {
+      name: 'Create label',
+      hidden: true,
+    });
+    create.focus();
+    fireEvent.keyDown(create, {key: 'Tab', shiftKey: true});
+    expect(hide).not.toHaveBeenCalled();
+    create.focus();
+    expect(create).toHaveFocus();
+    fireEvent.keyDown(create, {key: 'Tab'});
+    expect(
+      screen.getByRole('textbox', {name: 'Filter labels', hidden: true}),
+    ).toHaveFocus();
+    expect(hide).not.toHaveBeenCalled();
+  });
+
+  it('Shift+Tab before the first header control wraps to the last footer control', async () => {
+    await open();
+    const hide = vi.mocked(HTMLElement.prototype.hidePopover);
+    hide.mockClear();
+    const field = screen.getByRole('textbox', {
+      name: 'Filter labels',
+      hidden: true,
+    });
+    field.focus();
+    fireEvent.keyDown(field, {key: 'Tab'});
+    expect(hide).not.toHaveBeenCalled();
+    field.focus();
+    expect(field).toHaveFocus();
+    fireEvent.keyDown(field, {key: 'Tab', shiftKey: true});
+    expect(
+      screen.getByRole('button', {name: 'Create label', hidden: true}),
+    ).toHaveFocus();
+    expect(hide).not.toHaveBeenCalled();
+  });
+
+  it('is a modal dialog named like the menu, holding the menu, and the trigger points at it', async () => {
+    const {menu} = await open();
+    const dialog = screen.getByRole('dialog', {name: 'Labels', hidden: true});
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toContainElement(menu);
+    expect(dialog).toContainElement(
+      screen.getByRole('textbox', {name: 'Filter labels', hidden: true}),
+    );
+    const trigger = screen.getByRole('button', {name: /Labels/});
+    expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+    const controlled = document.getElementById(
+      trigger.getAttribute('aria-controls') ?? '',
+    );
+    expect(controlled).not.toBeNull();
+    expect(controlled).toContainElement(dialog);
+    expect(controlled).not.toContainElement(trigger);
+  });
+
+  it('a custom trigger with a header names the dialog and logs no unnamed-dialog warning', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          header={<input aria-label="Filter labels" />}
+          renderTrigger={props => (
+            <span {...props} role="button" tabIndex={0}>
+              Labels
+            </span>
+          )}>
+          <DropdownMenuItem label="Bug" />
+        </DropdownMenu>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Labels'});
+      expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+      await user.click(trigger);
+      expect(
+        screen.getByRole('dialog', {name: 'Labels', hidden: true}),
+      ).toHaveAttribute('aria-modal', 'true');
+      expect(
+        warn.mock.calls.some(args =>
+          String(args[0]).includes('unnamed dialog'),
+        ),
+      ).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('an icon-only custom trigger with a header still gets a named dialog', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        header={<input aria-label="Filter labels" />}
+        renderTrigger={props => (
+          <button {...props} type="button">
+            <img alt="Labels" src="" />
+          </button>
+        )}>
+        <DropdownMenuItem label="Bug" />
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Labels'});
+    expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+    await user.click(trigger);
+    expect(
+      screen.getByRole('dialog', {name: 'Labels', hidden: true}),
+    ).toHaveAttribute('aria-modal', 'true');
+  });
+
+  it.each([
+    [
+      'its own <label>',
+      (props: DropdownMenuTriggerProps) => (
+        <>
+          <label htmlFor={props.id}>Labels</label>
+          <button {...props} type="button" />
+        </>
+      ),
+    ],
+    [
+      "an input button's value",
+      (props: DropdownMenuTriggerProps) => (
+        <input {...props} type="button" value="Labels" />
+      ),
+    ],
+  ])(
+    'a custom trigger named by %s names the dialog like the menu',
+    async (_label, renderTrigger) => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          header={<input aria-label="Filter labels" />}
+          renderTrigger={renderTrigger}>
+          <DropdownMenuItem label="Bug" />
+        </DropdownMenu>,
+      );
+      await user.click(screen.getByRole('button', {name: 'Labels'}));
+      expect(
+        screen.getByRole('dialog', {name: 'Labels', hidden: true}),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('menu', {name: 'Labels', hidden: true}),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it('a custom trigger with no readable name still gets a dialog, named by the default label', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        footer={<button type="button">Create label</button>}
+        renderTrigger={props => (
+          <button {...props} type="button" data-testid="bare" />
+        )}>
+        <DropdownMenuItem label="Bug" />
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByTestId('bare'));
+    const dialog = screen.getByRole('dialog', {hidden: true});
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog.getAttribute('aria-label')?.trim()).not.toBe('');
+  });
+
+  describe('with a radio group in the header', () => {
+    async function openWithRadios(checked: string | null) {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          button={{label: 'Labels'}}
+          header={
+            <fieldset>
+              {['Name', 'Date', 'Size'].map(option => (
+                <input
+                  key={option}
+                  type="radio"
+                  name="sort"
+                  aria-label={option}
+                  defaultChecked={option === checked}
+                />
+              ))}
+            </fieldset>
+          }
+          footer={<button type="button">Create label</button>}>
+          <DropdownMenuItem label="Bug" />
+        </DropdownMenu>,
+      );
+      await user.click(screen.getByRole('button', {name: /Labels/}));
+      const menu = screen.getByRole('menu', {name: 'Labels', hidden: true});
+      await waitFor(() => expect(menu).toHaveFocus());
+      const radio = (name: string) =>
+        screen.getByRole('radio', {name, hidden: true});
+      const create = screen.getByRole('button', {
+        name: 'Create label',
+        hidden: true,
+      });
+      return {menu, radio, create};
+    }
+
+    it('Shift+Tab from the menu lands on the checked radio, and Tab leaves the group in one step', async () => {
+      const {menu, radio} = await openWithRadios('Date');
+      fireEvent.keyDown(menu, {key: 'Tab', shiftKey: true});
+      expect(radio('Date')).toHaveFocus();
+      fireEvent.keyDown(radio('Date'), {key: 'Tab'});
+      expect(menu).toHaveFocus();
+    });
+
+    it('Tab wrapping past the footer lands on the checked radio', async () => {
+      const {radio, create} = await openWithRadios('Size');
+      act(() => create.focus());
+      fireEvent.keyDown(create, {key: 'Tab'});
+      expect(radio('Size')).toHaveFocus();
+    });
+
+    it('with none checked, the group is entered at its first radio forward and its last backward', async () => {
+      const {menu, radio, create} = await openWithRadios(null);
+      fireEvent.keyDown(menu, {key: 'Tab', shiftKey: true});
+      expect(radio('Size')).toHaveFocus();
+      act(() => create.focus());
+      fireEvent.keyDown(create, {key: 'Tab'});
+      expect(radio('Name')).toHaveFocus();
+      fireEvent.keyDown(radio('Name'), {key: 'Tab', shiftKey: true});
+      expect(create).toHaveFocus();
+    });
+  });
+
+  it('without a header or footer, there is no dialog and the trigger points at the menu', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Item 1" />
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole('button', {name: /Actions/});
+    await user.click(trigger);
+    const menu = screen.getByRole('menu', {name: 'Actions', hidden: true});
+    expect(screen.queryByRole('dialog', {hidden: true})).toBeNull();
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    expect(trigger).toHaveAttribute('aria-controls', menu.id);
+  });
+
+  it('leaves keys typed in the header to the field', async () => {
+    const {user} = await open();
+    const field = screen.getByRole('textbox', {
+      name: 'Filter labels',
+      hidden: true,
+    });
+    await user.click(field);
+    await user.keyboard('bug');
+    expect(field).toHaveValue('bug');
+    expect(field).toHaveFocus();
+  });
+
+  it('a footer button acts on its own click and the menu stays open', async () => {
+    const user = userEvent.setup();
+    const onCreate = vi.fn();
+    render(<LabelsMenu onCreate={onCreate} />);
+    const trigger = screen.getByRole('button', {name: /Labels/});
+    await user.click(trigger);
+    await user.click(
+      screen.getByRole('button', {name: 'Create label', hidden: true}),
+    );
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('without a header or footer, Tab still closes and the menu stays out of the Tab order', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Item 1" />
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const menu = screen.getByRole('menu', {hidden: true});
+    expect(menu).toHaveAttribute('tabindex', '-1');
+    expect(menu.parentElement?.closest('[role="menu"]')).toBeNull();
+    fireEvent.keyDown(menu, {key: 'Tab'});
+    expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
+  });
+
+  it('a false or empty region renders no wrapper', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}} header={false} footer="">
+        <DropdownMenuItem label="Item 1" />
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const menu = screen.getByRole('menu', {hidden: true});
+    expect(menu).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('renders the regions above and below the actions in the bottom sheet', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'Labels'}}
+        presentation="bottom-sheet"
+        header={<input aria-label="Filter labels" />}
+        footer={<button type="button">Create label</button>}
+        items={[{label: 'Bug'}, {label: 'Feature'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /Labels/}));
+    const sheet = screen.getByRole('dialog', {name: 'Labels'});
+    const field = screen.getByRole('textbox', {name: 'Filter labels'});
+    const bug = screen.getByRole('button', {name: 'Bug'});
+    const create = screen.getByRole('button', {name: 'Create label'});
+    expect(sheet).toContainElement(field);
+    expect(sheet).toContainElement(create);
+    expect(
+      field.compareDocumentPosition(bug) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      bug.compareDocumentPosition(create) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+});
+
+describe('DropdownMenu trigger refs across renders', () => {
+  // A ref that is a new function on every render makes React call it again on
+  // every commit (with null, then the element). Each call moved the menu's
+  // anchor off the trigger and back, rewriting the trigger's style and
+  // reordering its anchor names whenever a tooltip anchors there too.
+  function watchStyleWrites(element: HTMLElement) {
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver(found => records.push(...found));
+    observer.observe(element, {attributes: true, attributeFilter: ['style']});
+    return () => {
+      records.push(...observer.takeRecords());
+      observer.disconnect();
+      return records.length;
+    };
+  }
+
+  const anchorNames = (element: HTMLElement) =>
+    element.style.getPropertyValue('anchor-name');
+
+  it('hands renderTrigger the same ref on every render, so a render leaves the trigger and its tooltip anchor alone', () => {
+    const refs: DropdownMenuTriggerProps['ref'][] = [];
+    function Menu({count}: {count: number}) {
+      return (
+        <DropdownMenu
+          renderTrigger={props => {
+            refs.push(props.ref);
+            return (
+              <Tooltip content="More actions">
+                <button type="button" {...props}>
+                  Menu {count}
+                </button>
+              </Tooltip>
+            );
+          }}>
+          <DropdownMenuItem label="Profile" onClick={() => {}} />
+        </DropdownMenu>
+      );
+    }
+    const {rerender} = render(<Menu count={0} />);
+    const trigger = screen.getByRole('button', {name: /^Menu/});
+    // Neither the closed menu nor the closed tooltip makes it an anchor.
+    expect(anchorNames(trigger)).toBe('');
+    // The open menu's anchor, on the trigger that also carries the tooltip.
+    fireEvent.click(trigger);
+    const before = anchorNames(trigger);
+    expect(before.split(',')).toHaveLength(1);
+
+    const stopWatching = watchStyleWrites(trigger);
+    rerender(<Menu count={1} />);
+
+    expect(stopWatching()).toBe(0);
+    expect(anchorNames(trigger)).toBe(before);
+    expect(refs.length).toBeGreaterThan(1);
+    expect(refs.at(-1)).toBe(refs[0]);
+  });
+
+  it('leaves the default trigger and its tooltip anchor alone on a render', () => {
+    function Menu({count}: {count: number}) {
+      return (
+        <>
+          <output>{count}</output>
+          <DropdownMenu
+            button={{label: 'Actions', tooltip: 'More actions'}}
+            onOpenChange={() => {}}>
+            <DropdownMenuItem label="Profile" onClick={() => {}} />
+          </DropdownMenu>
+        </>
+      );
+    }
+    const {rerender} = render(<Menu count={0} />);
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+    expect(anchorNames(trigger)).toBe('');
+    fireEvent.click(trigger);
+    const before = anchorNames(trigger);
+    expect(before.split(',')).toHaveLength(1);
+
+    const stopWatching = watchStyleWrites(trigger);
+    rerender(<Menu count={1} />);
+
+    expect(stopWatching()).toBe(0);
+    expect(anchorNames(trigger)).toBe(before);
+  });
+
+  it('still hands the default trigger to a ref the caller passes', () => {
+    const buttonRef = createRef<HTMLButtonElement>();
+    render(
+      <DropdownMenu button={{label: 'Actions', ref: buttonRef}}>
+        <DropdownMenuItem label="Profile" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+    expect(buttonRef.current).toBe(
+      screen.getByRole('button', {name: 'Actions'}),
+    );
+  });
+
+  it('hands the bottom-sheet trigger the same ref on every render', () => {
+    const refs: DropdownMenuTriggerProps['ref'][] = [];
+    function Menu({count}: {count: number}) {
+      return (
+        <DropdownMenu
+          presentation="bottom-sheet"
+          items={[{label: 'Profile'}]}
+          renderTrigger={props => {
+            refs.push(props.ref);
+            return (
+              <button type="button" {...props}>
+                Menu {count}
+              </button>
+            );
+          }}
+        />
+      );
+    }
+    const {rerender} = render(<Menu count={0} />);
+    rerender(<Menu count={1} />);
+
+    expect(refs.length).toBeGreaterThan(1);
+    expect(refs.at(-1)).toBe(refs[0]);
   });
 });

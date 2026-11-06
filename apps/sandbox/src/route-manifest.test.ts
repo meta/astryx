@@ -107,6 +107,8 @@ describe('Sandbox static export contract', () => {
     );
     expect(canHydrate('/pages/component-scores/', '?filter=all')).toBe(true);
     expect(canHydrate('/pages/shell-lab/', '')).toBe(true);
+    expect(canHydrate('/pages/perf-scenes/', '?scene=table')).toBe(false);
+    expect(canHydrate('/pages/perf-scenes/', '')).toBe(true);
   });
 
   it('does not turn unknown URLs, dynamic segments or traversal into a 200 fallback', () => {

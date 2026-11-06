@@ -17,14 +17,14 @@ export const docs = {
     "order": 20
   },
   "category": "foundations",
-  "description": "Colors for charts and graphs: one categorical accent per series, a neutral for labels and reference lines, and sequential ramps from 5 (darkest) to 1 (lightest) for ordered scales and heatmaps. Import their public StyleX variables from @astryxdesign/core/theme/dataTokens.stylex.",
+  "description": "Colors for charts and graphs: one categorical accent per series, a neutral for labels and reference lines, and sequential ramps from 5 (darkest) to 1 (lightest) for ordered scales and heatmaps. Import dataVars from @astryxdesign/core/theme/dataTokens.stylex for CSS-capable code. Source compilation emits the complete 56-variable group when any member is retained and none for an unused graph. Prebuilt CSS consumers load @astryxdesign/core/astryx.css, which defines the complete group for the already-compiled dataVars entry.",
   "sections": [
     {
       "title": "Data Visualization Tokens",
       "content": [
         {
           "type": "prose",
-          "text": "Colors for charts and graphs: one categorical accent per series, a neutral for labels and reference lines, and sequential ramps from 5 (darkest) to 1 (lightest) for ordered scales and heatmaps. Import their public StyleX variables from @astryxdesign/core/theme/dataTokens.stylex."
+          "text": "Colors for charts and graphs: one categorical accent per series, a neutral for labels and reference lines, and sequential ramps from 5 (darkest) to 1 (lightest) for ordered scales and heatmaps. Import dataVars from @astryxdesign/core/theme/dataTokens.stylex for CSS-capable code. Source compilation emits the complete 56-variable group when any member is retained and none for an unused graph. Prebuilt CSS consumers load @astryxdesign/core/astryx.css, which defines the complete group for the already-compiled dataVars entry."
         },
         {
           "type": "table",

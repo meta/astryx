@@ -20,9 +20,9 @@ import {createLayerScopedContext as createContext} from '../Layer/layerScopedCon
  * Direction of form field arrangement.
  *
  * - `'vertical'` — Fields stack top-to-bottom (default). Most common.
- * - `'horizontal'` — Fields arrange left-to-right, wrapping when needed.
- * - `'horizontal-labels'` — Fields stack vertically but labels sit to the left
- *   of their inputs (settings/admin panel pattern).
+ * - `'horizontal'` — Fields occupy one `1fr` grid track per child in logical inline order.
+ * - `'horizontal-labels'` — Fields stack vertically while labels sit beside
+ *   their inputs on the inline-start side (settings/admin panel pattern).
  */
 export type FormLayoutDirection =
   'vertical' | 'horizontal' | 'horizontal-labels';

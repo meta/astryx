@@ -97,7 +97,9 @@ const styles = stylex.create({
   // positioning and browser top-layer promotion.
   card: {
     backgroundColor: colorVars['--color-background-popover'],
-    border: `1px solid ${colorVars['--color-border']}`,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: colorVars['--color-border'],
     borderRadius: radiusVars['--radius-container'],
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-3'],

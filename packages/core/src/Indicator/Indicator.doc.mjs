@@ -122,8 +122,7 @@ export const docs = {
         {
           name: 'children',
           type: 'ReactNode',
-          description:
-            'Rendered inside the chrome INSTEAD of the state mark.',
+          description: 'Rendered inside the chrome INSTEAD of the state mark.',
         },
       ],
     },
@@ -143,25 +142,6 @@ export const docs = {
         states: ['checked', 'disabled'],
       },
       {className: 'astryx-radio-indicator-dot', visualProps: ['size']},
-      // Retained beside the canonical names for backwards compatibility.
-      // New themes use the canonical targets above.
-      {
-        className: 'astryx-checkbox',
-        visualProps: ['size'],
-        states: ['checked', 'disabled'],
-        deprecatedFor: 'checkbox-indicator',
-      },
-      {
-        className: 'astryx-radio',
-        visualProps: ['size'],
-        states: ['checked', 'disabled'],
-        deprecatedFor: 'radio-indicator',
-      },
-      {
-        className: 'astryx-radio-dot',
-        visualProps: ['size'],
-        deprecatedFor: 'radio-indicator-dot',
-      },
     ],
   },
   examples: [
@@ -191,7 +171,7 @@ defineTheme({
       code: `// When the shape itself is wrong, hand the theme a component. It receives
 // {state, size, isDisabled, children} and nothing else.
 //
-// Use theme tokens, never raw values — run \`npx @astryxdesign/cli docs tokens\` for the
+// Use theme tokens, never raw values — run \`astryx docs tokens\` for the
 // full set. Color: --color-accent, --color-on-accent, --color-border,
 // --color-border-emphasized, --color-background-surface,
 // --color-background-muted. Radius: --radius-inner, --radius-full.
@@ -256,22 +236,22 @@ defineTheme({name: 'brand', indicators: {check: RadioIndicator}});`,
       {
         guidance: true,
         description:
-          'Use theme tokens for every color, radius, and border width in a replacement. Run `npx @astryxdesign/cli docs tokens` for the set.',
+          'Use theme tokens for every color, radius, and border width in a replacement. Run `astryx docs tokens` for the set.',
       },
       {
         guidance: true,
         description:
-          'Render a single root ELEMENT, and let it keep the border-radius you want the focus ring to follow. A control whose real input is visually hidden cannot show focus on that input, so the owner paints the standard ring onto the indicator element itself at focus time (useIndicatorFocusRing), and `outline` then picks up that element\'s radius. A replacement needs no cooperation and can forget nothing: the ring is never missing (WCAG 2.4.7), it is only the wrong shape if the root has no radius of its own. Do not draw a focus ring yourself; the owner already did.',
+          "Render a single root ELEMENT, and let it keep the border-radius you want the focus ring to follow. A control whose real input is visually hidden cannot show focus on that input, so the owner paints the standard ring onto the indicator element itself at focus time (useIndicatorFocusRing), and `outline` then picks up that element's radius. A replacement needs no cooperation and can forget nothing: the ring is never missing (WCAG 2.4.7), it is only the wrong shape if the root has no radius of its own. Do not draw a focus ring yourself; the owner already did.",
       },
       {
         guidance: false,
         description:
-          'Thread hover or pressed state in as props. Interaction state reaches an indicator through the owner\'s CSS ancestor marker, so hovering the row tints the control with no props involved.',
+          "Thread hover or pressed state in as props. Interaction state reaches an indicator through the owner's CSS ancestor marker, so hovering the row tints the control with no props involved.",
       },
       {
         guidance: false,
         description:
-          'Assume you are only mounted when selected. The host renders its indicator unconditionally and passes `state`, in every state; that is what lets a replacement draw where the default draws nothing (a radio\'s empty circle on an unchosen row). Drawing nothing in a state is a decision the indicator makes, not one the host makes for it.',
+          "Assume you are only mounted when selected. The host renders its indicator unconditionally and passes `state`, in every state; that is what lets a replacement draw where the default draws nothing (a radio's empty circle on an unchosen row). Drawing nothing in a state is a decision the indicator makes, not one the host makes for it.",
       },
     ],
     anatomy: [
@@ -299,13 +279,41 @@ export const docsDense = {
     description:
       'Componentized selection visuals shared by CheckboxInput, RadioList, and menu rows. Decorative: the owner keeps input/role/name/focus/keyboard; the indicator turns state into a picture. That split makes them themeable: restyle via class targets or replace the component.',
     bestPractices: [
-      { guidance: true, description: "Prefer the canonical `components['checkbox-indicator']` override first. Replacing the component is the heavier path, for when the shape itself is wrong." },
-      { guidance: true, description: 'Match the shipped replacement-content branch with `isRenderable(children)`, not `children != null` or `children ?? mark`. The helper is shallow: it excludes nullish values, booleans, and the empty string, while React elements and containers take the replacement path even when their descendants render nothing. The owner passes `children={isBusy && <Spinner/>}`, so a nullish check deletes the state mark whenever the value is `false` (#4893).' },
-      { guidance: true, description: 'A replacement must set aria-hidden. The owner supplies role and accessible name; a visible indicator would be announced twice.' },
-      { guidance: true, description: 'Use theme tokens for every color, radius, and border width in a replacement. Run `npx @astryxdesign/cli docs tokens` for the set.' },
-      { guidance: true, description: 'Render a single root ELEMENT with the border-radius the focus ring should follow. The owner paints the standard ring onto the indicator at focus time (useIndicatorFocusRing) and outline picks up its radius; the ring is never missing (WCAG 2.4.7), only mis-shaped if the root lacks a radius. Do not draw a focus ring yourself.' },
-      { guidance: false, description: 'Thread hover or pressed state in as props. Interaction state reaches an indicator through the owner\'s CSS ancestor marker.' },
-      { guidance: false, description: 'Assume you are only mounted when selected. The host renders the indicator unconditionally and passes `state` in every state; that is what lets a replacement draw where the default draws nothing (a radio\'s empty circle on an unchosen row).' },
+      {
+        guidance: true,
+        description:
+          "Prefer the canonical `components['checkbox-indicator']` override first. Replacing the component is the heavier path, for when the shape itself is wrong.",
+      },
+      {
+        guidance: true,
+        description:
+          'Match the shipped replacement-content branch with `isRenderable(children)`, not `children != null` or `children ?? mark`. The helper is shallow: it excludes nullish values, booleans, and the empty string, while React elements and containers take the replacement path even when their descendants render nothing. The owner passes `children={isBusy && <Spinner/>}`, so a nullish check deletes the state mark whenever the value is `false` (#4893).',
+      },
+      {
+        guidance: true,
+        description:
+          'A replacement must set aria-hidden. The owner supplies role and accessible name; a visible indicator would be announced twice.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use theme tokens for every color, radius, and border width in a replacement. Run `astryx docs tokens` for the set.',
+      },
+      {
+        guidance: true,
+        description:
+          'Render a single root ELEMENT with the border-radius the focus ring should follow. The owner paints the standard ring onto the indicator at focus time (useIndicatorFocusRing) and outline picks up its radius; the ring is never missing (WCAG 2.4.7), only mis-shaped if the root lacks a radius. Do not draw a focus ring yourself.',
+      },
+      {
+        guidance: false,
+        description:
+          "Thread hover or pressed state in as props. Interaction state reaches an indicator through the owner's CSS ancestor marker.",
+      },
+      {
+        guidance: false,
+        description:
+          "Assume you are only mounted when selected. The host renders the indicator unconditionally and passes `state` in every state; that is what lets a replacement draw where the default draws nothing (a radio's empty circle on an unchosen row).",
+      },
     ],
   },
   components: [
@@ -315,10 +323,13 @@ export const docsDense = {
       description:
         'Checkbox visual: a square box with a checkmark or indeterminate bar. Decorative (aria-hidden); the owner keeps input/role/name/focus/keyboard.',
       propDescriptions: {
-        state: "which state to draw. An indicator draws in EVERY state: unchecked is an empty box, not nothing.",
+        state:
+          'which state to draw. An indicator draws in EVERY state: unchecked is an empty box, not nothing.',
         size: 'control size: 20px or 24px.',
-        isDisabled: 'whether the owner is disabled. Purely visual; the owner keeps the real disabled semantics.',
-        children: 'rendered inside the chrome INSTEAD of the state mark. CheckboxInput passes its loading Spinner through while a change action is pending, so a replacement must render children when present or the busy visual is lost.',
+        isDisabled:
+          'whether the owner is disabled. Purely visual; the owner keeps the real disabled semantics.',
+        children:
+          'rendered inside the chrome INSTEAD of the state mark. CheckboxInput passes its loading Spinner through while a change action is pending, so a replacement must render children when present or the busy visual is lost.',
       },
     },
     {
@@ -327,10 +338,13 @@ export const docsDense = {
       description:
         'The mark on a chosen option: a checkmark by default, nothing when unchosen. Map to RadioIndicator for radio visuals on single-selection marks. Renders no chrome of its own (it IS the glyph), so a theme target lands on the same element as astryx-icon.',
       propDescriptions: {
-        state: 'which state to draw. The default renders nothing when unchecked; a replacement may draw in both states.',
+        state:
+          'which state to draw. The default renders nothing when unchecked; a replacement may draw in both states.',
         size: 'control size, matching the other indicators.',
-        isDisabled: 'whether the owning row is disabled. Purely visual; the owner keeps the real disabled semantics.',
-        children: 'rendered INSTEAD of the mark, in every state; a host showing a pending Spinner passes it through whether or not the row is chosen.',
+        isDisabled:
+          'whether the owning row is disabled. Purely visual; the owner keeps the real disabled semantics.',
+        children:
+          'rendered INSTEAD of the mark, in every state; a host showing a pending Spinner passes it through whether or not the row is chosen.',
       },
     },
     {
@@ -339,9 +353,11 @@ export const docsDense = {
       description:
         'Radio visual: a circle with a filled inner dot when selected. Draws in both states; an unselected radio is an empty circle, which is what lets it stand in for a checkmark in a selection slot.',
       propDescriptions: {
-        state: 'which state to draw. Radio belongs to the singleSelection family, which has no partial state.',
+        state:
+          'which state to draw. Radio belongs to the singleSelection family, which has no partial state.',
         size: 'control size: 20px or 24px.',
-        isDisabled: 'whether the owner is disabled. Purely visual; the owner keeps the real disabled semantics.',
+        isDisabled:
+          'whether the owner is disabled. Purely visual; the owner keeps the real disabled semantics.',
         children: 'rendered inside the chrome INSTEAD of the state mark.',
       },
     },

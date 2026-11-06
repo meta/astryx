@@ -48,6 +48,22 @@ describe('every shipped topic compiles to plain JSON', () => {
   );
 });
 
+describe('author-a-theme color guidance', () => {
+  it('teaches committed generated palette references as the main example', async () => {
+    const catalog = await loadDocsCatalog();
+    const topic = detailView(
+      await compileTopic(catalog, catalog.resolve('author-a-theme')),
+    );
+    const rendered = JSON.stringify(topic);
+
+    expect(rendered).toContain("import {palette} from './palette.generated';");
+    expect(rendered).toContain('palette.neutral.light[100]');
+    expect(rendered).toContain('palette.neutral.dark[15]');
+    expect(rendered).toContain('color (existing themes)');
+    expect(rendered).not.toContain("color: { accent: ['#7B61FF'");
+  });
+});
+
 describe('reads that share a catalog', () => {
   it(
     'never let one read change another',

@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/themes`: author a theme
+ * @file `astryx docs authoring/building-blocks/themes`: author a theme
  * in an integration; apps install, apply, and extend it like any theme.
  */
 
@@ -23,7 +23,11 @@ export const docs = {
   blocks: [
     {
       type: 'prose',
-      text: 'A theme contribution has editable `defineTheme` source plus a built module and production CSS. `integration add theme` scaffolds the source and declares the package exports; `theme build` writes the built outputs. An app installs the package, runs `theme add --import`, applies the theme from its generated app module, and customizes it with `extends` instead of copying source.',
+      text: 'In global mode: outside projects, the theme list includes themes from integrations installed for the computer, and `theme add` there only shows them; inside a project, it lists only themes from integrations the project installs. See {@link namespace:global} and {@link generic:global-integrations}.',
+    },
+    {
+      type: 'prose',
+      text: 'A theme contribution has editable `defineTheme` source plus a built module and production CSS. `integration add theme` scaffolds the source and declares the package exports; `theme build` writes the built outputs. An app installs the package, runs `theme add`, applies the theme from its generated app module, and customizes it with `extends` instead of copying source.',
     },
     {
       type: 'prose',

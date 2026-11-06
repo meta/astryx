@@ -19,7 +19,6 @@ import {
 } from './template.mjs';
 import {search} from '../search/search.mjs';
 import {build} from '../build/build.mjs';
-import {layoutExpand} from '../layout/layout.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 
 let tmpDir;
@@ -532,105 +531,6 @@ describe('integration template discovery', () => {
     });
   });
 
-  it('resolves a replacement block through the layout alias', async () => {
-    const pkgDir = installWidgets(tmpDir);
-    writeTemplate(pkgDir, 'acme-card-callout', {
-      kind: 'block',
-      source:
-        'export default function AcmeCardCallout() { return <span>Acme replacement block</span>; }\n',
-    });
-    declareReplaces(pkgDir, {
-      'acme-card-callout': 'CardCallout',
-    });
-
-    const accidental = path.join(tmpDir, 'node_modules', '@acme', 'extra');
-    fs.mkdirSync(path.join(accidental, 'templates'), {recursive: true});
-    fs.writeFileSync(
-      path.join(accidental, 'package.json'),
-      JSON.stringify({name: '@acme/extra', version: '1.0.0'}),
-    );
-    fs.writeFileSync(
-      path.join(accidental, 'astryx.integration.mjs'),
-      `export default {templates: './templates'};\n`,
-    );
-    writeTemplate(accidental, 'CardCallout', {
-      kind: 'block',
-      body: `export default {type: 'block', name: 'ZZZ accidental block', description: 'collision'};\n`,
-      source:
-        'export default function Accidental() { return <span>Accidental block</span>; }\n',
-    });
-    fs.writeFileSync(
-      path.join(tmpDir, 'astryx.config.mjs'),
-      `export default { integrations: ['@acme/widgets', '@acme/extra'] };\n`,
-    );
-
-    const result = await layoutExpand('C{card-callout}', {
-      name: 'ReplacementLayout',
-      cwd: tmpDir,
-    });
-
-    expect(result.data.code).toContain('Acme replacement block');
-    expect(result.data.code).not.toContain('Accidental block');
-    expect(result.data.blocksReferenced).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({name: 'CardCallout', mode: 'splice'}),
-      ]),
-    );
-  }, 30_000);
-
-  it('resolves chained block aliases consistently in template and layout', async () => {
-    const [firstTarget, secondTarget] = (await discoverCoreTemplates()).filter(
-      candidate => candidate.type === 'block',
-    );
-    expect(firstTarget).toBeDefined();
-    expect(secondTarget).toBeDefined();
-
-    const pkgDir = installWidgets(tmpDir);
-    writeTemplate(pkgDir, secondTarget.dirName, {
-      kind: 'block',
-      source:
-        'export default function FirstReplacement() { return <span>First chain replacement</span>; }\n',
-    });
-    writeTemplate(pkgDir, 'acme-final-block', {
-      kind: 'block',
-      source:
-        'export default function FinalReplacement() { return <span>Final chain replacement</span>; }\n',
-    });
-    declareReplaces(pkgDir, {
-      [secondTarget.dirName]: firstTarget.dirName,
-      'acme-final-block': secondTarget.dirName,
-    });
-
-    const firstTemplate = await template(firstTarget.dirName, {
-      show: true,
-      cwd: tmpDir,
-    });
-    expect(firstTemplate.data.source).toContain('First chain replacement');
-    const layoutId = id =>
-      id.replace(/([a-z0-9])([A-Z])/gu, '$1-$2').toLowerCase();
-    const firstLayout = await layoutExpand(
-      `C{${layoutId(firstTarget.dirName)}}`,
-      {
-        cwd: tmpDir,
-      },
-    );
-    expect(firstLayout.data.code).toContain('First chain replacement');
-    expect(firstLayout.data.code).not.toContain('Final chain replacement');
-
-    const secondTemplate = await template(secondTarget.dirName, {
-      show: true,
-      cwd: tmpDir,
-    });
-    expect(secondTemplate.data.source).toContain('Final chain replacement');
-    const secondLayout = await layoutExpand(
-      `C{${layoutId(secondTarget.dirName)}}`,
-      {
-        cwd: tmpDir,
-      },
-    );
-    expect(secondLayout.data.code).toContain('Final chain replacement');
-  }, 30_000);
-
   it('keeps the old discovery behavior when no replacement is declared', async () => {
     const pkgDir = installWidgets(tmpDir);
     writeTemplate(pkgDir, 'acme-app-shell', {kind: 'page'});
@@ -836,7 +736,7 @@ describe('integration template discovery', () => {
     const command = await runCli(['template', 'shell-side-nav'], tmpDir);
     expect(command.status).toBe(0);
     expect(command.stderr).toContain('@acme/extra has 1 integration issue');
-    expect(command.stderr).toContain('astryx doctor');
+    expect(command.stderr).toMatch(/Run: .+ doctor/);
 
     const doctor = await runCli(['doctor'], tmpDir);
     expect(doctor.status).toBe(0);
@@ -1334,4 +1234,41 @@ describe('build names a start its command selects', () => {
       template('contact-form', {show: true, cwd: tmpDir}),
     ).rejects.toMatchObject({code: 'ERR_AMBIGUOUS_TEMPLATE'});
   });
+
+  it('resolves chained template aliases without the layout command', async () => {
+    const [firstTarget, secondTarget] = (await discoverCoreTemplates()).filter(
+      candidate => candidate.type === 'block',
+    );
+    expect(firstTarget).toBeDefined();
+    expect(secondTarget).toBeDefined();
+
+    const pkgDir = installWidgets(tmpDir);
+    writeTemplate(pkgDir, secondTarget.dirName, {
+      kind: 'block',
+      source:
+        'export default function FirstReplacement() { return <span>First chain replacement</span>; }\n',
+    });
+    writeTemplate(pkgDir, 'acme-final-block', {
+      kind: 'block',
+      source:
+        'export default function FinalReplacement() { return <span>Final chain replacement</span>; }\n',
+    });
+    declareReplaces(pkgDir, {
+      [secondTarget.dirName]: firstTarget.dirName,
+      'acme-final-block': secondTarget.dirName,
+    });
+
+    const firstTemplate = await template(firstTarget.dirName, {
+      show: true,
+      cwd: tmpDir,
+    });
+    expect(firstTemplate.data.source).toContain('First chain replacement');
+
+    const secondTemplate = await template(secondTarget.dirName, {
+      show: true,
+      cwd: tmpDir,
+    });
+    expect(secondTemplate.data.source).toContain('Final chain replacement');
+  }, 30_000);
+
 });

@@ -13,9 +13,8 @@
  * astryx --json theme build <a> <b> …         -> theme.build.batch
  * astryx --json theme list                    -> theme.list
  * astryx --json theme add --list              -> theme.list
- * astryx --json theme add <slug>              -> theme.add
- * astryx --json theme add <slug> --import    -> theme.app
- * astryx --json theme remove/use <slug>      -> theme.app
+ * astryx --json theme add <slug> [--import]   -> theme.app
+ * astryx --json theme remove/use <slug>       -> theme.app
  * astryx --json theme eject <slug>            -> theme.eject
  * astryx --json theme template                -> theme.template
  * astryx --json theme targets [filter]        -> theme.targets
@@ -84,14 +83,6 @@
  */
 
 /**
- * astryx --json theme add <slug> [path]
- * @typedef {object} ThemeAddResponse
- * @property {'theme.add'} type
- * @property {{slug: string, displayName: string, maintained: boolean, package: string, outputDir: string, entry: string, exportName: string, files: string[]}} data
- * @property {{deprecations: Array<{id: 'DEP-0005', replacements: string[]}>}} meta additive lifecycle guidance; every released data field is unchanged
- */
-
-/**
  * One built theme imported by the generated app module.
  * @typedef {object} ThemeAppEntry
  * @property {string} slug
@@ -103,7 +94,7 @@
  */
 
 /**
- * astryx --json theme add <slug> --import / remove / use
+ * astryx --json theme add <slug> [--import] / remove / use
  * @typedef {object} ThemeAppResponse
  * @property {'theme.app'} type
  * @property {string} [package] npm package that owns the theme `theme add`
@@ -140,7 +131,6 @@
  * @property {string} component
  * @property {string[]} props
  * @property {string[]} states
- * @property {string} [deprecatedFor] - exact canonical replacement for a deprecated target
  */
 
 /**
@@ -255,7 +245,13 @@
  * @typedef {object} TonalPaletteGenerationReceipt
  * @property {1} schemaVersion
  * @property {'astryx-oklch-v1'} recipe Recipe that produced the candidate.
- * @property {string} candidateSha256 SHA-256 over the candidate bytes as written.
+ * @property {'palette-generator-v1'} generatorVersion Generator
+ * implementation that ran the recipe.
+ * @property {'palette-typescript-v1' | 'palette-json-v1'} candidateFormatVersion
+ * Format of the candidate bytes `candidateSha256` covers: the TypeScript
+ * module for a `.ts` output, otherwise canonical JSON.
+ * @property {string} candidateSha256 SHA-256 over the candidate bytes in
+ * `candidateFormatVersion`, exactly as written when an output path is given.
  * @property {{version: string, sha256: string}} [preview] Present when preview
  * content was generated for the request, even if no file was written because
  * the target already exists.

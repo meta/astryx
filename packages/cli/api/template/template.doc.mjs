@@ -48,7 +48,8 @@ export const doc = {
     {
       name: 'options.list',
       type: 'boolean',
-      description: 'Force the list response even when a name is given.',
+      description:
+        'List templates instead of scaffolding; refused with ERR_INVALID_ARGUMENT when a name or path is also given.',
       default: 'false',
     },
     {
@@ -89,7 +90,7 @@ export const doc = {
       type: 'string',
       description:
         'Destination (relative to cwd) to scaffold the template into. Its presence switches a named lookup into a copy. ' +
-        'A path that ends in .tsx, .ts, .jsx, .js, .mjs, .cjs, .css, .scss, .json, .md or .html is the file to write; any other path is a directory, which receives page.tsx for a page template or the block\'s own file name for a block.',
+        "A path that ends in .tsx, .ts, .jsx, .js, .mjs, .cjs, .css, .scss, .json, .md or .html is the file to write; any other path is a directory, which receives page.tsx for a page template or the block's own file name for a block.",
     },
     {
       name: 'options.overwrite',
@@ -114,7 +115,7 @@ export const doc = {
     {
       type: 'template.show',
       description:
-        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and `demoMediaReplaced` — how many Astryx demo media references (images, posters, videos) in the source were replaced with placeholders for you to swap for your own media.",
+        "The resolved template's source, exactly as a copy writes it, plus its description, kind, the component names it composes, and `demoMediaReplaced` — how many Astryx demo media references (images, posters, videos) in the source were replaced with placeholders for you to swap for your own media, and `demoContentReplaced` — how many Astryx docs-only demo content elements were replaced with a `<Text>` placeholder for your own content.",
     },
     {
       type: 'template.skeleton',
@@ -124,7 +125,7 @@ export const doc = {
     {
       type: 'template.copy',
       description:
-        'A receipt after scaffolding the template into the project: the template id, output directory, written file name, file count, `demoMediaReplaced` — how many Astryx demo media references were replaced with placeholders, `notes` — setup notes naming what the template needs that the project lacks (missing packages, missing StyleX compiler; empty when satisfied), `missingPackages` — external package names the template imports that are not in the project, and `installCommand` — a ready-to-run install command with the detected package manager and workspace version ranges (null when nothing is missing).',
+        'A receipt after scaffolding the template into the project: the template id, output directory, written file name, file count, `demoMediaReplaced` — how many Astryx demo media references were replaced with placeholders, `demoContentReplaced` — how many Astryx docs-only demo content elements were replaced with a `<Text>` placeholder, `notes` — setup notes naming what the template needs that the project lacks (missing packages, missing StyleX compiler; empty when satisfied), `missingPackages` — external package names the template imports that are not in the project, and `installCommand` — a ready-to-run install command with the detected package manager and workspace version ranges (null when nothing is missing, or when several lockfiles leave the package manager undetermined; `missingPackages` still names the packages).',
     },
     {
       type: 'template.cdn',
@@ -133,6 +134,10 @@ export const doc = {
     },
   ],
   throws: [
+    {
+      code: 'ERR_INVALID_ARGUMENT',
+      when: '--cdn is combined with <name>, --list, --skeleton, --type, or --package; --list is combined with <name>, <path>, --skeleton, or --overwrite; --skeleton is combined with <path> or --overwrite; or options.list is set with a type outside page or block, or with a package that provides no templates (a valid filter that matches nothing returns an empty list instead)',
+    },
     {
       code: 'ERR_UNKNOWN_TEMPLATE',
       when: 'the named template does not exist, or options.skeleton is set without a name',

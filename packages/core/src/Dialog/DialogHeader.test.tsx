@@ -260,6 +260,19 @@ describe('DialogHeader', () => {
     expect(closeIcon).toHaveClass('astryx-icon');
   });
 
+  it('renders numeric zero in both content slots', () => {
+    const {container} = render(
+      <DialogHeader title="Title" startContent={0} endContent={0} />,
+    );
+
+    expect(
+      container.querySelector('.astryx-dialog-header-start-content'),
+    ).toHaveTextContent(/^0$/);
+    expect(
+      container.querySelector('.astryx-dialog-header-end-content'),
+    ).toHaveTextContent(/^0$/);
+  });
+
   it('exposes the start-content target when startContent renders', () => {
     const {container} = render(
       <DialogHeader
@@ -292,8 +305,20 @@ describe('DialogHeader', () => {
     ).toHaveLength(1);
   });
 
-  it('omits the content-slot targets when their content does not render', () => {
-    const {container} = render(<DialogHeader title="Title" />);
+  it.each([
+    ['empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+    ['undefined', undefined],
+  ])('omits both content-slot targets for %s', (_, content) => {
+    const {container} = render(
+      <DialogHeader
+        title="Title"
+        startContent={content}
+        endContent={content}
+      />,
+    );
 
     expect(
       container.querySelector('.astryx-dialog-header-start-content'),

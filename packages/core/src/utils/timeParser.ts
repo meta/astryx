@@ -341,7 +341,8 @@ export function isTimeInRange(
 }
 
 /**
- * Clamps a time to a min/max range.
+ * Clamps a time to a min/max range. Without seconds, a bound that falls
+ * between whole minutes gives the nearest whole minute inside the range.
  */
 export function clampTime(
   time: ISOTimeString,
@@ -357,13 +358,19 @@ export function clampTime(
   if (min && compareTime(time, min) < 0) {
     const parsedMin = parseISOTime(min);
     if (parsedMin) {
-      return formatISOTime(parsedMin, includeSeconds);
+      return formatISOTime(
+        onWholeMinute(parsedMin, 1, includeSeconds, max),
+        includeSeconds,
+      );
     }
   }
   if (max && compareTime(time, max) > 0) {
     const parsedMax = parseISOTime(max);
     if (parsedMax) {
-      return formatISOTime(parsedMax, includeSeconds);
+      return formatISOTime(
+        onWholeMinute(parsedMax, -1, includeSeconds, min),
+        includeSeconds,
+      );
     }
   }
 
@@ -371,7 +378,41 @@ export function clampTime(
 }
 
 /**
+ * A bound as a time without seconds reaches it: the next whole minute up from
+ * a minimum, or the whole minute down from a maximum. With no whole minute
+ * before the other bound, the bound stays as it is.
+ */
+function onWholeMinute(
+  bound: ParsedTime,
+  direction: 1 | -1,
+  includeSeconds: boolean,
+  other: ISOTimeString | undefined,
+): ParsedTime {
+  if (includeSeconds || bound.second === 0) {
+    return bound;
+  }
+  const minutes = bound.hour * 60 + bound.minute + (direction === 1 ? 1 : 0);
+  if (minutes > 23 * 60 + 59) {
+    return bound;
+  }
+  const rounded = {
+    hour: Math.floor(minutes / 60),
+    minute: minutes % 60,
+    second: 0,
+  };
+  const order = compareTime(formatISOTime(rounded, true), other);
+  if (other && (direction === 1 ? order > 0 : order < 0)) {
+    return bound;
+  }
+  return rounded;
+}
+
+/**
  * Adjusts a time by adding/subtracting minutes.
+ *
+ * `deltaMinutes` is a whole number of minutes. A fractional delta leaves the
+ * time unchanged rather than returning a value that is no longer a time —
+ * `HH:MM` has no place for a fraction of a minute.
  */
 export function adjustTime(
   time: ISOTimeString,
@@ -384,8 +425,11 @@ export function adjustTime(
   }
 
   // A non-finite delta would spin the wrap-around forever (-Infinity) or
-  // produce "NaN:NaN" (NaN) — return the input unchanged instead.
-  if (!Number.isFinite(deltaMinutes)) {
+  // produce "NaN:NaN" (NaN), and a fractional one is never rounded on the way
+  // out — formatISOTime pads "30.5" to two characters and leaves it, so the
+  // caller gets back a value that is no longer a time. Steps are whole
+  // minutes: return the input unchanged instead.
+  if (!Number.isInteger(deltaMinutes)) {
     return time;
   }
 

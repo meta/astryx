@@ -124,7 +124,6 @@ describe('generated app-theme module types', () => {
 
     await themeAdd('ocean', {
       cwd: project,
-      import: true,
       package: '@acme/themes',
     });
     await themeAdd('stone', {cwd: project, import: true});

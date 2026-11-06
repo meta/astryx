@@ -238,8 +238,8 @@ TypeScript declaration metadata is not executable runtime behavior.
 ## Deprecation lifecycle
 
 The three legacy surfaces follow `spec:AST-017` FR28–FR31 and FR29a–FR29d.
-They share one authoring mechanism but are distinct public contracts, so each owns
-a separate deprecation and cleanup id. Their direct authority is `spec:AST-008/FR18`.
+They share one authoring mechanism but are distinct public contracts, so each is
+described and removed separately. Their direct authority is `spec:AST-008/FR18`.
 
 ### `DefineThemeInput.color`
 

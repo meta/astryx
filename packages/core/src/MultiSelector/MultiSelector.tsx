@@ -5,18 +5,20 @@
 /**
  * @file MultiSelector.tsx
  * @input Uses React, StyleX, usePopover, useTooltip, CheckboxInput, Field, Badge, Icon, InputGroupContext
- * @output Exports MultiSelector component
+ * @output Exports MultiSelector with input, secondary, and ghost trigger variants
  * @position Core implementation; consumed by index.ts
  *
  * SYNC: When modified, update:
  * - /packages/core/src/MultiSelector/MultiSelector.doc.mjs
  * - /packages/core/src/MultiSelector/MultiSelector.test.tsx
  * - /packages/core/src/MultiSelector/index.ts
+ * - /apps/storybook/stories/MultiSelector.stories.tsx
  * - /apps/storybook/stories/InputGroup.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/MultiSelector/ (showcase blocks)
  */
 
 import React, {
+  use,
   useCallback,
   useEffect,
   useId,
@@ -29,6 +31,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import type {IconName} from '../Icon';
@@ -37,9 +40,9 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputWrapperStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {useKeepLayerOpenProps} from '../Layer/useLayer';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Divider} from '../Divider';
 import {Spinner} from '../Spinner';
@@ -49,6 +52,7 @@ import type {IndicatorPosition} from '../Indicator';
 import {Badge} from '../Badge';
 import {
   colorVars,
+  focusVars,
   sizeVars,
   spacingVars,
   radiusVars,
@@ -72,28 +76,51 @@ import {
 } from '../Selector/utils';
 import {useMultiCombobox} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
+import {joinAriaIDs} from '../utils/inputAria';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {devWarn, warnOnce} from '../utils/devWarning';
-import {FOCUS_OUTLINE_PARTS} from '../utils/focusOutline.stylex';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import type {BaseProps} from '../BaseProps';
+import {
+  useFieldInputStyling,
+  type FieldInputBaseProps,
+  type FieldPartStyleProps,
+} from '../Field/fieldParts';
+import {useDevWarning} from '../hooks/useDevWarning';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {mergeRefs} from '../utils/mergeRefs';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import type {SizeValue} from '../utils/types';
 import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {stableClassName} from '../naming';
-import {groupStyles} from '../InputGroup/groupStyles';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useTranslator} from '../i18n';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
 import {selectorPresentationStyles} from '../Selector/selectorPresentation.stylex';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MultiSelector/MultiSelector.generated';
+
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
+registerEnglishFallback(english);
 
 // Sentinel value for the select-all item in keyboard navigation
 const SELECT_ALL_VALUE = '__xds_select_all__';
@@ -234,6 +261,31 @@ const styles = stylex.create({
       '[data-astryx-press="on"]': 'scale(0.98)',
     },
   },
+  // Keep the input-family width contract while reusing ghost's borderless paint
+  // and the neutral resting fill used by secondary buttons.
+  triggerSecondary: {
+    borderWidth: 0,
+    backgroundColor: colorVars['--color-neutral'],
+    boxShadow: {
+      default: 'none',
+      ':hover:not(:focus-within):where(:not(:disabled,[aria-disabled="true"]))':
+        {
+          '@media (hover: hover)': 'none',
+        },
+      ':focus-within': 'none',
+    },
+    fontWeight: fontWeightVars['--font-weight-medium'],
+    transitionProperty:
+      'background-image, background-color, color, opacity, transform',
+    transform: {
+      default: 'scale(1)',
+      ':active': {
+        default: 'scale(0.98)',
+        '@media (pointer: coarse)': 'scale(1)',
+      },
+      '[data-astryx-press="on"]': 'scale(0.98)',
+    },
+  },
   triggerGhostDisabled: {
     backgroundImage: 'none',
     transform: {
@@ -272,10 +324,31 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-element'],
   },
 
+  // A panel with a search field, capped as a whole.
+  searchPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    // No taller than its layer's block-size cap, which folds in the software
+    // keyboard's. The search field's row keeps its height, and the list takes
+    // what is left.
+    maxHeight: stylex.firstThatWorks(
+      `calc(${layerViewportInset.maxBlockSize})`,
+      `calc(${layerViewportInset.maxBlockSizeFallback})`,
+    ),
+  },
+
   // Dropdown container
   dropdown: {
     boxSizing: 'border-box',
-    maxHeight: '300px',
+    // In a search panel, the list shrinks below its content to fit the cap.
+    minHeight: 0,
+    // 300 px, and no taller than its layer's block-size cap, which folds in
+    // the software keyboard's: the list ends above the keyboard with the
+    // layer.
+    maxHeight: stylex.firstThatWorks(
+      `min(300px, ${layerViewportInset.maxBlockSize})`,
+      `min(300px, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflowY: 'auto',
     padding: spacingVars['--spacing-1'],
   },
@@ -403,11 +476,15 @@ const styles = stylex.create({
     flexShrink: 0,
     borderRadius: radiusVars['--radius-element'],
   },
+  // The standard ring, from the focus tokens themselves: inside
+  // `stylex.create` StyleX resolves an imported `defineVars` group, and a
+  // plain object such as `FOCUS_OUTLINE_PARTS` compiles to variables nothing
+  // defines.
   actionCellActive: {
-    outlineWidth: FOCUS_OUTLINE_PARTS.outlineWidth,
-    outlineStyle: FOCUS_OUTLINE_PARTS.outlineStyle,
-    outlineColor: FOCUS_OUTLINE_PARTS.outlineColor,
-    outlineOffset: FOCUS_OUTLINE_PARTS.outlineOffset,
+    outlineWidth: focusVars['--focus-outline-width'],
+    outlineStyle: focusVars['--focus-outline-style'],
+    outlineColor: focusVars['--focus-outline-color'],
+    outlineOffset: focusVars['--focus-outline-offset'],
   },
 
   // Empty state
@@ -460,6 +537,10 @@ const selectAllSizeStyles = stylex.create({
   },
 });
 
+const RENDER_TRIGGER_PARTS_MESSAGE =
+  '`container*` and `control*` styling props have no effect with `renderTrigger`: ' +
+  'no Field box or control box renders. Style the control you render instead.';
+
 const STATUS_ICON_MAP: Record<MultiSelectorStatusType, IconName> = {
   warning: 'warning',
   error: 'error',
@@ -483,7 +564,7 @@ const STATUS_BUTTON_LABEL_KEY: Record<MultiSelectorStatusType, string> = {
 
 export type MultiSelectorSize = 'sm' | 'md' | 'lg';
 
-export type MultiSelectorVariant = 'input' | 'ghost';
+export type MultiSelectorVariant = 'input' | 'secondary' | 'ghost';
 
 export type MultiSelectorPresentation = AdaptivePresentation;
 
@@ -497,8 +578,23 @@ export type {MultiSelectorStatus};
  * Spread them onto that control: it becomes the panel's anchor, the element
  * focus returns to, and the control that announces the panel's state.
  */
-export interface MultiSelectorRenderTriggerProps {
-  /** Attaches the control as the panel's anchor and focus-return target. */
+export interface MultiSelectorRenderTriggerProps extends Omit<
+  FieldInputBaseProps,
+  | keyof FieldPartStyleProps
+  | 'id'
+  | 'onClick'
+  | 'onKeyDown'
+  | 'onFocus'
+  | 'aria-haspopup'
+  | 'aria-expanded'
+  | 'aria-controls'
+  | 'aria-busy'
+  | 'aria-readonly'
+> {
+  /**
+   * Attaches the control as the panel's anchor and focus-return target, and
+   * forwards it to the selector's own `ref`.
+   */
   ref: (element: HTMLElement | null) => void;
   /** The id the field would have given its own button. */
   id: string;
@@ -563,11 +659,36 @@ export interface MultiSelectorSelectedItem {
 
 export interface MultiSelectorProps<
   T extends MultiSelectorOptionType = MultiSelectorOptionType,
-> extends Omit<BaseProps, 'onChange' | 'defaultValue'> {
+> extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'> {
   /**
    * Label text for the multi-selector (always rendered for accessibility).
    */
   label: string;
+
+  /**
+   * Ref to the trigger: the button that carries the combobox role, the
+   * accessible name, and the value — or, with `renderTrigger`, the caller's
+   * control.
+   */
+  ref?: React.Ref<HTMLElement>;
+
+  /**
+   * Click handler on the trigger (or, with `renderTrigger`, the caller's
+   * control). It runs after the built-in toggle and cannot cancel it.
+   */
+  onClick?: React.MouseEventHandler<HTMLElement>;
+
+  /**
+   * Focus handler on the trigger. It runs before the selector's own focus
+   * handling.
+   */
+  onFocus?: React.FocusEventHandler<HTMLElement>;
+
+  /**
+   * Key handler on the trigger. It runs after the built-in keyboard model and
+   * is skipped for keys that model handles and cancels.
+   */
+  onKeyDown?: React.KeyboardEventHandler<HTMLElement>;
 
   /**
    * Whether to visually hide the label (still accessible to screen readers).
@@ -603,8 +724,8 @@ export interface MultiSelectorProps<
    * The selected values stay visible, focusable, and included in form
    * submission, and retain their combobox identity with `aria-readonly`. The
    * selection surface and editing affordances are removed.
-   * Unlike `isDisabled`, a read-only selector is not dimmed and stays in the
-   * tab order. `isDisabled` takes precedence when both are set.
+   * Unlike `isDisabled`, a read-only selector is not dimmed and keeps its
+   * value in form submission. `isDisabled` takes precedence when both are set.
    * @default false
    */
   isReadOnly?: boolean;
@@ -616,8 +737,8 @@ export interface MultiSelectorProps<
    * so the reason is discoverable by keyboard and assistive technology.
    * Activation stays blocked.
    *
-   * Use this instead of wrapping a disabled selector in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled selector in `Tooltip`, so the
+   * reason is attached to the trigger itself.
    *
    * @example
    * ```
@@ -685,7 +806,9 @@ export interface MultiSelectorProps<
   /**
    * Visual style of the selector trigger.
    * - 'input': bordered input-style trigger for forms
-   * - 'ghost': borderless trigger matching ghost buttons, for toolbars
+   * - 'secondary': matches the theme's secondary buttons (borderless and
+   *   neutral-filled by default)
+   * - 'ghost': borderless, transparent trigger matching ghost buttons
    * @default 'input'
    */
   variant?: MultiSelectorVariant;
@@ -699,14 +822,14 @@ export interface MultiSelectorProps<
    * - 'attached': message overlaps directly below the bordered input (input variant only)
    * - 'detached': message floats below as a separate element with spacing
    * - 'tooltip': message is exposed from the on-field status icon
-   * @default 'attached' for input selectors; 'detached' for ghost selectors
+   * @default 'attached' for input selectors; 'detached' for secondary and ghost selectors
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
    * (e.g. `'100%'`). Sizes the whole field (label, control, and status) so they
-   * stay aligned, unlike setting width via `xstyle`/`className`/`style`.
+   * stay aligned, unlike setting width via `controlXstyle`/`controlClassName`/`controlStyle`.
    */
   width?: SizeValue;
   /**
@@ -799,7 +922,7 @@ export interface MultiSelectorProps<
    * Not called when nothing is selected — the placeholder shows instead — and
    * not called for triggerDisplay 'badges', which renders Badge elements
    * rather than text.
-   * @default items => `${items.length} selected` for 'count', "A, B, C, +N" for 'labels'
+   * @default the translated `@astryx.multiSelector.selectedCount` message ("2 selected") for 'count', "A, B, C, +N" for 'labels'
    */
   formatValue?: (items: MultiSelectorSelectedItem[]) => string;
 
@@ -890,7 +1013,8 @@ export interface MultiSelectorProps<
   onOpenChange?: (isOpen: boolean) => void;
 
   /**
-   * Test ID for testing frameworks.
+   * Test ID for testing frameworks, set on the trigger button (or, with
+   * `renderTrigger`, the caller's control).
    */
   'data-testid'?: string;
 }
@@ -983,7 +1107,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   description,
   isOptional = false,
   isRequired = false,
-  isDisabled = false,
+  isDisabled: isDisabledProp = false,
   isReadOnly = false,
   disabledMessage,
   options,
@@ -1016,15 +1140,43 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   renderTrigger,
   handleRef,
   onOpenChange,
-  'data-testid': testId,
   htmlName,
   width,
-  xstyle,
-  className,
-  style,
+  containerXstyle,
+  containerClassName,
+  containerStyle,
+  controlXstyle,
+  controlClassName,
+  controlStyle,
+  ref,
+  id,
+  onClick,
   onFocus,
+  onKeyDown: onKeyDownProp,
+  'aria-describedby': ariaDescribedByProp,
+  'aria-labelledby': ariaLabelledByProp,
+  ...restProps
 }: MultiSelectorProps<T>) {
-  const t = useTranslator();
+  const inputGroup = useInputGroup();
+  const inputGroupState = use(InputGroupInternalContext);
+  const isDisabled = isDisabledProp || inputGroupState.isDisabled;
+  const {rest, container} = useFieldInputStyling('MultiSelector', restProps, {
+    containerXstyle,
+    containerClassName,
+    containerStyle,
+  });
+  useDevWarning(
+    'MultiSelector',
+    RENDER_TRIGGER_PARTS_MESSAGE,
+    renderTrigger != null &&
+      (containerXstyle != null ||
+        containerClassName != null ||
+        containerStyle != null ||
+        controlXstyle != null ||
+        controlClassName != null ||
+        controlStyle != null),
+  );
+  const t = useComponentTranslator();
   const pressable = usePressFeedback();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -1038,24 +1190,38 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     emptySearchTextFromProps ?? t('@astryx.multiSelector.emptySearchResults');
   const size = useSize(sizeProp, 'md');
   const effectiveStatusVariant =
-    variant === 'ghost' && statusVariant === 'attached'
+    variant !== 'input' && statusVariant === 'attached'
       ? 'detached'
       : statusVariant;
   const isEffectivelyReadOnly = isReadOnly && !isDisabled;
 
-  const triggerId = useId();
+  const generatedTriggerId = useId();
+  // A caller's `id` lands on the trigger, so the label and listbox wiring
+  // must use that same value.
+  const triggerId = id ?? generatedTriggerId;
   const listboxId = useId();
   const descriptionId = useId();
   const statusMessageId = useId();
+  const fieldLabelId = useId();
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
   const searchId = useId();
   // Read by the live region above so it speaks what this element renders.
   const emptyStateRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
+  // A hover moves the highlight too, but the focus ring follows the shared
+  // interaction modality (architecture:interaction-modality INV1): it is read
+  // whenever a key or the pointer moves the highlight, so an action cell
+  // highlighted after pointer input keeps the hover treatment and no ring.
+  const triggerModality = useInteractionModalityTracking();
+  const readModality = triggerModality.readModality;
+  const triggerButtonRef = useMergedRefs<HTMLElement>(
+    triggerRef,
+    triggerModality.ref,
+    ref,
+  );
   const searchRef = useRef<HTMLInputElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
-  const inputGroup = useInputGroup();
 
   const [searchQuery, setSearchQuery] = useState('');
   // A typed query shows the search row's clear (✕) button, which becomes
@@ -1072,12 +1238,13 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
   const isBusy = isLoading || optimisticValue !== value;
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8).
+  useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), triggerRef);
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the trigger container (which already exists)
-  // and the trigger button stays perceivable via aria-disabled instead of the
-  // disabled attribute. Activation is blocked by the isDisabled guards in
-  // useMultiCombobox (onTriggerClick / onKeyDown).
+  // Disabled-reason tooltip listeners attach to the existing trigger container.
+  // The trigger stays focusable via aria-disabled. Trigger guards and the value
+  // commit guards below block activation, including from an already-open panel.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -1106,6 +1273,12 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ],
     inputGroup,
   );
+  // A caller aria-labelledby names the trigger together with the field's own
+  // label (the Field label standalone, the group and input labels in a group).
+  const triggerLabelledBy =
+    ariaLabelledByProp != null
+      ? joinAriaIDs(ariaLabelledBy ?? fieldLabelId, ariaLabelledByProp)
+      : ariaLabelledBy;
 
   // Flatten options for keyboard navigation
   const selectableItems = useMemo(
@@ -1302,6 +1475,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     triggerRef,
+    triggerModality,
+    isFocusReturnAlways: hasExternalTrigger,
     popoverOptions: {
       hasLightDismiss: true,
       hasCloseButton: false,
@@ -1398,21 +1573,27 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // Announce the filtered result count from the query-change handler (matching
   // BaseTypeahead) rather than a reactive effect: computing the count for the
   // next query here fires the announcement exactly once per keystroke and does
-  // not re-speak on unrelated re-renders. Reuses the announce instance shared
-  // with the selection-count announcements above.
+  // not re-speak on unrelated re-renders. The count, the create row and the
+  // empty panel's message state one thing, how the search ended, so they go
+  // through the search's own `hasReplace` announcer: one the next keystroke
+  // replaces before it is exposed is withdrawn rather than joined
+  // (`spec:AST-086` FR9, FR13), and keystrokes arriving within one frame,
+  // from a scanner, dictation or automation, say only the last query's.
+  // Selection changes keep the plain announcer above, so they still join.
+  const announceSearch = useAnnounce({hasReplace: true});
   const handleSearchChange = useCallback(
     (nextQuery: string) => {
       setSearchQuery(nextQuery);
       if (nextQuery.length === 0) {
         // Emptying the query clears the region rather than announcing a count.
-        announce('');
+        announceSearch('');
         return;
       }
       // While isLoading the panel deliberately shows nothing, so announcing a
       // result would put a claim in the one channel the screen has gone quiet
       // for.
       if (isLoading) {
-        announce('');
+        announceSearch('');
         return;
       }
       const count = filterOptionsByQuery(selectableItems, nextQuery).length;
@@ -1422,7 +1603,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           // The create row is the one result on screen, so the panel is not
           // empty and the rendered-message route below stays silent; say the
           // row.
-          announce(
+          announceSearch(
             t('@astryx.multiSelector.createOption', {query: nextCreateQuery}),
           );
           return;
@@ -1433,9 +1614,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         // keystroke — an async load landing with nothing that matches.
         return;
       }
-      announce(t('@astryx.multiSelector.resultCount', {count}));
+      announceSearch(t('@astryx.multiSelector.resultCount', {count}));
     },
-    [announce, isLoading, selectableItems, getCreateQuery, t],
+    [announceSearch, isLoading, selectableItems, getCreateQuery, t],
   );
 
   // The panel's empty message is role="presentation" — role="listbox" permits
@@ -1460,12 +1641,20 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   const realItemCount = sortedItems.length - leadingCount;
   const isPanelEmpty =
     surface.isOpen && !isLoading && realItemCount === 0 && !hasCreateRow;
-  useAnnounceRenderedText(emptyStateRef, isPanelEmpty, searchQuery);
+  // Through the search's announcer: the empty panel is how the search ended,
+  // so it and the count replace each other while not yet exposed
+  // (`spec:AST-086` FR13).
+  useAnnounceRenderedText(emptyStateRef, isPanelEmpty, searchQuery, {
+    announce: announceSearch,
+  });
 
   // Handle toggle
   // Clear all selected values. Shared by the clear button and the keyboard
   // Delete/Backspace path so clearing is reachable without a mouse.
   const clearValues = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
     onChange([]);
     announceSelection([]);
     if (changeAction) {
@@ -1475,6 +1664,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       });
     }
   }, [
+    isDisabled,
     onChange,
     changeAction,
     startTransition,
@@ -1489,12 +1679,23 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     (e: React.MouseEvent) => {
       e.stopPropagation(); // Don't open dropdown
       clearValues();
+      // A keyboard activation (detail 0) leaves focus on the clear button,
+      // which unmounts once the value is empty and would drop focus to <body>;
+      // hand it to the trigger. A pointer press never focuses the button, so
+      // there is no focus to repair, and moving it would pull focus out of an
+      // open list's search input.
+      if (e.detail === 0) {
+        triggerRef.current?.focus();
+      }
     },
     [clearValues],
   );
 
   const handleToggle = useCallback(
     (itemValue: string) => {
+      if (isDisabled) {
+        return;
+      }
       const newValue = optimisticValue.includes(itemValue)
         ? optimisticValue.filter(v => v !== itemValue)
         : [...optimisticValue, itemValue];
@@ -1509,6 +1710,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       }
     },
     [
+      isDisabled,
       optimisticValue,
       onChange,
       changeAction,
@@ -1543,6 +1745,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       : false;
 
   const handleSelectAll = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
     let newValue: string[];
     if (allEnabledSelected) {
       // Deselect all enabled items, keep disabled items that are selected
@@ -1568,6 +1773,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       });
     }
   }, [
+    isDisabled,
     allEnabledSelected,
     enabledItems,
     optimisticValue,
@@ -1584,6 +1790,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // the option the caller adds is visible.
   const commitCreate = useCallback(
     (query: string) => {
+      if (isDisabled) {
+        return;
+      }
       const newValue = optimisticValue.includes(query)
         ? optimisticValue
         : [...optimisticValue, query];
@@ -1598,6 +1807,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       }
     },
     [
+      isDisabled,
       optimisticValue,
       onChange,
       changeAction,
@@ -1636,8 +1846,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     getActionCellId,
     activeDescendantId,
     onTriggerClick,
-    onKeyDown,
-    onItemMouseEnter,
+    onKeyDown: onComboboxKeyDown,
+    onItemMouseEnter: onComboboxItemMouseEnter,
   } = useMultiCombobox({
     selectableItems: sortedItems,
     isDisabled: isDisabled || isEffectivelyReadOnly,
@@ -1668,6 +1878,31 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ),
   });
 
+  const {isKeyboardHighlight, onKeyDown, onItemMouseEnter} =
+    useKeyboardHighlight(
+      readModality,
+      onComboboxKeyDown,
+      onComboboxItemMouseEnter,
+    );
+
+  // The trigger button owns its click so a consumer `onClick`, which lands on
+  // the button, composes after the built-in toggle. A press elsewhere in the
+  // control box (padding, start icon, chevron) still opens the panel.
+  const handleTriggerButtonClick = useCallback(() => {
+    onTriggerClick();
+  }, [onTriggerClick]);
+  const handleControlBoxClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (triggerRef.current?.contains(event.target as Node)) {
+        return;
+      }
+      // Route the press through the trigger so it behaves exactly like a
+      // press on the trigger itself, caller `onClick` included.
+      triggerRef.current?.click();
+    },
+    [],
+  );
+
   // Highlight scrolling (and its hover/keyboard split) lives in useMultiCombobox.
 
   // Build trigger display content
@@ -1693,7 +1928,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         return (
           <span {...stylex.props(styles.triggerText)}>
             {formatValue?.(selectedItems) ??
-              `${optimisticValue.length} selected`}
+              t('@astryx.multiSelector.selectedCount', {
+                count: optimisticValue.length,
+              })}
           </span>
         );
 
@@ -1736,6 +1973,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     placeholder,
     formatValue,
     maxBadges,
+    t,
   ]);
 
   // Render search input
@@ -1983,6 +2221,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
                   styles.actionCell,
                   isHighlighted &&
                     highlightedCell === 'action' &&
+                    isKeyboardHighlight &&
                     styles.actionCellActive,
                 )}>
                 {isSelectAll || isCreate ? null : item.action}
@@ -1997,6 +2236,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     [
       isGrid,
       highlightedCell,
+      isKeyboardHighlight,
       getActionCellId,
       renderOption,
       indicatorPosition,
@@ -2180,7 +2420,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     surface.activePresentation === 'bottom-sheet' || hasExternalTrigger;
 
   const panelContent = hasSearch ? (
-    <div>
+    <div {...stylex.props(styles.searchPanel)}>
       {renderSearch()}
       <Divider />
       <div {...stylex.props(styles.dropdown)}>
@@ -2242,19 +2482,38 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     });
   }
 
+  // A disabled trigger stays focusable but, like a natively disabled button,
+  // runs no caller event handler other than focus and blur, and a press on it
+  // reaches no handler at all (`spec:AST-085` FR2).
+  const callerProps = withholdCallerHandlers(rest, isDisabled);
   const triggerSharedProps: React.HTMLAttributes<HTMLElement> = {
+    ...callerProps,
     id: triggerId,
-    'aria-describedby': ariaDescribedBy,
-    'aria-labelledby': ariaLabelledBy,
+    // A caller's description is kept alongside the field's own.
+    'aria-describedby':
+      [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
+      undefined,
+    'aria-labelledby': triggerLabelledBy,
     'aria-required': isEffectivelyRequired ? 'true' : undefined,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
-    onKeyDown,
+    // Newly forwarded handlers compose component first: the built-in toggle
+    // and keyboard model always run. `onFocus` keeps its existing caller-first
+    // order.
+    onKeyDown: isDisabled
+      ? onKeyDown
+      : composeEventHandlers(onKeyDown, onKeyDownProp),
     onFocus: event => {
       onFocus?.(event);
       surface.onTriggerFocus(event);
     },
-    tabIndex: isDisabled && !showsDisabledMessage ? -1 : 0,
+    onClick: isDisabled
+      ? event => {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      : composeEventHandlers(handleTriggerButtonClick, onClick),
+    tabIndex: 0,
     ...stylex.props(
       styles.trigger,
       isEffectivelyReadOnly && styles.triggerReadOnly,
@@ -2266,23 +2525,40 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     // on it. No Field, no status, no clear button — the caller owns the
     // control; the selector owns the panel, its anchor, and focus return.
     const triggerProps: MultiSelectorRenderTriggerProps = {
-      ref: el => {
-        popover.triggerRef(el);
-        triggerRef.current = el;
-        // A control that takes no focus has nowhere for focus to return to
-        // when the panel closes, and focus would land on the body — the
-        // person loses their place in the page. Making it programmatically
-        // focusable repairs the return without putting it in the tab order,
-        // which is the caller's decision to make. It does not make the
-        // control openable from the keyboard: only a real control does
-        // that, which is what the warning below is for.
-        if (el != null && !el.matches(FOCUSABLE_SELECTOR)) {
-          el.tabIndex = -1;
-        }
-      },
+      // Base props reach the caller's control, the primary semantic control
+      // in this mode; the selector's own wiring below wins over them.
+      ...rest,
+      'aria-describedby': ariaDescribedByProp,
+      // Only a caller value is handed back, so a control that names itself
+      // with its own aria-labelledby before spreading keeps it.
+      ...(ariaLabelledByProp != null
+        ? {'aria-labelledby': ariaLabelledByProp}
+        : null),
+      ref: mergeRefs<HTMLElement>(
+        el => {
+          popover.triggerRef(el);
+          triggerRef.current = el;
+          // A control that takes no focus has nowhere for focus to return to
+          // when the panel closes, and focus would land on the body — the
+          // person loses their place in the page. Making it programmatically
+          // focusable repairs the return without putting it in the tab order,
+          // which is the caller's decision to make. It does not make the
+          // control openable from the keyboard: only a real control does
+          // that, which is what the warning below is for.
+          if (el != null && !el.matches(FOCUSABLE_SELECTOR)) {
+            el.tabIndex = -1;
+          }
+        },
+        triggerModality.ref,
+        ref,
+      ),
       id: triggerId,
-      onClick: isEffectivelyReadOnly ? undefined : onTriggerClick,
-      onKeyDown: isEffectivelyReadOnly ? undefined : onKeyDown,
+      onClick: isEffectivelyReadOnly
+        ? onClick
+        : composeEventHandlers(onTriggerClick, onClick),
+      onKeyDown: isEffectivelyReadOnly
+        ? onKeyDownProp
+        : composeEventHandlers(onKeyDown, onKeyDownProp),
       onFocus: event => {
         onFocus?.(event);
         surface.onTriggerFocus(event);
@@ -2313,14 +2589,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       <>
         {renderTrigger(triggerProps)}
         {htmlName != null &&
+          !isDisabled &&
           value.map(v => (
-            <input
-              key={v}
-              type="hidden"
-              name={htmlName}
-              value={v}
-              disabled={isDisabled}
-            />
+            <input key={v} type="hidden" name={htmlName} value={v} />
           ))}
         {selectionSurface}
       </>
@@ -2337,9 +2608,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
           // compose, so attaching unconditionally is safe.
           disabledMessageTooltip.ref(el);
         }}
-        onClick={onTriggerClick}
-        data-testid={testId}
+        onClick={handleControlBoxClick}
         {...pressable}
+        {...(inputGroup ? inputGroupItemProps : undefined)}
         {...mergeProps(
           themeProps('multi-selector', {
             variant,
@@ -2352,30 +2623,37 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             inputWrapperStyles.base,
             styles.triggerContainer,
             sizeStyles[size],
+            variant === 'secondary' && styles.triggerSecondary,
             variant === 'ghost' && styles.triggerGhost,
-            variant === 'ghost' && interactionOverlayStyles.backgroundImage,
-            variant === 'ghost' && focusOutlineStyles.focusWithin,
+            variant !== 'input' && interactionOverlayStyles.backgroundImage,
+            variant !== 'input' && focusOutlineStyles.focusWithin,
             surface.isTriggerFocusRingSuppressed &&
               selectorPresentationStyles.pointerRestoredFocus,
             isDisabled && inputWrapperStyles.disabled,
+            variant === 'input' &&
+              isDisabled &&
+              !surface.isTriggerFocusRingSuppressed &&
+              inputDisabledFocusStyles.ring,
             isEffectivelyReadOnly && styles.triggerReadOnly,
-            variant === 'ghost' && isDisabled && styles.triggerGhostDisabled,
-            variant === 'ghost' &&
+            variant !== 'input' && isDisabled && styles.triggerGhostDisabled,
+            variant !== 'input' &&
               isEffectivelyReadOnly &&
               styles.triggerGhostReadOnly,
             optimisticValue.length === 0 && styles.triggerPlaceholder,
-            variant !== 'ghost' &&
+            variant === 'input' &&
               status &&
               inputStatusBorderStyles[status.type],
-            variant !== 'ghost' &&
+            variant === 'input' &&
               status &&
               !isDisabled &&
               inputStatusHoverShadowStyles[status.type],
+            // Grouped secondary triggers keep their neutral fill but take the
+            // group's row height, connected edge radii, and focus stacking.
             variant !== 'ghost' && inputGroup && groupStyles.inGroup,
-            xstyle,
+            controlXstyle,
           ),
-          className,
-          style,
+          controlClassName,
+          controlStyle,
         )}>
         {startIcon &&
           renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
@@ -2389,7 +2667,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         )}
         <button
           {...triggerSharedProps}
-          ref={triggerRef as React.Ref<HTMLButtonElement>}
+          ref={triggerButtonRef}
           type="button"
           // The read-only trigger stays a combobox even when hasSearch is set:
           // no search input is rendered in that state, and preserving the role
@@ -2413,28 +2691,21 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
               ? activeDescendantId
               : undefined
           }
-          // With a disabledMessage the trigger keeps focusability via
-          // aria-disabled so the reason is focus-discoverable; activation is
-          // still blocked by the isDisabled guards in useMultiCombobox.
-          disabled={isDisabled && !showsDisabledMessage}
-          aria-disabled={showsDisabledMessage ? 'true' : undefined}>
+          // A disabled trigger keeps its tab stop and says so through
+          // aria-disabled (`spec:AST-085` FR1); the isDisabled guards in
+          // useMultiCombobox block every way of opening it.
+          aria-disabled={isDisabled ? 'true' : undefined}>
           <span {...stylex.props(styles.triggerContent)}>
             {renderTriggerContent()}
           </span>
         </button>
+        {/* A disabled selector submits no value (`spec:AST-085` FR3). */}
         {htmlName != null &&
+          !isDisabled &&
           value.map(v => (
-            <input
-              key={v}
-              type="hidden"
-              name={htmlName}
-              value={v}
-              // Disabled native controls are excluded from form submission;
-              // mirror that for the hidden carriers.
-              disabled={isDisabled}
-            />
+            <input key={v} type="hidden" name={htmlName} value={v} />
           ))}
-        {isBusy && <Spinner size="sm" />}
+        {isBusy && <Spinner size="sm" aria-hidden="true" />}
         {hasClear &&
           value.length > 0 &&
           !isDisabled &&
@@ -2443,7 +2714,6 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
               {...keepOpenProps}
               label={t('@astryx.multiSelector.clearAll', {label})}
               onClick={handleClear}
-              iconClassName={stableClassName('multi-selector-clear-icon')}
             />
           )}
         {/*
@@ -2524,6 +2794,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={triggerId}
+      labelID={ariaLabelledByProp != null ? fieldLabelId : undefined}
       descriptionID={description ? descriptionId : undefined}
       isOptional={isOptional}
       isRequired={isRequired}
@@ -2539,7 +2810,8 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       }
       statusVariant={effectiveStatusVariant}
       labelTooltip={labelTooltip}
-      width={width}>
+      width={width}
+      {...container}>
       {multiSelectorContent}
     </Field>
   );

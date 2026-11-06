@@ -14,7 +14,11 @@
 export {syntaxTokenDefaults} from './tokens';
 export type {SyntaxTokenName} from './tokens';
 
-export {defineSyntaxTheme, syntaxThemeStyle, syntaxThemeToCSS} from './defineSyntaxTheme';
+export {
+  defineSyntaxTheme,
+  syntaxThemeStyle,
+  syntaxThemeToCSS,
+} from './defineSyntaxTheme';
 export type {
   SyntaxThemeDefinition,
   SyntaxThemeInput,

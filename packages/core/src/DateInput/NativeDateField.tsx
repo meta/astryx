@@ -36,6 +36,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useCalendarConstraints} from '../Calendar';
 import type {DateInputProps} from './DateInput';
 import {hasEditableDateSegments} from './nativeDateSegments';
@@ -49,12 +50,14 @@ import {
 } from '../Field';
 import {useInputStatusIcon, useMergedRefs} from '../hooks';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {useInputGroup} from '../InputGroup';
-import {groupStyles} from '../InputGroup/groupStyles';
-import {stableClassName} from '../naming';
+import {useFieldInputStyling} from '../Field/fieldParts';
+import {joinAriaIDs} from '../utils/inputAria';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext';
 import {Spinner} from '../Spinner';
 import {
@@ -78,6 +81,14 @@ import {
   themeProps,
   type ISODateString,
 } from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateInput/NativeDateField.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   wrapper: {
@@ -271,13 +282,29 @@ export function NativeDateField({
   weekStartsOn: _weekStartsOn,
   format = 'date_long',
   width,
-  xstyle,
-  className,
-  style,
+  containerXstyle,
+  containerClassName,
+  containerStyle,
+  controlXstyle,
+  controlClassName,
+  controlStyle,
   ref,
-  ...rest
+  ...restProps
 }: DateInputProps) {
-  const t = useTranslator();
+  const {rest, container} = useFieldInputStyling('DateInput', restProps, {
+    containerXstyle,
+    containerClassName,
+    containerStyle,
+  });
+  const {
+    id: idProp,
+    'aria-describedby': ariaDescribedByProp,
+    'aria-labelledby': ariaLabelledByProp,
+    onFocus: onFocusProp,
+    onBlur: onBlurProp,
+    ...controlProps
+  } = rest;
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -286,7 +313,9 @@ export function NativeDateField({
   // Only breaks a tie the engine probe cannot: see ./nativeDateSegments.
   const isTouchPointer = useMediaQuery('(pointer: coarse)');
 
-  const id = useId();
+  const generatedID = useId();
+  const id = idProp ?? generatedID;
+  const fieldLabelID = useId();
   const inputLabelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
@@ -297,15 +326,19 @@ export function NativeDateField({
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
   const isBusy = isLoading || optimisticValue !== value;
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8).
+  useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), inputRef);
   // Keep the OS picker mounted and focusable while its own Action is pending.
   // Native TimeInput follows the same pattern: commit guards block duplicates,
   // while aria-busy and the Spinner communicate the save without detaching the
   // platform picker from its input.
   const isEffectivelyDisabled = isDisabled || isLoading;
 
-  // Disabled-reason tooltip, same contract as the other two surfaces: a
-  // disabled control swallows pointer events, so the listeners attach to the
-  // wrapper and the input stays focusable via aria-disabled.
+  // Same contract as the other two surfaces: a disabled field never renders
+  // native `disabled` (spec:AST-085 FR1); the input stays focusable via
+  // aria-disabled and readOnly. The disabled-reason tooltip's listeners
+  // attach to the wrapper.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -329,6 +362,7 @@ export function NativeDateField({
       statusVariant !== 'tooltip' && status?.message ? statusMessageID : null,
       statusTooltipDescribedBy,
       showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
+      ariaDescribedByProp,
     ],
     inputGroup,
   );
@@ -550,7 +584,7 @@ export function NativeDateField({
       ref={el => {
         disabledMessageTooltip.ref(el);
       }}
-      {...rest}
+      {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('date-input', {
           size,
@@ -561,23 +595,27 @@ export function NativeDateField({
           inputWrapperStyles.base,
           sizeStyles[size],
           styles.wrapper,
-          isEffectivelyDisabled && inputWrapperStyles.disabled,
+          // Disabled paint belongs to the disabled state only; a busy field
+          // keeps its ordinary paint and shows the Spinner (spec:AST-085
+          // FR6, family:buttons FR4).
+          isDisabled && inputWrapperStyles.disabled,
+          isEffectivelyDisabled && inputDisabledFocusStyles.inputFocusRing,
           status && inputStatusBorderStyles[status.type],
           status &&
             !isEffectivelyDisabled &&
             inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],
           inputGroup && groupStyles.inGroup,
-          xstyle,
+          controlXstyle,
         ),
-        className,
-        style,
+        controlClassName,
+        controlStyle,
       )}>
       {inputGroup && <VisuallyHidden id={inputLabelID}>{label}</VisuallyHidden>}
       <button
         type="button"
         onClick={openPicker}
-        disabled={isEffectivelyDisabled}
+        aria-disabled={isEffectivelyDisabled || undefined}
         aria-label={t('@astryx.dateInput.openCalendar')}
         tabIndex={-1}
         {...stylex.props(
@@ -594,6 +632,8 @@ export function NativeDateField({
       </button>
       <span {...stylex.props(styles.slot)}>
         <input
+          {...controlProps}
+          onClick={isEffectivelyDisabled ? undefined : controlProps.onClick}
           ref={mergedInputRef}
           id={id}
           type="date"
@@ -601,14 +641,17 @@ export function NativeDateField({
           // mount — see `initialValueRef` and the sync effect above.
           defaultValue={initialValueRef.current ?? ''}
           onChange={handleChange}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
+          onFocus={chainEventHandlers(handleFocus, onFocusProp)}
+          onBlur={chainEventHandlers(handleBlur, onBlurProp)}
           min={min}
           max={max}
-          disabled={isEffectivelyDisabled && !showsDisabledMessage}
-          aria-disabled={showsDisabledMessage ? 'true' : undefined}
-          readOnly={showsDisabledMessage || undefined}
-          aria-labelledby={ariaLabelledBy}
+          aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
+          readOnly={isEffectivelyDisabled || undefined}
+          aria-labelledby={
+            ariaLabelledByProp != null
+              ? joinAriaIDs(ariaLabelledBy ?? fieldLabelID, ariaLabelledByProp)
+              : ariaLabelledBy
+          }
           aria-describedby={ariaDescribedBy}
           aria-required={isEffectivelyRequired ? 'true' : undefined}
           aria-invalid={
@@ -647,10 +690,9 @@ export function NativeDateField({
         <InputClearButton
           label={t('@astryx.dateInput.clear', {label})}
           onClick={handleClear}
-          iconClassName={stableClassName('date-input-clear-icon')}
         />
       )}
-      {isBusy && <Spinner size="sm" />}
+      {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {statusIcon}
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
@@ -663,10 +705,12 @@ export function NativeDateField({
 
   return (
     <Field
+      {...container}
       label={label}
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={id}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
       descriptionID={description ? descriptionID : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

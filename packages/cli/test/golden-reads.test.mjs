@@ -15,6 +15,10 @@ import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
+import {
+  CLI_VERSION,
+  linkThisCliAsProjectCli,
+} from '../test-utils/release-fixtures.mjs';
 
 const REPO_ROOT = path.resolve(CLI_ROOT, '..', '..');
 const CLI_BIN = path.join(CLI_ROOT, 'clients', 'cli', 'bin', 'astryx.mjs');
@@ -45,6 +49,8 @@ function astryx(args) {
   });
   expect(result.status).toBe(0);
   return result.stdout
+    .split(`"${CLI_VERSION}"`)
+    .join('"<cli version>"')
     .split(project)
     .join('<project>')
     .split(REPO_ROOT)
@@ -76,6 +82,7 @@ beforeAll(() => {
   // bin; a project without one gets the scoped package instead.
   fs.mkdirSync(path.join(project, 'node_modules', '.bin'), {recursive: true});
   fs.writeFileSync(path.join(project, 'node_modules', '.bin', 'astryx'), '');
+  linkThisCliAsProjectCli(project);
   write('package.json', JSON.stringify({name: '@acme/kit', version: '1.2.3'}));
   write(
     'astryx.integration.mjs',
@@ -169,6 +176,7 @@ describe('golden reads of integration docs', () => {
     ['docs-index.txt', ['docs', 'acme-guide', '--index']],
     ['docs-section.json', ['docs', 'acme-guide', 'colors', '--json']],
     ['search.json', ['search', 'zorblax', '--json']],
+    ['theme-add-list.json', ['theme', 'add', '--list', '--json']],
   ])('%s', async (name, args) => {
     await expect(astryx(args)).toMatchFileSnapshot(path.join(GOLDEN, name));
   });

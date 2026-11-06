@@ -29,7 +29,7 @@ export default function InternationalizationProviderShippedLocale() {
           <SegmentedControlItem value="fr-FR" label="FR" />
         </SegmentedControl>
         <Selector
-          style={{width: 300}}
+          controlStyle={{width: 300}}
           label="Billing region"
           options={[
             {value: 'americas', label: 'Americas'},

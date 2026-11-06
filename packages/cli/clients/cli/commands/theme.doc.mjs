@@ -13,7 +13,7 @@ export const doc = {
   namespace: 'cli/commands',
   summary: 'Add, switch, build, and author themes',
   description:
-    'The theme command group. Import built themes into an app, choose its default, remove them, list available and added themes, or eject source to make a local fork. Plain theme add still copies source while that default is deprecated. The authoring commands build themes, generate palettes, write the annotated template, and list component theme targets.',
+    'The theme command group. Add built themes to an app, choose its default, remove them, list available and added themes, or eject source to make a local fork. The authoring commands build themes, generate palettes, write the annotated template, and list component theme targets.',
   subcommands: [
     'build',
     'list',
@@ -27,7 +27,7 @@ export const doc = {
   ],
   examples: [
     {label: 'List available and added themes', cli: 'astryx theme list'},
-    {label: 'Import a theme into the app', cli: 'astryx theme add ocean --import'},
+    {label: 'Import a theme into the app', cli: 'astryx theme add ocean'},
     {label: 'Choose the default', cli: 'astryx theme use ocean'},
     {label: 'Fork source to customize', cli: 'astryx theme eject ocean'},
     {

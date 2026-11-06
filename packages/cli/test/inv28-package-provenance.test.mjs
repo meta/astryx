@@ -217,7 +217,7 @@ describe('INV28: text names the same package', () => {
   });
 });
 
-describe('INV28: theme add --import names the package that owns the added theme', () => {
+describe('INV28: theme add names the package that owns the added theme', () => {
   const THEMES = '@acme/themes';
   /** @type {string[]} */
   const dirs = [];
@@ -294,6 +294,24 @@ describe('INV28: theme add --import names the package that owns the added theme'
         force: true,
       });
     }
+  });
+
+  it('plain theme add names the package directly after type', async () => {
+    const dir = appWithThemePackage();
+    const {status, stdout, stderr} = await runCli(
+      ['theme', 'add', 'ocean', '--package', THEMES, '--json'],
+      dir,
+    );
+    expect(status, stderr).toBe(0);
+    const res = JSON.parse(stdout);
+    expect(res.type).toBe('theme.app');
+    expect(res.package).toBe(THEMES);
+    expect(Object.keys(res).slice(0, 4)).toEqual([
+      'apiVersion',
+      'type',
+      'package',
+      'data',
+    ]);
   });
 
   it('theme.app names the package directly after type, and text names it', async () => {

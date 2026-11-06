@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file ItemSwipeActions.a11y.chromium.spec.ts
@@ -15,7 +16,7 @@
  *   device has already disagreed with jsdom once on this gesture.
  */
 
-import {expect, test, type Locator} from '@playwright/test';
+import {expect, test, type Locator} from '@astryxdesign/a11y-spec/playwright';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 import {
@@ -249,6 +250,9 @@ test('fires the outermost trailing entry on a fling and the row leaves', async (
   const rows = page.locator('.astryx-item');
   const row = rows.first();
   await expect(row.getByText('Message 1')).toBeVisible();
+  // The gesture arrives with the lazily loaded swipe layer; its panel is the
+  // sign the row can be dragged.
+  await expect(row.locator('[data-swipe-panel="trailing"]')).toBeAttached();
   const before = await rows.count();
   const rest = await boxOf(row);
   const y = rest.y + rest.height / 2;
@@ -286,6 +290,8 @@ test('the trailing panel: Delete is outermost and the panel wears its colour', a
   );
   const row = page.locator('.astryx-item').first();
   const panel = row.locator('[data-swipe-panel="trailing"]');
+  // The gesture arrives with the lazily loaded swipe layer.
+  await expect(panel).toBeAttached();
   const rest = await boxOf(row);
   const y = rest.y + rest.height / 2;
   const startX = rest.x + rest.width - 24;

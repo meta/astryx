@@ -8,11 +8,18 @@
  * the runner that launched us. Returns the correct command prefix for running
  * package binaries (e.g. 'npx astryx', 'yarn astryx', 'pnpm exec astryx'), and
  * the scoped one-off form ('npx @astryxdesign/cli') when the `astryx` bin does
- * not resolve from the project.
+ * not resolve from the project. An integration's declared `cliCommand`, then
+ * a host's door name, come first (see cli-command.mjs).
  */
 
+import {AsyncLocalStorage} from 'node:async_hooks';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {cliDoor, declaredCliCommand} from './cli-command.mjs';
+import {CLI_ROOT} from '../fs/paths.mjs';
+import {cliVersion, runChoice} from '../release/run-context.mjs';
+import {isGlobalCopy} from '../release/choose.mjs';
+import {isInReleaseCache} from '../release/cache.mjs';
 
 /**
  * A package manager we can install with and run binaries through.
@@ -145,6 +152,76 @@ function evidenceIn(dir) {
  */
 
 /**
+ * What one directory's own files say about its package manager, by the rules
+ * {@link explainPackageManager} applies within a directory (declared field,
+ * then a single lockfile, then committed config when lockfiles tie). Returns
+ * null when the directory has neither a declaration nor a lockfile, so a caller
+ * walking up keeps looking. An ambiguous directory reports `ambiguous: true`
+ * with the lockfiles that disagree, so a caller can name them.
+ * @param {string} dir
+ * @returns {(Omit<PackageManagerResolution, 'dir'> & {lockfiles: FoundLockfile[]}) | null}
+ */
+export function decidePackageManagerIn(dir) {
+  const locks = lockfilesIn(dir);
+  const candidates = locks.map(lock => lock.pm);
+  const declared = declaredPackageManager(dir);
+
+  // The project declared one. Nothing on the filesystem outranks that.
+  if (declared) {
+    return {
+      pm: declared,
+      ambiguous: false,
+      candidates,
+      declared,
+      source: 'declared',
+      lockfiles: locks,
+      strayLockfiles: locks.filter(lock => lock.pm !== declared),
+    };
+  }
+
+  // One lockfile is unambiguous.
+  if (locks.length === 1) {
+    return {
+      pm: locks[0].pm,
+      ambiguous: false,
+      candidates,
+      declared: null,
+      source: 'lockfile',
+      lockfiles: locks,
+      strayLockfiles: [],
+    };
+  }
+
+  // Several lockfiles and no declaration: the filesystem cannot say. Only a
+  // file the project committed on purpose can.
+  if (locks.length > 1) {
+    const evidence = evidenceIn(dir).filter(pm => candidates.includes(pm));
+    if (evidence.length === 1) {
+      return {
+        pm: evidence[0],
+        ambiguous: false,
+        candidates,
+        declared: null,
+        source: 'evidence',
+        lockfiles: locks,
+        strayLockfiles: [],
+      };
+    }
+    return {
+      pm: 'npx',
+      ambiguous: true,
+      candidates,
+      declared: null,
+      source: 'none',
+      lockfiles: locks,
+      strayLockfiles: [],
+    };
+  }
+
+  return null;
+}
+
+/**
  * Detect the project's package manager, with the reasoning attached.
  * Walks up from targetDir, taking the first directory that answers.
  *
@@ -182,59 +259,16 @@ export function explainPackageManager(targetDir = process.cwd()) {
   const root = path.parse(dir).root;
 
   while (dir !== root) {
-    const locks = lockfilesIn(dir);
-    const candidates = locks.map(lock => lock.pm);
-    const declared = declaredPackageManager(dir);
-
-    // 1. The project declared one. Nothing on the filesystem outranks that.
-    if (declared) {
+    const decision = decidePackageManagerIn(dir);
+    if (decision) {
       return {
-        pm: declared,
-        ambiguous: false,
+        pm: decision.pm,
+        ambiguous: decision.ambiguous,
         dir,
-        candidates,
-        declared,
-        source: 'declared',
-        strayLockfiles: locks.filter(lock => lock.pm !== declared),
-      };
-    }
-
-    // 2. One lockfile is unambiguous.
-    if (locks.length === 1) {
-      return {
-        pm: locks[0].pm,
-        ambiguous: false,
-        dir,
-        candidates,
-        declared: null,
-        source: 'lockfile',
-        strayLockfiles: [],
-      };
-    }
-
-    // 3. Several lockfiles and no declaration: the filesystem cannot say.
-    //    Only a file the project committed on purpose can.
-    if (locks.length > 1) {
-      const evidence = evidenceIn(dir).filter(pm => candidates.includes(pm));
-      if (evidence.length === 1) {
-        return {
-          pm: evidence[0],
-          ambiguous: false,
-          dir,
-          candidates,
-          declared: null,
-          source: 'evidence',
-          strayLockfiles: [],
-        };
-      }
-      return {
-        pm: 'npx',
-        ambiguous: true,
-        dir,
-        candidates,
-        declared: null,
-        source: 'none',
-        strayLockfiles: [],
+        candidates: decision.candidates,
+        declared: decision.declared,
+        source: decision.source,
+        strayLockfiles: decision.strayLockfiles,
       };
     }
 
@@ -279,11 +313,15 @@ export function detectPackageManager(targetDir = process.cwd()) {
 export function getRunPrefix(targetDir) {
   const pm = detectPackageManager(targetDir);
   switch (pm) {
-    case 'yarn': return 'yarn';
-    case 'pnpm': return 'pnpm exec';
-    case 'bun': return 'bunx';
+    case 'yarn':
+      return 'yarn';
+    case 'pnpm':
+      return 'pnpm exec';
+    case 'bun':
+      return 'bunx';
     case 'npm':
-    default: return 'npx';
+    default:
+      return 'npx';
   }
 }
 
@@ -310,11 +348,15 @@ export const CLI_BIN = 'astryx';
 export function getDlxPrefix(targetDir) {
   const resolution = explainPackageManager(targetDir);
   switch (resolution.pm) {
-    case 'yarn': return isYarnClassic(resolution) ? 'npx' : 'yarn dlx';
-    case 'pnpm': return 'pnpm dlx';
-    case 'bun': return 'bunx';
+    case 'yarn':
+      return isYarnClassic(resolution) ? 'npx' : 'yarn dlx';
+    case 'pnpm':
+      return 'pnpm dlx';
+    case 'bun':
+      return 'bunx';
     case 'npm':
-    default: return 'npx';
+    default:
+      return 'npx';
   }
 }
 
@@ -343,7 +385,9 @@ function isYarnClassic({dir}) {
     if (fs.existsSync(path.join(dir, '.yarnrc.yml'))) return false;
     if (fs.existsSync(path.join(dir, '.yarnrc'))) return true;
   }
-  const agent = /^yarn\/(\d+)\./.exec(String(process.env.npm_config_user_agent ?? ''));
+  const agent = /^yarn\/(\d+)\./.exec(
+    String(process.env.npm_config_user_agent ?? ''),
+  );
   return agent ? agent[1] === '1' : false;
 }
 
@@ -354,8 +398,12 @@ function isYarnClassic({dir}) {
  */
 function declaredYarnMajor(dir) {
   try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'));
-    const match = /^yarn@(\d+)(?:[.+]|$)/.exec(String(pkg.packageManager ?? ''));
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(dir, 'package.json'), 'utf-8'),
+    );
+    const match = /^yarn@(\d+)(?:[.+]|$)/.exec(
+      String(pkg.packageManager ?? ''),
+    );
     return match ? Number(match[1]) : null;
   } catch {
     // Best-effort: no package.json, or an unreadable one.
@@ -432,25 +480,73 @@ export function cliBinResolves(targetDir = process.cwd()) {
 }
 
 /**
- * The safe, install-aware CLI invocation stem to suggest to users.
+ * The CLI invocation stem every printed command starts with. The one picker:
+ * every hint, error, Doctor fix and doc line that names a command goes through
+ * it (directly, or through {@link formatCliCommand} and
+ * {@link formatCliCommandsIn}). JSON fields that carry a command stay bare.
  *
- * - The `astryx` bin resolves from `targetDir`: `<run-prefix> astryx`
- *   (e.g. `pnpm exec astryx`).
- * - Launched one-off (npx/dlx cache), or the bin does not resolve from
- *   `targetDir` (a global install, a fresh package in a workspace):
- *   `<dlx-prefix> @astryxdesign/cli`. The bare `astryx` name would make npm
- *   fetch an unrelated registry package; the scoped package always resolves
- *   to this CLI.
+ * In order:
+ *
+ * - The `cliCommand` an integration loaded in this project declares, e.g.
+ *   `acme astryx`. When two integrations declare different commands,
+ *   neither is used, the guess below is (even when a host set a door), and
+ *   `astryx doctor` warns.
+ * - The door a host ran this call through (see cli-command.mjs). Empty in a
+ *   plain run.
+ * - Otherwise the guess below.
+ *
+ * The guess names a command that, run from `targetDir`, reaches the release
+ * that answered (spec AST-081 FR5):
+ *
+ * - The project's own CLI answered and its `astryx` bin resolves from
+ *   `targetDir`: `<run-prefix> astryx` (e.g. `pnpm exec astryx`).
+ * - Outside a project, the CLI installed for the computer (or the release it
+ *   keeps) answered: `astryx`.
+ * - Otherwise: `<dlx-prefix> @astryxdesign/cli@<answering version>`, pinned so
+ *   the package runner starts the same release. The bare `astryx` name would
+ *   make npm fetch an unrelated registry package, and the unpinned scoped
+ *   package the newest release.
+ *
+ * With `installed`, the line follows a step that installs the project's own
+ * CLI (an update notice, the hint that matches a project's CLI to its Core),
+ * so the guess is that CLI: `<run-prefix> astryx`. A declared `cliCommand`
+ * and a host's door still come first.
  *
  * @param {string} [targetDir] the project the printed command runs in;
  *   defaults to the working directory
+ * @param {{installed?: boolean}} [options]
  * @returns {string}
  */
-export function getCliInvocation(targetDir) {
-  if (isCliOneOff() || !cliBinResolves(targetDir)) {
-    return `${getDlxPrefix(targetDir)} ${CLI_PACKAGE}`;
+export function getCliInvocation(targetDir, {installed = false} = {}) {
+  const declared = declaredCliCommand(targetDir);
+  if (declared.command) return declared.command;
+  const guess = () =>
+    installed
+      ? `${getRunPrefix(targetDir)} ${CLI_BIN}`
+      : guessCliInvocation(targetDir);
+  if (declared.conflict) return guess();
+  return cliDoor() ?? guess();
+}
+
+/**
+ * The package-manager guess alone, without any integration's `cliCommand` or
+ * a host's door. The picker falls back to it when declared commands conflict,
+ * and Doctor names it then.
+ *
+ * @param {string} [targetDir]
+ * @returns {string}
+ */
+export function guessCliInvocation(targetDir) {
+  // Who answered this run decides the stem, so every command one run prints
+  // reaches the same release, whichever folder a line names.
+  const choice = runChoice(process.cwd());
+  if (choice.copy === 'project' && !isCliOneOff() && cliBinResolves(targetDir)) {
+    return `${getRunPrefix(targetDir)} ${CLI_BIN}`;
   }
-  return `${getRunPrefix(targetDir)} ${CLI_BIN}`;
+  if (!choice.inProject && (isGlobalCopy(CLI_ROOT) || isInReleaseCache(CLI_ROOT))) {
+    return CLI_BIN;
+  }
+  return `${getDlxPrefix(targetDir)} ${CLI_PACKAGE}@${cliVersion()}`;
 }
 
 /**
@@ -465,7 +561,165 @@ export function getCliInvocation(targetDir) {
  * @returns {string}
  */
 export function formatCliCommand(command, targetDir) {
-  const sub = String(command).replace(/^\s*astryx\b\s*/, '').trim();
+  const sub = String(command)
+    .replace(/^\s*astryx\b\s*/, '')
+    .trim();
   const stem = getCliInvocation(targetDir);
   return sub ? `${stem} ${sub}` : stem;
+}
+
+/** Code-fence languages whose lines are shell commands. */
+const SHELL_FENCES = new Set(['', 'bash', 'sh', 'shell', 'zsh', 'console']);
+
+/** Code-fence languages that hold prose, such as a prompt to paste. */
+const PROSE_FENCES = new Set(['text', 'txt', 'markdown', 'md']);
+
+/** `astryx` where a shell line starts a command: line start, `$ `, `&&`, `||`, `;`, `|`. */
+const SHELL_COMMAND = /(^\s*(?:\$\s+)?|(?:&&|\|\||;|\|)\s*)astryx(?=\s|$)/g;
+
+/** `astryx` opening an inline code span: `` `astryx docs` `` or `` `astryx` ``. */
+const INLINE_COMMAND = /`astryx(?=[\s`])/g;
+
+/**
+ * Prefix the CLI commands in one line.
+ * @param {string} line
+ * @param {string} stem
+ * @param {string | null} lang the fence the line sits in; null for prose
+ * @returns {string}
+ */
+function prefixLine(line, stem, lang) {
+  if (lang == null) return line.replace(INLINE_COMMAND, `\`${stem}`);
+  if (SHELL_FENCES.has(lang)) return line.replace(SHELL_COMMAND, `$1${stem}`);
+  if (PROSE_FENCES.has(lang)) {
+    return line
+      .replace(INLINE_COMMAND, `\`${stem}`)
+      .replace(SHELL_COMMAND, `$1${stem}`);
+  }
+  return line;
+}
+
+/**
+ * Prefix every CLI command in doc text with `stem`, the invocation from
+ * {@link getCliInvocation}.
+ *
+ * Docs, including an integration's, are written with bare `astryx ...`
+ * commands; this rewrites them when they are shown. In prose, an inline code
+ * span that starts with `astryx`. In a shell code fence (no language, `bash`,
+ * `sh`, `shell`, `zsh`, `console`), each `astryx` that starts a command. In a
+ * `text` or `markdown` fence, both. Other fences, and plain words, are left
+ * alone. JSON output keeps the authored text.
+ *
+ * @param {string} text Markdown-style doc text, or the body of one code block.
+ * @param {string} stem e.g. `pnpm exec astryx`
+ * @param {string | null} [lang] the code block's language when `text` is one
+ *   block's body; omit for Markdown, whose fences are followed
+ * @returns {string}
+ */
+export function prefixCliCommands(text, stem, lang = null) {
+  if (stem === CLI_BIN) return String(text);
+  const blockLang = lang == null ? null : lang.toLowerCase();
+  /** @type {{marker: string, lang: string} | null} */
+  let fence = null;
+  return String(text)
+    .split('\n')
+    .map(line => {
+      if (blockLang != null) return prefixLine(line, stem, blockLang);
+      const marker = /^\s*(`{3,}|~{3,})\s*([\w-]*)/.exec(line);
+      if (marker) {
+        if (fence == null) {
+          fence = {marker: marker[1], lang: marker[2].toLowerCase()};
+        } else if (marker[1].startsWith(fence.marker)) {
+          fence = null;
+        }
+        return line;
+      }
+      return prefixLine(line, stem, fence?.lang ?? null);
+    })
+    .join('\n');
+}
+
+/** @type {AsyncLocalStorage<{pm: import('../doc-compiler/doc-syntax.mjs').DocPackageManager}>} */
+const docPackageManagerScope = new AsyncLocalStorage();
+
+/**
+ * Run `fn` with doc `{@pm}` steps rendered for `pm`, whatever the working
+ * directory's project uses: a host that shows docs to readers of every
+ * package manager, such as the docsite, picks one.
+ * @template T
+ * @param {import('../doc-compiler/doc-syntax.mjs').DocPackageManager} pm
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function runWithDocPackageManager(pm, fn) {
+  return docPackageManagerScope.run({pm}, fn);
+}
+
+/**
+ * The package manager a doc's `{@pm}` steps render for, from the project in
+ * `targetDir`: npm when nothing is detected, and Yarn 1 told apart from Yarn
+ * 2 and newer; the one a host chose with runWithDocPackageManager wins.
+ * @param {string} [targetDir]
+ * @returns {import('../doc-compiler/doc-syntax.mjs').DocPackageManager}
+ */
+export function docPackageManager(targetDir) {
+  const chosen = docPackageManagerScope.getStore()?.pm;
+  if (chosen) return chosen;
+  const resolution = explainPackageManager(targetDir);
+  switch (resolution.pm) {
+    case 'yarn':
+      return isYarnClassic(resolution) ? 'yarn-classic' : 'yarn';
+    case 'pnpm':
+      return 'pnpm';
+    case 'bun':
+      return 'bun';
+    default:
+      return 'npm';
+  }
+}
+
+/**
+ * Quote one argument of a printed command so the shell it is pasted into
+ * passes it on unchanged. Printed commands target a POSIX shell (sh, bash,
+ * zsh), and PowerShell on Windows; cmd.exe is not a target. A value made only
+ * of letters, digits and `@ / . _ -` (and, on Windows, a drive path's `:` and
+ * `\`) stays bare. Any other value gets single quotes, inside which both
+ * shells read `$`, backticks, `%`, `!`, spaces and double quotes literally. An
+ * embedded single quote is written `'\''` for a POSIX shell and doubled for
+ * PowerShell, which also ends a single-quoted string at the typographic
+ * quotes `‘ ’ ‚ ‛`, so those are doubled too (`Macy’s` → `'Macy’’s'`).
+ *
+ * @param {string} value
+ * @param {string} [platform] the `process.platform` the command is printed for
+ * @returns {string}
+ */
+export function quoteCommandArgument(value, platform = process.platform) {
+  const text = String(value);
+  if (platform === 'win32') {
+    if (/^[A-Za-z0-9@/._:\\-]+$/u.test(text)) return text;
+    return `'${text.replace(/['\u2018\u2019\u201A\u201B]/gu, quote => quote + quote)}'`;
+  }
+  if (/^[A-Za-z0-9@/._-]+$/u.test(text)) return text;
+  return `'${text.replace(/'/gu, `'\\''`)}'`;
+}
+
+/**
+ * A printed command that changes to `dir`, then runs `command` there, so it
+ * does the same work pasted from any folder. It runs `command` only when the
+ * change worked. For a POSIX shell: `cd <dir> && <command>`. For PowerShell
+ * on Windows: `cd -LiteralPath <dir> -ErrorAction Stop; <command>`, because
+ * `-LiteralPath` reads `[` and `]` in a folder name literally, and a failed
+ * change stops the line in Windows PowerShell 5.1, which has no `&&`, as in
+ * PowerShell 7.
+ *
+ * @param {string} dir an absolute folder
+ * @param {string} command the command to run there, its arguments already
+ *   quoted with {@link quoteCommandArgument}
+ * @param {string} [platform] the `process.platform` the command is printed for
+ * @returns {string}
+ */
+export function commandInFolder(dir, command, platform = process.platform) {
+  const folder = quoteCommandArgument(dir, platform);
+  return platform === 'win32'
+    ? `cd -LiteralPath ${folder} -ErrorAction Stop; ${command}`
+    : `cd ${folder} && ${command}`;
 }

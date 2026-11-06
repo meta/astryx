@@ -2,7 +2,7 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import {useState} from 'react';
-import {Drawer, DrawerHeader} from '@astryxdesign/lab';
+import {Drawer, DrawerHeader} from '@astryxdesign/core/Drawer';
 import {Button} from '@astryxdesign/core/Button';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
 import {Divider} from '@astryxdesign/core/Divider';
@@ -14,7 +14,7 @@ import {Text} from '@astryxdesign/core/Text';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 
 const meta: Meta<typeof Drawer> = {
-  title: 'Lab/Drawer',
+  title: 'Core/Drawer',
   component: Drawer,
   tags: ['autodocs'],
   parameters: {
@@ -30,8 +30,8 @@ const meta: Meta<typeof Drawer> = {
           '  LTR); block-axis sheets are `BottomSheet`.',
           '- Works on **desktop and touch**: `width` is the desktop budget',
           '  budget, and below 640px the panel preserves a 56px reveal',
-          '  without exceeding that budget (`isFullWidthOnMobile` makes it',
-          '  edge to edge).',
+          '  without exceeding that budget (the experimental',
+          '  `experimental={{isFullWidthOnMobile: true}}` makes it edge to edge).',
           '- **Scrim optional**: modal with a scrim by default, or',
           '  `hasScrim={false}` for a non-modal overlay that leaves the page',
           '  behind interactive.',
@@ -43,7 +43,14 @@ const meta: Meta<typeof Drawer> = {
   },
   decorators: [
     Story => (
-      <div style={{width: 560, minHeight: 360, padding: 32}}>
+      // 560 px wide, or the viewport less the frame's gutters (16 px a side,
+      // twice) on a phone, so the story never scrolls the page sideways.
+      <div
+        style={{
+          width: 'min(560px, 100vw - 64px)',
+          minHeight: 360,
+          padding: 32,
+        }}>
         <Story />
       </div>
     ),
@@ -221,6 +228,85 @@ export const Sides: Story = {
   },
 };
 
+function selfDirectedRtlStory(side: 'start' | 'end'): Story {
+  return {
+    name: `Self-applied RTL ${side} audit`,
+    parameters: {docs: {disable: true}},
+    render: () => {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <>
+          <Button
+            label={`Open self-directed RTL ${side} drawer`}
+            onClick={() => setIsOpen(true)}
+          />
+          <Drawer
+            isOpen={isOpen}
+            onOpenChange={setIsOpen}
+            label="Deployment details"
+            side={side}
+            dir="rtl">
+            <Layout
+              header={
+                <DrawerHeader
+                  title="Deployment details"
+                  onOpenChange={setIsOpen}
+                />
+              }
+              content={
+                <LayoutContent>
+                  <Text type="body">The Drawer root owns this RTL region.</Text>
+                </LayoutContent>
+              }
+            />
+          </Drawer>
+        </>
+      );
+    },
+  };
+}
+
+export const SelfDirectedRtlStart = selfDirectedRtlStory('start');
+export const SelfDirectedRtlEnd = selfDirectedRtlStory('end');
+
+export const NestedLtrOverride: Story = {
+  name: 'Nested LTR override audit',
+  parameters: {docs: {disable: true}},
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <Button
+          label="Open nested LTR drawer"
+          onClick={() => setIsOpen(true)}
+        />
+        <Drawer
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Deployment details"
+          side="end"
+          dir="ltr">
+          <Layout
+            header={
+              <DrawerHeader
+                title="Deployment details"
+                onOpenChange={setIsOpen}
+              />
+            }
+            content={
+              <LayoutContent>
+                <Text type="body">
+                  This local LTR region overrides the ambient RTL page.
+                </Text>
+              </LayoutContent>
+            }
+          />
+        </Drawer>
+      </>
+    );
+  },
+};
+
 /**
  * `width` is the desktop budget: a number of pixels or any CSS length.
  * Narrow the browser below 640px: each width remains an upper bound while
@@ -255,8 +341,8 @@ export const Widths: Story = {
 
 /**
  * On touch viewports (below 640px) the drawer preserves a 56px reveal of the
- * page behind without exceeding its width budget; `isFullWidthOnMobile` makes
- * it edge to edge. Resize the preview below 640px to compare.
+ * page behind without exceeding its width budget; the experimental
+ * `experimental={{isFullWidthOnMobile: true}}` makes it edge to edge. Resize the preview below 640px to compare.
  */
 export const MobileWidth: Story = {
   render: () => {
@@ -322,7 +408,7 @@ export const MobileWidth: Story = {
           isOpen={openFull}
           onOpenChange={setOpenFull}
           label="Region filters (full width)"
-          isFullWidthOnMobile>
+          experimental={{isFullWidthOnMobile: true}}>
           {filters}
         </Drawer>
       </>

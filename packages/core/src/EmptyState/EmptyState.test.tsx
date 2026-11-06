@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {describe, it, expect, vi} from 'vitest';
+import {fireEvent, render, screen} from '@testing-library/react';
+import * as stylex from '@stylexjs/stylex';
 import {EmptyState} from './EmptyState';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
@@ -10,6 +11,12 @@ function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
   return [prose, component].filter(Boolean).join('\n\n');
 }
+
+const testStyles = stylex.create({
+  root: {
+    minWidth: '123px',
+  },
+});
 
 describe('EmptyState', () => {
   it('renders with title', () => {
@@ -52,7 +59,7 @@ describe('EmptyState', () => {
       />,
     );
     expect(screen.getByText('Try adjusting your search.')).toBeInTheDocument();
-    // Description renders as <div> (never <p>) so block content composes safely.
+    // Description keeps its stable target element instead of paragraph semantics.
     expect(screen.getByText('Try adjusting your search.').tagName).toBe('DIV');
   });
 
@@ -110,14 +117,13 @@ describe('EmptyState', () => {
     expect(divs).toHaveLength(2); // container + text group
   });
 
-  it('has role="status" on the container', () => {
-    render(<EmptyState title="No results" />);
-    expect(screen.getByRole('status')).toBeInTheDocument();
+  it('does not make the root a live region', () => {
+    const {container} = render(<EmptyState title="No results" />);
+    expect(container.querySelector('[role], [aria-live]')).toBeNull();
   });
 
   it('renders compact variant', () => {
     render(<EmptyState title="No results" isCompact />);
-    expect(screen.getByRole('status')).toBeInTheDocument();
     expect(screen.getByText('No results')).toBeInTheDocument();
   });
 
@@ -130,6 +136,71 @@ describe('EmptyState', () => {
   it('spreads data-testid', () => {
     render(<EmptyState title="No results" data-testid="empty-state" />);
     expect(screen.getByTestId('empty-state')).toBeInTheDocument();
+  });
+
+  it('does not render empty optional slot wrappers', () => {
+    const {container} = render(
+      <EmptyState title="No results" description="" icon={false} actions="" />,
+    );
+    const root = container.firstElementChild as HTMLElement;
+    expect(root).toHaveTextContent('No results');
+    expect(root).toHaveTextContent(/^No results$/);
+    expect(root.children).toHaveLength(1);
+    expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
+    expect(
+      container.querySelector('.astryx-empty-state-description'),
+    ).toBeNull();
+  });
+
+  it('composes root props, including a caller role', () => {
+    const onClick = vi.fn();
+    const expectedXstyleClass = stylex.props(testStyles.root).className;
+    if (expectedXstyleClass == null) {
+      throw new Error('Expected the test xstyle to produce a class name.');
+    }
+    render(
+      <EmptyState
+        title="No results"
+        role="region"
+        data-owner="consumer"
+        className="consumer-class"
+        style={{width: '321px'}}
+        xstyle={testStyles.root}
+        onClick={onClick}
+      />,
+    );
+
+    const root = screen.getByRole('region');
+    expect(root).toHaveClass('astryx-empty-state', 'consumer-class');
+    expect(root).toHaveClass(expectedXstyleClass);
+    expect(root).toHaveAttribute('data-owner', 'consumer');
+    expect(root).toHaveStyle({width: '321px'});
+    fireEvent.click(root);
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('reflects compact layout on the root and preserves slot order', () => {
+    render(
+      <EmptyState
+        title="No results"
+        description="Try again."
+        icon={<span data-testid="icon">Icon</span>}
+        actions={<button type="button">Retry</button>}
+        isCompact
+        data-testid="empty-state"
+      />,
+    );
+
+    const root = screen.getByTestId('empty-state');
+    expect(root).toHaveAttribute('data-variant', 'compact');
+    expect(root.children).toHaveLength(3);
+    expect(root.children[0]).toContainElement(screen.getByTestId('icon'));
+    expect(root.children[1]).toContainElement(
+      screen.getByRole('heading', {name: 'No results'}),
+    );
+    expect(root.children[2]).toContainElement(
+      screen.getByRole('button', {name: 'Retry'}),
+    );
   });
 
   it('renders all slots together', () => {

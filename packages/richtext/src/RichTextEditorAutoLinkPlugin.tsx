@@ -9,7 +9,7 @@
  *   `linkUtils`.
  * @output Exports `RichTextEditorAutoLinkPlugin` and its props type, plus the
  *   default `DEFAULT_LINK_MATCHERS`.
- * @position Experimental (lab). Drop into RichTextEditor's `plugins` slot to
+ * @position @astryxdesign/richtext. Drop into RichTextEditor's `plugins` slot to
  *   auto-linkify URLs and emails as they are typed or pasted. Requires
  *   `AutoLinkNode` to be registered (it is, by default).
  *
@@ -19,8 +19,8 @@
  * - /packages/richtext/src/RichTextEditor.test.tsx (tests)
  * - /apps/storybook/stories/RichTextEditor.stories.tsx (story)
  *
- * NOTE: Experimental `@astryxdesign/richtext` component (canary). `lexical` and
- * `@lexical/*` are OPTIONAL peer dependencies — install them to use this.
+ * NOTE: `lexical` and `@lexical/*` are OPTIONAL peer dependencies — install them
+ * to use this.
  *
  * COMPATIBILITY: the plugin is deliberately a thin pass-through so an
  * application with its own link conventions can adopt it without forking. It

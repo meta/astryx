@@ -93,7 +93,7 @@ describe('package and integration themes', () => {
     ).toContain('oceanTheme');
   });
 
-  it('copies the complete nested integration theme directory', async () => {
+  it('ejects the complete nested integration theme directory', async () => {
     installThemeIntegration(
       '@acme/themes',
       'ocean',
@@ -104,7 +104,7 @@ describe('package and integration themes', () => {
       },
     );
 
-    const result = await themeAdd('ocean', {cwd: tmpDir});
+    const result = await themeEject('ocean', {cwd: tmpDir});
 
     expect(result.data.files).toEqual([
       'oceanTheme.ts',
@@ -123,7 +123,7 @@ describe('package and integration themes', () => {
         path.join(tmpDir, 'src', 'themes', 'ocean', 'oceanTheme.doc.mjs'),
         'utf-8',
       ),
-    ).toContain('maintained: true');
+    ).toContain('maintained: false');
     expect(
       fs.readFileSync(
         path.join(tmpDir, 'src', 'themes', 'ocean', 'tokens', 'colors.ts'),

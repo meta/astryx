@@ -1,5 +1,27 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/** @type {import('@astryxdesign/cli/authoring').ComponentAnatomyElement[]} */
+const anatomy = [
+  {
+    name: 'Checkable row',
+    required: true,
+    description:
+      'The menuitemcheckbox root that owns the accessible name, checked state, focus, and activation.',
+  },
+  {
+    name: 'Label/content',
+    required: true,
+    description:
+      'Caller content laid out by Item: the required label plus optional description, icon, and end content.',
+  },
+  {
+    name: 'Checkbox marker',
+    required: true,
+    description:
+      'Decorative shared Indicator chrome that visualizes checked and disabled state without adding a second control.',
+  },
+];
+
 /** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
 
 export const docs = {
@@ -9,6 +31,11 @@ export const docs = {
   isHiddenFromOverview: true,
   description:
     'A checkable menu item (role="menuitemcheckbox") that toggles an independent boolean. Use for on/off options inside a DropdownMenu; for a one-of-N choice use DropdownMenuRadioGroup.',
+  usage: {
+    anatomy,
+    description:
+      'An independently checkable option inside DropdownMenu. The row owns menuitemcheckbox semantics while the shared Indicator supplies decorative checkbox paint.',
+  },
   props: [
     {
       name: 'label',
@@ -24,24 +51,26 @@ export const docs = {
       name: 'icon',
       type: 'IconType',
       description:
-        'Icon to display before the label. See `npx @astryxdesign/cli docs icons` for valid semantic names.',
+        'Icon to display before the label. See `astryx docs icons` for valid semantic names.',
     },
     {
       name: 'value',
       type: 'boolean',
-      description: 'Whether the item is checked. Controlled; pair with onChange.',
+      description:
+        'Whether the item is checked. Controlled; pair with onChange.',
     },
     {
       name: 'onChange',
       type: '(checked: boolean) => void',
-      description: 'Callback fired with the next checked state when the item is toggled.',
+      description:
+        'Callback fired with the next checked state when the item is toggled.',
     },
     {
       name: 'isDisabled',
       type: 'boolean',
       default: 'false',
       description:
-        'Whether the item is disabled. Disabled items stay focusable (via aria-disabled) so they remain discoverable by keyboard and assistive technology, but activation is blocked.',
+        'Whether the item is disabled. A disabled item stays in the accessibility tree as disabled (aria-disabled) but takes no focus: the arrow keys, typeahead, and the pointer highlight skip it, and activation is blocked.',
     },
     {
       name: 'hasCloseOnSelect',
@@ -63,6 +92,14 @@ export const docs = {
         'Content to render after the label and description, such as a keyboard shortcut hint or badge.',
     },
   ],
+  theming: {
+    targets: [
+      {
+        className: 'astryx-dropdown-menu-item',
+        visualProps: ['size'],
+      },
+    ],
+  },
 };
 
 export const docsZh = {
@@ -88,14 +125,16 @@ export const docsDense = {
   name: 'DropdownMenuCheckboxItem',
   isHiddenFromOverview: true,
   displayName: 'Dropdown Menu Checkbox Item',
-  description: 'checkable menu item (menuitemcheckbox); independent boolean toggle',
+  description:
+    'checkable menu item (menuitemcheckbox); independent boolean toggle',
   propDescriptions: {
     label: 'primary label text',
     description: 'secondary text below label',
     icon: 'icon before label',
     value: 'checked state (controlled, w/ onChange)',
     onChange: 'fired w/ next checked state on toggle',
-    isDisabled: 'disabled; stays focusable via aria-disabled',
+    isDisabled:
+      'disabled (aria-disabled); skipped by arrows/typeahead, not focusable',
     hasCloseOnSelect: 'close menu on toggle (default false, stays open)',
     ref: 'forwarded to the row root (the role="menuitemcheckbox" element)',
     endContent: 'content after label+description',

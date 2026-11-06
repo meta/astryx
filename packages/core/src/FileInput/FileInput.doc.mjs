@@ -123,7 +123,7 @@ export const docs = {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
-        'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing; tooltip hides the message box and surfaces it in a tooltip on the status icon.',
+        'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing; tooltip hides the message box and surfaces it in a tooltip on the status icon. Dropzone mode does not support attached: use detached or tooltip. From the next minor release, a dropzone resolves attached to detached and defaults to it.',
       default: "'attached'",
     },
     {
@@ -137,6 +137,38 @@ export const docs = {
       type: 'SizeValue',
       description:
         'Width of the field (number = pixels, string used as-is, e.g. "100%"). Sizes the whole field (label, control, and status) so they stay aligned.',
+    },
+    {
+      name: 'containerXstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles for the field container (label, control, and status together). No effect inside InputGroup (style the InputGroup instead) or in a `horizontal-labels` FormLayout. Root `xstyle`, `className`, and `style` are not accepted.',
+    },
+    {
+      name: 'containerClassName',
+      type: 'string',
+      description: 'Class name for the field container. Same targeting as `containerXstyle`.',
+    },
+    {
+      name: 'containerStyle',
+      type: 'CSSProperties',
+      description: 'Inline styles for the field container. Same targeting as `containerXstyle`.',
+    },
+    {
+      name: 'controlXstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles for the visual control box: the element that paints the border and background and holds icons and end controls. Never the native input.',
+    },
+    {
+      name: 'controlClassName',
+      type: 'string',
+      description: 'Class name for the visual control box.',
+    },
+    {
+      name: 'controlStyle',
+      type: 'CSSProperties',
+      description: 'Inline styles for the visual control box.',
     },
   ],
   theming: {
@@ -164,7 +196,7 @@ export const docs = {
       {name: 'Upload icon', required: false, description: 'An upload-to-tray icon in the drop zone hinting at the upload action.'},
       {name: 'Placeholder', required: false, description: 'Hint text shown when no files are selected.'},
       {name: 'File name display', required: false, description: 'Shows the name(s) of selected files.'},
-      {name: 'Clear button', required: false, description: 'A close button that removes selected files and returns focus to the input.'},
+      {name: 'Clear button', required: false, description: 'A close button that removes selected files and returns focus to the file-selection trigger.'},
       {name: 'Spinner', required: false, description: 'Loading indicator that appears during async upload actions.'},
       {name: 'Status message', required: false, description: 'Validation feedback showing error, warning, or success with a message.'},
     ],
@@ -264,8 +296,40 @@ export const docsZh = {
       name: 'statusVariant',
       type: "'attached' | 'detached' | 'tooltip'",
       description:
-        '状态消息相对于输入框的放置方式。attached 直接叠加在输入框下方（带边框处理）；detached 作为独立元素浮于下方并留有间距；tooltip 隐藏消息框，并在状态图标上以提示气泡形式显示。',
+        '状态消息相对于输入框的放置方式。attached 直接叠加在输入框下方（带边框处理）；detached 作为独立元素浮于下方并留有间距；tooltip 隐藏消息框，并在状态图标上以提示气泡形式显示。dropzone 模式不支持 attached：请使用 detached 或 tooltip。从下一个次版本起，dropzone 会将 attached 解析为 detached，并以其为默认值。',
       default: "'attached'",
+    },
+    {
+      name: 'containerXstyle',
+      type: 'StyleXStyles',
+      description:
+        '字段容器（标签、控件和状态整体）的 StyleX 样式。在 InputGroup 内（请改为设置 InputGroup 的样式）或 `horizontal-labels` FormLayout 中无效。不接受根级 `xstyle`、`className` 和 `style`。',
+    },
+    {
+      name: 'containerClassName',
+      type: 'string',
+      description: '字段容器的类名，作用目标同 `containerXstyle`。',
+    },
+    {
+      name: 'containerStyle',
+      type: 'CSSProperties',
+      description: '字段容器的内联样式，作用目标同 `containerXstyle`。',
+    },
+    {
+      name: 'controlXstyle',
+      type: 'StyleXStyles',
+      description:
+        '可视控件框的 StyleX 样式：绘制边框和背景并包含图标与尾部控件的元素，而非原生输入元素。',
+    },
+    {
+      name: 'controlClassName',
+      type: 'string',
+      description: '可视控件框的类名。',
+    },
+    {
+      name: 'controlStyle',
+      type: 'CSSProperties',
+      description: '可视控件框的内联样式。',
     },
   ],
   theming: {
@@ -319,6 +383,12 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
+    containerXstyle: 'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
+    containerClassName: 'Class name for the field container.',
+    containerStyle: 'Inline styles for the field container.',
+    controlXstyle: 'StyleX styles for the visual control box (border, background, icons); not the native input.',
+    controlClassName: 'Class name for the visual control box.',
+    controlStyle: 'Inline styles for the visual control box.',
     label: 'Accessible label for the file input.',
     value: 'Currently selected file(s). Controlled.',
     onChange: 'Fired when files are selected or removed.',
@@ -338,7 +408,7 @@ export const docsDense = {
     placeholder: 'Placeholder when no files selected.',
     mode: "Visual mode: 'input' (compact) or 'dropzone' (drag-and-drop).",
     status: 'Validation status; colored border. Message floats below.',
-    statusVariant: 'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
+    statusVariant: 'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon. Dropzone: attached unsupported; use detached or tooltip (detached default from next minor).',
     labelTooltip: 'Tooltip in info icon at label end.',
   },
 };

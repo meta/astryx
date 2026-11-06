@@ -36,6 +36,7 @@ import {
   tokenizeQuery,
   SEARCH_DOMAINS,
 } from './search.mjs';
+import {linkThisCliAsProjectCli} from '../../test-utils/release-fixtures.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..');
 const cwd = REPO;
@@ -99,7 +100,7 @@ describe('search leaf — per-domain result fields', () => {
         expect(['page', 'block']).toContain(res.kind);
       } else if (res.domain === 'theme') {
         expect(res.displayName).toMatch(/\S/);
-        expect(res.command).toMatch(/^astryx theme add /);
+        expect(res.command).toBe(`astryx theme add ${res.name}`);
       }
     }
   }, SLOW);
@@ -116,16 +117,16 @@ describe('search leaf — docs at the grain a reader reads them', () => {
         .find(result => result.section === 'which-codemods-run');
       expect(hit).toMatchObject({
         domain: 'doc',
-        name: expect.stringMatching(/^cli\/integrations\/(?:.+\/)?codemods$/),
+        name: expect.stringMatching(/^authoring\/(?:.+\/)?codemods$/),
         title: expect.stringMatching(/ › Codemods › Choose when a codemod runs$/),
       });
       expect(hit.parent).toBe(`astryx docs ${hit.name} --index`);
       expect(hit.command).toBe(`astryx docs ${hit.name} which-codemods-run`);
       const block = await search('token-ref', {cwd});
       expect(block.data.results[0]).toMatchObject({
-        name: 'authoring',
+        name: 'authoring/field-reference',
         section: 'reference-doc',
-        command: 'astryx docs authoring reference-doc',
+        command: 'astryx docs authoring/field-reference reference-doc',
       });
       const fn = await search('assertResponse', {cwd, type: 'doc'});
       expect(fn.data.results[0]).toMatchObject({
@@ -147,13 +148,13 @@ describe('search leaf — docs at the grain a reader reads them', () => {
       // keywords and the title the guides declare. A namespace's own
       // keywords count, and a plural name is the name.
       for (const [query, route] of [
-        ['make an integration', /^cli\/integrations$/],
-        ['build an integration', /^cli\/integrations$/],
-        ['create an integration', /^cli\/integrations$/],
-        ['integration', /^cli\/integrations$/],
-        ['publish an integration', /^cli\/integrations$/],
+        ['make an integration', /^authoring$/],
+        ['build an integration', /^authoring$/],
+        ['create an integration', /^authoring$/],
+        ['integration', /^authoring$/],
+        ['publish an integration', /^authoring$/],
         // The troubleshooting guide, wherever the tree places it.
-        ['troubleshoot integration', /^cli\/integrations\/(?:.+\/)?troubleshooting$/],
+        ['troubleshoot integration', /^authoring\/(?:.+\/)?troubleshooting$/],
       ]) {
         const r = await search(query, {cwd, type: 'doc'});
         const names = r.data.results.slice(0, 3).map(result => result.name);
@@ -166,7 +167,7 @@ describe('search leaf — docs at the grain a reader reads them', () => {
   it(
     'gives a top-level namespace hit the topic list as its parent',
     async () => {
-      for (const [query, route] of [['unorganized', 'unorganized'], ['Astryx CLI', 'cli']]) {
+      for (const [query, route] of [['foundations', 'foundations'], ['Astryx CLI', 'cli']]) {
         const r = await search(query, {cwd, type: 'doc'});
         expect(r.data.results).toContainEqual(
           expect.objectContaining({
@@ -184,7 +185,7 @@ describe('search leaf — docs at the grain a reader reads them', () => {
     'points a topic hit at its index, never a whole-topic read',
     async () => {
       // A guide the tree places, read from the tree rather than named.
-      const {data: integrations} = await docs('cli/integrations');
+      const {data: integrations} = await docs('authoring');
       const guide = integrations.slots
         .flatMap(slot => slot.children)
         .find(child => child.kind === 'generic').route;
@@ -439,9 +440,9 @@ describe('search leaf — a candidate that matches every word outranks a partial
     const tokens = await search('tokens', {cwd});
     expect(tokens.data.results[0]).toMatchObject({domain: 'doc', name: 'tokens'});
     for (const [query, route] of [
-      ['codemods', /^cli\/integrations\/(?:.+\/)?codemods$/],
-      ['quick start', /^cli\/integrations\/(?:.+\/)?quick-start$/],
-      ['test in an app', /^cli\/integrations\/(?:.+\/)?test-in-an-app$/],
+      ['codemods', /^authoring\/(?:.+\/)?codemods$/],
+      ['quick start', /^authoring\/(?:.+\/)?quick-start$/],
+      ['test in an app', /^authoring\/(?:.+\/)?test-in-an-app$/],
     ]) {
       const r = await search(query, {cwd, type: 'doc'});
       // The guide is among the hits that share the top score: two guides
@@ -470,8 +471,10 @@ describe('search leaf — error paths (pinned)', () => {
 
   it('searches the docs without @astryxdesign/core, and throws for a domain that needs it', async () => {
     const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-search-no-core-'));
+    // A project whose own CLI answers, with no Core installed.
+    linkThisCliAsProjectCli(empty);
     try {
-      // An open search outside an app covers the docs, as `astryx docs` does.
+      // An open search without Core covers the docs, as `astryx docs` does.
       const open = await search('make an integration', {cwd: empty});
       expect(open.data.results.length).toBeGreaterThan(0);
       expect(new Set(open.data.results.map(r => r.domain))).toEqual(
@@ -614,6 +617,42 @@ describe('search leaf — a theme is found by its names; its description is pros
     },
     SLOW,
   );
+});
+
+describe('search leaf — components whose docs live in a family folder', () => {
+  it("indexes a family member from its own entry, not the family's keywords", async () => {
+    // HStack and VStack are documented in Stack's doc, whose keywords
+    // (horizontal, vertical, row, column, ...) describe Stack.
+    const reasons = async (/** @type {string} */ query) =>
+      Object.fromEntries(
+        (await search(query, {cwd, type: 'component'})).data.results.map(r => [
+          r.name,
+          r.reason,
+        ]),
+      );
+    const column = await reasons('column');
+    expect(column.HStack ?? '').not.toMatch(/keyword/);
+    expect(column.VStack ?? '').not.toMatch(/keyword/);
+    expect(column.Stack).toMatch(/keyword/);
+    const vertical = (await search('vertical', {cwd, type: 'component'})).data.results.map(
+      r => r.name,
+    );
+    expect(vertical.indexOf('VStack')).toBeGreaterThanOrEqual(0);
+    if (vertical.includes('HStack')) {
+      expect(vertical.indexOf('VStack')).toBeLessThan(vertical.indexOf('HStack'));
+    }
+  }, SLOW);
+
+  it('ranks VStack, HStack and Heading first for their own names, with their own import', async () => {
+    for (const name of ['VStack', 'HStack', 'Heading']) {
+      const r = await search(name.toLowerCase(), {cwd, type: 'component'});
+      expect(r.data.results[0]).toMatchObject({
+        domain: 'component',
+        name,
+        import: `@astryxdesign/core/${name}`,
+      });
+    }
+  }, SLOW);
 });
 
 describe('search leaf — integration components', () => {
@@ -826,4 +865,143 @@ describe('search — usage guidance is indexed, a tier below description', () =>
     });
     expect(hit?.score).toBe(45);
   });
+});
+
+describe('search leaf — compound names, other names, and word forms', () => {
+  it('finds a compound name typed as separate words inside a longer query', async () => {
+    const {data} = await search('table header cell with sort arrow', {cwd});
+    expect(
+      data.results.slice(0, 3).map(r => r.name),
+    ).toContain('TableHeaderCell');
+  }, SLOW);
+
+  it('finds a one-word keyword typed as separate words', async () => {
+    // MetadataList declares `keyvalue`.
+    const {data} = await search('key value pairs', {cwd});
+    expect(data.results[0]).toMatchObject({
+      domain: 'component',
+      name: 'MetadataList',
+    });
+  }, SLOW);
+
+  it('finds a hook named by its words without the `use` prefix', async () => {
+    const {data} = await search('persisted table column settings', {cwd});
+    expect(data.results[0]).toMatchObject({
+      domain: 'hook',
+      name: 'useTableColumnSettings',
+    });
+  }, SLOW);
+
+  it('reads a camelCase identifier as the words it spells', async () => {
+    const {data} = await search('useTablePaginationState', {cwd});
+    expect(data.results[0]).toMatchObject({
+      domain: 'hook',
+      name: 'useTablePagination',
+    });
+  }, SLOW);
+
+  it('keeps each identifier of a multi-word query whole', async () => {
+    const {data} = await search('ChatMessageList ChatComposer', {cwd});
+    expect(data.results.slice(0, 2).map(r => r.name).sort()).toEqual([
+      'ChatComposer',
+      'ChatMessageList',
+    ]);
+  }, SLOW);
+
+  it("finds a component by another library's name for it", async () => {
+    for (const [q, name] of [
+      ['ScrollArea viewport', 'ScrollableArea'],
+      ['toggle group of buttons', 'ToggleButtonGroup'],
+      ['circular progress for uploads', 'Spinner'],
+    ]) {
+      const {data} = await search(q, {cwd});
+      expect(data.results[0], q).toMatchObject({domain: 'component', name});
+    }
+  }, SLOW);
+
+  it('reads a one-identifier other name as typed', async () => {
+    const {data} = await search('AppHeader', {cwd});
+    expect(data.results[0]).toMatchObject({
+      domain: 'component',
+      name: 'LayoutHeader',
+    });
+  }, SLOW);
+
+  it('adds no near siblings beside an entry the query names outright', async () => {
+    const {data} = await search('top nav mega menu', {cwd});
+    expect(data.results[0]).toMatchObject({name: 'TopNavMegaMenu'});
+    // Its sub-parts start with its name; read joined they would score in the
+    // whole-name tier right under it.
+    const siblings = data.results.filter(
+      r => r.name !== 'TopNavMegaMenu' && r.name.startsWith('TopNavMegaMenu'),
+    );
+    for (const sibling of siblings) expect(sibling.score).toBeLessThan(190);
+  }, SLOW);
+
+  it('ranks an entry the query names above a match on part of another name', async () => {
+    // `table header` names TableHeader; useTableStickyColumns only holds the
+    // words `sticky columns`.
+    const {data} = await search('table header with sticky columns', {cwd});
+    const names = data.results.map(r => r.name);
+    expect(names.indexOf('TableHeader')).toBeLessThan(
+      names.indexOf('useTableStickyColumns') === -1
+        ? Infinity
+        : names.indexOf('useTableStickyColumns'),
+    );
+  }, SLOW);
+
+  it('keeps an entry a query word names by its whole name at its own rank', async () => {
+    // Two words join into TextInput, and TextArea also matches two words
+    // through its joined keyword; one word is still TextArea's whole name.
+    const {data} = await search('text input and textarea with multi line', {
+      cwd,
+    });
+    expect(data.results[0]).toMatchObject({name: 'TextArea'});
+  }, SLOW);
+
+  it('ranks a match on more of the query above a shorter named entry', async () => {
+    const {data} = await search('dropdown menu radio options', {cwd});
+    expect(data.results[0]).toMatchObject({name: 'DropdownMenuRadioItem'});
+  }, SLOW);
+
+  it('lets a plural start a name through its singular', () => {
+    expect(
+      scoreCandidate('tokens', {domain: 'component', name: 'Tokenizer'}),
+    ).toMatchObject({score: 60});
+  });
+
+  it('finds Icon by a glyph name', async () => {
+    for (const q of ['cog', 'lightning bolt']) {
+      const {data} = await search(q, {cwd});
+      expect(data.results[0], q).toMatchObject({
+        domain: 'component',
+        name: 'Icon',
+      });
+    }
+  }, SLOW);
+
+  it('matches a verb form against its verb', () => {
+    // "spacing" lost the final e of "space".
+    expect(
+      scoreCandidate('spacing', {domain: 'component', name: 'Gap', keywords: ['space']}),
+    ).toMatchObject({score: 88});
+    expect(
+      scoreCandidate('dragging', {domain: 'component', name: 'Gap', keywords: ['drag']}),
+    ).toMatchObject({score: 88});
+  });
+
+  it('lets a plural start a longer word through its singular', () => {
+    expect(
+      scoreCandidate('chips', {domain: 'component', name: 'Chipset'}),
+    ).toMatchObject({score: 60});
+    // A four-letter singular is too short: "stats" does not start "statusbar".
+    expect(
+      scoreCandidate('stats', {domain: 'component', name: 'Statusbar'}),
+    ).toBeNull();
+  });
+
+  it('leaves an identifier joined with _ unmatched when nothing has it', async () => {
+    const {data} = await search('qqzz_no_match_here', {cwd});
+    expect(data.results).toEqual([]);
+  }, SLOW);
 });

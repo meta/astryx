@@ -8,8 +8,8 @@
  * names a subpath Core does not export, or names it with the wrong case, fails
  * in the user's app, so every specifier must match an entry in Core's
  * package.json `exports`. Wherever command output shows the `<Theme>` wrapper,
- * it also shows where `Theme` comes from, and so does every doc page that shows
- * it.
+ * it also shows that `Theme` comes from `@astryxdesign/core/theme`, the path
+ * `astryx component Theme` prints, and so does every doc page that shows it.
  *
  * @position packages/cli/test — taught imports
  */
@@ -25,7 +25,7 @@ const CORE_PACKAGE = path.resolve(CLI, '..', 'core', 'package.json');
 /** Command modules whose printed text shows app code. */
 const OUTPUT_MODULES = [
   'api/init/run/run.mjs',
-  'clients/cli/commands/build-theme.mjs',
+  'clients/cli/commands/theme.mjs',
   'api/theme/build/build.mjs',
   'api/doctor/theme-checks.mjs',
   'api/build/help/help.mjs',
@@ -64,8 +64,7 @@ function isExported(keys, subpath) {
   });
 }
 
-const THEME_IMPORT =
-  /\{\s*Theme\s*\}\s+from\s+'@astryxdesign\/core(?:\/theme)?'/;
+const THEME_IMPORT = /\{\s*Theme\s*\}\s+from\s+'@astryxdesign\/core\/theme'/;
 
 /**
  * Every code block (`{type: 'code', code}`) reachable from a doc module.
@@ -145,9 +144,7 @@ describe('taught @astryxdesign/core imports', () => {
           Math.max(previous, index - 400),
           lineEnd === -1 ? source.length : lineEnd,
         );
-        expect(nearby, `${file} at offset ${index}`).toMatch(
-          /\{\s*Theme\s*\}\s+from\s+'@astryxdesign\/core'/,
-        );
+        expect(nearby, `${file} at offset ${index}`).toMatch(THEME_IMPORT);
       });
     },
   );

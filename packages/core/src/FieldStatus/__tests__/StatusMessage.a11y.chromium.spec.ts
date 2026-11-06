@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file StatusMessage.a11y.chromium.spec.ts
@@ -13,7 +14,7 @@ import {
   type CDPSession,
   type Locator,
   type Page,
-} from '@playwright/test';
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   STATUS_MESSAGE_PATTERN,
   blockingResults,
@@ -87,6 +88,7 @@ async function bindSubject(
       name: facts.initialMessage,
     });
   } else {
+    await expect(candidates).toContainText([facts.initialMessage]);
     const texts = await candidates.evaluateAll(elements =>
       elements.map(element =>
         (element.textContent ?? '').replace(/\s+/g, ' ').trim(),
@@ -138,6 +140,22 @@ async function transition(page: Page, name: string): Promise<void> {
   );
 }
 
+async function expectSpinnerIndicator(
+  page: Page,
+  cdp: CDPSession,
+  name: string,
+): Promise<void> {
+  const harness = createChromiumHarness({
+    page,
+    cdp,
+    subject: page.getByRole('progressbar', {name}),
+  });
+  expect(await (await harness.subject()).computed()).toMatchObject({
+    role: 'progressbar',
+    name,
+  });
+}
+
 async function runState(
   page: Page,
   cdp: CDPSession,
@@ -151,6 +169,12 @@ async function runState(
     knownFailures: CORE_STATUS_MESSAGE_KNOWN_FAILURES,
     mount: async () => {
       await mountState(page, state);
+      if (
+        state.binding === 'Spinner announcement channel' &&
+        state.facts.kind === 'live-region'
+      ) {
+        await expectSpinnerIndicator(page, cdp, state.facts.initialMessage);
+      }
       return createChromiumHarness({
         page,
         cdp,
@@ -168,26 +192,24 @@ async function runState(
   });
 }
 
-test('every expectation is exercised by at least one Core binding state', async ({
-  page,
-}) => {
-  test.setTimeout(4 * 60 * 1000);
-  const cdp = await page.context().newCDPSession(page);
-  const results: BindingResult[] = [];
-  for (const state of CORE_STATUS_MESSAGE_BINDING_STATES) {
-    results.push(await runState(page, cdp, state));
-  }
-  expect(neverExercised(results)).toEqual([]);
-  expect(
-    unmatchedKnownFailures(CORE_STATUS_MESSAGE_KNOWN_FAILURES, results),
-  ).toEqual([]);
-});
+// Each state's result, recorded by its own test below so the whole-suite check
+// at the end reads it instead of measuring every state a second time. A state
+// whose test did not run in this worker (a filtered run, or a worker restarted
+// after a failure) is measured by the whole-suite check itself.
+const recorded = new Map<string, BindingResult>();
 
 for (const state of CORE_STATUS_MESSAGE_BINDING_STATES) {
   test(`${state.binding} [${state.id}] — ${state.summary}`, async ({page}) => {
     test.setTimeout(2 * 60 * 1000);
     const cdp = await page.context().newCDPSession(page);
     const result = await runState(page, cdp, state);
+    if (
+      state.binding === 'Spinner announcement channel' &&
+      state.facts.kind === 'live-region'
+    ) {
+      await expectSpinnerIndicator(page, cdp, state.facts.replacement);
+    }
+    recorded.set(state.id, result);
     const report = summarize(STATUS_MESSAGE_PATTERN, [result]);
     // eslint-disable-next-line no-console -- the report is this run's artifact
     console.log(formatReport(report));
@@ -196,3 +218,20 @@ for (const state of CORE_STATUS_MESSAGE_BINDING_STATES) {
     expect(report.counts.unexpectedPass).toBe(0);
   });
 }
+
+test('every Core-applicable expectation is exercised by a binding state', async ({
+  page,
+}) => {
+  test.setTimeout(4 * 60 * 1000);
+  const cdp = await page.context().newCDPSession(page);
+  const results: BindingResult[] = [];
+  for (const state of CORE_STATUS_MESSAGE_BINDING_STATES) {
+    results.push(recorded.get(state.id) ?? (await runState(page, cdp, state)));
+  }
+  expect(neverExercised(results)).toEqual([
+    'status-message.message.name-exposed',
+  ]);
+  expect(
+    unmatchedKnownFailures(CORE_STATUS_MESSAGE_KNOWN_FAILURES, results),
+  ).toEqual([]);
+});

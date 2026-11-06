@@ -148,7 +148,7 @@ describe('resolveThemeImports', () => {
     });
 
     expect(() => resolveThemeImports(theme, {cwd: dir})).toThrow(
-      /astryx theme build src\/themes\/ocean\/oceanTheme\.ts/i,
+      / theme build src\/themes\/ocean\/oceanTheme\.ts`/i,
     );
     fs.writeFileSync(
       path.join(sourceDir, 'ocean.js'),

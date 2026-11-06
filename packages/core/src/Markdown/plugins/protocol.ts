@@ -18,6 +18,10 @@ import type {
   MarkdownAstRoot,
 } from '../ast';
 
+// Bundlers replace this value at build time. The declaration lets a product
+// without Node's types type-check this file.
+declare const process: {readonly env: {readonly NODE_ENV?: string}};
+
 export type MarkdownPluginData = MarkdownAstDataValue;
 
 export type MarkdownExtensionNode<
@@ -708,10 +712,46 @@ export function freezeMarkdownPluginData<T extends MarkdownPluginData>(
   return value;
 }
 
+/**
+ * The identity of a source-backed node's position: its offsets, or, for a
+ * block nested in a list item or quote, which carries lines and no offsets
+ * while source lines are on (`module:Markdown/sourceLines`), its lines.
+ */
 function positionKey(position: MarkdownAstPosition | undefined): string | null {
   const start = position?.start.offset;
   const end = position?.end.offset;
-  return start == null || end == null ? null : `${start}:${end}`;
+  if (start != null && end != null) {
+    return `${start}:${end}`;
+  }
+  const startLine = position?.start.line;
+  const endLine = position?.end.line;
+  return startLine == null || endLine == null
+    ? null
+    : `line ${startLine}:${endLine}`;
+}
+
+/** A position's two points measure the same thing and never run backwards. */
+function isValidPosition(position: MarkdownAstPosition): boolean {
+  const measures = [
+    [position.start?.offset, position.end?.offset, 0],
+    [position.start?.line, position.end?.line, 1],
+  ] as const;
+  let measured = false;
+  for (const [start, end, minimum] of measures) {
+    if (start === undefined && end === undefined) {
+      continue;
+    }
+    if (
+      !Number.isInteger(start) ||
+      !Number.isInteger(end) ||
+      (start as number) < minimum ||
+      (end as number) < (start as number)
+    ) {
+      return false;
+    }
+    measured = true;
+  }
+  return measured;
 }
 
 interface CodeInternalProperties {
@@ -825,6 +865,8 @@ function restoreCodeInternalProperties(
 
 interface SourceInvariant {
   readonly type: string;
+  readonly startLine?: number;
+  readonly endLine?: number;
   readonly depth?: unknown;
   readonly ordered?: unknown;
   readonly start?: unknown;
@@ -844,6 +886,8 @@ function collectSourceInvariants(
       const record = node as unknown as Record<string, unknown>;
       const invariant = {
         type: node.type,
+        startLine: node.position?.start.line,
+        endLine: node.position?.end.line,
         depth: record.depth,
         ordered: record.ordered,
         start: record.start,
@@ -1048,23 +1092,16 @@ function validateAst(
 
     const position = node.position as MarkdownAstPosition | undefined;
     const key = positionKey(position);
-    if (position != null) {
-      const start = position.start?.offset;
-      const end = position.end?.offset;
-      if (
-        !Number.isInteger(start) ||
-        !Number.isInteger(end) ||
-        (start as number) < 0 ||
-        (end as number) < (start as number)
-      ) {
-        return false;
-      }
+    if (position != null && !isValidPosition(position)) {
+      return false;
     }
     if (key != null) {
       const invariants = sourcePositions.get(key) ?? [];
       const invariantIndex = invariants.findIndex(
         invariant =>
           invariant.type === type &&
+          invariant.startLine === position?.start?.line &&
+          invariant.endLine === position?.end?.line &&
           invariant.depth === node.depth &&
           invariant.ordered === node.ordered &&
           invariant.start === node.start &&

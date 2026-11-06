@@ -4,7 +4,7 @@
 
 /**
  * @file DialogHeader.tsx
- * @input Uses React, StyleX, LayoutHeader, Button, Icon, Heading, Text, DialogContext, mergeProps, themeProps
+ * @input Uses React, StyleX, LayoutHeader, Button, Icon, Heading, Text, DialogContext, isRenderable, mergeProps, themeProps
  * @output Exports DialogHeader component and DialogHeaderProps
  * @position Dialog header component; used with Dialog and Layout
  *
@@ -20,15 +20,22 @@ import {useEffect, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars, sizeVars, typeScaleVars} from '../theme/tokens.stylex';
 import {LayoutHeader} from '../Layout/LayoutHeader';
-import {Button} from '../Button';
-import {Icon} from '../Icon';
+import {Button} from '../Button/Button';
+import {Icon} from '../Icon/Icon';
 import {Heading} from '../Heading/Heading';
 import {Text} from '../Text/Text';
 import type {BaseProps} from '../BaseProps';
-import {mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {useDialogContext} from './DialogContext';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Dialog/DialogHeader.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   container: {
@@ -159,15 +166,14 @@ export function DialogHeader({
   ref,
   ...rest
 }: DialogHeaderProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const titleRef = useRef<HTMLHeadingElement>(null);
   const dialogContext = useDialogContext();
   const shouldAutoFocus = dialogContext?.isInline !== true;
   const titleId = dialogContext?.titleId;
-  // A node subtitle may be `0`: render it inside Text instead of letting a
-  // truthiness check leak a bare text node, and skip only empty values.
-  const hasSubtitle =
-    subtitle != null && typeof subtitle !== 'boolean' && subtitle !== '';
+  const hasSubtitle = isRenderable(subtitle);
+  const hasStartContent = isRenderable(startContent);
+  const hasEndContent = isRenderable(endContent);
   const shouldCompensateEndBlock =
     endContentEdgeCompensation == null
       ? onOpenChange != null
@@ -203,7 +209,7 @@ export function DialogHeader({
           themeProps('dialog-header'),
           stylex.props(styles.container),
         )}>
-        {startContent && (
+        {hasStartContent && (
           <div
             {...mergeProps(
               themeProps('dialog-header-start-content'),
@@ -231,7 +237,7 @@ export function DialogHeader({
             </Text>
           )}
         </div>
-        {(endContent || onOpenChange) && (
+        {(hasEndContent || onOpenChange != null) && (
           <div
             {...mergeProps(
               themeProps('dialog-header-end-content'),

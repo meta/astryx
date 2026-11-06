@@ -4,12 +4,11 @@
  * @file Every bundled theme draws every shared icon name.
  *
  * `spec:AST-032` FR6: the default registry, each bundled theme, and each CLI
- * theme template supply `upload` artwork in their own style. Until the next
- * scheduled minor makes `upload` a required `IconRegistry` key, the type
- * checker cannot see a theme that leaves it out, and that theme would quietly
- * render the default glyph inside its own icon family. The CLI templates are
- * byte-pinned copies of these sources (`check-cli-theme-bundle.test.mjs`), so
- * checking the packages covers both.
+ * theme template supply `upload` artwork in their own style. `IconRegistry`
+ * requires every shared `IconName`. This test verifies at runtime that every
+ * bundled theme package exports a complete registry with no missing entries.
+ * The CLI templates are byte-pinned copies of these sources
+ * (`check-cli-theme-bundle.test.mjs`), so checking the packages covers both.
  */
 
 import path from 'node:path';

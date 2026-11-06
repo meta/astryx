@@ -21,7 +21,7 @@ describe('init Next steps theme guidance', () => {
 
   it('adds an installed theme through the CLI', () => {
     expect(text).toContain('npm install @astryxdesign/theme-neutral');
-    expect(text).toContain('npx astryx theme add neutral --import');
+    expect(text).toContain('npx astryx theme add neutral');
   });
 
   it('wires the generated theme record once', () => {

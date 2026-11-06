@@ -32,7 +32,10 @@ import {
   themeRecordOwner,
   validateThemePrivateInputs,
 } from './_adapter.mjs';
-import {getCliInvocation} from '../../foundation/env/package-manager.mjs';
+import {
+  getCliInvocation,
+  formatCliCommand,
+} from '../../foundation/env/package-manager.mjs';
 import {satisfiesRange} from '../../foundation/env/semver.mjs';
 import {logger} from '../logger.mjs';
 
@@ -69,7 +72,7 @@ function unavailableChecks(message, moduleError = null) {
       moduleError && id === 'theme-module' ? moduleError.message : message,
     ...(moduleError && id === 'theme-module'
       ? {
-          fix: 'Keep one CLI-generated astryx-themes.ts or astryx-themes.js file, then run `astryx theme add <slug> --import`.',
+          fix: `Keep one CLI-generated astryx-themes.ts or astryx-themes.js file, then run \`${formatCliCommand('theme add <slug>')}\`.`,
         }
       : {}),
   }));
@@ -101,12 +104,12 @@ function refreshThemeCommand(projectDir, run, available, slug, owner) {
   );
   if (!isLocalThemeOwner(owner)) {
     const selector = theme?.package ?? owner;
-    return `npm install ${owner}@latest; ${run} theme add ${slug} --import --package ${selector}`;
+    return `npm install ${owner}@latest; ${run} theme add ${slug} --package ${selector}`;
   }
   const source = theme
     ? relative(projectDir, path.join(theme.sourceDir, theme.entry))
     : projectPath(path.join(owner, slug, `${slug}Theme.ts`));
-  return `${run} theme build ${source}; ${run} theme add ${slug} --import`;
+  return `${run} theme build ${source}; ${run} theme add ${slug}`;
 }
 
 /** @param {string} source */
@@ -478,7 +481,7 @@ export function checkThemes(cwd, appChecks) {
       label,
       status: 'warn',
       message: 'No @astryxdesign/theme-* packages are installed.',
-      fix: `Install a theme, e.g. \`npm install @astryxdesign/theme-neutral\`, then add it to the app with \`${run} theme add neutral --import\`.`,
+      fix: `Install a theme, e.g. \`npm install @astryxdesign/theme-neutral\`, then add it to the app with \`${run} theme add neutral\`.`,
     };
   }
   const names = packages.join(', ');
@@ -488,7 +491,7 @@ export function checkThemes(cwd, appChecks) {
       label,
       status: 'warn',
       message: `Theme package(s) installed (${names}) but no theme appears wired.`,
-      fix: `Add one to the app with \`${run} theme add <slug> --import\`.`,
+      fix: `Add one to the app with \`${run} theme add <slug>\`.`,
     };
   }
   return {
@@ -538,7 +541,7 @@ export async function checkAppThemes(cwd) {
         message: state.legacyTheme
           ? `The CLI manages no themes. The released package.json astryx.theme value ${JSON.stringify(state.legacyTheme)} remains active.`
           : 'The CLI manages no themes because this project has no generated theme module.',
-        fix: `Start managing app themes with \`${run} theme add <slug> --import\`.`,
+        fix: `Start managing app themes with \`${run} theme add <slug>\`.`,
       },
     ];
     const migration = unmigratedCopyCheck(state.projectDir);
@@ -656,7 +659,7 @@ export async function checkAppThemes(cwd) {
       label: 'Theme owners and built imports',
       status: 'fail',
       message: 'The generated record has no added themes.',
-      fix: `${run} theme add <slug> --import`,
+      fix: `${run} theme add <slug>`,
     });
   } else if (discoveryError) {
     checks.push({
@@ -664,7 +667,7 @@ export async function checkAppThemes(cwd) {
       label: 'Theme owners and built imports',
       status: 'fail',
       message: discoveryError.message,
-      fix: `${run} theme add <slug> --import`,
+      fix: `${run} theme add <slug>`,
     });
   } else if (resolutionProblems.length > 0) {
     checks.push({
@@ -736,7 +739,7 @@ export async function checkAppThemes(cwd) {
       label: 'App imports the theme module',
       status: 'warn',
       message: `Could not prove that project source imports ${state.module.path}${importEvidence.parseFailures ? `; ${importEvidence.parseFailures} source file(s) could not be parsed` : ''}.`,
-      fix: `Import {themes, defaultThemeSlug} from the generated module and {Theme} from '@astryxdesign/core', then render <Theme theme={themes[defaultThemeSlug]}>.`,
+      fix: `Import {themes, defaultThemeSlug} from the generated module and {Theme} from '@astryxdesign/core/theme', then render <Theme theme={themes[defaultThemeSlug]}>.`,
     });
   }
 
@@ -794,6 +797,16 @@ export async function checkAppThemes(cwd) {
       message:
         'Could not check local build freshness until every local output resolves.',
     });
+  } else if (localThemes.length > 0 && !findDoctorCoreDir(state.projectDir)) {
+    // A build reads Core, and doctor reads only the Core the project
+    // installed, never the one the answering copy carries (spec AST-081 FR3).
+    checks.push({
+      id: 'theme-local-builds',
+      label: 'Local theme build freshness',
+      status: 'info',
+      message:
+        "The project's Core isn't installed, so local theme builds were not checked. Install the project's dependencies, then run doctor again.",
+    });
   } else if (localThemes.length === 0) {
     checks.push({
       id: 'theme-local-builds',
@@ -817,7 +830,7 @@ export async function checkAppThemes(cwd) {
           const receipt = await themeBuild(
             path.join(availableTheme.sourceDir, availableTheme.entry),
             {check: true},
-            {cwd: state.projectDir},
+            {cwd: state.projectDir, projectCore: true},
           );
           if (
             receipt == null ||
@@ -1003,7 +1016,7 @@ export async function checkAppThemes(cwd) {
           fix:
             ownerEntries.length > 0
               ? `${run} theme use ${ownerEntries[0][0]}`
-              : `${run} theme add <slug> --import`,
+              : `${run} theme add <slug>`,
         },
   );
 
@@ -1083,7 +1096,7 @@ export async function checkAppThemes(cwd) {
     if (localWarnings.length > 0) {
       fontWarningFixes.push(
         `Add <slug>.fonts.css beside each built local theme output, then ${localWarnings
-          .map(problem => `${run} theme add ${problem.theme.slug} --import`)
+          .map(problem => `${run} theme add ${problem.theme.slug}`)
           .join('; ')}.`,
       );
     }

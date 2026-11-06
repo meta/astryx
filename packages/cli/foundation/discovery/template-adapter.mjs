@@ -15,7 +15,8 @@
  * needs it: `Project` assembles templates from it. While this sat in api/, that
  * made a cycle across the layer boundary — Project reached up for discovery and
  * this module imported Project back. Nothing here depends on api/; every import
- * is node:*, jiti, foundation/*, or authoring/*.
+ * is node:*, jiti, foundation/*, or authoring/*, plus a lazily required
+ * @babel/parser for extractComponents' local-declaration scan.
  *
  * @position packages/cli/foundation/discovery — shared template discovery/IO;
  *   consumed by Project and by the api/template leaves.
@@ -29,6 +30,13 @@ import {importDocModule} from '../doc-compiler/import.mjs';
 import {CLI_ROOT, discoverExternalPackages} from '../fs/paths.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {Project} from '../config/project.mjs';
+import {
+  isReference,
+  parseTemplateSource,
+  programPath,
+  traverseTemplateSource,
+  writtenNames,
+} from './template-source-tree.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -111,6 +119,8 @@ export function effectiveTemplateDiscovery(templates) {
  * @property {string[]} [alsoExampleFor]
  * @property {string[]} [alsoShowcaseFor]
  * @property {string[]} [componentsUsed]
+ * @property {Record<string, string>} [icons] the icon definition each
+ *   imported icon draws, by its imported name
  * @property {boolean} [isShowcase]
  * @property {string} filePath
  * @property {string} docPath
@@ -230,6 +240,14 @@ const PLACEHOLDER_IMAGE =
  */
 const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'mov', 'ogv', 'm4v']);
 
+/**
+ * A video placeholder that names itself in the source, for a copy that has no
+ * response to disclose the replacement in, such as the shadcn install. It is a
+ * text data URL: it makes no request, it does not play, and it is not image
+ * data, so a video element never receives image bytes.
+ */
+export const MARKED_VIDEO_PLACEHOLDER = 'data:,placeholder-video-add-your-own';
+
 const IMAGE_EXTENSIONS = new Set([
   'svg',
   'png',
@@ -331,9 +349,11 @@ export function stripTemplateAssetRefs(source) {
  * third-party URL left as written. That count is what a receipt discloses.
  *
  * @param {string} source - Template source code.
+ * @param {{videoPlaceholder?: string}} [options] - `videoPlaceholder` replaces
+ *   each video reference; the default is an empty source.
  * @returns {{source: string, demoMediaReplaced: number}}
  */
-export function replaceDemoMedia(source) {
+export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
   const needle = `/${FIXTURE_SEGMENT}`;
   let output = '';
   let copied = 0;
@@ -349,7 +369,7 @@ export function replaceDemoMedia(source) {
     /** @type {{text: string, end: number} | null} */
     let edit;
     try {
-      edit = fixtureEdit(source, start, at, end);
+      edit = fixtureEdit(source, start, at, end, videoPlaceholder);
     } catch (err) {
       comments ??= commentRanges(source);
       if (!comments.some(([from, to]) => from <= at && at < to)) throw err;
@@ -363,6 +383,499 @@ export function replaceDemoMedia(source) {
     at = source.indexOf(needle, end);
   }
   return {source: output + source.slice(copied), demoMediaReplaced};
+}
+
+/**
+ * The one module docs-only demo content is imported from. A template imports
+ * an element such as a playing card's face from here so its live preview shows
+ * real-looking content; the module exists only where Astryx's own previews
+ * build templates, so a copy replaces every element imported from it (see
+ * {@link replaceDemoContent}).
+ */
+export const DEMO_CONTENT_MODULE = '@astryx-docs/demo-content';
+
+/** What a demo-content element becomes in emitted source. */
+const DEMO_CONTENT_PLACEHOLDER_TEXT = 'Card content';
+
+/** Where emitted placeholders import Text from, as catalog templates do. */
+const TEXT_MODULE = '@astryxdesign/core/Text';
+
+/** The modules an existing Astryx Text import can come from. */
+const TEXT_MODULES = new Set([TEXT_MODULE, '@astryxdesign/core']);
+
+/** The local name a new Text import takes when the file already writes `Text`. */
+const TEXT_ALIAS = 'AstryxText';
+
+/**
+ * Replace each JSX element imported from {@link DEMO_CONTENT_MODULE} with a
+ * generic `<Text>` placeholder and remove that import, so emitted source never
+ * depends on content only Astryx's previews provide. An element that wraps one
+ * element, such as a hint shown under a demo, is removed instead: its child
+ * takes its place, with the indentation the child would have had without it.
+ * `demoContentReplaced` counts the placeholders, because only they need the
+ * consumer's own content.
+ *
+ * Every check resolves a name to its binding through the module's scope, so a
+ * local declaration or parameter with the same name never counts as the same
+ * variable. The placeholder uses an existing Text import from Astryx when that
+ * import is the binding its name resolves to at every replaced element. Else
+ * the placeholder imports Text, under a unique alias when the file already
+ * writes the name `Text`.
+ *
+ * Only a plain static use is replaced: a named import used only as a JSX tag
+ * whose children are whitespace or one element, and whose props are literal values or
+ * read only bindings that code outside the replaced elements still reads. So
+ * `faceDown={!isOpen}` is safe when the same `isOpen` is also read elsewhere.
+ * Anything else (a namespace or type import, a re-export, a dynamic import, the
+ * element used as a value or a type, a spread or computed prop, a prop whose
+ * binding nothing else reads, other children) throws, naming the element, rather than
+ * leaving a reference behind, leaving a binding unused, or dropping code the
+ * rest of the file relies on. Source that never names the module is returned
+ * as is.
+ *
+ * @param {string} source - Template source code.
+ * @returns {{source: string, demoContentReplaced: number}}
+ */
+export function replaceDemoContent(source) {
+  if (!source.includes(DEMO_CONTENT_MODULE)) {
+    return {source, demoContentReplaced: 0};
+  }
+  /** @type {any} */
+  let file;
+  try {
+    file = parseTemplateSource(source);
+  } catch (err) {
+    throw unsafeDemoContent(
+      `the source does not parse (${/** @type {Error} */ (err).message})`,
+    );
+  }
+
+  /** @type {any[]} */
+  const demoImports = [];
+  for (const statement of file.program.body) {
+    if (
+      statement.type !== 'ImportDeclaration' ||
+      statement.source.value !== DEMO_CONTENT_MODULE
+    ) {
+      continue;
+    }
+    if (statement.importKind === 'type') {
+      throw unsafeDemoContent('it is imported as a type');
+    }
+    for (const specifier of statement.specifiers) {
+      if (
+        specifier.type !== 'ImportSpecifier' ||
+        specifier.importKind === 'type'
+      ) {
+        throw unsafeDemoContent(
+          'only named value imports can be replaced; import each element by name',
+        );
+      }
+    }
+    demoImports.push(statement);
+  }
+
+  const program = programPath(file);
+  const demoBindings = new Set(
+    demoImports.flatMap(statement =>
+      statement.specifiers.map((/** @type {any} */ specifier) =>
+        program.scope.getBinding(specifier.local.name),
+      ),
+    ),
+  );
+  /** The paths of the JSX elements to replace. */
+  /** @type {any[]} */
+  const elements = [];
+  traverseTemplateSource(file, {
+    StringLiteral(/** @type {any} */ path) {
+      if (
+        path.node.value === DEMO_CONTENT_MODULE &&
+        !(path.parentPath.isImportDeclaration() && path.key === 'source')
+      ) {
+        throw unsafeDemoContent(
+          'it is used outside a static import (a re-export, dynamic import, require, or string value)',
+        );
+      }
+    },
+    TemplateLiteral(/** @type {any} */ path) {
+      if (
+        path.node.quasis.some((/** @type {any} */ quasi) =>
+          quasi.value.cooked?.includes(DEMO_CONTENT_MODULE),
+        )
+      ) {
+        throw unsafeDemoContent('it is used outside a static import');
+      }
+    },
+    'Identifier|JSXIdentifier'(/** @type {any} */ path) {
+      const {node, parentPath} = path;
+      if (!demoBindings.has(path.scope.getBinding(node.name))) return;
+      if (!isReference(node, path.parent, path.listKey ?? path.key)) return;
+      if (path.key === 'name' && parentPath.isJSXOpeningElement()) {
+        elements.push(parentPath.parentPath);
+        return;
+      }
+      if (path.key === 'name' && parentPath.isJSXClosingElement()) return;
+      if (parentPath.isJSXMemberExpression()) {
+        throw unsafeDemoContent(`${node.name} is used as a namespace`);
+      }
+      throw unsafeDemoContent(
+        `${node.name} is used as a value, not only as a JSX element`,
+      );
+    },
+  });
+
+  const wrappers = elements.filter(
+    element => wrappedElement(element.node) !== null,
+  );
+  if (wrappers.length > 0) {
+    return replaceDemoContent(unwrapDemoWrappers(source, wrappers));
+  }
+
+  /** @param {any} node */
+  const isReplaced = node =>
+    elements.some(
+      element =>
+        element.node.start <= node.start && node.end <= element.node.end,
+    );
+  for (const element of elements) {
+    for (const variable of assertStaticDemoElement(element.node)) {
+      const binding = element.scope.getBinding(variable);
+      // An unbound name is a global: removing its read leaves nothing unused.
+      if (!binding || isExportedDeclaration(binding)) continue;
+      if (
+        binding.referencePaths.every((/** @type {any} */ ref) =>
+          isReplaced(ref.node),
+        )
+      ) {
+        throw unsafeDemoContent(
+          `<${element.node.openingElement.name.name}> reads ${variable}, and nothing else in the file reads it, so the copy would leave it unused`,
+        );
+      }
+    }
+  }
+
+  const reused =
+    elements.length === 0 ? null : astryxTextAtEvery(file, program, elements);
+  const written = writtenNames(file);
+  const textName =
+    reused ?? (written.has('Text') ? uniqueName(TEXT_ALIAS, written) : 'Text');
+  const textImport =
+    elements.length > 0 && reused === null
+      ? `import {${textName === 'Text' ? 'Text' : `Text as ${textName}`}} from '${TEXT_MODULE}';\n`
+      : '';
+  const placeholder = `<${textName}>${DEMO_CONTENT_PLACEHOLDER_TEXT}</${textName}>`;
+
+  /** @type {Array<{start: number, end: number, text: string}>} */
+  const edits = elements.map(element => ({
+    start: element.node.start,
+    end: element.node.end,
+    text: placeholder,
+  }));
+  demoImports.forEach((statement, index) => {
+    let end = statement.end;
+    if (source[end] === '\n') end += 1;
+    edits.push({
+      start: statement.start,
+      end,
+      text: index === 0 ? textImport : '',
+    });
+  });
+  edits.sort((a, b) => b.start - a.start);
+  let output = source;
+  for (const edit of edits) {
+    output = output.slice(0, edit.start) + edit.text + output.slice(edit.end);
+  }
+  return {source: output, demoContentReplaced: elements.length};
+}
+
+/**
+ * The local name of an Astryx Text import that is the binding its name
+ * resolves to at every element, or null when no such import exists.
+ * @param {any} file
+ * @param {any} program - The program path, from {@link programPath}.
+ * @param {any[]} elements - Element paths.
+ * @returns {string | null}
+ */
+function astryxTextAtEvery(file, program, elements) {
+  for (const statement of file.program.body) {
+    if (
+      statement.type !== 'ImportDeclaration' ||
+      statement.importKind === 'type' ||
+      !TEXT_MODULES.has(statement.source.value)
+    ) {
+      continue;
+    }
+    for (const specifier of statement.specifiers) {
+      if (
+        specifier.type !== 'ImportSpecifier' ||
+        specifier.importKind === 'type' ||
+        (specifier.imported.name ?? specifier.imported.value) !== 'Text'
+      ) {
+        continue;
+      }
+      const name = specifier.local.name;
+      const imported = program.scope.getBinding(name);
+      if (
+        elements.every(element => element.scope.getBinding(name) === imported)
+      ) {
+        return name;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether a binding is declared in an export, so code outside the file can
+ * still read it.
+ * @param {any} binding
+ */
+function isExportedDeclaration(binding) {
+  const declaration = binding.path.isVariableDeclarator()
+    ? binding.path.parentPath
+    : binding.path;
+  return Boolean(declaration.parentPath?.isExportDeclaration());
+}
+
+/**
+ * `base`, or `base` with the first number from 2 that makes it a name the
+ * file does not write.
+ * @param {string} base
+ * @param {Set<string>} written
+ */
+function uniqueName(base, written) {
+  let name = base;
+  for (let n = 2; written.has(name); n++) name = `${base}${n}`;
+  return name;
+}
+
+/**
+ * Replace each outermost demo-content wrapper with the element it wraps.
+ * Wrappers inside a kept child go on the next pass, when they are outermost.
+ * Throws when a wrapper's prop reads a binding that nothing outside the
+ * wrappers' opening tags reads, so the removal would leave it unused.
+ * @param {string} source
+ * @param {any[]} wrappers - Element paths whose element wraps one element.
+ * @returns {string}
+ */
+function unwrapDemoWrappers(source, wrappers) {
+  /** @param {any} node */
+  const isInWrapperTag = node =>
+    wrappers.some(
+      wrapper =>
+        wrapper.node.openingElement.start <= node.start &&
+        node.end <= wrapper.node.openingElement.end,
+    );
+  for (const wrapper of wrappers) {
+    for (const variable of staticPropReads(wrapper.node)) {
+      const binding = wrapper.scope.getBinding(variable);
+      if (!binding || isExportedDeclaration(binding)) continue;
+      if (
+        binding.referencePaths.every((/** @type {any} */ ref) =>
+          isInWrapperTag(ref.node),
+        )
+      ) {
+        throw unsafeDemoContent(
+          `<${wrapper.node.openingElement.name.name}> reads ${variable}, and nothing else in the file reads it, so the copy would leave it unused`,
+        );
+      }
+    }
+  }
+  const outermost = wrappers.filter(
+    wrapper =>
+      !wrappers.some(
+        other =>
+          other !== wrapper &&
+          other.node.start <= wrapper.node.start &&
+          wrapper.node.end <= other.node.end,
+      ),
+  );
+  let output = source;
+  for (const wrapper of outermost.sort((a, b) => b.node.start - a.node.start)) {
+    output =
+      output.slice(0, wrapper.node.start) +
+      dedentedChild(source, wrapper) +
+      output.slice(wrapper.node.end);
+  }
+  return output;
+}
+
+/**
+ * The source of the element a wrapper holds, with each of its later lines
+ * moved left by the indent the wrapper added. A line that starts inside a
+ * string keeps its whitespace, because that whitespace is part of the value.
+ * @param {string} source
+ * @param {any} wrapper - An element path whose element wraps one element.
+ * @returns {string}
+ */
+function dedentedChild(source, wrapper) {
+  const child = /** @type {any} */ (wrappedElement(wrapper.node));
+  /** @param {number} offset */
+  const indentOfLine = offset => {
+    const lineStart = source.lastIndexOf('\n', offset - 1) + 1;
+    return /^[ \t]*/u.exec(source.slice(lineStart))?.[0].length ?? 0;
+  };
+  const depth = indentOfLine(child.start) - indentOfLine(wrapper.node.start);
+  /** @type {any[]} */
+  const strings = [];
+  wrapper.traverse({
+    'StringLiteral|TemplateLiteral'(/** @type {any} */ path) {
+      strings.push(path.node);
+    },
+  });
+  const leadingIndent = new RegExp(`^[ \\t]{0,${Math.max(depth, 0)}}`, 'u');
+  let lineStart = child.start;
+  return source
+    .slice(child.start, child.end)
+    .split('\n')
+    .map((line, index) => {
+      const start = lineStart;
+      lineStart += line.length + 1;
+      if (
+        index === 0 ||
+        strings.some(string => string.start < start && start < string.end)
+      ) {
+        return line;
+      }
+      return line.replace(leadingIndent, '');
+    })
+    .join('\n');
+}
+
+/**
+ * The one element a demo-content element wraps, or null when its children are
+ * only whitespace. Throws for any other children.
+ * @param {any} element
+ * @returns {any}
+ */
+function wrappedElement(element) {
+  const content = element.children.filter(
+    (/** @type {any} */ child) =>
+      !(child.type === 'JSXText' && child.value.trim() === ''),
+  );
+  if (content.length === 0) return null;
+  if (
+    content.length === 1 &&
+    (content[0].type === 'JSXElement' || content[0].type === 'JSXFragment')
+  ) {
+    return content[0];
+  }
+  throw unsafeDemoContent(
+    `<${element.openingElement.name.name}> has children other than one element`,
+  );
+}
+
+/**
+ * Throw unless a demo-content element can be replaced without dropping code:
+ * each prop a literal or a read of variables (see {@link staticPropReads}),
+ * and no children but whitespace.
+ * @param {any} element
+ * @returns {string[]} The variables its props read.
+ */
+function assertStaticDemoElement(element) {
+  const variables = staticPropReads(element);
+  for (const child of element.children) {
+    if (child.type === 'JSXText' && child.value.trim() === '') continue;
+    throw unsafeDemoContent(
+      `<${element.openingElement.name.name}> has children`,
+    );
+  }
+  return variables;
+}
+
+/**
+ * Throw unless each prop of a demo-content element is a literal or a read of
+ * variables (see {@link isVariableRead}).
+ * @param {any} element
+ * @returns {string[]} The variables its props read.
+ */
+function staticPropReads(element) {
+  const name = element.openingElement.name.name;
+  /** @type {string[]} */
+  const variables = [];
+  for (const attribute of element.openingElement.attributes) {
+    if (attribute.type === 'JSXSpreadAttribute') {
+      throw unsafeDemoContent(`<${name}> spreads props`);
+    }
+    const value = attribute.value;
+    if (value === null || value.type === 'StringLiteral') continue;
+    if (
+      value.type === 'JSXExpressionContainer' &&
+      (isLiteralExpression(value.expression) ||
+        isVariableRead(value.expression, variables))
+    ) {
+      continue;
+    }
+    throw unsafeDemoContent(
+      `<${name}> prop ${attribute.name.name ?? ''} is not a literal value or a variable read`,
+    );
+  }
+  return variables;
+}
+
+/**
+ * Whether an expression only reads variables: a variable, a non-computed
+ * property of one, or its negation. Removing such a read runs no code. Adds
+ * each variable it reads to `variables`.
+ * @param {any} node
+ * @param {string[]} variables
+ * @returns {boolean}
+ */
+function isVariableRead(node, variables) {
+  switch (node.type) {
+    case 'Identifier':
+      variables.push(node.name);
+      return true;
+    case 'MemberExpression':
+      return !node.computed && isVariableRead(node.object, variables);
+    case 'UnaryExpression':
+      return node.operator === '!' && isVariableRead(node.argument, variables);
+    default:
+      return false;
+  }
+}
+
+/** @param {any} node */
+function isLiteralExpression(node) {
+  switch (node.type) {
+    case 'StringLiteral':
+    case 'NumericLiteral':
+    case 'BooleanLiteral':
+    case 'NullLiteral':
+      return true;
+    case 'TemplateLiteral':
+      return node.expressions.length === 0;
+    case 'UnaryExpression':
+      return node.operator === '-' && node.argument.type === 'NumericLiteral';
+    default:
+      return false;
+  }
+}
+
+/** @param {string} reason */
+function unsafeDemoContent(reason) {
+  return new Error(
+    `Demo content from ${DEMO_CONTENT_MODULE} cannot be replaced safely: ${reason}. Use each element as a JSX tag with no children or with one element child, and give each prop a literal or a variable the file also reads elsewhere.`,
+  );
+}
+
+/**
+ * Replace everything in a template that only Astryx's previews provide, in
+ * the order a copy applies it: demo-content elements
+ * ({@link replaceDemoContent}), then demo media ({@link replaceDemoMedia}).
+ * Both counts are what a receipt discloses.
+ *
+ * @param {string} source - Template source code.
+ * @param {{videoPlaceholder?: string}} [options] - As {@link replaceDemoMedia}.
+ * @returns {{source: string, demoContentReplaced: number, demoMediaReplaced: number}}
+ */
+export function replaceTemplateDemos(source, options) {
+  const {source: withContent, demoContentReplaced} = replaceDemoContent(source);
+  const {source: output, demoMediaReplaced} = replaceDemoMedia(
+    withContent,
+    options,
+  );
+  return {source: output, demoContentReplaced, demoMediaReplaced};
 }
 
 /** @param {string | undefined} char */
@@ -399,9 +912,10 @@ function fixtureSegments(reference) {
  * @param {number} start
  * @param {number} at
  * @param {number} end
+ * @param {string} videoPlaceholder
  * @returns {{text: string, end: number} | null}
  */
-function fixtureEdit(source, start, at, end) {
+function fixtureEdit(source, start, at, end, videoPlaceholder) {
   const token = source.slice(start, end);
   if (ABSOLUTE_URL.test(token)) return null;
   if (!token.startsWith('/')) {
@@ -469,7 +983,9 @@ function fixtureEdit(source, start, at, end) {
     .extname(segments[segments.length - 1])
     .slice(1)
     .toLowerCase();
-  if (VIDEO_EXTENSIONS.has(ext)) return {text: '', end: referenceEnd};
+  if (VIDEO_EXTENSIONS.has(ext)) {
+    return {text: videoPlaceholder, end: referenceEnd};
+  }
   if (IMAGE_EXTENSIONS.has(ext)) {
     return {text: PLACEHOLDER_IMAGE, end: referenceEnd};
   }
@@ -512,6 +1028,19 @@ function expressionUse(source, open, close) {
   return null;
 }
 
+/** @type {typeof import('@babel/parser') | undefined} */
+let babelParser;
+
+/**
+ * The template source parser, loaded on first use so listing templates
+ * never pays for it.
+ * @returns {typeof import('@babel/parser')}
+ */
+function templateSourceParser() {
+  babelParser ??= require('@babel/parser');
+  return /** @type {typeof import('@babel/parser')} */ (babelParser);
+}
+
 /**
  * The [start, end) range of every comment in `source`, or none when it does
  * not parse as TSX.
@@ -520,8 +1049,7 @@ function expressionUse(source, open, close) {
  */
 function commentRanges(source) {
   try {
-    const {parse} = require('@babel/parser');
-    const {comments} = parse(source, {
+    const {comments} = templateSourceParser().parse(source, {
       sourceType: 'module',
       plugins: ['jsx', 'typescript'],
     });
@@ -652,6 +1180,7 @@ async function discoverPages() {
       keywords: doc?.keywords ?? [],
       isReady: doc?.isReady ?? true,
       scaffold: doc?.scaffold ?? false,
+      ...(doc?.icons ? {icons: doc.icons} : {}),
       filePath: path.join(dirPath, 'page.tsx'),
       docPath,
     });
@@ -682,7 +1211,11 @@ async function discoverBlocks() {
       isReady: doc?.isReady ?? true,
       aspectRatio: doc?.aspectRatio ?? 1,
       componentsUsed: doc?.componentsUsed ?? [],
+      ...(doc?.icons ? {icons: doc.icons} : {}),
       isShowcase: doc?.isShowcase ?? false,
+      ...(typeof doc?.exampleFor === 'string'
+        ? {exampleFor: doc.exampleFor}
+        : {}),
       filePath: tsxPath,
       docPath,
       category: relPath,
@@ -724,7 +1257,11 @@ async function discoverExternalBlocks(cwd = process.cwd()) {
         isReady: doc?.isReady ?? true,
         aspectRatio: doc?.aspectRatio ?? 1,
         componentsUsed: doc?.componentsUsed ?? [],
+        ...(doc?.icons ? {icons: doc.icons} : {}),
         isShowcase: doc?.isShowcase ?? false,
+        ...(typeof doc?.exampleFor === 'string'
+          ? {exampleFor: doc.exampleFor}
+          : {}),
         filePath: tsxPath,
         docPath,
         category: relPath,
@@ -1180,6 +1717,23 @@ function reportSamePackageReplacements(pkg, autolinked, templates, errors) {
 }
 
 /**
+ * The fix for a template doc with no same-stem `.tsx`: rename a same-stem
+ * source written in another extension, or add the `.tsx`.
+ * @param {string} docPath
+ * @param {string} sourcePath the `.tsx` it needs
+ */
+function missingTemplateSourceFix(docPath, sourcePath) {
+  const source = path.basename(sourcePath);
+  const stem = source.slice(0, -'.tsx'.length);
+  const other = ['.jsx', '.js', '.ts', '.mjs']
+    .map(extension => `${stem}${extension}`)
+    .find(file => fs.existsSync(path.join(path.dirname(sourcePath), file)));
+  return other
+    ? `Found ${other}, but a template source must be a .tsx file. Fix: rename ${other} to ${source}.`
+    : `Fix: add ${source} beside ${path.basename(docPath)}, with the template as its default export.`;
+}
+
+/**
  * Discover the templates contributed by a SINGLE integration. Same per-template
  * rules as {@link discoverIntegrationTemplates} (same-stem source required,
  * page|block type required); broken templates are recorded in `errors` rather
@@ -1212,7 +1766,7 @@ export async function discoverIntegrationTemplatesForOne(integration) {
       errors.push({
         package: pkgLabel,
         template: id,
-        message: `Template "${id}" is missing its same-stem source file ${path.basename(sourcePath)}.`,
+        message: `Template "${id}" is missing its same-stem source file ${path.basename(sourcePath)}. ${missingTemplateSourceFix(docPath, sourcePath)}`,
       });
       // A replacement this unusable template declares still counts, so its
       // target fails closed instead of going to a sibling.
@@ -1267,7 +1821,8 @@ export async function discoverIntegrationTemplatesForOne(integration) {
         template: id,
         message: `Template "${id}" is missing a "type" of "page" or "block". Stamp the default export with type: 'page' or type: 'block'.`,
       });
-      const declared = doc?.replaces ?? (await declaredReplacement(docPath, id));
+      const declared =
+        doc?.replaces ?? (await declaredReplacement(docPath, id));
       if (declared != null) {
         errors.push({
           code: 'invalid_template_replacement',
@@ -1304,6 +1859,7 @@ export async function discoverIntegrationTemplatesForOne(integration) {
       // so read it off the envelope shape here.
       componentsUsed:
         /** @type {{componentsUsed?: string[]}} */ (doc).componentsUsed ?? [],
+      ...(doc?.icons ? {icons: doc.icons} : {}),
       filePath: sourcePath,
       docPath,
       package: pkgLabel,
@@ -1396,6 +1952,11 @@ export async function findShowcase(componentName, cwd, options) {
     docPath: b.docPath,
   });
 
+  // Priority 0: the showcase that names the component (`exampleFor`), the
+  // way packages declare it; a category no longer has to carry the name.
+  const named = showcases.find(b => (b.exampleFor ?? '').toLowerCase() === lc);
+  if (named) return toResult(named);
+
   // Priority 1: own directory (components/Badge/ for "Badge")
   const dirMatch = showcases.find(b => {
     const catDir = path.basename(b.category ?? '').toLowerCase();
@@ -1412,6 +1973,44 @@ export async function findShowcase(componentName, cwd, options) {
   return null;
 }
 
+/** The npm scope of every Astryx package. */
+const ASTRYX_PACKAGE_SCOPE = '@astryxdesign/';
+
+/** A JSX opening tag; componentsInSource says why the pattern looks so. */
+const JSX_TAG = /(?<![\w$.])<(XDS)?([A-Z]\w+)/g;
+
+/** Comments and line breaks that may sit between two words of an import. */
+// A block comment ends at its first `*/`, and a line comment at its line's
+// end. So each comment has one reading, and a failed match cannot backtrack
+// through every split of a comment run.
+const SPACE_OR_COMMENT = String.raw`\s|\/\*(?:[^*]|\*(?!\/))*\*\/|\/\/[^\n\r\u2028\u2029]*(?![^\n\r\u2028\u2029])`;
+const BETWEEN = `(?:${SPACE_OR_COMMENT})*`;
+const GAP = new RegExp(`(?:${SPACE_OR_COMMENT})+`, 'g');
+// The pair scan can start again at each word of a run of spaces and
+// comments, so a run costs up to its length squared. The longest run in the
+// bundled templates is about 10 KB.
+const MAX_GAP = 16 * 1024;
+
+/**
+ * One `imported as local` pair. The imported name is an identifier (group 1)
+ * or a string (group 3); the local name is group 4.
+ */
+const ALIAS = new RegExp(
+  String.raw`(?:(?<![\p{ID_Continue}$])([\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*)|(['"])((?:\\[\s\S]|(?!\2)[^\\\n])*)\2)` +
+    BETWEEN +
+    String.raw`\bas\b` +
+    BETWEEN +
+    String.raw`([\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*)`,
+  'gu',
+);
+// What follows each `as`: the pair scan reads the same text after its `as`.
+const AS_LOCAL = new RegExp(
+  String.raw`\bas\b` +
+    BETWEEN +
+    String.raw`([\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*)`,
+  'gu',
+);
+
 const UBIQUITOUS = new Set([
   'Text',
   'Heading',
@@ -1424,11 +2023,84 @@ const UBIQUITOUS = new Set([
 ]);
 
 /**
+ * The top-level bindings of a source. `declared` holds names bound by
+ * `function`, `class`, `const`, `let` or `var` declarations (exported or not).
+ * `astryxImports` maps each local name of a named Astryx import to the name the
+ * package exports, so `Text as AstryxText` maps `AstryxText` to `Text`. Both
+ * are empty when the source does not parse, so a parse failure never drops a
+ * real component.
+ *
+ * @param {string} src
+ * @returns {{declared: Set<string>, astryxImports: Map<string, string>}}
+ */
+function topLevelBindings(src) {
+  /** @type {Set<string>} */
+  const names = new Set();
+  /** @type {Map<string, string>} */
+  const astryxImports = new Map();
+  let program;
+  try {
+    program = templateSourceParser().parse(src, {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript'],
+      errorRecovery: true,
+    }).program;
+  } catch {
+    return {declared: names, astryxImports};
+  }
+  for (const statement of program.body) {
+    if (statement.type === 'ImportDeclaration') {
+      if (!statement.source.value.startsWith(ASTRYX_PACKAGE_SCOPE)) continue;
+      for (const specifier of statement.specifiers) {
+        if (specifier.type !== 'ImportSpecifier') continue;
+        const {imported} = specifier;
+        astryxImports.set(
+          specifier.local.name,
+          imported.type === 'Identifier' ? imported.name : imported.value,
+        );
+      }
+      continue;
+    }
+    const node =
+      statement.type === 'ExportNamedDeclaration' ||
+      statement.type === 'ExportDefaultDeclaration'
+        ? statement.declaration
+        : statement;
+    if (node == null) continue;
+    if (
+      (node.type === 'FunctionDeclaration' ||
+        node.type === 'ClassDeclaration') &&
+      node.id
+    ) {
+      names.add(node.id.name);
+    } else if (node.type === 'VariableDeclaration') {
+      for (const declarator of node.declarations) {
+        if (declarator.id.type === 'Identifier') {
+          names.add(declarator.id.name);
+        }
+      }
+    }
+  }
+  return {declared: names, astryxImports};
+}
+
+/**
+ * The components a template file composes, as written in the catalog.
  * @param {string} pagePath
  * @returns {string[]}
  */
 export function extractComponents(pagePath) {
-  const src = fs.readFileSync(pagePath, 'utf-8');
+  return componentsInSource(fs.readFileSync(pagePath, 'utf-8'));
+}
+
+/**
+ * The components a template source composes. A surface that returns rewritten
+ * source lists the components of that source, so a component the rewrite
+ * removed is not listed.
+ * @param {string} src
+ * @returns {string[]}
+ */
+export function componentsInSource(src) {
   // Match JSX opening tags, e.g. `<Section` or the legacy `<XDSSection`.
   // Templates author bare component names post un-prefix migration
   // (P2380608025), so the `XDS` prefix is optional. Anchoring on the `<`
@@ -1442,25 +2114,91 @@ export function extractComponents(pagePath) {
   // and `Record<string, Phase>` no longer do. Those were being indexed as
   // rendered components, putting type names like `Record`, `SVGProps` and
   // `ReadonlySet` into template keyword and "components used" output.
-  const tagRegex = /(?<![\w$.])<(XDS)?([A-Z]\w+)/g;
+  const tagRegex = new RegExp(JSX_TAG);
   /** @type {string[]} */
   const matches = [];
   let m;
   while ((m = tagRegex.exec(src)) !== null) {
     matches.push(m[2]);
   }
+
+  // Exclude names bound by a top-level declaration in the same file: those are
+  // page-local helpers (e.g. `function TimelineSection()`), not components a
+  // builder can import. Read real bindings from the syntax tree so comments,
+  // strings and type annotations cannot add or hide a name.
+  const {declared: localDeclNames, astryxImports} = topLevelBindings(src);
+
+  return catalogNames(
+    matches
+      .filter(n => !localDeclNames.has(n))
+      .map(n => astryxImports.get(n) ?? n),
+  );
+}
+
+/**
+ * Rendered component names as the catalog lists them: without theme wrappers
+ * and ubiquitous parts, each part suffix stripped, each name once, sorted.
+ * @param {string[]} names
+ * @returns {string[]}
+ */
+function catalogNames(names) {
   return [
     ...new Set(
-      matches
+      names
         .filter(n => !['Theme', 'ThemeProvider'].includes(n))
         .filter(n => !UBIQUITOUS.has(n))
         .map(n =>
           n.replace(
-            /(Item|Section|Header|Content|Footer|Panel|Heading|CollapseButton|Column|Sortable|Selection|Group|Source)$/,
+            // Strip only when a stem remains, so a bare `<Section>` keeps its
+            // own name instead of emptying out.
+            /(?<=.)(Item|Section|Header|Content|Footer|Panel|Heading|CollapseButton|Column|Sortable|Selection|Group|Source)$/,
             '',
           ),
         )
         .filter(Boolean),
     ),
   ].sort();
+}
+
+/**
+ * Every name componentsInSource can return for `src`, read without parsing
+ * it, or null when it cannot be bounded so. It keeps the tag names a parse
+ * would drop as page-local. It adds each name an `imported as local` pair
+ * makes a tag stand for, wherever that text appears. An escaped name in an
+ * identifier or a string defeats the reading, so then it is null.
+ * @param {string} src
+ * @returns {string[] | null}
+ */
+export function componentNameBound(src) {
+  if (src.includes('\\u')) return null;
+  for (const gap of src.matchAll(GAP)) {
+    if (gap[0].length > MAX_GAP) return null;
+  }
+  const tags = Array.from(src.matchAll(JSX_TAG), m => m[2]);
+  const local = new Set(tags);
+  // A pair adds a name only when its local name is a tag. Most sources have
+  // no `as` before a tag's name, so they skip the slower pair scan. Each
+  // match restarts one character on: a `/*` in a comment can hide a pair.
+  const asLocal = new RegExp(AS_LOCAL);
+  let pairs = false;
+  for (let m = asLocal.exec(src); m && !pairs; m = asLocal.exec(src)) {
+    asLocal.lastIndex = m.index + 1;
+    pairs = local.has(m[1]);
+  }
+  if (!pairs) return catalogNames(tags);
+  /** @type {string[]} */
+  const imported = [];
+  // Each match restarts one character on, so no pair hides inside another.
+  const alias = new RegExp(ALIAS);
+  for (let m = alias.exec(src); m; m = alias.exec(src)) {
+    // Step one code point: a `u` regex moves an index inside a surrogate
+    // pair back to the pair's start.
+    alias.lastIndex =
+      m.index + ((src.codePointAt(m.index) ?? 0) > 0xffff ? 2 : 1);
+    if (!local.has(m[4])) continue;
+    const name = m[1] ?? m[3];
+    if (name.includes('\\')) return null;
+    imported.push(name);
+  }
+  return catalogNames([...tags, ...imported]);
 }

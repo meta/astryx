@@ -50,6 +50,39 @@ describe('parseDiscoverCatalog', () => {
     expect(parsed).not.toHaveProperty('cursor');
   });
 
+  it('keeps an icon-set entry with its icon count and definitions when the project opts in', () => {
+    const value = catalog();
+    const set = {
+      kind: 'icon-set',
+      name: 'outline',
+      title: 'Outline',
+      iconCount: 120,
+      definitions: ['close', 'search'],
+    };
+    value.packages[0].contributions.push(/** @type {any} */ (set));
+    expect(
+      parseDiscoverCatalog(value, 'source', {iconSets: true}).packages[0]
+        .contributions[1],
+    ).toEqual(set);
+    expect(DISCOVER_KINDS).toContain('icon-set');
+    const bad = catalog();
+    bad.packages[0].contributions.push(
+      /** @type {any} */ ({kind: 'icon-set', name: 'x', iconCount: -1}),
+    );
+    expect(() => parseDiscoverCatalog(bad, 'source', {iconSets: true})).toThrow(
+      /iconCount/,
+    );
+  });
+
+  it('without the opt-in, ignores icon-set entries and fields as unknown, even malformed ones', () => {
+    const value = catalog();
+    value.packages[0].contributions.push(
+      /** @type {any} */ ({kind: 'icon-set', name: 'x', iconCount: -1}),
+    );
+    /** @type {any} */ (value.packages[0].contributions[0]).definitions = [7];
+    expect(parseDiscoverCatalog(value)).toEqual(catalog());
+  });
+
   it('drops items of a kind it does not know', () => {
     const value = catalog();
     value.packages[0].contributions.push({kind: 'widget', name: 'Spinner'});
@@ -106,6 +139,7 @@ describe('parseDiscoverCatalog', () => {
       'theme',
       'codemod',
       'agent-doc',
+      'icon-set',
     ]);
   });
 });

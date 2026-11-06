@@ -64,16 +64,36 @@ export function getTokenLabel(tokenName: string): string {
     .replace(/\b\w/g, c => c.toUpperCase());
 }
 
+/** The root font size the editor's px controls are written against. */
+const DEFAULT_ROOT_FONT_SIZE_PX = 16;
+
 /**
- * Build the `--spacing-*` token ramp from a base step: each token is
- * `round(base × step)px`. Token keys derive from the step (e.g. 0.5 → "0-5").
+ * A spacing token value in px at the default 16px root: the default scale's
+ * `'0.5rem'` reads as 8, and a theme's own px value (`'12px'`) as written.
+ * `NaN` for anything else.
+ */
+export function spacingToPx(value: string | undefined): number {
+  const match = /^(\d*\.?\d+)(px|rem)$/.exec((value ?? '').trim());
+  if (match == null) {
+    return Number.NaN;
+  }
+  const length = Number.parseFloat(match[1]);
+  return match[2] === 'rem' ? length * DEFAULT_ROOT_FONT_SIZE_PX : length;
+}
+
+/**
+ * Build the `--spacing-*` token ramp from a base step in px: each token is
+ * `round(base × step)` px, written in rem like the default scale so the ramp
+ * keeps following the reader's root font size, and the default base (4)
+ * reproduces the defaults exactly. Token keys derive from the step (e.g.
+ * 0.5 → "0-5").
  */
 export function buildSpacingScale(base: number): Record<string, string> {
   const steps = [0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
   const patch: Record<string, string> = {};
   for (const step of steps) {
     patch[`--spacing-${String(step).replace('.', '-')}`] =
-      `${Math.round(base * step)}px`;
+      `${Math.round(base * step) / DEFAULT_ROOT_FONT_SIZE_PX}rem`;
   }
   return patch;
 }
@@ -113,7 +133,7 @@ export function getConcentricityWarning(
   const radii = expandRadiusScale({base: radiusBase, multiplier: 1});
   const container = parseInt(radii['--radius-container'], 10);
   const element = parseInt(radii['--radius-element'], 10);
-  const gap = parseInt(buildSpacingScale(spacingBase)['--spacing-1'], 10);
+  const gap = spacingToPx(buildSpacingScale(spacingBase)['--spacing-1']);
   const suggestion =
     control === 'radius'
       ? `Set radius to ${spacingBase}px`

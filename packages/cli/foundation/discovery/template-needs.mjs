@@ -18,8 +18,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import module from 'node:module';
-import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_ROOT, findWorkspaceRoot} from '../fs/paths.mjs';
 import {detectStylingSystem} from '../agent-docs/agent-docs.mjs';
+import {
+  decidePackageManagerIn,
+  formatCliCommand,
+} from '../env/package-manager.mjs';
 
 // ── Known packages that a template may import without the user installing them.
 // react and react-dom are the framework; @astryxdesign/* is the design system
@@ -59,16 +63,43 @@ export function extractImportedPackages(source) {
   return pkgs;
 }
 
+/** @type {Record<string, string>} */
+const ADD_VERB = {
+  pnpm: 'pnpm add',
+  yarn: 'yarn add',
+  bun: 'bun add',
+  npm: 'npm install',
+};
+
 /**
- * Detect which package manager the project uses, from its lockfile.
- * @param {string} cwd Project root
- * @returns {'pnpm add' | 'yarn add' | 'bun add' | 'npm install'}
+ * The project's package manager for an install command (AST-048 FR17, FR19):
+ * the nearest directory from the target up to the workspace root that has a
+ * `packageManager` field or a lockfile decides, by the CLI's shared
+ * per-directory rule; with none, npm. Ambiguous when that directory's
+ * lockfiles disagree and nothing it commits picks one.
+ * @param {string} target
+ * @returns {{verb: string} | {verb: null, dir: string, lockfiles: string[]}}
  */
-function detectInstallCommand(cwd) {
-  if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) return 'pnpm add';
-  if (fs.existsSync(path.join(cwd, 'yarn.lock'))) return 'yarn add';
-  if (fs.existsSync(path.join(cwd, 'bun.lockb'))) return 'bun add';
-  return 'npm install';
+function resolveInstallVerb(target) {
+  const root = findWorkspaceRoot(target);
+  let dir = path.resolve(target);
+  for (;;) {
+    const decision = decidePackageManagerIn(dir);
+    if (decision) {
+      if (decision.ambiguous) {
+        return {
+          verb: null,
+          dir,
+          lockfiles: decision.lockfiles.map(lock => lock.file),
+        };
+      }
+      return {verb: ADD_VERB[decision.pm] ?? ADD_VERB.npm};
+    }
+    const parent = path.dirname(dir);
+    if (dir === root || parent === dir) break;
+    dir = parent;
+  }
+  return {verb: ADD_VERB.npm};
 }
 
 /**
@@ -128,11 +159,18 @@ export function analyzeTemplateNeeds(source, cwd) {
 
   // Build the install command with version ranges from the CLI workspace.
   let installCommand = null;
+  /** @type {string | null} */
+  let noCommandReason = null;
   if (missing.length > 0) {
-    const pm = detectInstallCommand(cwd);
+    const resolved = resolveInstallVerb(cwd);
     const ranges = cliPackageRanges();
     const specs = missing.map(p => (ranges[p] ? `${p}@"${ranges[p]}"` : p));
-    installCommand = `${pm} ${specs.join(' ')}`;
+    if (resolved.verb !== null) {
+      installCommand = `${resolved.verb} ${specs.join(' ')}`;
+    } else {
+      const where = path.relative(cwd, resolved.dir) || '.';
+      noCommandReason = `Install missing dependencies: ${specs.join(' ')}. No install command: ${where} has ${resolved.lockfiles.join(' and ')}, and nothing there says which package manager to use.`;
+    }
   }
 
   // ── StyleX compiler ────────────────────────────────────────────────────
@@ -144,11 +182,15 @@ export function analyzeTemplateNeeds(source, cwd) {
   /** @type {string[]} */
   const notes = [];
   if (missing.length > 0) {
-    notes.push(`Install missing dependencies: ${installCommand}`);
+    notes.push(
+      installCommand
+        ? `Install missing dependencies: ${installCommand}`
+        : (noCommandReason ?? ''),
+    );
   }
   if (stylexCompilerNeeded) {
     notes.push(
-      'This template uses StyleX. Your project needs a StyleX compiler plugin \u2014 see `astryx docs styling-overview` for setup steps.',
+      `This template uses StyleX. Your project needs a StyleX compiler plugin \u2014 see \`${formatCliCommand('docs styling-overview')}\` for setup steps.`,
     );
   }
 

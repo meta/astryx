@@ -7,7 +7,7 @@
  * 1. No props beyond searchSource — default input, footer, rendering
  * 2. renderItem — custom item content, grouping still automatic
  */
-import {useState, useMemo} from 'react';
+import {useEffect, useMemo, useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {
   CommandPalette,
@@ -266,7 +266,12 @@ export const AsyncSearch: Story = {
           isOpen={isOpen}
           onOpenChange={setIsOpen}
           searchSource={source}
-          input={<CommandPaletteInput placeholder="Search files..." />}
+          input={
+            <CommandPaletteInput
+              label="Search files"
+              placeholder="Search files..."
+            />
+          }
           emptyBootstrapText="Type a filename to search"
           emptySearchText="No files found"
         />
@@ -457,4 +462,144 @@ export const ThemedGroupHeading: Story = {
       </CommandPaletteGroup>
     </Theme>
   ),
+};
+
+// ─── Audit matrix ─────────────────────────────────────────────────────────────
+
+/**
+ * Stable, always-rendered states for visual, accessibility, RTL, and responsive
+ * verification. Inline mode keeps each palette in normal document flow while
+ * preserving the same owned input, result, empty, pending, and footer anatomy.
+ */
+export const AuditMatrix: Story = {
+  tags: ['visual-theme-matrix'],
+  render: function Render() {
+    // React entangles async transitions that are in flight together, so a
+    // never-settling bootstrap started beside the other palettes' would keep
+    // them busy too. Mount the pending palette only after the grouped and
+    // empty results have rendered without a spinner, so only it is busy.
+    const matrixRef = useRef<HTMLDivElement>(null);
+    const [isPendingMountable, setIsPendingMountable] = useState(false);
+    useEffect(() => {
+      const matrix = matrixRef.current;
+      if (matrix == null) {
+        return;
+      }
+      const hasSettled = () =>
+        matrix.querySelector('[role="option"]') != null &&
+        matrix.querySelector('.astryx-spinner') == null;
+      if (hasSettled()) {
+        setIsPendingMountable(true);
+        return;
+      }
+      const observer = new MutationObserver(() => {
+        if (hasSettled()) {
+          observer.disconnect();
+          setIsPendingMountable(true);
+        }
+      });
+      observer.observe(matrix, {childList: true, subtree: true});
+      return () => observer.disconnect();
+    }, []);
+    const groupedSource = useMemo(
+      () =>
+        createStaticSource([
+          {id: 'home', label: 'Home', auxiliaryData: {group: 'Navigation'}},
+          {
+            id: 'settings',
+            label: 'Settings',
+            auxiliaryData: {group: 'Navigation'},
+          },
+          {id: 'save', label: 'Save', auxiliaryData: {group: 'Actions'}},
+          {id: 'export', label: 'Export', auxiliaryData: {group: 'Actions'}},
+        ]),
+      [],
+    );
+    const emptySource = useMemo(() => createStaticSource([]), []);
+    const pendingSource = useMemo<SearchSource>(
+      () => ({
+        bootstrap: () => new Promise<SearchableItem[]>(() => {}),
+        search: () => new Promise<SearchableItem[]>(() => {}),
+      }),
+      [],
+    );
+    const panelStyle = {
+      flex: '1 1 280px',
+      minWidth: 0,
+    } as const;
+    const headingStyle = {
+      marginBlock: '0 8px',
+      font: 'inherit',
+      fontWeight: 600,
+    } as const;
+
+    return (
+      <div
+        ref={matrixRef}
+        data-command-palette-audit-matrix
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'flex-start',
+          gap: 16,
+          width: '100%',
+          padding: 16,
+          boxSizing: 'border-box',
+        }}>
+        <section style={panelStyle}>
+          <h2 style={headingStyle}>Grouped results</h2>
+          <CommandPalette
+            isOpen
+            isInline
+            role="region"
+            label="Grouped command palette"
+            onOpenChange={() => {}}
+            searchSource={groupedSource}
+            value="settings"
+            width="100%"
+            maxHeight={420}
+          />
+        </section>
+        <section style={panelStyle}>
+          <h2 style={headingStyle}>Empty bootstrap</h2>
+          <CommandPalette
+            isOpen
+            isInline
+            role="region"
+            label="Empty command palette"
+            onOpenChange={() => {}}
+            searchSource={emptySource}
+            emptyBootstrapText={
+              <span>
+                No commands yet. <a href="#new-command">Create a command</a>
+              </span>
+            }
+            emptySearchText={
+              <span>
+                No matching commands.{' '}
+                <a href="#new-command">Create a command</a>
+              </span>
+            }
+            width="100%"
+            maxHeight={420}
+          />
+        </section>
+        <section style={panelStyle}>
+          <h2 style={headingStyle}>Pending bootstrap</h2>
+          {isPendingMountable && (
+            <CommandPalette
+              isOpen
+              isInline
+              role="region"
+              label="Pending command palette"
+              onOpenChange={() => {}}
+              searchSource={pendingSource}
+              width="100%"
+              maxHeight={420}
+            />
+          )}
+        </section>
+      </div>
+    );
+  },
 };

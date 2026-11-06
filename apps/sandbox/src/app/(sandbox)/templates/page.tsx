@@ -33,7 +33,8 @@ import {TextInput} from '@astryxdesign/core/TextInput';
 import {colorVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {Toolbar} from '@astryxdesign/core/Toolbar';
 import {useToast} from '@astryxdesign/core/Toast';
-import {Drawer, DrawerHeader, Stat} from '@astryxdesign/lab';
+import {Drawer, DrawerHeader} from '@astryxdesign/core/Drawer';
+import {Stat} from '@astryxdesign/lab';
 
 import {
   TEMPLATE_AUDIT_CATEGORIES,
@@ -100,7 +101,7 @@ const CATEGORY_STATUS_VARIANTS: Record<
 };
 
 const AUDIT_PANEL_ID = 'template-audit-details';
-const REPO_URL = 'https://github.com/facebook/astryx';
+const REPO_URL = 'https://github.com/meta/astryx';
 const INTERACTIVE_ROW_DESCENDANT =
   'a, button, input, select, textarea, [role="button"], [role="link"], ' +
   '[role="checkbox"], [role="menu"], [role="menuitem"], ' +
@@ -865,7 +866,7 @@ export default function TemplatesPage() {
                       )
                     }
                     options={TEMPLATE_AUDIT_FILTER_OPTIONS}
-                    xstyle={styles.filterToken}
+                    controlXstyle={styles.filterToken}
                   />
                   <Selector
                     label="Template type"
@@ -880,7 +881,7 @@ export default function TemplatesPage() {
                       )
                     }
                     options={TEMPLATE_TYPE_FILTER_OPTIONS}
-                    xstyle={styles.filterToken}
+                    controlXstyle={styles.filterToken}
                   />
                   <Text type="supporting" color="secondary">
                     {visible.length}{' '}

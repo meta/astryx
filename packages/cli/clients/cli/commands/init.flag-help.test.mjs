@@ -66,7 +66,8 @@ describe('astryx init flag interactions', () => {
     for (const file of ['AGENTS.md', '.claude/CLAUDE.md', '.cursorrules', '.hermes.md', 'HERMES.md']) {
       expect(help).toContain(file);
     }
-    expect(help).toMatch(/--agent-docs-path keeps its block/);
+    expect(help).toMatch(/--agent-docs-path are refused/);
+    expect(help).toMatch(/at the project root \(where init writes them\) and in this folder/);
 
     await initJson(['--agent-docs-path', 'docs/AI.md']);
     await initJson([]);
@@ -82,22 +83,19 @@ describe('astryx init flag interactions', () => {
       '--agent-docs-path',
       'docs/AI.md',
     ]);
-    expect(removed.status).toBe(0);
-    expect(removed.envelope.type).toBe('init.remove');
-    expect(exists('AGENTS.md')).toBe(false);
-    expect(exists('theme.template.ts')).toBe(false);
-    expect(read('docs/AI.md')).toContain(MARKER_START);
+    expect(removed.status).toBe(1);
+    expect(removed.envelope.code).toBe('ERR_INVALID_ARGUMENT');
   });
 
   it('--all: help says it overrides --features, and an unknown feature beside it is not checked', async () => {
     const options = await initOptions();
-    expect(options['--all']).toMatch(/overrides --features/);
-    expect(options['--features']).toMatch(/Ignored with --all or --remove-agents/);
+    expect(options['--all']).toMatch(/refused with --features/);
+    expect(options['--features']).toMatch(/Refused with --all or --remove-agents/);
     expect(options['--features']).toContain('ERR_UNKNOWN_FEATURE');
 
     const {status, envelope} = await initJson(['--all', '--features', 'bogus']);
-    expect(status).toBe(0);
-    expect(envelope.data.features).toEqual(['agents', 'theme', 'template']);
+    expect(status).toBe(1);
+    expect(envelope.code).toBe('ERR_INVALID_ARGUMENT');
   });
 
   it('--agent and --agent-docs-path: help states their scope and precedence, and the CLI follows it', async () => {

@@ -6,9 +6,12 @@
  *
  * A free-text query always answers with a list, so its response type depends
  * on the form of the query and never on what the project has:
- *   1. any matches                -> discover.search
- *   2. fuzzy hits (distance <= 3) -> throw ERR_NOT_FOUND with suggestions
- *   3. otherwise                  -> throw ERR_NOT_FOUND
+ *   1. any matches, a near-miss name included -> discover.search (a one- to
+ *      three-edit miss counts when both words are long enough: 5, 8 and 11
+ *      letters)
+ *   2. other fuzzy hits (distance <= 3)        -> throw ERR_NOT_FOUND with
+ *      suggestions
+ *   3. otherwise                               -> throw ERR_NOT_FOUND
  * Matches are installed components, the project's other installed items,
  * packages, and every item a source lists for a package the project could add.
  * A caller opens one item by its package path, which ../detail answers.
@@ -31,7 +34,8 @@ const KIND_ORDER = ['package', ...DISCOVER_KINDS];
 
 /**
  * How well an item matches: 0 exact name, 1 name prefix, 2 name substring,
- * 3 title, summary, keyword, or description; null for no match.
+ * 3 a near-miss name (3.0, 3.1, 3.2 for one, two or three edits), 4 title,
+ * summary, keyword, or description; null for no match.
  * @param {SearchItem} item
  * @param {string} lower
  * @returns {number | null}
@@ -41,6 +45,19 @@ function rank(item, lower) {
   if (name === lower) return 0;
   if (name.startsWith(lower)) return 1;
   if (name.includes(lower)) return 2;
+  // A near-miss name ranks above a match in the title or text: how closely
+  // the name matches decides first (AST-051 FR4).
+  // Typo tolerance: same minimum-length guards as search (api/search/search.mjs).
+  // A one-edit miss is a typo only on words long enough that one edit rarely
+  // makes a different real word.
+  const dist = levenshteinDistance(lower, name);
+  if (dist >= 1 && dist <= 3) {
+    /** @type {Record<number, number>} */
+    const MIN_LENGTHS = {1: 5, 2: 8, 3: 11};
+    if (Math.min(lower.length, name.length) >= MIN_LENGTHS[dist]) {
+      return 3 + (dist - 1) / 10;
+    }
+  }
   const text = [
     item.title,
     item.summary,
@@ -50,14 +67,16 @@ function rank(item, lower) {
     .filter(Boolean)
     .join('\n')
     .toLowerCase();
-  return text.includes(lower) ? 3 : null;
+  if (text.includes(lower)) return 4;
+  return null;
 }
 
 /**
  * Search all packages for `query` (a free-text term that never starts with
  * `@`). Resolves to a search response when anything matches, even a single
- * item or an exact component name, or throws AstryxError (ERR_NOT_FOUND) —
- * with fuzzy suggestions when any exist.
+ * item, an exact component name or a near-miss name long enough to be a
+ * typo, or throws AstryxError (ERR_NOT_FOUND) — with fuzzy suggestions when
+ * any exist.
  *
  * @param {ScannedPackage[]} packages installed packages
  * @param {string} query

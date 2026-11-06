@@ -119,7 +119,7 @@ export const docs = {
       name: 'searchSource',
       type: 'SearchSource<T>',
       description:
-        'Data source providing search and bootstrap methods for populating the dropdown.',
+        'Data source providing search and bootstrap methods. `search(query, context)` may call `context.update(items)` to show matches it already has before it returns; the value it returns is the final list, and every list after the first for a query keeps the shown rows first and adds new rows after them.',
       required: true,
     },
     {
@@ -154,14 +154,15 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Disables the input.',
+      description:
+        'Disables the input. The field keeps its tab stop: it is announced as disabled (aria-disabled), is read-only, and opens and picks nothing.',
       default: 'false',
     },
     {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled Typeahead in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus, and the reason describes the field (activation stays blocked). Use this instead of wrapping a disabled Typeahead in Tooltip, so the reason is attached to the field itself.',
     },
     {
       name: 'maxMenuItems',
@@ -231,13 +232,6 @@ export const docs = {
       default: "'No results found'",
     },
     {
-      name: 'emptySearchResultsText',
-      type: 'string',
-      description:
-        'Deprecated: renamed to emptySearchText, which takes a ReactNode rather than a string, so every existing value stays valid. Still works exactly as released; emptySearchText wins when both are set.',
-      default: "'No results found'",
-    },
-    {
       name: 'hasAutoFocus',
       type: 'boolean',
       description: 'Auto-focus the input on mount.',
@@ -253,7 +247,7 @@ export const docs = {
       name: 'debounceMs',
       type: 'number',
       description:
-        'Debounce delay in ms before triggering search. Set to 0 for synchronous sources.',
+        'Debounce delay in ms before triggering search. Set to 0 for synchronous sources, and for a source that shows local matches through `context.update` and delays its own server request.',
       default: '150',
     },
     {
@@ -278,10 +272,38 @@ export const docs = {
       description: 'SVG icon component displayed at the start of the input.',
     },
     {
-      name: 'xstyle',
+      name: 'containerXstyle',
       type: 'StyleXStyles',
       description:
-        'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}.',
+        'StyleX styles for the field container (label, control, and status together). No effect inside InputGroup (style the InputGroup instead) or in a `horizontal-labels` FormLayout. Root `xstyle`, `className`, and `style` are not accepted.',
+    },
+    {
+      name: 'containerClassName',
+      type: 'string',
+      description:
+        'Class name for the field container. Same targeting as `containerXstyle`.',
+    },
+    {
+      name: 'containerStyle',
+      type: 'CSSProperties',
+      description:
+        'Inline styles for the field container. Same targeting as `containerXstyle`.',
+    },
+    {
+      name: 'controlXstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles for the visual control box: the element that paints the border and background and holds icons and end controls. Never the native input.',
+    },
+    {
+      name: 'controlClassName',
+      type: 'string',
+      description: 'Class name for the visual control box.',
+    },
+    {
+      name: 'controlStyle',
+      type: 'CSSProperties',
+      description: 'Inline styles for the visual control box.',
     },
   ],
   components: [{name: 'BaseTypeahead'}, {name: 'TypeaheadItem'}],
@@ -312,6 +334,11 @@ export const docs = {
         guidance: true,
         description:
           'Add a search delay for remote data sources to avoid excessive network requests.',
+      },
+      {
+        guidance: true,
+        description:
+          'For a remote source, show the matches the page already has at once: call `context.update(local)` in `search`, pass `debounceMs={0}`, delay the server request in the source, and return the server answer with the shown rows first.',
       },
       {
         guidance: true,
@@ -363,6 +390,11 @@ export const docsZh = {
           'Add a search delay for remote data sources to avoid excessive network requests.',
       },
       {
+        guidance: true,
+        description:
+          'For a remote source, show the matches the page already has at once: call `context.update(local)` in `search`, pass `debounceMs={0}`, delay the server request in the source, and return the server answer with the shown rows first.',
+      },
+      {
         guidance: false,
         description:
           'Use for short, static option lists; use Selector for better discoverability.',
@@ -407,6 +439,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Add a search delay for remote data sources to avoid excessive network requests.',
+      },
+      {
+        guidance: true,
+        description:
+          'For a remote source, show the matches the page already has at once: call `context.update(local)` in `search`, pass `debounceMs={0}`, delay the server request in the source, and return the server answer with the shown rows first.',
       },
       {
         guidance: true,

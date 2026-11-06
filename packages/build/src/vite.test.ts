@@ -12,7 +12,9 @@ import {mkdtempSync, mkdirSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {astryxStylex} from './vite';
+import stylex from '@stylexjs/unplugin';
+import {astryxStylex, LIGHTNINGCSS_TARGETS} from './vite';
+import {undefinedGeneratedVariables} from './undefinedVariables';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -70,6 +72,44 @@ describe('astryxStylex layer order (legacy API)', () => {
   it('uses the astryx-* layer names (theme layer is astryx-theme)', () => {
     const order = getLayerOrder(astryxStylex({stylexOptions: {}}));
     expect(order).toBe('@layer reset, astryx-base, astryx-theme, product;');
+  });
+});
+
+describe('astryxStylex Lightning CSS defaults (modern API)', () => {
+  type StylexOptions = {
+    lightningcssOptions: {
+      targets: Record<string, number>;
+      drafts?: {nesting: boolean};
+    };
+  };
+
+  function getStylexOptions(
+    options: Parameters<typeof astryxStylex>[0] = {},
+  ): StylexOptions {
+    const vite = vi.spyOn(stylex, 'vite');
+    try {
+      astryxStylex(options);
+      return vite.mock.calls.at(-1)?.[0] as StylexOptions;
+    } finally {
+      vite.mockRestore();
+    }
+  }
+
+  it('preserves native light-dark() at the supported browser floor', () => {
+    expect(getStylexOptions().lightningcssOptions.targets).toEqual(
+      LIGHTNINGCSS_TARGETS,
+    );
+  });
+
+  it('keeps the floor when a consumer supplies another Lightning CSS option', () => {
+    const options = getStylexOptions({
+      stylexOverrides: {lightningcssOptions: {drafts: {nesting: true}}},
+    }).lightningcssOptions;
+
+    expect(options).toEqual({
+      targets: LIGHTNINGCSS_TARGETS,
+      drafts: {nesting: true},
+    });
   });
 });
 
@@ -231,5 +271,59 @@ describe('astryxStylex optimizeDeps package discovery', () => {
     } finally {
       rmSync(outfile, {force: true});
     }
+  });
+});
+
+describe('undefinedGeneratedVariables', () => {
+  it('reports a generated variable that is read but never declared', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{min-height:var(--astryx1abc2)}.b{color:var(--x9zz9z, red)}',
+        ['astryx', 'x'],
+      ),
+    ).toEqual(['--astryx1abc2', '--x9zz9z']);
+  });
+
+  it('accepts a variable declared anywhere in the stylesheet', () => {
+    expect(
+      undefinedGeneratedVariables(
+        ':root{--astryx1abc2:4px}.a{padding:var(--astryx1abc2)}',
+        ['astryx', 'x'],
+      ),
+    ).toEqual([]);
+  });
+
+  it('ignores dynamic-style and component variables, which carry a dash', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{width:var(--x-width)}.b{padding:var(--astryx-card-padding,8px)}',
+        ['astryx', 'x'],
+      ),
+    ).toEqual([]);
+  });
+
+  it('counts a declaration in any other stylesheet the build emits', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{padding:var(--xlarge)}',
+        ['astryx', 'x'],
+        [':root{--xlarge:24px}'],
+      ),
+    ).toEqual([]);
+  });
+
+  it('reports only hash-shaped names: four to seven characters after the prefix', () => {
+    expect(
+      undefinedGeneratedVariables(
+        '.a{margin:var(--xl)}.b{gap:var(--xs1)}.c{inset:var(--x1abc2de)}.d{top:var(--x1abc2def)}',
+        ['astryx', 'x'],
+      ),
+    ).toEqual(['--x1abc2de']);
+  });
+
+  it('checks only the prefixes it is given', () => {
+    expect(
+      undefinedGeneratedVariables('.a{color:var(--x1abc2)}', ['astryx']),
+    ).toEqual([]);
   });
 });

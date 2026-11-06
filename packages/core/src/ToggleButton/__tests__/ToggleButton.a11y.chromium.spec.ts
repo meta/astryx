@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^internal/a11y-spec/src/patterns/toggle-button
 
 /**
  * @file ToggleButton.a11y.chromium.spec.ts
@@ -10,7 +11,12 @@
  *   apps/storybook/stories/ToggleButtonPatternA11y.stories.tsx.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type CDPSession,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   TOGGLE_BUTTON_PATTERN,
   blockingResults,
@@ -143,22 +149,17 @@ test('the state inventory matches rendered labels and applicability facts', asyn
   expect(wrong).toEqual([]);
 });
 
-test('every expectation is exercised by at least one ToggleButton state', async ({
-  page,
-}) => {
-  test.setTimeout(5 * 60 * 1000);
-  const cdp = await page.context().newCDPSession(page);
-  const results: BindingResult[] = [];
-  for (const state of TOGGLE_BUTTON_BINDING_STATES) {
-    results.push(await runState(page, cdp, state));
-  }
-  expect(neverExercised(results)).toEqual([]);
-});
+// Each state's result, recorded by its own test below so the whole-suite check
+// at the end reads it instead of measuring every state a second time. A state
+// whose test did not run in this worker (a filtered run, or a worker restarted
+// after a failure) is measured by the whole-suite check itself.
+const recorded = new Map<string, BindingResult>();
 
 for (const state of TOGGLE_BUTTON_BINDING_STATES) {
   test(`ToggleButton [${state.id}] — ${state.summary}`, async ({page}) => {
     const cdp = await page.context().newCDPSession(page);
     const result = await runState(page, cdp, state);
+    recorded.set(state.id, result);
     const report = summarize(TOGGLE_BUTTON_PATTERN, [result]);
     // eslint-disable-next-line no-console -- the report is this run's evidence
     console.log(formatReport(report));
@@ -167,3 +168,15 @@ for (const state of TOGGLE_BUTTON_BINDING_STATES) {
     expect(report.counts.unexpectedPass).toBe(0);
   });
 }
+
+test('every expectation is exercised by at least one ToggleButton state', async ({
+  page,
+}) => {
+  test.setTimeout(5 * 60 * 1000);
+  const cdp = await page.context().newCDPSession(page);
+  const results: BindingResult[] = [];
+  for (const state of TOGGLE_BUTTON_BINDING_STATES) {
+    results.push(recorded.get(state.id) ?? (await runState(page, cdp, state)));
+  }
+  expect(neverExercised(results)).toEqual([]);
+});

@@ -9,8 +9,12 @@
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {useState} from 'react';
 import {CommandPalette} from './CommandPalette';
+import {CommandPaletteInput} from './CommandPaletteInput';
+import {getFocusableElements} from '../hooks/useFocusTrap';
+import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {createStaticSource} from '@astryxdesign/core/Typeahead';
 import type {SearchSource, SearchableItem} from '@astryxdesign/core/Typeahead';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
@@ -26,6 +30,11 @@ const groupedSource = createStaticSource([
 ]);
 
 const emptySource = createStaticSource([]);
+
+function NestedDismissible({onDismiss}: {onDismiss: () => void}) {
+  useLayerDismissal({isActive: true, onDismiss});
+  return null;
+}
 
 // Mock showModal and close since jsdom doesn't implement them
 beforeEach(() => {
@@ -43,6 +52,25 @@ beforeEach(() => {
 });
 
 describe('CommandPalette', () => {
+  it('a closed palette adds no document pointermove listener', () => {
+    const addListener = vi.spyOn(document, 'addEventListener');
+    try {
+      render(
+        <CommandPalette
+          isOpen={false}
+          onOpenChange={() => {}}
+          searchSource={simpleSource}
+        />,
+      );
+      const moveListeners = addListener.mock.calls.filter(
+        ([type]) => type === 'pointermove',
+      );
+      expect(moveListeners).toEqual([]);
+    } finally {
+      addListener.mockRestore();
+    }
+  });
+
   it('renders when isOpen is true', () => {
     render(
       <CommandPalette
@@ -198,6 +226,31 @@ describe('CommandPalette', () => {
     });
   });
 
+  it('keeps actionable empty content outside listbox semantics', async () => {
+    const {container} = render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={emptySource}
+        emptyBootstrapText={<a href="/commands/new">Create a command</a>}
+      />,
+    );
+
+    expect(
+      await screen.findByRole('link', {name: 'Create a command'}),
+    ).toHaveAttribute('href', '/commands/new');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('option')).not.toBeInTheDocument();
+    expect(
+      container.querySelectorAll('.astryx-command-palette-empty'),
+    ).toHaveLength(1);
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.getByRole('combobox')).not.toHaveAttribute('aria-controls');
+  });
+
   it('shows default emptyBootstrapText when not provided', async () => {
     render(
       <CommandPalette
@@ -209,6 +262,40 @@ describe('CommandPalette', () => {
     await waitFor(() => {
       expect(screen.getByText('Type to search')).toBeInTheDocument();
     });
+  });
+
+  it('clears a stale highlight across empty and repopulated results', async () => {
+    render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={simpleSource}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Settings')).toBeInTheDocument(),
+    );
+
+    const input = screen.getByRole('combobox');
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(input.getAttribute('aria-activedescendant')).toMatch(/-item-1$/);
+
+    fireEvent.change(input, {target: {value: 'zzz'}});
+    await waitFor(() => expect(screen.queryByRole('listbox')).toBeNull());
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+
+    fireEvent.change(input, {target: {value: 'hom'}});
+    await waitFor(() =>
+      expect(screen.getByRole('option', {name: 'Home'})).toBeInTheDocument(),
+    );
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+
+    fireEvent.keyDown(input, {key: 'ArrowDown'});
+    expect(input).toHaveAttribute(
+      'aria-activedescendant',
+      screen.getByRole('option', {name: 'Home'}).id,
+    );
   });
 
   it('calls onOpenChange(false) when Escape is pressed', () => {
@@ -227,6 +314,82 @@ describe('CommandPalette', () => {
       cancelable: true,
     });
     dialog.dispatchEvent(escapeEvent);
+    expect(handleOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('lets the topmost nested layer handle Escape before the palette', () => {
+    const handleOpenChange = vi.fn();
+    const handleNestedDismiss = vi.fn();
+    render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={handleOpenChange}
+        searchSource={simpleSource}
+        input={
+          <>
+            <CommandPaletteInput />
+            <NestedDismissible onDismiss={handleNestedDismiss} />
+          </>
+        }
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole('combobox'), {key: 'Escape'});
+
+    expect(handleNestedDismiss).toHaveBeenCalledOnce();
+    expect(handleOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('an inline preview highlights its value again after a key and a cleared query', async () => {
+    const user = userEvent.setup();
+    render(
+      <CommandPalette
+        isOpen={true}
+        isInline
+        onOpenChange={() => {}}
+        searchSource={simpleSource}
+        value="settings"
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    const settingsId = async () =>
+      (await screen.findByRole('option', {name: 'Settings', hidden: true})).id;
+    await waitFor(async () => {
+      expect(input.getAttribute('aria-activedescendant')).toBe(
+        await settingsId(),
+      );
+    });
+    await user.click(input);
+    // Keys only from here: a press would end the keyboard's hold.
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('h');
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('option', {name: 'Settings', hidden: true}),
+      ).toBeNull();
+    });
+    await user.keyboard('{Backspace}');
+    await waitFor(async () => {
+      expect(input.getAttribute('aria-activedescendant')).toBe(
+        await settingsId(),
+      );
+    });
+  });
+
+  it('preserves local Escape closing for inline previews', () => {
+    const handleOpenChange = vi.fn();
+    render(
+      <CommandPalette
+        isOpen={true}
+        isInline
+        onOpenChange={handleOpenChange}
+        searchSource={simpleSource}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole('combobox'), {key: 'Escape'});
+
+    expect(handleOpenChange).toHaveBeenCalledOnce();
     expect(handleOpenChange).toHaveBeenCalledWith(false);
   });
 
@@ -273,6 +436,120 @@ describe('CommandPalette', () => {
     await waitFor(() =>
       expect(screen.getByText('No results')).toBeInTheDocument(),
     );
+  });
+
+  // component:CommandPaletteEmpty FR2: "no query" is the field's current value.
+  it('shows no empty text while the first query is pending, then its outcome', async () => {
+    const resolvers: ((items: SearchableItem[]) => void)[] = [];
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(): Promise<SearchableItem[]> {
+        return new Promise<SearchableItem[]>(resolve => {
+          resolvers.push(resolve);
+        });
+      },
+    };
+
+    render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={source}
+        emptyBootstrapText="Type to search"
+        emptySearchText="No results"
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Type to search')).toBeInTheDocument(),
+    );
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'ap'}});
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    // Pending: no bootstrap text, no search-empty text; the spinner shows.
+    expect(screen.queryByText('Type to search')).toBeNull();
+    expect(screen.queryByText('No results')).toBeNull();
+    // The Input's spinner is decorative (spec:AST-086 FR8): find it by class.
+    expect(document.querySelector('.astryx-spinner')).not.toBeNull();
+    // The result surface keeps the Empty container (so the dialog keeps its
+    // height), hidden from assistive technology and with no message.
+    const placeholder = document.querySelector('.astryx-command-palette-empty');
+    expect(placeholder).not.toBeNull();
+    expect(placeholder).toHaveAttribute('aria-hidden', 'true');
+    expect(placeholder?.textContent?.trim()).toBe('');
+
+    resolvers[0]([]);
+    await waitFor(() =>
+      expect(screen.getByText('No results')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Type to search')).toBeNull();
+  });
+
+  it('shows the first query results once they arrive, with no empty text before', async () => {
+    const resolvers: ((items: SearchableItem[]) => void)[] = [];
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(): Promise<SearchableItem[]> {
+        return new Promise<SearchableItem[]>(resolve => {
+          resolvers.push(resolve);
+        });
+      },
+    };
+
+    render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={source}
+        emptyBootstrapText="Type to search"
+        emptySearchText="No results"
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'ap'}});
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    expect(screen.queryByText('Type to search')).toBeNull();
+
+    resolvers[0]([{id: 'apple', label: 'Apple'}]);
+    await waitFor(() =>
+      expect(screen.getByRole('option', {name: /Apple/})).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('No results')).toBeNull();
+  });
+
+  it('brings the bootstrap text back when the field is cleared', async () => {
+    const resolvers: ((items: SearchableItem[]) => void)[] = [];
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(): Promise<SearchableItem[]> {
+        return new Promise<SearchableItem[]>(resolve => {
+          resolvers.push(resolve);
+        });
+      },
+    };
+
+    render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={source}
+        emptyBootstrapText="Type to search"
+        emptySearchText="No results"
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'zq'}});
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    resolvers[0]([]);
+    await waitFor(() =>
+      expect(screen.getByText('No results')).toBeInTheDocument(),
+    );
+
+    fireEvent.change(input, {target: {value: ''}});
+    await waitFor(() =>
+      expect(screen.getByText('Type to search')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('No results')).toBeNull();
   });
 
   it('discards a search response that resolves after the palette closed', async () => {
@@ -355,6 +632,52 @@ describe('CommandPalette', () => {
     fireEvent.keyDown(input, {key: 't'});
 
     expect(input).not.toHaveAttribute('aria-activedescendant');
+  });
+
+  it('keeps Home and End on the query field and uses Page keys for results', async () => {
+    const user = userEvent.setup();
+    const handleOpenChange = vi.fn();
+    const handleValueChange = vi.fn();
+    render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={handleOpenChange}
+        onValueChange={handleValueChange}
+        searchSource={simpleSource}
+      />,
+    );
+
+    const input = screen.getByRole<HTMLInputElement>('combobox');
+    await waitFor(() =>
+      expect(screen.getByText('Settings')).toBeInTheDocument(),
+    );
+    await user.click(input);
+    await user.type(input, 'e');
+    await waitFor(() =>
+      expect(screen.getByText('Settings')).toBeInTheDocument(),
+    );
+    const homeOption = screen.getByText('Home').closest('[role="option"]');
+    const settingsOption = screen
+      .getByText('Settings')
+      .closest('[role="option"]');
+
+    expect(input).toHaveValue('e');
+    expect(input.selectionStart).toBe(1);
+    await user.keyboard('{Home}');
+    expect(input.selectionStart).toBe(0);
+    await user.keyboard('{End}');
+    expect(input.selectionStart).toBe(1);
+    expect(input).not.toHaveAttribute('aria-activedescendant');
+
+    await user.keyboard('{PageDown}');
+    expect(input.getAttribute('aria-activedescendant')).toBe(
+      settingsOption?.id,
+    );
+    await user.keyboard('{PageUp}');
+    expect(input.getAttribute('aria-activedescendant')).toBe(homeOption?.id);
+    await user.keyboard('{Enter}');
+    expect(handleValueChange).toHaveBeenCalledWith('home');
+    expect(handleOpenChange).toHaveBeenCalledWith(false);
   });
 
   it('highlights on hover without scrolling and scrolls once per key (#6077)', async () => {
@@ -453,7 +776,7 @@ describe('CommandPalette', () => {
       });
     });
 
-    it('announces the empty state with the query when nothing matches', async () => {
+    it('announces the rendered default empty state when nothing matches', async () => {
       render(
         <CommandPalette
           isOpen={true}
@@ -464,8 +787,94 @@ describe('CommandPalette', () => {
       await waitFor(() => expect(screen.getByText('Home')).toBeInTheDocument());
       fireEvent.change(screen.getByRole('combobox'), {target: {value: 'zzz'}});
       await waitFor(() => {
-        expect(politeRegion()).toHaveTextContent('No results for zzz');
+        expect(politeRegion()).toHaveTextContent(/^No results$/);
       });
+    });
+
+    it('announces rich emptySearchText exactly as rendered', async () => {
+      render(
+        <CommandPalette
+          isOpen={true}
+          onOpenChange={() => {}}
+          searchSource={simpleSource}
+          emptySearchText={
+            <span>
+              Nothing like that here. <a href="/commands/new">Add a command</a>
+            </span>
+          }
+        />,
+      );
+      await waitFor(() => expect(screen.getByText('Home')).toBeInTheDocument());
+      fireEvent.change(screen.getByRole('combobox'), {target: {value: 'zzz'}});
+
+      expect(
+        await screen.findByRole('link', {name: 'Add a command'}),
+      ).toHaveAttribute('href', '/commands/new');
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent(
+          /^Nothing like that here\. Add a command$/,
+        );
+      });
+    });
+
+    it('waits for a narrowed search to settle before announcing no results', async () => {
+      const resolvers: ((items: SearchableItem[]) => void)[] = [];
+      const source: SearchSource = {
+        bootstrap: () => [
+          {id: 'home', label: 'Home'},
+          {id: 'settings', label: 'Settings'},
+        ],
+        async search(): Promise<SearchableItem[]> {
+          return new Promise<SearchableItem[]>(resolve => {
+            resolvers.push(resolve);
+          });
+        },
+      };
+      const spoken: string[] = [];
+      const observer = new MutationObserver(() => {
+        const text = politeRegion()?.textContent ?? '';
+        if (text !== '' && spoken.at(-1) !== text) {
+          spoken.push(text);
+        }
+      });
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
+      try {
+        render(
+          <CommandPalette
+            isOpen={true}
+            onOpenChange={() => {}}
+            searchSource={source}
+          />,
+        );
+        await waitFor(() =>
+          expect(screen.getByText('Home')).toBeInTheDocument(),
+        );
+        const input = screen.getByRole('combobox');
+
+        fireEvent.change(input, {target: {value: 'e'}});
+        await act(async () =>
+          resolvers.shift()?.(source.bootstrap() as SearchableItem[]),
+        );
+        await waitFor(() => expect(spoken.at(-1)).toBe('2 results'));
+
+        // Optimistic narrowing empties the list while the source is still
+        // answering; the source then finds one match.
+        fireEvent.change(input, {target: {value: 'ez'}});
+        await act(async () => {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        });
+        await act(async () =>
+          resolvers.shift()?.([{id: 'settings', label: 'Settings'}]),
+        );
+        await waitFor(() => expect(spoken.at(-1)).toBe('1 result'));
+        expect(spoken).not.toContain('No results');
+      } finally {
+        observer.disconnect();
+      }
     });
 
     it('announces loading politely while a search is in flight', async () => {
@@ -490,7 +899,7 @@ describe('CommandPalette', () => {
       });
     });
 
-    it('does not announce on initial open (bootstrap)', async () => {
+    it('announces no result count on initial open (bootstrap)', async () => {
       render(
         <CommandPalette
           isOpen={true}
@@ -503,7 +912,40 @@ describe('CommandPalette', () => {
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 50));
       });
-      expect(politeRegion()?.textContent ?? '').toBe('');
+      // The bootstrap's busy start may say "Loading" (spec:AST-086 FR3, FR8);
+      // its results are never counted aloud.
+      expect(['', 'Loading']).toContain(politeRegion()?.textContent ?? '');
     });
+  });
+});
+
+// Tab from the last tabbable control wraps to the first and Shift+Tab from the
+// first wraps to the last, so focus never leaves the modal for the browser's
+// own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+describe('CommandPalette focus region (Dialog DEC-2)', () => {
+  it('keeps Tab inside the open palette', () => {
+    render(
+      <CommandPalette
+        isOpen
+        onOpenChange={() => {}}
+        searchSource={simpleSource}
+      />,
+    );
+    expectTabWrapsInside(document.querySelector('dialog') as HTMLElement);
   });
 });

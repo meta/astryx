@@ -5,7 +5,7 @@
 /**
  * @file Avatar.tsx
  * @input Uses React, HTMLAttributes, ReactNode, useState, useRef; useTooltip
- *   (Tooltip hook) for the optional name-on-hover tooltip; useTranslator (i18n)
+ *   (Tooltip hook) for the optional name-on-hover tooltip; useComponentTranslator (i18n)
  * @output Exports Avatar component, AvatarProps, AvatarSize types
  * @position Core implementation; consumed by index.ts
  *
@@ -50,7 +50,14 @@ import {useTooltip} from '../Tooltip/useTooltip';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
-import {useTranslator, type TranslatorFn} from '../i18n';
+import type {TranslatorFn} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Avatar/Avatar.generated';
+
+registerEnglishFallback(english);
 
 /**
  * The offset ratio for positioning elements on a circle's edge at 45°.
@@ -192,6 +199,19 @@ const styles = stylex.create({
     fontFamily: typographyVars['--font-family-body'],
     fontWeight: fontWeightVars['--font-weight-medium'],
     textTransform: 'uppercase',
+  },
+  // After `fallback` on a lone Avatar: in forced colors its initials and
+  // default icon take the color around them, which the browser forces to
+  // CanvasText, so a control that paints itself disabled (GrayText) or
+  // selected (HighlightText) carries them with it; an
+  // authored color would be forced to CanvasText whatever the control shows.
+  // A grouped face keeps it: its ring's opaque fill is forced to Canvas, so
+  // only CanvasText is sure to read on it.
+  loneFallback: {
+    color: {
+      default: colorVars['--color-text-secondary'],
+      '@media (forced-colors: active)': 'currentColor',
+    },
   },
   status: {
     position: 'absolute',
@@ -387,9 +407,18 @@ export interface AvatarProps extends BaseProps<HTMLDivElement> {
 /**
  * A character that can stand for a word in initials: a letter, a digit, or an
  * emoji. Punctuation and other symbols, such as `(`, `"` or `-`, cannot.
+ *
+ * Built at runtime, not written as a literal: for targets without property
+ * escapes, or when no browserslist is set, Babel's
+ * transform-unicode-property-regex rewrites a `\p{…}` literal, and the copy
+ * bundled with Next.js lacks the Unicode data it needs, so a source build fails
+ * with "Unknown property". A literal is safe once Next's bundled Babel ships
+ * that data.
  */
-const INITIAL_CHARACTER =
-  /[\p{L}\p{N}\p{Extended_Pictographic}\p{Regional_Indicator}]/u;
+const INITIAL_CHARACTER = new RegExp(
+  '[\\p{L}\\p{N}\\p{Extended_Pictographic}\\p{Regional_Indicator}]',
+  'u',
+);
 
 /**
  * The first character of a word that can stand for it in initials, skipping
@@ -590,7 +619,7 @@ export function Avatar({
   // neither a name nor a labelled status, the avatar is decorative — expose
   // it as `presentation`/`aria-hidden` rather than announcing a meaningless
   // generic "Avatar" (obs-9).
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const nameLabel = meaningfulAlt || meaningfulName;
   // This render can only see a label introspected off a directly-passed
   // element. A status inside a consumer's own wrapper reports through the ref
@@ -775,6 +804,7 @@ export function Avatar({
               themeProps('avatar-fallback', {size: resolvedSize}),
               stylex.props(
                 styles.fallback,
+                avatarGroup == null && styles.loneFallback,
                 dynamicStyles.fontSize(numericSize),
               ),
             )}>
@@ -785,13 +815,18 @@ export function Avatar({
           <div
             {...mergeProps(
               themeProps('avatar-fallback', {size: resolvedSize}),
-              stylex.props(styles.fallback),
+              stylex.props(
+                styles.fallback,
+                avatarGroup == null && styles.loneFallback,
+              ),
             )}>
             <DefaultIcon size={numericSize} />
           </div>
         )}
       </div>
-      {status && (
+      {/* The status slot renders for a truthy value only. A falsy one, 0
+          included, renders nothing, not a stray "0". */}
+      {Boolean(status) && (
         <div
           {...stylex.props(
             styles.status,

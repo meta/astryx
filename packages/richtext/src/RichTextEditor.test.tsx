@@ -13,10 +13,24 @@
  * SYNC: When the editor components change, update these tests to match.
  */
 
+import {$createLinkNode} from '@lexical/link';
 import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
-import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  act,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {createRef, StrictMode, useEffect, useState} from 'react';
+import {
+  createRef,
+  StrictMode,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import type {EditorState, LexicalEditor} from 'lexical';
@@ -33,7 +47,11 @@ import {
 } from 'lexical';
 import {HeadingNode} from '@lexical/rich-text';
 import {TRANSFORMERS, $convertFromMarkdownString} from '@lexical/markdown';
-import {RichTextEditor, type RichTextEditorRef} from './RichTextEditor';
+import {
+  RichTextEditor,
+  type RichTextEditorProps,
+  type RichTextEditorRef,
+} from './RichTextEditor';
 import {RichTextView} from './RichTextView';
 import {
   markdownToEditorStateJSON,
@@ -41,6 +59,8 @@ import {
 } from './markdownSerializers';
 import {RichTextEditorToolbar} from './RichTextEditorToolbar';
 import {registerIcons, resetIcons} from '@astryxdesign/core/Icon';
+import {EDGE_COMP_ATTR} from '@astryxdesign/core/Layout';
+import type {BaseProps} from '@astryxdesign/core';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {rtlStyles} from '@astryxdesign/core/utils';
 import {InternationalizationProvider} from '@astryxdesign/core/i18n';
@@ -288,6 +308,53 @@ const HELLO_STATE = JSON.stringify({
 });
 
 describe('RichTextEditor', () => {
+  it('documents every prop the editor declares', () => {
+    // The doc file is what `astryx component RichTextEditor` and the docsite
+    // read, so a prop missing from it is invisible to builders. The compile-time
+    // check below fails when RichTextEditorProps gains a prop this list lacks;
+    // the runtime check fails when the doc file lacks a listed prop.
+    const ownProps = [
+      'label',
+      'isLabelHidden',
+      'description',
+      'isOptional',
+      'isRequired',
+      'defaultValue',
+      'onChange',
+      'placeholder',
+      'isReadOnly',
+      'isDisabled',
+      'status',
+      'statusVariant',
+      'size',
+      'nodes',
+      'toolbar',
+      'plugins',
+      'hasMarkdownShortcuts',
+      'markdownExtensions',
+      'codeLanguages',
+      'transformers',
+      'hasAutoFocus',
+      'tabEscapeHint',
+      'maxLength',
+      'width',
+      'minHeight',
+      'labelTooltip',
+      'namespace',
+    ] as const satisfies ReadonlyArray<keyof RichTextEditorProps>;
+    type Unlisted = Exclude<
+      keyof RichTextEditorProps,
+      keyof BaseProps | 'ref' | (typeof ownProps)[number]
+    >;
+    const everyPropListed: [Unlisted] extends [never] ? true : Unlisted = true;
+    expect(everyPropListed).toBe(true);
+
+    const docProps =
+      'props' in richTextEditorDoc ? richTextEditorDoc.props : [];
+    const documented = new Set(docProps.map(({name}) => name));
+    expect(ownProps.filter(name => !documented.has(name))).toEqual([]);
+  });
+
   it('declares exactly the visual props its theme target reflects', () => {
     // The core theming guards walk packages/core/src (and Lab) only, so
     // nothing else compares this package's doc metadata with its
@@ -1275,9 +1342,19 @@ describe('markdown serializers', () => {
 });
 
 describe('RichTextEditorToolbar', () => {
-  it('treats a false conditional toolbar as absent', () => {
+  // A slot is empty for exactly the values React renders as nothing.
+  it.each([
+    ['false', false],
+    ['an empty string', ''],
+    ['true', true],
+    ['null', null],
+  ])('treats a %s conditional toolbar as absent', (_name, value) => {
     const {container, rerender} = render(
-      <RichTextEditor label="Notes" toolbar={false} tabEscapeHint="" />,
+      <RichTextEditor
+        label="Notes"
+        toolbar={value as ReactNode}
+        tabEscapeHint=""
+      />,
     );
     const conditionalBodyClass = container.querySelector(
       '.astryx-rich-text-editor',
@@ -1313,7 +1390,11 @@ describe('RichTextEditorToolbar', () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(toolbarRegion?.parentElement).toBe(editor);
+    expect(toolbarRegion).toBeInstanceOf(HTMLElement);
     expect(editorBody).toBeInstanceOf(HTMLElement);
+    // The compact gutter is emitted by StyleX; do not regress to a component
+    // inline-style escape hatch. Browser coverage below owns the geometry.
+    expect(toolbarRegion).not.toHaveAttribute('style');
     // Vitest's JSDOM setup does not load compiled StyleX CSS. The WithToolbar
     // story provides visual coverage for flush edges and preserved body inset;
     // here we verify that the dedicated body receives its StyleX layout.
@@ -1420,6 +1501,7 @@ describe('RichTextEditorToolbar', () => {
     const actionRow = screen.getByRole('group', {
       name: 'Formatting actions',
     });
+    expect(actionRow).not.toHaveAttribute(EDGE_COMP_ATTR);
     for (const name of [
       'Bold',
       'Italic',
@@ -1679,6 +1761,178 @@ describe('RichTextEditorToolbar — links', () => {
     });
   });
 
+  describe('with a collapsed selection', () => {
+    /** The paragraph's children as `text` or `link:<href>:<text>`. */
+    function paragraphParts(editor: LexicalEditor): string[] {
+      const parts: string[] = [];
+      editor.getEditorState().read(() => {
+        const paragraph = $getRoot().getFirstChild();
+        if (!$isElementNode(paragraph)) {
+          return;
+        }
+        for (const child of paragraph.getChildren()) {
+          parts.push(
+            'getURL' in child
+              ? `link:${(child as {getURL(): string}).getURL()}:${child.getTextContent()}`
+              : child.getTextContent(),
+          );
+        }
+      });
+      return parts;
+    }
+
+    async function renderWithPrompt() {
+      let editor!: LexicalEditor;
+      render(
+        <RichTextEditor
+          label="Notes"
+          toolbar={<RichTextEditorToolbar promptForUrl={() => 'example.com'} />}
+          plugins={<CaptureEditor onReady={e => (editor = e)} />}
+        />,
+      );
+      await waitFor(() => expect(editor).toBeDefined());
+      return editor;
+    }
+
+    it('inserts the URL as a link in an empty paragraph', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        root.append(paragraph);
+        paragraph.select();
+      });
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'link:https://example.com/:example.com',
+        ]),
+      );
+    });
+
+    it('inserts the link at a caret inside text, linking nothing else', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const textNode = $createTextNode('hello world');
+        paragraph.append(textNode);
+        root.append(paragraph);
+        textNode.select(6, 6);
+      });
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'hello ',
+          'link:https://example.com/:example.com',
+          'world',
+        ]),
+      );
+    });
+
+    it('inserts the link at a caret from Cmd/Ctrl+K with promptForUrl', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const textNode = $createTextNode('hello world');
+        paragraph.append(textNode);
+        root.append(paragraph);
+        textNode.select(6, 6);
+      });
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual(['hello world']),
+      );
+
+      const textbox = screen.getByRole('textbox');
+      fireEvent.keyDown(textbox, {key: 'k', metaKey: true});
+      fireEvent.keyDown(textbox, {key: 'k', ctrlKey: true});
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toContain(
+          'link:https://example.com/:example.com',
+        ),
+      );
+      expect(paragraphParts(editor)[0]).toBe('hello ');
+      expect(paragraphParts(editor)).not.toContain(
+        'link:https://example.com/:hello world',
+      );
+    });
+
+    it('updates the link around a caret instead of splitting it', async () => {
+      let editor!: LexicalEditor;
+      render(
+        <RichTextEditor
+          label="Notes"
+          toolbar={<RichTextEditorToolbar />}
+          plugins={<CaptureEditor onReady={e => (editor = e)} />}
+        />,
+      );
+      await waitFor(() => expect(editor).toBeDefined());
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const link = $createLinkNode('https://old.example/');
+        const linkText = $createTextNode('docs');
+        link.append(linkText);
+        paragraph.append($createTextNode('see '), link);
+        root.append(paragraph);
+        linkText.select(2, 2);
+      });
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'see ',
+          'link:https://old.example/:docs',
+        ]),
+      );
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+      expect(
+        await screen.findByRole('dialog', {name: 'Edit link', ...h}),
+      ).toBeInTheDocument();
+      const url = screen.getByRole('textbox', {name: 'URL', ...h});
+      fireEvent.change(url, {target: {value: 'https://new.example/'}});
+      fireEvent.click(screen.getByRole('button', {name: 'Update link', ...h}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'see ',
+          'link:https://new.example/:docs',
+        ]),
+      );
+    });
+
+    it('still links the selected text when the selection is not empty', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const textNode = $createTextNode('hello world');
+        paragraph.append(textNode);
+        root.append(paragraph);
+        textNode.select(0, 5);
+      });
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'link:https://example.com/:hello',
+          ' world',
+        ]),
+      );
+    });
+  });
+
   it('does not create a link when promptForUrl returns an unsafe scheme', async () => {
     let editor!: LexicalEditor;
     const promptForUrl = vi.fn(() => 'javascript:alert(1)');
@@ -1839,7 +2093,41 @@ describe('RichTextEditorToolbar — new-tab links', () => {
     });
   });
 
-  it('omits new-tab attributes when linkOpensInNewTab is false', async () => {
+  it('passes base props and the ref through to the Astryx Toolbar', () => {
+    const ref = createRef<HTMLDivElement>();
+    const onKeyDown = vi.fn();
+    render(
+      <RichTextEditor
+        label="Notes"
+        toolbar={
+          <RichTextEditorToolbar
+            ref={ref}
+            className="product-toolbar"
+            style={{marginBlockEnd: 3}}
+            data-testid="toolbar-root"
+            aria-describedby="toolbar-help"
+            onKeyDown={onKeyDown}
+          />
+        }
+      />,
+    );
+    // Base props land where core Toolbar puts them: the ref and styling on
+    // its root, every other base prop on the role="toolbar" element inside.
+    const toolbar = screen.getByRole('toolbar');
+    const root = ref.current;
+    expect(root).not.toBeNull();
+    expect(root?.contains(toolbar)).toBe(true);
+    expect(root).toHaveClass('product-toolbar');
+    expect(root?.style.marginBlockEnd).toBe('3px');
+    expect(screen.getByTestId('toolbar-root')).toBe(toolbar);
+    expect(toolbar).toHaveAttribute('aria-describedby', 'toolbar-help');
+    // The toolbar's own label and role survive the spread.
+    expect(toolbar).toHaveAccessibleName('Text formatting');
+    fireEvent.keyDown(toolbar, {key: 'x'});
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits new-tab attributes when hasNewTabLinks is false', async () => {
     let editor!: LexicalEditor;
     const promptForUrl = vi.fn(() => 'example.com');
     render(
@@ -1848,7 +2136,7 @@ describe('RichTextEditorToolbar — new-tab links', () => {
         toolbar={
           <RichTextEditorToolbar
             promptForUrl={promptForUrl}
-            linkOpensInNewTab={false}
+            hasNewTabLinks={false}
           />
         }
         plugins={<CaptureEditor onReady={e => (editor = e)} />}
@@ -2162,5 +2450,45 @@ describe('RichTextEditor translation', () => {
     expect(screen.getByRole('textbox')).toHaveAccessibleDescription(
       'Custom hint',
     );
+  });
+});
+
+describe('RichTextEditorToolbar end content', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('adds no divider for %s', (_name, value) => {
+    const html = () =>
+      within(
+        screen.getByRole('toolbar', {name: 'Text formatting'}),
+      ).queryAllByRole('separator').length;
+    const {unmount} = render(
+      <RichTextEditor
+        label="Notes"
+        toolbar={<RichTextEditorToolbar endContent={value as ReactNode} />}
+      />,
+    );
+    const withEnd = html();
+    unmount();
+    render(
+      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
+    );
+    expect(withEnd).toBe(html());
+  });
+
+  it('renders 0 as end content, as React does', () => {
+    render(
+      <RichTextEditor
+        label="Notes"
+        toolbar={<RichTextEditorToolbar endContent={0} />}
+      />,
+    );
+    expect(
+      within(screen.getByRole('toolbar', {name: 'Text formatting'})).getByText(
+        '0',
+      ),
+    ).toBeInTheDocument();
   });
 });

@@ -3,8 +3,10 @@
 /**
  * @file Banner.test.tsx
  * @input Uses vitest, @testing-library/react, Banner component
- * @output Unit tests for Banner component behavior, including the
- *   'banner-frame' theme target on the outer elevation/radius painter and the
+ * @output Unit tests for Banner component behavior, including default and
+ *   explicit live-region roles, augmented-status color fallback, scoped status
+ *   foregrounds that do not recolor consumer content or tooltips, the
+ *   'banner-frame' theme target on the outer elevation/radius painter, and the
  *   'banner-icon' theme target on the status icon glyph (#4166)
  * @position Testing; validates Banner.tsx implementation
  *
@@ -14,10 +16,11 @@
 import {describe, it, expect, vi, afterEach} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {Banner} from './Banner';
+import {Banner, type BannerStatus} from './Banner';
 import {defineTheme, generateThemeCSS} from '../theme';
 import {registerIcons, resetIcons} from '../Icon';
 import {InternationalizationProvider} from '../i18n';
+import {getForcedColorsRules} from '../__tests__/forcedColors';
 
 describe('Banner', () => {
   afterEach(() => {
@@ -29,24 +32,26 @@ describe('Banner', () => {
     expect(screen.getByText('Test Banner')).toBeInTheDocument();
   });
 
-  it('renders info status with role="status"', () => {
-    render(<Banner status="info" title="Info" />);
-    expect(screen.getByRole('status')).toBeInTheDocument();
+  it('does not infer a live-region role from visual status', () => {
+    const statuses = ['info', 'warning', 'error', 'success'] as const;
+    for (const status of statuses) {
+      const {container, unmount} = render(
+        <Banner status={status} title={`${status} banner`} />,
+      );
+      expect(container.firstElementChild).not.toHaveAttribute('role');
+      expect(container.firstElementChild).not.toHaveAttribute('aria-live');
+      unmount();
+    }
   });
 
-  it('renders warning status with role="alert"', () => {
-    render(<Banner status="warning" title="Warning" />);
-    expect(screen.getByRole('alert')).toBeInTheDocument();
-  });
+  it('forwards an explicit persistent or alert role', () => {
+    const {rerender} = render(
+      <Banner status="info" title="Saved" role="status" />,
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Saved');
 
-  it('renders error status with role="alert"', () => {
-    render(<Banner status="error" title="Error" />);
-    expect(screen.getByRole('alert')).toBeInTheDocument();
-  });
-
-  it('renders success status with role="status"', () => {
-    render(<Banner status="success" title="Success" />);
-    expect(screen.getByRole('status')).toBeInTheDocument();
+    rerender(<Banner status="error" title="Failed" role="alert" />);
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed');
   });
 
   it('renders default icon per status with aria-hidden', () => {
@@ -97,6 +102,79 @@ describe('Banner', () => {
     expect(screen.getByText('Title Only')).toBeInTheDocument();
     expect(screen.queryByText('This is a description')).not.toBeInTheDocument();
   });
+
+  it('keeps base title and description colors for an augmented status', () => {
+    const augmentedStatus = 'neutral' as unknown as BannerStatus;
+    const {rerender} = render(
+      <Banner
+        status={augmentedStatus}
+        title="Neutral title"
+        description="Neutral description"
+      />,
+    );
+
+    const customTitleClass = screen.getByText('Neutral title').className;
+    const customDescriptionClass = screen.getByText(
+      'Neutral description',
+    ).className;
+
+    rerender(
+      <Banner
+        status="info"
+        title="Info title"
+        description="Info description"
+      />,
+    );
+
+    expect(screen.getByText('Info title').className).not.toBe(customTitleClass);
+    expect(screen.getByText('Info description').className).not.toBe(
+      customDescriptionClass,
+    );
+  });
+
+  it.each([
+    ['info', 'var(--color-on-info-muted)'],
+    ['success', 'var(--color-on-success-muted)'],
+    ['warning', 'var(--color-on-warning-muted)'],
+    ['error', 'var(--color-on-error-muted)'],
+  ] as const)(
+    'routes %s built-in controls to the matching on-muted role without recoloring tooltips',
+    (status, expectedRole) => {
+      render(
+        <Banner
+          status={status}
+          title={`${status} banner`}
+          collapsible={{defaultIsOpen: true}}
+          isDismissable>
+          <div>Details</div>
+        </Banner>,
+      );
+
+      for (const button of [
+        screen.getByRole('button', {name: 'Collapse'}),
+        screen.getByRole('button', {name: `Dismiss ${status} banner`}),
+      ]) {
+        expect(
+          getComputedStyle(button).getPropertyValue('--color-text-primary'),
+        ).toBe(expectedRole);
+        // A tooltip that repeats the name does not describe the button
+        // (Button FR12), so find it by its text.
+        const describedBy = button.getAttribute('aria-describedby');
+        const tooltip =
+          describedBy != null
+            ? document.getElementById(describedBy)
+            : (screen
+                .getAllByRole('tooltip', {hidden: true})
+                .find(
+                  el => el.textContent === button.getAttribute('aria-label'),
+                ) ?? null);
+        expect(tooltip).not.toBeNull();
+        expect(
+          getComputedStyle(tooltip!).getPropertyValue('--color-text-primary'),
+        ).not.toBe(expectedRole);
+      }
+    },
+  );
 
   it('renders dismiss button when isDismissable', () => {
     render(<Banner status="info" title="Dismissable" isDismissable />);
@@ -159,19 +237,42 @@ describe('Banner', () => {
     expect(screen.queryByRole('button', {name: /^Dismiss/})).toBeNull();
   });
 
-  it('renders endContent', () => {
+  it('leaves consumer endContent outside the built-in status foreground', () => {
     render(
-      <Banner
-        status="info"
-        title="With Action"
-        endContent={
-          <button type="button" data-testid="end-btn">
-            Action
-          </button>
-        }
-      />,
+      <>
+        <style>{'dialog { color: inherit; }'}</style>
+        <Banner
+          status="warning"
+          title="Warning action"
+          endContent={
+            <dialog open data-testid="warning-dialog">
+              Consumer dialog
+            </dialog>
+          }
+        />
+        <Banner
+          status="error"
+          title="Error action"
+          endContent={
+            <dialog open data-testid="error-dialog">
+              Consumer dialog
+            </dialog>
+          }
+        />
+      </>,
     );
-    expect(screen.getByTestId('end-btn')).toBeInTheDocument();
+
+    const warningTitle = screen.getByText('Warning action');
+    const errorTitle = screen.getByText('Error action');
+    const warningDialog = screen.getByTestId('warning-dialog');
+    const errorDialog = screen.getByTestId('error-dialog');
+
+    expect(getComputedStyle(warningTitle).color).not.toBe(
+      getComputedStyle(errorTitle).color,
+    );
+    expect(getComputedStyle(warningDialog).color).toBe(
+      getComputedStyle(errorDialog).color,
+    );
   });
 
   it('renders card container by default', () => {
@@ -459,7 +560,7 @@ describe('Banner', () => {
     const target = container.querySelector(
       '.astryx-banner-icon[data-status="info"]',
     );
-    expect(target).toHaveAttribute('data-color', 'accent');
+    expect(target).toHaveAttribute('data-color', 'inherit');
   });
 
   it("keeps the 'banner-icon' target on the wrapper for a custom icon node", () => {
@@ -531,9 +632,9 @@ describe('Banner', () => {
           );
           const frame = container.firstElementChild;
           expect(frame).toHaveClass('astryx-banner-frame');
-          // The data attributes are canonical; the released bare values remain
-          // same-element compatibility classes through the 0.7.0 window.
-          expect(frame).toHaveClass(containerType, elevation);
+          // Visual axes are reflected only as canonical data attributes.
+          expect(frame).not.toHaveClass(containerType);
+          expect(frame).not.toHaveClass(elevation);
           expect(frame).toHaveAttribute('data-container', containerType);
           expect(frame).toHaveAttribute('data-elevation', elevation);
           expect(frame?.firstElementChild).toHaveClass('astryx-banner');
@@ -737,7 +838,13 @@ describe('Banner', () => {
         <Banner status="info" title={<span>Rich title</span>} isDismissable />,
       );
       const button = screen.getByRole('button', {name: 'Dismiss'});
-      expect(button).toHaveAccessibleDescription('Dismiss');
+      // The tooltip repeats the name, so it shows but adds no description.
+      expect(button).not.toHaveAttribute('aria-describedby');
+      expect(
+        screen
+          .getAllByRole('tooltip', {hidden: true})
+          .some(el => el.textContent === 'Dismiss'),
+      ).toBe(true);
     });
 
     it('uses a translated dismissLabel for a rich title and its tooltip', () => {
@@ -752,7 +859,12 @@ describe('Banner', () => {
       const button = screen.getByRole('button', {
         name: 'Wartungshinweis schließen',
       });
-      expect(button).toHaveAccessibleDescription('Wartungshinweis schließen');
+      expect(button).not.toHaveAttribute('aria-describedby');
+      expect(
+        screen
+          .getAllByRole('tooltip', {hidden: true})
+          .some(el => el.textContent === 'Wartungshinweis schließen'),
+      ).toBe(true);
     });
 
     it('keeps a translated verb when the titled message falls back to English', () => {
@@ -770,5 +882,17 @@ describe('Banner', () => {
       });
       expect(button).toHaveAccessibleDescription('Schließen');
     });
+  });
+});
+
+// jsdom cannot emulate forced colors, so this asserts the compiled rule the
+// status fill relies on (architecture:theme-tokens INV11): the fill becomes
+// Canvas, and a CanvasText boundary keeps its shape.
+describe('Banner forced colors', () => {
+  it('keeps a visible boundary on the status fill', () => {
+    render(<Banner status="error" title="Upload failed" />);
+    const css = getForcedColorsRules();
+    expect(css).toContain('outline-style: solid;');
+    expect(css).toContain('outline-color: canvastext;');
   });
 });

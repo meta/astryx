@@ -32,11 +32,12 @@ import type {LinkComponentType} from '../Link/types';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {isRenderable} from '../utils/isRenderable';
 
 // =============================================================================
 // Styles
@@ -191,11 +192,17 @@ export function TopNavMegaMenuItem({
   onClick,
   as,
   tabIndex,
+  xstyle,
+  className,
+  style,
+  ...restProps
 }: TopNavMegaMenuItemProps) {
   const pressable = usePressFeedback();
   const renderMode = useTopNavRenderMode();
   const LinkComponent = useLinkComponent(as);
-  const {closeMobileNav} = useAppShellMobile();
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(
+    renderMode === 'drawer',
+  );
 
   // =========================================================================
   // Drawer mode — matches SideNavItem / TopNavMenu drawer appearance
@@ -203,16 +210,17 @@ export function TopNavMegaMenuItem({
   if (renderMode === 'drawer') {
     const Element = href ? LinkComponent : 'button';
     const elementProps = Element === 'button' ? {type: 'button' as const} : {};
-    const handleDrawerClick = () => {
+    const handleDrawerClick = closeDrawerAfter(() => {
       onClick?.();
-      closeMobileNav();
-    };
+    });
     return (
       <Element
+        {...restProps}
         ref={ref}
         href={href}
         {...pressable}
         onClick={handleDrawerClick}
+        tabIndex={tabIndex}
         {...elementProps}
         {...mergeProps(
           themeProps('top-nav-mega-menu-item', {mode: 'drawer'}),
@@ -220,9 +228,14 @@ export function TopNavMegaMenuItem({
             navItemStyles.item,
             interactionOverlayStyles.backgroundColor,
             styles.drawerItem,
+            xstyle,
           ),
+          className,
+          style,
         )}>
-        {icon && <div {...stylex.props(styles.drawerItemIcon)}>{icon}</div>}
+        {isRenderable(icon) && (
+          <div {...stylex.props(styles.drawerItemIcon)}>{icon}</div>
+        )}
         <div {...stylex.props(styles.drawerItemContent)}>
           {title}
           {description && (
@@ -241,6 +254,7 @@ export function TopNavMegaMenuItem({
   const Element = href ? LinkComponent : 'div';
   return (
     <Element
+      {...restProps}
       ref={ref}
       href={href}
       {...pressable}
@@ -251,9 +265,14 @@ export function TopNavMegaMenuItem({
         focusOutlineProps.focusVisible(
           styles.desktop,
           interactionOverlayStyles.backgroundColor,
+          xstyle,
         ),
+        className,
+        style,
       )}>
-      {icon && <div {...stylex.props(styles.desktopIcon)}>{icon}</div>}
+      {isRenderable(icon) && (
+        <div {...stylex.props(styles.desktopIcon)}>{icon}</div>
+      )}
       <div {...stylex.props(styles.desktopContent)}>
         <span {...stylex.props(styles.desktopTitle)}>{title}</span>
         {description && (

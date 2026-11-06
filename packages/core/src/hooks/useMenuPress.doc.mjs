@@ -55,7 +55,7 @@ export const docs = {
       name: 'options.onHighlight',
       type: '(row: HTMLElement | null) => void',
       description:
-        'Move the highlight; null clears it. Defaults to moving DOM focus with preventScroll onto the row, and onto the menu root when there is no row. A picker that highlights through aria-activedescendant supplies its own.',
+        'Move the highlight; null clears it. Defaults to moving DOM focus with preventScroll onto the row, and onto the menu root when there is no row; after a pointer press that focus does not match :focus-visible. A picker that highlights through aria-activedescendant supplies its own.',
     },
     {
       name: 'options.onActivate',
@@ -132,7 +132,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Declare touch-action on the menu root: none when its rows fit, pan-y when it scrolls, so the browser — not the hook — decides when a finger is scrolling.',
+          'Declare touch-action on the menu root: pinch-zoom when its rows fit, pan-y pinch-zoom when it scrolls, so the browser — not the hook — decides when a finger is scrolling, and a two-finger pinch still zooms the page.',
       },
       {
         guidance: false,
@@ -164,7 +164,7 @@ export const docsDense = {
     'options.onTriggerPress':
       'mouse press / held finger on trigger: open, return whether it opened (false = the press closed it).',
     'options.onHighlight':
-      'move highlight (null clears); default = focus w/ preventScroll, menu root when no row.',
+      'move highlight (null clears); default = focus w/ preventScroll (not :focus-visible after a pointer press), menu root when no row.',
     'options.onActivate':
       'act on row under release; default = dispatch click w/ release button + modifiers.',
     'options.onDismiss': 'MOUSE released outside: close. Finger: never called.',
@@ -196,7 +196,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'touch-action on the root: none when rows fit, pan-y when it scrolls.',
+          'touch-action on the root: pinch-zoom when rows fit, pan-y pinch-zoom when it scrolls.',
       },
       {
         guidance: false,

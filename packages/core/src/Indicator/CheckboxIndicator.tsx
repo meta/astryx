@@ -16,7 +16,9 @@ import {
   easeVars,
   radiusVars,
 } from '../theme/tokens.stylex';
-import {isRenderable, mergeProps, themeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
 import {indicatorScope} from './indicator.markers.stylex';
 import type {IndicatorProps} from './types';
 
@@ -195,21 +197,15 @@ export function CheckboxIndicator({
       ref={ref}
       aria-hidden="true"
       {...mergeProps(
-        themeProps(
-          'checkbox-indicator',
-          {
-            size,
-            checked: isChecked
-              ? 'checked'
-              : isIndeterminate
-                ? 'indeterminate'
-                : null,
-            disabled: isDisabled ? 'disabled' : null,
-          },
-          // `checkbox` was the target before indicators existed; keep it
-          // emitted so existing themes continue to work.
-          {legacyNames: ['checkbox']},
-        ),
+        themeProps('checkbox-indicator', {
+          size,
+          checked: isChecked
+            ? 'checked'
+            : isIndeterminate
+              ? 'indeterminate'
+              : null,
+          disabled: isDisabled ? 'disabled' : null,
+        }),
         stylex.props(
           styles.box,
           boxSizeStyles[size],

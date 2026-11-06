@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/templates/template-assets`: make every
- * style, font, icon, and media dependency survive a template copy.
+ * @file `astryx docs authoring/building-blocks/templates/build-the-template/template-assets`:
+ * make every style, font, icon, and media dependency survive a template copy.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').NamespaceDoc} */

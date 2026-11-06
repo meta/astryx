@@ -4,8 +4,10 @@
 /**
  * Generates apps/docsite/src/generated/playground-scope.ts
  *
- * Maps Core exports and configured canary integrations into the preview iframe.
- * @input Core package exports, docsite integrations, and the content target
+ * Maps Core exports and the integration packages this build documents into
+ * the preview iframe.
+ * @input Core package exports, the admitted integration packages recorded by
+ *   generate-data.mjs, and the content target
  * @output The runtime module scope used by copyable Playground examples
  * @position Build-time companion to component and block registry generation
  * This runs as part of `pnpm generate` (before dev/build) so new components
@@ -17,19 +19,19 @@
 import {readFileSync, writeFileSync, mkdirSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import docsiteConfig from '../astryx.config.mjs';
 import {getTarget} from './resolve-content-root.mjs';
-import {integrationPackagesForTarget} from '../src/lib/integrationTargets.mjs';
+import {readAdmittedIntegrationPackages} from '../src/lib/integrationTargets.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const CORE_PKG = resolve(ROOT, '../../packages/core/package.json');
 const OUT = resolve(ROOT, 'src/generated/playground-scope.ts');
-// Shared with generate-data.mjs so the canary-only admission rule for
-// integration packages cannot drift between the two generators.
-const integrationPackages = integrationPackagesForTarget(
+// The packages generate-data.mjs admitted for this target (canary: every
+// configured integration; latest: the stable releases in its content
+// snapshot), so the scope and the registries describe the same packages.
+const integrationPackages = readAdmittedIntegrationPackages(
+  resolve(ROOT, 'src/generated'),
   getTarget(),
-  docsiteConfig,
 );
 
 const HEADER = `// Copyright (c) Meta Platforms, Inc. and affiliates.
@@ -292,6 +294,12 @@ lines.push('');
 lines.push("import * as Hooks from '@astryxdesign/core/hooks';");
 lines.push('');
 
+// ── Utils ──────────────────────────────────────────────────────────────
+// camelCase too, and skipped for the same reason. Page templates mirror their
+// directional icons in right-to-left with `rtlStyles` from here.
+lines.push("import * as Utils from '@astryxdesign/core/utils';");
+lines.push('');
+
 // ── Icon and chart libraries ───────────────────────────────────────────
 lines.push("import * as LucideIcons from 'lucide-react';");
 lines.push("import * as Recharts from 'recharts';");
@@ -399,6 +407,9 @@ lines.push("  '@astryxdesign/core/theme/tokens.stylex': astryxTokens,");
 
 // hooks (useMediaQuery, etc.)
 lines.push("  '@astryxdesign/core/hooks': Hooks,");
+
+// utils (rtlStyles, etc.)
+lines.push("  '@astryxdesign/core/utils': Utils,");
 
 // Per-component and nested-module subpath entries
 for (const name of components) {

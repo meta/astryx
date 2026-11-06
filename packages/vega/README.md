@@ -29,7 +29,7 @@ Vega is published **only** under the `@canary` dist-tag, so you must request tha
 npm install @astryxdesign/vega@canary vega vega-lite
 ```
 
-> Canary builds track the latest commit on `main` (`0.x.y-canary.<sha>`). They can break between any two versions — pin an exact version if you need stability.
+> Canary builds follow `main`'s tip, published at most once an hour and on demand (`0.x.y-canary.<sha>`). They can break between any two versions — pin an exact version if you need stability.
 
 ## Usage
 
@@ -264,20 +264,11 @@ pnpm -F @astryxdesign/vega build
 `package.json` keeps `"private": true` plus an `"astryx": { "canaryOnly": true }` marker. The release workflow (`.github/workflows/release.yml`) handles both dist-tags:
 
 - The **stable (`latest`) job** skips every package that is `private` **or** `canaryOnly`, so Vega can never be published as a stable release by accident.
-- The **canary job** runs on every push to `main`. In its ephemeral CI checkout only (never in git) it strips the `private` flag from `canaryOnly` packages and publishes them to the `@canary` dist-tag as `0.x.y-canary.<short-sha>`, with npm OIDC trusted publishing + provenance.
+- The **canary job** runs at most hourly from `main`'s tip, and on demand from `main`. In its ephemeral CI checkout only (never in git) it strips the `private` flag from `canaryOnly` packages and publishes them to the `@canary` dist-tag as `0.x.y-canary.<short-sha>`, with npm OIDC trusted publishing + provenance.
 
 The committed `private: true` is npm's hard guarantee that no stable publish can ever happen — **do not remove it until the graduation steps below are intentionally taken.**
 
-> **First canary won't publish until the package name is claimed on npm.** npm cannot register OIDC trust for a name that does not yet exist on the registry. An `@astryxdesign` npm org owner must bootstrap it once (this also applies before the first stable publish):
->
-> ```bash
-> npm i -g npm@latest
-> npm login --registry https://registry.npmjs.org   # must be an @astryxdesign org owner
-> pnpm run setup-trusted-publishing                  # audit — shows what needs bootstrap/trust
-> pnpm run setup-trusted-publishing --bootstrap --setup-trust --workflow release.yml
-> ```
->
-> This publishes a deprecated `0.0.0-bootstrap.0` stub to claim the name and registers `release.yml` as the trusted publisher. Until this is done, CI's canary publish for this package will fail.
+> **First canary won't publish until the package name is claimed on npm.** npm cannot register OIDC trust for a name that does not yet exist on the registry. An `@astryxdesign` npm org owner must claim the name and register `release.yml` as its trusted publisher once, following [Trusted-publisher setup](https://github.com/meta/astryx/blob/main/docs/release.md#trusted-publisher-setup) (this also applies before the first stable publish). Until this is done, CI's canary publish for this package will fail.
 
 ### Graduating to a public stable (`latest`) release
 
@@ -298,7 +289,7 @@ When Vega is ready to be published publicly as a stable release, take these step
    ```
 
 5. **Land the change, then version + publish** through the normal release flow:
-   - Merge the PR that removes the gating (a canary publishes automatically on that push to `main`).
+   - Merge the PR that removes the gating (the next hourly canary, or a canary dispatch from `main`, publishes it).
    - Run the version-bump PR (`pnpm version-packages`, refresh the lockfile, merge) — this bumps versions on `main` but publishes nothing.
    - Dispatch the stable Release workflow to publish the `latest` dist-tag:
 

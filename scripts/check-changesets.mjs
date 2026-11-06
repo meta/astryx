@@ -97,6 +97,23 @@ function validateChangeset(file, contents, ctx) {
       `${file}: [breaking] cannot merge while main declares patch ${declaredVersion}. ` +
         'Plan the minor first, or keep the change compatible through deprecation.',
     );
+  // Fail closed: a breaking entry is admitted only once the fixed group
+  // declares one plain x.y.0. Split versions or a prerelease declare no tier.
+  // Only a repository check carries `declaredTier`; a caller validating one
+  // entry without a declaration is not making an admission decision.
+  if (
+    pre1 &&
+    parsed.category === 'breaking' &&
+    'declaredTier' in ctx &&
+    declaredTier == null
+  )
+    problems.push(
+      `${file}: [breaking] cannot merge until the fixed group declares one plain minor version` +
+        (declaredVersion
+          ? ` (found ${declaredVersion})`
+          : ' (the fixed packages disagree)') +
+        '. Plan the minor first, or keep the change compatible through deprecation.',
+    );
 
   for (const [name, type] of Object.entries(fm.releases)) {
     if (!allNames.has(name)) {

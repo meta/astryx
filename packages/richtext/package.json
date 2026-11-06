@@ -1,19 +1,18 @@
 {
   "name": "@astryxdesign/richtext",
   "displayName": "Rich Text",
-  "version": "0.1.9",
-  "private": true,
-  "description": "Astryx rich text — a Lexical-based rich text editor and viewer. Published to npm only under the @canary dist-tag for early testing; never released as a stable (latest) version.",
+  "version": "0.7.10",
+  "description": "Astryx rich text — a Lexical-based rich text editor and viewer, styled with Astryx design tokens.",
   "author": "Meta Open Source",
   "license": "MIT",
-  "homepage": "https://github.com/facebook/astryx#readme",
+  "homepage": "https://github.com/meta/astryx#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/astryx.git",
+    "url": "git+https://github.com/meta/astryx.git",
     "directory": "packages/richtext"
   },
   "bugs": {
-    "url": "https://github.com/facebook/astryx/issues"
+    "url": "https://github.com/meta/astryx/issues"
   },
   "keywords": [
     "astryx",
@@ -23,21 +22,32 @@
     "lexical",
     "design-system"
   ],
-  "astryx": {
-    "canaryOnly": true,
-    "_comment": "Published ONLY to the @canary dist-tag (see .github/workflows/release.yml). Never released as a stable `latest` release. `private: true` is intentional and must stay — it is npm\"s hard guarantee against an accidental stable publish."
-  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
   "files": [
     "astryx.integration.mjs",
     "blocks",
     "dist",
     "src",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "exports": {
     ".": {
@@ -55,35 +65,36 @@
     }
   },
   "scripts": {
+    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "prepack": "pnpm build",
-    "build": "node ../../scripts/clean-dist.mjs && pnpm build:esm && tsc --project tsconfig.build.json && pnpm build:css && node ../../scripts/check-no-dev-jsx.mjs && node ../../scripts/check-fully-specified.mjs",
-    "build:esm": "babel src --out-dir dist --extensions \".ts,.tsx\" --out-file-extension \".js\" --ignore \"**/*.test.ts,**/*.test.tsx,**/__tests__/**,**/*.perf.test.*,**/*.doc.mjs,**/*.d.ts,**/*.css,**/*.css.d.ts\" --config-file ./babel.config.json",
+    "build": "node ../../scripts/clean-dist.mjs && pnpm build:esm && tsc --project tsconfig.build.json && node ../../scripts/add-declaration-extensions.mjs && pnpm build:css && node ../../scripts/check-no-dev-jsx.mjs && node ../../scripts/check-fully-specified.mjs",
+    "build:esm": "babel src --out-dir dist --extensions \".ts,.tsx\" --out-file-extension \".js\" --ignore \"**/*.test.ts,**/*.test.tsx,**/__tests__/**,**/*.perf.test.*,**/*.doc.mjs,**/*.d.ts,**/*.css,**/*.css.d.ts\" --config-file ./babel.config.cjs",
     "build:css": "node ../../scripts/build-css.mjs --package richtext",
-    "dev": "babel src --watch --out-dir dist --extensions \".ts,.tsx\" --out-file-extension \".js\" --ignore \"**/*.test.*,**/*.doc.mjs,**/*.d.ts,**/*.css*\" --config-file ./babel.config.json",
+    "dev": "babel src --watch --out-dir dist --extensions \".ts,.tsx\" --out-file-extension \".js\" --ignore \"**/*.test.*,**/*.doc.mjs,**/*.d.ts,**/*.css*\" --config-file ./babel.config.cjs",
     "test": "vitest run --root ../..",
     "test:watch": "vitest --root ../..",
     "lint": "eslint src",
     "typecheck:docs": "tsc --project tsconfig.docs.json",
-    "typecheck": "tsc --project tsconfig.json --noEmit"
+    "typecheck": "tsc --project tsconfig.json --noEmit && pnpm typecheck:docs"
   },
   "peerDependencies": {
     "@stylexjs/stylex": ">=0.10.0",
-    "@astryxdesign/core": "0.7.0",
+    "@astryxdesign/core": "0.7.10",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
-    "lexical": "^0.46.0",
-    "@lexical/react": "^0.46.0",
-    "@lexical/markdown": "^0.46.0",
-    "@lexical/headless": "^0.46.0",
-    "@lexical/html": "^0.46.0",
-    "@lexical/link": "^0.46.0",
-    "@lexical/list": "^0.46.0",
-    "@lexical/rich-text": "^0.46.0",
-    "@lexical/selection": "^0.46.0",
-    "@lexical/code": "^0.46.0",
-    "@lexical/extension": "^0.46.0",
-    "@lexical/table": "^0.46.0",
-    "@lexical/utils": "^0.46.0"
+    "lexical": "^0.52.0",
+    "@lexical/react": "^0.52.0",
+    "@lexical/markdown": "^0.52.0",
+    "@lexical/headless": "^0.52.0",
+    "@lexical/html": "^0.52.0",
+    "@lexical/link": "^0.52.0",
+    "@lexical/list": "^0.52.0",
+    "@lexical/rich-text": "^0.52.0",
+    "@lexical/selection": "^0.52.0",
+    "@lexical/code": "^0.52.0",
+    "@lexical/extension": "^0.52.0",
+    "@lexical/table": "^0.52.0",
+    "@lexical/utils": "^0.52.0"
   },
   "peerDependenciesMeta": {
     "lexical": {
@@ -133,20 +144,20 @@
     "@babel/core": "catalog:",
     "@babel/preset-react": "catalog:",
     "@babel/preset-typescript": "catalog:",
-    "@lexical/code": "^0.46.0",
-    "@lexical/extension": "^0.46.0",
-    "@lexical/headless": "^0.46.0",
-    "@lexical/html": "^0.46.0",
-    "@lexical/link": "^0.46.0",
-    "@lexical/list": "^0.46.0",
-    "@lexical/markdown": "^0.46.0",
-    "@lexical/react": "^0.46.0",
-    "@lexical/rich-text": "^0.46.0",
-    "@lexical/selection": "^0.46.0",
-    "@lexical/table": "^0.46.0",
-    "@lexical/utils": "^0.46.0",
+    "@lexical/code": "^0.52.0",
+    "@lexical/extension": "^0.52.0",
+    "@lexical/headless": "^0.52.0",
+    "@lexical/html": "^0.52.0",
+    "@lexical/link": "^0.52.0",
+    "@lexical/list": "^0.52.0",
+    "@lexical/markdown": "^0.52.0",
+    "@lexical/react": "^0.52.0",
+    "@lexical/rich-text": "^0.52.0",
+    "@lexical/selection": "^0.52.0",
+    "@lexical/table": "^0.52.0",
+    "@lexical/utils": "^0.52.0",
     "@stylexjs/babel-plugin": "catalog:",
     "@testing-library/react": "catalog:",
-    "lexical": "^0.46.0"
+    "lexical": "^0.52.0"
   }
 }

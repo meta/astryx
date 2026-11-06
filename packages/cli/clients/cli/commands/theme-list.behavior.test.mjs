@@ -24,12 +24,19 @@ afterEach(() => {
 
 describe('astryx theme list', () => {
   it('lists bundled themes and points at import, eject, and discover', async () => {
+    // Inside a project; outside one there is no app to import into
+    // (outside-project.test.mjs).
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}',
+    );
     const {status, stdout} = await runCli(['theme', 'list'], {cwd: tmpDir});
 
     expect(status).toBe(0);
     expect(stdout).toMatch(/^slug:\s+neutral$/m);
     expect(stdout).toMatch(/^package:\s+@astryxdesign\/cli$/m);
-    expect(stdout).toMatch(/Import one: .*theme add <slug> --import/m);
+    expect(stdout).toMatch(/Import one: .*theme add <slug>/m);
+    expect(stdout).not.toContain('theme add <slug> --import');
     expect(stdout).toMatch(/Fork source: .*theme eject <slug>/m);
     expect(stdout).toMatch(/More themes in packages you could add: .*discover theme$/m);
   });

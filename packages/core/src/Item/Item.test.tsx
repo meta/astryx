@@ -3,19 +3,31 @@
 /**
  * @file Item.test.tsx
  * @input Uses vitest, @testing-library/react, Item component
- * @output Unit tests for Item
+ * @output Unit tests for Item, including flat marker DOM and numbered-row scope
  * @position Testing; validates Item component implementation
  *
  * SYNC: When Item component changes, update tests to match new behavior
  */
 
-import {use, useRef} from 'react';
-import {afterEach, beforeEach, describe, it, expect, vi} from 'vitest';
-import {act, fireEvent, render, screen} from '@testing-library/react';
-import {rulesDeclaredFor} from '../__tests__/pressState';
+import {Activity, use, useRef, type ReactNode} from 'react';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  it,
+  expect,
+  vi,
+} from 'vitest';
+import {act, cleanup, fireEvent, render, screen} from '@testing-library/react';
+import {layerOnlyWhilePressed, rulesDeclaredFor} from '../__tests__/pressState';
+import {swipeLayerLoaded} from './__tests__/swipeLayerLoaded';
 import userEvent from '@testing-library/user-event';
+import {LinkProvider} from '../Link/LinkProvider';
 import {Item} from './Item';
+import {useClickableContainer} from '../hooks/useClickableContainer';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
+import {List, ListItem} from '../List';
 
 /**
  * Item in delegation mode: `interactiveRef` points at a nested control that
@@ -276,6 +288,39 @@ describe('Item', () => {
     expect(document.body).toHaveFocus();
   });
 
+  it('drops its pressable marker when a row stops delegating, so a mouse click in its padding reaches a clickable container around it', () => {
+    const cardClick = vi.fn();
+    function Card({delegates}: {delegates: boolean}) {
+      const cardRef = useRef<HTMLDivElement | null>(null);
+      const checkboxRef = useRef<HTMLInputElement>(null);
+      const {onClick} = useClickableContainer({
+        containerRef: cardRef,
+        onClick: cardClick,
+      });
+      return (
+        <div ref={cardRef} onClick={onClick}>
+          <Item
+            label="Row"
+            interactiveRef={delegates ? checkboxRef : undefined}
+            startContent={
+              <input ref={checkboxRef} type="checkbox" aria-label="Pick row" />
+            }
+          />
+        </div>
+      );
+    }
+    const {container, rerender} = render(<Card delegates />);
+    const row = container.firstElementChild?.firstElementChild as HTMLElement;
+    expect(row).toHaveAttribute('data-pressable-container', 'true');
+
+    rerender(<Card delegates={false} />);
+    expect(row).not.toHaveAttribute('data-pressable-container');
+    withPrimaryPointer(false, () => {
+      fireEvent.click(row, {detail: 1});
+    });
+    expect(cardClick).toHaveBeenCalledTimes(1);
+  });
+
   it('delegates a row-surface click to the interactive control', async () => {
     const user = userEvent.setup();
     const onToggle = vi.fn();
@@ -330,6 +375,243 @@ describe('Item', () => {
     expect(anchor?.textContent).toContain('Link');
   });
 
+  /** A List link row whose box spans x 0–100 and y 10–50, its anchor followed. */
+  function linkRow(endContent?: ReactNode) {
+    const {container} = render(
+      <List>
+        <ListItem label="Link" href="/docs" endContent={endContent} />
+      </List>,
+    );
+    const anchor = container.querySelector('a') as HTMLAnchorElement;
+    const followed = vi.fn((event: MouseEvent) => event.preventDefault());
+    anchor.addEventListener('click', followed);
+    const row = container.querySelector('li') as HTMLElement;
+    vi.spyOn(row, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 0, y: 10, width: 100, height: 40}),
+    );
+    return {anchor, followed, row};
+  }
+
+  it('follows the link on a tap in a List link row’s touch band, past its box', () => {
+    const {anchor, followed, row} = linkRow();
+    fireEvent.click(row, {clientX: 50, clientY: 5, detail: 1});
+    expect(followed).toHaveBeenCalledTimes(1);
+    // A click on the anchor itself follows it once, not twice.
+    fireEvent.click(anchor);
+    expect(followed).toHaveBeenCalledTimes(2);
+    // Modifier keys carry over, so a ctrl or cmd tap opens as on the label.
+    fireEvent.click(row, {clientX: 50, clientY: 55, detail: 1, ctrlKey: true});
+    expect(followed).toHaveBeenCalledTimes(3);
+    expect(followed.mock.calls[2][0].ctrlKey).toBe(true);
+  });
+
+  it('does nothing for a mouse click inside a List link row’s box but outside its anchor', () => {
+    const {followed, row} = linkRow();
+    fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
+    expect(followed).not.toHaveBeenCalled();
+  });
+
+  /** Runs `body` with the primary pointer coarse or fine. */
+  function withPrimaryPointer(coarse: boolean, body: () => void) {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: coarse && query === '(pointer: coarse)',
+      media: query,
+      addEventListener() {},
+      removeEventListener() {},
+    })) as unknown as typeof window.matchMedia;
+    try {
+      body();
+    } finally {
+      window.matchMedia = original;
+    }
+  }
+
+  it('decides a tap in a List link row’s own padding by the primary pointer, not the pointer that made it', () => {
+    const {followed, row} = linkRow();
+    // A fine primary pointer keeps the anchor as the target: a finger's tap in
+    // the padding (a touch screen beside a mouse) does nothing.
+    withPrimaryPointer(false, () => {
+      fireEvent.pointerDown(row, {pointerType: 'touch'});
+      fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
+    });
+    expect(followed).not.toHaveBeenCalled();
+    // Under a coarse primary pointer the padding is part of the row's
+    // target, whatever pointer made the click (WebKit reports a finger's
+    // click as `mouse`).
+    withPrimaryPointer(true, () => {
+      fireEvent.pointerDown(row, {pointerType: 'mouse'});
+      fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
+    });
+    expect(followed).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a standalone link Item to its anchor under a finger: a tap in its padding or past its box does nothing', () => {
+    const {container} = render(<Item label="Link" href="/docs" />);
+    const anchor = container.querySelector('a') as HTMLAnchorElement;
+    const followed = vi.fn((event: MouseEvent) => event.preventDefault());
+    anchor.addEventListener('click', followed);
+    const row = container.firstElementChild as HTMLElement;
+    vi.spyOn(row, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 0, y: 10, width: 100, height: 40}),
+    );
+    withPrimaryPointer(true, () => {
+      fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
+      fireEvent.click(row, {clientX: 50, clientY: 5, detail: 1});
+    });
+    expect(followed).not.toHaveBeenCalled();
+    // Present first: its anchor itself still follows.
+    fireEvent.click(anchor);
+    expect(followed).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a link Item inside a List row’s content to its anchor under a finger', () => {
+    const {container} = render(
+      <List>
+        <ListItem label="Row" endContent={<Item label="Nested" href="/n" />} />
+      </List>,
+    );
+    const nested = container.querySelector('li [href="/n"]')?.parentElement;
+    const anchor = container.querySelector('[href="/n"]') as HTMLElement;
+    const followed = vi.fn((event: MouseEvent) => event.preventDefault());
+    anchor.addEventListener('click', followed);
+    // Present first: the nested Item is in the row.
+    expect(nested).not.toBeNull();
+    withPrimaryPointer(true, () => {
+      fireEvent.click(nested as HTMLElement, {detail: 1});
+    });
+    expect(followed).not.toHaveBeenCalled();
+  });
+
+  it('under a finger, leaves a tap on a control in a List link row’s end content to that control', () => {
+    const control = vi.fn();
+    const {followed} = linkRow(
+      <span role="button" tabIndex={0} onClick={control}>
+        More
+      </span>,
+    );
+    withPrimaryPointer(true, () => {
+      fireEvent.click(screen.getByRole('button', {name: 'More'}), {detail: 1});
+    });
+    expect(control).toHaveBeenCalledTimes(1);
+    expect(followed).not.toHaveBeenCalled();
+  });
+
+  it('under a finger, does not follow a List link row’s link on the click that ends a text selection in it', () => {
+    const {followed, row} = linkRow();
+    // Present first: the same tap with no selection follows the link.
+    withPrimaryPointer(true, () => {
+      fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
+    });
+    expect(followed).toHaveBeenCalledTimes(1);
+    const selection = document.getSelection() as Selection;
+    selection.selectAllChildren(row);
+    try {
+      withPrimaryPointer(true, () => {
+        fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
+      });
+      expect(followed).toHaveBeenCalledTimes(1);
+    } finally {
+      selection.removeAllRanges();
+    }
+  });
+
+  it('with a mouse, leaves a click in a List link row’s padding to a clickable container around it', () => {
+    const cardClick = vi.fn();
+    function Card({children}: {children: ReactNode}) {
+      const cardRef = useRef<HTMLDivElement | null>(null);
+      const {onClick} = useClickableContainer({
+        containerRef: cardRef,
+        onClick: cardClick,
+      });
+      return (
+        <div ref={cardRef} onClick={onClick}>
+          {children}
+        </div>
+      );
+    }
+    const {container} = render(
+      <Card>
+        <List>
+          <ListItem label="Link" href="/docs" />
+        </List>
+      </Card>,
+    );
+    const row = container.querySelector('li') as HTMLElement;
+    const anchor = row.querySelector('a') as HTMLAnchorElement;
+    const followed = vi.fn((event: MouseEvent) => event.preventDefault());
+    anchor.addEventListener('click', followed);
+    vi.spyOn(row, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 0, y: 10, width: 100, height: 40}),
+    );
+    withPrimaryPointer(false, () => {
+      fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
+    });
+    expect(followed).not.toHaveBeenCalled();
+    expect(cardClick).toHaveBeenCalledTimes(1);
+    expect(row).not.toHaveAttribute('data-pressable-container');
+  });
+
+  it('keeps a List link row unmarked after its Activity hides and shows, so a mouse click in its padding still reaches the card around it', () => {
+    const cardClick = vi.fn();
+    function Card({hidden}: {hidden: boolean}) {
+      const cardRef = useRef<HTMLDivElement | null>(null);
+      const {onClick} = useClickableContainer({
+        containerRef: cardRef,
+        onClick: cardClick,
+      });
+      return (
+        <div ref={cardRef} onClick={onClick}>
+          <Activity mode={hidden ? 'hidden' : 'visible'}>
+            <List>
+              <ListItem label="Link" href="/docs" />
+            </List>
+          </Activity>
+        </div>
+      );
+    }
+    const {container, rerender} = render(<Card hidden={false} />);
+    const row = container.querySelector('li') as HTMLElement;
+    const anchor = row.querySelector('a') as HTMLAnchorElement;
+    const followed = vi.fn((event: MouseEvent) => event.preventDefault());
+    anchor.addEventListener('click', followed);
+    vi.spyOn(row, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 0, y: 10, width: 100, height: 40}),
+    );
+    // A finger's tap in the padding follows the link.
+    withPrimaryPointer(true, () => {
+      fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
+    });
+    expect(followed).toHaveBeenCalledTimes(1);
+    rerender(<Card hidden />);
+    rerender(<Card hidden={false} />);
+    expect(row).not.toHaveAttribute('data-pressable-container');
+    withPrimaryPointer(false, () => {
+      fireEvent.click(row, {clientX: 4, clientY: 30, detail: 1});
+    });
+    expect(cardClick).toHaveBeenCalledTimes(1);
+    expect(followed).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing for a click with no pointer behind it', () => {
+    const {followed, row} = linkRow();
+    fireEvent.click(row, {clientX: 50, clientY: 5, detail: 0});
+    expect(followed).not.toHaveBeenCalled();
+  });
+
+  it('keeps a row with both onClick and href on onClick for a click in its own box', () => {
+    const onClick = vi.fn();
+    const {container} = render(
+      <Item label="Both" href="/docs" onClick={onClick} />,
+    );
+    const anchor = container.querySelector('a') as HTMLAnchorElement;
+    const followed = vi.fn((event: MouseEvent) => event.preventDefault());
+    anchor.addEventListener('click', followed);
+    fireEvent.click(container.firstElementChild as HTMLElement);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(followed).not.toHaveBeenCalled();
+  });
+
   it('sets target on anchor when provided', () => {
     const {container} = render(
       <Item label="External" href="https://example.com" target="_blank" />,
@@ -365,6 +647,65 @@ describe('Item', () => {
   it('applies aria-disabled when isDisabled', () => {
     render(<Item label="Disabled" isDisabled data-testid="item" />);
     expect(screen.getByTestId('item')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it("gives a disabled row's link no destination (spec:AST-085 FR2)", () => {
+    function RouterLink({ref, ...props}: React.ComponentPropsWithRef<'a'>) {
+      return <a ref={ref} data-router-link {...props} />;
+    }
+    render(
+      <LinkProvider component={RouterLink}>
+        <Item
+          label="Billing"
+          href="/billing"
+          target="_blank"
+          rel="noopener"
+          isDisabled
+        />
+        <Item label="Profile" href="/profile" />
+      </LinkProvider>,
+    );
+    // No href, target or rel, so a screen reader's click, Enter or a link
+    // menu cannot navigate; it keeps the link role and skips the router link.
+    const disabled = screen.getByRole('link', {name: 'Billing'});
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    for (const attribute of ['href', 'target', 'rel', 'data-router-link']) {
+      expect(disabled).not.toHaveAttribute(attribute);
+    }
+    const enabled = screen.getByRole('link', {name: 'Profile'});
+    expect(enabled).toHaveAttribute('href', '/profile');
+    expect(enabled).toHaveAttribute('data-router-link');
+    expect(enabled).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('keeps focus on a focused link row that becomes disabled (spec:AST-085 FR4)', () => {
+    const {rerender} = render(<Item label="Billing" href="/billing" />);
+    screen.getByRole('link', {name: 'Billing'}).focus();
+    rerender(<Item label="Billing" href="/billing" isDisabled />);
+    // The disabled row renders a plain anchor in place of the link component;
+    // focus moves to it instead of falling to the page.
+    const disabled = screen.getByRole('link', {name: 'Billing'});
+    expect(disabled).not.toHaveAttribute('href');
+    expect(disabled).toHaveFocus();
+    rerender(<Item label="Billing" href="/billing" />);
+    expect(screen.getByRole('link', {name: 'Billing'})).toHaveFocus();
+  });
+
+  it('does not pull focus back to a row that changes while focus is elsewhere', () => {
+    const {rerender} = render(
+      <>
+        <Item label="Billing" href="/billing" />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    screen.getByRole('button', {name: 'Elsewhere'}).focus();
+    rerender(
+      <>
+        <Item label="Billing" href="/billing" isDisabled />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
   });
 
   it('disables the invisible button when isDisabled', () => {
@@ -464,6 +805,12 @@ describe('Item', () => {
     expect(root?.querySelector('[data-testid="marker"]')).toBeInTheDocument();
     expect(root?.querySelector('[data-testid="start"]')).toBeInTheDocument();
     expect(root?.querySelector('[data-testid="end"]')).toBeInTheDocument();
+    // A bullet or caller-owned marker needs no extra formatting group: marker,
+    // start, primary and end retain the released flat row structure.
+    expect(root?.children).toHaveLength(4);
+    expect(button?.parentElement).toBe(root);
+    expect(screen.getByTestId('start').parentElement?.parentElement).toBe(root);
+    expect(screen.getByTestId('end').parentElement?.parentElement).toBe(root);
     expect(
       button?.querySelector('[data-testid="marker"]'),
     ).not.toBeInTheDocument();
@@ -514,6 +861,182 @@ describe('Item', () => {
   it('renders with start alignment', () => {
     render(<Item label="Item" align="start" data-testid="item" />);
     expect(screen.getByTestId('item')).toBeInTheDocument();
+  });
+
+  it('reflects the resolved alignment on the item theme target', () => {
+    const {rerender} = render(<Item label="Item" data-testid="item" />);
+    expect(screen.getByTestId('item')).toHaveAttribute('data-align', 'center');
+    for (const align of ['center', 'start', 'first-line'] as const) {
+      rerender(<Item label="Item" align={align} data-testid="item" />);
+      const item = screen.getByTestId('item');
+      expect(item).toHaveClass('astryx-item');
+      expect(item).toHaveAttribute('data-align', align);
+    }
+  });
+
+  it('keeps its touch press layer to a press: on or fading', () => {
+    render(<Item label="Row" onClick={() => {}} data-testid="row" />);
+    // Under a coarse pointer the row's `::before` layer and its isolation
+    // apply only on a press arm; at rest a caller's own `::before` keeps its
+    // styles.
+    expect(layerOnlyWhilePressed(screen.getByTestId('row'), '::before')).toBe(
+      true,
+    );
+  });
+
+  it('truncates the label and description to the lines it is given', () => {
+    // The clamp count reaches CSS through a custom property, so resolve it.
+    const lineClamp = (element: HTMLElement) => {
+      const value = getComputedStyle(element)
+        .getPropertyValue('-webkit-line-clamp')
+        .trim();
+      const variable = /^var\((--[^),]+)\)$/.exec(value)?.[1];
+      return variable == null
+        ? value
+        : getComputedStyle(element).getPropertyValue(variable).trim() ||
+            element.style.getPropertyValue(variable).trim();
+    };
+    // A node label wraps by default, so one line comes from labelLines.
+    const {rerender} = render(
+      <Item
+        label={<span>A long label</span>}
+        labelLines={1}
+        description={<span>A long description</span>}
+        descriptionLines={1}
+      />,
+    );
+    for (const text of ['A long label', 'A long description']) {
+      const style = getComputedStyle(screen.getByText(text).parentElement!);
+      expect(style.overflow).toBe('hidden');
+      expect(style.textOverflow).toBe('ellipsis');
+      expect(style.whiteSpace).toBe('nowrap');
+    }
+    rerender(
+      <Item
+        label="A long label"
+        labelLines={3}
+        description="A long description"
+        descriptionLines={2}
+      />,
+    );
+    const label = screen.getByText('A long label');
+    const description = screen.getByText('A long description');
+    for (const element of [label, description]) {
+      const style = getComputedStyle(element);
+      expect(style.overflow).toBe('hidden');
+      expect(style.display).toBe('-webkit-box');
+      expect(style.whiteSpace).not.toBe('nowrap');
+    }
+    expect(lineClamp(label)).toBe('3');
+    expect(lineClamp(description)).toBe('2');
+  });
+
+  it('reflects highlighted, selected, and disabled on the item theme target', () => {
+    const {rerender} = render(<Item label="Item" data-testid="item" />);
+    const item = () => screen.getByTestId('item');
+    for (const state of ['highlighted', 'selected', 'disabled']) {
+      expect(item()).not.toHaveAttribute(`data-${state}`);
+    }
+    rerender(
+      <Item
+        label="Item"
+        isHighlighted
+        isSelected
+        isDisabled
+        onClick={() => {}}
+        data-testid="item"
+      />,
+    );
+    expect(item()).toHaveClass('astryx-item');
+    expect(item()).toHaveAttribute('data-highlighted', 'highlighted');
+    expect(item()).toHaveAttribute('data-selected', 'selected');
+    expect(item()).toHaveAttribute('data-disabled', 'disabled');
+    rerender(<Item label="Item" role="option" isSelected data-testid="item" />);
+    expect(item()).toHaveAttribute('data-selected', 'selected');
+    expect(item()).not.toHaveAttribute('data-highlighted');
+    expect(item()).not.toHaveAttribute('data-disabled');
+  });
+
+  it('aligns the row on first baselines only under first-line', () => {
+    const {rerender} = render(<Item label="Item" data-testid="item" />);
+    const declares = (value: string) =>
+      rulesDeclaredFor(screen.getByTestId('item')).some(rule =>
+        rule.includes(`align-items: ${value}`),
+      );
+    expect(declares('baseline')).toBe(false);
+    rerender(<Item label="Item" align="start" data-testid="item" />);
+    expect(declares('baseline')).toBe(false);
+    rerender(<Item label="Item" align="first-line" data-testid="item" />);
+    expect(declares('baseline')).toBe(true);
+  });
+
+  it('gives each first-line slot a strut with no accessible text', () => {
+    render(
+      <Item
+        label="Item"
+        align="first-line"
+        startContent={<span data-testid="start">S</span>}
+        endContent={<span data-testid="end">E</span>}
+      />,
+    );
+    for (const id of ['start', 'end']) {
+      const slot = screen.getByTestId(id).parentElement!;
+      const before = rulesDeclaredFor(slot).filter(rule =>
+        rule.slice(0, rule.indexOf('{')).includes('::before'),
+      );
+      expect(before.some(rule => rule.includes('/ ""'))).toBe(true);
+    }
+  });
+
+  it('leaves center and start slots without a strut', () => {
+    const {rerender} = render(
+      <Item label="Item" startContent={<span data-testid="start">S</span>} />,
+    );
+    const hasStrut = () =>
+      rulesDeclaredFor(screen.getByTestId('start').parentElement!).some(rule =>
+        rule.slice(0, rule.indexOf('{')).includes('::before'),
+      );
+    expect(hasStrut()).toBe(false);
+    rerender(
+      <Item
+        label="Item"
+        align="start"
+        startContent={<span data-testid="start">S</span>}
+      />,
+    );
+    expect(hasStrut()).toBe(false);
+  });
+
+  it('groups only the numbered composing row, not marked Items in its slots', () => {
+    render(
+      <List listStyle="decimal">
+        <ListItem
+          data-testid="numbered-row"
+          label="Numbered"
+          startContent={<span data-testid="numbered-start">S</span>}
+          endContent={
+            <Item
+              data-testid="nested-row"
+              label="Nested item"
+              marker={<span>•</span>}
+              startContent={<span data-testid="nested-start">S</span>}
+              endContent={<span>E</span>}
+            />
+          }
+        />
+      </List>,
+    );
+    const numbered = screen.getByTestId('numbered-row');
+    expect(numbered.children).toHaveLength(2);
+    const group = numbered.children[1];
+    expect(
+      screen.getByTestId('numbered-start').parentElement?.parentElement,
+    ).toBe(group);
+    const nested = screen.getByTestId('nested-row');
+    expect(nested.children).toHaveLength(4);
+    expect(
+      screen.getByTestId('nested-start').parentElement?.parentElement,
+    ).toBe(nested);
   });
 
   // ===========================================================================
@@ -607,6 +1130,25 @@ describe('Item', () => {
 });
 
 describe('swipeActions', () => {
+  // The panels and the gesture are loaded lazily (React.lazy + Suspense), so
+  // the first row with swipe actions renders them once that module is in.
+  // Mount one once up front: the resolved module is cached on the lazy
+  // component, and every row below renders its panels synchronously.
+  beforeAll(async () => {
+    render(
+      <Item
+        label="Warm"
+        data-testid="warm"
+        swipeActions={{leading: [{label: 'Unread', onActivate: () => {}}]}}
+      />,
+    );
+    await swipeLayerLoaded();
+    expect(
+      screen.getByTestId('warm').querySelector('[data-swipe-panel]'),
+    ).not.toBeNull();
+    cleanup();
+  });
+
   beforeEach(() => {
     // The gesture reads the clock for its fling test and its settle timers:
     // fake both, and space the moves out the way a finger does.
@@ -625,6 +1167,7 @@ describe('swipeActions', () => {
     vi.useRealTimers();
   });
 
+  /** The first finger down: the primary touch pointer. */
   function touch(
     element: Element,
     type: 'pointerDown' | 'pointerMove' | 'pointerUp' | 'pointerCancel',
@@ -635,7 +1178,25 @@ describe('swipeActions', () => {
     fireEvent[type](element, {
       clientX: x,
       clientY: y,
+      isPrimary: true,
       pointerId: 7,
+      pointerType: 'touch',
+    });
+  }
+
+  /** A second finger: a touch pointer that is not the primary one. */
+  function secondFinger(
+    element: Element,
+    type: 'pointerDown' | 'pointerMove' | 'pointerUp' | 'pointerCancel',
+    x: number,
+    y = 10,
+  ) {
+    vi.advanceTimersByTime(10);
+    fireEvent[type](element, {
+      clientX: x,
+      clientY: y,
+      isPrimary: false,
+      pointerId: 8,
       pointerType: 'touch',
     });
   }
@@ -862,6 +1423,105 @@ describe('swipeActions', () => {
     });
   });
 
+  describe('a pinch', () => {
+    /** A touchmove listing both fingers; true when the row cancelled it. */
+    const pinchMoveCancelled = (row: Element, x: number) =>
+      !fireEvent.touchMove(row, {
+        cancelable: true,
+        touches: [
+          {clientX: x, clientY: 10},
+          {clientX: 300 - x, clientY: 10},
+        ],
+      });
+
+    it('lets the touch go when a second finger lands on the row before the axis is decided, and cancels nothing', () => {
+      const {row} = renderRow();
+      touch(row, 'pointerDown', 100);
+      secondFinger(row, 'pointerDown', 60);
+      // The fingers spread apart; the first one travels toward the leading
+      // side far past the axis lock.
+      touch(row, 'pointerMove', 130);
+      secondFinger(row, 'pointerMove', 30);
+      touch(row, 'pointerMove', 160);
+      expect(pinchMoveCancelled(row, 160)).toBe(false);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('');
+      // The browser takes the pinch.
+      touch(row, 'pointerCancel', 160);
+      secondFinger(row, 'pointerCancel', 0);
+      settled();
+      expect(travelOf(row)).toBe('');
+    });
+
+    it('lets the touch go when the second finger lands off the row', () => {
+      const {row} = renderRow();
+      touch(row, 'pointerDown', 100);
+      secondFinger(document.body, 'pointerDown', 60, 200);
+      touch(row, 'pointerMove', 130);
+      touch(row, 'pointerMove', 160);
+      expect(pinchMoveCancelled(row, 160)).toBe(false);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('');
+      touch(row, 'pointerCancel', 160);
+    });
+
+    it('never starts a drag from a finger that is not the first one down', () => {
+      const {row} = renderRow();
+      // The first finger is somewhere else on the page; this one lands on
+      // the row and travels sideways.
+      secondFinger(row, 'pointerDown', 100);
+      secondFinger(row, 'pointerMove', 130);
+      secondFinger(row, 'pointerMove', 160);
+      expect(pinchMoveCancelled(row, 160)).toBe(false);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('');
+      secondFinger(row, 'pointerUp', 160);
+    });
+
+    it('keeps a drag the row already owns when a second finger lands', () => {
+      const {row} = renderRow();
+      touch(row, 'pointerDown', 10);
+      touch(row, 'pointerMove', 30);
+      touch(row, 'pointerMove', 45);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('35px');
+      secondFinger(row, 'pointerDown', 200);
+      touch(row, 'pointerMove', 60);
+      expect(pinchMoveCancelled(row, 60)).toBe(true);
+      void act(() => vi.advanceTimersByTime(20));
+      expect(travelOf(row)).toBe('50px');
+      touch(row, 'pointerUp', 60);
+      secondFinger(row, 'pointerUp', 200);
+      settled();
+      expect(travelOf(row)).toBe('72px');
+    });
+
+    it('stops listening to the document once the axis is decided or the touch ends', () => {
+      const add = vi.spyOn(document, 'addEventListener');
+      const remove = vi.spyOn(document, 'removeEventListener');
+      try {
+        const {row} = renderRow();
+        const watching = () =>
+          add.mock.calls.filter(([type]) => type === 'pointerdown').length -
+          remove.mock.calls.filter(([type]) => type === 'pointerdown').length;
+        const before = watching();
+        touch(row, 'pointerDown', 10);
+        expect(watching()).toBe(before + 1);
+        touch(row, 'pointerMove', 40);
+        expect(watching()).toBe(before);
+        touch(row, 'pointerUp', 40);
+        settled();
+        touch(row, 'pointerDown', 10);
+        expect(watching()).toBe(before + 1);
+        touch(row, 'pointerUp', 12);
+        expect(watching()).toBe(before);
+      } finally {
+        add.mockRestore();
+        remove.mockRestore();
+      }
+    });
+  });
+
   it('does not move toward a side without entries', () => {
     const {row} = renderRow({
       leading: [{label: 'Unread', onActivate: vi.fn()}],
@@ -918,6 +1578,36 @@ describe('swipeActions', () => {
       expect(travelOf(row)).toBe('');
       expect(panel).toHaveAttribute('inert');
       // The row's own primary never fired.
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('keeps a disabled entry focusable but inert on an open row (spec:AST-085 FR1, FR2)', () => {
+      const onActivate = vi.fn();
+      const onClick = vi.fn();
+      const {row} = renderRow({
+        leading: [{label: 'Unread', onActivate, isDisabled: true}],
+        onClick,
+      });
+      touch(row, 'pointerDown', 10);
+      touch(row, 'pointerMove', 30);
+      touch(row, 'pointerMove', 45);
+      touch(row, 'pointerMove', 60);
+      touch(row, 'pointerUp', 60);
+      settled();
+      expect(travelOf(row)).toBe('72px');
+      const button = screen.getByRole('button', {name: 'Unread'});
+      // Exposed through aria-disabled, never the native attribute, so it
+      // keeps its place in the focus order.
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      expect(button).not.toHaveAttribute('disabled');
+      button.focus();
+      expect(button).toHaveFocus();
+      // Inert: the click Enter and Space send runs nothing, leaves the row
+      // open, and does not reach the row's own primary.
+      fireEvent.click(button);
+      settled();
+      expect(onActivate).not.toHaveBeenCalled();
+      expect(travelOf(row)).toBe('72px');
       expect(onClick).not.toHaveBeenCalled();
     });
 
@@ -1198,5 +1888,70 @@ describe('swipeActions', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+// A slot is empty for exactly the values React renders as nothing.
+describe('Item empty slots', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no start or end wrapper for %s', (_name, value) => {
+    const {container: withSlots} = render(
+      <Item
+        label="Item"
+        startContent={value as ReactNode}
+        endContent={value as ReactNode}
+      />,
+    );
+    const {container: without} = render(<Item label="Item" />);
+    expect(withSlots.innerHTML).toBe(without.innerHTML);
+  });
+
+  it.each([
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no description wrapper for %s', (_name, description) => {
+    const {container: withDescription} = render(
+      <Item label="Item" description={description as ReactNode} />,
+    );
+    const {container: without} = render(<Item label="Item" />);
+    expect(withDescription.innerHTML).toBe(without.innerHTML);
+  });
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+  ])(
+    'keeps the stacked layout for an inline row whose description is %s',
+    (_name, description) => {
+      const {container: withDescription} = render(
+        <Item
+          label="Item"
+          layout="inline"
+          description={description as ReactNode}
+        />,
+      );
+      const {container: without} = render(
+        <Item label="Item" layout="inline" />,
+      );
+      expect(withDescription.innerHTML).toBe(without.innerHTML);
+    },
+  );
+
+  it('renders no description element for an empty string', () => {
+    render(<Item label="Item" description="" />);
+    const label = screen.getByText('Item');
+    expect(label.parentElement?.children).toHaveLength(1);
+  });
+
+  it('renders 0 in the start, end and description slots, as React does', () => {
+    render(
+      <Item label="Item" startContent={0} endContent={0} description={0} />,
+    );
+    expect(screen.getAllByText('0')).toHaveLength(3);
   });
 });

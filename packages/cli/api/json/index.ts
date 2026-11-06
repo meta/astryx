@@ -26,7 +26,6 @@ export type * from '../gap-report/gap-report.type.mjs';
 export type * from '../upgrade/upgrade.type.mjs';
 export type * from '../init/init.type.mjs';
 export type * from '../doctor/doctor.type.mjs';
-export type * from '../layout/layout.type.mjs';
 export type * from '../integration/validate-integration.type.mjs';
 export type * from '../integration/authoring-checks.type.mjs';
 export type * from '../integration/pack-check.type.mjs';

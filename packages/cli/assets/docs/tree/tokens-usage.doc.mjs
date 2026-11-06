@@ -28,7 +28,7 @@ export const docs = {
         },
         {
           "type": "prose",
-          "text": "See {@link namespace:styling} for how to apply tokens via xstyle, className, and compound component patterns. See {@link generic:author-a-theme} for overriding tokens with defineTheme."
+          "text": "Use `dataVars` for StyleX, DOM styles, and SVG presentation attributes. Canvas and other APIs that require concrete mode-resolved values use `resolveThemeToken()` or `useTheme().token()` instead. Raw CSS may use the stable custom-property names only when compiled dataVars output is guaranteed or the declaration carries an explicit fallback. See {@link namespace:styling} for xstyle, className, and compound component patterns, and {@link generic:author-a-theme} for overriding tokens with defineTheme."
         }
       ]
     }

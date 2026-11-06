@@ -121,6 +121,35 @@ describe('classifyVisualScope', () => {
     });
   });
 
+  it('leaves a Changeset out: release notes render nothing', () => {
+    expect(
+      classifyVisualScope(
+        ['packages/core/src/Button/Button.tsx', '.changeset/button-fix.md'],
+        root,
+      ),
+    ).toMatchObject({
+      hasStableVisual: true,
+      broadStableVisual: false,
+      stableComponents: ['Button'],
+    });
+    expect(classifyVisualScope(['.changeset/notes.md'], root)).toMatchObject({
+      hasStableVisual: false,
+      broadStableVisual: false,
+    });
+  });
+
+  it('audits a shared Core module through its reverse dependents when the pull request runs what it reaches (spec:AST-030 FR13)', () => {
+    const files = ['packages/core/src/hooks/useHold.ts'];
+    expect(classifyVisualScope(files, root, {}, {scoped: true})).toMatchObject({
+      hasStableVisual: true,
+      broadStableVisual: false,
+    });
+    // Unscoped (main, a full-suite change), it keeps the whole plan.
+    expect(classifyVisualScope(files, root)).toMatchObject({
+      broadStableVisual: true,
+    });
+  });
+
   it('ignores Core tests and component docs — they do not change pixels', () => {
     const result = classifyVisualScope(
       [
@@ -208,7 +237,7 @@ describe('classifyVisualScope', () => {
 
   it('excludes Lab and records its release channel from package metadata', () => {
     const result = classifyVisualScope(
-      ['packages/lab/src/Drawer/Drawer.tsx'],
+      ['packages/lab/src/Stat/Stat.tsx'],
       root,
     );
     expect(result.hasStableVisual).toBe(false);
@@ -231,7 +260,7 @@ describe('classifyVisualScope', () => {
       execFileSync(
         process.execPath,
         [SCRIPT, '--manifests', manifests, '--github-output', output],
-        {input: 'packages/lab/src/Drawer/Drawer.tsx\n'},
+        {input: 'packages/lab/src/Stat/Stat.tsx\n'},
       ),
     ).toThrow();
   });

@@ -513,11 +513,11 @@ describe('BaseTable', () => {
       );
     });
 
-    it('keeps the astryx theme classes alongside a consumer className', () => {
+    it('keeps the canonical theme class alongside a consumer className', () => {
       render(<Table data={users} columns={columns} className="custom-table" />);
       const table = screen.getByRole('table');
-      expect(table.className).toContain('astryx-base-table');
       expect(table.className).toContain('astryx-table');
+      expect(table.className).not.toContain('astryx-base-table');
       expect(table.className).toContain('custom-table');
     });
 
@@ -959,6 +959,38 @@ describe('Table', () => {
     const wrapper = screen.getByRole('group', {name: 'Table'});
     expect(wrapper).not.toHaveAttribute('tabindex');
     expect(wrapper.style.overscrollBehaviorX).toBe('auto');
+  });
+
+  it('names the scroll region after its table, not a generic "Table" (AST-025)', () => {
+    render(
+      <>
+        <Table aria-label="Orders" data={users} columns={columns} />
+        <h2 id="refunds-title">Refunds</h2>
+        <Table aria-labelledby="refunds-title" data={users} columns={columns} />
+        <h2 id="returns-title">Returns</h2>
+        <Table
+          aria-label="Ignored label"
+          aria-labelledby="returns-title"
+          data={users}
+          columns={columns}
+        />
+        <Table data={users} columns={columns} />
+      </>,
+    );
+    expect(screen.getByRole('group', {name: 'Orders'})).toBeInTheDocument();
+    expect(screen.getByRole('group', {name: 'Refunds'})).toHaveAttribute(
+      'aria-labelledby',
+      'refunds-title',
+    );
+    // With both, the region is named as the table is: by aria-labelledby.
+    expect(screen.getByRole('table', {name: 'Returns'})).toBeInTheDocument();
+    const returns = screen.getByRole('group', {name: 'Returns'});
+    expect(returns).not.toHaveAttribute('aria-label');
+    expect(
+      screen.queryByRole('group', {name: 'Ignored label'}),
+    ).not.toBeInTheDocument();
+    // An unnamed table keeps the generic fallback.
+    expect(screen.getAllByRole('group', {name: 'Table'})).toHaveLength(1);
   });
 
   it('preserves scroll-wrapper HTML attributes from plugins', () => {

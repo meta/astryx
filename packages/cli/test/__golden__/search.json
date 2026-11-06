@@ -22,9 +22,9 @@
         "score": 50,
         "reason": "description mentions \"zorblax\"",
         "description": "How zorblax cards fit together.",
-        "title": "Unorganized › Acme guide",
+        "title": "Guides › Acme guide",
         "command": "astryx docs acme-guide --index",
-        "parent": "astryx docs unorganized"
+        "parent": "astryx docs guides"
       },
       {
         "domain": "template",
@@ -45,8 +45,15 @@
         "reason": "description mentions \"zorblax\"",
         "description": "A zorblax blue.",
         "displayName": "Ocean",
-        "command": "astryx theme add --import ocean"
+        "command": "astryx theme add ocean"
       }
     ]
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
   }
 }

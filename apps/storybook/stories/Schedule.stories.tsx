@@ -18,10 +18,24 @@ import {
   useSchedulePaginationPlugin,
   useScheduleViewSelectorPlugin,
 } from '@astryxdesign/lab';
+import {
+  plainDateAddDays,
+  plainDateFromISO,
+  plainDateFromInstant,
+  plainDateToISO,
+  plainDateToInstant,
+  type PlainDate,
+} from '@astryxdesign/core/utils';
 
-const storyNow = new Date();
-const focusDate = storyNow.getTime() as Instant;
-const currentWeekStart = startOfWeek(storyNow);
+// The demo week is fixed and its events are built in the Schedule's own
+// timezone, so every viewer, and CI's browser, sees the same week with its
+// events on the 7-19 grid, whatever the viewer's own timezone or today's date.
+const STORY_TIMEZONE = 'America/Los_Angeles';
+// A Wednesday.
+const STORY_DATE = plainDateFromISO('2026-05-13');
+const focusDate = plainDateToInstant(STORY_DATE, STORY_TIMEZONE, 12) as Instant;
+const currentWeekStart = plainDateAddDays(STORY_DATE, -3);
+const storyNow = STORY_DATE;
 
 const categories: ScheduleCategory[] = [
   {label: 'Company', color: 'blue'},
@@ -46,15 +60,15 @@ const events: CalendarEvent[] = [
     id: 'all-hands-previous-day',
     title: 'Company all hands',
     category: 'Company',
-    start: dateTimeISO(addDays(storyNow, -1), 9),
-    end: dateTimeISO(addDays(storyNow, -1), 10),
+    start: dateTimeISO(plainDateAddDays(storyNow, -1), 9),
+    end: dateTimeISO(plainDateAddDays(storyNow, -1), 10),
   }),
   createEventFromISO({
     id: 'all-hands-next-day',
     title: 'Company all hands',
     category: 'Company',
-    start: dateTimeISO(addDays(storyNow, 1), 9),
-    end: dateTimeISO(addDays(storyNow, 1), 10),
+    start: dateTimeISO(plainDateAddDays(storyNow, 1), 9),
+    end: dateTimeISO(plainDateAddDays(storyNow, 1), 10),
   }),
   createEventFromISO({
     id: 'design-review',
@@ -67,43 +81,43 @@ const events: CalendarEvent[] = [
     id: 'launch',
     title: 'Launch window',
     category: 'Launch',
-    start: dateISO(addDays(currentWeekStart, 3)),
-    end: dateISO(addDays(currentWeekStart, 4)),
+    start: plainDateToISO(plainDateAddDays(currentWeekStart, 3)),
+    end: plainDateToISO(plainDateAddDays(currentWeekStart, 4)),
   }),
   createEventFromISO({
     id: 'focus-day',
     title: 'Focus day',
     category: 'Focus',
-    start: dateISO(storyNow),
-    end: dateISO(storyNow),
+    start: plainDateToISO(storyNow),
+    end: plainDateToISO(storyNow),
   }),
   createEventFromISO({
     id: 'company-holiday',
     title: 'Company holiday',
     category: 'Holiday',
-    start: dateISO(addDays(currentWeekStart, 6)),
-    end: dateISO(addDays(currentWeekStart, 6)),
+    start: plainDateToISO(plainDateAddDays(currentWeekStart, 6)),
+    end: plainDateToISO(plainDateAddDays(currentWeekStart, 6)),
   }),
   createEventFromISO({
     id: 'retro',
     title: 'Weekly retro',
     category: 'Retro',
-    start: dateTimeISO(addDays(currentWeekStart, 5), 14),
-    end: dateTimeISO(addDays(currentWeekStart, 5), 15),
+    start: dateTimeISO(plainDateAddDays(currentWeekStart, 5), 14),
+    end: dateTimeISO(plainDateAddDays(currentWeekStart, 5), 15),
   }),
   createEventFromISO({
     id: 'incident',
     title: 'Incident review',
     category: 'Incident',
-    start: dateTimeISO(addDays(currentWeekStart, 1), 10, 30),
-    end: dateTimeISO(addDays(currentWeekStart, 1), 11, 30),
+    start: dateTimeISO(plainDateAddDays(currentWeekStart, 1), 10, 30),
+    end: dateTimeISO(plainDateAddDays(currentWeekStart, 1), 11, 30),
   }),
   createEventFromISO({
     id: 'overnight-migration',
     title: 'Overnight migration',
     category: 'Migration',
-    start: dateTimeISO(addDays(currentWeekStart, 5), 23, 30),
-    end: dateTimeISO(addDays(currentWeekStart, 6), 2),
+    start: dateTimeISO(plainDateAddDays(currentWeekStart, 5), 23, 30),
+    end: dateTimeISO(plainDateAddDays(currentWeekStart, 6), 2),
   }),
 ];
 
@@ -127,30 +141,15 @@ export default meta;
 
 type Story = StoryObj<typeof Schedule>;
 
-function addDays(date: Date, days: number): Date {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
-  return nextDate;
-}
-
-function startOfWeek(date: Date): Date {
-  const startDate = new Date(date);
-  startDate.setHours(12, 0, 0, 0);
-  startDate.setDate(startDate.getDate() - startDate.getDay());
-  return startDate;
-}
-
-function dateISO(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function dateTimeISO(date: Date, hour: number, minute: number = 0): string {
-  const dateTime = new Date(date);
-  dateTime.setHours(hour, minute, 0, 0);
-  return dateTime.toISOString();
+// A wall-clock time on a story date in STORY_TIMEZONE, as an ISO instant.
+function dateTimeISO(
+  date: PlainDate,
+  hour: number,
+  minute: number = 0,
+): string {
+  return new Date(
+    plainDateToInstant(date, STORY_TIMEZONE, hour, minute),
+  ).toISOString();
 }
 
 function makeSeededRandom(seed: number): () => number {
@@ -176,7 +175,11 @@ function createAsyncEvents(start: Instant, end: Instant): CalendarEvent[] {
 
   for (let dayStart = start; dayStart < end; dayStart += 24 * 60 * 60 * 1000) {
     const eventCount = 1 + Math.floor(random() * 3);
-    const day = new Date(dayStart);
+    // Midday, so a 23- or 25-hour daylight-saving day still lands on its date.
+    const day = plainDateFromInstant(
+      dayStart + 12 * 60 * 60 * 1000,
+      STORY_TIMEZONE,
+    );
 
     for (let index = 0; index < eventCount; index++) {
       const startHour = 8 + Math.floor(random() * 8);
@@ -204,8 +207,8 @@ function createAsyncEvents(start: Instant, end: Instant): CalendarEvent[] {
           category:
             asyncCategories[Math.floor(random() * asyncCategories.length)]
               .label,
-          start: dateISO(day),
-          end: dateISO(day),
+          start: plainDateToISO(day),
+          end: plainDateToISO(day),
         }),
       );
     }
@@ -227,7 +230,7 @@ export const Monthly: Story = {
         date={date}
         focusDate={focusDate}
         onChangeDate={setDate}
-        timezoneID="America/Los_Angeles"
+        timezoneID={STORY_TIMEZONE}
       />
     );
   },
@@ -248,7 +251,7 @@ export const Weekly: Story = {
         categories={categories}
         date={date}
         onChangeDate={setDate}
-        timezoneID="America/Los_Angeles"
+        timezoneID={STORY_TIMEZONE}
       />
     );
   },
@@ -270,7 +273,7 @@ export const WeeklyFixedHeight: Story = {
           categories={categories}
           date={date}
           onChangeDate={setDate}
-          timezoneID="America/Los_Angeles"
+          timezoneID={STORY_TIMEZONE}
           style={{height: '100%'}}
         />
       </div>
@@ -291,7 +294,7 @@ export const Day: Story = {
         date={date}
         focusDate={focusDate}
         onChangeDate={setDate}
-        timezoneID="America/Los_Angeles"
+        timezoneID={STORY_TIMEZONE}
       />
     );
   },
@@ -310,7 +313,7 @@ export const List: Story = {
         date={date}
         focusDate={focusDate}
         onChangeDate={setDate}
-        timezoneID="America/Los_Angeles"
+        timezoneID={STORY_TIMEZONE}
       />
     );
   },
@@ -335,7 +338,7 @@ export const RightToLeftLocale: Story = {
             date={date}
             focusDate={focusDate}
             onChangeDate={setDate}
-            timezoneID="America/Los_Angeles"
+            timezoneID={STORY_TIMEZONE}
           />
         </div>
       </InternationalizationProvider>
@@ -366,7 +369,7 @@ export const AsyncLoader: Story = {
         date={date}
         focusDate={focusDate}
         onChangeDate={setDate}
-        timezoneID="America/Los_Angeles"
+        timezoneID={STORY_TIMEZONE}
       />
     );
   },
@@ -618,6 +621,92 @@ export const EventPopover: Story = {
       />
     );
   },
+};
+
+// Two zones that spring forward from a negative offset at local midnight, so
+// the first day of each week starts at 1:00 AM.
+const SKIPPED_MIDNIGHT_ZONES = [
+  {
+    timezoneID: 'America/Santiago',
+    date: Date.UTC(2026, 8, 6, 15) as Instant,
+    firstHour: '2026-09-06T04:30:00.000Z',
+  },
+  {
+    timezoneID: 'America/Havana',
+    date: Date.UTC(2026, 2, 8, 15) as Instant,
+    firstHour: '2026-03-08T05:30:00.000Z',
+  },
+];
+
+function SkippedMidnightZone({
+  timezoneID,
+  date: initialDate,
+  firstHour,
+}: (typeof SKIPPED_MIDNIGHT_ZONES)[number]) {
+  const [weekDate, setWeekDate] = useState<Instant>(initialDate);
+  const [dayDate, setDayDate] = useState<Instant>(initialDate);
+  const weekView = useMemo(
+    () => createScheduleWeeklyView({minHour: 0, maxHour: 4}),
+    [],
+  );
+  const dayView = useMemo(
+    () => createScheduleDayView({minHour: 0, maxHour: 4}),
+    [],
+  );
+  const zoneEvents = useMemo(
+    () => [
+      createEventFromISO({
+        id: `${timezoneID}-first-hour`,
+        title: 'First hour',
+        category: 'Focus',
+        start: firstHour,
+        end: new Date(Date.parse(firstHour) + 60 * 60 * 1000).toISOString(),
+      }),
+    ],
+    [timezoneID, firstHour],
+  );
+  return (
+    <section
+      aria-label={timezoneID}
+      data-zone={timezoneID}
+      style={{display: 'grid', gap: 8}}>
+      <Text type="label" weight="bold">
+        {timezoneID}
+      </Text>
+      <Schedule
+        view={weekView}
+        events={zoneEvents}
+        categories={categories}
+        date={weekDate}
+        focusDate={initialDate}
+        onChangeDate={setWeekDate}
+        timezoneID={timezoneID}
+      />
+      <Schedule
+        view={dayView}
+        events={zoneEvents}
+        categories={categories}
+        date={dayDate}
+        focusDate={initialDate}
+        onChangeDate={setDayDate}
+        timezoneID={timezoneID}
+      />
+    </section>
+  );
+}
+
+/**
+ * Weeks and days whose midnight daylight saving skips keep their own dates:
+ * seven columns in the week, one in the day view.
+ */
+export const SkippedMidnight: Story = {
+  render: () => (
+    <div style={{display: 'grid', gap: 24}}>
+      {SKIPPED_MIDNIGHT_ZONES.map(zone => (
+        <SkippedMidnightZone key={zone.timezoneID} {...zone} />
+      ))}
+    </div>
+  ),
 };
 
 const midnightEvents: CalendarEvent[] = [
@@ -884,7 +973,7 @@ export const ViewSelectorPlugin: Story = {
         date={date}
         focusDate={focusDate}
         onChangeDate={setDate}
-        timezoneID="America/Los_Angeles"
+        timezoneID={STORY_TIMEZONE}
         plugins={plugins}
       />
     );

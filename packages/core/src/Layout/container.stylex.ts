@@ -4,8 +4,8 @@
  * @file container.stylex.ts
  * @input Uses @stylexjs/stylex, spacing from theme
  * @output StyleX utility for layout container styling
- * @position Layout utility; used by Card, Section, Dialog, BottomSheet, and the
- * Lab Drawer
+ * @position Layout utility; used by Card, Section, Dialog, BottomSheet, and
+ * Drawer
  *
  * ## Public API for themes
  *
@@ -19,10 +19,8 @@
  *   --astryx-card-padding-block-end
  *
  * Read order per level: `var(--astryx-…, <next level>)`, terminating at
- * `--spacing-4`. Same pattern for section, dialog, and the Lab drawer.
- * Bottom-sheet keeps its released unpadded default: its edges terminate at 0px
- * and its Layout insets at no value, so an unthemed sheet changes nothing for
- * descendants.
+ * `--spacing-4`. Same pattern for section, dialog, bottom-sheet, and
+ * drawer.
  *
  * ```ts
  * components: {
@@ -141,26 +139,18 @@ const dialogInlineEnd = `var(--astryx-dialog-padding-inline-end, ${dialogInline}
 const dialogBlockStart = `var(--astryx-dialog-padding-block-start, ${dialogShorthand})`;
 const dialogBlockEnd = `var(--astryx-dialog-padding-block-end, ${dialogShorthand})`;
 
-// Bottom sheet padding chains: --astryx-* then the next specificity level.
-// Unlike card/section/dialog, the sheet's released default is no padding, so
-// the edge chains terminate at 0px. The Layout inset chains have NO terminal
-// value: with no theme padding they are invalid at computed-value time, which
-// leaves the overlay reset in force and lets a Layout inside the sheet fall
-// back to its own default, exactly as before the sheet was a container. Built
-// as chained const strings (no function calls) so StyleX can statically
-// analyze them; see naming.ts for the prefix policy.
-const bottomSheetThemeShorthand = 'var(--astryx-bottom-sheet-padding)';
-const bottomSheetThemeInline = `var(--astryx-bottom-sheet-padding-inline, ${bottomSheetThemeShorthand})`;
-const bottomSheetThemeInlineStart = `var(--astryx-bottom-sheet-padding-inline-start, ${bottomSheetThemeInline})`;
-const bottomSheetThemeBlockStart = `var(--astryx-bottom-sheet-padding-block-start, ${bottomSheetThemeShorthand})`;
-const bottomSheetShorthand = 'var(--astryx-bottom-sheet-padding, 0px)';
+// Bottom sheet padding chains: --astryx-* then the next specificity level,
+// terminating at --spacing-4 like Dialog. Built as chained const strings (no
+// function calls) so StyleX can statically analyze them; see naming.ts for the
+// prefix policy.
+const bottomSheetShorthand = `var(--astryx-bottom-sheet-padding, ${SP4})`;
 const bottomSheetInline = `var(--astryx-bottom-sheet-padding-inline, ${bottomSheetShorthand})`;
 const bottomSheetInlineStart = `var(--astryx-bottom-sheet-padding-inline-start, ${bottomSheetInline})`;
 const bottomSheetInlineEnd = `var(--astryx-bottom-sheet-padding-inline-end, ${bottomSheetInline})`;
 const bottomSheetBlockStart = `var(--astryx-bottom-sheet-padding-block-start, ${bottomSheetShorthand})`;
 const bottomSheetBlockEnd = `var(--astryx-bottom-sheet-padding-block-end, ${bottomSheetShorthand})`;
 
-// Drawer (Lab) padding chains: --astryx-* then the next specificity level,
+// Drawer padding chains: --astryx-* then the next specificity level,
 // terminating at --spacing-4 like Dialog. Built as chained const strings (no
 // function calls) so StyleX can statically analyze them; see naming.ts for the
 // prefix policy.
@@ -266,16 +256,16 @@ const bottomSheetDefaultPaddingStyles = stylex.create({
     '--container-padding-block-end': bottomSheetBlockEnd,
   },
   layoutPaddingOuterX: {
-    '--layout-padding-outer-x': bottomSheetThemeInlineStart,
+    '--layout-padding-outer-x': bottomSheetInlineStart,
   },
   layoutPaddingOuterY: {
-    '--layout-padding-outer-y': bottomSheetThemeBlockStart,
+    '--layout-padding-outer-y': bottomSheetBlockStart,
   },
   layoutPaddingInnerX: {
-    '--layout-padding-inner-x': bottomSheetThemeInlineStart,
+    '--layout-padding-inner-x': bottomSheetInlineStart,
   },
   layoutPaddingInnerY: {
-    '--layout-padding-inner-y': bottomSheetThemeBlockStart,
+    '--layout-padding-inner-y': bottomSheetBlockStart,
   },
 });
 
@@ -532,8 +522,8 @@ export interface ContainerOptions {
    * This allows themes to override container padding via component-specific
    * public CSS custom properties without touching internal vars.
    *
-   * Used by Card, Section, Dialog, BottomSheet, and the Lab Drawer when no
-   * explicit padding prop is provided.
+   * Used by Card, Section, Dialog, BottomSheet, and Drawer when no explicit
+   * padding prop is provided.
    * @default undefined (uses explicit spacing token values)
    */
   useThemeDefault?: ContainerComponent;

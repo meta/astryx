@@ -16,6 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/RadioList/ (showcase blocks)
  */
 
+import {RadioListReasonContext} from './RadioListReasonContext';
 import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 import React, {
   useCallback,
@@ -28,10 +29,15 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {Field} from '../Field/Field';
 import type {InputStatus} from '../Field/types';
-import {useTooltip} from '../Tooltip';
+import {useTooltip} from '../Tooltip/useTooltip';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import {mergeProps} from '../utils';
-import type {BaseProps} from '../BaseProps';
+import {composeEventHandlers} from '../utils/composeEventHandlers';
+import {mergeProps} from '../utils/mergeProps';
+import {joinAriaIDs} from '../utils/inputAria';
+import {
+  type FieldInputBaseProps,
+  useFieldInputStyling,
+} from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 
@@ -77,9 +83,10 @@ const styles = stylex.create({
 });
 
 export interface RadioListProps extends Omit<
-  BaseProps<HTMLElement>,
+  FieldInputBaseProps<HTMLDivElement>,
   'onChange'
 > {
+  /** Ref forwarded to the `role="radiogroup"` element. */
   ref?: React.Ref<HTMLDivElement>;
   /**
    * Label text for the radio group (always rendered for accessibility).
@@ -203,13 +210,24 @@ export function RadioList({
   status,
   labelTooltip,
   width,
-  xstyle,
-  className,
-  style,
-  'data-testid': dataTestId,
+  containerXstyle,
+  containerClassName,
+  containerStyle,
+  controlXstyle,
+  controlClassName,
+  controlStyle,
   htmlName,
   children,
+  onFocus,
+  'aria-labelledby': ariaLabelledByProp,
+  'aria-describedby': ariaDescribedByProp,
+  ...restProps
 }: RadioListProps) {
+  const {rest, container} = useFieldInputStyling('RadioList', restProps, {
+    containerXstyle,
+    containerClassName,
+    containerStyle,
+  });
   const autoName = useId();
   const name = htmlName ?? autoName;
   const inputID = useId();
@@ -230,7 +248,8 @@ export function RadioList({
   // controls swallow pointer events, so the tooltip listeners attach to the
   // radiogroup container and the radios stay perceivable via aria-disabled
   // instead of the disabled attribute. Selection is blocked in the item's
-  // onChange guard.
+  // onChange guard. The reason describes the radiogroup and each radio (see
+  // RadioListReasonContext).
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -347,8 +366,7 @@ export function RadioList({
 
   return (
     <Field
-      ref={ref}
-      data-testid={dataTestId}
+      {...container}
       label={label}
       isLabelHidden={isLabelHidden}
       description={description}
@@ -370,23 +388,32 @@ export function RadioList({
       }
       labelTooltip={labelTooltip}
       statusVariant="detached"
-      width={width}
-      xstyle={xstyle}
-      className={className}
-      style={style}>
+      width={width}>
       <div
+        {...rest}
         ref={el => {
           groupRef.current = el;
+          if (typeof ref === 'function') {
+            ref(el);
+          } else if (ref) {
+            ref.current = el;
+          }
           // Anchor + hover/focus listeners for the disabled-message tooltip.
           // Handlers are gated internally by isEnabled, so attaching
           // unconditionally is safe.
           disabledMessageTooltip.ref(el);
         }}
         role="radiogroup"
-        aria-labelledby={labelID}
-        onFocus={handleFocus}
+        // Screen readers announce the whole group as unavailable. Its dimmed
+        // label then labels a disabled control. An enabled list keeps a
+        // caller's own value.
+        aria-disabled={isDisabled || rest['aria-disabled']}
+        // A caller aria-labelledby names the group together with its label.
+        aria-labelledby={joinAriaIDs(labelID, ariaLabelledByProp)}
+        onFocus={composeEventHandlers(handleFocus, onFocus)}
         aria-describedby={
           [
+            ariaDescribedByProp,
             description ? descriptionID : null,
             status?.message ? statusMessageID : null,
             showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
@@ -401,9 +428,21 @@ export function RadioList({
           stylex.props(
             styles.radiogroup,
             orientation === 'vertical' ? styles.vertical : styles.horizontal,
+            controlXstyle,
           ),
+          controlClassName,
+          controlStyle,
         )}>
-        <RadioListContext value={contextValue}>{children}</RadioListContext>
+        <RadioListContext value={contextValue}>
+          <RadioListReasonContext
+            value={
+              showsDisabledMessage
+                ? disabledMessageTooltip.describedBy
+                : undefined
+            }>
+            {children}
+          </RadioListReasonContext>
+        </RadioListContext>
       </div>
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
