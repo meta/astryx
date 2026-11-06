@@ -16,12 +16,6 @@ import {registerEnglishFallback} from '../i18n/englishFallback';
 import english from '../i18n/generated-english/Resizable/createResizable.generated';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {devWarn} from '../utils/devWarning';
-import {project} from '../motion/projection';
-import {
-  rubberBandClamp,
-  rubberBandInverse,
-  rubberBandSlope,
-} from '../motion/rubberBand';
 import type {SizeValue} from '../utils/types';
 import {
   DEFAULT_COLLAPSED_SIZE,
@@ -46,18 +40,13 @@ import {
   type ResizeGestureState,
 } from './resizeGesture';
 import {
-  createOvershootDrawing,
   createPaneReveal,
   handOverPane,
-  type OvershootDrawing,
   type PaneListener,
   type RegionPaneSlot,
   type ResizablePane,
-  slideNextOnRelease,
 } from './resizablePane';
 import {separatorAttributes} from './separatorAttributes';
-import {resolveMotion} from '../motion/resolveMotion';
-import {springs} from '../motion/uikit/springs';
 import type {ResizableSize} from './utils';
 
 // The English for the two messages it names, and nothing more of the catalog.
@@ -182,9 +171,6 @@ function readWindowExtent(direction: ResizableDirection): number | null {
 
 /** Starts as warned: the factory warns, and this first-render read does not. */
 const QUIET = {current: true};
-
-/** How far a pull past a size bound can move a pane's edge, in px. */
-const RUBBER_BAND_TRAVEL_PX = 8;
 
 /**
  * The state a region with `options` starts in, before its handle exists: the
@@ -450,20 +436,6 @@ export function createResizableAs(
   let gestureBasis: number | null = null;
   let isGestureActive = false;
   let dragStartSize = 0;
-  let pointerSize = 0;
-  // The open size a drag started from, which a close on its lift keeps.
-  let sizeBeforeDrag: number | null = null;
-  // Past a bound the pane's edge is drawn this far past it, with no layout
-  // change. It springs back to 0 after the lift.
-  let overshoot = 0;
-  let drawing: OvershootDrawing | null = null;
-  // A spring-back the pane's edge is playing: what it started from, when, and
-  // the share of it still to go by ms since then.
-  let springBack: {
-    from: number;
-    startedAt: number;
-    remaining: (elapsedMs: number) => number;
-  } | null = null;
 
   let initialDefault: {px: number; isFinal: boolean} | null = null;
   let chosenSize: number | null | undefined;
@@ -805,8 +777,6 @@ export function createResizableAs(
     paneReveal.land();
     pendingFlip = null;
     expectedFlip = null;
-    drawing?.clear();
-    drawing = next == null ? null : createOvershootDrawing(next);
     pane = handOverPane(pane, next, paneListener, derived.isCollapsed, handle);
   }
 
@@ -958,25 +928,18 @@ export function createResizableAs(
       // The basis holds still for the whole gesture.
       gestureBasis = readLiveBasis();
       isGestureActive = true;
-      // A finger catches a spring-back where it shows.
-      const shown =
-        springBack == null ? overshoot : springBackShown(springBack);
-      springBack = null;
-      overshoot = shown;
-      drawing?.draw(shown);
-      dragStartSize =
-        (derived.isCollapsed ? 0 : derived.size) +
-        rubberBandInverse(shown, rubberDimension());
-      pointerSize = dragStartSize;
-      sizeBeforeDrag = derived.isCollapsed ? null : derived.size;
+      dragStartSize = derived.isCollapsed ? 0 : derived.size;
     },
     move(delta) {
       const raw = dragStartSize + delta;
-      pointerSize = raw;
       const collapsedSize = opts.collapsedSize ?? DEFAULT_COLLAPSED_SIZE;
-      // A collapsed pane opens once the pointer passes the collapsed size.
-      // An open one never collapses mid-drag: the lift decides.
-      if (derived.isCollapsed && raw < collapsedSize) {
+      if (collapsible() && raw < collapsedSize) {
+        if (!derived.isCollapsed) {
+          setCollapsed(true);
+          commit();
+          opts.onCollapseChange?.(true);
+          opts.onSizeChange?.(0);
+        }
         return;
       }
       const reopens = derived.isCollapsed && raw >= collapsedSize;
@@ -985,10 +948,6 @@ export function createResizableAs(
       }
       const clamped = clampSize(raw, derived.min, derived.max, snaps());
       chosenSize = clamped;
-      // Only a pane a LayoutPanel lends shows the rubber band. A panel at the
-      // hook's size alone stops at the limit.
-      overshoot = pane == null ? 0 : overshootPast(raw);
-      drawing?.draw(overshoot);
       // Only a pointer reopens without a reveal; a key's step plays one.
       isPointerReopening = reopens && regionSlot?.isPointerDragging() === true;
       commit();
@@ -998,114 +957,17 @@ export function createResizableAs(
       }
       opts.onSizeChange?.(clamped);
     },
-    // The lift decides a close: past the collapsed size, or released fast
-    // enough to come to rest past it. Anything else springs back.
-    end(velocity = 0) {
-      const collapsedSize = opts.collapsedSize ?? DEFAULT_COLLAPSED_SIZE;
-      const closes =
-        collapsible() &&
-        !derived.isCollapsed &&
-        Math.min(pointerSize, project(pointerSize, velocity)) < collapsedSize;
-      if (closes) {
-        closeOnRelease(velocity);
-      } else {
-        settleOvershoot(velocity);
-      }
+    end() {
       endGesture();
     },
     // A cancelled gesture is still over: the basis it held comes back, and
     // the size it reached is saved once, like a completed one.
     cancel() {
-      settleOvershoot(0);
       endGesture();
     },
     collapse,
     expand,
   };
-
-  /** How far a pull past a bound can move the edge: the band's extent. */
-  function rubberDimension(): number {
-    return RUBBER_BAND_TRAVEL_PX;
-  }
-
-  /** How far the shown size runs past the bound `raw` is beyond. */
-  function overshootPast(raw: number): number {
-    const {min, max} = derived;
-    if (raw >= min && raw <= max) {
-      return 0;
-    }
-    const shown = rubberBandClamp(raw, min, max, rubberDimension());
-    // Below the minimum the drawn edge stops at 0, never past it.
-    return Math.max(shown, 0) - (raw > max ? max : min);
-  }
-
-  /**
-   * The drawn edge springs back to the bound on the settle spring from the
-   * release velocity, on the compositor. The size never left the bound, so
-   * nothing is laid out.
-   */
-  function settleOvershoot(velocity: number): void {
-    const from = overshoot;
-    springBack = null;
-    overshoot = 0;
-    if (from === 0 || drawing == null || pane == null) {
-      drawing?.clear();
-      return;
-    }
-    const element = pane.element;
-    const view = element.ownerDocument.defaultView;
-    if (
-      view == null ||
-      view.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
-    ) {
-      drawing.clear();
-      return;
-    }
-    // The drawn edge moved at the pointer's speed times the band's slope.
-    const dimension = rubberDimension();
-    const slope = rubberBandSlope(
-      rubberBandInverse(from, dimension),
-      dimension,
-    );
-    const remaining = drawing.springBack(
-      resolveMotion(element, springs.settle),
-      -Math.sign(from) * velocity * slope,
-    );
-    if (remaining != null) {
-      springBack = {from, startedAt: view.performance.now(), remaining};
-    }
-  }
-
-  /** How far past the bound a playing spring-back shows the edge now. */
-  function springBackShown(played: NonNullable<typeof springBack>): number {
-    const view = pane?.element.ownerDocument.defaultView;
-    const elapsed =
-      view == null ? Infinity : view.performance.now() - played.startedAt;
-    return played.from * played.remaining(elapsed);
-  }
-
-  /**
-   * A lift that closes: the pane slides shut from what it shows, on the
-   * settle spring from the release velocity.
-   */
-  function closeOnRelease(velocity: number): void {
-    springBack = null;
-    const shown = derived.size + overshoot;
-    overshoot = 0;
-    drawing?.clear();
-    // An open restores the size the drag started from.
-    if (sizeBeforeDrag != null) {
-      chosenSize = sizeBeforeDrag;
-    }
-    const row = pane?.element.parentElement;
-    if (row != null) {
-      slideNextOnRelease(row, -velocity, shown);
-    }
-    setCollapsed(true);
-    commit();
-    opts.onCollapseChange?.(true);
-    opts.onSizeChange?.(0);
-  }
 
   function readLiveBasis(): number {
     const needs = observation();
@@ -1234,10 +1096,6 @@ export function createResizableAs(
       // A gesture a ResizeHandle drove through the region's model, rather
       // than the factory's own, ends the same way.
       endGesture();
-      springBack = null;
-      overshoot = 0;
-      drawing?.clear();
-      drawing = null;
       isDestroyed = true;
       stopFollowingRegion?.();
       stopFollowingRegion = null;

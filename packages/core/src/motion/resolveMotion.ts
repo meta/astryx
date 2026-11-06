@@ -82,8 +82,8 @@ function springAtTempo(
 
 /**
  * A motion role's value at the tempo of the theme `element` is in. Hand it a
- * spring or curve of a motion table, or a table group and a key. A key names
- * a duration, which is a bare number:
+ * spring or curve of a motion table, or a table group and a key (the way to
+ * name a duration, which is a bare number):
  *
  * @example
  * ```

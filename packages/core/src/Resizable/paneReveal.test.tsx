@@ -281,17 +281,13 @@ describe("a LayoutPanel's pane slides on collapse and open (component:Resizable 
     expect(reveals.every(r => r.animate.mock.calls.length === 1)).toBe(true);
   });
 
-  it('plays the close a lift past the collapse threshold makes, plays nothing for a drag that reopens, and lands a running conceal then', () => {
+  it('plays a drag that crosses the collapse threshold, plays nothing for a drag that reopens, and lands a running conceal then', () => {
     render(<PropsSplit />);
     fireEvent.pointerDown(grabZone(), {pointerId: 1, clientX: 300});
     fireEvent.pointerMove(grabZone(), {pointerId: 1, clientX: 110});
-    expect(propsRegion?.isCollapsed).toBe(false);
-    expect(reveals).toHaveLength(0);
-    fireEvent.pointerUp(grabZone(), {pointerId: 1, clientX: 110});
     expect(propsRegion?.isCollapsed).toBe(true);
     expect(reveals).toHaveLength(1);
     expect(reveals[0].animate).toHaveBeenCalledTimes(1);
-    fireEvent.pointerDown(grabZone(), {pointerId: 1, clientX: 110});
     fireEvent.pointerMove(grabZone(), {pointerId: 1, clientX: 320});
     expect(propsRegion?.isCollapsed).toBe(false);
     expect(reveals).toHaveLength(1);
@@ -424,12 +420,9 @@ describe("a LayoutPanel's pane slides on collapse and open (component:Resizable 
     }
     fireEvent.pointerDown(grabZone(), {pointerId: 1, clientX: 300});
     fireEvent.pointerMove(grabZone(), {pointerId: 1, clientX: 100});
-    expect(propsRegion?.isCollapsed).toBe(false);
-    fireEvent.pointerUp(grabZone(), {pointerId: 1, clientX: 100});
     expect(propsRegion?.isCollapsed).toBe(true);
     expect(reveals).toHaveLength(7);
     expect(reveals[6].animate).toHaveBeenCalledTimes(1);
-    fireEvent.pointerDown(grabZone(), {pointerId: 1, clientX: 100});
     fireEvent.pointerMove(grabZone(), {pointerId: 1, clientX: 340});
     expect(propsRegion?.isCollapsed).toBe(false);
     expect(reveals).toHaveLength(7);

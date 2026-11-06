@@ -26,7 +26,6 @@ import {
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {mergeProps, rtlStyles} from '../utils';
 import {
-  endResizeAt,
   getCollapseControls,
   getEffectiveMaxPx,
   resizablePropsOf,
@@ -466,12 +465,10 @@ export function ResizeHandle({
         resizableRef.current?._onResizeStart();
       },
       move: delta => resizableRef.current?._onResizeMove(delta),
-      end: velocity => {
+      end: () => {
         const region = resizableRef.current ?? dragRegionRef.current;
         dragRegionRef.current = undefined;
-        if (region != null) {
-          endResizeAt(region, velocity ?? 0);
-        }
+        region?._onResizeEnd();
       },
       // Not a resize end, but the gesture is over. The region froze its state
       // for the drag, so it must hear that the drag ended.
