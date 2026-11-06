@@ -450,8 +450,18 @@ describe('Table render performance', () => {
   // ===========================================================================
 
   describe('render benchmarks', () => {
+    // An untimed render first: a run's first Table render also pays one-off
+    // module and compiler work, which is not what these budgets measure.
+    const warmUp = () => {
+      const {unmount} = render(
+        <Table data={createTestData(100)} columns={testColumns} idKey="id" />,
+      );
+      unmount();
+    };
+
     it('should render 100 rows within performance budget', () => {
       const data = createTestData(100);
+      warmUp();
 
       const started = process.threadCpuUsage();
       render(<Table data={data} columns={testColumns} idKey="id" />);
@@ -464,6 +474,7 @@ describe('Table render performance', () => {
 
     it('should render 500 rows within performance budget', () => {
       const data = createTestData(500);
+      warmUp();
 
       const started = process.threadCpuUsage();
       render(<Table data={data} columns={testColumns} idKey="id" />);
