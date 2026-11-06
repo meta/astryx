@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/Link/ (showcase blocks)
  */
 
-import type {ReactNode} from 'react';
+import {use, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 
@@ -24,12 +24,14 @@ import {
   colorVars,
   durationVars,
   easeVars,
+  focusVars,
   spacingVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import {Icon} from '../Icon';
 import {Tooltip} from '../Tooltip';
 import {Text} from '../Text';
+import {TextClampContext} from '../Text/textClampContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {
   TextType,
@@ -103,6 +105,18 @@ const styles = stylex.create({
     textAlign: 'inherit',
     pointerEvents: 'auto',
     position: 'relative',
+  },
+  // Inside a clamped Text the root joins the text's line boxes, so the
+  // clamp can cut through the link. An inline-flex box is atomic: a clamp
+  // cannot truncate it. The clamp also clips at the line edges, so the ring
+  // sits inside each line box.
+  inClampedText: {
+    display: 'inline',
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
+  },
+  externalIconInClampedText: {
+    marginInlineStart: spacingVars['--spacing-0-5'],
+    verticalAlign: 'middle',
   },
   hasUnderline: {
     textDecoration: 'underline',
@@ -343,10 +357,19 @@ export function Link({
   // render as a <button> with link styling for semantic correctness.
   const renderAsButton =
     role === 'button' || (role === 'inert' && href == null);
+  const isExternalWithIcon = isExternalLink && !renderAsButton;
+  // Link reads the enclosing Text's clamp, never its own children (AV1). A
+  // Link with its own display or clamp keeps its own box.
+  const isInClampedText =
+    use(TextClampContext) && display === 'inline' && maxLines === 0;
 
   // The reflected theme attributes win over a caller's same-named `data-*`, so
   // theme targeting always sees the real value (public-component-api INV5).
   const reflectedAttributes = themeDataAttributes({color});
+  // For a color the root paints, the label inherits it, so the label, the
+  // underline, and the icon keep one color at rest and on hover, whatever a
+  // theme sets on its text targets.
+  const labelColor: TextColor = color in linkColorStyles ? 'inherit' : color;
 
   const sharedContent = (
     <>
@@ -354,14 +377,19 @@ export function Link({
         type={type}
         size={size}
         weight={weight}
-        color={color}
+        color={labelColor}
         display={display}
         maxLines={maxLines}>
         {children}
       </Text>
-      {isExternalLink && !renderAsButton && (
+      {isExternalWithIcon && (
         <>
-          <Icon icon="externalLink" size="xsm" color="inherit" />
+          <Icon
+            icon="externalLink"
+            size="xsm"
+            color="inherit"
+            xstyle={isInClampedText && styles.externalIconInClampedText}
+          />
           <VisuallyHidden>{newTabLabel}</VisuallyHidden>
         </>
       )}
@@ -422,6 +450,7 @@ export function Link({
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
             styles.base,
+            isInClampedText && styles.inClampedText,
             linkColorStyles[color],
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
@@ -454,6 +483,7 @@ export function Link({
           themeProps('link', {color}),
           focusOutlineProps.focusVisible(
             styles.base,
+            isInClampedText && styles.inClampedText,
             linkColorStyles[color],
             !isDisabled && interactionOverlayStyles.pressedBackgroundColor,
             hasUnderline && styles.hasUnderline,

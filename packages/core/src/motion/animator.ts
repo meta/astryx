@@ -153,11 +153,12 @@
  * release (`touchRelease`) and at once elsewhere (DR2, DR3).
  *
  * Roles: every spring and curve the animator plays passes through
- * resolveMotion.ts, which names the motion role it plays (`springs.settle`
- * once `registerSpringsTable()` has run, the Reduce Motion fade's curve,
- * which the animator registers alone). The per-role tables stay internal
+ * resolveMotion.ts, which names the motion role it plays. `springs.settle`
+ * registers as its module loads, and the animator registers the Reduce Motion
+ * fade's curve alone. The per-role tables stay internal
  * (`spec:AST-094` DEC-15), so a role plays its table value: nothing reads a
- * CSS variable or the element's style for it. A spring written inline at the call
+ * role's own CSS variable. Its time scales by the tempo of the element's
+ * theme. A spring written inline at the call
  * site, and a table never registered, play as given; the fade's length is not
  * a role.
  *
@@ -183,7 +184,12 @@
 import {cubicBezier} from './bezier';
 import {LATE_START_MS} from './frameBlock';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
-import {registerPresentedOffset, type PresentedSource} from './presentation';
+import {
+  clearPresentedResolve,
+  registerPresentedOffset,
+  type PresentedSource,
+  writePresentedResolve,
+} from './presentation';
 import {resolveMotion} from './resolveMotion';
 import {
   reducedMotionCrossFade,
@@ -749,9 +755,6 @@ export const PROMOTION_LINGER_MS = 500;
 
 type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
 
-/** The custom property whose writes make WebKit resolve a moving element. */
-const RESOLVE_PROPERTY = '--astryx-presented';
-
 const CHANNELS: Record<Channel, ReadonlyArray<MotionProperty>> = {
   translate: ['x', 'y'],
   rotate: ['rotate'],
@@ -1025,8 +1028,6 @@ export function createMotionEngine(
    * moves it: where the animation started, or where a `resolve` left it.
    */
   let hitTested = {x: 0, y: 0};
-  /** Counts the style writes that make WebKit resolve the element again. */
-  let resolutions = 0;
   let unpresent: (() => void) | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
   const promoted = new Set<Channel>();
@@ -1260,8 +1261,7 @@ export function createMotionEngine(
       // Any style write makes WebKit resolve the element's transform again,
       // to the value drawn now, where it then stays (iOS 26.2: in the same
       // task); a custom property changes nothing else.
-      resolutions += 1;
-      target.style.setProperty(RESOLVE_PROPERTY, String(resolutions));
+      writePresentedResolve(target);
       hitTested = {x: drawnTranslate('x', time), y: drawnTranslate('y', time)};
     },
   };
@@ -1275,7 +1275,7 @@ export function createMotionEngine(
     unpresent?.();
     unpresent = null;
     if (presented instanceof HTMLElement) {
-      presented.style.removeProperty(RESOLVE_PROPERTY);
+      clearPresentedResolve(presented);
     }
     presented = element;
     if (element != null) {
@@ -2729,7 +2729,7 @@ export function createMotionEngine(
     if (from === to && velocity === 0) {
       return null;
     }
-    // The motion role it plays: its table value (DEC-15).
+    // The motion role it plays, at the tempo of the theme it is in.
     const resolved = resolveMotion(target, spring);
     const curve = solveSpring(toSpring(resolved), {from, to, velocity});
     const duration = Math.min(
