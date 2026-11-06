@@ -300,8 +300,11 @@ export interface MonthScrollerProps {
   onVisibleMonthChange: (monthIndex: number) => void;
   /** Currently selected date. */
   selectedDate: PlainDate | null;
-  /** Today, for the `aria-current` marker. */
-  today: PlainDate;
+  /**
+   * Today, for the `aria-current` marker; `null` while it is not known yet
+   * (server render, hydration).
+   */
+  today: PlainDate | null;
   /** Whether a date fails min/max or a custom constraint. */
   isDateDisabled: (date: PlainDate) => boolean;
   /** First column of the week. */
@@ -894,7 +897,8 @@ interface MonthPaneProps {
   inlineSize: number;
   selectedDate: PlainDate | null;
   focusedDate: PlainDate | null;
-  today: PlainDate;
+  /** Today, or `null` while it is not known yet (server render, hydration). */
+  today: PlainDate | null;
   isDateDisabled: (date: PlainDate) => boolean;
   weekStartsOn: DayOfWeek;
   onSelect: (value: ISODateString) => void;
@@ -975,7 +979,10 @@ function MonthPane({
               !day.isOutside &&
               selectedDate != null &&
               plainDateIsEqual(day.date, selectedDate);
-            const isToday = !day.isOutside && plainDateIsEqual(day.date, today);
+            const isToday =
+              !day.isOutside &&
+              today != null &&
+              plainDateIsEqual(day.date, today);
 
             return (
               <div
