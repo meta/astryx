@@ -203,6 +203,13 @@ test('the ring keeps turning while a script holds the main thread', async ({
 test('turning paints nothing on the main thread', async ({page}) => {
   await openSizes(page);
   await page.waitForTimeout(200);
+  // Clearing the mount announcement repaints the shared live region, not the
+  // rotor. Let it clear before measuring steady-state motion.
+  await page.waitForFunction(() =>
+    Array.from(document.querySelectorAll('[data-astryx-live-region]')).every(
+      region => region.textContent === '',
+    ),
+  );
   // Four rings turn for two seconds. A paint animation repaints every frame;
   // a transform animation paints none. React listens for
   // `animationiteration`, so Chromium recalculates style a few times at each
