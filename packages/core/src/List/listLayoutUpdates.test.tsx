@@ -570,7 +570,16 @@ describe('List row updates through animatedLayout', () => {
     });
   });
 
-  it('reads every near row before it settles any swiped row: no read between two settles', async () => {
+  /**
+   * Swipes `swiped` 40 px left, then changes the rows to `next`. It logs each
+   * read of a row's place or style, each settle, and the commit removing a
+   * row, in order.
+   */
+  async function readsAndSettles(
+    initial: string[],
+    swiped: string[],
+    next: string[],
+  ): Promise<string[]> {
     // jsdom has no DOMMatrix: a 2D one, enough for a translation.
     class Matrix {
       a = 1;
@@ -603,9 +612,8 @@ describe('List row updates through animatedLayout', () => {
       }
     }
     vi.stubGlobal('DOMMatrix', Matrix);
-    render(<Demo initial={['Inbox', 'Sent', 'Drafts', 'Archive']} />);
-    // Two rows a swipe left translated, with a row between them.
-    for (const label of ['Inbox', 'Drafts']) {
+    render(<Demo initial={initial} />);
+    for (const label of swiped) {
       const row = [...document.querySelectorAll('li')].find(
         li => li.textContent === label,
       );
@@ -629,31 +637,63 @@ describe('List row updates through animatedLayout', () => {
       }
       return rect.call(this);
     };
-    const settles = new WeakSet<CSSStyleDeclaration>();
+    const rows = new WeakSet<CSSStyleDeclaration>();
     for (const row of document.querySelectorAll('li')) {
-      settles.add(row.style);
+      rows.add(row.style);
     }
+    const removeChild = Node.prototype.removeChild;
+    vi.spyOn(Node.prototype, 'removeChild').mockImplementation(function <
+      T extends Node,
+    >(this: Node, child: T): T {
+      if ((child as unknown as Element).tagName === 'LI') {
+        log.push('commit');
+      }
+      return removeChild.call(this, child) as T;
+    });
     const setProperty = CSSStyleDeclaration.prototype.setProperty;
     vi.spyOn(CSSStyleDeclaration.prototype, 'setProperty').mockImplementation(
       function (this: CSSStyleDeclaration, name, value, priority) {
         // A settle turns a row's own translation off.
-        if (name === 'transform' && value === 'none' && settles.has(this)) {
+        if (name === 'transform' && value === 'none' && rows.has(this)) {
           log.push('settle');
         }
         setProperty.call(this, name, value, priority);
       },
     );
     try {
-      await change(['Inbox', 'Sent', 'New', 'Drafts', 'Archive']);
+      await change(next);
     } finally {
       Element.prototype.getBoundingClientRect = rect;
       vi.unstubAllGlobals();
     }
-    // The first two settles are the two swiped rows of the one change.
-    const first = log.indexOf('settle');
-    const second = log.indexOf('settle', first + 1);
-    expect(second, log.join(' ')).toBeGreaterThan(first);
-    expect(log.slice(first, second), log.join(' ')).not.toContain('read');
+    return log;
+  }
+
+  it('measuring a change with swiped rows in view only reads: a row that stays keeps its translation, and nothing is settled', async () => {
+    const log = await readsAndSettles(
+      ['Inbox', 'Sent', 'Drafts', 'Archive'],
+      ['Inbox', 'Drafts'],
+      ['Inbox', 'Sent', 'New', 'Drafts', 'Archive'],
+    );
+    expect(log, log.join(' ')).toContain('read');
+    expect(log, log.join(' ')).not.toContain('settle');
+  });
+
+  it('a swiped row that leaves settles after the commit, before any place is read again, so it costs no layout of its own', async () => {
+    const log = await readsAndSettles(
+      ['Inbox', 'Sent', 'Drafts', 'Archive'],
+      ['Inbox', 'Drafts'],
+      ['Inbox', 'Sent', 'Archive'],
+    );
+    const commit = log.indexOf('commit');
+    const settle = log.indexOf('settle');
+    expect(commit, log.join(' ')).toBeGreaterThan(0);
+    expect(log.slice(0, commit), log.join(' ')).not.toContain('settle');
+    expect(
+      log.filter(entry => entry === 'settle'),
+      log.join(' '),
+    ).toHaveLength(1);
+    expect(log.slice(commit, settle), log.join(' ')).not.toContain('read');
   });
 
   it('a re-render with the same rows in the same order plays nothing', async () => {

@@ -31,6 +31,7 @@ import {useCallback, useRef, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
   holdLayoutExit,
+  landLayoutGlide,
   playLayoutChange,
   reportLayoutChange,
   type AnimatedLayout,
@@ -70,8 +71,8 @@ interface Measured {
   /** The rows reported to the module, the only ones whose exit it holds. */
   readonly reported: ReadonlySet<HTMLElement>;
   readonly changes: ReadonlyArray<LayoutChange>;
-  /** Rows whose translation moved onto their children for the commit. */
-  readonly settled: ReadonlyArray<Settled>;
+  /** Near rows with a translation of their own, read before the commit. */
+  readonly translations: ReadonlyArray<Translation>;
 }
 
 /**
@@ -212,14 +213,6 @@ function putBack(
   keptStyles.delete(element);
 }
 
-/** A row whose own translation moved onto its children, and what it replaced. */
-interface Settled {
-  readonly row: HTMLElement;
-  readonly prior: ReadonlyArray<
-    readonly [HTMLElement | SVGElement, string, string]
-  >;
-}
-
 /** What `readTranslation` reads off a row, before anything is written. */
 interface Translation {
   readonly view: Window & typeof globalThis;
@@ -231,19 +224,16 @@ interface Translation {
 }
 
 /**
- * Moves a row's own translation, such as a swipe's, onto its children. So the
- * row's box lies where the row lies in the list, while it shows the same
- * thing. This runs for every translated row as a change is measured. After
- * the commit it is undone for each row that stays. A row that leaves exits on
- * its own box, in view. Its exit's clip keeps the action that the swipe
- * uncovered and cuts the content that the swipe carried away. The box is the
- * same before and after the commit, so nothing glides it. With the
- * translation on the row, a row that a swipe carried out of the list's box
- * would lie out of view. Its exit would then clip the action. Only a
- * translation moves. `readTranslation` reads it, and `settleTranslation`
- * moves it, so a list reads every row before it writes any. Returns the
- * row's translation and its children's transforms, or null when the row has
- * no translation of its own.
+ * Reads a row's own translation, such as a swipe's, and its children's
+ * transforms, as a change is measured. A row that leaves exits on its own
+ * box, in view. So `settleTranslation` moves its translation onto its
+ * children before the module reads the new places. Its exit's clip then
+ * keeps the action that the swipe uncovered and cuts the content that the
+ * swipe carried away. With the translation on the row, a row that a swipe
+ * carried out of the list's box would lie out of view. Its exit would then
+ * clip the action. A row that stays keeps its translation: the module reads
+ * it on both sides of the commit, so nothing glides it. Returns null when
+ * the row has no translation of its own.
  */
 function readTranslation(row: HTMLElement): Translation | null {
   const view = row.ownerDocument.defaultView;
@@ -281,7 +271,7 @@ function readTranslation(row: HTMLElement): Translation | null {
   };
 }
 
-/** Moves a row's own translation onto its children. Returns what to undo. */
+/** Moves a row's own translation onto its children. */
 function settleTranslation({
   view,
   row,
@@ -289,15 +279,7 @@ function settleTranslation({
   y,
   children,
   transforms,
-}: Translation): Settled {
-  const prior = [row, ...children].map(
-    element =>
-      [
-        element,
-        element.style.getPropertyValue('transform'),
-        element.style.getPropertyPriority('transform'),
-      ] as const,
-  );
+}: Translation): void {
   row.style.setProperty('transform', 'none');
   children.forEach((child, index) => {
     const current = transforms[index];
@@ -308,18 +290,6 @@ function settleTranslation({
         : shift.multiply(new view.DOMMatrix(current));
     child.style.setProperty('transform', moved.toString());
   });
-  return {row, prior};
-}
-
-/** Puts back what `settleTranslation` replaced on a row that stays. */
-function unsettle({prior}: Settled): void {
-  for (const [element, value, priority] of prior) {
-    if (value === '') {
-      element.style.removeProperty('transform');
-    } else {
-      element.style.setProperty('transform', value, priority);
-    }
-  }
 }
 
 /**
@@ -432,7 +402,7 @@ export function useListLayoutUpdates(
         near: null,
         reported: new Set([target]),
         changes: [change],
-        settled: [],
+        translations: [],
       };
       reportedRows.set(list, measuredRef.current.reported);
       return;
@@ -443,13 +413,12 @@ export function useListLayoutUpdates(
     // The rows near the visible part (a viewport's height above and below
     // it): only they can glide in view, so only their places are read.
     const near = rowsMeeting(elements, -height, 2 * height);
-    const settled: Settled[] = [];
+    const translations: Translation[] = [];
     const tops = new Map<string, number>();
     if (near != null) {
-      // One pass reads every near row's translation and place before any
-      // settle is written. A settled row's place is its box without its own
-      // translation.
-      const translations: Translation[] = [];
+      // One pass reads every near row's translation and place. A row's place
+      // is its box without its own translation. The measurement writes
+      // nothing, so no read here lays the page out again.
       for (let index = near[0]; index <= near[1]; index++) {
         const translation = readTranslation(elements[index]);
         const {top} = elements[index].getBoundingClientRect();
@@ -457,9 +426,6 @@ export function useListLayoutUpdates(
         if (translation != null) {
           translations.push(translation);
         }
-      }
-      for (const translation of translations) {
-        settled.push(settleTranslation(translation));
       }
     }
     // The module exits only rows it measured, so every row in view is
@@ -487,7 +453,7 @@ export function useListLayoutUpdates(
       near,
       reported: new Set(targets),
       changes,
-      settled,
+      translations,
     };
     reportedRows.set(list, measuredRef.current.reported);
   }, [animatedLayout, listRef]);
@@ -507,13 +473,6 @@ export function useListLayoutUpdates(
       return;
     }
     const now = keyedRows(list);
-    // A row that stays shows its translation on itself again; a row that
-    // left exits settled (what it kept as it left already holds it).
-    for (const done of measured.settled) {
-      if (done.row.parentElement === list) {
-        unsettle(done);
-      }
-    }
     const order = [...now.keys()];
     if (
       order.length === measured.order.length &&
@@ -546,6 +505,26 @@ export function useListLayoutUpdates(
     }
     for (const change of measured.changes) {
       change.animate();
+    }
+    // A row that leaves exits on its own box, in view: its translation moves
+    // onto its children before its exit starts. The commit has already
+    // changed the layout, so this costs no layout of its own.
+    const settled: HTMLElement[] = [];
+    for (const translation of measured.translations) {
+      if (leaving.includes(translation.row)) {
+        settleTranslation(translation);
+        settled.push(translation.row);
+      }
+    }
+    if (settled.length > 0) {
+      // The module read the row's old place with the translation on it, so
+      // it glides the row by that translation. The row shows where it
+      // showed already, so that glide lands before the frame paints.
+      queueMicrotask(() => {
+        for (const row of settled) {
+          landLayoutGlide(row);
+        }
+      });
     }
     for (const element of leaving) {
       if (!holdLayoutExit(animatedLayout, element, () => element.remove())) {

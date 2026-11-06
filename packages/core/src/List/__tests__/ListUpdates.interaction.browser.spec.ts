@@ -742,6 +742,169 @@ test('a row swiped away with a removal action exits in place as it was on screen
   await expect(leaving(page)).toHaveCount(0, {timeout: 3000});
 });
 
+test('a change with a row swiped open lays the page out no more often than the same change with none', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'Chromium counts layouts and drives the swipe through CDP',
+  );
+  const layoutsFor = async (isSwiped: boolean) => {
+    await open(page, SWIPE_STORY);
+    const cdp = await page.context().newCDPSession(page);
+    if (isSwiped) {
+      const sent = row(page, 'Sent');
+      await expect(
+        sent.locator('[data-swipe-panel="trailing"]'),
+      ).toBeAttached();
+      const box = await sent.boundingBox();
+      if (box == null) {
+        throw new Error('no row');
+      }
+      const y = box.y + box.height / 2;
+      const startX = box.x + box.width - 24;
+      await cdp.send('Input.dispatchTouchEvent', {
+        touchPoints: [{x: startX, y}],
+        type: 'touchStart',
+      });
+      for (const fraction of [0.02, 0.05, 0.1, 0.15, 0.2, 0.25]) {
+        await cdp.send('Input.dispatchTouchEvent', {
+          touchPoints: [{x: startX - box.width * fraction, y}],
+          type: 'touchMove',
+        });
+        await page.waitForTimeout(40);
+      }
+      await cdp.send('Input.dispatchTouchEvent', {
+        touchPoints: [],
+        type: 'touchEnd',
+      });
+      await expect
+        .poll(async () =>
+          sent.evaluate(
+            el => new DOMMatrix(getComputedStyle(el).transform).m41,
+          ),
+        )
+        .toBeLessThan(-20);
+    }
+    await expect
+      .poll(async () => page.evaluate(() => document.getAnimations().length))
+      .toBe(0);
+    await cdp.send('Performance.enable');
+    const layouts = async () => {
+      const {metrics} = await cdp.send('Performance.getMetrics');
+      return metrics.find(metric => metric.name === 'LayoutCount')?.value ?? 0;
+    };
+    const before = await layouts();
+    // A click with no pointer, so no swipe closes and no hover restyles.
+    await page.evaluate(async () => {
+      const button = [...document.querySelectorAll('button')].find(
+        element => element.textContent?.trim() === 'Move Archive first',
+      );
+      button?.click();
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+    });
+    const after = await layouts();
+    await cdp.detach();
+    return after - before;
+  };
+  const none = await layoutsFor(false);
+  const swiped = await layoutsFor(true);
+  expect(swiped, `with a row swiped open: ${swiped}; with none: ${none}`).toBe(
+    none,
+  );
+});
+
+test('a row swiped away lays the page out as often as the same swipe with no translation on the row, and never glides sideways', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'Chromium counts layouts and drives the swipe through CDP',
+  );
+  const swipeAway = async (isTranslated: boolean) => {
+    await open(page, SWIPE_STORY);
+    const cdp = await page.context().newCDPSession(page);
+    const sent = row(page, 'Sent');
+    await expect(sent.locator('[data-swipe-panel="trailing"]')).toBeAttached();
+    if (!isTranslated) {
+      // The same gesture and removal, with no translation on the row.
+      await sent.evaluate(el => {
+        el.style.setProperty('transform', 'none', 'important');
+      });
+    }
+    const box = await sent.boundingBox();
+    if (box == null) {
+      throw new Error('no row');
+    }
+    // From the frame where Sent is put back for its exit: does a glide on it
+    // move it sideways?
+    await page.evaluate(() => {
+      const state = {sideways: -1};
+      (window as unknown as {__exit: typeof state}).__exit = state;
+      const tick = () => {
+        const exit = document.querySelector(
+          '#storybook-root li[data-astryx-leaving]',
+        );
+        if (exit != null) {
+          state.sideways = exit
+            .getAnimations()
+            .filter(animation =>
+              (animation.effect as KeyframeEffect | null)
+                ?.getKeyframes()
+                .some(frame => 'translate' in frame),
+            ).length;
+          return;
+        }
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    const y = box.y + box.height / 2;
+    const startX = box.x + box.width - 24;
+    await cdp.send('Input.dispatchTouchEvent', {
+      touchPoints: [{x: startX, y}],
+      type: 'touchStart',
+    });
+    for (const fraction of [0.02, 0.05, 0.1, 0.2, 0.35, 0.5, 0.65, 0.8, 0.9]) {
+      await cdp.send('Input.dispatchTouchEvent', {
+        touchPoints: [{x: startX - box.width * fraction, y}],
+        type: 'touchMove',
+      });
+      await page.waitForTimeout(40);
+    }
+    await cdp.send('Performance.enable');
+    const layouts = async () => {
+      const {metrics} = await cdp.send('Performance.getMetrics');
+      return metrics.find(metric => metric.name === 'LayoutCount')?.value ?? 0;
+    };
+    const before = await layouts();
+    await cdp.send('Input.dispatchTouchEvent', {
+      touchPoints: [],
+      type: 'touchEnd',
+    });
+    await expect(leaving(page)).toHaveCount(1, {timeout: 3000});
+    await expect(leaving(page)).toHaveCount(0, {timeout: 3000});
+    const after = await layouts();
+    const sideways = await page.evaluate(
+      () => (window as unknown as {__exit: {sideways: number}}).__exit.sideways,
+    );
+    await cdp.detach();
+    return {layouts: after - before, sideways};
+  };
+  const plain = await swipeAway(false);
+  const swiped = await swipeAway(true);
+  // The leaving row exits where it was: nothing glides it sideways.
+  expect(swiped.sideways, JSON.stringify({plain, swiped})).toBe(0);
+  // Its settle costs no layout of its own.
+  expect(swiped.layouts, JSON.stringify({plain, swiped})).toBeLessThanOrEqual(
+    plain.layouts,
+  );
+});
+
 test('a row a swipe left open, still moving when another row is swiped away, is left as the swipe moves it: the list leaves no transform on it', async ({
   page,
   browserName,
