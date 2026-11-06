@@ -5,12 +5,13 @@
  * @input The animated-layout module bundled with esbuild onto fixture pages
  *   written inline, real Chromium and WebKit (the interaction projects: a
  *   phone with a coarse pointer) plus a fine-pointer describe
- * @output One proof per `spec:AST-105` Coverage row, and FR2–FR4: which
- *   elements glide after a reported size change, by how much, on one shared
- *   start and spring, never past the area and never scrolling it; nothing
- *   without a handle; Reduce Motion by pointer; and FR9's edge reveal, a
- *   block-end and an inline-edge reveal and conceal and the two-state form,
- *   each element's moving edge on the content beside it on every frame, a
+ * @output Proof of which elements glide after a reported size change, by how
+ *   much, and on one shared start and the theme's move curve. That curve may
+ *   be a `linear()` or `steps()` easing. It checks that
+ *   the glide never passes the area or scrolls it, and that nothing moves
+ *   without a handle. It checks Reduce Motion by pointer, and the edge reveal:
+ *   a block-end and an inline-edge reveal and conceal, and the two-state form.
+ *   Each element's moving edge sits on the content beside it on every frame, a
  *   reversal included
  * @position Real-browser verification of `spec:AST-105` and
  *   `architecture:react-component-runtime` INV12
@@ -19,7 +20,9 @@
 import {fileURLToPath} from 'node:url';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {build} from 'esbuild';
+import {cubicBezier} from '../bezier';
 import type * as Bundle from './animatedLayoutBundle';
+import {stylexDeclarations} from './stylexDeclarationsPlugin';
 
 /** One animation on an element: its first frame and its timing. */
 interface MotionRead {
@@ -42,6 +45,8 @@ declare global {
     }) => Promise<void>;
     /** Animations on an element: their first transform and timing. */
     motionOf: (selector: string) => MotionRead[];
+    /** The first animation's keyframes: each one's time in ms and its y. */
+    curveOf: (selector: string) => {t: number; y: number}[];
     /**
      * Pauses every animation `ms` into its motion: the page as it shows then,
      * however far apart the browser draws its frames.
@@ -90,6 +95,7 @@ test.beforeAll(async () => {
     entryPoints: [
       fileURLToPath(new URL('./animatedLayoutBundle.ts', import.meta.url)),
     ],
+    plugins: [stylexDeclarations],
     bundle: true,
     write: false,
     format: 'iife',
@@ -231,6 +237,21 @@ window.motionOf = selector => {
     };
   });
 };
+window.curveOf = selector => {
+  const [animation] = document
+    .querySelector(selector)
+    .getAnimations({subtree: false});
+  const duration = Number(animation.effect.getTiming().duration);
+  return animation.effect.getKeyframes().map(frame => {
+    const match = /^(-?[\\d.e+-]+)px(?:\\s+(-?[\\d.e+-]+)px)?/.exec(
+      frame.translate ?? '',
+    );
+    return {
+      t: frame.computedOffset * duration,
+      y: match == null || match[2] == null ? 0 : Number(match[2]),
+    };
+  });
+};
 `;
 
 async function open(page: Page, body: string, style = '') {
@@ -271,6 +292,34 @@ async function settle(page: Page) {
       timeout: 5000,
     })
     .toBe(0);
+}
+
+/** Every keyframe sits on `points` over `ms`, from the first one's offset. */
+function expectOnCurve(
+  curve: {t: number; y: number}[],
+  points: readonly [number, number, number, number],
+  ms: number,
+) {
+  expectOnEase(
+    curve,
+    cubicBezier([...points] as [number, number, number, number]),
+    ms,
+  );
+}
+
+/** Every keyframe sits on `ease` over `ms`, from the first one's offset. */
+function expectOnEase(
+  curve: {t: number; y: number}[],
+  ease: (x: number) => number,
+  ms: number,
+) {
+  const from = curve[0].y;
+  // The glide moves the row: a curve read as all zeros proves nothing.
+  expect(curve.length).toBeGreaterThan(2);
+  expect(Math.abs(from)).toBeGreaterThan(10);
+  for (const {t, y} of curve) {
+    expect(y, `${t} ms`).toBeCloseTo(from * (1 - ease(Math.min(1, t / ms))), 2);
+  }
 }
 
 /** The translate an animation starts from, in px. */
@@ -632,8 +681,9 @@ test.describe('spec:AST-105 Coverage', () => {
     expect(motions).toHaveLength(1);
     expect(motions[0].composite).toBe('replace');
     expect(motions[0].startTime).not.toBe(first.startTime);
-    // No jump: the new glide starts where the old one is drawn.
-    expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.1);
+    // No jump: the new glide starts where the old one is drawn, which is a
+    // straight line between two of its keyframes.
+    expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.01);
     // Still gliding down at least as fast: the new move adds to the motion.
     expect(run.before).toBeGreaterThan(0);
     expect(run.after).toBeGreaterThan(run.before * 0.9);
@@ -656,7 +706,7 @@ test.describe('spec:AST-105 Coverage', () => {
       // started that many ms of motion ahead (0.3 px at 1 ms, about 3 px at
       // 9 ms).
       const {run} = await retarget(page, lateMs);
-      expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.1);
+      expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.01);
       expect(run.after).toBeGreaterThan(run.before * 0.9);
     });
   }
@@ -744,7 +794,7 @@ test.describe('spec:AST-105 Coverage', () => {
       expect(run.cardGlidingAfter).toBe(true);
       expect(run.cardRetargeted).toBe(true);
       expect(run.rowGlidingAfter).toBe(true);
-      expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.1);
+      expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.01);
     });
   }
 
@@ -766,7 +816,7 @@ test.describe('spec:AST-105 Coverage', () => {
       expect(run.cardGlidingAfter).toBe(true);
       expect(run.cardRetargeted).toBe(false);
       expect(run.rowGlidingAfter).toBe(true);
-      expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.1);
+      expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.01);
     });
   }
 
@@ -824,10 +874,12 @@ test.describe('spec:AST-105 Coverage', () => {
   test('a change made after a block retargets a running glide from where the compositor has it, not from before the block', async ({
     page,
   }) => {
+    // A glide long enough to still run when the 400 ms block ends.
     await open(
       page,
       `<div id="area" class="area"><div id="grow" class="grow"></div>
         <div id="second" class="grow"></div><div id="after" class="row"></div></div>`,
+      '#area { --duration-medium-min: 1000ms; }',
     );
     await change(page);
     await page.waitForTimeout(100);
@@ -1895,7 +1947,7 @@ test.describe('spec:AST-105 FR2–FR4', () => {
     expect(withHandle).toEqual(without);
   });
 
-  test('the changed element and its followers start on one frame on springs.settle (FR4)', async ({
+  test("the changed element and its followers start on one frame on the theme's move curve (FR4)", async ({
     page,
   }) => {
     await open(page, PAGE);
@@ -1907,10 +1959,13 @@ test.describe('spec:AST-105 FR2–FR4', () => {
     expect(follower).toHaveLength(1);
     expect(grow[0].startTime).toBe(follower[0].startTime);
     expect(grow[0].duration).toBeCloseTo(follower[0].duration, 3);
-    // springs.settle is SwiftUI's smooth spring (duration 0.5 s, no bounce):
-    // it settles within a second.
-    expect(follower[0].duration).toBeGreaterThan(300);
-    expect(follower[0].duration).toBeLessThan(1200);
+    // With no stylesheet, the tokens read core's declared values.
+    expect(follower[0].duration).toBeCloseTo(310, 3);
+    expectOnCurve(
+      await page.evaluate(() => window.curveOf('#a')),
+      [0.24, 1, 0.4, 1],
+      310,
+    );
   });
 
   for (const layout of [
@@ -2290,17 +2345,75 @@ test.describe('spec:AST-105 FR2–FR4', () => {
     );
   });
 
-  test("a scope's --motion-springs-settle changes nothing: the role is internal (FR4)", async ({
-    page,
-  }) => {
-    await open(page, PAGE);
-    await change(page);
-    const [shared] = await page.evaluate(() => window.motionOf('#a'));
-    await open(page, PAGE, '#area { --motion-springs-settle: 0.2s 0; }');
-    await change(page);
-    const [scoped] = await page.evaluate(() => window.motionOf('#a'));
-    expect(scoped.duration).toBeCloseTo(shared.duration, 3);
-  });
+  for (const theme of [
+    {
+      name: 'at tempo 0.75',
+      style: '--duration-medium-min: 232.5ms',
+      ms: 232.5,
+      points: [0.24, 1, 0.4, 1],
+    },
+    {
+      name: 'at tempo 1.5',
+      style: '--duration-medium-min: 465ms',
+      ms: 465,
+      points: [0.24, 1, 0.4, 1],
+    },
+    {
+      name: "at character 'crisp'",
+      style: '--ease-move: cubic-bezier(0, 0, 0.2, 1)',
+      ms: 310,
+      points: [0, 0, 0.2, 1],
+    },
+    {
+      name: "at character 'expressive'",
+      style: '--ease-move: cubic-bezier(0.3, 1.2, 0.5, 1)',
+      ms: 310,
+      points: [0.3, 1.2, 0.5, 1],
+    },
+  ] as const) {
+    test(`a theme ${theme.name}: the glide plays its --ease-move over its --duration-medium-min (FR4)`, async ({
+      page,
+    }) => {
+      // The tokens a theme with that knob writes on its scope.
+      await open(page, PAGE, `#area { ${theme.style}; }`);
+      await change(page);
+      const [motion] = await page.evaluate(() => window.motionOf('#a'));
+      expect(motion.duration).toBeCloseTo(theme.ms, 3);
+      expectOnCurve(
+        await page.evaluate(() => window.curveOf('#a')),
+        theme.points,
+        theme.ms,
+      );
+    });
+  }
+
+  for (const theme of [
+    {
+      easing: 'linear(0, 0.8 50%, 1)',
+      // Two straight runs: to 0.8 at half the time, then on to 1.
+      ease: (x: number) => (x < 0.5 ? 1.6 * x : 0.8 + 0.4 * (x - 0.5)),
+    },
+    {
+      easing: 'steps(4, jump-end)',
+      ease: (x: number) => Math.floor(4 * x) / 4,
+    },
+  ]) {
+    test(`a theme whose --ease-move is ${theme.easing}: the glide plays it as the browser plays it (FR4)`, async ({
+      page,
+    }) => {
+      // The motion scale's easing option writes such an easing.
+      await open(page, PAGE, `#area { --ease-move: ${theme.easing}; }`);
+      await change(page);
+      const motions = await page.evaluate(() => window.motionOf('#a'));
+      expect(motions, 'the content after the change glides').toHaveLength(1);
+      expect(motions[0].duration).toBeCloseTo(310, 3);
+      expectOnEase(
+        await page.evaluate(() => window.curveOf('#a')),
+        theme.ease,
+        310,
+      );
+    });
+  }
 
   test('under Reduce Motion with a coarse pointer, both cross-fade with no travel (FR4)', async ({
     page,
