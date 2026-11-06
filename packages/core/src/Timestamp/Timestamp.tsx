@@ -377,9 +377,9 @@ export function Timestamp({
               date,
               effectiveFormat,
               locale,
-              // The pre-hydration placeholder is written in UTC, labelled, so
-              // the server and the hydrating client produce the same text in
-              // every time zone — whatever `timezoneID` pins.
+              // The pre-hydration placeholder is Gregorian and in UTC, with its zone,
+              // whatever `timezoneID` pins. The server and the client then write the
+              // same text, with or without Temporal.
               isClockPending
                 ? {timeZone: 'UTC', isTimezoneShown: true}
                 : {timeZone: timezoneID, isTimezoneShown, calendar},
@@ -390,8 +390,7 @@ export function Timestamp({
   // abbreviation) and for the AT-facing aria-label, which spells the timezone
   // out in full: abbreviations like "PST" or "GMT+2" are unexpanded
   // abbreviations to a screen-reader user (WCAG 3.1.4). Both stay in the
-  // viewer's zone: the default hover-card row, and the relative accessible
-  // name because relative formats ignore `timezoneID`.
+  // viewer's zone: the default hover-card row and the relative accessible name.
   const fullAbsoluteText = isValidDate
     ? formatInstant(date, 'full', locale, {timeZone: undefined, calendar})
     : '';
