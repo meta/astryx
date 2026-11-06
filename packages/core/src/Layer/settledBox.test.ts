@@ -59,6 +59,13 @@ function layerIn(engine: Engine): HTMLElement {
     };
     return {
       getPropertyValue: (name: string) => values[name] ?? '',
+      transform: values.transform,
+      translate: values.translate,
+      rotate: values.rotate,
+      scale: values.scale,
+      transformOrigin: values['transform-origin'],
+      transitionProperty: values['transition-property'],
+      transitionDuration: values['transition-duration'],
     } as unknown as CSSStyleDeclaration;
   });
   layer.getBoundingClientRect = () => {
