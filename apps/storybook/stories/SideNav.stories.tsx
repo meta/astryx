@@ -17,6 +17,7 @@ import {ListItem} from '@astryxdesign/core/List';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {NavHeadingMenu, NavHeadingMenuItem} from '@astryxdesign/core/NavMenu';
+import {HStack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
 import {
   HomeIcon,
@@ -766,10 +767,12 @@ function CollapsedWidthZeroDemo() {
           </SideNavSection>
         </SideNav>
       }>
-      <SideNavCollapseButton collapsible={collapsible} />
-      <Text type="body">
-        Collapsed, the navigation takes no width. Its toggle stays here.
-      </Text>
+      <HStack gap={2} vAlign="center">
+        <SideNavCollapseButton collapsible={collapsible} />
+        <Text type="body">
+          Collapsed, the navigation takes no width. Its toggle stays here.
+        </Text>
+      </HStack>
     </AppShell>
   );
 }
