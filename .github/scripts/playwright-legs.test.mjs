@@ -229,13 +229,16 @@ describe('the interaction proof legs in ci.yml', () => {
     {
       id: 'pr-interaction',
       project: 'chromium',
-      legs: [1, 2],
+      legs: [1, 2, 3, 4],
       run: 'Run interaction proofs',
       plan: "Plan this leg's interaction proofs",
       evidence: 'interaction-evidence-${{ matrix.leg }}',
-      gate: "steps.scope.outputs.applies == 'true'",
-      leg: '${{ matrix.leg }}',
-      of: '${{ strategy.job-total }}',
+      // As few legs as fit; see the leg counts below.
+      gate: "steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'",
+      leg: '${{ steps.legs.outputs.leg }}',
+      of: '${{ steps.legs.outputs.count }}',
+      count: "Count this run's legs",
+      fallback: 'webkit',
     },
     {
       id: 'pr-interaction-webkit',
@@ -248,6 +251,8 @@ describe('the interaction proof legs in ci.yml', () => {
       gate: "steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'",
       leg: '${{ steps.legs.outputs.leg }}',
       of: '${{ steps.legs.outputs.count }}',
+      count: "Count this run's WebKit legs",
+      fallback: 'chromium',
     },
   ];
 
@@ -594,14 +599,59 @@ describe('the interaction proof legs in ci.yml', () => {
       expect(leg.seconds).toBeLessThanOrEqual(6 * 60);
   });
 
-  it('records a time for each project the legs plan, each under the legs\u2019 per-runner budget', () => {
+  it('fits every leg in ten minutes at today’s recorded times, within the matrix', () => {
+    // Every interaction spec in the tree, as the count steps list them.
+    const specs = execFileSync('git', ['ls-files'], {
+      cwd: root,
+      encoding: 'utf8',
+    })
+      .split('\n')
+      .filter(isInteractionSpec);
     for (const lane of lanes) {
       const times = durations[`interaction-${lane.project}`];
-      expect(Object.keys(times).length, lane.project).toBeGreaterThan(0);
-      const plan = planLegs(Object.keys(times), times, lane.legs.length);
-      // About six minutes a leg under load; the recorded run was a loaded one.
-      for (const leg of plan)
-        expect(leg.seconds, lane.project).toBeLessThanOrEqual(6 * 60);
+      const fallback = durations[`interaction-${lane.fallback}`];
+      const count = step(ci.jobs[lane.id], lane.count);
+      const filters =
+        lane.project === 'webkit'
+          ? ci.jobs[lane.id].env.WEBKIT_SPEC_PATHS.split(' ')
+          : [];
+      const seconds = estimateSeconds(times, filters, {
+        listed: specs,
+        fallback,
+      });
+      const limits = {
+        setupSeconds: 90,
+        maxSeconds: 600,
+        maxLegs: lane.legs.length,
+      };
+      expect(count.run, lane.id).toContain(
+        '--setup-seconds 90 --max-seconds 600',
+      );
+      // The matrix still has room: the count stays under its legs.
+      const needed = Math.ceil(
+        seconds / (limits.maxSeconds - limits.setupSeconds),
+      );
+      expect(
+        needed,
+        `${lane.id}: ${Math.round(seconds)} s of proofs`,
+      ).toBeLessThan(lane.legs.length);
+      const legsNow = legCount({seconds, ...limits});
+      const planned = planLegs(
+        specs.filter(
+          file =>
+            filters.length === 0 || filters.some(each => file.includes(each)),
+        ),
+        Object.fromEntries(
+          specs
+            .map(file => [file, times[file] ?? fallback[file]])
+            .filter(([, v]) => v != null),
+        ),
+        legsNow,
+      );
+      for (const leg of planned)
+        expect(leg.seconds + limits.setupSeconds, lane.id).toBeLessThanOrEqual(
+          limits.maxSeconds + 60,
+        );
     }
   });
 

@@ -58,8 +58,9 @@ export function planLegs(files, durations, legs) {
 }
 
 /**
- * The seconds a suite's proofs take: each listed spec file a filter selects,
- * and each changed spec, at its recorded time. A spec with no time of its own
+ * The seconds a suite's proofs take: each listed spec file a filter selects
+ * (every listed spec with no filter), and each changed spec, at its recorded
+ * time. A spec with no time of its own
  * counts its time in `fallback` (another browser's), else the median.
  */
 export function estimateSeconds(
@@ -67,8 +68,11 @@ export function estimateSeconds(
   filters,
   {listed = [], changed = [], fallback = {}} = {},
 ) {
+  // No filter: the suite plans every listed spec.
   const files = new Set(
-    listed.filter(file => filters.some(filter => file.includes(filter))),
+    filters.length === 0
+      ? listed
+      : listed.filter(file => filters.some(filter => file.includes(filter))),
   );
   for (const file of changed) files.add(file);
   const median = medianOf(Object.values(times));
@@ -251,9 +255,9 @@ function legs(args) {
     maxSeconds: Number(option(own, '--max-seconds')),
     maxLegs: Number(option(own, '--max-legs')),
   };
-  if (!key || !Number.isInteger(leg) || leg < 1 || filters.length === 0)
+  if (!key || !Number.isInteger(leg) || leg < 1)
     throw new Error(
-      'usage: legs --key <times key> --leg <i> --listed <file> --setup-seconds <s> --max-seconds <s> --max-legs <n> [--fallback-key <times key>] [--durations <file>] [--changed <file>] -- <filters...>',
+      'usage: legs --key <times key> --leg <i> --listed <file> --setup-seconds <s> --max-seconds <s> --max-legs <n> [--fallback-key <times key>] [--durations <file>] [--changed <file>] [-- <filters...>]',
     );
   const specs = file =>
     fs.readFileSync(file, 'utf8').split('\n').filter(isInteractionSpec);

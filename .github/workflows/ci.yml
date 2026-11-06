@@ -2471,16 +2471,15 @@ jobs:
     needs: [room, admission, heavy-ci, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
-    # One runner ran every proof in about ten minutes and passed the job's
-    # fifteen once its checkout was slow. Two legs share the spec files by
-    # their recorded times (playwright-legs.mjs), so each runs in about five
-    # minutes, and a leg with the slowest checkout seen still ends with about
-    # four minutes to spare. `test` reads the job's result, which is success
-    # only when every leg passed.
+    # The legs share the spec files by their recorded times
+    # (playwright-legs.mjs), as few legs as keep each leg's setup and proofs
+    # within ten minutes, which leaves a third of the job's fifteen for a slow
+    # runner or checkout. A leg with no share passes. `test` reads the job's
+    # result, which is success only when every leg passed.
     strategy:
       fail-fast: false
       matrix:
-        leg: [1, 2]
+        leg: [1, 2, 3, 4]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -2541,8 +2540,28 @@ jobs:
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
       # checkout below replaces this directory.
-      - name: Check out the heavy-suite caps
+      # The legs this run needs: every spec file in the merge commit, which the
+      # scope checkout fetched whole, at its recorded time (a WebKit time or
+      # the median for one with none), plus 90 s of setup a leg, within ten
+      # minutes a leg. Each leg decides the same way before its own setup.
+      - name: Count this run's legs
+        id: legs
         if: steps.scope.outputs.applies == 'true'
+        run: |
+          git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" legs \
+            --listed "$RUNNER_TEMP/interaction-legs/listed.txt" \
+            --key interaction-chromium --fallback-key interaction-webkit \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
+            --setup-seconds 90 --max-seconds 600 \
+            --leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }}
+
+      - name: Leave the proofs to the other legs
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs != 'true'
+        run: echo "This run's interaction proofs fit ${{ steps.legs.outputs.count }} legs, so this leg runs none."
+
+      - name: Check out the heavy-suite caps
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
         with:
           path: .heavy-caps
@@ -2550,22 +2569,22 @@ jobs:
           persist-credentials: false
 
       - name: Per-author heavy-suite caps
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: ./.heavy-caps/.github/actions/heavy-caps
 
       # The daily heavy-run cap counts this step (spec:AST-030 FR16).
       - name: Heavy suite runs
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         run: 'true'
 
       - name: Checkout
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Verify evidence checkout
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         env:
           EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
@@ -2573,27 +2592,27 @@ jobs:
       # The head's specs run in this lane's environment, which comes from the
       # merge commit. A head older than that environment stops here.
       - name: Require this lane's environment in the branch
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         run: >-
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/lane-environment.mjs" check --lane interaction-chromium
           --workflow "$RUNNER_TEMP/interaction-legs/.github/lane-environments.json"
           --head .github/lane-environments.json
 
       - name: Setup Node and pnpm
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: ./.github/actions/setup
         with:
           install: 'false'
 
       - name: Download Storybook artifact
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/download-artifact@v8
         with:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
           path: apps/storybook/dist
 
       - name: Install Playwright
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
       # This leg's share of the spec files, by their recorded times. Every
@@ -2603,16 +2622,16 @@ jobs:
       # head cut before them has none.
       - name: Plan this leg's interaction proofs
         id: plan
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         run: |
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
             --key interaction-chromium --config playwright.interaction.config.ts --project chromium \
-            --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
+            --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }} \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --out "$RUNNER_TEMP/interaction-leg.txt"
 
       - name: Run interaction proofs
-        if: steps.scope.outputs.applies == 'true' && steps.plan.outputs.files != '0'
+        if: steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true' && steps.plan.outputs.files != '0'
         run: |
           pnpm exec playwright test \
             --test-list "$RUNNER_TEMP/interaction-leg.txt" \
@@ -2622,7 +2641,7 @@ jobs:
 
       # Storyboards (PNG contact sheets) and curve traces, for review.
       - name: Upload interaction evidence
-        if: always() && steps.scope.outputs.applies == 'true'
+        if: always() && steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: interaction-evidence-${{ matrix.leg }}
