@@ -245,7 +245,7 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: |
           if ! pnpm -s visual:probe-theme:check; then
-            echo '::error title=Probe theme out of date::The probe theme is behind the component docs. Run pnpm visual:probe-theme and commit packages/themes/probe/src/probeTheme.ts.'
+            echo '::error title=Probe theme out of date::The probe theme or its config is out of date. Run pnpm visual:probe-theme and commit the files it changes in packages/themes/probe/src/.'
             exit 1
           fi
 

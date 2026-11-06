@@ -66,7 +66,9 @@ describe('required lint checks the probe theme', () => {
     const stale = runStep(1);
     expect(stale.status).toBe(1);
     expect(stale.stdout).toContain('::error title=Probe theme out of date::');
-    expect(stale.stdout).toContain('Run pnpm visual:probe-theme');
+    expect(stale.stdout).toContain(
+      'Run pnpm visual:probe-theme and commit the files it changes in packages/themes/probe/src/.',
+    );
     const current = runStep(0);
     expect(current.status).toBe(0);
     expect(current.stdout).not.toContain('::error');
