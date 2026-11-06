@@ -122,7 +122,7 @@ export const docs = {
       { guidance: true, description: 'Add dividers between same-background sections that need separation.' },
       { guidance: true, description: 'Combine with a heading + Stack for a typical page section pattern.' },
       { guidance: false, description: 'Use Card when you mean Section. Cards are for discrete items (one notification, one profile). Sections are for page regions.' },
-      { guidance: true, description: "To center a Section, set marginInlineStart and marginInlineEnd to 'auto' in xstyle. The marginInline shorthand loses to Section's own inline margins, which let a nested Section reach into its parent's padding." },
+      { guidance: true, description: "To center a Section, set marginInlineStart and marginInlineEnd to 'auto' in xstyle. If Astryx source is compiled in your app's own StyleX pass, the marginInline shorthand loses to Section's own inline margins." },
     ],
   },
   examples: [
@@ -250,7 +250,7 @@ export const docsZh = {
       { guidance: true, description: 'Add dividers between same-background sections that need separation.' },
       { guidance: true, description: 'Combine with a heading + Stack for a typical page section pattern.' },
       { guidance: false, description: 'Use Card when you mean Section. Cards are for discrete items (one notification, one profile). Sections are for page regions.' },
-      { guidance: true, description: '要让 Section 居中，在 xstyle 中把 marginInlineStart 和 marginInlineEnd 设为 \'auto\'。marginInline 简写会输给 Section 自身的行内外边距（这些外边距让嵌套的 Section 伸入父级的内边距）。' },
+      { guidance: true, description: '要让 Section 居中，在 xstyle 中把 marginInlineStart 和 marginInlineEnd 设为 \'auto\'。如果 Astryx 源码在你的应用自己的 StyleX 编译中处理，marginInline 简写会输给 Section 自身的行内外边距。' },
     ],
   },
 };
@@ -269,7 +269,7 @@ export const docsDense = {
       { guidance: true, description: 'Add dividers between same-background sections that need separation.' },
       { guidance: true, description: 'Combine w/ heading + Stack for typical page section pattern.' },
       { guidance: false, description: 'Use Card when you mean Section. Cards = discrete items (one notification, one profile). Sections = page regions.' },
-      { guidance: true, description: "Center: xstyle marginInlineStart + marginInlineEnd 'auto'. The marginInline shorthand loses to Section's inline margins." },
+      { guidance: true, description: "Center: xstyle marginInlineStart + marginInlineEnd 'auto'. If Astryx source goes through your app's StyleX pass, marginInline shorthand loses to Section's inline margins." },
     ],
   },
   propDescriptions: {
