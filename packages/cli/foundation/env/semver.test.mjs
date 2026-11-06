@@ -111,6 +111,15 @@ describe('satisfiesRange', () => {
     expect(satisfiesRange('3.0.0', '1.0.0 - 2.0.0 || >=3')).toBe(true);
   });
 
+  it('reads a partial upper bound in a hyphen range as its whole series', () => {
+    expect(satisfiesRange('2.9.9', '1.0.0 - 2')).toBe(true);
+    expect(satisfiesRange('3.0.0', '1.0.0 - 2')).toBe(false);
+    expect(satisfiesRange('2.3.9', '1.2.3 - 2.3')).toBe(true);
+    expect(satisfiesRange('2.4.0', '1.2.3 - 2.3')).toBe(false);
+    expect(satisfiesRange('0.8.3', '0.7.0 - 0.8')).toBe(true);
+    expect(satisfiesRange('22.14.0', '20 - 22')).toBe(true);
+  });
+
   it('handles exact, tilde, unions, and wildcards', () => {
     expect(satisfiesRange('1.2.3', '1.2.3')).toBe(true);
     expect(satisfiesRange('1.2.4', '1.2.3')).toBe(false);
