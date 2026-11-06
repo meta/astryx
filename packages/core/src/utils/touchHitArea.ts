@@ -206,8 +206,9 @@ function holdWatch(
  * A callback ref that keeps its element's hit insets live while `enabled`:
  * the element takes taps, so it is interactive and not disabled or read-only.
  * Merge it into the element's ref, and pair it with `touchHitAreaStyles.layer`
- * on the same element, or on a descendant with `ownsDescendantTouches` off. The watch lasts while the element is attached, so a
- * replaced element starts its own. A re-render that hands the same element a
+ * on the same element, or on a descendant with `ownsDescendantTouches` off.
+ * The watch lasts while the element is attached, so a replaced element starts
+ * its own. A re-render that hands the same element a
  * new merged ref keeps its watch. `options` set how the element grows. Keep
  * them stable, as a module constant. An element's first holder sets them.
  *

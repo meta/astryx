@@ -66,7 +66,7 @@ import {
 import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useTouchHitArea} from '../utils/touchHitArea';
-import type {TouchHitAreaOptions} from '../utils/touchHitArea';
+import {ButtonHitAreaContext} from './buttonHitArea';
 import {touchHitAreaStyles} from '../internal/touchHitArea.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
@@ -471,11 +471,6 @@ const contentHide = stylex.keyframes({
 // frame in between. Reduced motion is instant.
 const SPINNER_DELAY = durationVars['--duration-medium-min'];
 
-// The band is on the content wrapper, so a band tap lands on a descendant.
-// Button's content never paints past its box, so such a tap nearer a
-// neighbour is the neighbour's, not this button's.
-const BUTTON_HIT_AREA: TouchHitAreaOptions = {ownsDescendantTouches: false};
-
 const loadingStyles = stylex.create({
   // Hide the button's own content while the spinner overlay is shown. Applied
   // to the content wrapper (not the button) so the button keeps its variant
@@ -744,7 +739,7 @@ export function Button({
   // The group draws one band for all its members.
   // A disabled or busy-only button takes no tap.
   const hasHitArea = buttonGroup == null && !buttonDisabled;
-  const hitAreaRef = useTouchHitArea(hasHitArea, BUTTON_HIT_AREA);
+  const hitAreaRef = useTouchHitArea(hasHitArea, use(ButtonHitAreaContext));
   // isIconOnly prop is the source of truth for icon-only rendering.
   // When false (default), label is always rendered as visible text.
 

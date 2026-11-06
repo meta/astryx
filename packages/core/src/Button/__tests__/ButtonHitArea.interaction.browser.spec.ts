@@ -187,4 +187,37 @@ test.describe('Button touch target (spec:AST-094 FR42), under a finger', () => {
     });
     await expect(page.locator('#storybook-root input')).toHaveValue('');
   });
+
+  test('a tap on a clearable selector’s chevron opens it and keeps the value', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), 'core-selector--clearable');
+    await waitForHitArea(page, [CLEAR]);
+    const driver = await touchDriver(page);
+    const clear = await measure(page, CLEAR);
+    // The chevron is the next part of the field that has a box.
+    const chevron = await buttonNamed(page, CLEAR).evaluate(button => {
+      let part = button.nextElementSibling;
+      while (part != null && part.getBoundingClientRect().width === 0) {
+        part = part.nextElementSibling;
+      }
+      if (part == null) {
+        return null;
+      }
+      const r = part.getBoundingClientRect();
+      return {
+        x: (r.left + r.right) / 2,
+        y: (r.top + r.bottom) / 2,
+        gap: r.left - button.getBoundingClientRect().right,
+      };
+    });
+    expect(chevron).not.toBeNull();
+    // The band stops at half the gap to the chevron.
+    expect(clear.insets.right).toBeLessThanOrEqual(chevron!.gap / 2 + 0.5);
+    await tapAt(driver, {x: Math.round(chevron!.x), y: Math.round(chevron!.y)});
+    await expect(
+      page.locator('#storybook-root').getByRole('combobox'),
+    ).toHaveAttribute('aria-expanded', 'true');
+    await expect(buttonNamed(page, CLEAR)).toBeVisible();
+  });
 });
