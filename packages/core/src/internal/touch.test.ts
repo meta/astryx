@@ -142,7 +142,7 @@ describe('internal/touch', () => {
     const animator = await import('../motion/animator');
     const reduced = await import('../motion/reducedMotion');
     const hitArea = await import('../utils/touchHitArea');
-    const hitAreaStyles = await import('../utils/touchHitArea.stylex');
+    const hitAreaStyles = await import('./touchHitArea.stylex');
     expect(entry.animatorFor).toBe(animator.animatorFor);
     expect(entry.reducedMotionFade).toBe(reduced.reducedMotionFade);
     expect(entry.useTouchHitArea).toBe(hitArea.useTouchHitArea);

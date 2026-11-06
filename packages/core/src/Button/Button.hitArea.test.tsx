@@ -4,7 +4,8 @@
  * @file Button.hitArea.test.tsx
  * @input Button, ButtonGroup, and the shared hit area (mocked)
  * @output Unit coverage that a standalone Button takes the shared touch band,
- *   and that a grouped, disabled or busy-only Button takes none of its own
+ *   on an element of its own that leaves a caller's ::after alone, and that a
+ *   grouped, disabled or busy-only Button takes none
  * @position Button's FR42 touch-target evidence beside Button.test.tsx
  */
 
@@ -42,18 +43,54 @@ function isWatched(element: Element): boolean {
   return hitAreaWatches.some(entry => entry.element === element);
 }
 
+/** The button's own element that carries the band, if any. */
+function bandElementOf(button: Element): Element | undefined {
+  return [...button.querySelectorAll('*')].find(element =>
+    bandClasses.every(bandClass => element.classList.contains(bandClass)),
+  );
+}
+
+const callerStyles = stylex.create({
+  dot: {
+    '::after': {
+      content: '""',
+      position: 'absolute',
+      top: '4px',
+      insetInlineEnd: '4px',
+    },
+  },
+});
+
 describe('Button touch target (AST-094 FR42)', () => {
   it('grows a standalone button toward 44 px as far as the shared hit area allows', () => {
     render(<Button label="Save" />);
     const button = screen.getByRole('button', {name: 'Save'});
     expect(bandClasses.length).toBeGreaterThan(0);
-    for (const bandClass of bandClasses) {
-      expect(button).toHaveClass(bandClass);
-    }
+    const band = bandElementOf(button);
+    expect(band).toBeDefined();
+    expect(band?.childNodes).toHaveLength(0);
+    expect(button).toHaveAccessibleName('Save');
     const watch = hitAreaWatches.find(entry => entry.element === button);
     expect(watch).toBeDefined();
     act(() => watch?.onInsets({top: 6, right: 0, bottom: 6, left: 0}));
     expect(button.style.getPropertyValue('--astryx-hit-inset-top')).toBe('6px');
+  });
+
+  it("leaves a caller's ::after decoration on the button itself, and the band on its own element", () => {
+    render(<Button label="Inbox" xstyle={callerStyles.dot} />);
+    const button = screen.getByRole('button', {name: 'Inbox'});
+    const callerClasses = (stylex.props(callerStyles.dot).className ?? '')
+      .split(/\s+/)
+      .filter(Boolean);
+    expect(callerClasses.length).toBeGreaterThan(0);
+    for (const callerClass of callerClasses) {
+      expect(button).toHaveClass(callerClass);
+    }
+    for (const bandClass of bandClasses) {
+      expect(button).not.toHaveClass(bandClass);
+    }
+    expect(bandElementOf(button)).toBeDefined();
+    expect(button).toHaveAccessibleName('Inbox');
   });
 
   it('gives a link button the same band', () => {
@@ -72,9 +109,8 @@ describe('Button touch target (AST-094 FR42)', () => {
     const busy = screen.getByRole('button', {name: 'Sending'});
     expect(isWatched(disabled)).toBe(false);
     expect(isWatched(busy)).toBe(false);
-    for (const bandClass of bandClasses) {
-      expect(disabled).not.toHaveClass(bandClass);
-    }
+    expect(bandElementOf(disabled)).toBeUndefined();
+    expect(bandElementOf(busy)).toBeUndefined();
   });
 
   it('keeps the band on a busy button that can still be interrupted', () => {
@@ -93,8 +129,6 @@ describe('Button touch target (AST-094 FR42)', () => {
     );
     const cut = screen.getByRole('button', {name: 'Cut'});
     expect(isWatched(cut)).toBe(false);
-    for (const bandClass of bandClasses) {
-      expect(cut).not.toHaveClass(bandClass);
-    }
+    expect(bandElementOf(cut)).toBeUndefined();
   });
 });

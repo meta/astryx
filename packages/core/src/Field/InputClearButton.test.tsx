@@ -230,9 +230,10 @@ describe('InputClearButton', () => {
       .split(/\s+/)
       .filter(Boolean);
     expect(bandClasses.length).toBeGreaterThan(0);
-    for (const bandClass of bandClasses) {
-      expect(button).toHaveClass(bandClass);
-    }
+    const band = [...button.querySelectorAll('*')].find(element =>
+      bandClasses.every(bandClass => element.classList.contains(bandClass)),
+    );
+    expect(band).toBeDefined();
     const source = readFileSync(
       path.resolve(__dirname, './InputClearButton.tsx'),
       'utf-8',
