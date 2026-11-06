@@ -315,6 +315,29 @@ async function waitPastScaleStart(
   );
 }
 
+/**
+ * The motion promotions the popover's content holds, read from inline styles:
+ * an element's `will-change`, or the custom property that promotes its
+ * `::before` or `::after`. Reading them restyles nothing.
+ */
+async function contentPromotions(layer: Locator): Promise<string[]> {
+  return layer.locator('[role="dialog"]').evaluate(dialog =>
+    Array.from(dialog.querySelectorAll<HTMLElement>('*')).flatMap(element => {
+      const name = element.classList.item(0) ?? element.tagName;
+      return Array.from(element.style)
+        .filter(
+          property =>
+            property === 'will-change' ||
+            property.startsWith('--astryx-motion-will-change-'),
+        )
+        .map(
+          property =>
+            `${name} ${property}: ${element.style.getPropertyValue(property)}`,
+        );
+    }),
+  );
+}
+
 /** The static copy the dismissal plays on. */
 const exitCopyOf = (page: Page) =>
   page.locator('[data-astryx-popover-exit]').first();
@@ -602,6 +625,17 @@ test('the presentation and the dismissal do no Layout or Paint per frame', async
   const exit = await themeTiming(story.layer, POPOVER_EXIT_TOKENS);
   expect(entrance.ms).toBe(1200);
   expect(exit.ms).toBe(1200);
+  // Each switch's motion engine promotes its fades as the story mounts and
+  // ends that promotion 500 ms later, with a style write. During a
+  // presentation, that write makes Chromium lay out this anchored layer. So
+  // the presentation starts once nothing in the content holds a promotion.
+  await expect
+    .poll(async () => contentPromotions(story.layer), {
+      message: 'promotions left in the popover content',
+      intervals: [50],
+      timeout: 10_000,
+    })
+    .toEqual([]);
   // It opens from the keyboard to keep the trigger's own press feedback out
   // of the measurement. The phone's primary pointer is still coarse, so the
   // touch presentation runs. Nothing reads the page inside the windows: on
