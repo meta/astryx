@@ -3,9 +3,10 @@
 /**
  * @file index.ts
  * @input The domain files of the UIKit constants table
- * @output Re-exports `springs` and one constant per spring (`SHEET_PRESENT_SPRING`,
- *   …), `scroll`, `timing`, `navigation`, `picker`, `progressBar`,
- *   `segmentedControl`, `datePicker`, `slider` and `switchControl`. It also
+ * @output Re-exports `springs` and one constant per spring
+ *   (`SHEET_PRESENT_SPRING`, …), and the `scroll`, `timing`, `navigation`,
+ *   `picker`, `popover`, `progressBar`, `segmentedControl`, `datePicker`,
+ *   `sheet`, `slider`, `switchControl` and `zoomMedia` domains. It also
  *   re-exports the gesture thresholds: one `UIKIT_*` group per recognizer,
  *   their union `UIKIT_GESTURES`, and the haptic tables
  * @position Entry of the UIKit constants table (motion/uikit). Internal to
@@ -43,9 +44,11 @@ export {
 export {datePicker} from './datePicker';
 export {navigation, registerNavigationTable} from './navigation';
 export {picker} from './picker';
+export {popover} from './popover';
 export {progressBar, registerProgressBarTable} from './progressBar';
 export {registerScrollTable, scroll} from './scroll';
 export {segmentedControl} from './segmented';
+export {sheet} from './sheet';
 export {slider} from './slider';
 export {
   ACTION_SHEET_DISMISS_SPRING,
@@ -85,3 +88,4 @@ export {
 } from './springs';
 export {switchControl} from './switch';
 export {registerTimingTable, timing} from './timing';
+export {zoomMedia} from './zoomMedia';

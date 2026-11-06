@@ -2,7 +2,7 @@
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {renderHook, act} from '@testing-library/react';
-import {useOverflow} from './useOverflow';
+import {useOverflow, useOverflowInternal} from './useOverflow';
 
 // Builds a mock container element with a given offsetWidth
 function mockContainer(width: number): HTMLElement {
@@ -383,6 +383,72 @@ describe('useOverflow with maxVisibleItems (cap)', () => {
     expect(result.current.visibleCount).toBe(3);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
+  });
+});
+
+describe('useOverflowInternal without row tracking', () => {
+  it('renders the host once per measurement that changes nothing it shows: rows and rowHeight are not tracked', () => {
+    let renders = 0;
+    const {result} = renderHook(() => {
+      renders += 1;
+      return useOverflowInternal(3, {gap: 10}, {tracksRows: false});
+    });
+
+    act(() => {
+      // 3 items of 50px, 24px tall, gap 10 → 170 fits in 200: the count stays.
+      result.current.measureRef(mockMeasure([50, 50, 50], 40, 24));
+      result.current.containerRef(mockContainer(200));
+    });
+
+    // The measurement found the same count the hook started with; the item
+    // height it also read is nobody's to render here, so nothing renders.
+    expect(renders).toBe(1);
+    expect(result.current.visibleCount).toBe(3);
+    expect(result.current.rows).toBe(1);
+    expect(result.current.rowHeight).toBe(0);
+  });
+
+  it('reports rows 1 and rowHeight 0 once a multi-row host stops tracking', () => {
+    const initialProps: {maxRows: number | undefined} = {maxRows: 2};
+    const {result, rerender} = renderHook(
+      ({maxRows}: {maxRows: number | undefined}) =>
+        useOverflowInternal(
+          6,
+          {gap: 10, maxRows},
+          {tracksRows: maxRows != null && maxRows > 1},
+        ),
+      {initialProps},
+    );
+
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50, 50, 50, 50], 40, 24));
+      result.current.containerRef(mockContainer(170));
+    });
+    expect(result.current.visibleCount).toBe(6);
+    expect(result.current.rows).toBe(2);
+    expect(result.current.rowHeight).toBe(24);
+
+    rerender({maxRows: undefined});
+    // The untracked values, not the state the multi-row measurements left
+    // behind; the count is re-measured for one row.
+    expect(result.current.rows).toBe(1);
+    expect(result.current.rowHeight).toBe(0);
+    expect(result.current.visibleCount).toBeLessThan(6);
+  });
+});
+
+describe('useOverflow on the single-line path', () => {
+  it('still measures rowHeight, as its return type documents', () => {
+    const {result} = renderHook(() => useOverflow(3, {gap: 10}));
+
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50], 40, 24));
+      result.current.containerRef(mockContainer(200));
+    });
+
+    expect(result.current.visibleCount).toBe(3);
+    expect(result.current.rows).toBe(1);
+    expect(result.current.rowHeight).toBe(24);
   });
 });
 

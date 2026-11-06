@@ -262,7 +262,7 @@ export const doc = {
     {
       value: 'swizzle.copy',
       description:
-        "An eject receipt: component name, owning package, output directory, files-copied count, the written file names, whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling. The envelope's package names the same owning package.",
+        "An eject receipt: component name, owning package, output directory, files-copied count, the copied file names (relative to the component folder; owner modules copied beside it start with ../), whether any file uses StyleX, and, when the owner has an issues URL, feedback ({issuesUrl, ghCommand?}): where to report the gap that led to swizzling. The envelope's package names the same owning package.",
     },
 
     // gap reports

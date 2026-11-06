@@ -23,15 +23,17 @@ import type {GestureTouch} from '../gestures/types';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {
-  createMotionAnimator,
+  createMotionEngine,
   type Animator,
   type MotionCurve,
 } from '../motion/animator';
 import {solveSpring, toSpring, type SpringDescription} from '../motion/spring';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import {registerSwitchTable, switchControl} from '../motion/uikit/switch';
+import {resolveMotion} from '../motion/resolveMotion';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {awaitBrowserClick, clickForLift} from '../utils/browserClickWait';
+import {lockPressedRow} from '../utils/boxHold';
 import {armClickGuard} from '../utils/clickGuard';
 import {
   commitOnRelease,
@@ -282,15 +284,15 @@ export class SwitchTouchController {
       return;
     }
     registerSwitchTable();
-    this.thumb = createMotionAnimator(elements.thumb);
+    this.thumb = createMotionEngine(elements.thumb);
     // The layer rests clear (its class's opacity 0) while the visuals show
     // the value; from here its opacity is the animator's.
-    this.fade = createMotionAnimator(elements.track, {
+    this.fade = createMotionEngine(elements.track, {
       pseudoElement: '::after',
       initial: {opacity: 0},
     });
     this.fade.set({opacity: 0});
-    this.shadow = createMotionAnimator(elements.thumb, {
+    this.shadow = createMotionEngine(elements.thumb, {
       pseudoElement: '::after',
       initial: {opacity: 0},
     });
@@ -316,6 +318,8 @@ export class SwitchTouchController {
       getBounds: () => surface.getBoundingClientRect(),
       isEnabled: () => this.isInteractive,
       isBraking: () => host.isScrollBraking(surface),
+      // A held finger selects no text beside the switch.
+      selectionLock: lockPressedRow,
       // A held switch opens no menu (UISwitch shows none).
       holdsContextMenu: () => this.pressTime != null,
       onControlEvent: (event, touch) => this.onControlEvent(event, touch),
@@ -891,9 +895,16 @@ export class SwitchTouchController {
       return;
     }
     this.liftTime = null;
-    const lift = switchControl.lift;
-    const settle = switchControl.settle;
-    this.settleAt = settleTime(time, liftTime);
+    // The lift played these roles at the thumb's tempo, so the settle and the
+    // minimum lift take that tempo too.
+    const element = this.thumb?.element;
+    const lift = resolveMotion(element, switchControl.lift);
+    const settle = resolveMotion(element, switchControl.settle);
+    this.settleAt = settleTime(
+      time,
+      liftTime,
+      resolveMotion(element, switchControl, 'minimumLiftMs'),
+    );
     const hold = (this.settleAt - time) / 1000;
     const play = (
       animator: Animator | null,
@@ -962,8 +973,8 @@ export class SwitchTouchController {
           rest: held ? keep : 1,
           holdSeconds: held ? 0 : hold,
           threshold: 1e-4,
-          lift: switchControl.lift,
-          settle: switchControl.settle,
+          lift: resolveMotion(thumb.element, switchControl.lift),
+          settle: resolveMotion(thumb.element, switchControl.settle),
         }),
       });
     }

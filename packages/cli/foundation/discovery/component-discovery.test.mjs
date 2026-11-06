@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {withListingCache} from '../fs/listing-cache.mjs';
 import {
   CORE_PACKAGE,
   discoverComponents,
@@ -120,6 +121,25 @@ describe('discoverComponents (real core)', () => {
     fs.mkdirSync(dir, {recursive: true});
     fs.writeFileSync(path.join(dir, 'XDSNaked.tsx'), 'x');
     expect(discoverComponents(core)).toEqual({});
+  });
+
+  it('reads the docs once per operation and fresh outside one', () => {
+    const core = mkTmp('as-cd-once-');
+    const dir = path.join(core, 'src', 'Foo');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, 'XDSFoo.tsx'), 'x');
+    const doc = path.join(dir, 'Foo.doc.mjs');
+    fs.writeFileSync(doc, 'export default {};\n');
+    withListingCache(() => {
+      const first = discoverComponents(core);
+      expect(first).toEqual({Foo: ['Foo']});
+      first.Foo.push('Bar');
+      fs.writeFileSync(doc, "export default {\n  group: 'Widgets',\n};\n");
+      // The operation read the doc once, so the edit does not reach it. A
+      // change to one caller's result does not reach the next caller.
+      expect(discoverComponents(core)).toEqual({Foo: ['Foo']});
+    });
+    expect(discoverComponents(core)).toEqual({Widgets: ['Foo']});
   });
 
   it('lists HStack, VStack and Heading, whose docs live in their family folders', () => {
@@ -328,6 +348,22 @@ describe('findComponentReadme / findComponentSource / resolveImportPath', () => 
     const core = mkTmp('as-rip-empty-');
     fs.mkdirSync(path.join(core, 'src'));
     expect(resolveImportPath(core, 'Nope')).toBe('@astryxdesign/core');
+  });
+
+  it('reads the exports map once per operation and fresh outside one', () => {
+    const core = mkTmp('as-rip-once-');
+    fs.mkdirSync(path.join(core, 'src'));
+    const pkgPath = path.join(core, 'package.json');
+    const writeExports = exports =>
+      fs.writeFileSync(pkgPath, JSON.stringify({exports}));
+    writeExports({'./Card': './dist/Card.js'});
+    withListingCache(() => {
+      expect(resolveImportPath(core, 'Card')).toBe('@astryxdesign/core/Card');
+      writeExports({});
+      // The operation read the map once, so the edit does not reach it.
+      expect(resolveImportPath(core, 'Card')).toBe('@astryxdesign/core/Card');
+    });
+    expect(resolveImportPath(core, 'Card')).toBe('@astryxdesign/core');
   });
 
   it('throws when src/ is missing', () => {

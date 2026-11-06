@@ -270,7 +270,8 @@ untargeted spans, so neither delegates to Text nor inherits the row-root
 `list-item` target; future exposure remains unsettled. Rich label content and end
 content are caller-provided, and end content intentionally stays outside
 CheckboxList's public theming ownership. The `Option row` delegation reaches the
-row surface, but not a checked-row state (`component:CheckboxListItem` FR15).
+row surface and, on a checked, enabled, editable row, its `selected` state
+(`component:CheckboxListItem` FR15).
 
 ## Family and system relationships
 

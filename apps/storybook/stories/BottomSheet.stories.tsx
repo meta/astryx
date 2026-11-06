@@ -927,8 +927,8 @@ export const NestedPopover: Story = {
 };
 
 /**
- * A no-scrim sheet with a `data-autofocus` field: focus on open follows the
- * native host, which lands on the panel; the field is not focused.
+ * A no-scrim sheet with a `data-autofocus` field: the field is focused when
+ * the sheet opens, in every browser.
  */
 export const NoScrimAutofocus: Story = {
   name: 'No scrim with a data-autofocus field',
@@ -963,7 +963,7 @@ export const NoScrimAutofocus: Story = {
 
 /**
  * A modal sheet with a `data-autofocus` field (a TextInput with hasAutoFocus):
- * what focus lands on when the sheet opens.
+ * the field is focused when the sheet opens, in every browser.
  */
 export const ModalAutofocus: Story = {
   name: 'Modal with a data-autofocus field',
@@ -1043,4 +1043,37 @@ export const ExitFocusControlRemoved: Story = {
 export const ExitFocusControlDisabled: Story = {
   tags: ['!autodocs'],
   render: () => <ExitFocusChangeFixture change="disable" />,
+};
+
+/**
+ * A sheet rendered only while it is open. "Done" removes the sheet while it is
+ * still open; focus returns to "Edit filters" (FR20).
+ */
+export const RenderedWhileOpen: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [hasScrim, setHasScrim] = useState(true);
+    return (
+      <VStack gap={2}>
+        <CheckboxInput
+          label="Modal (scrim)"
+          value={hasScrim}
+          onChange={setHasScrim}
+        />
+        <Button label="Edit filters" onClick={() => setIsOpen(true)} />
+        {isOpen && (
+          <BottomSheet
+            isOpen
+            onOpenChange={setIsOpen}
+            hasScrim={hasScrim}
+            label="Filters">
+            <VStack gap={2}>
+              <Text>Removing this sheet while it is open returns focus.</Text>
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </BottomSheet>
+        )}
+      </VStack>
+    );
+  },
 };
