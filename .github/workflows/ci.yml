@@ -2307,13 +2307,18 @@ jobs:
         if: (!cancelled()) && steps.scope.outputs.has_components == 'true'
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           WORKFLOW_SHA: ${{ github.sha }}
+        # The merge commit's first parent is the base branch tip that it
+        # merges into. The event's base SHA stays at the base the pull request
+        # was opened on, so after the base is merged into the head, a merge
+        # base from it counts the base's own changes as the pull request's.
         run: |
           runner="$RUNNER_TEMP/a11y-pr-contracts.mjs"
-          git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA"
+          git fetch --quiet --no-tags --depth=2 origin "$WORKFLOW_SHA"
           git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"
+          BASE_SHA=$(git rev-parse "$WORKFLOW_SHA^1")
+          export BASE_SHA
           node "$runner"
 
       - name: Upload browser accessibility evidence
