@@ -13,6 +13,9 @@ import {describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
+import type {ReactNode} from 'react';
+import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {Text} from '../Text/Text';
 import {Link} from './Link';
 import {LinkProvider} from './LinkProvider';
 
@@ -431,6 +434,35 @@ describe('Link', () => {
     expect(link.className).toContain('astryx-link');
     expect(link).toHaveAttribute('data-color', 'secondary');
   });
+
+  it('keeps the reflected data-color when a caller passes its own', () => {
+    const callerProps = {'data-color': 'danger'};
+    render(
+      <>
+        <Link href="/test" color="secondary" {...callerProps}>
+          Anchor Link
+        </Link>
+        <Link color="secondary" onClick={() => {}} {...callerProps}>
+          Button Link
+        </Link>
+        <Link href="/test" color="secondary" isDisabled {...callerProps}>
+          Disabled Link
+        </Link>
+      </>,
+    );
+    expect(screen.getByRole('link', {name: 'Anchor Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+    expect(screen.getByRole('button', {name: 'Button Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+    expect(screen.getByRole('link', {name: 'Disabled Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+  });
 });
 
 describe('pressed state', () => {
@@ -453,5 +485,199 @@ describe('pressed state', () => {
       </Link>,
     );
     expect(hasPressedArm(screen.getByText('Docs').closest('a')!)).toBe(false);
+  });
+});
+
+// =============================================================================
+// Display: inside a clamped Text the anchor joins the text's line boxes, so
+// the clamp can truncate it. Everywhere else it keeps its inline-flex box.
+// Link never reads its children to decide (Link AV1).
+// =============================================================================
+
+/**
+ * Extracts class-name tokens from a CSS selector (e.g. the selectorText of
+ * a CSSStyleRule), so callers can match against an element's classList by
+ * exact token rather than by substring. Handles compound selectors
+ * (`.a.b:hover`) and comma-separated selector lists (`.a, .b`).
+ */
+function classTokensFromSelector(selectorText: string): string[] {
+  const tokens: string[] = [];
+  const classRegex = /\.([-_a-zA-Z0-9]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = classRegex.exec(selectorText)) !== null) {
+    tokens.push(match[1]);
+  }
+  return tokens;
+}
+
+/**
+ * Recursively collects every CSSStyleRule from a rule list, descending into
+ * grouping rules (e.g. `@media`) so declarations nested in a condition are
+ * not missed.
+ */
+function collectStyleRules(rules: CSSRuleList, out: CSSStyleRule[]): void {
+  for (const rule of Array.from(rules)) {
+    if (rule instanceof CSSStyleRule) {
+      out.push(rule);
+    } else if ('cssRules' in rule && rule.cssRules) {
+      collectStyleRules((rule as CSSGroupingRule).cssRules, out);
+    }
+  }
+}
+
+/**
+ * Returns the `display` value of every injected CSS rule that targets `el`,
+ * matched via the CSSOM (real selector tokens + real class list) rather than
+ * substring checks on raw selector/body text — a hashed atomic class like
+ * `x1a` can be a substring of an unrelated class like `x1a2b3c4`, so
+ * string-based matching can both false-positive and false-negative.
+ */
+function displayDeclarationsFor(el: Element): string[] {
+  const classes = new Set(Array.from(el.classList));
+  const styleRules: CSSStyleRule[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    let rules: CSSRuleList;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    collectStyleRules(rules, styleRules);
+  }
+
+  const declarations: string[] = [];
+  for (const rule of styleRules) {
+    const matchesElement = classTokensFromSelector(rule.selectorText).some(
+      token => classes.has(token),
+    );
+    if (!matchesElement) {
+      continue;
+    }
+    const display = rule.style.getPropertyValue('display');
+    if (display) {
+      declarations.push(display.trim());
+    }
+  }
+  return declarations;
+}
+
+describe('Link display', () => {
+  const inClamp = (link: ReactNode) => (
+    <Text maxLines={2} hasTruncateTooltip={false}>
+      Lead text {link} tail text
+    </Text>
+  );
+
+  it('keeps its inline-flex box outside a clamped Text', () => {
+    const {container} = render(<Link href="/docs">Documentation</Link>);
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline-flex',
+    );
+  });
+
+  it('keeps its inline-flex box inside a Text that does not clamp', () => {
+    const {container} = render(
+      <Text>
+        <Link href="/docs">Documentation</Link>
+      </Text>,
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline-flex',
+    );
+  });
+
+  it('is inline inside a clamped Text, so the clamp can truncate it', () => {
+    const {container} = render(
+      inClamp(<Link href="/docs">Documentation</Link>),
+    );
+    const anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline');
+  });
+
+  it('decides from the clamp, not the children: composed content is inline too', () => {
+    const {container} = render(
+      inClamp(
+        <Link href="/docs">
+          <strong>Docs</strong> home
+        </Link>,
+      ),
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline',
+    );
+  });
+
+  it('is inline inside a clamped Text for the external-link form', () => {
+    const {container} = render(
+      inClamp(
+        <Link href="https://example.com" isExternalLink>
+          External docs
+        </Link>,
+      ),
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline',
+    );
+  });
+
+  it('keeps its own box inside a clamped Text when it sets display or maxLines', () => {
+    const {container} = render(
+      inClamp(
+        <>
+          <Link href="/block" display="block">
+            Block
+          </Link>
+          <Link href="/self" maxLines={1}>
+            Self clamped
+          </Link>
+        </>,
+      ),
+    );
+    for (const anchor of Array.from(container.querySelectorAll('a'))) {
+      expect(displayDeclarationsFor(anchor)).not.toContain('inline');
+    }
+  });
+
+  it('keeps the button form as an inline-flex box inside a clamped Text', () => {
+    const {container} = render(
+      inClamp(
+        <Link onClick={() => {}} role="button">
+          Action
+        </Link>,
+      ),
+    );
+    expect(
+      displayDeclarationsFor(container.querySelector('button')!),
+    ).not.toContain('inline');
+  });
+
+  it('keeps its own box in a layer opened inside a clamped Text', () => {
+    const {container} = render(
+      inClamp(
+        <LayerContentBoundary>
+          <Link href="/docs">In a layer</Link>
+        </LayerContentBoundary>,
+      ),
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).not.toContain(
+      'inline',
+    );
+  });
+});
+
+describe('Link label color', () => {
+  it('lets the label inherit the root color, so a theme styles Link through the link target', () => {
+    for (const color of ['accent', 'primary', 'secondary'] as const) {
+      const {container, unmount} = render(
+        <Link href="/docs" color={color}>
+          Docs
+        </Link>,
+      );
+      const anchor = container.querySelector('a')!;
+      expect(anchor).toHaveAttribute('data-color', color);
+      const label = anchor.querySelector('.astryx-text')!;
+      expect(label).toHaveAttribute('data-color', 'inherit');
+      unmount();
+    }
   });
 });

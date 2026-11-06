@@ -4,7 +4,7 @@
 
 /**
  * @file Timestamp.tsx
- * @input Uses React, Text, provider locale, and Timestamp formatters
+ * @input Uses React, Text, provider locale and calendar, and Timestamp formatters
  * @output Exports Timestamp component and related types
  * @position Core implementation; renders formatted timestamps
  *
@@ -30,11 +30,11 @@ import {Text} from '../Text';
 import type {TextType, TextSize, TextColor, TextWeight} from '../theme/types';
 import {mergeProps} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
-import {useTranslator} from '../i18n';
 import {useLocale} from '../i18n/useLocale';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {formatInstant} from './formatInstant';
+import {formatInstant, formatZoneName} from './formatInstant';
 import {formatRelativeTime} from './formatRelativeTime';
 import {formatTooltipLines} from './tooltipEntries';
 import type {
@@ -43,6 +43,13 @@ import type {
 } from './tooltipEntries';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Timestamp/Timestamp.generated';
+
+registerEnglishFallback(english);
 // Load the overlay lazily so a card-less Timestamp — the default — never
 // bundles HoverCard or the copy affordance's Icon/IconButton. Mirrors the code
 // split the read-only Tooltip path used before it.
@@ -289,8 +296,9 @@ export function Timestamp({
   'data-testid': testId,
   ...rest
 }: TimestampProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'Timestamp');
   const timeRef = useRef<HTMLTimeElement>(null);
   const mergedTimeRef = useMergedRefs(ref, timeRef);
   // Only relative and auto formats depend on the current time. Absolute
@@ -352,12 +360,12 @@ export function Timestamp({
               date,
               effectiveFormat,
               locale,
-              // The pre-hydration placeholder is written in UTC, labelled, so
-              // the server and the hydrating client produce the same text in
-              // every time zone.
+              // The placeholder before hydration is Gregorian and in UTC, with
+              // its zone. The server and the client then write the same text,
+              // with or without Temporal.
               isClockPending
                 ? {timeZone: 'UTC', isTimezoneShown: true}
-                : {isTimezoneShown},
+                : {isTimezoneShown, calendar},
             )
           : '';
 
@@ -366,13 +374,16 @@ export function Timestamp({
   // out in full: abbreviations like "PST" or "GMT+2" are unexpanded
   // abbreviations to a screen-reader user (WCAG 3.1.4).
   const fullAbsoluteText = isValidDate
-    ? formatInstant(date, 'full', locale)
+    ? formatInstant(date, 'full', locale, {calendar})
     : '';
   const ariaLabelText = isValidDate
-    ? formatInstant(date, 'full', locale, {timeZoneNameStyle: 'long'})
+    ? formatInstant(date, 'full', locale, {
+        timeZoneNameStyle: 'long',
+        calendar,
+      })
     : '';
 
-  // Live updates
+  // Syncs the relative time with an interval timer while the timestamp is live.
   useEffect(() => {
     if (!isLive || !isValidDate || !isRelativeFormat(effectiveFormat)) {
       return;
@@ -417,8 +428,14 @@ export function Timestamp({
   // full absolute time, itself copyable, just like a configured entry.
   const lines: ReadonlyArray<TimestampTooltipLine> =
     entries === undefined
-      ? [{value: fullAbsoluteText, isCopyable: true}]
-      : formatTooltipLines(date, entries, locale);
+      ? [
+          {
+            value: fullAbsoluteText,
+            zoneName: isValidDate ? formatZoneName(date, locale) : '',
+            isCopyable: true,
+          },
+        ]
+      : formatTooltipLines(date, entries, locale, calendar);
 
   const timestampProps = mergeProps(
     themeProps('timestamp', {format: effectiveFormat}),
@@ -443,7 +460,10 @@ export function Timestamp({
         // before rendering — but keep the guard local: an empty aria-label
         // must be omitted entirely (not rendered as aria-label="") so AT
         // falls back to reading the visible <time> content.
-        {...(isRelativeFormat(effectiveFormat) && ariaLabelText !== ''
+        // A caller's own name wins (`component:Timestamp` FR5).
+        {...(isRelativeFormat(effectiveFormat) &&
+        ariaLabelText !== '' &&
+        rest['aria-label'] == null
           ? {'aria-label': ariaLabelText}
           : {})}
         // The hover card is anchored here with focusTrigger="always", which
@@ -454,7 +474,8 @@ export function Timestamp({
         // gratuitous tab stops otherwise. The card carries its own
         // dashed-underline hover indication as the affordance, so the anchor
         // needs no separate focus outline.
-        {...(showTooltip ? {tabIndex: 0} : {})}>
+        // A caller's own tabIndex wins (`component:Timestamp` FR9).
+        {...(showTooltip && rest.tabIndex == null ? {tabIndex: 0} : {})}>
         {displayText}
       </time>
     </Text>

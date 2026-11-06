@@ -43,7 +43,14 @@ const meta: Meta<typeof Drawer> = {
   },
   decorators: [
     Story => (
-      <div style={{width: 560, minHeight: 360, padding: 32}}>
+      // 560 px wide, or the viewport less the frame's gutters (16 px a side,
+      // twice) on a phone, so the story never scrolls the page sideways.
+      <div
+        style={{
+          width: 'min(560px, 100vw - 64px)',
+          minHeight: 360,
+          padding: 32,
+        }}>
         <Story />
       </div>
     ),

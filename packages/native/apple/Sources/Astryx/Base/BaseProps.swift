@@ -13,4 +13,9 @@ extension View {
       self
     }
   }
+
+  /// Core's base `id` on the part it targets, such as a field's control.
+  @ViewBuilder func astryxIdentifier(_ id: String?) -> some View {
+    if let id { accessibilityIdentifier(id) } else { self }
+  }
 }

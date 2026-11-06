@@ -103,7 +103,7 @@
         "token-utilities",
         "usetheme-hook"
       ],
-      "skeleton": "4e494f1ed2599a4a3ba54c3f722ae1ff9808fe80843e9ed0c6ab2e8b9f0bb19e",
+      "skeleton": "9d5b6d6c228d6f569726bc06c61eaac8fbe073ff28d1d8b2d33ad4c5644188b8",
       "mentions": []
     },
     "browser-support": {
@@ -113,10 +113,11 @@
         "which-features-set-the-floor",
         "which-components-are-affected",
         "what-astryx-guarantees",
+        "the-on-screen-keyboard",
         "supporting-older-browsers",
         "how-these-tiers-move-over-time"
       ],
-      "skeleton": "98bdd1d0e1db35f5ad03896962be51d2f21679c3f3cd25cf724045778a959b5e",
+      "skeleton": "463a740e90118dea23181c46a2cca01695d9295027863282835518f0bd655bdb",
       "mentions": []
     },
     "color": {
@@ -145,6 +146,7 @@
       "sections": [
         "quick-start-with-ai",
         "install",
+        "upgrade",
         "install-once",
         "add-base-css-and-a-theme",
         "add-your-first-component",
@@ -152,7 +154,7 @@
         "example-apps",
         "explore-the-cli"
       ],
-      "skeleton": "6564c786e0e708b5ffb9a1811db06328dc9eb1f833c9722f7a4c417c46cc6eee",
+      "skeleton": "3241e02aec55b756c2dd55f6311b8e60f3b1f70b6cf76b3bc4661e7fb9410a4b",
       "mentions": []
     },
     "icons": {
@@ -160,9 +162,11 @@
         "available-names",
         "custom-icons",
         "theme-overrides",
-        "component-and-library-icons"
+        "icon-variants",
+        "component-and-library-icons",
+        "component-icon-slots"
       ],
-      "skeleton": "e64c5b38eb3c598a4e2d35f4301fe72a59497fee2f48a32e1faf270fc5fd41f1",
+      "skeleton": "206b12fc6081d11de22b5e9aa8c2cbf3755acf167da9442cab0f89c3080ca101",
       "mentions": [
         "This lets you swap the icon set (e.g."
       ]
@@ -198,9 +202,10 @@
         "movement-principles",
         "respecting-user-preferences",
         "usage",
+        "theme-motion",
         "best-practices"
       ],
-      "skeleton": "e648d618f9141bbd7f15bf970ba9e0d41b59ff9ae89e0cbbb2042e98bd5f0109",
+      "skeleton": "fd00e4ddb07bfdb6b20ba2d257fe04877d634ce3906fa2fae2a0c21da4161e2f",
       "mentions": []
     },
     "principles": {
@@ -251,10 +256,11 @@
       "sections": [
         "quick-start",
         "creating-a-custom-theme",
+        "icon-sizes",
         "light-dark-mode",
         "integration-themes"
       ],
-      "skeleton": "4af0a08dbcf2008c2ad6c12e61a1451130f10109fdb666a08933a7ce69ce18bd",
+      "skeleton": "eacd1432d49237ed62f82ea054c0e5930503e9f072ab40b4965461f29cf31080",
       "mentions": []
     },
     "use-a-theme": {

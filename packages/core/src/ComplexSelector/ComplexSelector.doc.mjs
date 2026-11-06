@@ -37,9 +37,9 @@ const anatomy = [
   },
   {
     name: 'Indicator icon',
-    required: true,
+    required: false,
     description:
-      'Trailing chevron that rotates to reflect whether the popup is open.',
+      'Trailing chevron shown when status presentation does not replace it; rotates to reflect whether the popup is open.',
   },
   {
     name: 'Popup',

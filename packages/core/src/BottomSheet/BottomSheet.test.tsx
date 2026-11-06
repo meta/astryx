@@ -9,13 +9,26 @@
  * SYNC: When BottomSheet.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {act, render, screen, fireEvent} from '@testing-library/react';
-import {createRef, useState} from 'react';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  onTestFinished,
+} from 'vitest';
+import {act, cleanup, render, screen, fireEvent} from '@testing-library/react';
+import {Profiler, createRef, useState, type ReactNode} from 'react';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
+import {resetBottomSheetStackForTests} from './bottomSheetStack';
 import {BottomSheetSwitcher} from './BottomSheetSwitcher';
+import {getFocusableElements} from '../hooks/useFocusTrap';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import {__focusTakeoverCallersForTest} from '../keyboard/keyboardHeight';
+import {__resetRevealsAtReportForTest} from '../keyboard/useMobileKeyboard';
+import {getKeyboardLayoutGuide} from '../keyboard/keyboardLayoutGuide';
 
 // A sheet has no stops unless its host asks for them, so the tests that
 // exercise detents pass their own. These three — a 14% peek, a half-height
@@ -25,6 +38,7 @@ const SNAP_POINTS: ReadonlyArray<number> = [0.14, 0.5, 0.92];
 
 // jsdom doesn't implement <dialog> open/close or pointer capture; stub them.
 beforeEach(() => {
+  resetBottomSheetStackForTests();
   HTMLDialogElement.prototype.showModal = vi.fn(function (
     this: HTMLDialogElement,
   ) {
@@ -32,6 +46,14 @@ beforeEach(() => {
   });
   HTMLDialogElement.prototype.show = vi.fn(function (this: HTMLDialogElement) {
     this.setAttribute('open', '');
+  });
+  // A non-modal sheet is a manual popover; jsdom's stand-ins keep the same
+  // `open` marker the dialog paths use (the Drawer tests do the same).
+  HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+    this.setAttribute('open', '');
+  });
+  HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+    this.removeAttribute('open');
   });
   HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
     this.removeAttribute('open');
@@ -67,6 +89,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  __resetRevealsAtReportForTest();
 });
 
 function getSheet(): HTMLElement {
@@ -137,7 +160,13 @@ function mockWindowHeight(height: number) {
   vi.stubGlobal('innerHeight', height);
 }
 
+// A touch platform that measures the keyboard (spec:AST-099 FR6): a visual
+// viewport, and no keyboard geometry API of its own. The user agent below no
+// longer decides anything; the capability does.
 function mockIOSWebKit() {
+  if (window.visualViewport == null) {
+    mockVisualViewport(window.innerHeight);
+  }
   const navigatorMock = Object.create(window.navigator);
   Object.defineProperties(navigatorMock, {
     userAgent: {
@@ -146,6 +175,37 @@ function mockIOSWebKit() {
         'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15',
     },
     maxTouchPoints: {configurable: true, value: 5},
+  });
+  vi.stubGlobal('navigator', navigatorMock);
+  mockPrimaryPointer('coarse');
+}
+
+// The primary pointer `matchMedia` reports: a touch screen's coarse finger,
+// or a desktop's fine mouse.
+function mockPrimaryPointer(pointer: 'coarse' | 'fine') {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      matches: query === `(pointer: ${pointer})`,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  );
+}
+
+// A browser with its own keyboard geometry API (navigator.virtualKeyboard).
+// Desktop Chrome's visual viewport never shrinks for a keyboard. The module
+// measures Chrome on Android from its visual viewport, like every browser.
+function mockKeyboardGeometryApi() {
+  const navigatorMock = Object.create(window.navigator);
+  Object.defineProperty(navigatorMock, 'virtualKeyboard', {
+    configurable: true,
+    value: {overlaysContent: false},
   });
   vi.stubGlobal('navigator', navigatorMock);
 }
@@ -219,19 +279,24 @@ function getHandle(): HTMLElement {
 
 // Drive a pointer drag on the grab handle. jsdom PointerEvents don't carry
 // clientY, so dispatch plain events with the coords the handlers read.
-function drag(handle: HTMLElement, points: {y: number}[]) {
+function drag(
+  handle: HTMLElement,
+  points: {y: number}[],
+  pointerType: 'mouse' | 'touch' | 'pen' = 'mouse',
+) {
   const [down, ...rest] = points;
   fireEvent.pointerDown(handle, {
     pointerId: 1,
     clientY: down.y,
     button: 0,
     isPrimary: true,
+    pointerType,
   });
   for (const p of rest) {
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: p.y});
+    fireEvent.pointerMove(handle, {pointerId: 1, clientY: p.y, pointerType});
   }
   const last = points[points.length - 1];
-  fireEvent.pointerUp(handle, {pointerId: 1, clientY: last.y});
+  fireEvent.pointerUp(handle, {pointerId: 1, clientY: last.y, pointerType});
 }
 
 function fireTimedPointer(
@@ -248,6 +313,17 @@ function fireTimedPointer(
     timeStamp: {value: time},
   });
   return fireEvent(target, event);
+}
+
+// The room the keyboard takes at the end of a Tall sheet's body, CSS px, or 0
+// when the sheet lays out none. The functional style on the body's content box sets
+// it as its `::after` box's height.
+function keyboardInsetOf(body: HTMLElement): number {
+  const content = body.firstElementChild;
+  const match = /--[\w-]+:\s*(-?[\d.]+)px/.exec(
+    content?.getAttribute('style') ?? '',
+  );
+  return match == null ? 0 : Number(match[1]);
 }
 
 describe('BottomSheet', () => {
@@ -553,6 +629,9 @@ describe('BottomSheet', () => {
   it('keeps a standalone modal sheet presented through its exit animation', () => {
     render(<ExitHarness />);
     const dialog = screen.getByRole('dialog', {name: 'Filters'});
+    // With focus elsewhere at the close, the exiting sheet is inert and
+    // hidden at once (BottomSheetCloseFocus.test.tsx covers focus inside).
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
 
     fireEvent.click(screen.getByRole('button', {name: 'Close sheet'}));
 
@@ -561,12 +640,12 @@ describe('BottomSheet', () => {
     expect(dialog).toHaveAttribute('aria-hidden', 'true');
     expect(dialog).not.toHaveAttribute('aria-modal');
     expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '0'});
-    expect(document.body.style.position).toBe('fixed');
+    expect(document.documentElement.style.overflow).toBe('hidden');
 
     finishSheetExit();
 
     expect(dialog).not.toHaveAttribute('open');
-    expect(document.body.style.position).not.toBe('fixed');
+    expect(document.documentElement.style.overflow).not.toBe('hidden');
   });
 
   it('does not dismiss when the sheet surface itself is clicked', () => {
@@ -583,7 +662,7 @@ describe('BottomSheet', () => {
   });
 
   describe('hasScrim={false} (non-modal)', () => {
-    it('opens non-modally: show() instead of showModal(), no aria-modal', () => {
+    it('opens non-modally: a manual popover instead of showModal(), no aria-modal', () => {
       render(
         <BottomSheet
           isOpen
@@ -593,9 +672,313 @@ describe('BottomSheet', () => {
           Content
         </BottomSheet>,
       );
-      expect(HTMLDialogElement.prototype.show).toHaveBeenCalled();
+      // In the top layer as a manual popover (no light dismiss, no backdrop)
+      // so sheets order by presentation without a page-level z-index.
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
+      expect(HTMLDialogElement.prototype.show).not.toHaveBeenCalled();
       expect(HTMLDialogElement.prototype.showModal).not.toHaveBeenCalled();
+      expect(screen.getByRole('dialog')).toHaveAttribute('popover', 'manual');
       expect(screen.getByRole('dialog')).not.toHaveAttribute('aria-modal');
+    });
+
+    it('focuses the panel, as show() did, when the browser focuses the popover on show (an engine whose show() lands on the panel container)', () => {
+      // Chromium's `show()` focusing steps land on the panel (tabindex -1,
+      // no ring); `showPopover()` lands on the first control and draws a
+      // ring. The sheet puts focus on the panel so a lone non-modal sheet
+      // focuses exactly as it did. The engine is told apart by what its
+      // `show()` does: here it focuses the tabindex -1 container.
+      const show = HTMLDialogElement.prototype.show;
+      HTMLDialogElement.prototype.show = vi.fn(function (
+        this: HTMLDialogElement,
+      ) {
+        this.setAttribute('open', '');
+        this.querySelector<HTMLElement>('[tabindex="-1"]')?.focus();
+      });
+      const showPopover = HTMLElement.prototype.showPopover;
+      HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+        this.setAttribute('open', '');
+        // The popover focusing steps: the autofocus delegate when there is
+        // one, else (as Chromium does) the first control.
+        (
+          this.querySelector<HTMLElement>('[autofocus]') ??
+          this.querySelector<HTMLElement>('button')
+        )?.focus();
+      });
+      try {
+        const opener = document.createElement('button');
+        document.body.appendChild(opener);
+        opener.focus();
+        const events: string[] = [];
+        render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Filters"
+            hasScrim={false}>
+            <button
+              type="button"
+              onFocus={() => events.push('focus')}
+              onBlur={() => events.push('blur')}>
+              First action
+            </button>
+          </BottomSheet>,
+        );
+        expect(document.activeElement).toBe(getSheet());
+        // The control is never focused on the way to the panel, so a field
+        // validating on blur would not fire.
+        expect(events).toEqual([]);
+        expect(getSheet()).not.toHaveAttribute('autofocus');
+        opener.remove();
+      } finally {
+        HTMLElement.prototype.showPopover = showPopover;
+        HTMLDialogElement.prototype.show = show;
+      }
+    });
+
+    it('measures the engine inside its own dialog, so a first non-modal sheet opened inside an open modal does not cache the wrong answer', () => {
+      // A browser moves no focus into a dialog that sits under an open
+      // modal's inertness. The stub models that for `show()`: a dialog
+      // appended to the body while a modal outside it is open focuses
+      // nothing; one inside the modal (or with no modal open) focuses its
+      // tabindex -1 container, as Chromium's show() does.
+      const show = HTMLDialogElement.prototype.show;
+      HTMLDialogElement.prototype.show = vi.fn(function (
+        this: HTMLDialogElement,
+      ) {
+        this.setAttribute('open', '');
+        const modal = Array.from(
+          document.querySelectorAll<HTMLDialogElement>(
+            'dialog[open][aria-modal="true"]',
+          ),
+        ).find(d => !d.contains(this));
+        if (modal != null) {
+          return;
+        }
+        this.querySelector<HTMLElement>('[tabindex="-1"]')?.focus();
+      });
+      const showPopover = HTMLElement.prototype.showPopover;
+      HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+        this.setAttribute('open', '');
+        (
+          this.querySelector<HTMLElement>('[autofocus]') ??
+          this.querySelector<HTMLElement>('button')
+        )?.focus();
+      });
+      function App() {
+        const [isModalOpen, setIsModalOpen] = useState(true);
+        const [isHintOpen, setIsHintOpen] = useState(false);
+        const [isLoneOpen, setIsLoneOpen] = useState(false);
+        return (
+          <>
+            <BottomSheet
+              isOpen={isModalOpen}
+              onOpenChange={setIsModalOpen}
+              label="Settings">
+              <button type="button" onClick={() => setIsHintOpen(true)}>
+                Show hint
+              </button>
+              <button type="button" onClick={() => setIsModalOpen(false)}>
+                Done
+              </button>
+              <BottomSheet
+                isOpen={isHintOpen}
+                onOpenChange={setIsHintOpen}
+                hasScrim={false}
+                label="Hint">
+                <button type="button">Got it</button>
+              </BottomSheet>
+            </BottomSheet>
+            <button type="button" onClick={() => setIsLoneOpen(true)}>
+              Open filters
+            </button>
+            <BottomSheet
+              isOpen={isLoneOpen}
+              onOpenChange={setIsLoneOpen}
+              hasScrim={false}
+              label="Filters">
+              <button type="button">First action</button>
+            </BottomSheet>
+          </>
+        );
+      }
+      try {
+        render(<App />);
+        // The first non-modal sheet of the page opens inside the open modal:
+        // the engine is measured there, where show() can move focus.
+        fireEvent.click(screen.getByRole('button', {name: 'Show hint'}));
+        const hint = screen.getByRole('dialog', {name: 'Hint'});
+        expect(document.activeElement).toBe(
+          hint.querySelector('.astryx-bottom-sheet'),
+        );
+        fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+        // A later lone non-modal sheet focuses as show() would: the panel.
+        fireEvent.click(screen.getByRole('button', {name: 'Open filters'}));
+        const filters = screen.getByRole('dialog', {name: 'Filters'});
+        expect(document.activeElement).toBe(
+          filters.querySelector('.astryx-bottom-sheet'),
+        );
+      } finally {
+        HTMLElement.prototype.showPopover = showPopover;
+        HTMLDialogElement.prototype.show = show;
+      }
+    });
+
+    it('leaves focus on the first control, as show() did, in an engine whose show() skips the panel container', () => {
+      // Firefox's `show()` and `showPopover()` both land on the first
+      // control in the sheet. Nothing is re-targeted, so a lone non-modal
+      // sheet focuses as it did with `show()` there too.
+      const show = HTMLDialogElement.prototype.show;
+      HTMLDialogElement.prototype.show = vi.fn(function (
+        this: HTMLDialogElement,
+      ) {
+        this.setAttribute('open', '');
+        this.querySelector<HTMLElement>('button')?.focus();
+      });
+      const showPopover = HTMLElement.prototype.showPopover;
+      HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+        this.setAttribute('open', '');
+        (
+          this.querySelector<HTMLElement>('[autofocus]') ??
+          this.querySelector<HTMLElement>('button')
+        )?.focus();
+      });
+      try {
+        const opener = document.createElement('button');
+        document.body.appendChild(opener);
+        opener.focus();
+        render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Filters"
+            hasScrim={false}>
+            <button type="button">First action</button>
+          </BottomSheet>,
+        );
+        expect(document.activeElement).toBe(
+          screen.getByRole('button', {name: 'First action'}),
+        );
+        expect(getSheet()).not.toHaveAttribute('autofocus');
+        opener.remove();
+      } finally {
+        HTMLElement.prototype.showPopover = showPopover;
+        HTMLDialogElement.prototype.show = show;
+      }
+    });
+
+    it('returns focus to its opener on close when the person was still in the sheet', () => {
+      const opener = document.createElement('button');
+      opener.textContent = 'Open';
+      document.body.appendChild(opener);
+      opener.focus();
+      try {
+        render(<ExitHarness hasScrim={false} />);
+        // The person moved into the sheet (e.g. tabbed to its control).
+        screen.getByRole('button', {name: 'Close sheet'}).focus();
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
+        finishSheetExit();
+        expect(screen.getByRole('dialog', {hidden: true})).not.toHaveAttribute(
+          'open',
+        );
+        expect(document.activeElement).toBe(opener);
+      } finally {
+        opener.remove();
+      }
+    });
+
+    it('always focuses finalFocusRef on close, even when focus had left the sheet', () => {
+      const elsewhere = document.createElement('input');
+      const target = document.createElement('button');
+      target.textContent = 'Target';
+      document.body.append(elsewhere, target);
+      const finalFocusRef = {current: target as HTMLElement | null};
+      function Harness() {
+        const [isOpen, setIsOpen] = useState(true);
+        return (
+          <>
+            <button type="button" onClick={() => setIsOpen(false)}>
+              Close from page
+            </button>
+            <BottomSheet
+              isOpen={isOpen}
+              onOpenChange={setIsOpen}
+              hasScrim={false}
+              finalFocusRef={finalFocusRef}
+              label="Filters">
+              Content
+            </BottomSheet>
+          </>
+        );
+      }
+      try {
+        render(<Harness />);
+        // The page stayed live: the person moved on, then a page control
+        // closed the sheet. The explicit target still receives focus.
+        elsewhere.focus();
+        fireEvent.click(screen.getByRole('button', {name: 'Close from page'}));
+        finishSheetExit();
+        expect(document.activeElement).toBe(target);
+      } finally {
+        elsewhere.remove();
+        target.remove();
+      }
+    });
+
+    it('leaves focus where the person took it when the sheet closes from the page', () => {
+      const opener = document.createElement('button');
+      const elsewhere = document.createElement('input');
+      document.body.append(opener, elsewhere);
+      opener.focus();
+      try {
+        render(<ExitHarness hasScrim={false} />);
+        // The page stayed live: the person moved on, then the sheet closed
+        // (a timer, a page control).
+        elsewhere.focus();
+        fireEvent.click(screen.getByRole('button', {name: 'Close sheet'}));
+        finishSheetExit();
+        expect(document.activeElement).toBe(elsewhere);
+      } finally {
+        opener.remove();
+        elsewhere.remove();
+      }
+    });
+
+    it('leaves focus alone when the browser does not move it on show', () => {
+      const opener = document.createElement('button');
+      document.body.appendChild(opener);
+      opener.focus();
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Filters"
+          hasScrim={false}>
+          <button type="button">First action</button>
+        </BottomSheet>,
+      );
+      expect(document.activeElement).toBe(opener);
+      opener.remove();
+    });
+
+    it('falls back to show() below the Popover API support floor', () => {
+      const showPopover = HTMLElement.prototype.showPopover;
+      // @ts-expect-error -- emulate a browser without the Popover API
+      delete HTMLElement.prototype.showPopover;
+      try {
+        render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Filters"
+            hasScrim={false}>
+            Content
+          </BottomSheet>,
+        );
+        expect(HTMLDialogElement.prototype.show).toHaveBeenCalled();
+        expect(HTMLDialogElement.prototype.showModal).not.toHaveBeenCalled();
+      } finally {
+        HTMLElement.prototype.showPopover = showPopover;
+      }
     });
 
     it('does not dismiss when the shell (dialog element itself) is clicked', () => {
@@ -705,7 +1088,7 @@ describe('BottomSheet', () => {
 
       expect(dialog).toHaveAttribute('open');
       expect(dialog).toHaveAttribute('inert');
-      expect(document.body.style.position).not.toBe('fixed');
+      expect(document.documentElement.style.overflow).not.toBe('hidden');
 
       finishSheetExit();
 
@@ -726,6 +1109,52 @@ describe('BottomSheet', () => {
   });
 
   describe('swipe to dismiss', () => {
+    it("a sheet opened from inside another sheet's content drags to dismiss by its own handle, and the covered host neither drags nor takes the pointer (FR6, FR7)", () => {
+      const onInnerOpenChange = vi.fn();
+      const onOuterOpenChange = vi.fn();
+      render(
+        <BottomSheet isOpen onOpenChange={onOuterOpenChange} label="Outer">
+          Outer content
+          <BottomSheet isOpen onOpenChange={onInnerOpenChange} label="Inner">
+            Inner content
+          </BottomSheet>
+        </BottomSheet>,
+      );
+      const dialogs = screen.getAllByRole('dialog', {hidden: true});
+      expect(dialogs).toHaveLength(2);
+      const [outerDialog, innerDialog] = dialogs;
+      // The inner sheet's dialog is rendered inside the outer sheet's body,
+      // so its events bubble through the outer body's gesture listeners.
+      expect(outerDialog.contains(innerDialog)).toBe(true);
+      const outerPanel = outerDialog.querySelector<HTMLElement>(
+        ':scope > .astryx-bottom-sheet',
+      )!;
+      const outerBody = outerPanel.querySelector<HTMLElement>(
+        ':scope > :not([aria-hidden])',
+      )!;
+      const innerHandle = innerDialog.querySelector<HTMLElement>(
+        '.astryx-bottom-sheet > [aria-hidden="true"]',
+      )!;
+      // `setPointerCapture` is a prototype stub here, so record who captures.
+      const captured: Element[] = [];
+      const capture = vi
+        .spyOn(Element.prototype, 'setPointerCapture')
+        .mockImplementation(function (this: Element) {
+          captured.push(this);
+        });
+      drag(innerHandle, [{y: 0}, {y: 40}, {y: 120}], 'touch');
+      capture.mockRestore();
+      // The inner sheet's own drag ran to its dismissal.
+      expect(onInnerOpenChange).toHaveBeenCalledWith(false);
+      // The covered host saw the same pointer bubble up and did nothing with
+      // it: no drag of its own (its panel keeps its resting transform) and no
+      // pointer capture, which would have cancelled the inner handle's drag.
+      expect(onOuterOpenChange).not.toHaveBeenCalled();
+      expect(captured).toContain(innerHandle);
+      expect(captured).not.toContain(outerBody);
+      expect(outerPanel.style.transform).toBe('');
+    });
+
     it('requests close when dragged past the dismiss threshold', () => {
       const onOpenChange = vi.fn();
       render(
@@ -903,6 +1332,286 @@ describe('BottomSheet', () => {
       // Transitions come back for the next gesture.
       act(() => reconciliationFrames.splice(0).forEach(frame => frame(0)));
       expect(sheet.style.transition).toBe('');
+    });
+
+    it('restores the layout height in the same task as the transform when a drag crosses its detent, without a synchronous render', async () => {
+      const observers = mockResizeObserverInstances();
+      mockVisualViewport(800);
+      mockWindowHeight(800);
+      let commits = 0;
+      render(
+        <Profiler
+          id="sheet"
+          onRender={() => {
+            commits += 1;
+          }}>
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Release notes"
+            snapPoints={SNAP_POINTS}
+            height="tall">
+            Content
+          </BottomSheet>
+        </Profiler>,
+      );
+      const sheet = getSheet();
+      const sheetObserver = observers.find(instance =>
+        instance.observed.has(sheet),
+      );
+      act(() => {
+        sheetObserver?.callback(
+          [resizeEntry(784, 736)],
+          sheetObserver as unknown as ResizeObserver,
+        );
+      });
+
+      // Rest on p50 (offset 336): the scrolling area gives up 336px of
+      // layout height and the sheet carries no transform.
+      fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
+      fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 336});
+      fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 336});
+      expect(sheet.style.height).toBe('448px');
+      expect(sheet.style.transform).toBe('');
+
+      const replacedNodes: Node[] = [];
+      const mutations = new MutationObserver(records => {
+        for (const record of records) {
+          replacedNodes.push(...record.addedNodes, ...record.removedNodes);
+        }
+      });
+      mutations.observe(sheet, {childList: true, subtree: true});
+      fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 336});
+
+      // Each finger sample arrives outside act(), as a browser delivers it:
+      // a render React schedules for later is still pending when this task
+      // ends, and the browser paints whatever the element holds then.
+      const reactGlobals = globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean};
+      const wasActEnvironment = reactGlobals.IS_REACT_ACT_ENVIRONMENT;
+      reactGlobals.IS_REACT_ACT_ENVIRONMENT = false;
+      const sampleAt = (time: number, y: number) => {
+        const event = new Event('pointermove', {bubbles: true});
+        Object.defineProperties(event, {
+          clientY: {value: y},
+          isPrimary: {value: true},
+          pointerId: {value: 1},
+          timeStamp: {value: time},
+        });
+        getHandle().dispatchEvent(event);
+        return {
+          height: sheet.style.height,
+          transform: sheet.style.transform,
+          inset: getBody().style.paddingBlockEnd,
+        };
+      };
+      let above: {height: string; transform: string; inset: string};
+      let below: {height: string; transform: string; inset: string};
+      const commitsBeforeCrossing = commits;
+      let commitsInCrossingTasks: number;
+      try {
+        // Up past the detent: the transform is written for the full height
+        // (no layout split), so the full height has to be there too.
+        above = sampleAt(4000, 136);
+        // Back down past it: the split returns with the transform.
+        below = sampleAt(5000, 436);
+        // React committed nothing inside those input tasks: the elements were
+        // written directly, not through a forced synchronous render.
+        commitsInCrossingTasks = commits - commitsBeforeCrossing;
+      } finally {
+        reactGlobals.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
+      }
+      await act(async () => {});
+
+      expect(above.transform).toMatch(/^translateY\(/);
+      expect(above.height).toBe('784px');
+      // The scrolling area keeps its scroll position across the taller
+      // height: its end inset lands with it.
+      expect(above.inset).toBe('336px');
+      expect(below.transform).toBe('translateY(100px)');
+      expect(below.height).toBe('448px');
+      expect(below.inset).toBe('');
+      expect(commitsInCrossingTasks).toBe(0);
+      // The scheduled render caught up to the values already on screen.
+      expect(sheet.style.height).toBe('448px');
+      expect(sheet.style.transform).toBe('translateY(100px)');
+      // Nothing in the sheet was replaced along the way.
+      mutations.disconnect();
+      expect(replacedNodes).toEqual([]);
+    });
+
+    it("rests at the detent's height when the finger lifts in the same task as the move that crossed it", async () => {
+      const observers = mockResizeObserverInstances();
+      mockVisualViewport(800);
+      mockWindowHeight(800);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Release notes"
+          snapPoints={SNAP_POINTS}
+          height="tall">
+          Content
+        </BottomSheet>,
+      );
+      const sheet = getSheet();
+      const sheetObserver = observers.find(instance =>
+        instance.observed.has(sheet),
+      );
+      act(() => {
+        sheetObserver?.callback(
+          [resizeEntry(784, 736)],
+          sheetObserver as unknown as ResizeObserver,
+        );
+      });
+
+      // Rest on p50 (offset 336) with the 336px layout split.
+      fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
+      fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 336});
+      fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 336});
+      expect(sheet.style.height).toBe('448px');
+      fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 336});
+
+      // A 3px nudge up crosses the detent, and the finger lifts before the
+      // render that move scheduled has committed: both arrive in one task,
+      // outside act(), as a browser can deliver them.
+      const reactGlobals = globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean};
+      const wasActEnvironment = reactGlobals.IS_REACT_ACT_ENVIRONMENT;
+      reactGlobals.IS_REACT_ACT_ENVIRONMENT = false;
+      const dispatch = (
+        type: 'pointermove' | 'pointerup',
+        time: number,
+        y: number,
+      ) => {
+        const event = new Event(type, {bubbles: true, cancelable: true});
+        Object.defineProperties(event, {
+          button: {value: 0},
+          clientY: {value: y},
+          isPrimary: {value: true},
+          pointerId: {value: 1},
+          timeStamp: {value: time},
+        });
+        getHandle().dispatchEvent(event);
+      };
+      let heightAboveDetent: string;
+      try {
+        dispatch('pointermove', 4000, 333);
+        heightAboveDetent = sheet.style.height;
+        dispatch('pointerup', 4500, 333);
+      } finally {
+        reactGlobals.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
+      }
+      await act(async () => {});
+
+      // The crossing move drew the sheet at its full height...
+      expect(heightAboveDetent).toBe('784px');
+      // ...and at rest it is drawn at p50 again: the split height, no
+      // offset, and no end inset left over from the drag.
+      expect(sheet.style.height).toBe('448px');
+      expect(sheet.style.transform).toBe('');
+      expect(getBody().style.paddingBlockEnd).toBe('');
+    });
+
+    describe('with a caller-set height', () => {
+      // Rests on p50 (offset 336), presses the handle again, and returns the
+      // sheet and a dispatcher that delivers pointer events outside act(), as
+      // a browser does, so a render React schedules is still pending when
+      // each event's task ends.
+      function restOnHalfWithCallerHeight() {
+        const observers = mockResizeObserverInstances();
+        mockVisualViewport(800);
+        mockWindowHeight(800);
+        render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Release notes"
+            snapPoints={SNAP_POINTS}
+            height="tall"
+            style={{height: '500px'}}>
+            Content
+          </BottomSheet>,
+        );
+        const sheet = getSheet();
+        const sheetObserver = observers.find(instance =>
+          instance.observed.has(sheet),
+        );
+        act(() => {
+          sheetObserver?.callback(
+            [resizeEntry(784, 736)],
+            sheetObserver as unknown as ResizeObserver,
+          );
+        });
+        fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
+        fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 336});
+        fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 336});
+        fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 336});
+        const outsideAct = (run: (dispatch: typeof dispatchRaw) => void) => {
+          const reactGlobals = globalThis as {
+            IS_REACT_ACT_ENVIRONMENT?: boolean;
+          };
+          const wasActEnvironment = reactGlobals.IS_REACT_ACT_ENVIRONMENT;
+          reactGlobals.IS_REACT_ACT_ENVIRONMENT = false;
+          try {
+            run(dispatchRaw);
+          } finally {
+            reactGlobals.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
+          }
+        };
+        function dispatchRaw(
+          type: 'pointermove' | 'pointerup',
+          time: number,
+          y: number,
+        ) {
+          const event = new Event(type, {bubbles: true, cancelable: true});
+          Object.defineProperties(event, {
+            button: {value: 0},
+            clientY: {value: y},
+            isPrimary: {value: true},
+            pointerId: {value: 1},
+            timeStamp: {value: time},
+          });
+          getHandle().dispatchEvent(event);
+        }
+        return {sheet, outsideAct};
+      }
+
+      it('keeps the caller height through a drag across the detent and back', async () => {
+        const {sheet, outsideAct} = restOnHalfWithCallerHeight();
+        expect(sheet.style.height).toBe('500px');
+
+        const heights: string[] = [];
+        outsideAct(dispatch => {
+          dispatch('pointermove', 4000, 136);
+          heights.push(sheet.style.height);
+          dispatch('pointermove', 5000, 436);
+          heights.push(sheet.style.height);
+        });
+        await act(async () => {});
+        outsideAct(dispatch => {
+          dispatch('pointerup', 6000, 336);
+        });
+        await act(async () => {});
+
+        // The caller's height owns the element: the crossing writes only the
+        // transform and the end inset, and nothing replaces the height after.
+        expect(heights).toEqual(['500px', '500px']);
+        expect(sheet.style.height).toBe('500px');
+      });
+
+      it('keeps the caller height when the finger lifts in the same task as the crossing move', async () => {
+        const {sheet, outsideAct} = restOnHalfWithCallerHeight();
+
+        let heightAboveDetent = '';
+        outsideAct(dispatch => {
+          dispatch('pointermove', 4000, 333);
+          heightAboveDetent = sheet.style.height;
+          dispatch('pointerup', 4500, 333);
+        });
+        await act(async () => {});
+
+        expect(heightAboveDetent).toBe('500px');
+        expect(sheet.style.height).toBe('500px');
+      });
     });
 
     it('uses transforms while dragging and resizes to the visible snapped height', () => {
@@ -1369,6 +2078,126 @@ describe('BottomSheet', () => {
   });
 
   describe('mobile keyboard', () => {
+    // The reveal-pan watch reads touches to leave a reader's own pan alone:
+    // the most touch listeners registered at once.
+    function trackTouchListeners(): () => number {
+      const live = new Set<unknown>();
+      let most = 0;
+      const add = window.addEventListener.bind(window);
+      const remove = window.removeEventListener.bind(window);
+      const adding = vi
+        .spyOn(window, 'addEventListener')
+        .mockImplementation((type, listener, options) => {
+          if (type === 'touchstart') {
+            live.add(listener);
+            most = Math.max(most, live.size);
+          }
+          add(type, listener, options);
+        });
+      const removing = vi
+        .spyOn(window, 'removeEventListener')
+        .mockImplementation((type, listener, options) => {
+          if (type === 'touchstart') {
+            live.delete(listener);
+          }
+          remove(type, listener, options);
+        });
+      onTestFinished(() => {
+        adding.mockRestore();
+        removing.mockRestore();
+      });
+      return () => most;
+    }
+
+    it('registers no touch listener for a presented Tall sheet under a fine pointer (architecture INV13, spec:AST-094 FR24)', () => {
+      mockPrimaryPointer('fine');
+      mockWindowHeight(800);
+      mockVisualViewport(800);
+      const mostTouchListeners = trackTouchListeners();
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Add a comment"
+          height="tall">
+          <input aria-label="Comment" />
+        </BottomSheet>,
+      );
+      expect(screen.getByRole('textbox', {name: 'Comment'})).toBeVisible();
+      expect(mostTouchListeners()).toBe(0);
+    });
+
+    it('installs no focus takeover for a presented Tall sheet under a fine pointer (architecture INV13, spec:AST-094 FR24)', () => {
+      mockPrimaryPointer('fine');
+      mockWindowHeight(800);
+      mockVisualViewport(800);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Add a comment"
+          height="tall">
+          <input aria-label="Comment" />
+        </BottomSheet>,
+      );
+      expect(screen.getByRole('textbox', {name: 'Comment'})).toBeVisible();
+      expect(__focusTakeoverCallersForTest(document)).toBe(0);
+    });
+
+    it('installs the focus takeover for each presented Tall sheet under a coarse pointer, through the one shared listener (spec:AST-094 FR24)', () => {
+      mockPrimaryPointer('coarse');
+      mockWindowHeight(800);
+      mockVisualViewport(800);
+      render(
+        <>
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Add a comment"
+            height="tall">
+            <input aria-label="Comment" />
+          </BottomSheet>
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Add a note"
+            height="tall">
+            <input aria-label="Note" />
+          </BottomSheet>
+        </>,
+      );
+      // Both sheets claim focus moves through the keyboard module's one
+      // document listener (its own test counts that listener).
+      expect(__focusTakeoverCallersForTest(document)).toBe(2);
+    });
+
+    it('registers one touch listener for two presented Tall sheets under a coarse pointer (spec:AST-094 FR24)', () => {
+      mockPrimaryPointer('coarse');
+      mockWindowHeight(800);
+      mockVisualViewport(800);
+      const mostTouchListeners = trackTouchListeners();
+      render(
+        <>
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Add a comment"
+            height="tall">
+            <input aria-label="Comment" />
+          </BottomSheet>
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Add a note"
+            height="tall">
+            <input aria-label="Note" />
+          </BottomSheet>
+        </>,
+      );
+      expect(screen.getByRole('textbox', {name: 'Note'})).toBeInTheDocument();
+      expect(mostTouchListeners()).toBe(1);
+    });
+
     it('claims a transition between fields and delivers it with preventScroll', () => {
       mockIOSWebKit();
       render(
@@ -1469,9 +2298,42 @@ describe('BottomSheet', () => {
       expect(sheetFocus).toHaveBeenCalledWith({preventScroll: true});
     });
 
+    it('leaves focus to desktop Safari and Firefox, which measure but have a fine pointer (AST-017 FR59)', () => {
+      // A visual viewport and no keyboard geometry API, as on iOS, but a mouse.
+      mockVisualViewport(800);
+      mockWindowHeight(800);
+      mockPrimaryPointer('fine');
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Add a comment"
+          height="tall">
+          <input aria-label="Title" />
+          <input aria-label="Comment" />
+        </BottomSheet>,
+      );
+      const sheet = getSheet();
+      const title = screen.getByRole('textbox', {name: 'Title'});
+      const comment = screen.getByRole('textbox', {name: 'Comment'});
+      title.focus();
+      const commentFocus = vi.spyOn(comment, 'focus');
+      const sheetFocus = vi.spyOn(sheet, 'focus');
+
+      // Tab between fields: the browser's own move, not one delivered here.
+      fireEvent.blur(title, {relatedTarget: comment});
+      expect(commentFocus).not.toHaveBeenCalled();
+
+      // A window switch blurs the field for nothing. The sheet does not park
+      // focus on itself, so focus comes back to the field.
+      fireEvent.blur(title, {relatedTarget: null});
+      expect(sheetFocus).not.toHaveBeenCalled();
+    });
+
     it('does not alter ordinary desktop focus when the viewport is unobstructed', () => {
       mockVisualViewport(800);
       mockWindowHeight(800);
+      mockKeyboardGeometryApi();
       const onFocus = vi.fn();
       render(
         <BottomSheet
@@ -1489,12 +2351,76 @@ describe('BottomSheet', () => {
 
       expect(focus).not.toHaveBeenCalledWith({preventScroll: true});
       expect(onFocus).toHaveBeenCalledTimes(1);
-      expect(getBody().style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '0px',
+      expect(keyboardInsetOf(getBody())).toBe(0);
+    });
+
+    it('lays out no keyboard room when the body overhangs the viewport by a fraction of a pixel', () => {
+      // On Chrome for Android, the visual viewport can be 0.3 px taller than
+      // the layout viewport. A sheet sized to it ends that far below it.
+      mockIOSWebKit();
+      mockWindowHeight(800);
+      mockVisualViewport(800.3);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Add a comment"
+          height="tall">
+          <input aria-label="Comment" />
+        </BottomSheet>,
       );
+      const body = getBody();
+      const input = screen.getByRole('textbox', {name: 'Comment'});
+      vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 100, bottom: 800.3}),
+      );
+      vi.spyOn(input, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 700, bottom: 740}),
+      );
+
+      input.focus();
+
+      expect(keyboardInsetOf(body)).toBe(0);
+    });
+
+    it('scrolls nothing for a field in the bottom clearance band when the body overhangs the viewport by a fraction of a pixel', () => {
+      // Chrome on Android: the visual viewport can be 0.3 px taller than the
+      // layout viewport. With no keyboard up, a field in the sheet's bottom
+      // 48 px is already visible: the suggestion clearance is for a keyboard.
+      mockIOSWebKit();
+      mockWindowHeight(800);
+      mockVisualViewport(800.3);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Add a comment"
+          height="tall">
+          <input aria-label="Comment" />
+        </BottomSheet>,
+      );
+      const body = getBody();
+      const input = screen.getByRole('textbox', {name: 'Comment'});
+      vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 100, bottom: 800.3}),
+      );
+      vi.spyOn(input, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 760, bottom: 790}),
+      );
+      const scrollBy = vi.fn();
+      Object.defineProperty(body, 'scrollBy', {
+        configurable: true,
+        value: scrollBy,
+      });
+
+      input.focus();
+
+      expect(scrollBy).not.toHaveBeenCalled();
+      expect(body.scrollTop).toBe(0);
     });
 
     it('keeps Tall geometry fixed while extending and cleaning up its internal scroll range', () => {
+      mockWindowHeight(800);
       const viewport = mockVisualViewport(500);
       render(
         <BottomSheet
@@ -1533,19 +2459,493 @@ describe('BottomSheet', () => {
         '',
       );
       // 300px keyboard overlap + 48px room for Android suggestion UI.
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '348px',
-      );
+      expect(keyboardInsetOf(body)).toBe(348);
       // Visible bottom is 500px; preserve the same 48px focus gap.
       expect(body.scrollTop).toBe(248);
 
       viewport.height = 800;
       void act(() => viewport.dispatchEvent(new Event('resize')));
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '0px',
-      );
+      expect(keyboardInsetOf(body)).toBe(0);
+      expect(body.scrollTop).toBe(0);
       expect(sheet.getBoundingClientRect()).toEqual(initialRect);
       expect(sheet.style.height).toBe('');
+    });
+
+    it('restores a top field when interactive keyboard dismissal leaves only the accessory bar', () => {
+      const viewport = mockVisualViewport(500);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Search items"
+          height="tall">
+          <input aria-label="Search" />
+        </BottomSheet>,
+      );
+      const body = getBody();
+      const input = screen.getByRole('textbox', {name: 'Search'});
+      vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 100, bottom: 800}),
+      );
+      vi.spyOn(input, 'getBoundingClientRect').mockImplementation(() =>
+        rect({top: 150 - body.scrollTop, bottom: 190 - body.scrollTop}),
+      );
+
+      input.focus();
+      expect(keyboardInsetOf(body)).toBe(348);
+      expect(body.scrollTop).toBe(0);
+
+      // Safari can move the sheet body during the interactive dismissal. The
+      // main keyboard has gone, but its accessory bar still shortens the visual
+      // viewport, so this is recovery without a full-height viewport yet.
+      body.scrollTop = 300;
+      viewport.height = 720;
+      void act(() => viewport.dispatchEvent(new Event('resize')));
+
+      expect(body.scrollTop).toBe(0);
+      expect(keyboardInsetOf(body)).toBe(128);
+
+      // Once that recovery step has been consumed, later layout work at the
+      // same visual-viewport height must not overwrite the person's scrolling.
+      body.scrollTop = 80;
+      void act(() => window.dispatchEvent(new Event('resize')));
+      // The ordinary safe-area pass may clamp scrolling just enough to keep
+      // the still-focused top field visible, but it must not reset to the old
+      // pre-keyboard position again.
+      expect(body.scrollTop).toBe(50);
+    });
+
+    it('re-reveals a later focused field after full keyboard recovery restores the opening scroll position', () => {
+      mockWindowHeight(800);
+      const viewport = mockVisualViewport(500);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Edit details"
+          height="tall">
+          <input aria-label="First" />
+          <input aria-label="Later" />
+        </BottomSheet>,
+      );
+      const body = getBody();
+      const first = screen.getByRole('textbox', {name: 'First'});
+      const later = screen.getByRole('textbox', {name: 'Later'});
+      Object.defineProperty(body, 'scrollBy', {
+        configurable: true,
+        value: ({top = 0}: ScrollToOptions) => {
+          body.scrollTop += top;
+        },
+      });
+      vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 100, bottom: 800}),
+      );
+      vi.spyOn(first, 'getBoundingClientRect').mockImplementation(() =>
+        rect({top: 150 - body.scrollTop, bottom: 190 - body.scrollTop}),
+      );
+      vi.spyOn(later, 'getBoundingClientRect').mockImplementation(() =>
+        rect({top: 860 - body.scrollTop, bottom: 900 - body.scrollTop}),
+      );
+
+      first.focus();
+      expect(body.scrollTop).toBe(0);
+      later.focus();
+      expect(body.scrollTop).toBe(448);
+
+      viewport.height = 800;
+      void act(() => viewport.dispatchEvent(new Event('resize')));
+
+      expect(keyboardInsetOf(body)).toBe(0);
+      // Cleanup restores 0, then the unobstructed safe-area pass reveals the
+      // still-focused later field at the bottom of the 100–800 body viewport.
+      expect(body.scrollTop).toBe(100);
+    });
+
+    it('retains the accommodated body scroll through partial viewport recovery while focus is leaving', () => {
+      const viewport = mockVisualViewport(500);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Add a comment"
+          height="tall">
+          <input aria-label="Comment" />
+        </BottomSheet>,
+      );
+      const body = getBody();
+      const input = screen.getByRole('textbox', {name: 'Comment'});
+      Object.defineProperty(body, 'scrollBy', {
+        configurable: true,
+        value: ({top = 0}: ScrollToOptions) => {
+          body.scrollTop += top;
+        },
+      });
+      vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 100, bottom: 800}),
+      );
+      vi.spyOn(input, 'getBoundingClientRect').mockImplementation(() =>
+        rect({top: 660 - body.scrollTop, bottom: 700 - body.scrollTop}),
+      );
+
+      input.focus();
+      expect(body.scrollTop).toBe(248);
+      input.blur();
+      viewport.height = 720;
+      void act(() => viewport.dispatchEvent(new Event('resize')));
+
+      expect(body.scrollTop).toBe(248);
+      expect(keyboardInsetOf(body)).toBe(128);
+
+      viewport.height = 800;
+      void act(() => viewport.dispatchEvent(new Event('resize')));
+      expect(body.scrollTop).toBe(0);
+      expect(keyboardInsetOf(body)).toBe(0);
+    });
+
+    it('lays out the keyboard room in Chrome on Android, which has its own keyboard geometry API (spec:AST-099 DEC-4)', () => {
+      // Gboard shrinks Chrome's visual viewport while the layout viewport
+      // keeps its height; the VirtualKeyboard API is not read.
+      mockKeyboardGeometryApi();
+      mockPrimaryPointer('coarse');
+      mockWindowHeight(800);
+      mockVisualViewport(500);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Add a comment"
+          height="tall">
+          <input aria-label="Comment" />
+        </BottomSheet>,
+      );
+      const body = getBody();
+      const input = screen.getByRole('textbox', {name: 'Comment'});
+      vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 100, bottom: 800}),
+      );
+      vi.spyOn(input, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 300, bottom: 340}),
+      );
+
+      input.focus();
+
+      expect(keyboardInsetOf(body)).toBe(348);
+    });
+
+    describe('on Gboard\u2019s slides in Chrome on Android (spec:AST-099 FR8)', () => {
+      // A Tall sheet in Chrome on Android. Its body, from top 100 to bottom
+      // 800, holds 800 px of content and the room after it. So the last
+      // field's reveal scrolls into the room. The body's scroll stays within
+      // its range, as a browser keeps it. `scrollBy` records a smooth scroll
+      // and moves nothing, unless `instantScrollBy` lands it at once.
+      function renderChromeSheet({
+        instantScrollBy = false,
+        roomRangeShort = 0,
+        pointer = 'coarse',
+        picker,
+      }: {
+        instantScrollBy?: boolean;
+        roomRangeShort?: number;
+        pointer?: 'coarse' | 'fine';
+        picker?: ReactNode;
+      } = {}) {
+        mockKeyboardGeometryApi();
+        mockPrimaryPointer(pointer);
+        mockWindowHeight(800);
+        const viewport = Object.assign(mockVisualViewport(800), {scale: 1});
+        render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Add a comment"
+            height="tall">
+            <input aria-label="Comment" />
+            {picker}
+          </BottomSheet>,
+        );
+        const body = getBody();
+        const content = body.firstElementChild as HTMLElement;
+        const input = screen.getByRole('textbox', {name: 'Comment'});
+        let scrollTop = 0;
+        // The scroll range the room adds: its height, less `roomRangeShort`.
+        const scrollHeight = () =>
+          800 + Math.max(0, keyboardInsetOf(body) - roomRangeShort);
+        const maxScroll = () => scrollHeight() - 700;
+        Object.defineProperties(body, {
+          clientHeight: {configurable: true, get: () => 700},
+          scrollHeight: {configurable: true, get: scrollHeight},
+          scrollTop: {
+            configurable: true,
+            get: () => Math.min(scrollTop, maxScroll()),
+            set: (value: number) => {
+              scrollTop = Math.max(0, Math.min(value, maxScroll()));
+            },
+          },
+        });
+        const scrollBy = vi.fn((options: ScrollToOptions) => {
+          if (instantScrollBy) {
+            body.scrollTop += options.top ?? 0;
+          }
+        });
+        Object.defineProperty(body, 'scrollBy', {
+          configurable: true,
+          value: scrollBy,
+        });
+        vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+          rect({top: 100, bottom: 800}),
+        );
+        vi.spyOn(input, 'getBoundingClientRect').mockImplementation(() =>
+          rect({top: 660 - body.scrollTop, bottom: 700 - body.scrollTop}),
+        );
+        const report = (height: number) => {
+          viewport.height = height;
+          act(() => {
+            viewport.dispatchEvent(new Event('resize'));
+          });
+        };
+        return {body, content, input, report, scrollBy};
+      }
+
+      const afterTheSlide = async () =>
+        act(async () => {
+          await new Promise(resolve => setTimeout(resolve, 400));
+        });
+
+      it('lands the body at once at the keyboard\u2019s report, and the content\u2019s ride ends with no translate left', async () => {
+        const {body, content, input, report, scrollBy} = renderChromeSheet();
+        act(() => input.focus());
+        report(500);
+        // In the report's own event, the room is 300 px of keyboard over the
+        // body plus the 48 px clearance. The body scrolls at once, so the
+        // field rests 48 px above the keyboard. No smooth scroll trails
+        // Gboard's slide.
+        expect(keyboardInsetOf(body)).toBe(348);
+        expect(body.scrollTop).toBe(248);
+        expect(scrollBy).not.toHaveBeenCalled();
+        await afterTheSlide();
+        // The ride ends at the layout: no translate is left.
+        expect(content.style.translate).toBe('');
+        expect(body.scrollTop).toBe(248);
+      });
+
+      it('keeps the room through the keyboard\u2019s hide while the content rides down to the scroll from before the keyboard, then drops both at rest', async () => {
+        const {body, content, input, report} = renderChromeSheet({
+          instantScrollBy: true,
+        });
+        act(() => input.focus());
+        report(500);
+        await afterTheSlide();
+        expect(body.scrollTop).toBe(248);
+
+        // Back: Chrome reports the keyboard gone, and the field keeps focus.
+        // The guide dates the hide back by the lag measured on blurs.
+        report(800);
+        // The room stays, so the body keeps its scroll. The content rides
+        // down 248 px, back to the scroll from before the keyboard.
+        expect(keyboardInsetOf(body)).toBe(348);
+        expect(body.scrollTop).toBe(248);
+        expect(content.style.translate).toBe('0px 248px');
+
+        await afterTheSlide();
+        // At rest, in one commit, the room drops, the body's scroll goes back
+        // to 0, and the translate clears.
+        expect(keyboardInsetOf(body)).toBe(0);
+        expect(body.scrollTop).toBe(0);
+        expect(content.style.translate).toBe('');
+      });
+
+      it.each([
+        [
+          'a select',
+          <select key="s" aria-label="Picker">
+            <option>One</option>
+          </select>,
+        ],
+        ['a date input', <input key="d" type="date" aria-label="Picker" />],
+      ] as const)(
+        'rides the content down and keeps the room through the hide when focus moves to %s, whose picker Chrome opens over the page',
+        async (_, picker) => {
+          const {body, content, input, report} = renderChromeSheet({
+            instantScrollBy: true,
+            picker,
+          });
+          // The picker sits above the field, in view while the keyboard is up.
+          const pickerControl = screen.getByLabelText('Picker');
+          vi.spyOn(pickerControl, 'getBoundingClientRect').mockImplementation(
+            () =>
+              rect({top: 600 - body.scrollTop, bottom: 640 - body.scrollTop}),
+          );
+          act(() => input.focus());
+          report(500);
+          await afterTheSlide();
+          expect(body.scrollTop).toBe(248);
+          // Gboard slides down for the picker: Chrome reports the keyboard
+          // gone, and no keyboard comes back.
+          act(() => pickerControl.focus());
+          report(800);
+          expect(keyboardInsetOf(body)).toBe(348);
+          expect(content.style.translate).toBe('0px 248px');
+          await afterTheSlide();
+          expect(keyboardInsetOf(body)).toBe(0);
+          expect(body.scrollTop).toBe(0);
+          expect(content.style.translate).toBe('');
+        },
+      );
+
+      it('rides by the scroll the room\u2019s drop takes back where the room adds less range than its height, as in Chrome 124', async () => {
+        // Chrome 124 added 344 px of scroll range for a 360 px room: here 16
+        // px less than the room's 348. The body starts at the end of its
+        // range, 100 px, so the clear puts its scroll back there.
+        const {body, content, input, report} = renderChromeSheet({
+          instantScrollBy: true,
+          roomRangeShort: 16,
+        });
+        body.scrollTop = 100;
+        act(() => input.focus());
+        report(500);
+        await afterTheSlide();
+        expect(body.scrollTop).toBe(248);
+        report(800);
+        // The drop takes back 148 px, to the end of the range without the
+        // room, not the 164 px the room's height would say.
+        expect(content.style.translate).toBe('0px 148px');
+        await afterTheSlide();
+        expect(body.scrollTop).toBe(100);
+        expect(content.style.translate).toBe('');
+      });
+
+      it('attaches nothing of the ride under a fine pointer: the room drops at Chrome\u2019s hide report', () => {
+        const guide = getKeyboardLayoutGuide(window);
+        const subscribe = vi.spyOn(guide, 'subscribe');
+        const {body, content, input, report} = renderChromeSheet({
+          instantScrollBy: true,
+          pointer: 'fine',
+        });
+        act(() => input.focus());
+        report(500);
+        expect(keyboardInsetOf(body)).toBe(348);
+        report(800);
+        expect(keyboardInsetOf(body)).toBe(0);
+        expect(content.style.translate).toBe('');
+        // Nothing subscribed the keyboard layout guide.
+        expect(subscribe).not.toHaveBeenCalled();
+        subscribe.mockRestore();
+      });
+    });
+
+    it('subscribes no keyboard layout guide where the keyboard moves on Safari\u2019s schedule, whose transitions the sheet never rides (spec:AST-099 FR8)', () => {
+      // iOS Safari and Firefox for Android have no VirtualKeyboard API, so the
+      // guide has no profile there. The sheet subscribes no guide, and its
+      // room follows the keyboard's reports.
+      mockWindowHeight(800);
+      const viewport = mockVisualViewport(800);
+      mockIOSWebKit();
+      const guide = getKeyboardLayoutGuide(window);
+      const subscribe = vi.spyOn(guide, 'subscribe');
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Add a comment"
+          height="tall">
+          <input aria-label="Comment" />
+        </BottomSheet>,
+      );
+      const body = getBody();
+      const input = screen.getByRole('textbox', {name: 'Comment'});
+      vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 100, bottom: 800}),
+      );
+      vi.spyOn(input, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 660, bottom: 700}),
+      );
+      act(() => input.focus());
+      viewport.height = 500;
+      void act(() => viewport.dispatchEvent(new Event('resize')));
+      // The room follows the keyboard's report (FR3)...
+      expect(keyboardInsetOf(body)).toBe(348);
+      // ...and nothing subscribed the guide, so no frame watch runs.
+      expect(subscribe).not.toHaveBeenCalled();
+      subscribe.mockRestore();
+    });
+
+    it('keeps the keyboard room when the page is pinch-zoomed past 2x with the keyboard up', () => {
+      // WebKit reports innerWidth and innerHeight in the zoomed visual
+      // viewport's px. At 2x, innerHeight alone reads no keyboard, and the
+      // sheet would give the room back with the keyboard up.
+      mockIOSWebKit();
+      mockWindowHeight(800);
+      vi.stubGlobal('innerWidth', 1024);
+      const viewport = Object.assign(mockVisualViewport(500), {
+        width: 1024,
+        scale: 1,
+      });
+      try {
+        render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Add a comment"
+            height="tall">
+            <input aria-label="Comment" />
+          </BottomSheet>,
+        );
+        const body = getBody();
+        const input = screen.getByRole('textbox', {name: 'Comment'});
+        vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+          rect({top: 100, bottom: 800}),
+        );
+        vi.spyOn(input, 'getBoundingClientRect').mockReturnValue(
+          rect({top: 300, bottom: 340}),
+        );
+        input.focus();
+        expect(keyboardInsetOf(body)).toBe(348);
+
+        vi.stubGlobal('innerHeight', 400);
+        vi.stubGlobal('innerWidth', 512);
+        Object.assign(viewport, {height: 250, scale: 2, width: 512});
+        void act(() => viewport.dispatchEvent(new Event('resize')));
+        expect(keyboardInsetOf(body)).toBe(348);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('makes no keyboard room beside a classic scrollbar with no keyboard', () => {
+      // A desktop page with a 17 px vertical scrollbar: innerWidth counts it,
+      // the document's client width and the visual viewport do not.
+      mockPrimaryPointer('fine');
+      mockWindowHeight(800);
+      vi.stubGlobal('innerWidth', 1280);
+      Object.assign(mockVisualViewport(800), {width: 1263, scale: 1});
+      Object.defineProperty(document.documentElement, 'clientWidth', {
+        configurable: true,
+        value: 1263,
+      });
+      try {
+        render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Add a comment"
+            height="tall">
+            <input aria-label="Comment" />
+          </BottomSheet>,
+        );
+        const body = getBody();
+        const input = screen.getByRole('textbox', {name: 'Comment'});
+        vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+          rect({top: 100, bottom: 800}),
+        );
+        vi.spyOn(input, 'getBoundingClientRect').mockReturnValue(
+          rect({top: 700, bottom: 740}),
+        );
+        input.focus();
+        expect(keyboardInsetOf(body)).toBe(0);
+      } finally {
+        Reflect.deleteProperty(document.documentElement, 'clientWidth');
+        vi.unstubAllGlobals();
+      }
     });
 
     it('smoothly scrolls a focused Tall control above the keyboard', () => {
@@ -1583,6 +2983,178 @@ describe('BottomSheet', () => {
       expect(scrollBy).toHaveBeenCalledWith({top: 248, behavior: 'smooth'});
     });
 
+    describe('the reveal at the keyboard\u2019s report (spec:AST-099 FR4)', () => {
+      // A Tall sheet with its last field low, as in the Mobile keyboard story,
+      // on a touch screen. The on-screen keyboard's own pan comes with a touch
+      // screen.
+      function renderLowField() {
+        mockPrimaryPointer('coarse');
+        mockWindowHeight(800);
+        const viewport = Object.assign(mockVisualViewport(800), {scale: 1});
+        render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Add a comment"
+            height="tall">
+            <input aria-label="Comment" />
+          </BottomSheet>,
+        );
+        const body = getBody();
+        const input = screen.getByRole('textbox', {name: 'Comment'});
+        // A smooth scroll is still under way when the next event comes; an
+        // instant one has landed.
+        const scrollBy = vi.fn((options: ScrollToOptions) => {
+          if (options.behavior !== 'smooth') {
+            body.scrollTop += options.top ?? 0;
+          }
+        });
+        Object.defineProperty(body, 'scrollBy', {
+          configurable: true,
+          value: scrollBy,
+        });
+        vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+          rect({top: 100, bottom: 800}),
+        );
+        vi.spyOn(input, 'getBoundingClientRect').mockImplementation(() =>
+          rect({top: 660 - body.scrollTop, bottom: 700 - body.scrollTop}),
+        );
+        const scrollIntoView = vi.fn();
+        const dialog = body.closest('dialog')!;
+        Object.defineProperty(dialog, 'scrollIntoView', {
+          configurable: true,
+          value: scrollIntoView,
+        });
+        const report = (height: number) => {
+          viewport.height = height;
+          void act(() => viewport.dispatchEvent(new Event('resize')));
+        };
+        // The browser's own pan: the visual viewport moves down within the
+        // layout viewport, with no touch and no document scroll.
+        const pan = (offsetTop: number) => {
+          viewport.offsetTop = offsetTop;
+          void act(() => viewport.dispatchEvent(new Event('scroll')));
+        };
+        return {body, input, scrollBy, scrollIntoView, report, pan};
+      }
+
+      it('reveals the field in the report\u2019s own frame', () => {
+        const {body, input, report} = renderLowField();
+        // No frame comes: only what the report's own event does shows.
+        vi.stubGlobal(
+          'requestAnimationFrame',
+          vi.fn(() => 1),
+        );
+        input.focus();
+        report(500);
+        expect(keyboardInsetOf(body)).toBe(348);
+      });
+
+      it('keeps the smooth reveal where the browser does not pan to the field', () => {
+        const {input, scrollBy, scrollIntoView, report} = renderLowField();
+        input.focus();
+        report(500);
+        expect(scrollBy).toHaveBeenLastCalledWith({
+          top: 248,
+          behavior: 'smooth',
+        });
+        expect(scrollIntoView).not.toHaveBeenCalled();
+      });
+
+      it('puts back the browser\u2019s own pan to the field and reveals at once from then on', () => {
+        const {body, input, scrollBy, scrollIntoView, report, pan} =
+          renderLowField();
+        input.focus();
+        report(500);
+        pan(256);
+        expect(scrollIntoView).toHaveBeenCalledWith({
+          block: 'start',
+          inline: 'nearest',
+          behavior: 'instant',
+        });
+        expect(scrollBy).toHaveBeenLastCalledWith({
+          top: 248,
+          behavior: 'instant',
+        });
+
+        // The next keyboard lands the field in the report's frame, at once.
+        report(800);
+        pan(0);
+        body.scrollTop = 0;
+        scrollBy.mockClear();
+        report(500);
+        expect(scrollBy).toHaveBeenLastCalledWith({
+          top: 248,
+          behavior: 'instant',
+        });
+      });
+
+      it('puts the pan back without a second scroll while the smooth reveal is still on its way', () => {
+        const {body, input, scrollBy, scrollIntoView, report, pan} =
+          renderLowField();
+        // The body can scroll far enough; the smooth reveal is under way.
+        Object.defineProperty(body, 'scrollHeight', {
+          configurable: true,
+          value: 2000,
+        });
+        Object.defineProperty(body, 'clientHeight', {
+          configurable: true,
+          value: 700,
+        });
+        input.focus();
+        report(500);
+        expect(scrollBy).toHaveBeenLastCalledWith({
+          top: 248,
+          behavior: 'smooth',
+        });
+        scrollBy.mockClear();
+        pan(256);
+        // Firefox keeps adding a smooth scrollBy's distance after an instant
+        // scroll, so a second scroll here would overshoot.
+        expect(scrollBy).not.toHaveBeenCalled();
+        expect(scrollIntoView).toHaveBeenCalledWith({
+          block: 'start',
+          inline: 'nearest',
+          behavior: 'instant',
+        });
+        // The put-back moves the visual viewport up again; the reveal that
+        // follows leaves the smooth one to land the field.
+        pan(0);
+        expect(scrollBy).not.toHaveBeenCalled();
+      });
+
+      it('keeps the browser\u2019s reveal when the sheet cannot bring the field above the keyboard', () => {
+        const {input, scrollBy, scrollIntoView, report, pan} = renderLowField();
+        // The body cannot scroll further: the field stays under the keyboard.
+        scrollBy.mockImplementation(() => {});
+        input.focus();
+        report(500);
+        pan(256);
+        expect(scrollIntoView).not.toHaveBeenCalled();
+      });
+
+      it('leaves a pan the reader makes', () => {
+        const {input, scrollBy, scrollIntoView, report, pan} = renderLowField();
+        input.focus();
+        report(500);
+        fireEvent.touchStart(document.body);
+        pan(256);
+        expect(scrollIntoView).not.toHaveBeenCalled();
+        expect(scrollBy).not.toHaveBeenCalledWith(
+          expect.objectContaining({behavior: 'instant'}),
+        );
+      });
+
+      it('leaves a document scroll, which is not the browser revealing the field', () => {
+        const {input, scrollIntoView, report, pan} = renderLowField();
+        input.focus();
+        report(500);
+        vi.stubGlobal('scrollY', 120);
+        pan(120);
+        expect(scrollIntoView).not.toHaveBeenCalled();
+      });
+    });
+
     it('does not add clearance or scroll when the viewport is unobstructed', () => {
       mockVisualViewport(800);
       mockWindowHeight(800);
@@ -1606,9 +3178,7 @@ describe('BottomSheet', () => {
 
       input.focus();
 
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '0px',
-      );
+      expect(keyboardInsetOf(body)).toBe(0);
       expect(body.scrollTop).toBe(0);
     });
 
@@ -1667,9 +3237,7 @@ describe('BottomSheet', () => {
       input.focus();
       void act(() => viewport.dispatchEvent(new Event('resize')));
 
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '0px',
-      );
+      expect(keyboardInsetOf(body)).toBe(0);
       expect(body.scrollTop).toBe(0);
       // The keyboard moved nothing: the sheet still rests at that detent.
       expect(sheet.style.transform).toBe('');
@@ -1720,7 +3288,7 @@ describe('BottomSheet', () => {
         expect(body.scrollTop).toBe(120);
         expect(focus).not.toHaveBeenCalled();
         expect(sheetFocus).not.toHaveBeenCalled();
-        expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe('');
+        expect(keyboardInsetOf(body)).toBe(0);
         expect(
           positioner.style.getPropertyValue('--_sheet-keyboard-lift'),
         ).toBe('');
@@ -1776,9 +3344,7 @@ describe('BottomSheet', () => {
 
         input.focus();
 
-        expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-          '348px',
-        );
+        expect(keyboardInsetOf(body)).toBe(348);
         expect(body.scrollTop).toBe(248);
         result.unmount();
       },
@@ -1816,7 +3382,10 @@ describe('BottomSheet', () => {
       const observer = observers.find(instance => instance.observed.has(input));
       expect(observer).toBeDefined();
       act(() => {
-        observer?.callback([], observer as unknown as ResizeObserver);
+        observer?.callback(
+          [{target: input} as unknown as ResizeObserverEntry],
+          observer as unknown as ResizeObserver,
+        );
       });
 
       expect(body.scrollTop).toBe(448);
@@ -1852,9 +3421,7 @@ describe('BottomSheet', () => {
 
       input.focus();
       expect(body.scrollTop).toBe(248);
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '348px',
-      );
+      expect(keyboardInsetOf(body)).toBe(348);
 
       const pointerDownAllowed = fireEvent.pointerDown(getHandle(), {
         pointerId: 1,
@@ -1871,16 +3438,12 @@ describe('BottomSheet', () => {
       expect(positioner.style.getPropertyValue('--_sheet-keyboard-lift')).toBe(
         '',
       );
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '348px',
-      );
+      expect(keyboardInsetOf(body)).toBe(348);
       expect(body.scrollTop).toBe(248);
 
       viewport.height = 800;
       void act(() => viewport.dispatchEvent(new Event('resize')));
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '0px',
-      );
+      expect(keyboardInsetOf(body)).toBe(0);
     });
 
     it('retains Tall keyboard scroll space after blur until the viewport recovers', () => {
@@ -1906,21 +3469,15 @@ describe('BottomSheet', () => {
         }),
       );
       input.focus();
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '348px',
-      );
+      expect(keyboardInsetOf(body)).toBe(348);
 
       input.blur();
 
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '348px',
-      );
+      expect(keyboardInsetOf(body)).toBe(348);
 
       viewport.height = 800;
       void act(() => viewport.dispatchEvent(new Event('resize')));
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '0px',
-      );
+      expect(keyboardInsetOf(body)).toBe(0);
     });
 
     it('blurs the focused Tall field and retains its inset until the viewport recovers', () => {
@@ -1948,22 +3505,16 @@ describe('BottomSheet', () => {
         }),
       );
       input.focus();
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '348px',
-      );
+      expect(keyboardInsetOf(body)).toBe(348);
 
       rerender(content(false));
 
       expect(document.activeElement).not.toBe(input);
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '348px',
-      );
+      expect(keyboardInsetOf(body)).toBe(348);
 
       viewport.height = 800;
       void act(() => viewport.dispatchEvent(new Event('resize')));
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '0px',
-      );
+      expect(keyboardInsetOf(body)).toBe(0);
     });
 
     it('retains Tall keyboard scroll space through a switcher handoff until the viewport recovers', () => {
@@ -1993,22 +3544,16 @@ describe('BottomSheet', () => {
         }),
       );
       input.focus();
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '348px',
-      );
+      expect(keyboardInsetOf(body)).toBe(348);
 
       rerender(content('confirmation'));
 
       expect(document.activeElement).not.toBe(input);
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '348px',
-      );
+      expect(keyboardInsetOf(body)).toBe(348);
 
       viewport.height = 800;
       void act(() => viewport.dispatchEvent(new Event('resize')));
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '0px',
-      );
+      expect(keyboardInsetOf(body)).toBe(0);
     });
 
     it('puts back a document scroll the browser makes to reveal a field', () => {
@@ -2053,6 +3598,45 @@ describe('BottomSheet', () => {
       );
       expect(body.scrollTop).toBe(scrolledBy);
       Object.defineProperty(window, 'scrollY', {configurable: true, value: 0});
+    });
+
+    it('puts back only the page\u2019s own scroll, never an element\u2019s scroll that reaches the window', () => {
+      mockVisualViewport(377);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Add a comment"
+          height="tall">
+          <input aria-label="Comment" />
+        </BottomSheet>,
+      );
+      const body = getBody();
+      const input = screen.getByRole('textbox', {name: 'Comment'});
+      vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 57, bottom: 714}),
+      );
+      vi.spyOn(input, 'getBoundingClientRect').mockImplementation(() =>
+        rect({top: 600 - body.scrollTop, bottom: 640 - body.scrollTop}),
+      );
+      input.focus();
+      const scrollTo = vi.mocked(window.scrollTo);
+      scrollTo.mockClear();
+      Object.defineProperty(window, 'scrollY', {
+        configurable: true,
+        value: 337,
+      });
+      try {
+        fireEvent.scroll(body);
+        expect(scrollTo).not.toHaveBeenCalled();
+        fireEvent.scroll(window);
+        expect(scrollTo).toHaveBeenCalledWith(0, 0);
+      } finally {
+        Object.defineProperty(window, 'scrollY', {
+          configurable: true,
+          value: 0,
+        });
+      }
     });
 
     it('leaves the document alone when no keyboard is measured', () => {
@@ -2135,9 +3719,7 @@ describe('BottomSheet', () => {
       // The first field opens the keyboard and is already inside the safe
       // area, so nothing has to move for it.
       title.focus();
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        '348px',
-      );
+      expect(keyboardInsetOf(body)).toBe(348);
       expect(scrolls).toEqual([]);
 
       // A keyboard accessory "Next" or a Tab arrives as a blur naming the
@@ -2155,6 +3737,7 @@ describe('BottomSheet', () => {
 
     it('does not scroll a browser-driven transition when the viewport is unobstructed', () => {
       mockIOSWebKit();
+      mockWindowHeight(800);
       mockVisualViewport(800);
       render(
         <BottomSheet
@@ -2267,8 +3850,8 @@ describe('BottomSheet', () => {
         rect({top: 660 - body.scrollTop, bottom: 700 - body.scrollTop}),
       );
       input.focus();
-      const inset = body.style.getPropertyValue('--_sheet-keyboard-inset');
-      expect(inset).toBe(`${layoutBottom - (500 - 48)}px`);
+      const inset = keyboardInsetOf(body);
+      expect(inset).toBe(layoutBottom - (500 - 48));
 
       // The browser pans the page up to reveal a field: the same 500px of
       // visible page, now offset so its bottom edge coincides with the layout
@@ -2278,9 +3861,7 @@ describe('BottomSheet', () => {
       input.blur();
 
       // The keyboard did not change size, so neither does the scroll range.
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        inset,
-      );
+      expect(keyboardInsetOf(body)).toBe(inset);
     });
 
     it('keeps defending a pinned sheet after the browser has panned it once', () => {
@@ -2326,14 +3907,12 @@ describe('BottomSheet', () => {
       );
 
       title.focus();
-      const inset = body.style.getPropertyValue('--_sheet-keyboard-inset');
-      expect(inset).toBe(`${layoutBottom - (500 - 48)}px`);
+      const inset = keyboardInsetOf(body);
+      expect(inset).toBe(layoutBottom - (500 - 48));
 
       viewport.offsetTop = layoutBottom - 500;
       void act(() => viewport.dispatchEvent(new Event('resize')));
-      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
-        inset,
-      );
+      expect(keyboardInsetOf(body)).toBe(inset);
 
       // And the next browser-driven transition is still claimed and revealed,
       // by a distance measured against the unshifted keyboard boundary.
@@ -2439,7 +4018,11 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(opener).toHaveFocus();
-        expect(focus.mock.calls).toEqual([[{focusVisible: false}]]);
+        // The return reveals nothing: the opener was on screen when the sheet
+        // opened and the page has not moved since.
+        expect(focus.mock.calls).toEqual([
+          [{preventScroll: true, focusVisible: false}],
+        ]);
       });
 
       it('leaves the ring to the browser after a keyboard close', () => {
@@ -2448,7 +4031,7 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(opener).toHaveFocus();
-        expect(focus.mock.calls).toEqual([[]]);
+        expect(focus.mock.calls).toEqual([[{preventScroll: true}]]);
       });
 
       it('clears a ring the native close already drew before refocusing', () => {
@@ -2476,7 +4059,9 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(blur).toHaveBeenCalledTimes(1);
-        expect(focus.mock.calls.at(-1)).toEqual([{focusVisible: false}]);
+        expect(focus.mock.calls.at(-1)).toEqual([
+          {preventScroll: true, focusVisible: false},
+        ]);
         expect(blur.mock.invocationCallOrder[0]).toBeLessThan(
           focus.mock.invocationCallOrder.at(-1) ?? 0,
         );
@@ -2514,7 +4099,9 @@ describe('BottomSheet', () => {
         finishSheetExit();
 
         expect(target).toHaveFocus();
-        expect(focus.mock.calls).toEqual([[{focusVisible: false}]]);
+        expect(focus.mock.calls).toEqual([
+          [{preventScroll: true, focusVisible: false}],
+        ]);
       });
     });
   });
@@ -2542,6 +4129,111 @@ describe('BottomSheet', () => {
       expect(document.activeElement).toBe(
         screen.getByRole('textbox', {name: 'Search'}),
       );
+    });
+  });
+
+  describe('data-autofocus eligibility on open (AR4)', () => {
+    function openWith(content: ReactNode, hasScrim = true) {
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Filters"
+          hasScrim={hasScrim}>
+          {content}
+        </BottomSheet>,
+      );
+    }
+    const own = () => screen.getByRole('textbox', {name: 'Own'});
+
+    it('focuses the field over a control placed before it, modal or not', () => {
+      // Land on the first control, as Firefox's native focusing steps do, so
+      // the test shows that the native landing does not count as placed.
+      const landOnFirstControl = function (this: HTMLElement) {
+        this.setAttribute('open', '');
+        this.querySelector<HTMLElement>('button')?.focus();
+      };
+      HTMLDialogElement.prototype.showModal = vi.fn(landOnFirstControl);
+      HTMLElement.prototype.showPopover = vi.fn(landOnFirstControl);
+      for (const hasScrim of [true, false]) {
+        openWith(
+          <>
+            <button type="button">First action</button>
+            <input data-autofocus aria-label="Own" />
+          </>,
+          hasScrim,
+        );
+        expect(document.activeElement).toBe(own());
+        cleanup();
+      }
+    });
+
+    it('skips a field that belongs to a sheet nested in the content', () => {
+      openWith(
+        <>
+          <dialog>
+            <input data-autofocus aria-label="Nested" />
+          </dialog>
+          <input data-autofocus aria-label="Own" />
+        </>,
+      );
+      expect(document.activeElement).toBe(own());
+    });
+
+    it('skips an inert field', () => {
+      openWith(
+        <>
+          <div inert>
+            <input data-autofocus aria-label="Inert" />
+          </div>
+          <input data-autofocus aria-label="Own" />
+        </>,
+      );
+      expect(document.activeElement).toBe(own());
+    });
+
+    it('skips a field that is not rendered', () => {
+      // jsdom has no layout, so the visibility check reads `hidden` here.
+      const original = Object.getOwnPropertyDescriptor(
+        HTMLElement.prototype,
+        'checkVisibility',
+      );
+      Object.defineProperty(HTMLElement.prototype, 'checkVisibility', {
+        configurable: true,
+        value(this: HTMLElement) {
+          return this.closest('[hidden]') == null;
+        },
+      });
+      try {
+        openWith(
+          <>
+            <input data-autofocus aria-label="Hidden" hidden />
+            <input data-autofocus aria-label="Own" />
+          </>,
+        );
+        expect(document.activeElement).toBe(own());
+      } finally {
+        if (original) {
+          Object.defineProperty(
+            HTMLElement.prototype,
+            'checkVisibility',
+            original,
+          );
+        } else {
+          delete (HTMLElement.prototype as {checkVisibility?: unknown})
+            .checkVisibility;
+        }
+      }
+    });
+
+    it('moves on from a candidate that refuses focus', () => {
+      openWith(
+        <>
+          <div data-autofocus>Not focusable</div>
+          <input data-autofocus aria-label="Own" />
+        </>,
+      );
+      expect(document.activeElement).toBe(own());
     });
   });
 
@@ -2581,6 +4273,150 @@ describe('BottomSheet', () => {
         </BottomSheet>,
       );
       expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    function stubReducedMotion(coarse: boolean) {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({
+          matches:
+            query === '(prefers-reduced-motion: reduce)' ||
+            (coarse &&
+              query ===
+                '(prefers-reduced-motion: reduce) and (pointer: coarse)'),
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      );
+    }
+
+    function Controlled() {
+      const [isOpen, setIsOpen] = useState(true);
+      return (
+        <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Filters">
+          <button type="button" onClick={() => setIsOpen(false)}>
+            Close
+          </button>
+        </BottomSheet>
+      );
+    }
+
+    it("a touch swipe dismissal under reduced motion fades out in place on a fine pointer (design:reduced-motion DR2, a touch drag's release)", () => {
+      stubReducedMotion(false);
+      render(<Controlled />);
+      const dialog = screen.getByRole('dialog');
+      drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
+      // Exiting: a transform end does not close the dialog, the fade does.
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
+      expect(dialog).toHaveAttribute('open');
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'opacity'});
+      expect(dialog).not.toHaveAttribute('open');
+    });
+
+    it('a touch swipe dismissal does not outlive the sheet: reopened and closed from a control, it leaves at once again', () => {
+      stubReducedMotion(false);
+      function Reopenable() {
+        const [isOpen, setIsOpen] = useState(true);
+        return (
+          <>
+            <button type="button" onClick={() => setIsOpen(true)}>
+              Open
+            </button>
+            <BottomSheet
+              isOpen={isOpen}
+              onOpenChange={setIsOpen}
+              label="Filters">
+              <button type="button" onClick={() => setIsOpen(false)}>
+                Close
+              </button>
+            </BottomSheet>
+          </>
+        );
+      }
+      render(<Reopenable />);
+      const dialog = screen.getByRole('dialog');
+      drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'opacity'});
+      expect(dialog).not.toHaveAttribute('open');
+      fireEvent.click(screen.getByRole('button', {name: 'Open'}));
+      expect(dialog).toHaveAttribute('open');
+      fireEvent.click(screen.getByRole('button', {name: 'Close'}));
+      // A control dismissal: its collapsed transform end closes the dialog.
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
+      expect(dialog).not.toHaveAttribute('open');
+    });
+
+    it('a refused touch swipe spends its request: a guarded onOpenChange keeps the sheet open, and the next close from a control leaves at once', () => {
+      stubReducedMotion(false);
+      function Guarded() {
+        const [isOpen, setIsOpen] = useState(true);
+        const [isGuarded, setIsGuarded] = useState(true);
+        return (
+          <BottomSheet
+            isOpen={isOpen}
+            // The documented replacement for the switcher's onCancel: ignore
+            // implicit closes while the step must stay open.
+            onOpenChange={next => {
+              if (!next && isGuarded) {
+                return;
+              }
+              setIsOpen(next);
+            }}
+            label="Filters">
+            <button type="button" onClick={() => setIsGuarded(false)}>
+              Unlock
+            </button>
+            <button type="button" onClick={() => setIsOpen(false)}>
+              Close
+            </button>
+          </BottomSheet>
+        );
+      }
+      render(<Guarded />);
+      const dialog = screen.getByRole('dialog');
+      drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
+      // Refused: the sheet stays open.
+      expect(dialog).toHaveAttribute('open');
+      fireEvent.click(screen.getByRole('button', {name: 'Unlock'}));
+      fireEvent.click(screen.getByRole('button', {name: 'Close'}));
+      // A control close: its collapsed transform end closes the dialog; the
+      // spent swipe request does not turn it into a cross-fade.
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
+      expect(dialog).not.toHaveAttribute('open');
+    });
+
+    it('a mouse drag dismissal under reduced motion on a fine pointer leaves at once (DR3): a mouse or pen drag is not a touch drag', () => {
+      stubReducedMotion(false);
+      render(<Controlled />);
+      const dialog = screen.getByRole('dialog');
+      drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'mouse');
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
+      expect(dialog).not.toHaveAttribute('open');
+    });
+
+    it('a dismissal from a control under reduced motion on a fine pointer leaves at once (DR3): its (collapsed) transform end closes the dialog', () => {
+      stubReducedMotion(false);
+      render(<Controlled />);
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(screen.getByRole('button', {name: 'Close'}));
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
+      expect(dialog).not.toHaveAttribute('open');
+    });
+
+    it('a dismissal from a control under reduced motion on a coarse pointer fades out (DR2)', () => {
+      stubReducedMotion(true);
+      render(<Controlled />);
+      const dialog = screen.getByRole('dialog');
+      fireEvent.click(screen.getByRole('button', {name: 'Close'}));
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
+      expect(dialog).toHaveAttribute('open');
+      fireEvent.transitionEnd(getSheet(), {propertyName: 'opacity'});
+      expect(dialog).not.toHaveAttribute('open');
     });
   });
 
@@ -2641,5 +4477,50 @@ describe('BottomSheet', () => {
         ),
       ).toBe('var(--spacing-2)');
     });
+  });
+});
+
+// Tab from the last tabbable control wraps to the first and Shift+Tab from the
+// first wraps to the last, so focus never leaves the modal for the browser's
+// own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+describe('BottomSheet focus region (Dialog DEC-2)', () => {
+  it('wraps Tab and Shift+Tab inside an open modal sheet', () => {
+    render(
+      <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
+        <button type="button">First</button>
+        <button type="button">Last</button>
+      </BottomSheet>,
+    );
+    expectTabWrapsInside(screen.getByRole('dialog'));
+  });
+
+  it('leaves Tab alone in a non-modal sheet', () => {
+    render(
+      <BottomSheet
+        isOpen
+        hasScrim={false}
+        onOpenChange={() => {}}
+        label="Filters">
+        <button type="button">Only</button>
+      </BottomSheet>,
+    );
+    const only = screen.getByRole('button', {name: 'Only'});
+    only.focus();
+    expect(fireEvent.keyDown(only, {key: 'Tab'})).toBe(true);
   });
 });

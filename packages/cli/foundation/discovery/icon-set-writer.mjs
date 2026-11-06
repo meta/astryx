@@ -33,6 +33,9 @@ import {findLocalIntegrationManifestOrNull} from '../integrations/manifest-write
 import {loadManifestObject} from '../integrations/integrations.mjs';
 import {levenshteinDistance} from '../text/string-utils.mjs';
 import {astryxDefinitionsByName} from './icon-definition-discovery.mjs';
+import {generatedTypesPath} from './icon-set-paths.mjs';
+
+export {generatedTypesPath};
 import {
   discoverIconSetDirectory,
   NOTICE_FILE_RE,
@@ -988,18 +991,6 @@ export function generatedModulePath(set, packageDir) {
 const THEME_ELEMENT_PROPS =
   "{'aria-hidden': true, 'width': '1em', 'height': '1em'}";
 
-/**
- * The declaration file beside a generated module (`x.generated.js` →
- * `x.generated.d.ts`, `.mjs` → `.d.mts`); null for a TypeScript module.
- * @param {string} generated
- * @returns {string | null}
- */
-export function generatedTypesPath(generated) {
-  if (/\.m?tsx?$/u.test(generated)) return null;
-  if (generated.endsWith('.mjs')) return generated.replace(/\.mjs$/u, '.d.mts');
-  if (generated.endsWith('.cjs')) return generated.replace(/\.cjs$/u, '.d.cts');
-  return generated.replace(/\.jsx?$/u, '.d.ts');
-}
 
 /**
  * The declaration file's text for a generated module's statements: each

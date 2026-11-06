@@ -27,7 +27,7 @@ import {
 } from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {resultSetOf} from '../../../foundation/debug/index.mjs';
-import {emit, section, text, records} from '../formatters/index.mjs';
+import {emit, formatDeprecation, section, text, records} from '../formatters/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
 import {defineCommand} from '../lib/define-command.mjs';
 import {search as searchApi} from '../../../api/search/search.mjs';
@@ -145,6 +145,7 @@ export function registerSearch(program) {
             'title',
             'displayName',
             'kind',
+            'deprecated',
             'score',
             'reason',
             'import',
@@ -160,6 +161,7 @@ export function registerSearch(program) {
             'title',
             'displayName',
             'kind',
+            'deprecated',
             'import',
             'description',
             'command',
@@ -177,7 +179,11 @@ export function registerSearch(program) {
         ),
         records(results, {
           fields,
-          format: {command: formatCliCommand, parent: formatCliCommand},
+          format: {
+            command: formatCliCommand,
+            parent: formatCliCommand,
+            deprecated: formatDeprecation,
+          },
         }),
         ...note,
         ...discoverHint(run, q, options.type),
