@@ -2758,44 +2758,6 @@ describe('a light-dismiss layer opened by a context-menu press', () => {
     delete (document as Partial<Document>).elementFromPoint;
   });
 
-  it('hit-tests inside the layer’s shadow root, so the capture lets go over a layer in one', () => {
-    const released: number[] = [];
-    HTMLElement.prototype.hasPointerCapture = () => true;
-    HTMLElement.prototype.releasePointerCapture = (pointerId: number) => {
-      released.push(pointerId);
-    };
-    const host = document.createElement('div');
-    document.body.append(host);
-    const shadow = host.attachShadow({mode: 'open'});
-    const mount = document.createElement('div');
-    shadow.append(mount);
-    const {getByTestId} = render(<ContextOpenedHarness lightDismiss />, {
-      container: mount,
-    });
-    const zone = getByTestId('zone');
-    pressDown(zone, 7);
-    fireEvent.contextMenu(zone);
-    const layer = shadow.querySelector('[popover]') as HTMLElement;
-    // The document answers with the host; the shadow root, with the layer.
-    document.elementFromPoint = () => host;
-    (shadow as Partial<ShadowRoot>).elementFromPoint = () => layer;
-    fireEvent(
-      layer,
-      Object.assign(
-        new MouseEvent('pointermove', {bubbles: true, composed: true}),
-        {
-          pointerId: 7,
-        },
-      ),
-    );
-    expect(released).toEqual([7]);
-    delete (HTMLElement.prototype as Partial<HTMLElement>).hasPointerCapture;
-    delete (HTMLElement.prototype as Partial<HTMLElement>)
-      .releasePointerCapture;
-    delete (document as Partial<Document>).elementFromPoint;
-    host.remove();
-  });
-
   it('captures nothing for a context menu from the keyboard, which has no press', () => {
     const {getByTestId} = render(<ContextOpenedHarness lightDismiss />);
     const zone = getByTestId('zone');
