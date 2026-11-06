@@ -31,13 +31,15 @@ test.afterAll(async () => {
 
 async function openStory(page: Page, id: string): Promise<void> {
   await page.goto(`${storybook.origin}/iframe.html?id=${id}&viewMode=story`);
-  await expect(page.locator('.top-nav-heading').first()).toBeVisible();
+  await expect(page.locator('.astryx-top-nav-heading').first()).toBeVisible();
 }
 
 /** Boxes of the heading's logo, its text, and the first nav item after it. */
 async function measure(page: Page) {
   return page.evaluate(() => {
-    const heading = document.querySelector<HTMLElement>('.top-nav-heading');
+    const heading = document.querySelector<HTMLElement>(
+      '.astryx-top-nav-heading',
+    );
     const logo = heading?.querySelector('svg, img');
     const text = [...(heading?.querySelectorAll<HTMLElement>('*') ?? [])].find(
       el =>
@@ -52,8 +54,9 @@ async function measure(page: Page) {
     return {
       logoWidth: logo.getBoundingClientRect().width,
       logoRight: logo.getBoundingClientRect().right,
-      textWidth: text.getBoundingClientRect().width,
+      textTruncated: text.scrollWidth > text.clientWidth,
       firstItemLeft: firstItem.getBoundingClientRect().left,
+      pageScrolls: document.documentElement.scrollWidth > innerWidth,
     };
   });
 }
@@ -67,7 +70,8 @@ for (const width of [700, 600]) {
     const box = await measure(page);
     expect(box.logoWidth).toBeGreaterThan(0);
     expect(box.logoRight).toBeLessThanOrEqual(box.firstItemLeft);
-    expect(box.textWidth).toBeLessThan(181);
+    expect(box.textTruncated).toBe(true);
+    expect(box.pageScrolls).toBe(false);
   });
 }
 
@@ -77,7 +81,9 @@ test('a long heading truncates inside its column instead of running under the en
   await page.setViewportSize({width: 420, height: 200});
   await openStory(page, 'core-topnav--title-only');
   const result = await page.evaluate(() => {
-    const heading = document.querySelector<HTMLElement>('.top-nav-heading');
+    const heading = document.querySelector<HTMLElement>(
+      '.astryx-top-nav-heading',
+    );
     const text = [...(heading?.querySelectorAll<HTMLElement>('*') ?? [])].find(
       el =>
         el.childNodes.length === 1 &&
