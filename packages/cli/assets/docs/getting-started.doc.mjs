@@ -21,7 +21,7 @@ export const docs = {
           type: 'code',
           lang: 'text',
           label: 'Set up the design system',
-          code: 'Install @astryxdesign/core, @stylexjs/stylex, @astryxdesign/theme-neutral, and @astryxdesign/cli in this project, then run `astryx init` to set up agent docs. Read the generated files to learn the conventions.',
+          code: 'Install @astryxdesign/core, @stylexjs/stylex, @astryxdesign/theme-neutral, and @astryxdesign/cli in this project, then run `{@command init}` to set up agent docs. Read the generated files to learn the conventions.',
         },
         {
           type: 'prose',
@@ -31,7 +31,7 @@ export const docs = {
           type: 'code',
           lang: 'text',
           label: 'Give it a look',
-          code: 'Ask me what look and feel this app should have. Run `astryx theme list`, install the closest theme package, and run `theme add <slug>`; use `--package` when owners share a slug. Import `themes` and `defaultThemeSlug` from the generated module once and pass `themes[defaultThemeSlug]` to `<Theme>`. Customize with `defineTheme({extends: importedTheme, ...})`. Use `theme eject` only when I ask for an independent source fork. Default to neutral if I have no preference, and show me the result before moving on.',
+          code: 'Ask me what look and feel this app should have. Run `{@command theme list}`, install the closest theme package, and run `theme add <slug>`; use `--package` when owners share a slug. Import `themes` and `defaultThemeSlug` from the generated module once and pass `themes[defaultThemeSlug]` to `<Theme>`. Customize with `defineTheme({extends: importedTheme, ...})`. Use `theme eject` only when I ask for an independent source fork. Default to neutral if I have no preference, and show me the result before moving on.',
         },
       ],
     },
@@ -50,17 +50,17 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Terminal',
-          code: `npm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral @astryxdesign/cli`,
+          code: `{@pm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral @astryxdesign/cli}`,
         },
         {
           type: 'prose',
-          text: "Then run `astryx init` to install the AI agent cheat sheet (AGENTS.md/CLAUDE.md). It's non-interactive; no prompts; so it's safe for AI agents, CI, and scripts. Add `--all` for pointers to the theme and page-building workflows.",
+          text: "Then run `{@command init}` to install the AI agent cheat sheet (AGENTS.md/CLAUDE.md). It's non-interactive; no prompts; so it's safe for AI agents, CI, and scripts. Add `--all` for pointers to the theme and page-building workflows.",
         },
         {
           type: 'code',
           lang: 'bash',
           label: 'Terminal',
-          code: `astryx init`,
+          code: `{@command init}`,
         },
       ],
     },
@@ -76,7 +76,7 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Terminal',
-          code: `npm i -g @astryxdesign/cli`,
+          code: `{@pm install @astryxdesign/cli --global}`,
         },
         {
           type: 'prose',
@@ -89,7 +89,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Import the reset and base styles in your global CSS. Then run `astryx theme add neutral`; the generated app module imports the theme’s production CSS and font CSS.',
+          text: 'Import the reset and base styles in your global CSS. Then run `{@command theme add neutral}`; the generated app module imports the theme’s production CSS and font CSS.',
         },
         {
           type: 'code',
@@ -100,7 +100,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'Run `astryx theme list` to see every theme.',
+          text: 'Run `{@command theme list}` to see every theme.',
         },
         {
           type: 'code',
@@ -139,7 +139,7 @@ import {themes, defaultThemeSlug} from './astryx-themes';
       content: [
         {
           type: 'prose',
-          text: 'Import each component from its own entry, the path `astryx component <Name>` prints. This keeps bundles small and makes intent clear.',
+          text: 'Import each component from its own entry, the path `{@command component <Name>}` prints. This keeps bundles small and makes intent clear.',
         },
         {
           type: 'code',
@@ -193,22 +193,22 @@ const overrides = stylex.create({
             [
               'Next.js',
               'Next.js + theme CSS',
-              '[apps/example-nextjs](https://github.com/facebook/astryx/tree/main/apps/example-nextjs)',
+              '[apps/example-nextjs](https://github.com/meta/astryx/tree/main/apps/example-nextjs)',
             ],
             [
               'Next.js + StyleX',
               'Next.js + StyleX for custom styles',
-              '[apps/example-nextjs-stylex](https://github.com/facebook/astryx/tree/main/apps/example-nextjs-stylex)',
+              '[apps/example-nextjs-stylex](https://github.com/meta/astryx/tree/main/apps/example-nextjs-stylex)',
             ],
             [
               'Next.js + Tailwind',
               'Next.js + Tailwind bridge',
-              '[apps/example-nextjs-tailwind](https://github.com/facebook/astryx/tree/main/apps/example-nextjs-tailwind)',
+              '[apps/example-nextjs-tailwind](https://github.com/meta/astryx/tree/main/apps/example-nextjs-tailwind)',
             ],
             [
               'Vite + Tailwind',
               'Vite + Tailwind bridge',
-              '[apps/example-vite-tailwind](https://github.com/facebook/astryx/tree/main/apps/example-vite-tailwind)',
+              '[apps/example-vite-tailwind](https://github.com/meta/astryx/tree/main/apps/example-vite-tailwind)',
             ],
           ],
         },
@@ -216,10 +216,10 @@ const overrides = stylex.create({
           type: 'code',
           lang: 'bash',
           label: 'Clone and run an example',
-          code: `git clone https://github.com/facebook/astryx.git
+          code: `git clone https://github.com/meta/astryx.git
 cd astryx/apps/example-nextjs
-pnpm install
-pnpm dev`,
+{@pm install}
+{@pm run dev}`,
         },
       ],
     },
@@ -246,11 +246,11 @@ pnpm dev`,
           type: 'code',
           lang: 'bash',
           label: 'Terminal',
-          code: `astryx component          # list all components
-astryx component Button   # props, usage, theming for Button
-astryx docs               # list all doc topics
-astryx template --list    # available page templates
-astryx docs tokens        # spacing, color, radius reference`,
+          code: `{@command component}          # list all components
+{@command component Button}   # props, usage, theming for Button
+{@command docs}               # list all doc topics
+{@command template --list}    # available page templates
+{@command docs tokens}        # spacing, color, radius reference`,
         },
       ],
     },

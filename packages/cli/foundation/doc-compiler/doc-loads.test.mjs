@@ -56,27 +56,23 @@ const RUNNERS = {
     runs: "`npm pack`, `tar`, and a Node script that resolves the packed specifiers, to check a package as published, and the package's doc modules, to see which need a newer CLI",
     sites: ['child_process.spawnSync ×3', 'loadTopicModule'],
   },
-  'api/swizzle/_github.mjs': {
-    runs: '`gh auth status`, to check the GitHub CLI is signed in',
-    sites: ['child_process.execFileSync'],
-  },
   'api/theme/_adapter.mjs': {
     runs: 'recorded built theme modules through the shared app-theme loader',
     sites: ['importThemeArtifact'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, through jiti; eval for legacy theme object literals; the project's installed Core",
+    runs: "theme source modules, through jiti; the project's installed Core, and a Core's root entry once a theme imports it",
     sites: [
       '.evalModule() ×2',
       '.import()',
       'createJiti ×5',
-      'eval ×2',
-      'import(<computed>) ×3',
+      'import(<computed>) ×2',
+      'require(<computed>)',
     ],
   },
   'api/theme/build/core-interception.mjs': {
-    runs: "@astryxdesign/core as a theme's CommonJS dependencies require it, to wrap defineTheme",
-    sites: ['require(<computed>)'],
+    runs: "@astryxdesign/core/theme beside a theme whose CommonJS dependencies may require Core, to wrap defineTheme; Module._load is watched during the load so the root is wrapped only as the load requires it; require.resolve for Core's entries",
+    sites: ['module', 'require(<computed>)'],
   },
   'api/upgrade/_adapter.mjs': {
     runs: 'the commands a codemod declares as its post-codemod hooks',
@@ -101,6 +97,34 @@ const RUNNERS = {
   'clients/cli/commands/blog.mjs': {
     runs: SELF_DOCS,
     sites: ['import ../../../api/blog/blog.doc.mjs', 'import ./blog.doc.mjs'],
+  },
+  'clients/cli/commands/experimental/icon.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/icon/icon.doc.mjs',
+      'import ../../../../api/icon/iconAdd.doc.mjs',
+      'import ../../../../api/icon/iconMap.doc.mjs',
+      'import ../../../../api/icon/iconNewDefinition.doc.mjs',
+      'import ../../../../api/icon/iconNewSet.doc.mjs',
+      'import ../../../../api/icon/iconUse.doc.mjs',
+      'import ../experimental-icon-add.doc.mjs',
+      'import ../experimental-icon-map.doc.mjs',
+      'import ../experimental-icon-new-definition.doc.mjs',
+      'import ../experimental-icon-new-set.doc.mjs',
+      'import ../experimental-icon-use.doc.mjs',
+      'import ../experimental-icon.doc.mjs',
+    ],
+  },
+  'clients/cli/commands/experimental/index.mjs': {
+    runs: SELF_DOCS,
+    sites: ['import ../experimental.doc.mjs'],
+  },
+  'clients/cli/commands/experimental/render.mjs': {
+    runs: SELF_DOCS,
+    sites: [
+      'import ../../../../api/render/render.doc.mjs',
+      'import ../experimental-render.doc.mjs',
+    ],
   },
   'clients/cli/commands/manifest.mjs': {
     runs: SELF_DOCS,
@@ -190,10 +214,7 @@ const RUNNERS = {
   },
   'clients/cli/commands/hook.mjs': {
     runs: SELF_DOCS,
-    sites: [
-      'import ../../../api/hook/hook.doc.mjs',
-      'import ./hook.doc.mjs',
-    ],
+    sites: ['import ../../../api/hook/hook.doc.mjs', 'import ./hook.doc.mjs'],
   },
   'clients/cli/commands/init.mjs': {
     runs: SELF_DOCS,
@@ -276,6 +297,14 @@ const RUNNERS = {
     runs: "a package's component docs and topics, to read the props, overlays, sections, and replaces/extends they declare",
     sites: ['importDocModule ×2'],
   },
+  'foundation/discovery/doc-stability.mjs': {
+    runs: "an integration's template docs, to see which set `stability`",
+    sites: ['loadTopicModule'],
+  },
+  'foundation/discovery/template-icon-notes.mjs': {
+    runs: "an integration's template docs, to read the icons each declares",
+    sites: ['loadTopicModule'],
+  },
   'foundation/discovery/doc-fluff.mjs': {
     runs: "the CLI's own guides, to measure the median share of content words a topic's density is compared with",
     sites: ['builtinGuideFiles'],
@@ -304,22 +333,34 @@ const RUNNERS = {
     runs: '@babel/parser, to find the fixture references and page-local bindings in template source; and a template doc that does not validate, to read the replacement it declares',
     sites: ['importDocModule', 'require(@babel/parser)'],
   },
+  'foundation/discovery/template-source-tree.mjs': {
+    runs: '@babel/parser and @babel/core (CommonJS), each on first use, to read template source and resolve its bindings for demo-content replacement and icon mapping',
+    sites: ['require(@babel/core)', 'require(@babel/parser)'],
+  },
   'foundation/discovery/theme-discovery.mjs': {
     runs: '@babel/parser and jscodeshift (CommonJS), each on first use, so listing bundled themes never loads jscodeshift',
     sites: ['require(@babel/parser)', 'require(jscodeshift)'],
   },
   'foundation/doc-compiler/import.mjs': {
-    runs: 'authored doc files, for the doc reader and discovery',
+    runs: 'authored doc files, for the doc reader and discovery, and again after an edit',
     sites: [
-      '.import()',
-      'createJiti',
-      'import(<computed>) ×2',
-      'importUserModule',
+      '.import() ×2',
+      'createJiti ×2',
+      'import(<computed>) ×4',
+      'importUserModule ×2',
     ],
   },
   'foundation/doc-compiler/read.mjs': {
     runs: 'authored doc files, each one handed to the compiler, with the loader its reader has always used',
     sites: ['importDocModule', 'importNativeModule ×3', 'importTemplateModule'],
+  },
+  'foundation/render/page-worker.mjs': {
+    runs: 'the page `astryx experimental render` renders, its local modules, React, and the StyleX compiler, in a worker',
+    sites: ['.import() ×3', 'createJiti ×2', 'require(@stylexjs/babel-plugin)'],
+  },
+  'foundation/render/render-page.mjs': {
+    runs: 'the render worker, so a page that never finishes can be stopped',
+    sites: ['worker_threads.Worker'],
   },
   'foundation/fs/module-loader.mjs': {
     runs: 'user modules (config, manifests, handlers, codemods): natively, through jiti, or by require for a fresh CommonJS read',
@@ -339,9 +380,17 @@ const RUNNERS = {
     runs: "Yarn's pnpapi, under Plug'n'Play, to find an installed package",
     sites: ['require(pnpapi)'],
   },
+  'foundation/integrations/contribution-fixes.mjs': {
+    runs: 'jscodeshift (CommonJS) on first use, so loading the project never loads it',
+    sites: ['require(jscodeshift)'],
+  },
   'foundation/integrations/integrations.mjs': {
     runs: "each installed integration's manifest",
     sites: ['importUserModule'],
+  },
+  'foundation/integrations/validate-contributions.mjs': {
+    runs: "`npm pack --dry-run --json --ignore-scripts`, to read which files an integration's package holds when a template loads an asset (no lifecycle script runs, nothing is written)",
+    sites: ['child_process.spawnSync'],
   },
   'foundation/release/cache.mjs': {
     runs: 'npm (under npm-guard.mjs), to install and look up CLI releases in the per-user cache; each installed release once, to check it starts and reports its version; and ps (tasklist on Windows), to confirm the process a stale lock records is node or npm before ending it',
@@ -389,8 +438,11 @@ const LOADER_MODULES = {
     'discoverIntegrationDocs',
     'GRAPH_BLOCK_TYPES',
     'GRAPH_ONLY_FIELDS',
+    'isGuideRoute',
     'mergeTopic',
+    'mergeTopicReport',
     'problemsInTopic',
+    'withoutPosition',
     'withSourceTitle',
   ],
 };

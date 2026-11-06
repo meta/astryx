@@ -252,6 +252,30 @@ describe('component dispatcher — name resolution', () => {
   );
 
   it(
+    'opens Tokenizer for tokenizer, not CodeBlock through its tokenizer module (spec:AST-083 FR7)',
+    async () => {
+      const r = await component('tokenizer', {cwd});
+      expect(r.type).toBe('component.detail');
+      expect(r.data.name).toBe('Tokenizer');
+    },
+    SLOW,
+  );
+
+  it.each(['slider', 'switch', 'progressBar', 'tokenizer'])(
+    'reads no source for %s, a component name in another case that a motion table or helper module shares',
+    async name => {
+      let err;
+      try {
+        await component(name, {cwd, source: true});
+      } catch (e) {
+        err = e;
+      }
+      expect(err?.code).toBe('ERR_NO_SOURCE');
+    },
+    SLOW,
+  );
+
+  it(
     'throws ERR_UNKNOWN_COMPONENT for a genuinely unknown name',
     async () => {
       let err;
@@ -495,6 +519,37 @@ describe('component dispatcher — detail levels on single component (text only)
       expect(Object.keys(compactData.data).sort()).toEqual(
         Object.keys(fullData.data).sort(),
       );
+    },
+    SLOW,
+  );
+});
+
+describe('component not-found suggestions', () => {
+  const suggested = async (/** @type {string} */ name) => {
+    const error = await component(name, {cwd}).catch(e => e);
+    expect(error).toBeInstanceOf(AstryxError);
+    expect(error.code).toBe('ERR_UNKNOWN_COMPONENT');
+    return error.suggestions.map((/** @type {{name: string}} */ s) => s.name);
+  };
+
+  it(
+    'leaves out a weaker match after a strong first suggestion',
+    async () => {
+      // FieldLabel is another name for it; past the second suggestion, the
+      // matches on one word of the name ("input", "label") are weaker and add
+      // only noise.
+      const names = await suggested('InputLabel');
+      expect(names[0]).toBe('FieldLabel');
+      expect(names).toHaveLength(2);
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps a close spelling of the whole name after a stronger first match',
+    async () => {
+      expect(await suggested('Blockqoute')).toContain('Blockquote');
+      expect(await suggested('TextrAea')).toContain('TextArea');
     },
     SLOW,
   );

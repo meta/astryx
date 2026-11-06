@@ -171,6 +171,42 @@ describe('buildOfficialList on a stand-in repository', () => {
     });
   });
 
+  it('lists the same family members with or without a build of the package', async () => {
+    // A canary-only package whose family member only its root entry exports,
+    // as Lab's TourStep is: the list must not depend on a local build.
+    const dir = path.join(root, 'packages', 'kit');
+    writeJSON(path.join(dir, 'package.json'), {
+      name: '@astryxdesign/kit',
+      private: true,
+      astryx: {canaryOnly: true},
+      exports: {
+        '.': {source: './src/index.ts', default: './dist/index.js'},
+      },
+    });
+    const files = {
+      'astryx.integration.mjs': "export default {components: './src'};\n",
+      'src/index.ts':
+        "export {Steps} from './Steps/Steps';\nexport {Step} from './Steps/Step';\n",
+      'src/Steps/Steps.doc.mjs':
+        "export default {type: 'component', name: 'Steps', usage: {description: 'x'}, components: [{name: 'Steps', description: 'x'}, {name: 'Step', description: 'x'}]};\n",
+      'src/Steps/Steps.tsx': 'export function Steps() { return null; }\n',
+      'src/Steps/Step.tsx': 'export function Step() { return null; }\n',
+    };
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(dir, file)), {recursive: true});
+      fs.writeFileSync(path.join(dir, file), text);
+    }
+    const unbuilt = serializeOfficialList(await buildOfficialList(root));
+    expect(unbuilt).toContain('"name": "Step"');
+
+    fs.mkdirSync(path.join(dir, 'dist'), {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'dist', 'index.js'),
+      'export function Steps() { return null; }\nexport function Step() { return null; }\n',
+    );
+    expect(serializeOfficialList(await buildOfficialList(root))).toBe(unbuilt);
+  });
+
   it('refuses a published theme package with no descriptor', async () => {
     theme('bare', {name: '@astryxdesign/theme-bare'}, {descriptor: false});
     await expect(buildOfficialList(root)).rejects.toThrow(

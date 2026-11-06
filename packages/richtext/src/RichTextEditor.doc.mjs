@@ -139,6 +139,12 @@ export const docs = {
         'Markdown plugins whose nodes the editor draws, each adopted with createRichTextExtension. A plugin node renders exactly as core Markdown renders it and edits as one unit; a node whose plugin is not given here shows its source. Pass the extensions the content was converted with, and create them in a client module. RichTextView takes the same prop.',
     },
     {
+      name: 'codeLanguages',
+      type: 'ReadonlyArray<CodeLanguage>',
+      description:
+        'CodeBlock language values a fence may name, each imported on its own (e.g. graphql from @astryxdesign/core/CodeBlock/languages/graphql) or made with createCodeLanguage. Pass the same list as Markdown codeLanguages so a matched fence paints and labels the same while reading and editing. RichTextView takes the same prop.',
+    },
+    {
       name: 'transformers',
       type: 'ReadonlyArray<Transformer>',
       description:
@@ -231,6 +237,11 @@ export const docs = {
         guidance: true,
         description:
           'GFM pipe tables import, edit, and export by default. The first row renders as header cells, delimiter-row colons set each column alignment, rows shorter than the widest row gain empty cells, and a wide table scrolls inside its own wrapper. Arrow keys move between cells; Tab keeps its editor meaning, so Escape then Tab still leaves the editor. Tables export in the canonical form: outer pipes and three-dash delimiters. RichTextView renders the same tables. Install @lexical/table with the other lexical peers.',
+      },
+      {
+        guidance: true,
+        description:
+          'Cmd+A (Ctrl+A on other platforms) in a code block or a table cell selects the code or the cell text first; pressing it again selects the whole document. Anywhere else it selects the whole document at once.',
       },
       {
         guidance: true,

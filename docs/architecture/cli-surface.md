@@ -214,7 +214,8 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   run of mostly function words, or one that three or more topics share, is not
   a copy); fluff, a listed padding phrase or a topic whose share of content
   words is under the published floor; and a stray pointer, a code span that is
-  exactly `astryx docs <name>` for a doc that exists, in a topic's prose,
+  exactly `astryx docs <name>`, or a `{@command docs <name>}` token in a code
+  span or not (DEC-12), for a doc that exists, in a topic's prose,
   description or summary or a component doc's text, where a `{@link}` to that
   doc would be checked. It also fails on doc structure a reader silently
   drops: a prop documented twice, an overlay key that names no prop, two
@@ -225,13 +226,22 @@ validate` MUST warn on a PascalCase `.tsx` at the top of the components root
   MAY join it only in a minor release that names the addition, and a change
   that can fail a build that passes, including a stricter rule for an existing
   finding, MAY ship only in a minor release that names it. Before that
-  release, its checks and failure codes MAY change in any release. A name a
+  release, its checks and failure codes MAY change in any release. A failure
+  code that fires only for a package declaring an experimental manifest key
+  (`spec:AST-017/FR27`, `spec:AST-084`) MAY join in a patch release, since a
+  package without the key never sees it. A name a
   patch release adds to Core or the CLI (a component, template, or topic) MAY
   raise a conflict with a package's own name. Each `doctor integration`
   subcommand MUST keep its exit codes, and its JSON MAY change only by
   additions. Because builds fail on its findings, it MUST NOT report a finding
-  the package's code does not contradict, other than the doc faults of DEC-8:
+  the package's code does not contradict, other than the doc faults of DEC-8,
+  the doc-syntax findings of DEC-12 and the example findings of DEC-13:
   a check that cannot judge an item lists it as not checked instead (DEC-7).
+  A finding that would newly fail a build MUST first ship as a note marked
+  `next` in `validate`'s `data.notes`, which fails nothing by default:
+  `--next` counts those notes as warnings, so `--strict --next` fails on them
+  today, and every run reports how many there are and names that command. The
+  next minor release counts them by default (DEC-11).
   When the running CLI is outside a package's `@astryxdesign/cli` peer range,
   `astryx doctor integration validate` and `integration check` MUST list a
   `cli_peer_version` note, which fails nothing, `--strict` included, and
@@ -767,8 +777,9 @@ Every integration runs `integration check --strict` in its build (DEC-6), so a
 false finding fails a package for a fault it does not have, and its only way
 out, dropping `--strict`, also drops the check for every real fault. A check
 that cannot tell whether the code contradicts a doc lists the item as not
-checked, which `--strict` does not fail. The one exception is the doc-quality
-findings of DEC-8.
+checked, which `--strict` does not fail. The exceptions are the doc-quality
+findings of DEC-8, the doc-syntax findings of DEC-12 and the example findings
+of DEC-13.
 Rejected: reporting a doubtful item as a warning (`--strict` fails it).
 
 ### DEC-8 — The strict check fails on copied passages, fluff and stray pointers in docs
@@ -778,7 +789,8 @@ Rejected: reporting a doubtful item as a warning (`--strict` fails it).
 People and agents read integration docs on a budget. A fact written in two
 topics goes stale in one of them at the next edit, and padding costs every
 reader. So these doc-quality findings fail `--strict` by owner decision, as
-the one exception to DEC-7. A copied passage (a run of identical words, after
+an exception to DEC-7, beside DEC-12's doc-syntax findings and DEC-13's
+example findings. A copied passage (a run of identical words, after
 the filters for function-word runs and for boilerplate that three or more
 topics share) and a listed padding phrase (outside code and quotes) are exact
 matches. The density floor is a threshold, not a contradiction, and a section
@@ -789,8 +801,9 @@ topic. The phrase
 list and the floor are published in the check's docs, and every finding
 names the phrase, or the measured density and the floor, so its fix is
 mechanical. A stray pointer (a code span that is exactly
-`astryx docs <name>` for a doc that exists, in a topic's prose, description
-or summary or a component doc's text) is exact as well: the `{@link}`
+`astryx docs <name>`, or a `{@command docs <name>}` token in a code span or
+not (DEC-12), for a doc that exists, in a topic's prose, description or
+summary or a component doc's text) is exact as well: the `{@link}`
 that replaces it prints the command that opens the doc, and doctor's link
 check then fails it when the doc goes away. A command with more words, or one
 in a code block, is a walkthrough, not a pointer. Each is a warning, so `integration check --strict` fails on it and
@@ -828,6 +841,63 @@ keeps its own upgrade.
 Rejected: treating every folder with an installed Core as a project (a
 workspace member then migrates against a Core its workspace does not use).
 
+### DEC-11 — A new failing check ships under `--next` first
+
+**Decider:** `josephfarina`, `2026-10-21`
+
+A check that would newly fail `integration check --strict` reaches packages
+as a `next` note first, so each package can run `integration check --strict
+--next`, fix what it finds, and stay ahead of the minor release that turns the
+notes into warnings. The default run names the count and the command, because
+every package's build runs it.
+
+Rejected: shipping a new failing check only in a minor release (packages
+learn of it when their build breaks), and a separate draft per check (the
+next minor's changes then live in many places).
+
+### DEC-12 — Doc-syntax findings are listed now and fail in the next minor
+
+**Decider:** `josephfarina`, `2026-10-21`
+
+Docs write commands with the tokens of `spec:AST-081` FR5 so every reader
+sees their own runner and package manager. `validate` lists each command a
+topic writes for one package manager (`package_manager_command`), bare
+(`plain_command`) or with a runner (`runner_command`), and each token that
+does not parse or names no command (`doc_token`), as `next` notes with the
+token to write: `integration check --strict --next` fails on them now, and
+`--strict` from the next minor release (DEC-11). They are doc faults the
+package's code does not contradict, the second exception to DEC-7 after
+DEC-8.
+
+Rejected: failing `--strict` on them in a patch (packages already running the
+check would break on an update), and leaving them unchecked (docs drift back
+to one package manager).
+
+### DEC-13 — A package's examples are checked, listed now and failing in the next minor
+
+**Decider:** `josephfarina`, `2026-10-21`
+
+Template lists, docs pages and catalog cards show a package through its
+examples, each block alone and from the packed package, so a package must ship
+what they need, as Core does. `validate` lists, as `next` notes with the fix
+to paste: a published component no block template shows with `exampleFor` and
+`isShowcase: true` or names in `alsoShowcaseFor` (`component_without_example`; hidden docs, family members,
+`isHiddenFromOverview` docs and `Utility` components are exempt), a template
+category written as a path such as `components/X` (`template_category`; INV34
+still lets a package author any category, and this note only names a
+`"<Group> - <Variant>"` one), a showcase that imports server-only code or
+reads `process.env` past `NODE_ENV` (`showcase_not_standalone`; live data
+through the app is fine), and an asset loaded with `new URL(…,
+import.meta.url)` that is missing or that `npm pack --dry-run` leaves out
+(`template_asset_not_packed`; when npm cannot answer, one no `files` entry
+can reach is still reported and any other is listed as not checked, INV35). Each fails `--strict --next` now and `--strict`
+from the next minor release (DEC-11). The CLI finds a component's showcase by
+`exampleFor` first, then by folder and `componentsUsed`.
+
+Rejected: failing them in a patch (packages already running the check would
+break on an update), and per-package special cases (a package that needs one
+is a package the checks should cover).
+
 ## Verification
 
 | Invariant | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
@@ -858,7 +928,7 @@ workspace member then migrates against a Core its workspace does not use).
 | INV32     | `test/cli-strict-guard.test.mjs` lists every command offering `--strict` and every command whose exit depends on warnings; `api/integration/check/check.test.mjs` compares a strict run with the default run                                                                                                                                                                                                                                                               | A second command offers `--strict`, a command exits 1 on a warning alone without `--strict`, or a strict run reports a finding the default run does not or outside the command's issue format.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | INV33     | `foundation/discovery/prop-drift.test.mjs`, `foundation/discovery/doc-consistency.test.mjs`, `foundation/discovery/type-text.test.mjs`, `clients/cli/commands/doctor-integration.test.mjs`, `test/core-prop-docs.test.mjs`                                                                                                                                                                                                                                                 | A removed or renamed prop or a changed union passes unreported, a missing compiler reads as a pass, or a table that leaves out `ref`, `key`, `xstyle`, `className`, `style`, `data-testid`, or an `@internal` prop draws a warning.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | INV34     | `foundation/discovery/doc-types.test.mjs`, `foundation/discovery/doc-consistency.test.mjs`, `clients/cli/commands/doctor-integration.test.mjs`, `test/core-doc-types.test.mjs`                                                                                                                                                                                                                                                                                             | An unknown, missing, or mistyped field passes unreported, or a missing compiler reads as a pass.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| INV35     | `api/integration/check/check.test.mjs`, `clients/cli/commands/integration-check.test.mjs`, `test/integration-check-failures.test.mjs`, `api/search/search.integration-check.test.mjs`, `foundation/discovery/prop-drift.test.mjs`, `foundation/discovery/type-match.test.mjs`, `foundation/discovery/doc-types.test.mjs`, `api/integration/authoring-checks.test.mjs`, `foundation/discovery/stray-pointers.test.mjs`, `foundation/integrations/cli-peer-version.test.mjs` | The default exit differs from a check's own, a warning or a skipped comparison passes `--strict`, text and JSON exit differently, a new failing finding is added without the list changing, a search for ci does not find the command first, a finding is reported on a doc the code does not contradict (for a type, one TypeScript accepts), or a copied passage or a fluff finding passes `--strict`, or a function-word run or shared boilerplate is reported as a copy, or a CLI outside a package's `@astryxdesign/cli` peer range is reported as a warning, fails `--strict`, reaches `integration verify`, or goes unlisted.                                                                                                                                                                                                                                                                                                                                                                                                               |
+| INV35     | `api/integration/check/check.test.mjs`, `clients/cli/commands/integration-check.test.mjs`, `test/integration-check-failures.test.mjs`, `api/search/search.integration-check.test.mjs`, `foundation/discovery/prop-drift.test.mjs`, `foundation/discovery/type-match.test.mjs`, `foundation/discovery/doc-types.test.mjs`, `api/integration/authoring-checks.test.mjs`, `foundation/discovery/stray-pointers.test.mjs`, `foundation/integrations/cli-peer-version.test.mjs` | The default exit differs from a check's own, a warning or a skipped comparison passes `--strict`, text and JSON exit differently, a new failing finding is added without the list changing, a search for ci does not find the command first, a finding is reported on a doc the code does not contradict (for a type, one TypeScript accepts), or a copied passage or a fluff finding passes `--strict`, or a function-word run or shared boilerplate is reported as a copy, or a CLI outside a package's `@astryxdesign/cli` peer range is reported as a warning, fails `--strict`, reaches `integration verify`, or goes unlisted, or a `next` note fails `--strict` without `--next`, passes `--strict --next`, or goes unreported in the default run.                                                                                                                                                                                                                                                                                                                                                                                                               |
 | INV36     | `api/gap-report/gap-report.test.mjs`, `clients/cli/commands/gap-report.test.mjs`                                                                                                                                                                                                                                                                                                                                                                                           | A run without `--to` reaches an `issuesUrl` the handlers did not choose, `--to` runs a handler or files on GitHub without `--confirm-public`, an unknown `--to` sends anything, or the destinations list or its line telling the agent to ask the person is missing while a destination exists.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | INV37     | `api/integration/validate-integration.test.mjs`, `api/integration/validate-integration-fixes.test.mjs`, `api/integration/pack-check.test.mjs`                                                                                                                                                                                                                                                                                                                              | A top-level source with no doc passes `--strict` (a dotted template id such as `landing.page` included), or a test, spec or story file or a subfolder helper is flagged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 

@@ -96,6 +96,9 @@ discover sources follow it except where this record says otherwise.
   `ERR_INVALID_OPTION`. `--limit <n>` caps search results (default 20) and the
   response reports the total when it cut the list. An unknown kind or a limit
   that is not a positive integer MUST fail with `ERR_INVALID_OPTION`.
+  In a project that sets `experimental.iconSet`, `icon-set` is an additional
+  kind (`spec:AST-084/DEC-8`); without it discover keeps the six kinds and
+  refuses `--type icon-set` with `ERR_INVALID_OPTION`.
 - **FR6 — Sources are functions a project, an integration, or a door
   provides.** A source is an async function that receives
   `{signal, package?, version?}` and resolves to a catalog; `package` asks for
@@ -121,6 +124,9 @@ source, packages}`. `source` has `name`, `generatedAt`, and `complete`. Each
   MUST refuse any other `schemaVersion`, and MUST show versions newest first by
   publish time whatever order the source returned them in. When two sources
   list the same package, the earlier source's entry is used.
+  In a project that sets `experimental.iconSet`, an `icon-set` contribution
+  MAY also carry `iconCount` and `definitions` (`spec:AST-084/DEC-8`); without
+  it discover ignores `icon-set` entries and those fields as unknown.
 - **FR8 — A saved copy covers an unreachable source.** After a source answers,
   discover MUST save that answer, per source and per request, in the per-user
   cache directory of the platform, never in the project. When the source later

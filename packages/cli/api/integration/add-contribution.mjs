@@ -25,7 +25,6 @@ import {
   findManifestObject,
   unwrapManifestExpression,
   patchIntegrationRoot,
-  findLocalIntegrationManifestOrNull,
   IntegrationRootConflictError,
 } from '../../foundation/integrations/manifest-writer.mjs';
 import {
@@ -43,7 +42,11 @@ import {findIntegrationComponentDoc} from '../../foundation/discovery/component-
 import {parseAgentDocsField} from '../../authoring/integration/schema.mjs';
 import {integrationAddTheme} from './add-theme.mjs';
 import {
-  findPackageDir,
+  KEBAB_NAME_RE,
+  kebabToTitle,
+  loadCurrentManifest,
+  receipt,
+  resolvePackage,
   projectPath,
   packageJsonUpdate,
   packageJsonFilesUpdate,
@@ -53,7 +56,6 @@ import {
 // ── Name grammars ───────────────────────────────────────────────────
 
 const COMPONENT_NAME_RE = /^[A-Z][A-Za-z0-9]*$/;
-const KEBAB_NAME_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
 const TOPIC_NAME_RE = /^[\w-]+$/;
 
 // ── Default roots (used when the manifest declares nothing) ─────────
@@ -67,103 +69,11 @@ const DEFAULT_ROOTS = {
 
 // ── Shared manifest / package plumbing ──────────────────────────────
 
-/**
- * Read package identity + resolve the manifest path.
- * @param {string} cwd
- */
-function resolvePackage(cwd) {
-  const packageDir = findPackageDir(cwd);
-  const packageFile = path.join(packageDir, 'package.json');
-  /** @type {any} */
-  let pkg;
-  try {
-    pkg = JSON.parse(fs.readFileSync(packageFile, 'utf-8'));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new AstryxError(
-      `Cannot read package.json: ${message}`,
-      undefined,
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
-  }
-  const owner = typeof pkg.name === 'string' ? pkg.name : '(local integration)';
-  const existingManifest = findLocalIntegrationManifestOrNull(packageDir);
-  // The nearest package.json above the cwd may belong to another package (an
-  // app that contains the folder). Only a package that is already an
-  // integration is found from a subfolder; the first add runs in the package.
-  const here = path.resolve(cwd ?? process.cwd());
-  if (existingManifest == null && path.resolve(packageDir) !== here) {
-    throw new AstryxError(
-      `${here} has no package.json. The nearest is ${packageFile} (${owner}), which is not an Astryx integration yet. Run this in your integration package's own directory, next to its package.json.`,
-      undefined,
-      ERROR_CODES.ERR_INVALID_ARGUMENT,
-    );
-  }
-  const manifestFile =
-    existingManifest ?? path.join(packageDir, 'astryx.integration.mjs');
-  return {
-    packageDir,
-    packageFile,
-    pkg,
-    owner,
-    manifestFile,
-    manifestExists: existingManifest != null,
-  };
-}
-
-/**
- * Load the current manifest's parsed object (or an empty object when no
- * manifest exists yet).
- * @param {string} manifestFile
- * @param {boolean} manifestExists
- * @returns {Promise<import('../../authoring/integration/type').AstryxIntegration>}
- */
-async function loadCurrentManifest(manifestFile, manifestExists) {
-  if (!manifestExists) return {};
-  return loadManifestObject(
-    manifestFile,
-    `Integration manifest ${path.basename(manifestFile)}`,
-    {fresh: true},
-  );
-}
-
-/**
- * Build and return the common receipt shape.
- * @param {import('./integration-authoring.type.mjs').IntegrationAddResponse['data']['kind']} kind
- * @param {string} name
- * @param {{path: string, created: boolean}|null} root
- * @param {string} manifestPath
- * @param {string[]} files
- * @param {boolean} dryRun
- * @returns {import('./integration-authoring.type.mjs').IntegrationAddResponse}
- */
-function receipt(kind, name, root, manifestPath, files, dryRun) {
-  return {
-    type: 'integration.add',
-    data: {
-      kind,
-      name,
-      root,
-      manifest: manifestPath,
-      files,
-      written: !dryRun,
-      dryRun,
-    },
-  };
-}
-
 // ── Helpers ─────────────────────────────────────────────────────────
 
 /** @param {string} slug */
 function kebabToPascal(slug) {
   return slug.replace(/(^|-)([a-z0-9])/gu, (_, _sep, ch) => ch.toUpperCase());
-}
-
-/** @param {string} slug */
-function kebabToTitle(slug) {
-  const words = slug.split(/[-_]+/u).filter(Boolean);
-  if (words.length === 0) return slug;
-  return words.map(word => word[0].toUpperCase() + word.slice(1)).join(' ');
 }
 
 // ── AST helper (for agent-doc manifest patching) ────────────────────
@@ -1240,9 +1150,9 @@ function validateKindOptions(kind, options) {
 /**
  * Add one contribution to the local integration package.
  *
- * @param {'component'|'doc'|'template'|'codemod'|'agent-doc'|'theme'} kind
+ * @param {import('./integration-authoring.type.mjs').IntegrationAddKind} kind
  * @param {string} name
- * @param {{cwd?: string, dryRun?: boolean, templateType?: 'page'|'block', to?: string, replaces?: string, extends?: string, parent?: string, from?: string}} [options]
+ * @param {import('./integration-authoring.type.mjs').IntegrationAddOptions} [options]
  * @returns {Promise<import('./integration-authoring.type.mjs').IntegrationAddResponse>}
  */
 export async function integrationAdd(kind, name, options = {}) {

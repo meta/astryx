@@ -40,9 +40,6 @@
  * the row. The list keeps this level's own roving focus, typeahead and press
  * model, so nothing beside the row needs to know.
  *
- * Prior art: legacy internal XDS `XDSDropdownSubMenuItem` (APG menubar-
- * navigation submenu). This re-expresses the same contract on Astryx primitives.
- *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/DropdownMenu/DropdownMenuSubMenu.doc.mjs
  * - /packages/core/src/DropdownMenu/DropdownMenuSubMenu.test.tsx
@@ -72,6 +69,7 @@ import {Item} from '../Item';
 import {useLayer} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {useListFocus} from '../hooks/useListFocus';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMenuHover} from '../hooks/useMenuHover';
 import {
   isMenuPressActivation,
@@ -91,6 +89,7 @@ import {
   shadowVars,
   typographyVars,
   typeScaleVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import {
   composeEventHandlers,
@@ -100,6 +99,7 @@ import {
   rtlStyles,
 } from '../utils';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {getInteractionModality} from '../utils/interactionModality';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useDevWarning} from '../hooks/useDevWarning';
@@ -121,7 +121,13 @@ import {
 } from './DropdownMenuContext';
 import {focusMenuItemOnHover} from './menuItemHover';
 import {DropdownMenuItem} from './DropdownMenuItem';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DropdownMenu/DropdownMenuSubMenu.generated';
+
+registerEnglishFallback(english);
 
 // The flyout's own lower cap on the placement axis; the viewport cap under
 // it and the inline gutter beside it are the layer runtime's (spec:AST-059).
@@ -141,7 +147,9 @@ const triggerStyles = stylex.create({
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',
-      ':focus': colorVars['--color-overlay-hover'],
+      // menuPressLitRowStyle sets the variable on the row a held finger or pen
+      // lights.
+      ':focus': `var(--_menu-row-focus-paint, ${colorVars['--color-overlay-hover']})`,
     },
     borderWidth: 0,
     borderStyle: 'none',
@@ -150,7 +158,10 @@ const triggerStyles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     textAlign: 'start',
-    outline: 'none',
+    // Rows show focus with a translucent overlay, which forced colors replace
+    // with the page color. The standard focus ring (focusOutlineStyles), drawn
+    // inside the row by its own width, marks the focused row in every mode.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   // While the flyout is open, keep the trigger visibly active so the open
   // branch reads as the current path even when focus has moved into the child.
@@ -346,7 +357,7 @@ interface DropdownMenuSubMenuBaseProps extends Omit<
   isDisabled?: boolean;
   /**
    * Show a spinner in place of the caret, e.g. while a lazy submenu's children
-   * are loading. Ported from the legacy `hasSpinner` async-submenu affordance.
+   * are loading.
    * @default false
    */
   hasSpinner?: boolean;
@@ -363,7 +374,7 @@ interface DropdownMenuSubMenuBaseProps extends Omit<
    * box; `adaptive` drills in when a finger opened the menu — a
    * `(pointer: coarse)` device, decided when the menu opened — and flies out
    * otherwise. Drill-in needs a `DropdownMenu` or `ContextMenu` root.
-   *  'adaptive'
+   * @default 'adaptive'
    */
   presentation?: DropdownMenuSubMenuPresentation;
   /**
@@ -385,7 +396,10 @@ interface DropdownMenuSubMenuBaseProps extends Omit<
   footer?: ReactNode;
   /** Test id for the trigger row. */
   'data-testid'?: string;
-  /** Test id for the flyout menu. */
+  /**
+   * Test id for the sub-menu's own `role="menu"` element: the flyout, or the
+   * drilled-in list on a phone.
+   */
   menuDataTestId?: string;
   /**
    * Ref forwarded to the trigger row — the element carrying `role="menuitem"`
@@ -501,7 +515,7 @@ export function DropdownMenuSubMenu(
     ...rest
   } = props;
 
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const menuCtx = useDropdownMenuContext();
   const rootSurface = use(DropdownMenuSurfaceContext);
   const rootHasRegions = use(MenuRegionsContext);
@@ -682,6 +696,14 @@ export function DropdownMenuSubMenu(
   // closed from elsewhere is cancelled instead of firing into the hidden
   // menu (#6893).
   const isRootMenuOpen = useDropdownMenuRootOpen();
+  // The loading Spinner on the trigger is decorative; the submenu announces
+  // its busy start instead (spec:AST-086 FR8), once its level is shown: a
+  // closed menu stays mounted but hidden, and announces nothing.
+  useBusyAnnouncement(
+    hasSpinner && isRootMenuOpen,
+    t('@astryx.spinner.loading'),
+    triggerRef,
+  );
   const {triggerProps, contentProps, confirmHoverOpen} =
     useMenuHover<HTMLDivElement>({
       show: showLayer,
@@ -1033,7 +1055,7 @@ export function DropdownMenuSubMenu(
 
   const endAffordance = hasSpinner ? (
     <span {...stylex.props(triggerStyles.caret)}>
-      <Spinner size="sm" />
+      <Spinner size="sm" aria-hidden="true" />
     </span>
   ) : (
     <span {...stylex.props(triggerStyles.caret)}>
@@ -1135,7 +1157,7 @@ export function DropdownMenuSubMenu(
         ? // The flyout's frame paints its surface, so the menu target rides
           // on it; a drilled-in view sits inside the root's surface.
           mergeProps(
-            themeProps('dropdown-menu'),
+            themeProps('dropdown-menu', {presentation: 'popover'}),
             stylex.props(regionStyles.frame, regionStyles.flyoutSurface),
           )
         : stylex.props(
@@ -1174,7 +1196,9 @@ export function DropdownMenuSubMenu(
   // on the menu element shows the ring the base style otherwise removes.
   const handleMenuFocus = (event: React.FocusEvent<HTMLDivElement>) => {
     if (hasRegions && event.target === event.currentTarget) {
-      setIsMenuKeyboardFocused(getInteractionModality() === 'keyboard');
+      setIsMenuKeyboardFocused(
+        getInteractionModality(event.currentTarget) === 'keyboard',
+      );
     }
   };
   const handleMenuBlur = (event: React.FocusEvent<HTMLDivElement>) => {
@@ -1220,7 +1244,9 @@ export function DropdownMenuSubMenu(
         onKeyDown={composeEventHandlers(handleTriggerKeyDown, onKeyDown)}
         isDisabled={isDisabled}
         xstyle={[
+          focusOutlineStyles.focusVisible,
           triggerStyles.root,
+          menuPressLitRowStyle,
           triggerSizeStyles[menuSize],
           isOpen && triggerStyles.open,
           isDisabled && triggerStyles.disabled,
@@ -1350,7 +1376,7 @@ export function DropdownMenuSubMenu(
                   data-testid={menuDataTestId}
                   {...menuPress.menuProps}
                   {...mergeProps(
-                    themeProps('dropdown-menu'),
+                    themeProps('dropdown-menu', {presentation: 'popover'}),
                     stylex.props(
                       flyoutStyles.menu,
                       hasOverflow

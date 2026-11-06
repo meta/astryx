@@ -42,7 +42,7 @@ export const docs = {
     {
       type: 'code',
       lang: 'bash',
-      code: 'npm i -g @astryxdesign/cli',
+      code: '{@pm install @astryxdesign/cli --global}',
     },
     {
       type: 'heading',
@@ -73,7 +73,7 @@ export const docs = {
         ],
         ['Outside any project', 'Your global version.'],
         [
-          'Commands for your computer, such as `astryx init --user`',
+          'Commands for your computer, such as `{@command init --user}`',
           'Your global version, in any folder.',
         ],
       ],

@@ -1,0 +1,448 @@
+{
+  "recipe": "astryx-oklch-v1",
+  "vibrancy": 80,
+  "neutralProfile": "custom",
+  "modeStrategy": "light-and-dark",
+  "stops": [
+    0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90,
+    95, 100
+  ],
+  "families": [
+    {
+      "id": "neutral",
+      "name": "Matcha Neutral",
+      "seed": "#707e46",
+      "kind": "neutral",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 5,
+          "color": "#12140e",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 10,
+          "color": "#1a1c14",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 15,
+          "color": "#1e2016",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 20,
+          "color": "#3e481d",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 30,
+          "color": "#5a6440",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 40,
+          "color": "#707e46",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 60,
+          "color": "#94a468",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 65,
+          "color": "#92af6a",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#a8bf6a",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#c0cba9",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 20,
+          "color": "#3e481d",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 30,
+          "color": "#5a6b2a",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 40,
+          "color": "#707e46",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 70,
+          "color": "#b7c29e",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 75,
+          "color": "#c0cba9",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 85,
+          "color": "#dce3ce",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 95,
+          "color": "#f0f0e0",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "red",
+      "name": "Red Berry",
+      "seed": "#fd0000",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 35,
+          "color": "#cc0000",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 50,
+          "color": "#fd0000",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 50,
+          "color": "#fd0000",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#ff5c5c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#ff7a7a",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "orange",
+      "name": "Roasted Orange",
+      "seed": "#c47620",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 50,
+          "color": "#c47620",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#d4903a",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#e0a04a",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 30,
+          "color": "#7c5e3a",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 35,
+          "color": "#a06018",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 50,
+          "color": "#c47620",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "yellow",
+      "name": "Tea Gold",
+      "seed": "#e8b800",
+      "anchors": []
+    },
+    {
+      "id": "green",
+      "name": "Matcha Green",
+      "seed": "#4d9900",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 35,
+          "color": "#3d7a00",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 50,
+          "color": "#4d9900",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 50,
+          "color": "#4d9900",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#6dbf2a",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#80d43a",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "teal",
+      "name": "Botanical Teal",
+      "seed": "#2e6b5a",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 50,
+          "color": "#2e6b5a",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#5ab898",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#6ccaaa",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 35,
+          "color": "#245546",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 50,
+          "color": "#2e6b5a",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 55,
+          "color": "#3a7c6b",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "cyan",
+      "name": "Mineral Cyan",
+      "seed": "#3a7c7c",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 35,
+          "color": "#2e6060",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 50,
+          "color": "#3a7c7c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 50,
+          "color": "#3a7c7c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#70c4c4",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#82d4d4",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "blue",
+      "name": "Rain Blue",
+      "seed": "#3a5e8c",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 35,
+          "color": "#2e4a6e",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 50,
+          "color": "#3a5e8c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 50,
+          "color": "#3a5e8c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#7ba8d4",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#8dbce0",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "purple",
+      "name": "Wisteria",
+      "seed": "#6b4a8c",
+      "anchors": [
+        {
+          "mode": "light",
+          "stop": 35,
+          "color": "#553a70",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 50,
+          "color": "#6b4a8c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 50,
+          "color": "#6b4a8c",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#b08ed4",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#c0a0e0",
+          "policy": "exact"
+        }
+      ]
+    },
+    {
+      "id": "pink",
+      "name": "Camellia Pink",
+      "seed": "#c44a70",
+      "anchors": [
+        {
+          "mode": "dark",
+          "stop": 50,
+          "color": "#c44a70",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 65,
+          "color": "#d47a7a",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 70,
+          "color": "#e07a9a",
+          "policy": "exact"
+        },
+        {
+          "mode": "dark",
+          "stop": 75,
+          "color": "#f08aaa",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 30,
+          "color": "#8c3a3a",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 35,
+          "color": "#a03a5a",
+          "policy": "exact"
+        },
+        {
+          "mode": "light",
+          "stop": 50,
+          "color": "#c44a70",
+          "policy": "exact"
+        }
+      ]
+    }
+  ]
+}

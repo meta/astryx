@@ -32,46 +32,44 @@ export default function TokenizerStates() {
   ]);
 
   return (
-    <Stack direction="vertical" gap={4}>
-      <Tokenizer
-        label="Disabled field"
-        searchSource={userSource}
-        value={[users[0], users[2]]}
-        onChange={() => {}}
-        isDisabled
-        containerStyle={{width: 400}}
-      />
-      <Tokenizer
-        label="Error message"
-        placeholder="Search people..."
-        searchSource={userSource}
-        value={errorValue}
-        onChange={items => setErrorValue(items)}
-        isRequired
-        status={{type: 'error', message: 'At least one reviewer is required'}}
-        containerStyle={{width: 400}}
-      />
-      <Tokenizer
-        label="Warning message"
-        placeholder="Search people..."
-        searchSource={userSource}
-        value={warningValue}
-        onChange={items => setWarningValue(items)}
-        status={{
-          type: 'warning',
-          message: 'Consider adding at least 2 approvers',
-        }}
-        containerStyle={{width: 400}}
-      />
-      <Tokenizer
-        label="Success message"
-        placeholder="Search people..."
-        searchSource={userSource}
-        value={successValue}
-        onChange={items => setSuccessValue(items)}
-        status={{type: 'success', message: 'All required reviewers added'}}
-        containerStyle={{width: 400}}
-      />
-    </Stack>
+    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>
+      <Stack direction="vertical" gap={4}>
+        <Tokenizer
+          label="Disabled field"
+          searchSource={userSource}
+          value={[users[0], users[2]]}
+          onChange={() => {}}
+          isDisabled
+        />
+        <Tokenizer
+          label="Error message"
+          placeholder="Search people..."
+          searchSource={userSource}
+          value={errorValue}
+          onChange={items => setErrorValue(items)}
+          isRequired
+          status={{type: 'error', message: 'At least one reviewer is required'}}
+        />
+        <Tokenizer
+          label="Warning message"
+          placeholder="Search people..."
+          searchSource={userSource}
+          value={warningValue}
+          onChange={items => setWarningValue(items)}
+          status={{
+            type: 'warning',
+            message: 'Consider adding at least 2 approvers',
+          }}
+        />
+        <Tokenizer
+          label="Success message"
+          placeholder="Search people..."
+          searchSource={userSource}
+          value={successValue}
+          onChange={items => setSuccessValue(items)}
+          status={{type: 'success', message: 'All required reviewers added'}}
+        />
+      </Stack>
+    </div>
   );
 }

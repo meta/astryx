@@ -431,6 +431,35 @@ describe('Link', () => {
     expect(link.className).toContain('astryx-link');
     expect(link).toHaveAttribute('data-color', 'secondary');
   });
+
+  it('keeps the reflected data-color when a caller passes its own', () => {
+    const callerProps = {'data-color': 'danger'};
+    render(
+      <>
+        <Link href="/test" color="secondary" {...callerProps}>
+          Anchor Link
+        </Link>
+        <Link color="secondary" onClick={() => {}} {...callerProps}>
+          Button Link
+        </Link>
+        <Link href="/test" color="secondary" isDisabled {...callerProps}>
+          Disabled Link
+        </Link>
+      </>,
+    );
+    expect(screen.getByRole('link', {name: 'Anchor Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+    expect(screen.getByRole('button', {name: 'Button Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+    expect(screen.getByRole('link', {name: 'Disabled Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+  });
 });
 
 describe('pressed state', () => {
@@ -453,5 +482,22 @@ describe('pressed state', () => {
       </Link>,
     );
     expect(hasPressedArm(screen.getByText('Docs').closest('a')!)).toBe(false);
+  });
+});
+
+describe('Link label color', () => {
+  it('lets the label inherit the root color, so a theme styles Link through the link target', () => {
+    for (const color of ['accent', 'primary', 'secondary'] as const) {
+      const {container, unmount} = render(
+        <Link href="/docs" color={color}>
+          Docs
+        </Link>,
+      );
+      const anchor = container.querySelector('a')!;
+      expect(anchor).toHaveAttribute('data-color', color);
+      const label = anchor.querySelector('.astryx-text')!;
+      expect(label).toHaveAttribute('data-color', 'inherit');
+      unmount();
+    }
   });
 });

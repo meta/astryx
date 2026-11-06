@@ -68,6 +68,29 @@ const INTEGRATION_DOC_SUFFIXES = ['.doc.ts', '.doc.mjs', '.doc.js'];
 const TOPIC_NAME_RE = /^[\w-]+$/;
 
 /**
+ * Whether a `replaces` or `extends` names a route of the docs tree rather than
+ * a flat topic: a topic name never holds a `/`, and a guide the tree places is
+ * always read by a route that does.
+ * @param {unknown} target
+ * @returns {target is string}
+ */
+export function isGuideRoute(target) {
+  return typeof target === 'string' && target.includes('/');
+}
+
+/**
+ * What the integrations do to one guide the docs tree places, in configured
+ * order: a replacement, and the extensions merged onto whatever is there.
+ * @typedef {object} GuideOverlay
+ * @property {DocsTopicRecord | null} replacement the doc readers get at the
+ *   route instead of the guide; the last package configured wins
+ * @property {Array<{package: string, path: string, providerId?: string}>} extensions
+ *   extensions authored after the replacement, if any, in configured order
+ * @property {string} [replacedPackage] the package of the replacement this one
+ *   took over from, when the guide was replaced twice
+ */
+
+/**
  * @typedef {object} DocsTopicRecord A doc file discovered under a docs root.
  * @property {string} name
  * @property {string} package owner package
@@ -92,6 +115,8 @@ const TOPIC_NAME_RE = /^[\w-]+$/;
  * @property {string} [description]
  * @property {string|null} [category]
  * @property {string} [replaces] the topic this one took the place of
+ * @property {string} [replacedPackage] the package whose topic or guide this
+ *   one took the place of
  * @property {Array<{package: string, path: string, providerId?: string}>} extensions
  *   overlays to merge onto the base doc, in the order their integrations were
  *   configured; each section an extension adds resolves its links against the
@@ -205,7 +230,21 @@ const BLOCK_FIELD_VALUES = {
 const PROJECTION_FIELDS = ['fields', 'sections'];
 
 /** Keys a section may carry. */
-const SECTION_FIELDS = ['id', 'title', 'category', 'content', 'previewType'];
+const SECTION_FIELDS = [
+  'id',
+  'title',
+  'category',
+  'content',
+  'previewType',
+  'before',
+  'after',
+];
+
+/**
+ * The fields an extension section places itself with: the key of the base
+ * section it goes before or after. Read only by a merge, never by a reader.
+ */
+export const SECTION_POSITION_FIELDS = ['before', 'after'];
 
 /**
  * Check the fields the docs surfaces actually read. `parseDoc` is the outer
@@ -264,6 +303,19 @@ export function problemsInTopic(doc, {placement = false} = {}) {
         if (!SECTION_FIELDS.includes(key)) {
           problems.push(`${at}.${key}: not a field of a section`);
         }
+      }
+      for (const field of SECTION_POSITION_FIELDS) {
+        const value = section?.[field];
+        if (value != null && (typeof value !== 'string' || value === '')) {
+          problems.push(
+            `${at}.${field}: expected the key of a section, as \`--index\` shows it`,
+          );
+        }
+      }
+      if (section?.before != null && section?.after != null) {
+        problems.push(
+          `${at}: sets both \`before\` and \`after\`; a section goes in one place`,
+        );
       }
       if (!Array.isArray(section?.content)) {
         problems.push(`${at}.content: expected an array of blocks`);
@@ -565,6 +617,7 @@ export async function discoverIntegrationDocs(integration) {
         kind: 'generic',
         name: parsed.name,
         title: parsed.title,
+        // Rendered once, where the tree is built (api/docs/_adapter.mjs).
         summary: parsed.description,
         group: null,
         placement: parsed.placement,
@@ -599,8 +652,9 @@ export async function discoverIntegrationDocs(integration) {
 /**
  * Merge an extension onto a base topic: a section with a stable `id` replaces
  * the base section with the same `id`; legacy sections without IDs fall back to
- * title matching. A section with no match is appended. The title and
- * description stay the base topic's: an extension adds to a topic, it never
+ * title matching. A section with no match is added: before or after the
+ * section whose key its `before` or `after` names, else at the end. The title
+ * and description stay the base topic's: an extension adds to a topic, it never
  * renames it. A topic that `replaces` another is the one that renames.
  *
  * Keyed by section TITLE rather than by position, the way the localization
@@ -613,22 +667,123 @@ export async function discoverIntegrationDocs(integration) {
  * @returns {any} a new doc; neither input is mutated
  */
 export function mergeTopic(base, overlay) {
+  return mergeTopicReport(base, overlay).doc;
+}
+
+/**
+ * {@link mergeTopic}, also naming each `before` or `after` that found no
+ * section: that section was added at the end instead.
+ *
+ * @param {any} base
+ * @param {any} overlay
+ * @returns {{doc: any, unplaced: Array<{section: string, field: 'before' | 'after', key: string}>}}
+ */
+export function mergeTopicReport(base, overlay) {
   const sections = [...(base.sections ?? [])];
-  for (const section of overlay.sections ?? []) {
+  /** @type {Array<{section: string, field: 'before' | 'after', key: string}>} */
+  const unplaced = [];
+
+  for (const authored of overlay.sections ?? []) {
+    const section = withoutPosition(authored);
     const at = findMergeTarget(sections, section);
     if (at === -1) {
-      sections.push(section);
+      const field = authored.before != null ? 'before' : 'after';
+      const key = authored[field];
+      if (typeof key !== 'string') {
+        sections.push(section);
+        continue;
+      }
+      const anchor = sections.findIndex(
+        candidate => sectionKey(candidate) === key || candidate.id === key,
+      );
+      if (anchor === -1) {
+        unplaced.push({section: sectionKey(section), field, key});
+        sections.push(section);
+      } else if (field === 'before') {
+        // Placed just before a section another was placed `after`, it joins
+        // that section's group, so later sections placed there follow both.
+        if (sections[anchor][PLACED_AFTER] != null) {
+          Object.defineProperty(section, PLACED_AFTER, {
+            value: sections[anchor][PLACED_AFTER],
+            configurable: true,
+          });
+        }
+        sections.splice(anchor, 0, section);
+      } else {
+        // Sections placed after one key keep their order, across every
+        // extension merged onto the topic: each goes after every section
+        // placed there before it, and after the sections placed after those.
+        const group = new Set([key]);
+        let at = anchor + 1;
+        while (at < sections.length && group.has(sections[at][PLACED_AFTER])) {
+          group.add(sectionKey(sections[at]));
+          at += 1;
+        }
+        Object.defineProperty(section, PLACED_AFTER, {
+          value: key,
+          configurable: true,
+        });
+        sections.splice(at, 0, section);
+      }
     } else {
       // A legacy extension that replaces a section which has since gained a
-      // stable ID keeps that ID, so readers addressing it keep working.
+      // stable ID keeps that ID, so readers addressing it keep working. A
+      // replacing section keeps the place of the one it replaces.
       const replaced = sections[at];
-      sections[at] =
+      const replacing =
         section.id == null && replaced.id != null
           ? withSourceTitle({...section, id: replaced.id}, sourceTitle(section))
           : section;
+      // It also keeps the place an earlier `after` gave the one it replaces,
+      // so sections placed after that key later still follow it.
+      if (replaced[PLACED_AFTER] != null) {
+        const placed = replacing === section ? withoutPosition({...section}) : replacing;
+        for (const symbol of Object.getOwnPropertySymbols(section)) {
+          if (!(symbol in placed)) {
+            Object.defineProperty(
+              placed,
+              symbol,
+              /** @type {PropertyDescriptor} */ (
+                Object.getOwnPropertyDescriptor(section, symbol)
+              ),
+            );
+          }
+        }
+        Object.defineProperty(placed, PLACED_AFTER, {
+          value: replaced[PLACED_AFTER],
+          configurable: true,
+        });
+        sections[at] = placed;
+      } else {
+        sections[at] = replacing;
+      }
     }
   }
-  return {...base, sections};
+  return {doc: {...base, sections}, unplaced};
+}
+
+/** The key a merged section was placed `after`, so later ones follow it. */
+const PLACED_AFTER = Symbol('astryx.docs.placedAfter');
+
+/**
+ * A section without the fields that place it; readers never see them.
+ * @param {any} section
+ * @returns {any}
+ */
+export function withoutPosition(section) {
+  if (section?.before == null && section?.after == null) return section;
+  const {before: _before, after: _after, ...rest} = section;
+  // Copy every own symbol (the provider and authored-title marks) too.
+  for (const symbol of Object.getOwnPropertySymbols(section)) {
+    Object.defineProperty(
+      rest,
+      symbol,
+      /** @type {PropertyDescriptor} */ (
+        Object.getOwnPropertyDescriptor(section, symbol)
+      ),
+    );
+  }
+  return rest;
 }
 
 /**
@@ -723,6 +878,71 @@ export class DocsCatalog {
   #treeInputs = [];
   /** @type {Array<{package: string, message: string}>} */
   #issues = [];
+  /** @type {Map<string, GuideOverlay>} lowercased route → what applies there */
+  #guideOverlays = new Map();
+  /** @type {DocsTopicRecord[]} every doc that targets a route, in order */
+  #guideTargeters = [];
+
+  /**
+   * Record a doc that replaces or extends a guide the docs tree places, by
+   * its route. Whether the route holds such a guide is known only once the
+   * tree is built: {@link guideOverlay} applies the record there, and a route
+   * that holds none applies nothing.
+   * @param {DocsTopicRecord} record
+   * @returns {import('../integrations/issue').AstryxIntegrationIssue | null}
+   */
+  #targetGuide(record) {
+    const route = /** @type {string} */ (
+      record.replaces ?? record.extendsTopic
+    );
+    const key = route.toLowerCase();
+    const overlay = this.#guideOverlays.get(key) ?? {
+      replacement: null,
+      extensions: [],
+    };
+    if (record.replaces != null) {
+      const earlier = overlay.replacement;
+      if (earlier) {
+        // As with a flat topic, the later-configured doc wins, and reads name
+        // the replacement it took over from. Unlike a flat topic's, this is
+        // no warning: a new failing finding joins only in a minor release
+        // (architecture:cli-surface INV35); `integration validate` lists one
+        // package's two replacements of a guide as a note.
+        overlay.replacedPackage = earlier.package;
+      }
+      // Extensions were authored against the content that just went away.
+      overlay.replacement = record;
+      overlay.extensions = [];
+    } else {
+      overlay.extensions.push({
+        package: record.package,
+        path: record.path,
+        ...(record.providerId ? {providerId: record.providerId} : {}),
+      });
+    }
+    this.#guideOverlays.set(key, overlay);
+    this.#guideTargeters.push(record);
+    return null;
+  }
+
+  /**
+   * What the integrations do to the guide the docs tree places at `route`, or
+   * null when they leave it as it is.
+   * @param {string} route
+   * @returns {GuideOverlay | null}
+   */
+  guideOverlay(route) {
+    return this.#guideOverlays.get(route.toLowerCase()) ?? null;
+  }
+
+  /**
+   * Every doc that replaces or extends a guide by its route, in configured
+   * order, so a check can name a route that holds no guide.
+   * @returns {ReadonlyArray<DocsTopicRecord>}
+   */
+  get guideTargeters() {
+    return this.#guideTargeters;
+  }
 
   /**
    * Record a doc file a package ships that did not load. Its package's docs
@@ -810,6 +1030,9 @@ export class DocsCatalog {
   add(record) {
     if (record.extendsTopic != null) {
       const target = this.resolve(record.extendsTopic);
+      if (!target && isGuideRoute(record.extendsTopic)) {
+        return this.#targetGuide(record);
+      }
       if (!target) {
         return {
           code: 'invalid_doc',
@@ -827,6 +1050,9 @@ export class DocsCatalog {
 
     if (record.replaces != null) {
       const target = this.resolve(record.replaces);
+      if (!target && isGuideRoute(record.replaces)) {
+        return this.#targetGuide(record);
+      }
       if (!target) {
         return {
           code: 'invalid_doc',
@@ -859,6 +1085,9 @@ export class DocsCatalog {
         description: record.description,
         category: record.category,
         replaces: replaced,
+        // The package whose topic it took over: an earlier replacement's, when
+        // the topic was already replaced.
+        replacedPackage: target.package,
         ...(record.providerId ? {providerId: record.providerId} : {}),
         // Extensions were authored against the content that just went away.
         extensions: [],

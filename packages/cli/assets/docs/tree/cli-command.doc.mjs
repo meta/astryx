@@ -29,7 +29,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "The CLI ends most answers with the next command to run: a hint, an error fix, a Doctor fix, or a doc example. By default each one starts with a command that reaches the release that answered: what the app's package manager runs, such as `pnpm exec astryx` or `yarn astryx`, when the app's own CLI answered, and otherwise the CLI package pinned to that release, such as `npx @astryxdesign/cli@0.7.2`.",
+          text: "The CLI ends most answers with the next command to run: a hint, an error fix, a Doctor fix, or a doc example. By default each one starts with a command that reaches the release that answered: what the app's package manager runs, such as `pnpm exec astryx` or `yarn astryx`, when the app's own CLI answered, and otherwise the CLI package pinned to that release, such as `{@pm dlx @astryxdesign/cli@0.7.2}`.",
         },
         {
           type: 'prose',
@@ -79,7 +79,7 @@ export default {
           items: [
             'The `cliCommand` of the packages the app loads, when they name one command.',
             'The command a host tool names when it runs the CLI for the app. Nothing in a plain project names one.',
-            "A command that reaches the release that answered: what the app's package manager runs when the app's own CLI answered, such as `pnpm exec astryx` or `yarn astryx`; `astryx` outside a project when the CLI installed for the computer answered; otherwise the CLI package pinned to that release, such as `npx @astryxdesign/cli@0.7.2` (see {@link generic:who-answers}).",
+            "A command that reaches the release that answered: what the app's package manager runs when the app's own CLI answered, such as `pnpm exec astryx` or `yarn astryx`; `astryx` outside a project when the CLI installed for the computer answered; otherwise the CLI package pinned to that release, such as `{@pm dlx @astryxdesign/cli@0.7.2}` (see {@link generic:who-answers}).",
           ],
         },
         {
@@ -94,7 +94,7 @@ export default {
       content: [
         {
           type: 'prose',
-          text: "If two packages an app loads set different commands, the CLI uses neither: it prints commands with what the app's package manager runs, even when a host tool named a command. `astryx doctor` warns in its `cli-command` check and names both packages:",
+          text: "If two packages an app loads set different commands, the CLI uses neither: it prints commands with what the app's package manager runs, even when a host tool named a command. `{@command doctor}` warns in its `cli-command` check and names both packages:",
         },
         {
           type: 'code',
@@ -115,16 +115,16 @@ message: Loaded integrations declare different CLI commands: @acme/astryx-widget
       content: [
         {
           type: 'prose',
-          text: 'An invalid value is ignored, and the rest of your manifest still loads. `astryx doctor integration validate` reports it as `invalid_cli_command`. A valid `cliCommand` is one line of plain text without spaces at either end, at most 120 characters.',
+          text: 'An invalid value is ignored, and the rest of your manifest still loads. `{@command doctor integration validate}` reports it as `invalid_cli_command`. A valid `cliCommand` is one line of plain text without spaces at either end, at most 120 characters.',
         },
         {
           type: 'prose',
-          text: "In an app that installs your package, `astryx doctor` passes its `cli-command` check and names your package as the one that set the command. A CLI released before this field reports `cliCommand` as an unknown key and prints the package manager's command.",
+          text: "In an app that installs your package, `{@command doctor}` passes its `cli-command` check and names your package as the one that set the command. A CLI released before this field reports `cliCommand` as an unknown key and prints the package manager's command.",
         },
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx doctor integration validate\n# In an app that installs the package\nastryx doctor',
+          code: '{@command doctor integration validate}\n# In an app that installs the package\n{@command doctor}',
         },
       ],
     },

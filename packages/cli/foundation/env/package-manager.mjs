@@ -12,6 +12,7 @@
  * a host's door name, come first (see cli-command.mjs).
  */
 
+import {AsyncLocalStorage} from 'node:async_hooks';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {cliDoor, declaredCliCommand} from './cli-command.mjs';
@@ -635,6 +636,45 @@ export function prefixCliCommands(text, stem, lang = null) {
       return prefixLine(line, stem, fence?.lang ?? null);
     })
     .join('\n');
+}
+
+/** @type {AsyncLocalStorage<{pm: import('../doc-compiler/doc-syntax.mjs').DocPackageManager}>} */
+const docPackageManagerScope = new AsyncLocalStorage();
+
+/**
+ * Run `fn` with doc `{@pm}` steps rendered for `pm`, whatever the working
+ * directory's project uses: a host that shows docs to readers of every
+ * package manager, such as the docsite, picks one.
+ * @template T
+ * @param {import('../doc-compiler/doc-syntax.mjs').DocPackageManager} pm
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function runWithDocPackageManager(pm, fn) {
+  return docPackageManagerScope.run({pm}, fn);
+}
+
+/**
+ * The package manager a doc's `{@pm}` steps render for, from the project in
+ * `targetDir`: npm when nothing is detected, and Yarn 1 told apart from Yarn
+ * 2 and newer; the one a host chose with runWithDocPackageManager wins.
+ * @param {string} [targetDir]
+ * @returns {import('../doc-compiler/doc-syntax.mjs').DocPackageManager}
+ */
+export function docPackageManager(targetDir) {
+  const chosen = docPackageManagerScope.getStore()?.pm;
+  if (chosen) return chosen;
+  const resolution = explainPackageManager(targetDir);
+  switch (resolution.pm) {
+    case 'yarn':
+      return isYarnClassic(resolution) ? 'yarn-classic' : 'yarn';
+    case 'pnpm':
+      return 'pnpm';
+    case 'bun':
+      return 'bun';
+    default:
+      return 'npm';
+  }
 }
 
 /**

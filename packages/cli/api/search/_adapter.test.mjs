@@ -2,8 +2,10 @@
 
 /**
  * @file Tests for search's adapter: a long-running caller reuses the gathered
- * candidates while their inputs are unchanged (gatherCandidatesReused), and
- * gathers again when an input changes or for another folder or `type`.
+ * candidates while their inputs are unchanged (gatherCandidatesReused), shares
+ * a gather that is still running, and gathers again when an input changes or
+ * for another folder or `type`. The lexical ranker (searchCore) ranks from the
+ * same reused gather.
  *
  * Whether inputs changed is read-record's answer (tested in
  * read-record.test.mjs). Other tests running at the same time change shared
@@ -13,12 +15,15 @@
  * undo.
  */
 
-import {describe, it, expect, vi} from 'vitest';
+import {afterAll, beforeAll, describe, it, expect, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {Project} from '../../foundation/config/project.mjs';
 import * as readRecord from '../../foundation/fs/read-record.mjs';
 import {gatherCandidates, gatherCandidatesReused} from './_adapter.mjs';
+import {searchCore} from './search.mjs';
 
 vi.mock('../../foundation/fs/read-record.mjs', async original => {
   const real = /** @type {typeof readRecord} */ (await original());
@@ -28,12 +33,33 @@ const unchangedSince = vi.mocked(readRecord.unchangedSince);
 
 const SLOW = 60_000;
 
+/** The repository root: Core's source is there, so every domain gathers. */
+const REPO = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../../..',
+);
+
 /** A folder with only a package.json: a docs search there reads the CLI's docs. */
 function scratchProject() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-gather-reuse-'));
+  const dir = fs.mkdtempSync(path.join(TEMP_ROOT, 'astryx-gather-reuse-'));
   fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app"}');
   return dir;
 }
+
+/**
+ * Every temporary folder these tests make lives here, removed once they
+ * finish. It is made in beforeAll, not when the module loads: Vitest skips
+ * both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-search-adapter-test-'),
+  );
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 describe('gatherCandidatesReused', () => {
   it(
@@ -48,6 +74,22 @@ describe('gatherCandidatesReused', () => {
       expect(JSON.parse(JSON.stringify(first))).toEqual(
         JSON.parse(JSON.stringify(await gatherCandidates({cwd, type: 'doc'}))),
       );
+    },
+    SLOW,
+  );
+
+  it(
+    'shares one gather between searches that start while it runs',
+    async () => {
+      const cwd = scratchProject();
+      const all = await Promise.all(
+        Array.from({length: 9}, () =>
+          gatherCandidatesReused({cwd, type: 'doc'}),
+        ),
+      );
+      // One gather: every search got the same candidates object.
+      for (const each of all) expect(each).toBe(all[0]);
+      expect(all[0].all.length).toBeGreaterThan(0);
     },
     SLOW,
   );
@@ -85,7 +127,7 @@ describe('gatherCandidatesReused', () => {
   );
 
   it(
-    'gathers again when a file the gather read changes, in a linked package too',
+    'gathers again when a file the gather read or imported changes, in a linked package too',
     async () => {
       // A consumer whose integration is a symlink to a package folder
       // elsewhere, as a workspace package is.
@@ -162,10 +204,49 @@ describe('gatherCandidatesReused', () => {
         // An edited file the gather read: the linked package's manifest.
         const later = new Date(Date.now() + 5_000);
         fs.utimesSync(path.join(pkg, 'package.json'), later, later);
-        expect(await gatherCandidatesReused(options)).not.toBe(second);
+        const third = await gatherCandidatesReused(options);
+        expect(third).not.toBe(second);
+
+        // An edited doc the gather imported: the next gather reads its new
+        // content, not the module this process imported first.
+        fs.writeFileSync(
+          path.join(pkg, 'components', 'FancyGizmo.doc.mjs'),
+          `export default {
+            type: 'component',
+            name: 'FancyGizmo',
+            keywords: ['gizmo'],
+            usage: {description: 'A shinier part, now with sprockets.'},
+            props: [],
+          };\n`,
+        );
+        const fourth = await gatherCandidatesReused(options);
+        expect(fourth).not.toBe(third);
+        expect(
+          JSON.stringify(fourth.all.find(c => c.name === 'FancyGizmo')),
+        ).toContain('A shinier part, now with sprockets.');
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
         fs.rmSync(pkg, {recursive: true, force: true});
+      }
+    },
+    SLOW,
+  );
+});
+
+describe('searchCore', () => {
+  it(
+    'ranks from the reused gather: a second query in the same folder gathers nothing again',
+    async () => {
+      const first = await searchCore('Button', {cwd: REPO});
+      const load = vi.spyOn(Project, 'load');
+      try {
+        unchangedSince.mockReturnValueOnce(true);
+        const second = await searchCore('Button', {cwd: REPO});
+        // A gather loads the project for each domain; the reused one, none.
+        expect(load).not.toHaveBeenCalled();
+        expect(second).toEqual(first);
+      } finally {
+        load.mockRestore();
       }
     },
     SLOW,

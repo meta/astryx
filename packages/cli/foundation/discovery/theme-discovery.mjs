@@ -548,6 +548,67 @@ function staticThemeValue(node, label) {
 }
 
 /**
+ * Convert one static literal of a data descriptor (an icon definition): a
+ * string, a boolean, or an array or plain object of those.
+ * @param {any} node
+ * @param {string} label
+ * @returns {unknown}
+ */
+function staticDataValue(node, label) {
+  if (node?.type === 'StringLiteral' || node?.type === 'BooleanLiteral') {
+    return node.value;
+  }
+  if (node?.type === 'ArrayExpression') {
+    return node.elements.map((/** @type {any} */ element) =>
+      staticDataValue(unparenthesized(element), label),
+    );
+  }
+  if (node?.type === 'ObjectExpression') {
+    return staticObject(node, label, staticDataValue);
+  }
+  throw new Error(
+    `${label} must use static strings, booleans, arrays, and objects in its default export.`,
+  );
+}
+
+/**
+ * A static object literal, every value converted by `convert`.
+ * @param {any} object
+ * @param {string} label
+ * @param {(node: any, label: string) => unknown} convert
+ * @returns {Record<string, any>}
+ */
+function staticObject(object, label, convert) {
+  /** @type {Record<string, any>} */
+  const value = {};
+  for (const property of object.properties) {
+    if (property.type !== 'ObjectProperty' || property.computed) {
+      throw new Error(`${label} must contain only static object properties.`);
+    }
+    const key =
+      property.key.type === 'Identifier'
+        ? property.key.name
+        : property.key.type === 'StringLiteral'
+          ? property.key.value
+          : null;
+    if (key === null) {
+      throw new Error(`${label} has an invalid property name.`);
+    }
+    if (Object.hasOwn(value, key)) {
+      throw new Error(`${label} declares "${key}" more than once.`);
+    }
+    // Defined, not assigned, so `__proto__` stays a key the parser rejects.
+    Object.defineProperty(value, key, {
+      value: convert(unparenthesized(property.value), label),
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return value;
+}
+
+/**
  * How messages about a theme descriptor name it.
  * @param {string} docPath
  * @param {string} owner
@@ -583,7 +644,7 @@ function readThemeDoc(docPath, owner) {
 /**
  * Descriptor reads in this process, by path and label, reused while the file
  * keeps its size and mtime.
- * @type {Map<string, {size: number, mtimeMs: number, read: {value: Record<string, string | boolean>} | {error: unknown}}>}
+ * @type {Map<string, {size: number, mtimeMs: number, read: {value: Record<string, any>} | {error: unknown}}>}
  */
 const descriptorReads = new Map();
 
@@ -596,15 +657,41 @@ const descriptorReads = new Map();
  * @returns {Record<string, string | boolean>}
  */
 export function readThemeDescriptorValue(docPath, label) {
+  return readStaticDescriptorValue(docPath, label, 'ThemeDoc');
+}
+
+/**
+ * The static value a typed descriptor default-exports, read from its source
+ * without executing it. Throws when the file is not one static object typed
+ * with `typeName` from `@astryxdesign/cli/authoring`. Theme and icon-set
+ * descriptors share this reader.
+ * @param {string} docPath
+ * @param {string} label
+ * @param {string} typeName the public authoring type, such as `ThemeDoc`
+ * @param {{data?: boolean}} [options] `data`: also accept arrays and plain
+ *   objects of static values (icon definitions)
+ * @returns {Record<string, any>}
+ */
+export function readStaticDescriptorValue(
+  docPath,
+  label,
+  typeName,
+  {data = false} = {},
+) {
   const {size, mtimeMs} = fs.statSync(docPath);
-  const key = `${docPath}\0${label}`;
+  const key = `${docPath}\0${label}\0${typeName}\0${data}`;
   let cached = descriptorReads.get(key);
   if (!cached || cached.size !== size || cached.mtimeMs !== mtimeMs) {
-    /** @type {{value: Record<string, string | boolean>} | {error: unknown}} */
+    /** @type {{value: Record<string, any>} | {error: unknown}} */
     let read;
     try {
       read = {
-        value: readDescriptorSource(fs.readFileSync(docPath, 'utf-8'), label),
+        value: readDescriptorSource(
+          fs.readFileSync(docPath, 'utf-8'),
+          label,
+          typeName,
+          data,
+        ),
       };
     } catch (error) {
       read = {error};
@@ -613,15 +700,17 @@ export function readThemeDescriptorValue(docPath, label) {
     descriptorReads.set(key, cached);
   }
   if ('error' in cached.read) throw cached.read.error;
-  return {...cached.read.value};
+  return data ? structuredClone(cached.read.value) : {...cached.read.value};
 }
 
 /**
  * @param {string} source
  * @param {string} label
- * @returns {Record<string, string | boolean>}
+ * @param {string} typeName
+ * @param {boolean} [data]
+ * @returns {Record<string, any>}
  */
-function readDescriptorSource(source, label) {
+function readDescriptorSource(source, label, typeName, data = false) {
   /** @type {any} */
   let ast;
   try {
@@ -647,52 +736,34 @@ function readDescriptorSource(source, label) {
   );
   if (unsupported.length > 0 || ast.program.directives.length > 0) {
     throw new Error(
-      `${label} must contain only its static default-exported ThemeDoc object.`,
+      `${label} must contain only its static default-exported ${typeName} object.`,
     );
   }
   const object =
     defaults.length === 1 && unparenthesized(defaults[0].declaration);
   if (object?.type !== 'ObjectExpression') {
-    throw new Error(`${label} must default-export one static ThemeDoc object.`);
-  }
-  if (!declaresThemeDoc(ast, defaults[0])) {
     throw new Error(
-      `${label} must declare its public ThemeDoc type from @astryxdesign/cli/authoring.`,
+      `${label} must default-export one static ${typeName} object.`,
+    );
+  }
+  if (!declaresDocType(ast, defaults[0], typeName)) {
+    throw new Error(
+      `${label} must declare its public ${typeName} type from @astryxdesign/cli/authoring.`,
     );
   }
 
-  /** @type {Record<string, string | boolean>} */
-  const value = {};
-  for (const property of object.properties) {
-    if (property.type !== 'ObjectProperty' || property.computed) {
-      throw new Error(`${label} must contain only static object properties.`);
-    }
-    const key =
-      property.key.type === 'Identifier'
-        ? property.key.name
-        : property.key.type === 'StringLiteral'
-          ? property.key.value
-          : null;
-    if (key === null) {
-      throw new Error(`${label} has an invalid property name.`);
-    }
-    if (Object.hasOwn(value, key)) {
-      throw new Error(`${label} declares "${key}" more than once.`);
-    }
-    // Defined, not assigned, so `__proto__` stays a key the parser rejects.
-    Object.defineProperty(value, key, {
-      value: staticThemeValue(unparenthesized(property.value), label),
-      enumerable: true,
-      writable: true,
-      configurable: true,
-    });
-  }
-  return value;
+  return staticObject(object, label, data ? staticDataValue : staticThemeValue);
 }
 
-/** `import('@astryxdesign/cli/authoring').ThemeDoc`, without whitespace. */
-const THEME_DOC_TYPE =
-  /^import\((['"])@astryxdesign\/cli\/authoring\1\)\.ThemeDoc$/u;
+/**
+ * `import('@astryxdesign/cli/authoring').<typeName>`, without whitespace.
+ * @param {string} typeName
+ */
+const authoringTypeRe = typeName =>
+  new RegExp(
+    String.raw`^import\((['"])@astryxdesign\/cli\/authoring\1\)\.${typeName}$`,
+    'u',
+  );
 
 /** @param {any} comment */
 function isJsdoc(comment) {
@@ -835,15 +906,16 @@ function wrappedInParens(type) {
 
 /**
  * Whether a JSDoc type, whitespace removed, checks an object literal exactly
- * as ThemeDoc does: ThemeDoc or one of its aliases, optionally parenthesized,
- * marked `!`, `?` or `=`, joined with `null` or `undefined`, or intersected
- * with `{}`.
+ * as `typeName` does: the type or one of its aliases, optionally
+ * parenthesized, marked `!`, `?` or `=`, joined with `null` or `undefined`, or
+ * intersected with `{}`.
  * @param {string} type
  * @param {Map<string, string>} aliases alias name to the type it names
+ * @param {string} typeName
  * @param {Set<string>} [seen]
  * @returns {boolean}
  */
-function isThemeDocType(type, aliases, seen = new Set()) {
+function isDocType(type, aliases, typeName, seen = new Set()) {
   let current = type;
   for (;;) {
     if (/^[!?]/u.test(current)) current = current.slice(1);
@@ -855,15 +927,17 @@ function isThemeDocType(type, aliases, seen = new Set()) {
     member => member !== 'null' && member !== 'undefined',
   );
   if (members.length !== 1) return false;
-  if (members[0] !== current) return isThemeDocType(members[0], aliases, seen);
+  if (members[0] !== current) {
+    return isDocType(members[0], aliases, typeName, seen);
+  }
   const parts = splitType(current, '&').filter(part => part !== '{}');
   if (parts.length !== 1) return false;
-  if (parts[0] !== current) return isThemeDocType(parts[0], aliases, seen);
-  if (THEME_DOC_TYPE.test(current)) return true;
+  if (parts[0] !== current) return isDocType(parts[0], aliases, typeName, seen);
+  if (authoringTypeRe(typeName).test(current)) return true;
   const named = aliases.get(current);
   if (named === undefined || seen.has(current)) return false;
   seen.add(current);
-  return isThemeDocType(named, aliases, seen);
+  return isDocType(named, aliases, typeName, seen);
 }
 
 const AUTHORING = String.raw`(['"])@astryxdesign\/cli\/authoring\2`;
@@ -872,12 +946,13 @@ const AUTHORING = String.raw`(['"])@astryxdesign\/cli\/authoring\2`;
  * The type names the file's JSDoc binds with `@typedef` or `@import`, from any
  * JSDoc comment in the module, as TypeScript reads them.
  * @param {any[]} comments
+ * @param {string} typeName
  * @returns {Map<string, string>}
  */
-function jsdocAliases(comments) {
+function jsdocAliases(comments, typeName) {
   /** @type {Map<string, string>} */
   const aliases = new Map();
-  const theme = "import('@astryxdesign/cli/authoring').ThemeDoc";
+  const theme = `import('@astryxdesign/cli/authoring').${typeName}`;
   for (const comment of comments.filter(isJsdoc)) {
     for (const tag of jsdocTags(comment.value)) {
       if (tag.name === 'typedef') {
@@ -890,17 +965,17 @@ function jsdocAliases(comments) {
           'u',
         ).exec(tag.text);
         for (const specifier of named?.[1].split(',') ?? []) {
-          const match =
-            /^\s*(?:type\s+)?ThemeDoc(?:\s+as\s+([$A-Z_a-z][$\w]*))?\s*$/u.exec(
-              specifier,
-            );
-          if (match) aliases.set(match[1] ?? 'ThemeDoc', theme);
+          const match = new RegExp(
+            String.raw`^\s*(?:type\s+)?${typeName}(?:\s+as\s+([$A-Z_a-z][$\w]*))?\s*$`,
+            'u',
+          ).exec(specifier);
+          if (match) aliases.set(match[1] ?? typeName, theme);
         }
         const namespace = new RegExp(
           String.raw`^\s*\*\s*as\s+([$A-Z_a-z][$\w]*)\s+from\s*${AUTHORING}`,
           'u',
         ).exec(tag.text)?.[1];
-        if (namespace) aliases.set(`${namespace}.ThemeDoc`, theme);
+        if (namespace) aliases.set(`${namespace}.${typeName}`, theme);
       }
     }
   }
@@ -909,14 +984,15 @@ function jsdocAliases(comments) {
 
 /**
  * Whether the JSDoc TypeScript reads for the default export types it as the
- * public ThemeDoc: `@type` in the last JSDoc comment between the previous
+ * public `typeName` (such as ThemeDoc): `@type` in the last JSDoc comment between the previous
  * token and `export`, or `@type` or `@satisfies` in the last one between the
  * previous token and the opening parenthesis of a JSDoc cast of the object.
  * Line comments, strings, code spans, and JSDoc anywhere else never type it.
  * @param {any} ast parsed with tokens and parenthesized expressions
  * @param {any} exportDefault
+ * @param {string} typeName
  */
-function declaresThemeDoc(ast, exportDefault) {
+function declaresDocType(ast, exportDefault, typeName) {
   const tokens = ast.tokens.filter(
     (/** @type {any} */ token) => typeof token.type !== 'string',
   );
@@ -947,14 +1023,14 @@ function declaresThemeDoc(ast, exportDefault) {
       tags: ['type', 'satisfies'],
     });
   }
-  const aliases = jsdocAliases(comments);
+  const aliases = jsdocAliases(comments, typeName);
   return attached.some(({comment, tags}) => {
     if (!comment) return false;
     const found = jsdocTags(comment.value);
     return tags.some(name => {
       const tag = found.find(candidate => candidate.name === name);
       const typed = tag && bracedType(tag.text);
-      return typed != null && isThemeDocType(typed.type, aliases);
+      return typed != null && isDocType(typed.type, aliases, typeName);
     });
   });
 }

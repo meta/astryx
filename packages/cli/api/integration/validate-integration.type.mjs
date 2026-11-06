@@ -39,9 +39,18 @@
  * "healthy" — the two are otherwise byte-identical.
  * @typedef {object} ValidateIntegrationResponse
  * @property {'integration.validate'} type
- * @property {{validated: boolean, name: string | null, version: string | null, issues: import('../../foundation/integrations/issue').AstryxIntegrationIssue[], notes?: Array<{code: string, message: string}>, docTypes?: DocTypesReport, docNames?: DocNamesReport, blockComponents?: BlockComponentsReport, publicImports?: PublicImportsReport}} data
- *   `notes`: information beside the issues that fails nothing, such as
- *   `invalid_cli_command`, a `cliCommand` that was ignored as malformed;
+ * @property {{validated: boolean, name: string | null, version: string | null, issues: import('../../foundation/integrations/issue').AstryxIntegrationIssue[], notes?: Array<{code: string, message: string, next?: boolean}>, docTypes?: DocTypesReport, docNames?: DocNamesReport, blockComponents?: BlockComponentsReport, exampleAssets?: {status: 'checked', findings: [], unchecked: Array<{file: string, asset: string, reason: string}>}, publicImports?: PublicImportsReport, iconSets?: IconSetCoverage[], olderCliNotes?: OlderCliNote[]}} data
+ *   `iconSets` is experimental: it may change or be removed in a patch
+ *   release.
+ *   `notes`: information beside the issues. A note fails nothing by default;
+ *   one with `next: true` counts as a warning under `integration check
+ *   --next`, fails `integration check --strict --next`, and fails `--strict`
+ *   from the next minor release. Notes include `invalid_cli_command`, a
+ *   `cliCommand` that was ignored as malformed;
+ *   `component_without_example`, `template_category`,
+ *   `showcase_not_standalone` and `template_asset_not_packed`, what a
+ *   package's examples need (next minor; a block's `alsoShowcaseFor` names
+ *   count as shown);
  *   `cli_peer_version`, the running CLI outside the package's
  *   `@astryxdesign/cli` peer range; and
  *   the package layout findings added after the last minor release, each with
@@ -54,8 +63,10 @@
  *   still pair (`source_without_component_doc`); `doc_name_mismatch` and
  *   `unknown_block_component` (see `docNames` and `blockComponents`); and
  *   since 0.7.3 each public-import finding; they become warnings in the next
- *   minor release; and `runner_command`, an Astryx command a topic writes
- *   with a package runner
+ *   minor release; and, for the commands a topic writes, `runner_command`
+ *   (written with a package runner), `plain_command` (written bare),
+ *   `package_manager_command` (written for one package manager) and
+ *   `doc_token` (a token that does not parse), each with the token to write
  */
 
 /**
@@ -99,6 +110,44 @@
  * `name`, and `reason`.
  *
  * @typedef {{status: 'checked', findings: [], unchecked: Array<{file: string, name: string, reason: string}>}} BlockComponentsReport
+ */
+
+/**
+ * Experimental (spec:AST-084 FR15): for a package that declares
+ * `experimental.iconSets`, which icon definitions each valid set leaves
+ * unmapped, and what the checks could not judge. Listed beside the issues and
+ * never counted: mapping an optional definition is optional, an item not
+ * checked is not a failure, and nothing here fails a check, even under
+ * `--strict`.
+ * @experimental May change or be removed in a patch release.
+ * @typedef {object} IconSetCoverage
+ * @property {string} set The set's name.
+ * @property {Array<{name: string, description: string, words: string[]}>} unmappedDefinitions
+ *   Astryx's optional (not built-in) definitions the set's `map` does not
+ *   name. An unmapped built-in definition is an error issue instead.
+ * @property {Array<{definition: string, icon: string}>} suggestions For each
+ *   unmapped definition (built-in, optional, or the set's own), the best icon
+ *   `integration check` gives it, by the rule `experimental icon new-set`
+ *   uses for its suggestions, when one is.
+ * @property {Array<{icon?: string, adapter?: string, entry?: string, reason: string}>} unchecked
+ *   What the checks could not judge, each with the reason: an icon export
+ *   whose module is an `exports` target not built yet, or that the reader
+ *   cannot prove either way (`icon`); an adapter export it cannot prove
+ *   (`adapter`); and a theme map or theme-map entry it cannot read
+ *   (`entry`).
+ */
+
+/**
+ * A descriptor an older CLI drops: a page or block template, or a namespace
+ * doc, that sets `stability`, or a template that declares `icons`, while the
+ * package's `@astryxdesign/cli` peer range admits a release before 0.7.4.
+ * Listed beside the issues for the package being authored, and never counted
+ * or failing a check.
+ * @typedef {object} OlderCliNote
+ * @property {string} file The descriptor, relative to the package.
+ * @property {'template' | 'namespace'} kind
+ * @property {'stability' | 'icons'} field The field an older CLI refuses.
+ * @property {string} message What an older CLI does with it, and the fix.
  */
 
 export {};

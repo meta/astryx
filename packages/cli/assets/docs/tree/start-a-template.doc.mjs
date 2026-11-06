@@ -38,8 +38,8 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           code: `# How an app finds a template and copies it
-astryx template --list
-astryx template acme-dashboard src/app/dashboard`,
+{@command template --list}
+{@command template acme-dashboard src/app/dashboard}`,
         },
       ],
     },
@@ -83,7 +83,7 @@ astryx template acme-dashboard src/app/dashboard`,
       content: [
         {
           type: 'prose',
-          text: 'Choose a stable lowercase kebab-case id, such as `acme-dashboard`. The id becomes the source and doc file name, the package export, and the value apps pass to `astryx template`. To change a label, edit the doc ({@link generic:template-doc-overview}); never rename the id.',
+          text: 'Choose a stable lowercase kebab-case id, such as `acme-dashboard`. The id becomes the source and doc file name, the package export, and the value apps pass to `{@command template}`. To change a label, edit the doc ({@link generic:template-doc-overview}); never rename the id.',
         },
         {
           type: 'list',
@@ -112,8 +112,8 @@ astryx template acme-dashboard src/app/dashboard`,
         {
           type: 'code',
           lang: 'bash',
-          code: `astryx integration add template acme-dashboard
-astryx integration add template acme-stat-card --type block`,
+          code: `{@command integration add template acme-dashboard}
+{@command integration add template acme-stat-card --type block}`,
         },
         {
           type: 'code',

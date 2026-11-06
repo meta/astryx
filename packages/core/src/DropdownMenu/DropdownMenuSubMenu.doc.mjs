@@ -16,6 +16,7 @@ export const docs = {
     {
       name: 'label',
       type: 'ReactNode',
+      required: true,
       description: 'Primary label text for the trigger row.',
     },
     {
@@ -32,6 +33,7 @@ export const docs = {
     {
       name: 'children',
       type: 'ReactNode',
+      required: true,
       description:
         'The flyout menu items: the same components used at the top level (DropdownMenuItem, nested DropdownMenuSubMenu, selectable items).',
     },
@@ -80,6 +82,12 @@ export const docs = {
         "Content below the sub-menu's rows and outside its menu, a door to where the options are managed, say. Same rules as header.",
     },
     {
+      name: 'menuDataTestId',
+      type: 'string',
+      description:
+        'Test id for the sub-menu\'s own role="menu" element: the flyout, or the drilled-in list on a phone. The trigger row takes data-testid.',
+    },
+    {
       name: 'xstyle',
       type: 'StyleXStyles',
       description:
@@ -115,6 +123,7 @@ export const docsDense = {
     header:
       'content above the rows, outside the menu; surface becomes a modal dialog named by the row (Tab wraps, Escape returns to the row)',
     footer: 'content below the rows, outside the menu; same rules as header',
+    menuDataTestId: 'test id for the flyout or drilled-in role="menu"',
     xstyle: 'StyleX styles for the trigger row',
     ref: 'ref to the trigger row (role="menuitem")',
   },

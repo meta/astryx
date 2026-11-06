@@ -199,6 +199,35 @@ describe('upgrade protected-file contract', () => {
     });
   });
 
+  it('keeps the error and adds the receipt when a hook leaves a protection declaration unreadable', () => {
+    seed();
+    write(
+      'astryx.config.mjs',
+      `export default {hooks: {postCodemod: [{name: 'regenerate', buildCommand: () => ({command: process.execPath, args: ['-e', ${JSON.stringify("require('node:fs').writeFileSync('.hgignore', 'syntax: regexp\\n[bad\\n')")}]})}]}};\n`,
+    );
+
+    const applied = run([...ARGS, '--apply']);
+
+    expect(applied.status).toBe(1);
+    expect(applied.envelope).not.toHaveProperty('type');
+    expect(applied.envelope).toMatchObject({
+      code: 'ERR_CODEMOD_PROTECTION_SOURCE',
+      error: expect.stringContaining('.hgignore'),
+      receipt: {
+        complete: false,
+        errorCode: 'ERR_CODEMOD_PROTECTION_SOURCE',
+        modifiedFiles: ['src/owned.tsx'],
+        protectedFiles: [
+          expect.objectContaining({file: 'generated/panel.tsx'}),
+        ],
+        errors: [expect.objectContaining({codemod: 'file-protection'})],
+      },
+    });
+    expect(fs.readFileSync(path.join(root, 'src/owned.tsx'), 'utf8')).toContain(
+      'minSize: 200',
+    );
+  });
+
   it('runs declared regeneration and clears a generated-file block after reevaluation', () => {
     seed({hook: true});
 
@@ -226,4 +255,150 @@ describe('upgrade protected-file contract', () => {
     expect(second.envelope.data.complete).toBe(true);
     expect(second.envelope.data.filesChanged).toBe(0);
   });
+
+  it('skips a vendored file that does not parse and completes the upgrade', () => {
+    seed();
+    write('.gitattributes', 'vendor/** linguist-vendored\n');
+    const bundle =
+      "/* minified */ import {useResizable} from '@astryxdesign/core';\n" +
+      'export const x = useResizable({minSizePx: 200;\n';
+    write('vendor/bundle.js', bundle);
+    rmGenerated();
+
+    const applied = run([...ARGS, '--apply']);
+
+    expect(applied.status, applied.stderr).toBe(0);
+    expect(applied.envelope).toMatchObject({
+      type: 'upgrade.run',
+      data: {
+        complete: true,
+        modifiedFiles: ['src/owned.tsx'],
+        protectedFiles: [],
+        declinedCandidates: [
+          {
+            file: 'vendor/bundle.js',
+            location: '2:46',
+            reason:
+              'unparseable protected file (vendored): Unexpected token, expected ","',
+          },
+        ],
+      },
+    });
+    expect(applied.envelope.data.errors ?? []).toEqual([]);
+    expect(fs.readFileSync(path.join(root, 'src/owned.tsx'), 'utf8')).toContain(
+      'minSize: 200',
+    );
+    expect(fs.readFileSync(path.join(root, 'vendor/bundle.js'), 'utf8')).toBe(
+      bundle,
+    );
+
+    const text = spawnSync(process.execPath, [CLI, 'upgrade', ...ARGS], {
+      cwd: root,
+      encoding: 'utf8',
+      timeout: 60_000,
+      env: {...process.env, FORCE_COLOR: '0', CI: ''},
+    });
+    expect(text.status, text.stderr).toBe(0);
+    expect(`${text.stdout}${text.stderr}`).toContain(
+      '1 protected file was skipped because it does not parse',
+    );
+    const declinedLine = `${text.stdout}${text.stderr}`
+      .split('\n')
+      .find(line => line.includes('vendor/bundle.js:2:46'));
+    expect(declinedLine).toMatch(/^ {2}vendor\/bundle\.js:2:46 - /);
+    // cli-surface output is plain ASCII.
+    expect(declinedLine).toMatch(/^[\x20-\x7e]*$/);
+  });
+
+  it('still fails when an owned file does not parse', () => {
+    seed();
+    write(
+      'lib/broken.js',
+      "import {useResizable} from '@astryxdesign/core';\n" +
+        'export const x = useResizable({minSizePx: 200;\n',
+    );
+    rmGenerated();
+
+    const applied = run([...ARGS, '--apply']);
+
+    expect(applied.status).toBe(1);
+    expect(applied.envelope).toMatchObject({code: 'ERR_CODEMOD_FAILED'});
+  });
+
+  it('reports a stylesheet the 0.6 and 0.7 theme codemods both need once, as protected', () => {
+    write('package.json', JSON.stringify({name: 'consumer', private: true}));
+    write(
+      'node_modules/@astryxdesign/core/package.json',
+      JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
+    );
+    write('.gitattributes', 'vendor/** linguist-vendored\n');
+    write('vendor/bundle.css', 'a:: { color: red; }\n');
+
+    const result = run(['--from', '0.5.4', '--path', '.']);
+    const text = spawnSync(
+      process.execPath,
+      [CLI, 'upgrade', '--from', '0.5.4', '--path', '.'],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        timeout: 60_000,
+        env: {...process.env, FORCE_COLOR: '0', CI: ''},
+      },
+    );
+    const output = `${text.stdout}${text.stderr}`;
+    expect(text.status).toBe(1);
+    expect(output).toContain('ERR_CODEMOD_PROTECTED');
+    expect(output).toMatch(/^ {2}vendor\/bundle\.css — /m);
+    expect(output).not.toContain('skipped because');
+    expect(output).not.toContain('unparseable protected file');
+
+    expect(result.status).toBe(1);
+    expect(result.envelope).toMatchObject({
+      type: 'upgrade.run',
+      data: {
+        complete: false,
+        errorCode: 'ERR_CODEMOD_PROTECTED',
+        protectedFiles: [expect.objectContaining({file: 'vendor/bundle.css'})],
+        declinedCandidates: [],
+      },
+    });
+  });
+
+  it('lists a generated file the hook regenerates into bytes that do not parse', () => {
+    seed();
+    const broken =
+      "// @generated\nimport {useResizable} from '@astryxdesign/core';\n" +
+      'export const usePanel = () => useResizable({minSizePx: 200;\n';
+    write(
+      'astryx.config.mjs',
+      `export default {hooks: {postCodemod: [{name: 'regenerate', buildCommand: () => ({command: process.execPath, args: ['-e', ${JSON.stringify(`require('node:fs').writeFileSync('generated/panel.tsx', ${JSON.stringify(broken)})`)}]})}]}};\n`,
+    );
+
+    const applied = run([...ARGS, '--apply']);
+
+    expect(applied.status, applied.stderr).toBe(0);
+    expect(applied.envelope).toMatchObject({
+      type: 'upgrade.run',
+      data: {
+        complete: true,
+        protectedFiles: [],
+        declinedCandidates: [
+          {
+            file: 'generated/panel.tsx',
+            location: expect.stringMatching(/^3:\d+$/),
+            reason: expect.stringMatching(
+              /^unparseable protected file \(generated\): /,
+            ),
+          },
+        ],
+      },
+    });
+    expect(
+      fs.readFileSync(path.join(root, 'generated/panel.tsx'), 'utf8'),
+    ).toBe(broken);
+  });
 });
+
+function rmGenerated() {
+  fs.rmSync(path.join(root, 'generated'), {recursive: true, force: true});
+}

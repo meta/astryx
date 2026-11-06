@@ -49,11 +49,15 @@ import {
   synonymMatches,
 } from '../../foundation/text/suggest-order.mjs';
 import {AstryxError, coreDirOrThrow} from '../error.mjs';
+import {levenshteinDistance} from '../../foundation/text/levenshtein.mjs';
 import {
   componentLinkProvider,
   linkComponentDoc,
   loadDocsCatalog,
 } from '../docs/_adapter.mjs';
+
+/** How far below the first suggestion's score a later one may be. */
+const NEAR_FIRST = 10;
 
 /** @type {Record<string, {synonyms?: string[]}> | undefined} */
 let cards;
@@ -503,9 +507,20 @@ export async function resolveUnscopedDoc(dirName, {coreDir, cwd, name}) {
           Object.values(components).flat(),
           synonymMatches(dirName, searchCards()),
         ).slice(0, count);
+        // Past the first two suggestions, only the ones about as close as
+        // the first (within NEAR_FIRST points), or a close spelling of the
+        // whole typed name (a typo): a weaker match after a strong one reads
+        // as noise. The list only gets shorter and keeps at least two.
+        const typed = dirName.toLowerCase();
+        const nearFirst = candidates.filter(
+          (c, i) =>
+            i < 2 ||
+            c.score >= candidates[0].score - NEAR_FIRST ||
+            levenshteinDistance(c.name.toLowerCase(), typed) <= 2,
+        );
         throw new AstryxError(
           `No component named "${name}"`,
-          candidates.map(c => ({name: c.name, reason: c.reason})),
+          nearFirst.map(c => ({name: c.name, reason: c.reason})),
           ERROR_CODES.ERR_UNKNOWN_COMPONENT,
         );
       }
@@ -718,7 +733,7 @@ export async function linkSearchResponse(response, cwd) {
       result =>
         result?.domain === 'component' &&
         typeof result.description === 'string' &&
-        result.description.includes('{@link'),
+        result.description.includes('{@'),
     )
   ) {
     return response;
@@ -728,7 +743,7 @@ export async function linkSearchResponse(response, cwd) {
     if (
       result?.domain !== 'component' ||
       typeof result.description !== 'string' ||
-      !result.description.includes('{@link')
+      !result.description.includes('{@')
     ) {
       linked.push(result);
       continue;
@@ -767,7 +782,8 @@ export async function linkComponentResponse(response, cwd) {
   ) {
     return response;
   }
-  if (!JSON.stringify(response.data ?? null).includes('{@link')) {
+  // Doc tokens render in the same pass as links.
+  if (!JSON.stringify(response.data ?? null).includes('{@')) {
     return response;
   }
   const catalog = await loadDocsCatalog(cwd);

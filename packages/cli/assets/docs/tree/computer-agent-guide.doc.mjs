@@ -32,7 +32,7 @@ export const docs = {
     'link skills',
   ],
   description:
-    'Your global install keeps one short Astryx skill in your home folder and links it into the folders agent tools read, so agents anywhere know Astryx is there. `astryx init --user` writes it now or turns it off.',
+    'Your global install keeps one short Astryx skill in your home folder and links it into the folders agent tools read, so agents anywhere know Astryx is there. `{@command init --user}` writes it now or turns it off.',
   sections: [
     {
       id: 'what',
@@ -40,7 +40,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "A project's agent docs reach only agents working in that project. Your global install also keeps one skill file, `~/.agents/skills/astryx/SKILL.md`, which most coding agents read. It tells agents that Astryx is on this computer, when it is relevant (building or changing UI), and to start with `astryx search`. It names no version, so it never goes stale. Inside a project, the project's own agent docs come first.",
+          text: "A project's agent docs reach only agents working in that project. Your global install also keeps one skill file, `~/.agents/skills/astryx/SKILL.md`, which most coding agents read. It tells agents that Astryx is on this computer, when it is relevant (building or changing UI), and to start with `{@command search}`. It names no version, so it never goes stale. Inside a project, the project's own agent docs come first.",
         },
         {
           type: 'prose',
@@ -83,7 +83,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "Astryx never replaces anything it did not create at one of these folders, and never writes a folder another tool manages; `astryx doctor` names any it skipped, and any link whose skill folder is missing, as in a container that mounts only one agent's folder.",
+          text: "Astryx never replaces anything it did not create at one of these folders, and never writes a folder another tool manages; `{@command doctor}` names any it skipped, and any link whose skill folder is missing, as in a container that mounts only one agent's folder.",
         },
       ],
     },
@@ -95,7 +95,7 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            "Cloud and background agents read only the repository, so the project's own agent docs, the block `astryx init` writes into AGENTS.md or CLAUDE.md, are what reach them.",
+            "Cloud and background agents read only the repository, so the project's own agent docs, the block `{@command init}` writes into AGENTS.md or CLAUDE.md, are what reach them.",
             'Apps that take an uploaded skill: upload `~/.agents/skills/astryx/SKILL.md`, or a zip of its folder.',
           ],
         },
@@ -132,16 +132,16 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx init --user\nastryx init --user --remove-agents',
+          code: '{@command init --user}\n{@command init --user --remove-agents}',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
             '`init --user` writes the file and the links now.',
-            '`--remove-agents` removes the file and every link Astryx made, and turns it off until you run `astryx init --user` again.',
+            '`--remove-agents` removes the file and every link Astryx made, and turns it off until you run `{@command init --user}` again.',
             'A file you edited is never overwritten or removed; delete it to get the current text.',
-            'Outside a project, `astryx doctor` says whether the skill is there, current, edited, or turned off, and where it is linked.',
+            'Outside a project, `{@command doctor}` says whether the skill is there, current, edited, or turned off, and where it is linked.',
           ],
         },
       ],

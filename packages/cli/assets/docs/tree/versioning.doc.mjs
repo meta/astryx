@@ -28,7 +28,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: '# 1.0.0 -> 2.0.0: a breaking change\nnpm version major\n# 1.0.0 -> 1.1.0: a new feature\nnpm version minor\n# 1.0.0 -> 1.0.1: a fix\nnpm version patch',
+          code: '# 1.0.0 -> 2.0.0: a breaking change\n{@pm-only npm "npm, which every Node install carries, sets the version" version major}\n# 1.0.0 -> 1.1.0: a new feature\n{@pm-only npm "npm, which every Node install carries, sets the version" version minor}\n# 1.0.0 -> 1.0.1: a fix\n{@pm-only npm "npm, which every Node install carries, sets the version" version patch}',
         },
         {
           type: 'list',
@@ -54,13 +54,13 @@ export const docs = {
           rows: [
             [
               'A component name, such as `AcmeCarousel`',
-              'Imports, and `astryx component AcmeCarousel`',
+              'Imports, and `{@command component AcmeCarousel}`',
             ],
             [
               'A template id, such as `acme-dashboard`',
-              '`astryx template acme-dashboard`',
+              '`{@command template acme-dashboard}`',
             ],
-            ['A theme slug, such as `ocean`', '`astryx theme add ocean`'],
+            ['A theme slug, such as `ocean`', '`{@command theme add ocean}`'],
             [
               'A topic name or route, such as `acme/deploying`',
               'Reads of the old name, and links to it from other docs',

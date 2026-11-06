@@ -23,6 +23,12 @@
 export {component} from './component/component.mjs';
 export {docs} from './docs/docs.mjs';
 export {blog} from './blog/blog.mjs';
+export {icon} from './icon/icon.mjs';
+export {iconAdd} from './icon/add/add.mjs';
+export {iconMap} from './icon/map/map.mjs';
+export {iconUse} from './icon/use/use.mjs';
+export {iconNewSet} from './icon/new-set/new-set.mjs';
+export {iconNewDefinition} from './icon/new-definition/new-definition.mjs';
 export {discover} from './discover/discover.mjs';
 export {template} from './template/template.mjs';
 export {

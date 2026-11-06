@@ -5,6 +5,8 @@
  * integrations contribute, read from their docs. Imported only by the adapter.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import {discoverExternalPackages} from '../../foundation/fs/paths.mjs';
 import {
   discoverComponents,
@@ -30,6 +32,28 @@ import {loadModuleDoc, guidanceFrom} from './_module-doc.mjs';
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
 
 /**
+ * The members a family doc names, each with the family and its place among
+ * the members (the family's own entry left out). A query naming the family
+ * lists its first members (see scoreCandidate).
+ * @param {any} docs
+ * @returns {Map<string, {_family: string, _familyIndex: number}>}
+ */
+function familyPlaces(docs) {
+  /** @type {Map<string, {_family: string, _familyIndex: number}>} */
+  const out = new Map();
+  if (!docs || typeof docs.name !== 'string') return out;
+  (Array.isArray(docs.components) ? docs.components : [])
+    .map((/** @type {any} */ m) => (typeof m === 'string' ? m : m?.name))
+    .filter(
+      (/** @type {unknown} */ n) => typeof n === 'string' && n !== docs.name,
+    )
+    .forEach((/** @type {string} */ n, /** @type {number} */ i) =>
+      out.set(n, {_family: docs.name, _familyIndex: i}),
+    );
+  return out;
+}
+
+/**
  * Build component candidates from core's own tree: name + keywords +
  * usage/description from the component's .doc.mjs.
  * @param {string} coreDir
@@ -40,6 +64,8 @@ async function gatherCoreComponents(coreDir) {
   const names = Object.values(grouped).flat();
   /** @type {Candidate[]} */
   const candidates = [];
+  /** @type {Map<string, {_family: string, _familyIndex: number}>} */
+  const places = new Map();
   for (const comp of names) {
     const readme = findComponentReadme(coreDir, comp);
     /** @type {string[]} */
@@ -47,6 +73,8 @@ async function gatherCoreComponents(coreDir) {
     let description = '';
     /** @type {string[]} */
     let guidance = [];
+    /** @type {import('@astryxdesign/cli/authoring').ComponentDeprecation | undefined} */
+    let deprecated;
     if (readme && readme.endsWith('.doc.mjs')) {
       const loaded = await loadModuleDoc(readme);
       // A member documented in its family's doc (VStack in Stack's doc) is
@@ -57,7 +85,9 @@ async function gatherCoreComponents(coreDir) {
         keywords = Array.isArray(doc.keywords) ? doc.keywords : [];
         description = doc.usage?.description || doc.description || '';
         guidance = guidanceFrom(doc);
+        deprecated = doc.deprecated;
       }
+      for (const [n, place] of familyPlaces(loaded)) places.set(n, place);
     }
     candidates.push({
       domain: 'component',
@@ -65,11 +95,22 @@ async function gatherCoreComponents(coreDir) {
       keywords,
       description,
       guidance,
+      ...(deprecated ? {_deprecated: deprecated} : {}),
       _package: CORE_PACKAGE,
       _import: resolveImportPath(coreDir, comp),
     });
   }
-  return candidates;
+  // A family doc with no component of its own name (Chat) names members too.
+  const srcDir = path.join(coreDir, 'src');
+  const listed = new Set(names);
+  for (const dir of fs.existsSync(srcDir) ? fs.readdirSync(srcDir) : []) {
+    const doc = path.join(srcDir, dir, `${dir}.doc.mjs`);
+    if (listed.has(dir) || !fs.existsSync(doc)) continue;
+    for (const [n, place] of familyPlaces(await loadModuleDoc(doc)))
+      places.set(n, place);
+  }
+  // A family doc names its members, whose own docs may sit elsewhere.
+  return candidates.map(c => ({...c, ...places.get(c.name)}));
 }
 
 /**
@@ -105,9 +146,18 @@ async function gatherIntegrationComponents(loadedIntegrations) {
         .filter(rec => !isIntegrationMember(rec))
         .map(rec => rec.docPath),
     );
+    /** @type {string[]} */
+    const docPaths = [];
     forEachIntegrationDoc(integration.components, (docPath, stem) => {
       if (!renamed.has(docPath)) hold(fileNamed, stem, docPath);
+      docPaths.push(docPath);
     });
+    // A family doc names its members, whose own docs may sit beside it.
+    /** @type {Map<string, {_family: string, _familyIndex: number}>} */
+    const places = new Map();
+    for (const docPath of docPaths)
+      for (const [n, place] of familyPlaces(await loadModuleDoc(docPath)))
+        places.set(n, place);
     for (const rec of components) {
       const loaded = await loadModuleDoc(rec.docPath);
       // A family member is indexed from its own entry: the family's keywords
@@ -132,6 +182,8 @@ async function gatherIntegrationComponents(loadedIntegrations) {
         keywords: doc && Array.isArray(doc.keywords) ? doc.keywords : [],
         description: doc ? doc.usage?.description || doc.description || '' : '',
         guidance: guidanceFrom(doc),
+        ...(doc?.deprecated ? {_deprecated: doc.deprecated} : {}),
+        ...places.get(rec.name),
         _package: rec.package ?? integration.name,
         // Exactly what `component` reports: a doc may state its own specifier
         // (one entry point exporting several components), and only when it

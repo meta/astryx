@@ -27,7 +27,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx doctor integration docs\n# In an app, check an installed package\nastryx doctor integration docs @acme/astryx-widgets',
+          code: '{@command doctor integration docs}\n# In an app, check an installed package\n{@command doctor integration docs @acme/astryx-widgets}',
         },
         {
           type: 'code',
@@ -44,7 +44,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "Point at another doc with a link, never by writing `astryx docs <name>` in prose: `{@link generic:<name>}` for one of your package's topics, or `{@link @astryxdesign/cli:generic:<name>}` for a Core doc (`namespace:` for a Core namespace). The CLI prints the link as the command that opens the doc, and doctor checks that the doc exists. The check lists each written pointer to a doc that exists as a `stray_doc_pointer` warning, with the link to write instead. A command with more words, or one in a code block, is a walkthrough and is not listed.",
+          text: "Point at another doc with a link, never by writing `{@command docs <name>}` in prose: `{@link generic:<name>}` for one of your package's topics, or `{@link @astryxdesign/cli:generic:<name>}` for a Core doc (`namespace:` for a Core namespace). The CLI prints the link as the command that opens the doc, and doctor checks that the doc exists. The check lists each written pointer to a doc that exists as a `stray_doc_pointer` warning, with the link to write instead. A command with more words, or one in a code block, is a walkthrough and is not listed.",
         },
         {
           type: 'prose',
@@ -109,7 +109,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx doctor integration validate',
+          code: '{@command doctor integration validate}',
         },
         {
           type: 'code',
@@ -144,12 +144,12 @@ fix:      Remove \`summary\`: SingleComponentDoc has no field \`summary\`.`,
       content: [
         {
           type: 'prose',
-          text: '`astryx doctor` also measures every read and warns on one over 32 KB. Run it in your package or in an app that installs it; `doctor integration docs` does not check size.',
+          text: '`{@command doctor}` also measures every read and warns on one over 32 KB. Run it in your package or in an app that installs it; `doctor integration docs` does not check size.',
         },
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx doctor',
+          code: '{@command doctor}',
         },
         {
           type: 'code',
@@ -173,7 +173,7 @@ fix:      Remove \`summary\`: SingleComponentDoc has no field \`summary\`.`,
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx integration verify',
+          code: '{@command integration verify}',
         },
         {
           type: 'code',

@@ -70,9 +70,15 @@ describe('a doc whose name differs from its source only in case, on a case-insen
 
     const {data} = await validateIntegration(undefined, {cwd: tmpDir});
     expect(data.issues).toEqual([]);
-    expect(data.notes).toEqual([
+    // The component has no example template; that note is tested elsewhere.
+    expect(
+      (data.notes ?? []).filter(
+        note => note.code !== 'component_without_example',
+      ),
+    ).toEqual([
       {
         code: 'source_without_component_doc',
+        next: true,
         message:
           'Component doc "Acmewidget.doc.mjs" and its source "AcmeWidget.tsx" differ only in letter case. They pair on a case-insensitive disk (macOS, Windows) but not on Linux, where CI and most installs run, so there the component is missing. Fix: rename Acmewidget.doc.mjs to AcmeWidget.doc.mjs.',
       },
@@ -100,9 +106,15 @@ describe('a doc whose name differs from its source only in case, on a case-insen
 
     const {data} = await validateIntegration(undefined, {cwd: tmpDir});
     expect(data.issues).toEqual([]);
-    expect(data.notes).toEqual([
+    // The component has no example template; that note is tested elsewhere.
+    expect(
+      (data.notes ?? []).filter(
+        note => note.code !== 'component_without_example',
+      ),
+    ).toEqual([
       {
         code: 'source_without_component_doc',
+        next: true,
         message:
           'Hidden component doc "Acmewidget.doc.mjs" and its source "AcmeWidget.tsx" differ only in letter case. They pair on a case-insensitive disk (macOS, Windows) but not on Linux, where CI and most installs run. Fix: rename Acmewidget.doc.mjs to AcmeWidget.doc.mjs.',
       },

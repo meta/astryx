@@ -37,7 +37,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx doctor integration components',
+          code: '{@command doctor integration components}',
         },
         {
           type: 'code',
@@ -178,11 +178,11 @@ reason:    AcmeCarousel depends on \`@acme/motion\` (imported in AcmeCarousel.ts
             ],
             [
               "It depends on a type the compiler can't work out",
-              'Make the types compile with `npx tsc --noEmit`, then run the check again',
+              'Make the types compile with `{@pm exec tsc --noEmit}`, then run the check again',
             ],
             [
               "The package's TypeScript config has an error",
-              'Fix `tsconfig.json` until `npx tsc -p .` reads it',
+              'Fix `tsconfig.json` until `{@pm exec tsc -p .}` reads it',
             ],
             ['Its props are typed `any`', 'Give the component a props type'],
             [

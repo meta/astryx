@@ -44,6 +44,7 @@
  * An installed integration, or an official package the project declares.
  * @typedef {object} DiscoverListEntry
  * @property {string} name
+ * @property {string} package The npm package — always equal to `name`.
  * @property {string} category
  * @property {string[]} components
  * @property {string} [version]
@@ -54,6 +55,7 @@
  * @property {string[]} [themes] Theme slugs, when it adds any.
  * @property {string[]} [codemods] `<version>/<id>`, when it adds any.
  * @property {string[]} [agentDocs] Agent guidance, when a source lists any.
+ * @property {string[]} [iconSets] Icon set names, when it adds any. Experimental: may change or be removed in a patch release.
  * @property {string} [latest] The latest release a discover source knows.
  */
 
@@ -61,6 +63,7 @@
  * A package the project could add.
  * @typedef {object} DiscoverAvailableEntry
  * @property {string} name
+ * @property {string} package The npm package — always equal to `name`.
  * @property {string} [version] Its latest release.
  * @property {string[]} components
  * @property {string[]} [templates]
@@ -68,6 +71,7 @@
  * @property {string[]} [themes]
  * @property {string[]} [codemods]
  * @property {string[]} [agentDocs]
+ * @property {string[]} [iconSets] Icon set names, when it adds any. Experimental: may change or be removed in a patch release.
  * @property {string} [description]
  * @property {string[]} [aliases] The integration's other package names.
  * @property {string} source The discover source that lists it; `Astryx` for
@@ -95,6 +99,7 @@
  * astryx --json discover @scope/name[@version]
  * @typedef {object} DiscoverDetailResponse
  * @property {'discover.detail'} type
+ * @property {string} package The npm package this result is about.
  * @property {DiscoverListEntry & {
  *   installed: boolean,
  *   installedVersion?: string,
@@ -115,6 +120,7 @@
  * astryx --json discover @scope/name/Component
  * @typedef {object} DiscoverDetailDocResponse
  * @property {'discover.detail.doc'} type
+ * @property {string} package The npm package that owns the component.
  * @property {import('@astryxdesign/cli/authoring').ComponentDoc} data
  */
 
@@ -123,6 +129,7 @@
  * installed component.
  * @typedef {object} DiscoverItemResponse
  * @property {'discover.item'} type
+ * @property {string} package The npm package that owns the item.
  * @property {{
  *   package: string,
  *   version?: string,
@@ -131,11 +138,23 @@
  *   title?: string,
  *   summary?: string,
  *   keywords?: string[],
+ *   license?: string,
+ *   iconCount?: number,
+ *   default?: {variant?: string},
+ *   definitions?: string[],
+ *   command?: string,
  *   installed: boolean,
  *   installedAs?: string,
  *   install?: string,
  *   source?: string,
- * }} data
+ * }} data For an icon set, `title` and `summary` are its display name and
+ *   description, and it carries `license`, `iconCount`, `default` (the variant
+ *   an icon's own export draws, when the set names one), the shared icon names
+ *   its `map` covers (`definitions`), and `command`, which searches the set's icons. A source's
+ *   entry carries `iconCount` and `definitions` when the source lists them.
+ *   The icon-set fields (`license`, `iconCount`, `default`, `definitions`,
+ *   and `command`) are experimental: they may change or be removed in a patch
+ *   release.
  */
 
 /**

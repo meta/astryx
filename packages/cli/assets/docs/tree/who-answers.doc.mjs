@@ -44,7 +44,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "Components come from `@astryxdesign/core`, and templates, docs, and agent guides come from the CLI. In a project, that Core is the one the project installs, so component commands work offline once the project's dependencies are installed. Outside a project, or in a project with nothing installed yet (a fresh clone), they use the answering version's own Core, from beside the CLI or the cache; when that Core cannot be downloaded, the error says to install the project's dependencies. When the project's CLI and Core are different versions, `astryx doctor` warns and prints the command that brings them to one version.",
+          text: "Components come from `@astryxdesign/core`, and templates, docs, and agent guides come from the CLI. In a project, that Core is the one the project installs, so component commands work offline once the project's dependencies are installed. Outside a project, or in a project with nothing installed yet (a fresh clone), they use the answering version's own Core, from beside the CLI or the cache; when that Core cannot be downloaded, the error says to install the project's dependencies. When the project's CLI and Core are different versions, `{@command doctor}` warns and prints the command that brings them to one version.",
         },
       ],
     },
@@ -58,7 +58,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'A few commands work on your computer rather than a folder, such as `astryx init --user`: your global install answers them in any folder.',
+          text: 'A few commands work on your computer rather than a folder, such as `{@command init --user}`: your global install answers them in any folder.',
         },
       ],
     },
@@ -101,7 +101,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "Commands the CLI prints for you to run start with a name that reaches the same version: the project's runner (such as `pnpm exec astryx`) in a project, `astryx` outside a project when your global install answered, and otherwise the CLI pinned to the version, such as `npx @astryxdesign/cli@0.6.8`. An integration can name its own command: {@link generic:cli-command}.",
+          text: "Commands the CLI prints for you to run start with a name that reaches the same version: the project's runner (such as `pnpm exec astryx`) in a project, `astryx` outside a project when your global install answered, and otherwise the CLI pinned to the version, such as `{@pm dlx @astryxdesign/cli@0.6.8}`. An integration can name its own command: {@link generic:cli-command}.",
         },
       ],
     },
@@ -111,7 +111,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'This page is part of {@link namespace:global}, which explains what global mode is and how each part works. To check your computer, run `astryx doctor` outside any project ({@link command:doctor}). Monorepos: {@link generic:monorepos}.',
+          text: 'This page is part of {@link namespace:global}, which explains what global mode is and how each part works. To check your computer, run `{@command doctor}` outside any project ({@link command:doctor}). Monorepos: {@link generic:monorepos}.',
         },
       ],
     },

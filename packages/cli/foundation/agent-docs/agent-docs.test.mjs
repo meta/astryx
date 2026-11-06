@@ -4,8 +4,10 @@ import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import {renderComputerAgentText} from './computer-agent-text.mjs';
 import {
   generateCompressedIndex,
+  projectHasBuiltCheck,
   detectStylingSystem,
   getXdsVersion,
   installAgentDocs,
@@ -94,6 +96,65 @@ describe('generateCompressedIndex', () => {
     expect(result).toContain('<!-- ASTRYX:START -->');
     expect(result).toContain('<!-- ASTRYX:END -->');
   });
+
+  it('tells agents to check a build with doctor --built; the computer-level skill does not', () => {
+    const line =
+      "Before you deliver a build, run `astryx doctor --built <dir>`; don't deliver it if it fails.";
+    expect(generateCompressedIndex('0.7.4', {builtCheck: true})).toContain(line);
+    expect(generateCompressedIndex('0.7.4')).not.toContain('doctor --built');
+    expect(renderComputerAgentText({command: 'astryx'})).not.toContain(
+      'doctor --built',
+    );
+  });
+
+  describe('projectHasBuiltCheck reads the CLI the project installs', () => {
+    /**
+     * @param {string | null} cliVersion the installed CLI, or none
+     * @param {{workspace?: boolean}} [options] install it at a workspace root
+     */
+    const project = (cliVersion, {workspace = false} = {}) => {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-built-check-'));
+      const app = workspace ? path.join(root, 'apps', 'web') : root;
+      fs.mkdirSync(app, {recursive: true});
+      if (workspace) {
+        fs.writeFileSync(
+          path.join(root, 'package.json'),
+          JSON.stringify({name: 'repo', private: true, workspaces: ['apps/*'], devDependencies: {'@astryxdesign/cli': cliVersion ?? '0.7.3'}}),
+        );
+      }
+      fs.writeFileSync(
+        path.join(app, 'package.json'),
+        JSON.stringify({name: 'web', dependencies: {'@astryxdesign/core': '0.7.4'}}),
+      );
+      if (cliVersion) {
+        const cliDir = path.join(root, 'node_modules', '@astryxdesign', 'cli');
+        fs.mkdirSync(cliDir, {recursive: true});
+        fs.writeFileSync(
+          path.join(cliDir, 'package.json'),
+          JSON.stringify({name: '@astryxdesign/cli', version: cliVersion}),
+        );
+      }
+      return {root, app};
+    };
+    it.each([
+      ['an installed CLI 0.7.4', '0.7.4', {}, true],
+      ['an installed CLI 0.8.0', '0.8.0', {}, true],
+      ['an installed CLI 0.7.3', '0.7.3', {}, false],
+      ['an installed 0.7.4 canary', '0.7.4-canary.b25f95e', {}, false],
+      ['no installed CLI (before install, or Core only)', null, {}, false],
+      ['a workspace root that installs CLI 0.7.3', '0.7.3', {workspace: true}, false],
+      ['a workspace root that installs CLI 0.7.4', '0.7.4', {workspace: true}, true],
+    ])('%s', (_label, cliVersion, options, expected) => {
+      const {root, app} = project(cliVersion, options);
+      try {
+        expect(projectHasBuiltCheck(app)).toBe(expected);
+      } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+      }
+    });
+  });
+
+
 
   it('includes theme nudge rule', () => {
     const result = generateCompressedIndex('1.0.0');
@@ -370,6 +431,52 @@ describe('renderAgentDocsBlock', () => {
       fs.rmSync(projectDir, {recursive: true, force: true});
     }
   });
+  it('renders doc tokens in an integration line for the project', async () => {
+    const projectDir = fs.mkdtempSync(
+      path.join(process.cwd(), '.astryx-agent-doc-tokens-'),
+    );
+    try {
+      fs.writeFileSync(
+        path.join(projectDir, 'package.json'),
+        JSON.stringify({name: 'consumer'}),
+      );
+      fs.writeFileSync(path.join(projectDir, 'bun.lock'), '{}\n');
+      fs.writeFileSync(
+        path.join(projectDir, 'astryx.config.mjs'),
+        `export default {integrations: ['@acme/kit']};\n`,
+      );
+      const coreDir = path.join(
+        projectDir,
+        'node_modules',
+        '@astryxdesign',
+        'core',
+      );
+      fs.mkdirSync(coreDir, {recursive: true});
+      fs.writeFileSync(
+        path.join(coreDir, 'package.json'),
+        JSON.stringify({name: '@astryxdesign/core', version: '1.0.0'}),
+      );
+      const packageDir = path.join(projectDir, 'node_modules', '@acme', 'kit');
+      fs.mkdirSync(packageDir, {recursive: true});
+      fs.writeFileSync(
+        path.join(packageDir, 'package.json'),
+        JSON.stringify({name: '@acme/kit'}),
+      );
+      fs.writeFileSync(
+        path.join(packageDir, 'astryx.integration.mjs'),
+        `export default {agentDocs: {append: ['Add it with {@pm install @acme/kit}, then run {@command doctor}.']}};\n`,
+      );
+
+      const block = await renderAgentDocsBlock(projectDir);
+      expect(block).toContain(
+        '- `@acme/kit`: Add it with `bun add @acme/kit`, then run `astryx doctor`.',
+      );
+      expect(block).not.toContain('{@');
+    } finally {
+      fs.rmSync(projectDir, {recursive: true, force: true});
+    }
+  });
+
   it('rejects a package label that could alter managed block structure', async () => {
     const projectDir = fs.mkdtempSync(
       path.join(process.cwd(), '.astryx-agent-doc-label-'),
@@ -442,6 +549,11 @@ describe('detectStylingSystem', () => {
 
   it('detects the official Next.js plugin', () => {
     writePkg({'@stylexjs/nextjs-plugin': '0.10.0'});
+    expect(detectStylingSystem(tmpDir)).toBe('stylex');
+  });
+
+  it('detects the official unplugin (the standard Vite path)', () => {
+    writePkg({'@stylexjs/unplugin': '0.10.0'});
     expect(detectStylingSystem(tmpDir)).toBe('stylex');
   });
 

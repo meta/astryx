@@ -35,7 +35,11 @@ export async function docFromResult(result, opts) {
     {type: 'component.detail', package: result.pkg.name, data},
     process.cwd(),
   );
-  return {type: 'discover.detail.doc', data: linked.data};
+  return {
+    type: 'discover.detail.doc',
+    package: result.pkg.name,
+    data: linked.data,
+  };
 }
 
 /**

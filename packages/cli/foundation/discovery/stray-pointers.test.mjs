@@ -21,6 +21,12 @@ describe('pointersIn', () => {
     ).toEqual([]);
   });
 
+  it('finds the {@command docs <name>} token too, with or without ticks', () => {
+    expect(
+      pointersIn('Read {@command docs theme}, then `{@command docs layout}`.'),
+    ).toEqual(['theme', 'layout']);
+  });
+
   it('leaves the bare name and a runner-written command alone', () => {
     expect(
       pointersIn('See astryx docs theme, or `pnpm astryx docs theme`.'),

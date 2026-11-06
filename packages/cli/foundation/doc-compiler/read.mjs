@@ -8,9 +8,9 @@
  *   how strictly the reader checks.
  * @output The lowered doc for that file. Readers get the view they have always
  *   read, lowered afresh on every read; a whole-project compile also gets the
- *   sealed node, memoized per file for the life of the process. For doc
- *   topics: the compiler input for a topic, with its extensions and overlays
- *   loaded.
+ *   sealed node, memoized per file while the file is unchanged. An edited file
+ *   is read again in the same process (./import.mjs). For doc topics: the
+ *   compiler input for a topic, with its extensions and overlays loaded.
  * @position Loads authored doc files for the readers in api/ and clients/ and
  *   hands each to ./compile.mjs. Each reader keeps its own loader, export
  *   order, and strictness, so what it prints is what it printed before.
@@ -30,6 +30,7 @@ import {
   importNativeModule,
   importTemplateModule,
 } from './import.mjs';
+import {fileStamp, recordContentRead} from '../fs/read-record.mjs';
 import {lowerDoc, parserFor} from './compile.mjs';
 import {translationFor} from './overlays.mjs';
 import {parseReadableDoc} from './parse-readable.mjs';
@@ -61,7 +62,7 @@ const LOADERS = Object.freeze({
 
 /**
  * @typedef {object} ReadOptions
- * @property {'components' | 'hooks' | 'templates' | 'themes' | 'self-docs' | 'tree'} root
+ * @property {'components' | 'hooks' | 'templates' | 'themes' | 'icon-definitions' | 'self-docs' | 'tree'} root
  * @property {string | null} [lang] overlay language; null reads the authored
  *   text
  * @property {string} [label] how a parse error names the file (default: its
@@ -74,7 +75,7 @@ const LOADERS = Object.freeze({
  * @property {readonly string[]} [exports] which exports name the doc, in
  *   precedence order, for a reader that has always read a narrower set than its
  *   root's default ({@link DOC_EXPORTS})
- * @property {() => unknown} [readStatic] for themes: the descriptor value, read
+ * @property {() => unknown} [readStatic] for themes and icon definitions: the descriptor value, read
  *   without executing the file
  * @property {'authored' | 'parsed'} [value] which value the view carries: the
  *   authored export (default) or its parser's result, for a reader that has
@@ -82,13 +83,14 @@ const LOADERS = Object.freeze({
  * @property {boolean} [check] hold the doc to its kind's parser
  */
 
-/** @type {Map<string, Promise<import('./compile.mjs').LoweredDoc>>} */
+/** @type {Map<string, {stamp: string, result: Promise<import('./compile.mjs').LoweredDoc>}>} */
 const lowered = new Map();
 
 /**
- * Lower one descriptor file. Memoized per file and options for the life of the
- * process; a file that failed to load is tried again on the next read, as a
- * fresh import would be.
+ * Lower one descriptor file. Memoized per file and options while the file is
+ * unchanged; an edited file is lowered again from its new content, and a file
+ * that failed to load is tried again on the next read, as a fresh import
+ * would be.
  * @param {string} file absolute path
  * @param {ReadOptions} options
  * @param {{node?: boolean}} [want] also build the sealed node
@@ -110,7 +112,10 @@ export function compileDocFile(file, options, {node = false} = {}) {
     check,
     node,
   ]);
-  let result = lowered.get(key);
+  recordContentRead(file);
+  const stamp = fileStamp(file);
+  const hit = lowered.get(key);
+  let result = hit?.stamp === stamp ? hit.result : undefined;
   if (!result) {
     result = loadAuthored(file, options, lang).then(authored => {
       const provider = options.provider ?? packageOf(file);
@@ -130,11 +135,11 @@ export function compileDocFile(file, options, {node = false} = {}) {
       );
       if (out.node) deepFreeze(out.node);
       if (out.loadFailed || 'overlayError' in authored) {
-        lowered.delete(key);
+        if (lowered.get(key)?.result === result) lowered.delete(key);
       }
       return out;
     });
-    lowered.set(key, result);
+    lowered.set(key, {stamp, result});
   }
   return result;
 }
@@ -250,10 +255,10 @@ async function missingDocProblem(file, options, exported) {
  */
 async function loadAuthored(file, options, lang) {
   const name = path.basename(file);
-  if (options.root === 'themes') {
+  if (options.root === 'themes' || options.root === 'icon-definitions') {
     if (!options.readStatic) {
       throw new Error(
-        'A theme descriptor is read statically; pass readStatic.',
+        'A theme descriptor or an icon definition is read statically; pass readStatic.',
       );
     }
     try {

@@ -686,6 +686,36 @@ describe('checkDocTypes', () => {
     );
   });
 
+  it('checks an icon set descriptor against IconSetDoc', async () => {
+    withTypeScript();
+    write(
+      'icon-sets/outline/outline.doc.mjs',
+      "/** @type {import('@astryxdesign/cli/authoring').IconSetDoc} */\nexport default {type: 'icon-set', name: 'outline', displayName: 'Outline', description: 'D', maintained: true, license: 1, icons: []};\n",
+    );
+    write(
+      'icon-sets/solid/solid.doc.mjs',
+      "export default {type: 'icon-set', name: 'solid', displayName: 'Solid', description: 'D', maintained: true};\n",
+    );
+    write(
+      'icon-sets/ok/ok.doc.mjs',
+      "export default {type: 'icon-set', name: 'ok', displayName: 'Ok', description: 'D', maintained: true, license: 'MIT'};\n",
+    );
+    const report = await check([
+      ['icon-sets/outline/outline.doc.mjs', 'icon-sets'],
+      ['icon-sets/solid/solid.doc.mjs', 'icon-sets'],
+      ['icon-sets/ok/ok.doc.mjs', 'icon-sets'],
+    ]);
+    expect(report.docs).toBe(3);
+    expect(summary(report)).toEqual([
+      'icon-sets/outline/outline.doc.mjs default icons unknown_field',
+      'icon-sets/outline/outline.doc.mjs default license wrong_type',
+      'icon-sets/solid/solid.doc.mjs default license missing_field',
+    ]);
+    expect(new Set(report.findings.map(f => f.type))).toEqual(
+      new Set(['IconSetDoc']),
+    );
+  });
+
   it('checks nothing with a TypeScript older than 4.9, even when every doc is TypeScript', async () => {
     const fake = path.join(pkg, 'node_modules', 'typescript');
     fs.mkdirSync(fake, {recursive: true});

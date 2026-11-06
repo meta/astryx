@@ -222,7 +222,11 @@ describe('DateInput nativePicker', () => {
     expect(changeAction).toHaveBeenCalledExactlyOnceWith('2026-03-21');
     expect(getInput()).not.toBeDisabled();
     expect(getInput()).toHaveAttribute('aria-busy', 'true');
-    expect(screen.getByRole('status', {name: 'Loading'})).toBeInTheDocument();
+    // The busy Spinner is decorative (spec:AST-086 FR8).
+    expect(document.querySelector('.astryx-spinner')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
     expect(screen.getByText('March 21, 2026')).toBeInTheDocument();
 
     fireEvent.change(getInput(), {target: {value: '2026-03-22'}});
@@ -597,7 +601,11 @@ describe('DateInput nativePicker', () => {
 
     expect(calls).toEqual(['onChange', 'changeAction']);
     expect(changeAction).toHaveBeenCalledExactlyOnceWith(undefined);
-    expect(screen.getByRole('status', {name: 'Loading'})).toBeInTheDocument();
+    // The busy Spinner is decorative (spec:AST-086 FR8).
+    expect(document.querySelector('.astryx-spinner')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
     await act(async () => resolveAction());
   });
 

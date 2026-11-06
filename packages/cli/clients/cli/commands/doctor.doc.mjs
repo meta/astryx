@@ -21,13 +21,25 @@ export const doc = {
     "the docs the CLI reads, the newest release the computer knows of, with the install and upgrade commands when the project's release is older, and every `astryx` command on the search path, warning when the first one is not the Astryx CLI or predates the hand-off. It writes nothing, but loading astryx.config runs that file's code. " +
     'The `integration` subcommands provide authoring checks for one integration package. ' +
     'Outside a project it checks the computer instead: the Node version, the release that answered, ' +
-    "the newest release this computer knows of, with the command that upgrades the CLI installed for the computer when it is older, the astryx commands on the search path, the integrations installed for the computer (warning about one it skips), and whether the computer-level agent text (`astryx init --user`) is present, matches this release, was edited, or is turned off (info only); when that text names `astryx` and no `astryx` command is on the search path, apart from a package runner's own copy, it says so and names the install step the text records, or npm's when it records none. " +
+    "the newest release this computer knows of, with the command that upgrades the CLI installed for the computer when it is older, the astryx commands on the search path, the integrations installed for the computer (warning about one it skips), and whether the computer-level agent text (`{@command init --user}`) is present, matches this release, was edited, or is turned off (info only); when that text names `astryx` and no `astryx` command is on the search path, apart from a package runner's own copy, it says so and names the install step the text records, or npm's when it records none. " +
     'It never fails a check because the folder has no project.',
   fn: 'doctor',
   subcommands: ['integration'],
+  options: [
+    {
+      flag: '--built <path>',
+      param: 'options.built',
+      description:
+        'Also check a finished build before you deliver it: a project folder, a build output folder, or one built HTML file. Fails when it does not use Astryx at all, and warns with each raw element, icon or custom style in its source.',
+    },
+  ],
   examples: [
     {label: 'Run project diagnostics', cli: 'astryx doctor'},
     {label: 'Machine-readable project report', cli: 'astryx doctor --json'},
+    {
+      label: 'Before you deliver a build: check that it uses Astryx',
+      cli: 'astryx doctor --built dist',
+    },
     {
       label: 'Validate an integration',
       cli: 'astryx doctor integration validate @acme/widgets',

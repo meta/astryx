@@ -432,6 +432,29 @@ function linkLines(links) {
 }
 
 /**
+ * A section title naming the package that wrote it, once: a title an author
+ * already ended with that package keeps its own.
+ * @param {string} title
+ * @param {string} pkg
+ * @returns {string}
+ */
+function titledWithPackage(title, pkg) {
+  const label = `(${pkg})`;
+  return title.endsWith(label) ? title : `${title} ${label}`;
+}
+
+/**
+ * What a topic or guide took the place of, and whose it was, as the line
+ * read right after its `package:` line (INV28); nothing for any other read.
+ * @param {{replaces?: string, replacedPackage?: string}} data
+ * @returns {ReturnType<typeof text>[]}
+ */
+function replacedLine(data) {
+  if (data.replaces == null || data.replacedPackage == null) return [];
+  return [text(`replaces ${data.replacedPackage}'s ${data.replaces}`)];
+}
+
+/**
  * A topic's section index: what the topic is, one line per section with the
  * key to read it by, and how to read further.
  * @param {import('../../../api/docs/docs.type.mjs').DocsIndex} index
@@ -445,6 +468,7 @@ function emitIndex(index, owner, run) {
       index.description ? wrapText(index.description) : undefined,
     ),
     record({package: owner}),
+    ...replacedLine(index),
     // Summaries wrap rather than being cut: the summary is how a reader picks
     // the one section to open. A section another package wrote says which one.
     records(
@@ -452,7 +476,7 @@ function emitIndex(index, owner, run) {
         const shown = {...s, summary: prefixCliCommands(s.summary ?? '', run)};
         return s.package === owner
           ? shown
-          : {...shown, title: `${s.title} (${s.package})`};
+          : {...shown, title: titledWithPackage(s.title, s.package)};
       }),
       {
         fields: ['id', 'title', 'summary'],
@@ -476,7 +500,7 @@ function emitIndex(index, owner, run) {
  * name (`assert-response  assertResponse()`).
  * @param {import('../../../api/docs/docs.type.mjs').DocsNodeChild} child
  * @param {string} owner the package that owns the namespace
- * @returns {{name: string, summary: string}}
+ * @returns {{name: string, summary: string, experimental: boolean}}
  */
 function childRow(child, owner) {
   const titleAddsIdentity =
@@ -486,10 +510,18 @@ function childRow(child, owner) {
   return {
     // A child another package owns says which one.
     name: child.package === owner ? child.name : `${child.name} (${child.package})`,
+    // An experimental child is marked as help marks an experimental command,
+    // unless its own summary already opens by saying so.
     summary: prefixCliCommands(
-      titleAddsIdentity ? `${child.title}: ${child.summary}` : child.summary,
+      `${
+        child.stability === 'experimental' &&
+        !/^experimental\b/iu.test(child.summary)
+          ? '[experimental] '
+          : ''
+      }${titleAddsIdentity ? `${child.title}: ${child.summary}` : child.summary}`,
       getCliInvocation(),
     ),
+    experimental: child.stability === 'experimental',
   };
 }
 
@@ -527,10 +559,19 @@ function emitNode(node, detail, run) {
         ...(node.slots.length === 1 && slot.title === node.title
           ? []
           : [section(slot.title)]),
-        records(slot.children.map(child => childRow(child, node.package)), {
-          fields: ['name', 'summary'],
-          layout: 'inline',
-        }),
+        records(
+          slot.children.map(child => childRow(child, node.package)),
+          {
+            fields: ['name', 'summary'],
+            layout: 'inline',
+            // Stable rows set the column, so an experimental entry changes no
+            // stable line (spec:AST-017 FR27); a long experimental name
+            // overhangs. A slot of experimental entries only sizes from them.
+            sizesColumn: row =>
+              !row.experimental ||
+              slot.children.every(child => child.stability === 'experimental'),
+          },
+        ),
       ]),
       text(
         [
@@ -717,6 +758,7 @@ export function registerDocs(program) {
           const owner = result.package;
           emit(
             record({package: owner}),
+            ...replacedLine(result.data),
             code(
               formatReferenceFull(
                 {
@@ -725,7 +767,7 @@ export function registerDocs(program) {
                   sections: result.data.sections.map(s =>
                     s.package === owner
                       ? s
-                      : {...s, title: `${s.title} (${s.package})`},
+                      : {...s, title: titledWithPackage(s.title, s.package)},
                   ),
                 },
                 detail,

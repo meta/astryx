@@ -92,7 +92,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "The first astryx command on your PATH is a version from before global mode, so it ignores your projects' versions. Run the command shown, or remove that install. `astryx doctor` lists every astryx command on your PATH in its `cli-on-path` check.",
+          text: "The first astryx command on your PATH is a version from before global mode, so it ignores your projects' versions. Run the command shown, or remove that install. `{@command doctor}` lists every astryx command on your PATH in its `cli-on-path` check.",
         },
       ],
     },
@@ -126,12 +126,12 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: "Astryx treats a copy as installed for your computer only when your package manager's own settings name its folder: npm's global prefix, Bun's `BUN_INSTALL`, Yarn's `global-folder`, pnpm's `PNPM_HOME`, or their defaults. A folder chosen only with a one-off flag, such as `yarn global add --global-folder ~/mine`, is not in any setting, so Astryx treats that copy like a project's: no daily update check and no agent guide. Save the folder in your settings so Astryx knows it is a global install:",
+          text: "Astryx treats a copy as installed for your computer only when your package manager's own settings name its folder: npm's global prefix, Bun's `BUN_INSTALL`, Yarn's `global-folder`, pnpm's `PNPM_HOME`, or their defaults. A folder chosen only with a one-off flag, such as `{@pm-only yarn-classic \"uses the Yarn 1 global folder\" global add --global-folder ~/mine}`, is not in any setting, so Astryx treats that copy like a project's: no daily update check and no agent guide. Save the folder in your settings so Astryx knows it is a global install:",
         },
         {
           type: 'code',
           lang: 'bash',
-          code: 'yarn config set global-folder ~/mine   # writes ~/.yarnrc\nexport BUN_INSTALL=~/mybun              # in your shell profile, for Bun',
+          code: '{@pm-only yarn-classic "uses the Yarn 1 global folder" config set global-folder ~/mine}   # writes ~/.yarnrc\nexport BUN_INSTALL=~/mybun              # in your shell profile, for Bun',
         },
       ],
     },
@@ -145,7 +145,7 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: "In a project with nothing installed yet, such as a fresh clone, the same commands use that Core too, and offline the error reads `This project has no Core installed, and Core <version> could not be downloaded`: install the project's dependencies (`npm install`, or your package manager's), and the project's own Core answers from then on.",
+          text: "In a project with nothing installed yet, such as a fresh clone, the same commands use that Core too, and offline the error reads `This project has no Core installed, and Core <version> could not be downloaded`: install the project's dependencies (`{@pm install}`, or your package manager's), and the project's own Core answers from then on.",
         },
       ],
     },
@@ -182,11 +182,11 @@ export const docs = {
           type: 'list',
           style: 'unordered',
           items: [
-            '`npm i -g` fails with `EACCES` (permission denied): do not use `sudo`. Use a Node version manager, or give npm a global folder you own: `npm config set prefix ~/.npm-global`, then add `~/.npm-global/bin` to your PATH.',
-            "`astryx: command not found` after installing: your package manager's global bin folder is not on your PATH. `npm prefix -g` shows npm's (its `bin` folder on macOS and Linux); `pnpm setup` adds pnpm's.",
-            '`pnpm add -g` stops with `ERR_PNPM_NO_GLOBAL_BIN_DIR`, often with Corepack: run `pnpm setup`, open a new terminal, and try again. Yarn 2 and later have no `yarn global`; use `npm i -g` instead.',
+            '`npm i -g` fails with `EACCES` (permission denied): do not use `sudo`. Use a Node version manager, or give npm a global folder you own: `{@pm-only npm "moves the npm global folder" config set prefix ~/.npm-global}`, then add `~/.npm-global/bin` to your PATH.',
+            '`astryx: command not found` after installing: your package manager\'s global bin folder is not on your PATH. `{@pm-only npm "prints the npm global folder" prefix -g}` shows npm\'s (its `bin` folder on macOS and Linux); `{@pm-only pnpm "sets up the pnpm global folder" setup}` adds pnpm\'s.',
+            '`pnpm add -g` stops with `ERR_PNPM_NO_GLOBAL_BIN_DIR`, often with Corepack: run `{@pm-only pnpm "sets up the pnpm global folder" setup}`, open a new terminal, and try again. Yarn 2 and later have no `yarn global`; use `npm i -g` instead.',
             'Windows: npm puts `astryx.cmd` in `%APPDATA%\\npm`, which must be on your PATH. If PowerShell says running scripts is disabled, run `astryx.cmd`, or allow scripts for your user with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.',
-            'Two installs, and the wrong one runs: `astryx doctor` outside a project lists every astryx command on your PATH, in the order your shell tries them.',
+            'Two installs, and the wrong one runs: `{@command doctor}` outside a project lists every astryx command on your PATH, in the order your shell tries them.',
           ],
         },
       ],

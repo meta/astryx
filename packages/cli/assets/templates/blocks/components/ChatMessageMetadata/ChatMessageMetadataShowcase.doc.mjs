@@ -10,5 +10,19 @@ export const doc = {
   isReady: true,
   isShowcase: true,
   aspectRatio: 4 / 3,
-  componentsUsed: ['Chat', 'ChatMessageMetadata', 'Timestamp', 'Button', 'Icon', 'Text', 'Layout'],
+  componentsUsed: [
+    'Chat',
+    'ChatMessageMetadata',
+    'Timestamp',
+    'Button',
+    'Icon',
+    'Text',
+    'Layout',
+  ],
+  icons: {
+    ArrowPathIcon: 'refresh',
+    ClipboardDocumentIcon: 'clipboard',
+    HandThumbDownIcon: 'thumbsDown',
+    HandThumbUpIcon: 'thumbsUp',
+  },
 };

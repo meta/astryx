@@ -19,7 +19,7 @@
  * - /packages/cli/assets/templates/blocks/components/InputGroup/
  */
 
-import {useId, useMemo, type ReactNode} from 'react';
+import {use, useId, useMemo, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {sizeVars} from '../theme/tokens.stylex';
 import {Field, type InputStatus} from '../Field';
@@ -27,6 +27,7 @@ import {SizeProvider, useSize} from '../SizeContext/SizeContext';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {InputGroupContext} from './InputGroupContext';
+import {InputGroupInternalContext} from './InputGroupInternalContext';
 import {themeProps} from '../utils/themeProps';
 
 export type InputGroupSize = 'sm' | 'md' | 'lg';
@@ -108,7 +109,8 @@ export interface InputGroupProps extends Omit<
   size?: InputGroupSize;
 
   /**
-   * Status indicator applied to the group border.
+   * Validation status. Its message shows below the group. The group border
+   * does not change; a theme can style the row from `data-status`.
    */
   status?: InputStatus;
 
@@ -124,8 +126,8 @@ export interface InputGroupProps extends Omit<
 }
 
 /**
- * Groups an input with prefix/suffix addons in a visually connected
- * container with shared border and focus ring.
+ * Groups an input with prefix and suffix addons in one connected row. A
+ * focused member stays above its neighbours, so its focus ring shows in full.
  *
  * @example
  * ```
@@ -140,7 +142,7 @@ export function InputGroup({
   label,
   isLabelHidden = false,
   description,
-  isDisabled = false,
+  isDisabled: isDisabledProp = false,
   isOptional = false,
   isRequired = false,
   size: sizeProp,
@@ -153,6 +155,8 @@ export function InputGroup({
   'data-testid': testId,
   ...rest
 }: InputGroupProps) {
+  const parentGroup = use(InputGroupInternalContext);
+  const isDisabled = isDisabledProp || parentGroup.isDisabled;
   const size = useSize(sizeProp, 'md');
   const inputId = useId();
   const labelID = useId();
@@ -171,58 +175,62 @@ export function InputGroup({
     () => ({isInGroup: true as const, labelID, describedByIDs}),
     [labelID, describedByIDs],
   );
+  const internalContextValue = useMemo(() => ({isDisabled}), [isDisabled]);
 
   return (
-    <InputGroupContext value={contextValue}>
-      <SizeProvider value={size}>
-        <Field
-          label={label}
-          isLabelHidden={isLabelHidden}
-          description={description}
-          inputID={inputId}
-          labelID={labelID}
-          descriptionID={description ? descriptionID : undefined}
-          isGroupLabel
-          isOptional={isOptional}
-          isRequired={isRequired}
-          isDisabled={isDisabled}
-          status={
-            status
-              ? {
-                  type: status.type,
-                  message: status.message,
-                  messageID: status.message ? statusMessageId : undefined,
-                }
-              : undefined
-          }
-          statusVariant="detached"
-          labelTooltip={labelTooltip}>
-          <div
-            ref={ref}
-            data-testid={testId}
-            {...rest}
-            role="group"
-            aria-labelledby={labelID}
-            aria-describedby={describedByIDs}
-            {...mergeProps(
-              themeProps('input-group', {
-                size,
-                status: status?.type ?? null,
-              }),
-              stylex.props(
-                styles.group,
-                sizeStyles[size],
-                isDisabled && styles.disabled,
-                xstyle,
-              ),
-              className,
-              style,
-            )}>
-            {children}
-          </div>
-        </Field>
-      </SizeProvider>
-    </InputGroupContext>
+    <InputGroupInternalContext value={internalContextValue}>
+      <InputGroupContext value={contextValue}>
+        <SizeProvider value={size}>
+          <Field
+            label={label}
+            isLabelHidden={isLabelHidden}
+            description={description}
+            inputID={inputId}
+            labelID={labelID}
+            descriptionID={description ? descriptionID : undefined}
+            isGroupLabel
+            isOptional={isOptional}
+            isRequired={isRequired}
+            isDisabled={isDisabled}
+            status={
+              status
+                ? {
+                    type: status.type,
+                    message: status.message,
+                    messageID: status.message ? statusMessageId : undefined,
+                  }
+                : undefined
+            }
+            statusVariant="detached"
+            labelTooltip={labelTooltip}>
+            <div
+              ref={ref}
+              data-testid={testId}
+              {...rest}
+              role="group"
+              aria-disabled={isDisabled || undefined}
+              aria-labelledby={labelID}
+              aria-describedby={describedByIDs}
+              {...mergeProps(
+                themeProps('input-group', {
+                  size,
+                  status: status?.type ?? null,
+                }),
+                stylex.props(
+                  styles.group,
+                  sizeStyles[size],
+                  isDisabled && styles.disabled,
+                  xstyle,
+                ),
+                className,
+                style,
+              )}>
+              {children}
+            </div>
+          </Field>
+        </SizeProvider>
+      </InputGroupContext>
+    </InputGroupInternalContext>
   );
 }
 

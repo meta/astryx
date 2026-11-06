@@ -43,7 +43,7 @@ export const docs = {
     },
     {
       type: 'prose',
-      text: 'For example, ship a carousel as an integration. Any app that installs it can find it with `astryx search carousel`, and the CLI uses it like any Astryx Core component.',
+      text: 'For example, ship a carousel as an integration. Any app that installs it can find it with `{@command search carousel}`, and the CLI uses it like any Astryx Core component.',
     },
     {
       type: 'prose',
@@ -55,7 +55,7 @@ export const docs = {
     },
     {
       type: 'prose',
-      text: "Every integration runs `astryx integration check --strict` in its own build: it is required, not optional, so a doc, prop, or link that stops matching the code fails your build instead of your users' apps. See {@link generic:checks}.",
+      text: "Every integration runs `{@command integration check --strict}` in its own build: it is required, not optional, so a doc, prop, or link that stops matching the code fails your build instead of your users' apps. See {@link generic:checks}.",
     },
   ],
 };

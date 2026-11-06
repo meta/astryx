@@ -25,6 +25,9 @@ import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
 import * as fs from 'node:fs';
 import {createJiti} from 'jiti';
+import {findPresentFiles} from './present-files.mjs';
+
+export {findPresentFiles};
 
 /** @type {ReturnType<typeof createJiti> | undefined} */
 let jitiInstance;
@@ -104,8 +107,9 @@ async function withStdoutOnStderr(load) {
  * no-cache jiti instance. A fresh CommonJS `.js` read evicts and reloads through
  * `require`; an ESM `.js` or `.mjs` read uses a cache-busted file URL. The
  * nearest package.json `type` decides `.js`, matching Node's package scopes.
- * Normal loads retain module caching. `fresh` is an explicit migration-only
- * escape hatch for rereading files that a codemod changed during this process.
+ * Normal loads retain module caching. `fresh` rereads a file that changed
+ * during this process: one a codemod rewrote, or an edited doc file (the doc
+ * importers in ../doc-compiler/import.mjs read each change once).
  * Anything the module writes to stdout while it loads goes to stderr.
  *
  * @param {string} file absolute path
@@ -274,18 +278,6 @@ async function importModule(file, fresh) {
   return await import(url.href);
 }
 
-/**
- * Return the conventional files (by basename, in the given precedence order)
- * that exist directly in `dir`, as absolute paths. Never throws.
- * @param {string} dir
- * @param {string[]} basenames precedence-ordered
- * @returns {string[]} absolute paths of present files, in basenames order
- */
-export function findPresentFiles(dir, basenames) {
-  return basenames
-    .filter(name => fs.existsSync(path.join(dir, name)))
-    .map(name => path.join(dir, name));
-}
 
 /**
  * Import a user-authored module, take its default export, and validate it

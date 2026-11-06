@@ -35,16 +35,77 @@
  * "cable" is not "table".
  */
 
-import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {
   stem,
-  wordForms,
   sameWord,
-  startsAWordOf,
+  sameTermWord,
+  startsATermWordOf,
+  termWords,
+  wordsOf,
   joined,
-  isTypo,
+  typoDistance,
 } from './_words.mjs';
 import {pluralOf} from './_query.mjs';
+
+/**
+ * Whether a multi-word term spells out a name word by word: as many words as
+ * the name, each the name's word in order or, for a single-letter word, a word
+ * starting with that letter ("vertical" for V) that the entry's own
+ * description names. `vertical stack` spells out VStack when its description says
+ * "vertical"; `visual stack` does not.
+ * @param {string} term
+ * @param {string} name
+ * @param {string} description
+ */
+function spellsOut(term, name, description) {
+  const words = term.split(/\s+/).filter(Boolean);
+  const parts = wordsOf(name);
+  if (words.length < 2 || words.length !== parts.length) return false;
+  const described = wordsOf(description);
+  let expanded = false;
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    const p = parts[i];
+    if (sameWord(w, p)) continue;
+    // Only a single-letter word is an abbreviation to spell out: "With" in a
+    // name is not spelled out by "without".
+    if (p.length !== 1 || !w.startsWith(p)) return false;
+    if (!described.some(d => sameWord(d, w))) return false;
+    expanded = true;
+  }
+  return expanded;
+}
+
+/**
+ * Whether a one-word term is a name's last word and every word before it is a
+ * single letter: Stack in VStack and HStack.
+ * @param {import('./_words.mjs').TermWords} t
+ * @param {string} name
+ */
+function headOfLetters(t, name) {
+  const parts = wordsOf(name);
+  return (
+    parts.length >= 2 &&
+    sameTermWord(t, parts[parts.length - 1]) &&
+    parts.slice(0, -1).every(p => p.length === 1)
+  );
+}
+
+/** How many of a family's members a query naming the family lists. */
+const FAMILY_MEMBERS = 3;
+
+/**
+ * A derived name's score for a term: 60 for the same word, 40 for a word the
+ * term starts, else 0.
+ * @param {import('./_words.mjs').TermWords} t - The lowercased search term.
+ * @param {string} kw - The derived name as authored.
+ * @returns {number}
+ */
+function weakKeywordScore(t, kw) {
+  const kwLower = String(kw).toLowerCase();
+  if (kwLower === t.term || sameTermWord(t, kwLower)) return 60;
+  return startsATermWordOf(t, kw) ? 40 : 0;
+}
 
 /**
  * Score a single candidate against the search term across name, keywords,
@@ -59,27 +120,35 @@ import {pluralOf} from './_query.mjs';
  *   also matches typed as words: `command palette` is CommandPalette.
  * @param {string[]} [candidate.keywords] - Authored intent (componentsUsed, category words).
  * @param {string[]} [candidate.weakKeywords] - Derived signal (components a page renders).
+ * @param {string[]} [candidate.weakKeywordBound] - Every name `weakKeywords`
+ *   can hold, when reading them is costly: they are read only if one matches.
  * @param {string} [candidate.description]
  * @param {string[]} [candidate.prose] - Extra free-text blobs (doc section text, best practices).
  * @param {string[]} [candidate.guidance] - Usage guidance (features, best practices) — scored a tier below description.
- * @param {{fuzzy?: boolean, joins?: boolean}} [opts] - `fuzzy`: allow edit-distance (typo) matches. Default true; multi-word queries pass false. `joins`: read a spaced query joined into a name or keyword (default true); off when the query names an entry outright.
+ * @param {string} [candidate._family] - The family whose doc lists the entry as a member.
+ * @param {number} [candidate._familyIndex] - The entry's place among that family's members.
+ * @param {{fuzzy?: boolean, joins?: boolean, part?: boolean, synonym?: boolean}} [opts] - `fuzzy`: allow edit-distance (typo) matches. Default true; multi-word queries pass false. `joins`: read a spaced query joined into a name or keyword (default true); off when the query names an entry outright. `part`: the term is one word of a longer query, so a name's head word after single letters (Stack in VStack) does not count as a keyword hit for it. `synonym`: the term stands in for a word of the query, so it names no family.
  * @returns {{score: number, reason: string, alias?: 'partial' | 'keyword'} | null}
  *   `alias` marks a hit that read the query's words joined.
  */
 export function scoreCandidate(
   term,
-  {
+  candidate,
+  {fuzzy = true, joins = true, part = false, synonym = false} = {},
+) {
+  const {
     name,
     aliases = [],
     domain,
     keywords = [],
-    weakKeywords = [],
     description = '',
     prose = [],
     guidance = [],
-  },
-  {fuzzy = true, joins = true} = {},
-) {
+    _family,
+    _familyIndex,
+  } = candidate;
+  // The term's forms, worked out once for every word below.
+  const t = termWords(term);
   let best = 0;
   let reason = '';
   /** @type {'partial' | 'keyword' | false} */
@@ -128,19 +197,37 @@ export function scoreCandidate(
       // Most of the name typed as words, cut short: `complex select` is
       // ComplexSelector, ahead of a one-word keyword elsewhere.
       consider(95, `name "${candidateName}" spelled`, 'partial');
+    } else if (
+      domain !== 'doc' &&
+      domain !== 'theme' &&
+      spellsOut(term, candidateName, description)
+    ) {
+      // The name's short words spelled out, in order, as the entry's own
+      // description spells them: `vertical stack` is VStack ("Vertical stack
+      // for arranging items top-to-bottom").
+      consider(95, `name "${candidateName}" spelled out`);
     } else if (pluralOf(nameLower, term) || pluralOf(term, nameLower)) {
       // One point under the exact spelling, so the doc named `tokens` still
       // outranks the Token component for `tokens`.
       consider(99, 'plural of the name');
     } else {
-      if (sameWord(term, nameLower)) consider(95, `name "${candidateName}"`);
+      if (sameTermWord(t, nameLower)) consider(95, `name "${candidateName}"`);
       // The term is a word of the name, or starts one: "input" in TextInput.
-      else if (startsAWordOf(term, candidateName)) {
+      else if (
+        !part &&
+        domain !== 'doc' &&
+        domain !== 'theme' &&
+        headOfLetters(t, candidateName)
+      ) {
+        // The whole query is the name's head word after single letters (Stack
+        // in VStack, HStack): a variant named by its head, as a keyword is.
+        consider(90, `name "${candidateName}" ends in "${term}"`);
+      } else if (startsATermWordOf(t, candidateName)) {
         consider(60, `name contains "${term}"`);
       }
       if (fuzzy) {
-        const dist = levenshteinDistance(term, nameLower);
-        if (isTypo(term, nameLower, dist)) {
+        const dist = typoDistance(term, nameLower);
+        if (dist != null) {
           consider(
             dist === 1 ? 80 : dist === 2 ? 40 : 20,
             `similar name (distance ${dist})`,
@@ -148,6 +235,23 @@ export function scoreCandidate(
         }
       }
     }
+  }
+
+  // ── Family signal ───────────────────────────────────────────────
+  // A query naming a family lists its first members as a keyword would: the
+  // family doc names them, whether or not a component of the family's name
+  // exists ("chat" lists ChatMessage and its siblings). Only the whole query
+  // names the family: a word of a longer query lifts no member.
+  if (
+    !part &&
+    !synonym &&
+    _family &&
+    (_familyIndex ?? Infinity) < FAMILY_MEMBERS &&
+    (term === _family.toLowerCase() ||
+      term === wordsOf(_family).join(' ') ||
+      term.replace(/\s+/g, '') === _family.toLowerCase())
+  ) {
+    consider(90, `member of ${_family}`);
   }
 
   // ── Keyword signals ─────────────────────────────────────────────
@@ -172,14 +276,14 @@ export function scoreCandidate(
       consider(90, `keyword "${kw}"`, 'keyword');
       continue;
     }
-    if (sameWord(term, kwLower)) {
+    if (sameTermWord(t, kwLower)) {
       consider(88, `keyword "${kw}"`);
       continue;
     }
-    if (startsAWordOf(term, kw)) consider(70, `keyword "${kw}"`);
+    if (startsATermWordOf(t, kw)) consider(70, `keyword "${kw}"`);
     if (fuzzy) {
-      const dist = levenshteinDistance(term, kwLower);
-      if (isTypo(term, kwLower, dist) && dist <= 2) {
+      const dist = typoDistance(term, kwLower);
+      if (dist != null && dist <= 2) {
         consider(dist === 1 ? 70 : 30, `keyword "${kw}" (distance ${dist})`);
       }
     }
@@ -190,13 +294,14 @@ export function scoreCandidate(
   // confident-match gate on its own; it still counts toward multi-term
   // coverage, which is where "this page renders that" is real evidence.
   // No Levenshtein tier — fuzzy matching a derived signal is pure noise.
-  for (const kw of weakKeywords) {
-    const kwLower = String(kw).toLowerCase();
-    if (kwLower === term || sameWord(term, kwLower)) {
-      consider(60, `renders ${kw}`);
-      continue;
+  // A bound skips the read when no name the page can yield matches the term,
+  // and then no weak keyword can match it either.
+  const bound = candidate.weakKeywordBound;
+  if (!bound || bound.some(kw => weakKeywordScore(t, kw) > 0)) {
+    for (const kw of candidate.weakKeywords ?? []) {
+      const score = weakKeywordScore(t, kw);
+      if (score > 0) consider(score, `renders ${kw}`);
     }
-    if (startsAWordOf(term, kw)) consider(40, `renders ${kw}`);
   }
 
   // ── Prose / description / guidance signals (stem-tolerant whole word) ──
@@ -205,7 +310,7 @@ export function scoreCandidate(
   if (term.length >= 3) {
     // Any form of the term, with any common suffix: `spacing` finds
     // "space" and "spaces", `tables` finds "table".
-    const roots = [...new Set([stem(term), ...wordForms(term)])]
+    const roots = [...new Set([stem(term), ...t.forms])]
       .filter(f => f.length >= 3)
       .map(f => f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
     const re = new RegExp(`\\b(?:${roots.join('|')})(s|es|ing|ed|ies)?\\b`);

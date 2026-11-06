@@ -23,6 +23,8 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {spawnSync} from 'node:child_process';
+import {builtinModules} from 'node:module';
 import {parse as parseModule} from '@babel/parser';
 import {isValidSemver} from '../env/semver.mjs';
 import {findProjectCoreDir} from '../fs/paths.mjs';
@@ -49,6 +51,7 @@ import {
   TEMPLATE_CANDIDATE_RE,
 } from './contribution-fixes.mjs';
 import {MANIFEST_BASENAMES} from './integrations.mjs';
+import {npmCommand} from '../release/cache.mjs';
 import {discoverIntegrationCodemods} from '../../assets/codemods/integration-discovery.mjs';
 import {discoverIntegrationTemplatesForOne} from '../discovery/template-adapter.mjs';
 import * as componentDiscovery from '../discovery/component-discovery.mjs';
@@ -256,7 +259,7 @@ export function rootProblem(root) {
  * `unreadable_root` error. The contribution checks skip all three.
  * A readable root reached through a symlinked folder is a `symlinked_root`
  * warning: npm pack does not follow it, so the published package loses it.
- * @param {{components?: string, templates?: string, codemods?: string, docs?: string, themes?: string, __manifestFile?: string}} resolved
+ * @param {{components?: string, templates?: string, codemods?: string, docs?: string, themes?: string, iconSets?: string, __manifestFile?: string}} resolved
  *   absolute resolved roots (undefined when not declared)
  * @param {Issue[]} issues
  * @param {string} [packageDir] the package the roots belong to
@@ -268,6 +271,7 @@ function checkRoots(resolved, issues, packageDir) {
     'codemods',
     'docs',
     'themes',
+    'iconSets',
   ]);
   for (const kind of kinds) {
     const root = resolved[kind];
@@ -1023,6 +1027,791 @@ export async function blockComponentsCheck(integration) {
   };
 }
 
+/** A package's own template category: `"<Group> - <Variant>"`. */
+/**
+ * A category written as a path, such as `components/Button`: a slash with no
+ * " - " between a group and a variant. Single words (`Settings`) and
+ * `"<Group> - <Variant>"` (`Table - Index/Detail`) are fine.
+ */
+// A category written as a path: lowercase first segment and no spaces
+// (`components/X`, `blocks/forms`), not a name with a slash in it (`UI/UX`,
+// `A/B Testing`).
+const PATH_CATEGORY = /^[a-z0-9][\w.-]*(?:\/[\w.-]+)+$/u;
+
+/** Imports a browser cannot load, which a showcase must not make. */
+const SERVER_ONLY_IMPORTS =
+  /^(?:server-only|next\/headers|next\/server|next\/cache|node:.+)$/u;
+
+/**
+ * Every spelling a glob's `{a,b}` braces stand for, nested braces included.
+ * @param {string} pattern
+ * @returns {string[]}
+ */
+function expandBraces(pattern) {
+  let depth = 0;
+  let open = -1;
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === '\\') {
+      i++;
+    } else if (ch === '{') {
+      if (depth++ === 0) open = i;
+    } else if (ch === '}' && depth > 0 && --depth === 0) {
+      const body = pattern.slice(open + 1, i);
+      /** @type {string[]} */
+      const parts = [];
+      let level = 0;
+      let from = 0;
+      for (let j = 0; j < body.length; j++) {
+        if (body[j] === '{') level++;
+        else if (body[j] === '}') level--;
+        else if (body[j] === ',' && level === 0) {
+          parts.push(body.slice(from, j));
+          from = j + 1;
+        }
+      }
+      parts.push(body.slice(from));
+      if (parts.length < 2) continue;
+      const head = pattern.slice(0, open);
+      const tail = pattern.slice(i + 1);
+      return parts.flatMap(part => expandBraces(head + part + tail));
+    }
+  }
+  return [pattern];
+}
+
+/**
+ * One brace-free glob as a regular expression source: `**`, `*`, `?` and
+ * `[…]` classes (`[!…]` negated), as npm's `files` matching reads them.
+ * @param {string} pattern
+ */
+function globSource(pattern) {
+  let out = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === '*') {
+      if (pattern[i + 1] === '*') {
+        const slashAfter = pattern[i + 2] === '/';
+        const atStart = i === 0 || pattern[i - 1] === '/';
+        if (atStart && slashAfter) {
+          out += '(?:.*/)?';
+          i += 2;
+        } else if (atStart && i + 2 === pattern.length) {
+          out = out.replace(/\/$/u, '') + '(?:/.*)?';
+          i += 1;
+        } else {
+          out += '.*';
+          i += 1;
+        }
+      } else {
+        out += '[^/]*';
+      }
+    } else if (ch === '?') {
+      out += '[^/]';
+    } else if (ch === '[') {
+      const close = pattern.indexOf(']', i + 2);
+      if (close === -1) {
+        out += '\\[';
+      } else {
+        let body = pattern.slice(i + 1, close);
+        const negated = body.startsWith('!') || body.startsWith('^');
+        if (negated) body = body.slice(1);
+        out += `[${negated ? '^' : ''}${body.replace(/[\\\]]/gu, '\\$&')}]`;
+        i = close;
+      }
+    } else if (ch === '\\' && i + 1 < pattern.length) {
+      out += pattern[++i].replace(/[.+^${}()|[\]\\*?/]/gu, '\\$&');
+    } else {
+      out += ch.replace(/[.+^${}()|[\]\\]/gu, '\\$&');
+    }
+  }
+  return out;
+}
+
+/**
+ * The paths npm packs for the package in `base`, read from
+ * `npm pack --dry-run --json --ignore-scripts` (nothing runs, nothing is
+ * written), started the way the CLI starts npm everywhere else, or why npm
+ * could not answer.
+ * @param {string} base
+ * @returns {{paths: Set<string>} | {error: string}}
+ */
+function npmPackedPaths(base) {
+  let npm;
+  try {
+    npm = npmCommand();
+  } catch {
+    return {error: 'npm was not found'};
+  }
+  const result = spawnSync(
+    npm.command,
+    [
+      ...npm.prefix,
+      'pack',
+      '--dry-run',
+      '--json',
+      '--ignore-scripts',
+      '--silent',
+    ],
+    {
+      cwd: base,
+      encoding: 'utf-8',
+      shell: false,
+      timeout: 60_000,
+      // One line per packed file: room for a very large package.
+      maxBuffer: 256 * 1024 * 1024,
+    },
+  );
+  if (result.error) return {error: `npm did not run (${result.error.message})`};
+  if (result.status !== 0) {
+    let code = '';
+    try {
+      code = JSON.parse(result.stdout)?.error?.code ?? '';
+    } catch {
+      // not JSON
+    }
+    return {
+      error: `npm pack failed${code ? ` (${code})` : ` with exit ${result.status}`}`,
+    };
+  }
+  try {
+    const [info] = JSON.parse(result.stdout);
+    if (Array.isArray(info?.files)) {
+      return {
+        paths: new Set(
+          info.files.map((/** @type {{path: string}} */ f) => f.path),
+        ),
+      };
+    }
+  } catch {
+    // fall through
+  }
+  return {error: 'npm pack printed no file list'};
+}
+
+/**
+ * The ignore files npm reads for one path in a package with no `files`
+ * field: in the root and each folder down to the path's own, `.npmignore`,
+ * or `.gitignore` where that folder has none. Root first, each relative to
+ * the package root.
+ * @param {string} base
+ * @param {string} rel POSIX, relative to the package root
+ * @returns {string[]}
+ */
+function ignoreFilesFor(base, rel) {
+  /** @type {string[]} */
+  const found = [];
+  const folders = rel.split('/').slice(0, -1);
+  for (let depth = 0; depth <= folders.length; depth++) {
+    const folder = folders.slice(0, depth).join('/');
+    const file = ['.npmignore', '.gitignore'].find(name =>
+      fs.existsSync(path.join(base, folder, name)),
+    );
+    if (file) found.push(folder ? `${folder}/${file}` : file);
+  }
+  return found;
+}
+
+/**
+ * The note for an asset a package with no `files` field leaves out through
+ * an ignore file, naming the line that drops it, never a `files` field,
+ * which would leave out everything else. The deepest file with a matching
+ * line is named; an entry is read relative to its own folder.
+ * @param {string} base
+ * @param {string} template
+ * @param {string} asset
+ * @param {boolean} [nestedOnly] with a `files` field npm skips the root's
+ *   ignore file but still reads those in folders below it
+ */
+function ignoreFix(base, template, asset, nestedOnly = false) {
+  const files = ignoreFilesFor(base, asset).filter(
+    file => !nestedOnly || file.includes('/'),
+  );
+  for (const file of [...files].reverse()) {
+    const folder = path.posix.dirname(file);
+    const within = folder === '.' ? asset : asset.slice(folder.length + 1);
+    /** @type {string[]} */
+    let lines;
+    try {
+      lines = fs.readFileSync(path.join(base, file), 'utf8').split(/\r?\n/);
+    } catch {
+      continue;
+    }
+    const line = lines.find(
+      entry =>
+        entry.trim() !== '' &&
+        !entry.trim().startsWith('#') &&
+        !entry.trim().startsWith('!') &&
+        !outsideFiles(within, [entry.trim()]),
+    );
+    if (line) {
+      return `${template}: loads ${asset}, which npm leaves out of the package because ${file} drops it, so the template breaks once installed. Fix: remove or narrow the line \`${line.trim()}\` in ${file}, and confirm with \`npm pack --dry-run\`.`;
+    }
+  }
+  const file = files.at(-1) ?? '.npmignore';
+  return `${template}: loads ${asset}, which npm leaves out of the package because an ignore file drops it, so the template breaks once installed. Fix: remove the line in ${file} (or another ignore file on its path) that matches ${asset}, and confirm with \`npm pack --dry-run\`.`;
+}
+
+/**
+ * Whether no `files` entry can reach a path, read case-insensitively and
+ * generously (`{a,b}` braces, globs, a no-slash entry at any depth, an entry
+ * for the path or any folder above it), for when npm cannot say what it
+ * packs: a path this misses is out of the package however npm reads the list.
+ * @param {string} rel POSIX, relative to the package root
+ * @param {unknown} files
+ */
+export function outsideFiles(rel, files) {
+  if (!Array.isArray(files)) return false;
+  const parts = rel.split('/');
+  const paths = parts.map((_, i) => parts.slice(0, i + 1).join('/'));
+  return !files.some(entry => {
+    if (typeof entry !== 'string' || entry.startsWith('!')) return false;
+    const trimmed = entry
+      .replace(/^\.?\//u, '')
+      .replace(/\/+$/u, '')
+      .replace(/\/\*$/u, '/**');
+    return expandBraces(trimmed).some(spelling => {
+      const pattern = new RegExp(`^${globSource(spelling)}$`, 'iu');
+      return spelling.includes('/') || /^\.?\//u.test(entry)
+        ? paths.some(at => pattern.test(at))
+        : parts.some(name => pattern.test(name));
+    });
+  });
+}
+
+/**
+ * The `!` entry of a `files` field that leaves out `rel` or a folder above
+ * it, as written; null when none does.
+ * @param {string} rel package-relative path
+ * @param {unknown} files the `files` field
+ * @returns {string | null}
+ */
+export function negatedFilesEntry(rel, files) {
+  if (!Array.isArray(files)) return null;
+  const parts = rel.split('/');
+  const paths = parts.map((_, i) => parts.slice(0, i + 1).join('/'));
+  for (const entry of files) {
+    if (typeof entry !== 'string' || !entry.startsWith('!')) continue;
+    const trimmed = entry
+      .slice(1)
+      .replace(/^\.?\//u, '')
+      .replace(/\/+$/u, '')
+      .replace(/\/\*$/u, '/**');
+    const hit = expandBraces(trimmed).some(spelling => {
+      const pattern = new RegExp(`^${globSource(spelling)}$`, 'iu');
+      return spelling.includes('/') || /^!\.?\//u.test(entry)
+        ? paths.some(at => pattern.test(at))
+        : parts.some(name => pattern.test(name));
+    });
+    if (hit) return entry;
+  }
+  return null;
+}
+
+/**
+ * The path a `new URL()` argument spells out: a string, or a template
+ * literal with no expressions. Anything computed is not read.
+ * @param {any} node
+ * @returns {string | null}
+ */
+function literalPath(node) {
+  if (node?.type === 'StringLiteral') return node.value;
+  if (node?.type === 'TemplateLiteral' && node.expressions.length === 0) {
+    return node.quasis[0]?.value?.cooked ?? null;
+  }
+  return null;
+}
+
+/**
+ * A template module, parsed, so strings, JSX text, comments and type-only
+ * imports and exports never count. `server` is what a browser cannot run: an
+ * import, re-export or `require()` of a server-only module or an uninstalled
+ * Node builtin, a read of `process.env` other than `process.env.NODE_ENV`
+ * (which bundlers replace). `assets` are the relative paths it loads with `new URL('./x', import.meta.url)`. A module
+ * that does not parse reports nothing; the template check owns that.
+ * @param {string} source
+ * @param {Set<string>} builtins
+ * @returns {{server: string[], assets: string[]}}
+ */
+function readModule(source, builtins) {
+  /** @type {any} */
+  let ast;
+  try {
+    ast = parseModule(source, {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript'],
+      errorRecovery: true,
+    });
+  } catch {
+    return {server: [], assets: []};
+  }
+  /** @type {string[]} */
+  const assets = [];
+  /** @type {string[]} */
+  const found = [];
+  /** @param {unknown} spec */
+  const checkSpec = spec => {
+    if (
+      typeof spec === 'string' &&
+      (SERVER_ONLY_IMPORTS.test(spec) || builtins.has(spec))
+    ) {
+      found.push(`imports '${spec}'`);
+    }
+  };
+  /** @param {any} node */
+  const visit = node => {
+    if (!node || typeof node.type !== 'string') return;
+    switch (node.type) {
+      case 'ImportDeclaration':
+        if (
+          node.importKind !== 'type' &&
+          !(
+            node.specifiers.length > 0 &&
+            node.specifiers.every(
+              (/** @type {any} */ s) => s.importKind === 'type',
+            )
+          )
+        ) {
+          checkSpec(node.source.value);
+        }
+        return;
+      case 'ExportNamedDeclaration':
+      case 'ExportAllDeclaration':
+        if (
+          node.source &&
+          node.exportKind !== 'type' &&
+          !(
+            node.specifiers?.length > 0 &&
+            node.specifiers.every(
+              (/** @type {any} */ s) => s.exportKind === 'type',
+            )
+          )
+        ) {
+          checkSpec(node.source.value);
+        }
+        break;
+      case 'CallExpression':
+        if (
+          (node.callee.type === 'Identifier' &&
+            node.callee.name === 'require') ||
+          node.callee.type === 'Import'
+        ) {
+          checkSpec(node.arguments[0]?.value);
+        }
+        break;
+      case 'ImportExpression':
+        checkSpec(node.source?.value);
+        break;
+      case 'NewExpression': {
+        const [first, second] = node.arguments ?? [];
+        if (
+          node.callee.type === 'Identifier' &&
+          node.callee.name === 'URL' &&
+          literalPath(first) != null &&
+          /^\.{1,2}\//u.test(/** @type {string} */ (literalPath(first))) &&
+          second?.type === 'MemberExpression' &&
+          second.object?.type === 'MetaProperty' &&
+          second.object.meta?.name === 'import' &&
+          second.object.property?.name === 'meta' &&
+          !second.computed &&
+          second.property?.name === 'url'
+        ) {
+          assets.push(/** @type {string} */ (literalPath(first)));
+        }
+        break;
+      }
+      case 'MemberExpression': {
+        const object = node.object;
+        if (
+          object.type === 'Identifier' &&
+          object.name === 'process' &&
+          !node.computed &&
+          node.property.name === 'env'
+        ) {
+          found.push('reads process.env');
+          return;
+        }
+        if (
+          object.type === 'MemberExpression' &&
+          object.object.type === 'Identifier' &&
+          object.object.name === 'process' &&
+          !object.computed &&
+          object.property.name === 'env'
+        ) {
+          if (!node.computed && node.property.name === 'NODE_ENV') return;
+          found.push('reads process.env');
+          return;
+        }
+        break;
+      }
+      default:
+        break;
+    }
+    for (const key of Object.keys(node)) {
+      if (
+        key === 'loc' ||
+        key === 'start' ||
+        key === 'end' ||
+        key === 'leadingComments' ||
+        key === 'trailingComments' ||
+        key === 'innerComments'
+      ) {
+        continue;
+      }
+      const value = node[key];
+      if (Array.isArray(value)) value.forEach(visit);
+      else if (value && typeof value === 'object') visit(value);
+    }
+  };
+  visit(ast.program);
+  return {server: found, assets};
+}
+
+/**
+ * What a package's examples need to work everywhere they are shown: template
+ * lists, docs pages and catalog cards, which render each block alone from
+ * the packed package. Four `next` notes, each with a fix to paste
+ * (architecture:cli-surface INV35, DEC-11):
+ * - `component_without_example`: a published component no block template
+ *   shows, as its `exampleFor` with `isShowcase: true` (or in
+ *   `alsoShowcaseFor`). A block named like a showcase that sets neither is a
+ *   standalone block and does not count. Exempt, because an example cannot
+ *   fix them: a hidden doc (`hidden: true`), a member of a family (its
+ *   family's example covers it), a doc kept off the overview
+ *   (`isHiddenFromOverview: true`, for parts that only make sense inside a
+ *   parent), and a `Utility` component (providers and context).
+ * - `template_category`: a template `category` written as a path, such as
+ *   `components/X`, with a `"<Group> - <Variant>"` one to write.
+ * - `showcase_not_standalone`: a showcase that imports what a browser cannot
+ *   load (`server-only`, `next/headers`, `next/server`, `next/cache`, a Node
+ *   built-in) or reads `process.env` past `NODE_ENV`. Type-only imports and
+ *   comments don't count, and live data is fine: a showcase may fetch
+ *   through the app. Only the showcase's own file is read.
+ * - `template_asset_not_packed`: a file a template loads with `new URL(…,
+ *   import.meta.url)` that does not exist, or that npm leaves out of the
+ *   package (`npm pack --dry-run`). When npm cannot answer, an asset no
+ *   `files` entry can reach is still a note, and any other is returned in
+ *   `unchecked`.
+ * @param {LoadedIntegration} integration
+ * @returns {Promise<{notes: Note[], unchecked: Array<{file: string, asset: string, reason: string}>}>}
+ */
+export async function componentExamplesCheck(integration) {
+  /** @type {Note[]} */
+  const notes = [];
+  const base = integration.__packageDir ?? integration.components ?? '';
+  const root = integration.templates;
+  /** @type {any[]} */
+  let templates = [];
+  if (root && !rootProblem(root)) {
+    try {
+      ({templates} = await discoverIntegrationTemplatesForOne(integration));
+    } catch {
+      // Templates that cannot be read are reported by the template check.
+      return {notes, unchecked: []};
+    }
+  }
+  const rel = (/** @type {string} */ file) => slash(path.relative(base, file));
+  /** @type {unknown} */
+  let packedFiles;
+  /** @type {Set<string>} */
+  const declared = new Set();
+  try {
+    const pkg = JSON.parse(
+      fs.readFileSync(path.join(base, 'package.json'), 'utf8'),
+    );
+    packedFiles = pkg.files;
+    for (const field of [
+      'dependencies',
+      'peerDependencies',
+      'optionalDependencies',
+      'devDependencies',
+    ]) {
+      for (const name of Object.keys(pkg[field] ?? {})) declared.add(name);
+    }
+  } catch {
+    packedFiles = undefined;
+  }
+  /** @type {{paths: Set<string>} | {error: string} | undefined} what npm packs, read once */
+  let packed;
+  /** @type {Array<{file: string, asset: string, reason: string}>} */
+  const unchecked = [];
+  // A bare builtin name the package installs from npm (`buffer`, `events`)
+  // is that package, which bundlers ship to the browser.
+  const builtins = new Set(builtinModules.filter(name => !declared.has(name)));
+  /** @type {Set<string>} */
+  const shown = new Set();
+  for (const template of templates) {
+    const docFile = rel(template.docPath ?? template.filePath);
+    if (template.type === 'block') {
+      if (typeof template.exampleFor === 'string' && template.isShowcase) {
+        shown.add(template.exampleFor);
+      }
+      for (const name of template.alsoShowcaseFor ?? []) shown.add(name);
+    }
+    if (
+      typeof template.category === 'string' &&
+      template.category !== '' &&
+      PATH_CATEGORY.test(template.category)
+    ) {
+      const [group, ...rest] = template.category.split('/');
+      const variant =
+        rest.join(' ').trim() || template.displayName || template.id;
+      const suggested = `${group.charAt(0).toUpperCase()}${group.slice(1)} - ${variant}`;
+      notes.push({
+        code: 'template_category',
+        message: `${docFile}: category '${template.category}' reads as a file path, and \`astryx template\` lists templates under their category as written. Fix: category: '${suggested}', a "<Group> - <Variant>" name.`,
+      });
+    }
+    /** @type {string} */
+    let source;
+    try {
+      source = fs.readFileSync(template.filePath, 'utf8');
+    } catch {
+      continue;
+    }
+    const parsed = readModule(source, builtins);
+    // A block is a showcase when it says so, or when it shows components
+    // through `alsoShowcaseFor`, which counts them as shown above.
+    const showcase =
+      template.isShowcase === true ||
+      (Array.isArray(template.alsoShowcaseFor) &&
+        template.alsoShowcaseFor.length > 0);
+    if (template.type === 'block' && showcase) {
+      const blocked = parsed.server;
+      if (blocked.length > 0) {
+        notes.push({
+          code: 'showcase_not_standalone',
+          message: `${rel(template.filePath)}: the showcase ${[...new Set(blocked)].join(', ')}, which cannot run in a browser, so a docs page or catalog card cannot render it. Fix: move that code into the app; pass values in as props or a sample-data provider the showcase renders itself. Fetching live data through the app is fine.`,
+        });
+      }
+    }
+    for (const loaded of new Set(parsed.assets)) {
+      const asset = path.resolve(path.dirname(template.filePath), loaded);
+      const assetRel = rel(asset);
+      const exists = fs.existsSync(asset);
+      // npm packs nothing outside the package root, whatever `files` says.
+      const fromBase = path.relative(base, asset);
+      if (fromBase.startsWith('..') || path.isAbsolute(fromBase)) {
+        notes.push({
+          code: 'template_asset_not_packed',
+          message: `${rel(template.filePath)}: loads ${assetRel}, which is outside the package, so npm never packs it and the template breaks once installed. Fix: move it inside the package (beside the template is simplest), point \`new URL()\` at the new place, and confirm with \`npm pack --dry-run\`.`,
+        });
+        continue;
+      }
+      // A folder URL is packed when npm packs anything inside it.
+      const isFolder = exists && fs.statSync(asset).isDirectory();
+      if (exists) {
+        // With no `files` field npm packs everything but what an ignore file
+        // drops, in the package root or any folder down to the asset, so
+        // with no ignore file on that path there is nothing to ask.
+        if (
+          !Array.isArray(packedFiles) &&
+          ignoreFilesFor(base, assetRel).length === 0
+        ) {
+          continue;
+        }
+        // What npm packs decides. Without npm's answer, an asset no entry
+        // can reach is reported, and any other is listed as not checked.
+        packed ??= npmPackedPaths(base);
+        if ('paths' in packed) {
+          if (packed.paths.has(assetRel)) continue;
+          if (
+            isFolder &&
+            [...packed.paths].some(each => each.startsWith(`${assetRel}/`))
+          ) {
+            continue;
+          }
+        } else if (
+          !Array.isArray(packedFiles) ||
+          !outsideFiles(assetRel, packedFiles)
+        ) {
+          unchecked.push({
+            file: rel(template.filePath),
+            asset: assetRel,
+            reason: Array.isArray(packedFiles)
+              ? `${packed.error}, and a \`files\` entry may reach it`
+              : `${packed.error}, and ${ignoreFilesFor(base, assetRel).at(-1) ?? '.npmignore'} may drop it`,
+          });
+          continue;
+        }
+      }
+      const folder =
+        path.posix.dirname(assetRel) === '.'
+          ? assetRel
+          : path.posix.dirname(assetRel);
+      const negated = negatedFilesEntry(assetRel, packedFiles);
+      notes.push({
+        code: 'template_asset_not_packed',
+        message: !exists
+          ? `${rel(template.filePath)}: loads ${assetRel}, which does not exist. Fix: add the file, or point \`new URL()\` at one that does.`
+          : negated != null && !outsideFiles(assetRel, packedFiles)
+            ? `${rel(template.filePath)}: loads ${assetRel}, which the \`files\` entry "${negated}" leaves out of the package, so the template breaks once installed. Fix: drop or narrow "${negated}" so it no longer matches ${assetRel}, and confirm with \`npm pack --dry-run\`.`
+            : Array.isArray(packedFiles) &&
+            (outsideFiles(assetRel, packedFiles) ||
+              !ignoreFilesFor(base, assetRel).some(file => file.includes('/')))
+            ? `${rel(template.filePath)}: loads ${assetRel}, which npm leaves out of the package by its \`files\` field, so the template breaks once installed. Fix: add "${folder}" to \`files\`, drop any \`!\` entry that excludes it, and confirm with \`npm pack --dry-run\`.`
+            : ignoreFix(
+                base,
+                rel(template.filePath),
+                assetRel,
+                Array.isArray(packedFiles),
+              ),
+      });
+    }
+  }
+  if (!integration.components || rootProblem(integration.components)) {
+    return {notes, unchecked};
+  }
+  /** @type {any[]} */
+  let records;
+  try {
+    records = componentDiscovery.discoverIntegrationComponents(integration);
+  } catch {
+    return {notes, unchecked};
+  }
+  const templatesDir = root ? rel(root) || '.' : 'templates';
+  /** @type {Set<unknown>} blocks a note has already asked to show one component */
+  const claimed = new Set();
+  // A block that names a component, by its category, name, display name or
+  // file (`acme-badge-showcase`), is offered to that component alone, so two
+  // notes never ask one block to show two components. The longest matching
+  // name wins (`AcmeBadgeGroup` over `AcmeBadge`).
+  const key = (/** @type {string} */ value) =>
+    value.toLowerCase().replace(/[-_\s]/g, '');
+  const componentNames = records
+    .map(record => record.name)
+    .filter(name => typeof name === 'string')
+    .sort((a, b) => b.length - a.length);
+  /** @type {Map<unknown, string>} */
+  const ownerOf = new Map();
+  for (const template of templates) {
+    if (template.type !== 'block' || typeof template.exampleFor === 'string') {
+      continue;
+    }
+    const words = [
+      template.category,
+      template.name,
+      template.displayName,
+      typeof template.filePath === 'string'
+        ? path.basename(template.filePath).replace(/\.[^.]+$/u, '')
+        : undefined,
+    ]
+      .filter(value => typeof value === 'string')
+      .map(key);
+    const owner = componentNames.find(name =>
+      words.some(word => word.includes(key(name))),
+    );
+    if (owner) ownerOf.set(template, owner);
+  }
+  for (const record of records) {
+    if (componentDiscovery.isIntegrationMember(record)) continue;
+    if (shown.has(record.name)) continue;
+    let doc;
+    try {
+      doc = await loadComponentDoc(record.docPath);
+    } catch {
+      continue;
+    }
+    if (doc?.hidden === true || doc?.isHiddenFromOverview === true) continue;
+    if (doc?.category === 'Utility') continue;
+    const name = record.name;
+    const stem = `${name.replace(/([a-z0-9])([A-Z])/gu, '$1-$2').toLowerCase()}-showcase`;
+    // A block that already composes the component only needs the fields.
+    // A block that composes the component and shows nothing else takes the
+    // fields; one that is already another component's showcase takes
+    // `alsoShowcaseFor` instead, so it keeps its own.
+    // A block whose `exampleFor` already names the component only needs
+    // `isShowcase: true`.
+    const named = templates.find(
+      template => template.type === 'block' && template.exampleFor === name,
+    );
+    if (named) {
+      notes.push({
+        code: 'component_without_example',
+        message: `${rel(record.docPath)}: no block template shows "${name}" (\`exampleFor: '${name}'\` with \`isShowcase: true\`), so template lists, docs pages and catalog cards have no example of it. Fix: add \`isShowcase: true\` to ${rel(named.docPath ?? named.filePath)}, whose \`exampleFor\` already names ${name}.`,
+      });
+      continue;
+    }
+    // Among the blocks that compose it, prefer the one that names it, then
+    // one that names no component and shows nothing yet; a block that names
+    // another component is that component's.
+    const namesIt = (/** @type {any} */ template) =>
+      ownerOf.get(template) === name;
+    const composing = templates
+      .filter(
+        template =>
+          template.type === 'block' &&
+          Array.isArray(template.componentsUsed) &&
+          template.componentsUsed.includes(name) &&
+          (!ownerOf.has(template) || ownerOf.get(template) === name),
+      )
+      .sort(
+        (a, b) =>
+          Number(namesIt(b)) - Number(namesIt(a)) ||
+          Number(typeof a.exampleFor === 'string') -
+            Number(typeof b.exampleFor === 'string'),
+      );
+    const existing =
+      composing.find(
+        template =>
+          typeof template.exampleFor !== 'string' && !claimed.has(template),
+      ) ?? composing.find(template => typeof template.exampleFor === 'string');
+    const showsAnother =
+      existing != null && typeof existing.exampleFor === 'string';
+    if (existing && !showsAnother) claimed.add(existing);
+    // The stem path is free to suggest unless a block there already shows
+    // another component; then the new files take the next free stem.
+    const stemTemplate = templates.find(
+      template =>
+        typeof template.filePath === 'string' &&
+        path.basename(template.filePath).replace(/\.[^.]+$/u, '') === stem,
+    );
+    const stemShowsAnother =
+      stemTemplate != null &&
+      typeof stemTemplate.exampleFor === 'string' &&
+      stemTemplate.exampleFor !== name;
+    let freeStem = stem;
+    if (stemShowsAnother && root && !rootProblem(root)) {
+      for (
+        let n = 2;
+        fs.existsSync(path.join(root, `${freeStem}.tsx`)) ||
+        fs.existsSync(path.join(root, `${freeStem}.doc.mjs`));
+        n++
+      ) {
+        freeStem = `${stem}-${n}`;
+      }
+    }
+    const taken =
+      !existing &&
+      !stemShowsAnother &&
+      root &&
+      !rootProblem(root) &&
+      fs.existsSync(path.join(root, `${stem}.tsx`));
+    if (existing || taken) {
+      const doc = existing
+        ? rel(existing.docPath ?? existing.filePath)
+        : `${templatesDir}/${stem}.doc.mjs`;
+      notes.push({
+        code: 'component_without_example',
+        message: `${rel(record.docPath)}: no block template shows "${name}" (\`exampleFor: '${name}'\` with \`isShowcase: true\`), so template lists, docs pages and catalog cards have no example of it. Fix: ${showsAnother ? `add '${name}' to \`alsoShowcaseFor\` in ${doc}, the block that already composes ${name} as the showcase of ${existing.exampleFor}` : `add \`exampleFor: '${name}'\` and \`isShowcase: true\` to ${doc}${existing ? `, the block that already composes ${name}` : ''}`}. A doc set to \`hidden\`, \`isHiddenFromOverview\` or category \`Utility\` needs no example.`,
+      });
+      continue;
+    }
+    notes.push({
+      code: 'component_without_example',
+      message:
+        `${rel(record.docPath)}: no block template shows "${name}" (\`exampleFor: '${name}'\` with \`isShowcase: true\`), so template lists, docs pages and catalog cards have no example of it.` +
+        (root
+          ? ''
+          : " The manifest sets no `templates` root; add `templates: './templates'` to it.") +
+        ` Fix: add ${templatesDir}/${freeStem}.tsx, a small composition that renders ${name}, and beside it ${templatesDir}/${freeStem}.doc.mjs:` +
+        ` export default {type: 'block', name: '${freeStem}', displayName: '${name} showcase', description: 'A ${name} in use.', exampleFor: '${name}', isShowcase: true, aspectRatio: 16 / 10};` +
+        ' A doc set to `hidden`, `isHiddenFromOverview` or category `Utility` needs no example.',
+    });
+  }
+  return {notes, unchecked};
+}
+
 /**
  * Warn about a `.tsx` directly in the templates root with no same-stem template
  * metadata: template discovery pairs sources with docs, so `astryx template`
@@ -1650,6 +2439,7 @@ async function allLoadedIntegrationIssues(loaded) {
       codemods: loaded.codemods,
       docs: loaded.docs,
       themes: loaded.themes,
+      iconSets: loaded.iconSets,
       __manifestFile: loaded.__manifestFile,
     },
     issues,

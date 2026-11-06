@@ -107,7 +107,7 @@ export const doc = {
     {
       type: 'docs.list',
       description:
-        "Every reference-doc topic in read order, as DocsListEntry[] ({topic, description, package, replaces?}), each readable with docs(topic). meta.namespaces lists the docs tree's top-level namespaces ({topic, description, package}), and meta.notLoaded each package whose docs did not load ({package, message}).",
+        "Every reference-doc topic in read order, as DocsListEntry[] ({topic, description, package, replaces?, replacedPackage?}), each readable with docs(topic). meta.namespaces lists the docs tree's top-level namespaces ({topic, description, package}), and meta.notLoaded each package whose docs did not load ({package, message}).",
     },
     {
       type: 'docs.detail',

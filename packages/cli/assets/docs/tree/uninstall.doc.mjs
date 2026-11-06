@@ -40,7 +40,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'astryx init --user --remove-agents',
+          code: '{@command init --user --remove-agents}',
         },
         {
           type: 'prose',
@@ -55,7 +55,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npm uninstall -g @astryxdesign/cli\n# or: pnpm remove -g @astryxdesign/cli · yarn global remove @astryxdesign/cli · bun remove -g @astryxdesign/cli · volta uninstall @astryxdesign/cli',
+          code: '{@pm remove @astryxdesign/cli --global}\n# with Volta: volta uninstall @astryxdesign/cli',
         },
         {
           type: 'prose',

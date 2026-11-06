@@ -52,6 +52,7 @@ const KIND_PLURALS = {
   theme: 'themes',
   codemod: 'codemods',
   'agent-doc': 'agent docs',
+  'icon-set': 'icon sets',
 };
 
 // The list fields that hold item names, summarized in the package list.
@@ -62,6 +63,7 @@ const ITEM_FIELDS = [
   'themes',
   'codemods',
   'agentDocs',
+  'iconSets',
 ];
 
 /**
@@ -81,6 +83,7 @@ const RESULT_KINDS = {
   theme: 'theme',
   codemod: 'migration',
   'agent-doc': 'doc',
+  'icon-set': 'mixed',
 };
 
 /**
@@ -488,7 +491,7 @@ export function registerDiscover(program) {
                 : detail === 'compact'
                   ? formatCompact(docs, docs.name, '')
                   : formatFull(docs);
-            emit(code(md));
+            emit(record({package: result.package}), code(md));
             break;
           }
 

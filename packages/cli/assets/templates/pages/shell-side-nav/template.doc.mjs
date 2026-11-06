@@ -21,4 +21,15 @@ export const doc = {
   ],
   isReady: true,
   category: 'Shell - Left Sidebar',
+  icons: {
+    BookOpenIcon: 'book',
+    BuildingOffice2Icon: 'building',
+    CodeBracketIcon: 'code',
+    Cog6ToothIcon: 'settings',
+    MagnifyingGlassIcon: 'search',
+    PlusIcon: 'add',
+    SparklesIcon: 'sparkles',
+    UserCircleIcon: 'userCircle',
+    UserIcon: 'user',
+  },
 };

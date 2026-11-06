@@ -15,6 +15,10 @@ export interface EnumMemberDoc {
   description: string;
   /** Deprecation reason, if deprecated. */
   deprecated?: string;
+  /** Set on a value of an experimental surface (spec:AST-017 FR27). The
+   *  enum's own section leaves it out; the experimental feature's docs,
+   *  under `astryx docs cli/experimental`, document it. */
+  stability?: 'experimental';
 }
 
 /**

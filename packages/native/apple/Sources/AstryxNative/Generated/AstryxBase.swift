@@ -2,7 +2,7 @@
 public enum AstryxBaseTarget: String, Sendable { case root, trigger, control, container }
 
 /// Base props shared by every platform (AST-082 FR7).
-public struct AstryxBaseProps: Equatable, Sendable {
+public struct AstryxBaseProps: Equatable, Codable, Sendable {
   public var id: String?
   public var isHidden: Bool?
   public init(id: String? = nil, isHidden: Bool? = nil) {

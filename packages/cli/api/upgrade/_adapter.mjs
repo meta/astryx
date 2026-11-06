@@ -24,6 +24,7 @@ import {
   latestVersion,
 } from '../../assets/codemods/registry.mjs';
 import {runCodemods} from '../../assets/codemods/runner.mjs';
+import {codemodOutcome} from '../../assets/codemods/outcome.mjs';
 import {
   discoverIntegrationCodemods,
   selectIntegrationCodemods,
@@ -141,7 +142,12 @@ export function relativeToOrigin(result, {cwd: root, origin}) {
     };
   }
   if (data.modifiedFiles) data.modifiedFiles = data.modifiedFiles.map(rebase);
-  for (const key of ['protectedFiles', 'declinedCandidates', 'errors']) {
+  for (const key of [
+    'protectedFiles',
+    'declinedCandidates',
+    'errors',
+    'regenerate',
+  ]) {
     if (data[key]) {
       data[key] = data[key].map(
         (/** @type {{file: string, declarations?: string[]}} */ entry) => ({
@@ -600,10 +606,58 @@ export async function ensureCodemodDeps({installDeps} = {}) {
 }
 
 /**
+ * @typedef {{kind: 'manual', file: string, codemod: string, message: string, line?: number} | {kind: 'regenerate', file: string, codemod: string, message: string, commands: string[]}} CodemodOutcomeRecord
+ */
+
+/**
+ * Wrap each core code and config transform so the non-failure outcomes it
+ * throws (`assets/codemods/outcome.mjs`) are recorded instead of reaching the
+ * runner as errors. The wrapped transform leaves that file unchanged, exactly
+ * as the throw did. Project codemods keep their own contract. One wrapper per
+ * pass: the regeneration re-check takes a fresh one, so an outcome a hook
+ * resolved does not linger.
+ *
+ * @template {{version: string, transforms: Array<{name: string, transform: any, meta?: {codemodType?: string}}>}} M
+ * @param {M[]} versionManifests
+ * @param {string} root project root; recorded files are relative to it
+ * @returns {{versionManifests: M[], outcomes: CodemodOutcomeRecord[]}}
+ */
+export function withCodemodOutcomes(versionManifests, root) {
+  /** @type {CodemodOutcomeRecord[]} */
+  const outcomes = [];
+  const wrapped = versionManifests.map(manifest => ({
+    ...manifest,
+    transforms: manifest.transforms.map(entry => {
+      if (entry.meta?.codemodType === 'project') return entry;
+      const {transform, name} = entry;
+      return {
+        ...entry,
+        /** @param {{path: string, source: string}} file @param {unknown} api */
+        transform(file, api) {
+          try {
+            return transform(file, api);
+          } catch (err) {
+            const outcome = codemodOutcome(err);
+            if (!outcome) throw err;
+            outcomes.push({
+              ...outcome,
+              file: path.relative(root, file.path).split(path.sep).join('/'),
+              codemod: `core:${name}`,
+            });
+            return undefined;
+          }
+        },
+      };
+    }),
+  }));
+  return {versionManifests: /** @type {M[]} */ (wrapped), outcomes};
+}
+
+/**
  * Run the CORE registry codemods. Runs BEFORE the config is loaded so a core
  * CONFIG codemod can repair a config the strict loader would otherwise reject.
  * @param {CoreVersionManifest[]} versionManifests
- * @param {{apply: boolean, path: string, codemod?: string, skipCodemods: Set<string>, root?: string, protection?: {root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}, silent?: boolean, coversTarget?: boolean}} options
+ * @param {{apply: boolean, path: string, codemod?: string, skipCodemods: Set<string>, root?: string, protection?: {root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}, silent?: boolean, coversTarget?: boolean, outcomes?: CodemodOutcomeRecord[]}} options
  */
 export async function runCoreCodemods(
   versionManifests,
@@ -616,6 +670,7 @@ export async function runCoreCodemods(
     protection,
     silent,
     coversTarget,
+    outcomes,
   },
 ) {
   return runCodemods(versionManifests, {
@@ -627,6 +682,7 @@ export async function runCoreCodemods(
     root,
     protection,
     coversTarget,
+    outcomes,
   });
 }
 
@@ -642,7 +698,8 @@ export async function runCoreCodemods(
  *
  * @param {string} cwd
  * @param {string[]} [extraIntegrationSpecs] explicit `--integration` specs
- * @returns {Promise<{postCodemodHooks: import('../../authoring/config/type').PostCodemodHook[], integrations: import('../../foundation/integrations/integrations.mjs').LoadedIntegration[], ledger: import('../../foundation/integrations/provider-resolution.mjs').ProviderLedger}>}
+ * @returns {Promise<{postCodemodHooks: import('../../authoring/config/type').PostCodemodHook[], integrations: import('../../foundation/integrations/integrations.mjs').LoadedIntegration[], ledger: import('../../foundation/integrations/provider-resolution.mjs').ProviderLedger, iconSets: boolean}>}
+ *   `iconSets`: the project sets `experimental.iconSet`
  */
 export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
   // The CLI debug preflight may already have imported this config before core
@@ -711,7 +768,12 @@ export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
     ],
     {codemods: true, prior: providerLedgerOf(project)},
   );
-  return {postCodemodHooks, integrations, ledger};
+  return {
+    postCodemodHooks,
+    integrations,
+    ledger,
+    iconSets: Boolean(project.config.experimental?.iconSet),
+  };
 }
 
 /**
@@ -719,11 +781,24 @@ export async function loadProjectContext(cwd, extraIntegrationSpecs = []) {
  * nudge must not fail the upgrade) and is suppressed for --json/programmatic
  * callers (the silent logger).
  * @param {Array<import('../../foundation/integrations/integrations.mjs').LoadedIntegration>} integrations
+ * @param {{iconSets?: boolean}} [options] `iconSets`: the project sets
+ *   `experimental.iconSet`. Without it a package's experimental icon-set root
+ *   is not checked (spec:AST-017 FR27, spec:AST-084 FR0), as in the project's
+ *   own issues.
  * @returns {Promise<void>}
  */
-export async function warnIntegrationIssues(integrations) {
+export async function warnIntegrationIssues(integrations, {iconSets} = {}) {
   try {
-    await warnOnIntegrationIssues(integrations, {json: logger.silent});
+    await warnOnIntegrationIssues(
+      iconSets
+        ? integrations
+        : integrations.map(each =>
+            each && typeof each === 'object'
+              ? {...each, iconSets: undefined}
+              : each,
+          ),
+      {json: logger.silent},
+    );
   } catch {
     // Never let the nudge break the upgrade.
   }

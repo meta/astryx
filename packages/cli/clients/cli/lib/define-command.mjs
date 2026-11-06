@@ -27,6 +27,7 @@
 import {recordCommandResult} from '../../../foundation/debug/index.mjs';
 import {routeSegment} from '../../../foundation/discovery/docs-section-key.mjs';
 import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
+import {renderTokens} from '../../../foundation/doc-compiler/links.mjs';
 import {text} from '../formatters/index.mjs';
 
 /**
@@ -126,7 +127,12 @@ export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
     hidden ? {hidden: true} : {},
   );
   Object.defineProperty(cmd, COMMAND_DOCS, {value: {doc, fn}, configurable: true});
-  if (doc.summary) cmd.description(doc.summary);
+  // Help shows doc tokens as commands, the way `astryx docs` does.
+  if (doc.summary) cmd.description(renderTokens(doc.summary));
+  // An experimental command says so wherever its name is listed in help.
+  if (doc.stability === 'experimental') {
+    cmd.description(`[experimental] ${cmd.description() || ''}`.trimEnd());
+  }
   if (doc.deprecated) {
     const base = cmd.description() || '';
     cmd.description(`${base} [DEPRECATED: ${doc.deprecated}]`);
@@ -143,13 +149,13 @@ export function defineCommand(parent, doc, {fn, action, hidden} = {}) {
     // its description instead.)
     if (arg.description) {
       const argument = cmd.registeredArguments?.find(a => a.name() === arg.name);
-      if (argument) argument.description = arg.description;
+      if (argument) argument.description = renderTokens(arg.description);
     }
   }
 
   for (const o of doc.options ?? []) {
     const desc = o.description ?? (o.param ? paramDesc(o.param) : '');
-    const option = cmd.createOption(o.flag, desc);
+    const option = cmd.createOption(o.flag, renderTokens(desc));
     if (o.default != null) option.default(o.default);
     cmd.addOption(option);
   }

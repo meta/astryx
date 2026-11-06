@@ -6,8 +6,9 @@
  * Integrations are PACKAGE NAMES listed in astryx.config.{ts,mjs,js}. Each
  * package declares a single conventional root manifest sibling to its
  * package.json — astryx.integration.{ts,mjs,js} — which contributes
- * components/templates/codemods/docs/themes roots, an optional issuesUrl, and
- * an optional cliCommand.
+ * components/templates/codemods/docs/themes roots (and the experimental
+ * `experimental.iconSets` root), an optional issuesUrl, and an optional
+ * cliCommand.
  * Stable provider identity and package metadata come from package.json, not the
  * manifest.
  *
@@ -31,6 +32,9 @@ import {
   unknownIntegrationKeys,
 } from '../../authoring/integration/schema.mjs';
 import {importUserModule, findPresentFiles} from '../fs/module-loader.mjs';
+import {findManifestPaths, MANIFEST_BASENAMES} from './manifest-paths.mjs';
+
+export {findManifestPaths, MANIFEST_BASENAMES};
 import {parseGapReportHandler} from '../../authoring/gap-report/parse.mjs';
 import {parseDiscoverSource} from '../../authoring/discover/parse.mjs';
 import {resolveProviders} from './provider-resolution.mjs';
@@ -52,6 +56,7 @@ import {resolveProviders} from './provider-resolution.mjs';
  * @property {string} [codemods]
  * @property {string} [docs]
  * @property {string} [themes]
+ * @property {string} [iconSets] the manifest's `experimental.iconSets` root
  * @property {string} [issuesUrl]
  * @property {{append?: readonly string[]}} [agentDocs]
  * @property {string} [cliCommand] the command this package's users run the
@@ -100,12 +105,6 @@ import {resolveProviders} from './provider-resolution.mjs';
  * @property {string} [__discoverError] isolated discover-source validation error.
  */
 
-/** Conventional manifest basenames, in load-precedence order. */
-export const MANIFEST_BASENAMES = [
-  'astryx.integration.ts',
-  'astryx.integration.mjs',
-  'astryx.integration.js',
-];
 
 /**
  * Normalize a package-owned provider ID without rejecting legacy unnamed local
@@ -151,16 +150,6 @@ export function markProviderConflicts(integrations) {
   ).integrations;
 }
 
-/**
- * Return the conventional root manifest paths present in `dir`, in
- * load-precedence order. Unlike {@link resolveManifestPath} this never throws —
- * callers (for example Doctor integration validation) decide how to treat zero / multiple.
- * @param {string} dir
- * @returns {string[]} absolute manifest paths
- */
-export function findManifestPaths(dir) {
-  return findPresentFiles(dir, MANIFEST_BASENAMES);
-}
 
 /**
  * Parse the optional named gap-report handler without making it part of the
@@ -510,6 +499,7 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
     codemods: resolveRoot(manifest.codemods),
     docs: resolveRoot(manifest.docs),
     themes: resolveRoot(manifest.themes),
+    iconSets: resolveRoot(manifest.experimental?.iconSets),
     issuesUrl: manifest.issuesUrl,
     agentDocs: manifest.agentDocs,
     cliCommand: manifest.cliCommand,
@@ -637,6 +627,7 @@ export async function loadIntegrations(
       codemods: resolveRoot(manifest.codemods),
       docs: resolveRoot(manifest.docs),
       themes: resolveRoot(manifest.themes),
+      iconSets: resolveRoot(manifest.experimental?.iconSets),
       issuesUrl: manifest.issuesUrl,
       agentDocs: manifest.agentDocs,
       cliCommand: manifest.cliCommand,

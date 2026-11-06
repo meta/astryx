@@ -54,7 +54,7 @@ const meta: Meta<typeof NumberInput> = {
     isReadOnly: {
       control: 'boolean',
       description:
-        'Whether the input is read-only. The value still submits with the form but cannot be edited. Unlike isDisabled it is not dimmed and stays in the tab order.',
+        'Whether the input is read-only. The value still submits with the form but cannot be edited. Unlike isDisabled it is not dimmed and keeps its form value.',
     },
     disabledMessage: {
       control: 'text',
@@ -224,6 +224,14 @@ export const FormattedDisplay: Story = {
 };
 
 export const WithNumberSteppers: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The compact steppers are shown on fine pointers and hidden on coarse pointers, regardless of viewport width. Direct entry and arrow-key stepping remain available.',
+      },
+    },
+  },
   render: args => {
     const [value, setValue] = useState<number | null>(args.value ?? 2);
     return <NumberInput {...args} value={value} onChange={setValue} />;
@@ -428,7 +436,7 @@ export const RequiredField: Story = {
 };
 
 // Read-only shows a value the user should see and send but not change. Unlike
-// a disabled field it is not dimmed, stays in the tab order, and still submits.
+// a disabled field it is not dimmed and still submits.
 export const ReadOnly: Story = {
   render: args => {
     const [value, setValue] = useState<number | null>(args.value ?? 1024);

@@ -248,7 +248,8 @@ export function Toolbar({
   const gapVar = spacingVars[spacingStepToVar[gap]] as string;
 
   const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    itemSelector: 'button, input, [tabindex]',
+    // `a[href]` catches a Button rendered with `href`.
+    itemSelector: 'button, input, a[href], [tabindex]',
     boundarySelector: '[role="toolbar"], [popover]',
     orientation,
     hasRovingTabIndex: true,

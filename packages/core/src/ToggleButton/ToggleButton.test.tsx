@@ -652,9 +652,90 @@ describe('ToggleButtonGroup (single)', () => {
   });
 });
 
+describe('ToggleButton caller attributes', () => {
+  // Spread so the pressed-state attributes are passed the way a wrapper that
+  // forwards arbitrary DOM props would pass them.
+  const callerProps: Record<string, string> = {
+    'data-is-pressed': 'bogus',
+    'aria-pressed': 'mixed',
+    'data-elevation': 'high',
+    'data-testid-extra': 'kept',
+  };
+
+  it('keeps the reflected pressed state when a caller passes its own', () => {
+    render(
+      <>
+        <ToggleButton
+          label="Unpressed"
+          isPressed={false}
+          onPressedChange={() => {}}
+          {...callerProps}
+        />
+        <ToggleButton
+          label="Pressed"
+          isPressed
+          onPressedChange={() => {}}
+          {...callerProps}
+        />
+      </>,
+    );
+    const unpressed = screen.getByRole('button', {name: 'Unpressed'});
+    const pressed = screen.getByRole('button', {name: 'Pressed'});
+    expect(unpressed).toHaveAttribute('data-is-pressed', 'false');
+    expect(unpressed).toHaveAttribute('aria-pressed', 'false');
+    expect(pressed).toHaveAttribute('data-is-pressed', 'true');
+    expect(pressed).toHaveAttribute('aria-pressed', 'true');
+    // The reflected elevation (the default, none) wins over a caller's too.
+    expect(unpressed).toHaveAttribute('data-elevation', 'none');
+    expect(pressed).toHaveAttribute('data-elevation', 'none');
+  });
+
+  it('still forwards other caller data attributes to the root', () => {
+    render(
+      <ToggleButton
+        label="Favorite"
+        isPressed={false}
+        onPressedChange={() => {}}
+        {...callerProps}
+      />,
+    );
+    expect(screen.getByRole('button', {name: 'Favorite'})).toHaveAttribute(
+      'data-testid-extra',
+      'kept',
+    );
+  });
+});
+
 // =============================================================================
 // ToggleButtonGroup — Multiple mode
 // =============================================================================
+
+describe('ToggleButtonGroup host props (public-component-api INV5)', () => {
+  it('passes className, style, id, aria-* and data-* to the group, keeping its own role and name', () => {
+    render(
+      <ToggleButtonGroup
+        label="Alignment"
+        value={null}
+        onChange={() => {}}
+        className="toolbar-group"
+        style={{marginTop: 8}}
+        id="alignment"
+        aria-describedby="alignment-hint"
+        data-section="format"
+        // A caller role or name never replaces the group's own.
+        {...{role: 'radiogroup', 'aria-label': 'Ignored'}}>
+        <ToggleButton value="left" label="Left" />
+      </ToggleButtonGroup>,
+    );
+    const group = screen.getByRole('group', {name: 'Alignment'});
+    expect(group).toHaveClass('toolbar-group');
+    expect(group).toHaveClass('astryx-toggle-button-group');
+    expect(group).toHaveStyle({marginTop: '8px'});
+    expect(group).toHaveAttribute('id', 'alignment');
+    expect(group).toHaveAttribute('aria-describedby', 'alignment-hint');
+    expect(group).toHaveAttribute('data-section', 'format');
+  });
+});
 
 describe('ToggleButtonGroup (multiple)', () => {
   function MultipleGroup() {
