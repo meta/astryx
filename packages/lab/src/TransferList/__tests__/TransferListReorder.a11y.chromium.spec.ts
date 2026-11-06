@@ -118,7 +118,7 @@ test('a row dragged past the end of its list stays inside it, clear of the next 
   }
   await sleep(150);
   const held = await geometry();
-  // The finger is 200 px past the list's end; the preview stopped with its
+  // The finger is 200 px past the list's end. The preview stopped with its
   // bottom on that end, so none of it hangs under the next panel.
   expect(held.rowTop).toBeGreaterThan(start.rowTop + 40);
   expect(held.rowBottom).toBeLessThanOrEqual(held.listBottom + 0.5);
