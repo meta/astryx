@@ -4,7 +4,7 @@
  * @file MetricTile.tsx
  * @input Label, headline value, optional delta/description, and a trend slot
  * @output KPI tile — label, large tabular value, sentiment-aware delta, trend graphic
- * @position Composed dashboard primitive; pair with Sparkline via the `trend` slot
+ * @position Composed dashboard primitive; pair with a small trend chart via the `trend` slot
  */
 
 'use client';
@@ -173,8 +173,8 @@ export interface MetricTileProps extends BaseProps<HTMLElement> {
   /** Muted supporting line under the value, e.g. "vs. previous 30 days". */
   description?: string;
   /**
-   * Trend graphic rendered below the text content, e.g. a Sparkline.
-   * MetricTile does not render a chart itself.
+   * Trend graphic rendered below the text content, e.g. a small trend
+   * chart. MetricTile does not render a chart itself.
    */
   trend?: ReactNode;
   /** Size variant controlling the value's font size. @default 'md' */
@@ -184,7 +184,7 @@ export interface MetricTileProps extends BaseProps<HTMLElement> {
 /**
  * A KPI/metric tile: label, large tabular-nums value, optional
  * sentiment-aware delta, supporting description, and a trend slot for a
- * Sparkline or mini chart.
+ * small trend chart.
  *
  * The delta's color follows its direction (up=success, down=error,
  * flat=secondary) unless `sentiment` overrides it — use that for inverted

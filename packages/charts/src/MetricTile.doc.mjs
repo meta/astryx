@@ -22,7 +22,7 @@ export const docs = {
 
   usage: {
     description:
-      'MetricTile is a KPI tile: a label, a large headline value, an optional sentiment-aware delta, a supporting description, and a trend slot for a Sparkline. Use it for dashboard headline metrics instead of hand-rolling label/value layouts.',
+      'MetricTile is a KPI tile: a label, a large headline value, an optional sentiment-aware delta, a supporting description, and a trend slot for a small trend chart, such as a `Chart` with one `line` mark. Use it for dashboard headline metrics instead of hand-rolling label/value layouts.',
     bestPractices: [
       {
         guidance: true,
@@ -87,7 +87,7 @@ export const docs = {
         name: 'Trend',
         required: false,
         description:
-          'Trend graphic below the text content, e.g. a Sparkline.',
+          'Trend graphic below the text content, e.g. a small trend chart.',
       },
     ],
   },
@@ -121,7 +121,7 @@ export const docs = {
       name: 'trend',
       type: 'ReactNode',
       description:
-        'Trend graphic rendered below the text content, e.g. a Sparkline.',
+        'Trend graphic rendered below the text content, e.g. a small trend chart.',
     },
     {
       name: 'size',
