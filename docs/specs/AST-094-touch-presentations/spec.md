@@ -944,12 +944,13 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   (a touchscreen laptop), a finger's tap or drag during the entrance is not
   held. After a finger, the first press of a mouse that has not moved since
   passes the entering presentation's shield where the page last heard the
-  mouse. On a shield over the viewport, that point is fixed when the shield
-  comes up, and a mouse the page has never heard has none. A still mouse
-  resting anywhere else presses the shield, and its press does nothing. A
-  non-modal Drawer shields only its panel, and that shield stops a mouse only
-  if the page had heard none when the shield came up. A move of the mouse
-  lowers the shield first.
+  mouse. The shield reads that point when it comes up, and again at each
+  press or move of a finger or a pen. A shield over the viewport opens only
+  at the point last read, and not at all if the page had heard no mouse by
+  then. A still mouse resting anywhere else presses the shield, and its press
+  does nothing. A non-modal Drawer shields only its panel, and that shield
+  stops a mouse only if the page had heard none at the last read. A move of
+  the mouse lowers the shield first.
 - BottomSheet, Toast, Lightbox, NavigationStack and keyboard dismissal: a
   drag that commits follows FR36–FR40.
 - `spec:AST-100` owns release velocity, which FR17 reads.
