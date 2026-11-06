@@ -58,6 +58,7 @@ import {
   useState,
   useTransition,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
@@ -901,8 +902,10 @@ export function TouchDateField({
 
   // An arrow steps a month. An arrow that reaches the end of the range is
   // hidden, and a hidden element loses focus. So if this arrow holds focus
-  // and the step reaches its end, focus moves first to the other arrow, or
-  // to the month-and-year button when both arrows hide.
+  // and the step reaches its end, focus moves to the other arrow, or to the
+  // month-and-year button when both arrows hide. The step renders first
+  // (flushSync), because the other arrow can itself be hidden until then: in
+  // a two-month range the arrows trade places on one step.
   const stepMonthFromArrow = useCallback(
     (delta: -1 | 1, arrow: HTMLButtonElement) => {
       const target = clampIndex(
@@ -912,7 +915,10 @@ export function TouchDateField({
       );
       const reachesEnd =
         delta < 0 ? target <= minMonthIndex : target >= maxMonthIndex;
-      if (reachesEnd && arrow.ownerDocument.activeElement === arrow) {
+      const holdsFocus = arrow.ownerDocument.activeElement === arrow;
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the other arrow must be shown before it can take focus
+      flushSync(() => stepMonth(delta));
+      if (reachesEnd && holdsFocus) {
         const otherArrowStays =
           delta < 0 ? target < maxMonthIndex : target > minMonthIndex;
         const destination = otherArrowStays
@@ -922,7 +928,6 @@ export function TouchDateField({
           : monthYearButtonRef.current;
         destination?.focus();
       }
-      stepMonth(delta);
     },
     [monthIndex, minMonthIndex, maxMonthIndex, stepMonth],
   );
