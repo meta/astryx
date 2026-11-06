@@ -12,6 +12,7 @@ import * as path from 'node:path';
 import {
   elementPropOrigins,
   moduleExportOrigin,
+  moduleExportOrigins,
   moduleExportSource,
   staticExportObject,
 } from './module-exports.mjs';
@@ -274,5 +275,57 @@ describe('elementPropOrigins', () => {
       "import {Theme} from '@acme/core';\nimport {gone} from '@acme/missing';\nexport const A = () => <Theme theme={gone} />;\n",
     );
     expect(elementPropOrigins(app, THEME)).toEqual([null]);
+describe('moduleExportOrigins', () => {
+  /** @type {string} */
+  let dir;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-export-origins-'));
+    const write = (name, text) => fs.writeFileSync(path.join(dir, name), text);
+    write('values.ts', 'export const a = 1;\nexport function b() {}\n');
+    write('types.ts', 'export interface Shape {}\nexport type Size = 1;\n');
+    write(
+      'local.ts',
+      "import {a as inner} from './values';\nexport {inner as renamed};\n",
+    );
+    write(
+      'index.ts',
+      [
+        "export * from './values';",
+        "export type {Shape} from './types';",
+        "export {renamed} from './local';",
+        "export * from './types';",
+        'export const own = 2;',
+        '',
+      ].join('\n'),
+    );
+  });
+  afterEach(() => {
+    fs.rmSync(dir, {recursive: true, force: true});
+  });
+
+  it('gives the origin moduleExportOrigin gives for every name', () => {
+    const index = path.join(dir, 'index.ts');
+    for (const types of [false, true]) {
+      const origins = moduleExportOrigins(index, {types});
+      const names = ['a', 'b', 'renamed', 'own', 'Shape', 'Size'];
+      for (const name of names) {
+        expect(origins.get(name) ?? null, `${name} (types: ${types})`).toEqual(
+          moduleExportOrigin(index, name, undefined, {types}),
+        );
+      }
+    }
+  });
+
+  it('follows type-only exports only when asked', () => {
+    const index = path.join(dir, 'index.ts');
+    expect(moduleExportOrigins(index).has('Shape')).toBe(false);
+    expect(moduleExportOrigins(index, {types: true}).get('Shape')).toEqual({
+      file: path.join(dir, 'types.ts'),
+      name: 'Shape',
+    });
+    expect(moduleExportOrigins(index).get('renamed')).toEqual({
+      file: path.join(dir, 'values.ts'),
+      name: 'a',
+    });
   });
 });
