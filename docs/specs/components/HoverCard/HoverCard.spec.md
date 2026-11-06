@@ -147,8 +147,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Transformation and precedence order
 
-- **ORD1 — Open state.** `isOpen`, then the input triggers, apart from FR7's
-  focus gap.
+- **ORD1 — Open state.** `isOpen`, then the input triggers.
 
 ### Performance and resources
 
