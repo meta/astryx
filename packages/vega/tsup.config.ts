@@ -17,5 +17,14 @@ export default defineConfig({
   dts: false,
   splitting: true,
   clean: true,
-  external: ['react', 'react-dom', 'vega', 'vega-lite'],
+  // The Astryx packages stay external so consumers share one copy of the
+  // charts palette and the theme context rather than getting a bundled fork.
+  external: [
+    '@astryxdesign/charts',
+    '@astryxdesign/core',
+    'react',
+    'react-dom',
+    'vega',
+    'vega-lite',
+  ],
 });

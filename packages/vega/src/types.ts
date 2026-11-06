@@ -164,6 +164,10 @@ export interface VegaChartProps extends Omit<
    * Options passed to `vega-lite`'s `compile()` function.
    * Only applied when `spec.$schema` identifies a `vega-lite` spec.
    * Ignored for native Vega specs.
+   *
+   * `config` here is merged *on top of* the Astryx theme config the component
+   * applies by default, so it overrides the theme rather than replacing it.
+   *
    * @see https://github.com/vega/vega-lite/blob/main/src/compile/compile.ts
    */
   compileOptions?: CompileOptions;

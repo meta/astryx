@@ -2,14 +2,18 @@
 
 /**
  * @file vegaLiteConfig.test.ts
- * @input Uses vitest, buildVegaLiteConfig and its exported layout constants
- * @output Functional tests for the Astryx-themed Vega-Lite config builder
+ * @input Uses vitest, buildVegaLiteConfig, withAstryxConfig, its exported layout
+ *   constants, and the shared CATEGORICAL_TOKENS from @astryxdesign/charts
+ * @output Functional tests for the Astryx-themed Vega-Lite config builder and
+ *   the compile-options merge that applies it
  * @position Colocated test for vegaLiteConfig.ts (issue #4295 vega coverage)
  */
 
 import {describe, it, expect} from 'vitest';
+import {CATEGORICAL_TOKENS, type TokenResolver} from '@astryxdesign/charts';
 import {
   buildVegaLiteConfig,
+  withAstryxConfig,
   DEFAULT_STROKE_WIDTH,
   DEFAULT_POINT_SIZE,
   DEFAULT_LEGEND_ORIENT,
@@ -19,6 +23,9 @@ import {
 
 /** Resolver that makes every resolved token traceable to its name. */
 const token = (name: string) => `resolved(${name})`;
+
+/** Echoes the token name back, so resolved output is inspectable by name. */
+const echo: TokenResolver = name => name;
 
 describe('buildVegaLiteConfig', () => {
   it('resolves chart chrome colors through the provided token resolver', () => {
@@ -48,6 +55,21 @@ describe('buildVegaLiteConfig', () => {
       'resolved(--color-data-categorical-brown)',
       'resolved(--color-data-categorical-indigo)',
     ]);
+  });
+
+  it('draws its categorical range from the shared @astryxdesign/charts token list', () => {
+    // Pins the palette to charts' single source of truth: with an echoing
+    // resolver the range IS the shared token list, so a re-introduced local
+    // copy in this package drifts and fails here.
+    const config = buildVegaLiteConfig(echo);
+    expect(config.range?.category).toEqual([...CATEGORICAL_TOKENS]);
+  });
+
+  it('resolves every categorical slot through the caller token resolver', () => {
+    const config = buildVegaLiteConfig(name => `value(${name})`);
+    expect(config.range?.category).toEqual(
+      CATEGORICAL_TOKENS.map(name => `value(${name})`),
+    );
   });
 
   it('builds the diverging range as a blue-to-red ramp around a gray midpoint', () => {
@@ -90,5 +112,40 @@ describe('buildVegaLiteConfig', () => {
     expect(config.padding).toBe(16);
     expect(config.scale?.bandPaddingInner).toBe(0.1);
     expect(config.view?.stroke).toBeNull();
+  });
+});
+
+describe('withAstryxConfig', () => {
+  it('applies the themed config by default when no compile options are given', () => {
+    const options = withAstryxConfig(echo);
+    expect(options.config).toEqual(buildVegaLiteConfig(echo));
+  });
+
+  it('applies the themed config when compile options carry no config', () => {
+    const logger = {
+      level: () => logger,
+      error: () => logger,
+      warn: () => logger,
+      info: () => logger,
+      debug: () => logger,
+    };
+    const options = withAstryxConfig(echo, {logger});
+    expect(options.logger).toBe(logger);
+    expect(options.config).toEqual(buildVegaLiteConfig(echo));
+  });
+
+  it('lets user config win over the derived theme config', () => {
+    const options = withAstryxConfig(echo, {
+      config: {background: '#ff0000', axis: {labelFontSize: 99}},
+    });
+    expect(options.config?.background).toBe('#ff0000');
+    expect(options.config?.axis?.labelFontSize).toBe(99);
+  });
+
+  it('keeps theme values the user did not override', () => {
+    const options = withAstryxConfig(echo, {config: {background: '#ff0000'}});
+    // Untouched theme keys survive the merge.
+    expect(options.config?.range?.category).toEqual([...CATEGORICAL_TOKENS]);
+    expect(options.config?.axis?.labelColor).toBe('--color-text-secondary');
   });
 });

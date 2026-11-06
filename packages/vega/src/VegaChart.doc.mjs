@@ -24,7 +24,7 @@ export const docs = {
       name: 'compileOptions',
       type: 'CompileOptions',
       description:
-        'Options passed to Vega-Lite compilation. Ignored for native Vega specs.',
+        'Options passed to Vega-Lite compilation. Its config is merged over the Astryx theme config applied by default. Ignored for native Vega specs.',
     },
     {
       name: 'parseConfig',

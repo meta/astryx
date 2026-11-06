@@ -14,7 +14,9 @@
 import React, {useEffect, useEffectEvent, useRef, useState} from 'react';
 import {parse, View} from 'vega';
 import {compile} from 'vega-lite';
+import {useTheme} from '@astryxdesign/core/theme';
 import {parseSchema} from './schema';
+import {withAstryxConfig} from './vegaLiteConfig';
 import {latchViewInputs, latchIsCurrent} from './viewInputs';
 import type {ViewInputs} from './viewInputs';
 import type {VegaChartProps, VegaSpec, VegaLiteSpec} from './types';
@@ -33,6 +35,14 @@ import type {VegaChartProps, VegaSpec, VegaLiteSpec} from './types';
  *   vega.parse(spec, parseConfig, parseOptions)
  *   new vega.View(runtime, { ...viewOptions, container })
  *
+ * Vega-Lite specs are themed out of the box: the Astryx config from
+ * `buildVegaLiteConfig` (axis/legend/mark/title chrome plus the shared
+ * `@astryxdesign/charts` categorical palette) is compiled in as the base
+ * config, resolved from the active `<Theme>`. Anything passed in
+ * `compileOptions.config` is merged on top and wins, and a spec's own inline
+ * `config` wins over both. Native Vega specs are not themed — they bypass
+ * compilation; use `parseConfig` for those.
+ *
  * Initial dataset values can be provided via `data`. They are loaded once
  * during View initialization, before the first render, and are not reactive:
  * a change to `data` alone never rebuilds the View, and is not applied to the
@@ -48,6 +58,9 @@ import type {VegaChartProps, VegaSpec, VegaLiteSpec} from './types';
  * inline spec or options object rebuilt on every render keeps the live View
  * (and its zoom, hover, and signal state), while a spec mutated in place is
  * still picked up. Nothing needs to be memoized for either to hold.
+ *
+ * A theme or color-mode change re-creates a Vega-Lite View, because the theme
+ * config is compiled into the spec. It never re-creates a native Vega View.
  *
  * Callbacks (`onReady`, `onError`) are non-reactive Effect Events -- they
  * always see the latest props and never re-run the View lifecycle, so you
@@ -98,6 +111,19 @@ export function VegaChart({
 }: VegaChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Vega-Lite specs are compiled with the Astryx theme underneath the caller's
+  // own compile options, so a chart is themed out of the box. Native specs
+  // never compile, so they get the caller's options untouched: otherwise a
+  // theme or mode switch would change their inputs and rebuild the View for
+  // nothing. The merge is redone every render, not memoized on the caller's
+  // object, so an in-place edit to `compileOptions` still reaches the latch.
+  const {token} = useTheme();
+  const schema = parseSchema(spec.$schema);
+  const isVegaLite = schema.ok && schema.library === 'vega-lite';
+  const effectiveCompileOptions = isVegaLite
+    ? withAstryxConfig(token, compileOptions)
+    : compileOptions;
+
   // Rebuild only when a value the runtime is built from actually differs.
   // The latch holds both the props the live View was built from and a copy of
   // their values, so a spec mutated in place is caught too -- comparing
@@ -107,7 +133,7 @@ export function VegaChart({
   // settles in one extra pass.
   const inputs: ViewInputs = {
     spec,
-    compileOptions,
+    compileOptions: effectiveCompileOptions,
     parseConfig,
     parseOptions,
     viewOptions,

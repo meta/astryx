@@ -43,7 +43,7 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsup && tsc --project tsconfig.json --emitDeclarationOnly --declaration --noEmit false --outDir dist",
+    "build": "tsup && tsc --project tsconfig.build.json --emitDeclarationOnly --declaration --noEmit false --outDir dist",
     "dev": "tsup --watch",
     "test": "vitest run --root ../..",
     "test:watch": "vitest --root ../..",
@@ -51,6 +51,8 @@
     "typecheck": "tsc --noEmit && pnpm typecheck:docs"
   },
   "peerDependencies": {
+    "@astryxdesign/charts": "0.1.9",
+    "@astryxdesign/core": "0.6.3",
     "react": ">=19.2.0",
     "react-dom": ">=19.2.0",
     "vega": ">=6.0.0",
