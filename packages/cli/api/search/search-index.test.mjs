@@ -211,6 +211,17 @@ describe('rankSearchIndex over stored indexes', () => {
     await expect(
       rankSearchIndex('button', [docsOnly], {type: 'component'}),
     ).rejects.toMatchObject({code: 'ERR_CORE_NOT_FOUND'});
+    // The stored lookup error is the one thrown.
+    const uncached = {...docsOnly, coreSkippedCode: 'ERR_VERSIONS_UNAVAILABLE'};
+    await expect(
+      rankSearchIndex('button', [uncached], {type: 'hook'}),
+    ).rejects.toMatchObject({code: 'ERR_VERSIONS_UNAVAILABLE'});
+    const open = await rankSearchIndex('button', [uncached]);
+    expect(open.meta?.partial?.skipped).toEqual([
+      'component',
+      'hook',
+      'template',
+    ]);
   });
 
   it('a package index holds only that package, with no folder paths', () => {
