@@ -215,8 +215,9 @@ system type, read its tokens from `astryx`, and add tests under
 
 ## UI tests in a host app
 
-`Host/` is a small iOS app, `AstryxHost`, with one screen per Swift
-component, and an XCUITest target that drives it on the iOS Simulator. The
+`Host/` is a small iOS app, `AstryxHost`, with a screen for seven Swift
+components (Banner, Button, Card, Heading, Icon, Text, and TextInput), and an
+XCUITest target that drives it on the iOS Simulator. The
 tests run the system accessibility audit on every screen and check what
 VoiceOver reads, which unit tests cannot measure. `Host/project.yml` describes
 both targets; XcodeGen writes the Xcode project from it, so no `.xcodeproj` is

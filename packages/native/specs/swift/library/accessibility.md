@@ -89,8 +89,8 @@ Differentiate Without Color get components that honor each setting.
   text sizes (X4, X5, X7). Two issues are recorded as known: a loading Button
   fails contrast, and the audit reports a filled TextInput's text as clipped;
   at the largest size the field cuts off the value until it is focused.
-  Avatar, Item, List, and Thumbnail have no host-app screen yet, so their
-  rendered trees are not measured.
+  Avatar, AvatarStatusDot, Item, ListItem, and Thumbnail have no host-app
+  screen yet, so their rendered trees are not measured.
 
 ## Open questions
 

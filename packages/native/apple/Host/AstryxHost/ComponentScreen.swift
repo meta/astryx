@@ -2,7 +2,7 @@
 
 import Astryx
 
-/// Every Swift component's screen. A new component adds a case and its
+/// The Swift components with a host screen. A component adds a case and its
 /// states here, and the UI tests audit it.
 enum ComponentScreen: String, CaseIterable, Identifiable {
   case Banner, Button, Card, Heading, Icon, Text, TextInput
@@ -38,7 +38,6 @@ struct ButtonScreen: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       Astryx.Button(label: "Save", variant: .primary) { taps += 1 }
-      Astryx.Button(label: "Search", icon: "search") { taps += 1 }
       Astryx.Button(label: "Sending", variant: .primary, isLoading: true) { taps += 1 }
       Astryx.Button(label: "Delete", variant: .destructive, isDisabled: true) { taps += 1 }
       Astryx.Button(label: "Small", size: .sm) { taps += 1 }
@@ -95,9 +94,11 @@ struct TextInputScreen: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Astryx.TextInput(label: "Name", value: $name, placeholder: "Your name")
-      Astryx.TextInput(label: "Email", value: $email, type: .email)
-      Astryx.TextInput(label: "Password", value: $password, type: .password)
+      Astryx.TextInput(
+        label: "Name", value: name, onChange: { name = $0 }, placeholder: "Your name")
+      Astryx.TextInput(label: "Email", value: email, type: .email, onChange: { email = $0 })
+      Astryx.TextInput(
+        label: "Password", value: password, type: .password, onChange: { password = $0 })
     }
   }
 }

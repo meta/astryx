@@ -141,7 +141,8 @@ states Thumbnail's choices.
   without moving its drawing (X7).
 - **AR5 — Rendered tree not measured.** Tests assert what the view sets; the
   rendered accessibility tree, the hit region, and the announcement are not
-  measured until an app-hosted target exists.
+  measured: the host app has no Thumbnail screen yet, an implementation gap
+  that closes when the screen is added.
 
 ## Design relationships
 

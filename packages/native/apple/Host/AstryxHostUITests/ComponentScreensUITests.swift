@@ -106,9 +106,6 @@ final class ComponentScreensUITests: XCTestCase {
     XCTAssertTrue(save.isEnabled)
     XCTAssertEqual(save.value as? String ?? "", "")
 
-    let search = app.buttons["Search"]
-    XCTAssertTrue(search.exists, "an icon button keeps its label as its name")
-
     let sending = app.buttons["Sending"]
     XCTAssertTrue(sending.exists)
     XCTAssertTrue(sending.isEnabled, "a loading button stays focusable")

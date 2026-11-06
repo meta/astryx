@@ -132,8 +132,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   the VoiceOver order and reads as dimmed (X1, X2).
 - **AR3 — Touch target.** A tappable row is at least 44 points tall (X7).
 - **AR4 — Rendered tree not measured.** Tests assert what the view sets; the
-  rendered accessibility tree is not measured until an app-hosted target
-  exists.
+  rendered accessibility tree is not measured: the host app has no Item
+  screen yet, an implementation gap that closes when the screen is added.
 
 ## Design relationships
 

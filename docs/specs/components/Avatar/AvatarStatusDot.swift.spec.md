@@ -114,8 +114,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **AR3 — Not by color alone.** Each variant has its own shape (X6, Differentiate
   Without Color).
 - **AR4 — Rendered tree not measured.** Tests assert what the view sets; the
-  rendered accessibility tree is not measured until an app-hosted target
-  exists.
+  rendered accessibility tree is not measured: the host app has no AvatarStatusDot
+  screen yet, an implementation gap that closes when the screen is added.
 
 ## Design relationships
 

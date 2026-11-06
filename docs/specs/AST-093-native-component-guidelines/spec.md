@@ -180,8 +180,8 @@ validating, and reviewing individual native components while
   - Heading's header trait: XCUITest cannot read a header trait.
   - Banner's icon and title: XCUITest lists the parts inside a banner's one
     element, so the test cannot show that they are skipped.
-  - Avatar, Item, List, and Thumbnail: they have no host-app screen yet. Each
-    gap closes when its screen is added.
+  - Avatar, AvatarStatusDot, Item, ListItem, and Thumbnail: they have no
+    host-app screen yet. Each gap closes when its screen is added.
 
 ## Verification
 
