@@ -910,62 +910,73 @@ test('a row swiped away lays the page out no more often than the same swipe with
   );
 });
 
-test('a row swiped away and still exiting glides only down when a row moves above it, and stays before the row after it', async ({
-  page,
-  browserName,
-}) => {
-  test.skip(
-    browserName !== 'chromium',
-    'the swipe is driven with Chromium touch events (CDP)',
-  );
+/**
+ * Swipes `label` away, and 30 ms into its exit presses `button`. In the frame
+ * after the press, it reads the rows' order and the leaving row's glides and
+ * top. It also returns the row's top as its exit started.
+ */
+async function secondChangeDuringExit(
+  page: Page,
+  label: string,
+  button: string,
+): Promise<{
+  starts: string[];
+  order: string[];
+  topBefore: number;
+  topAfter: number;
+}> {
   await open(page, SWIPE_STORY);
-  const sent = row(page, 'Sent');
-  await expect(sent.locator('[data-swipe-panel="trailing"]')).toBeAttached();
-  const box = await sent.boundingBox();
+  const target = row(page, label);
+  await expect(target.locator('[data-swipe-panel="trailing"]')).toBeAttached();
+  const box = await target.boundingBox();
   if (box == null) {
     throw new Error('no row');
   }
-  // From the frame where Sent is put back for its exit, it moves Archive
-  // first 30 ms later. Then it records Sent's new glide and the rows' order.
-  await page.evaluate(() => {
-    (window as unknown as {__second: object | null}).__second = null;
-    const label = (li: Element) => {
-      const copy = li.cloneNode(true) as Element;
-      for (const panel of copy.querySelectorAll('[data-swipe-panel]')) {
-        panel.remove();
-      }
-      return copy.textContent?.trim() ?? '';
-    };
-    const tick = () => {
-      const exit = document.querySelector(
-        '#storybook-root li[data-astryx-leaving]',
-      );
-      if (exit == null) {
-        requestAnimationFrame(tick);
-        return;
-      }
-      setTimeout(() => {
-        [...document.querySelectorAll('button')]
-          .find(button => button.textContent?.trim() === 'Move Archive first')
-          ?.click();
-        requestAnimationFrame(() => {
-          (window as unknown as {__second: unknown}).__second = {
-            starts: exit.getAnimations().flatMap(animation => {
-              const first = (
-                animation.effect as KeyframeEffect | null
-              )?.getKeyframes()[0]?.translate;
-              return typeof first === 'string' ? [first] : [];
-            }),
-            order: [...document.querySelectorAll('#storybook-root li')].map(
-              li =>
-                `${li.hasAttribute('data-astryx-leaving') ? 'leaving:' : ''}${label(li)}`,
-            ),
-          };
-        });
-      }, 30);
-    };
-    requestAnimationFrame(tick);
-  });
+  await page.evaluate(
+    ({button}) => {
+      (window as unknown as {__second: object | null}).__second = null;
+      const labelOf = (li: Element) => {
+        const copy = li.cloneNode(true) as Element;
+        for (const panel of copy.querySelectorAll('[data-swipe-panel]')) {
+          panel.remove();
+        }
+        return copy.textContent?.trim() ?? '';
+      };
+      const tick = () => {
+        const exit = document.querySelector(
+          '#storybook-root li[data-astryx-leaving]',
+        );
+        if (exit == null) {
+          requestAnimationFrame(tick);
+          return;
+        }
+        const topBefore = exit.getBoundingClientRect().top;
+        setTimeout(() => {
+          [...document.querySelectorAll('button')]
+            .find(element => element.textContent?.trim() === button)
+            ?.click();
+          requestAnimationFrame(() => {
+            (window as unknown as {__second: object}).__second = {
+              starts: exit.getAnimations().flatMap(animation => {
+                const first = (
+                  animation.effect as KeyframeEffect | null
+                )?.getKeyframes()[0]?.translate;
+                return typeof first === 'string' ? [first] : [];
+              }),
+              order: [...document.querySelectorAll('#storybook-root li')].map(
+                li =>
+                  `${li.hasAttribute('data-astryx-leaving') ? 'leaving:' : ''}${labelOf(li)}`,
+              ),
+              topBefore,
+              topAfter: exit.getBoundingClientRect().top,
+            };
+          });
+        }, 30);
+      };
+      requestAnimationFrame(tick);
+    },
+    {button},
+  );
   const cdp = await page.context().newCDPSession(page);
   const y = box.y + box.height / 2;
   const startX = box.x + box.width - 24;
@@ -991,20 +1002,69 @@ test('a row swiped away and still exiting glides only down when a row moves abov
       ),
     )
     .toBe(true);
-  const second = await page.evaluate(
+  return page.evaluate(
     () =>
-      (window as unknown as {__second: {starts: string[]; order: string[]}})
-        .__second,
+      (
+        window as unknown as {
+          __second: {
+            starts: string[];
+            order: string[];
+            topBefore: number;
+            topAfter: number;
+          };
+        }
+      ).__second,
   );
-  // Archive moved above it, so it glides down a row, and nothing sideways.
-  expect(second.starts.length, JSON.stringify(second)).toBeGreaterThan(0);
+}
+
+test('a row swiped away and still exiting stays in its place when a row moves above it, and no glide moves it sideways', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'the swipe is driven with Chromium touch events (CDP)',
+  );
+  const second = await secondChangeDuringExit(
+    page,
+    'Sent',
+    'Move Archive first',
+  );
   for (const start of second.starts) {
     expect(start.split(' ')[0], JSON.stringify(second)).toBe('0px');
   }
-  // It stays before Drafts, the row after it as it left.
-  const order = second.order;
-  expect(order.indexOf('leaving:Sent'), JSON.stringify(second)).toBe(
-    order.indexOf('Drafts') - 1,
+  // One staying row came before it, so it stays second, where it showed.
+  expect(second.order.indexOf('leaving:Sent'), JSON.stringify(second)).toBe(1);
+  expect(second.topAfter, JSON.stringify(second)).toBeCloseTo(
+    second.topBefore,
+    0,
+  );
+  await expect(leaving(page)).toHaveCount(0, {timeout: 3000});
+});
+
+test('a row swiped away and still exiting stays in its place when the row after it moves', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'the swipe is driven with Chromium touch events (CDP)',
+  );
+  const second = await secondChangeDuringExit(
+    page,
+    'Drafts',
+    'Move Archive first',
+  );
+  expect(second.order, JSON.stringify(second)).toEqual([
+    'Archive',
+    'Inbox',
+    'leaving:Drafts',
+    'Sent',
+    'Notes',
+  ]);
+  expect(second.topAfter, JSON.stringify(second)).toBeCloseTo(
+    second.topBefore,
+    0,
   );
   await expect(leaving(page)).toHaveCount(0, {timeout: 3000});
 });

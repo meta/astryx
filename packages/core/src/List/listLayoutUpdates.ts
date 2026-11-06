@@ -73,6 +73,8 @@ interface Measured {
   readonly changes: ReadonlyArray<LayoutChange>;
   /** Near rows with a translation of their own, read before the commit. */
   readonly translations: ReadonlyArray<Translation>;
+  /** The list's keyed and leaving rows before the commit, in order. */
+  readonly sequence: ReadonlyArray<HTMLElement>;
 }
 
 /**
@@ -187,34 +189,37 @@ export function keepPresentation(row: HTMLElement): void {
 }
 
 /**
- * Puts a row that left back where it was for its exit, before `anchor`, the
- * nearest later row in the list. It shows what it showed as it left. The
- * exit makes it inert. Until then it is marked as leaving and hidden from
- * assistive technology, so no later commit counts it as a row.
+ * The rows of `list` in order: its keyed rows and the rows still leaving. Each
+ * leaving row's place is counted against the keyed rows around it.
  */
-/**
- * Where each leaving row came back: before the nearest later row as it left.
- * A row that left at the list's end stays after the rows the list had then.
- */
-const leavingPlaces = new WeakMap<
-  HTMLElement,
-  {readonly before: Element | null; readonly after: ReadonlySet<Element>}
->();
+function rowSequence(list: HTMLElement): HTMLElement[] {
+  const rows: HTMLElement[] = [];
+  for (const child of list.children) {
+    if (
+      child instanceof HTMLElement &&
+      (isLeaving(child) || itemKeyOf(child) != null)
+    ) {
+      rows.push(child);
+    }
+  }
+  return rows;
+}
 
-function putBack(
-  element: HTMLElement,
-  list: HTMLElement,
-  anchor: HTMLElement | null,
-): void {
+/**
+ * Marks a row that left as leaving. The exit makes it inert. Until then it is
+ * hidden from assistive technology, so no later commit counts it as a row.
+ */
+function markLeavingRow(element: HTMLElement): void {
   markLeaving(element);
   element.setAttribute('aria-hidden', 'true');
-  list.insertBefore(element, anchor);
-  leavingPlaces.set(element, {
-    before: anchor,
-    after: new Set(anchor == null ? list.children : []),
-  });
-  // Back in the document, its parts' animations would apply again over what
-  // they showed as it left: stop them, and show what was on screen.
+}
+
+/**
+ * After a row that left is back in the document, its parts' animations would
+ * apply again over what they showed as it left. This stops them, so it shows
+ * what was on screen.
+ */
+function showAsItLeft(element: HTMLElement): void {
   if (typeof element.getAnimations === 'function') {
     for (const animation of element.getAnimations({subtree: true})) {
       animation.cancel();
@@ -227,49 +232,23 @@ function putBack(
 }
 
 /**
- * Puts each leaving row back where it came back. React moves only its own
- * rows. So a commit that moves rows can carry a leaving row away from its
- * place, such as to the top of the list.
+ * Puts `rows` right before `anchor`, or at the list's end when it is null, in
+ * their order. A row already in its place stays where it is.
  */
-function keepLeavingInPlace(list: HTMLElement): void {
-  const rows = [...list.children].filter(
-    (child): child is HTMLElement =>
-      child instanceof HTMLElement && isLeaving(child),
-  );
-  // A row can come back beside another leaving row, which a pass may move
-  // first: one pass per row is enough.
-  for (let pass = 0; pass < rows.length; pass++) {
-    let isMoved = false;
-    for (const row of rows) {
-      const place = leavingPlaces.get(row);
-      if (place == null) {
-        continue;
-      }
-      if (place.before != null) {
-        if (
-          place.before.parentElement === list &&
-          row.nextElementSibling !== place.before
-        ) {
-          list.insertBefore(row, place.before);
-          isMoved = true;
-        }
-        continue;
-      }
-      // At the end: after the last row the list had as it left.
-      let last: Element | null = null;
-      for (const child of list.children) {
-        if (child !== row && place.after.has(child)) {
-          last = child;
-        }
-      }
-      if (last != null && row.previousElementSibling !== last) {
-        list.insertBefore(row, last.nextElementSibling);
-        isMoved = true;
-      }
+function placeBefore(
+  list: HTMLElement,
+  rows: ReadonlyArray<HTMLElement>,
+  anchor: HTMLElement | null,
+): void {
+  let next = anchor;
+  for (let index = rows.length - 1; index >= 0; index--) {
+    const row = rows[index];
+    const before =
+      next == null ? list.lastElementChild : next.previousElementSibling;
+    if (before !== row) {
+      list.insertBefore(row, next);
     }
-    if (!isMoved) {
-      break;
-    }
+    next = row;
   }
 }
 
@@ -462,6 +441,7 @@ export function useListLayoutUpdates(
         reported: new Set([target]),
         changes: [change],
         translations: [],
+        sequence: rowSequence(list),
       };
       reportedRows.set(list, measuredRef.current.reported);
       return;
@@ -513,6 +493,7 @@ export function useListLayoutUpdates(
       reported: new Set(targets),
       changes,
       translations,
+      sequence: rowSequence(list),
     };
     reportedRows.set(list, measuredRef.current.reported);
   }, [animatedLayout, listRef]);
@@ -531,7 +512,6 @@ export function useListLayoutUpdates(
     if (measured == null || list == null || animatedLayout == null) {
       return;
     }
-    keepLeavingInPlace(list);
     const now = keyedRows(list);
     const order = [...now.keys()];
     if (
@@ -542,31 +522,36 @@ export function useListLayoutUpdates(
       // is dropped by the next frame).
       return;
     }
-    // Each row that left comes back before the nearest later row in the
-    // list. One pass runs from the end, and a row put back is the next one's
-    // anchor.
+    // Each row that left, and each row still leaving, keeps its place: after
+    // as many staying rows as came before it. React moves only its own rows,
+    // so this also keeps a leaving row in place when the rows around it move.
+    const current = [...now.values()];
+    const staying = new Set(current);
+    const places = new Map<HTMLElement | null, HTMLElement[]>();
     const leaving: HTMLElement[] = [];
-    let anchor: HTMLElement | null = null;
-    for (let index = measured.order.length - 1; index >= 0; index--) {
-      const key = measured.order[index];
-      const staying = now.get(key);
-      if (staying != null) {
-        anchor = staying;
+    let before = 0;
+    for (const element of measured.sequence) {
+      if (staying.has(element)) {
+        before += 1;
         continue;
       }
-      // Only a row the module measured can exit; any other went with the
-      // commit (it was out of view).
-      const element = measured.rows.get(key);
-      if (element != null && measured.reported.has(element)) {
-        putBack(element, list, anchor);
+      if (!isLeaving(element)) {
+        // Only a row the module measured can exit; any other went with the
+        // commit (it was out of view).
+        if (!measured.reported.has(element)) {
+          continue;
+        }
+        markLeavingRow(element);
         leaving.push(element);
-        anchor = element;
       }
+      const anchor = current[before] ?? null;
+      places.set(anchor, [...(places.get(anchor) ?? []), element]);
     }
-    // A row that left now may be one an earlier leaving row came back
-    // before.
-    if (leaving.length > 0) {
-      keepLeavingInPlace(list);
+    for (const [anchor, rows] of places) {
+      placeBefore(list, rows, anchor);
+    }
+    for (const element of leaving) {
+      showAsItLeft(element);
     }
     for (const change of measured.changes) {
       change.animate();
@@ -601,7 +586,6 @@ export function useListLayoutUpdates(
     }
     // A row that appeared in view enters (the module plays an entrance only
     // in view): the rows in view are found by halving again.
-    const current = [...now.values()];
     const height = list.ownerDocument.defaultView?.innerHeight ?? 0;
     const shown = rowsMeeting(current, 0, height);
     if (shown != null) {

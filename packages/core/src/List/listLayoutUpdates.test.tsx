@@ -549,7 +549,7 @@ describe('List row updates through animatedLayout', () => {
     ).toEqual(['Sent', 'Drafts']);
   });
 
-  it('a reorder while a removed row still exits keeps that row where it was, beside the row after it', async () => {
+  it('a reorder while a removed row still exits keeps that row at its place among the rows that stay', async () => {
     render(<Demo initial={['Inbox', 'Sent', 'Drafts', 'Archive', 'Spam']} />);
     await change(['Inbox', 'Drafts', 'Archive', 'Spam']);
     // Sent still exits, before Drafts.
@@ -557,11 +557,32 @@ describe('List row updates through animatedLayout', () => {
       'Sent',
     );
     // React moves only its own rows, so moving Spam first would leave Sent at
-    // the top of the list.
+    // the top of the list. One staying row came before it, so it stays second.
     await change(['Spam', 'Inbox', 'Drafts', 'Archive']);
     expect(
       [...document.querySelectorAll('li')].map(row => row.textContent?.trim()),
-    ).toEqual(['Spam', 'Inbox', 'Sent', 'Drafts', 'Archive']);
+    ).toEqual(['Spam', 'Sent', 'Inbox', 'Drafts', 'Archive']);
+  });
+
+  it('a removed row that still exits stays in its place when the row after it moves, or the row before it', async () => {
+    render(<Demo initial={['Inbox', 'Sent', 'Drafts', 'Archive', 'Spam']} />);
+    await change(['Inbox', 'Drafts', 'Archive', 'Spam']);
+    await change(['Drafts', 'Inbox', 'Archive', 'Spam']);
+    expect(
+      [...document.querySelectorAll('li')].map(row => row.textContent?.trim()),
+    ).toEqual(['Drafts', 'Sent', 'Inbox', 'Archive', 'Spam']);
+    await change(['Inbox', 'Archive', 'Spam', 'Drafts']);
+    expect(
+      [...document.querySelectorAll('li')].map(row => row.textContent?.trim()),
+    ).toEqual(['Inbox', 'Sent', 'Archive', 'Spam', 'Drafts']);
+  });
+
+  it('a removal and a move in one update: the removed row comes back at its place among the rows that stay', async () => {
+    render(<Demo initial={['Inbox', 'Sent', 'Drafts']} />);
+    await change(['Drafts', 'Inbox']);
+    expect(
+      [...document.querySelectorAll('li')].map(row => row.textContent?.trim()),
+    ).toEqual(['Drafts', 'Sent', 'Inbox']);
   });
 
   it('a removed last row that still exits stays last when the rows before it move, and new rows still land after it', async () => {
@@ -792,7 +813,7 @@ describe('List row updates through animatedLayout', () => {
     expect(log.slice(commit, settle), log.join(' ')).not.toContain('read');
   });
 
-  it('a swiped row that leaves while the same update moves it down glides down with the rows around it, never sideways', async () => {
+  it('a swiped row that leaves while the same update moves it up glides up with the rows around it, never sideways', async () => {
     // jsdom has no DOMMatrix: a 2D one, enough for a translation.
     class Matrix {
       a = 1;
@@ -831,14 +852,14 @@ describe('List row updates through animatedLayout', () => {
         li => li.textContent === 'Drafts',
       );
       drafts?.style.setProperty('transform', 'translate(-40px, 0px)');
-      // Drafts leaves, and a row inserted above it moves it a row down.
-      await change(['New', 'Inbox', 'Sent', 'Archive']);
+      // Drafts leaves, and Inbox above it leaves too, so it moves a row up.
+      await change(['Sent', 'Archive']);
       const glide = played.find(
         entry =>
           entry.element === drafts &&
           String(entry.keyframes[0]?.translate ?? '') !== '',
       );
-      expect(String(glide?.keyframes[0]?.translate)).toBe(`0px ${-ROW}px`);
+      expect(String(glide?.keyframes[0]?.translate)).toBe(`0px ${ROW}px`);
       expect(glide?.isCancelled).not.toBe(true);
       // It exits settled: its box in the list, its content still swiped.
       expect(drafts?.style.transform).toBe('none');
