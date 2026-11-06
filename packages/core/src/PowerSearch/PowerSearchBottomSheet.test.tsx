@@ -2000,7 +2000,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
       within(sheet())
         .getAllByRole('button', {name: 'Add filter'})
         .find(button => button.closest('[role="tree"]') == null) as HTMLElement;
-    expect(primary()).toBeDisabled();
+    expect(primary()).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(
       within(sheet()).getByRole('button', {name: '+ Add filter'}),
     );
@@ -2014,7 +2014,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
     fireEvent.click(
       within(listbox).getByRole('option', {name: 'Open', hidden: true}),
     );
-    expect(primary()).toBeEnabled();
+    expect(primary()).not.toHaveAttribute('aria-disabled');
     fireEvent.click(primary());
     done();
     expect(onChange).toHaveBeenCalledWith(
@@ -3090,13 +3090,13 @@ describe('PowerSearch value step (FR14–FR16)', () => {
     expect(within(sheet()).queryByRole('button', {name: 'Remove'})).toBeNull();
     expect(
       within(sheet()).getByRole('button', {name: 'Add filter'}),
-    ).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
     fireEvent.change(within(sheet()).getByRole('textbox', {name: 'Value'}), {
       target: {value: 'Ada'},
     });
     expect(
       within(sheet()).getByRole('button', {name: 'Add filter'}),
-    ).toBeEnabled();
+    ).not.toHaveAttribute('aria-disabled');
   });
 
   it('restores focus to the chosen field when creation is canceled', () => {
@@ -4602,11 +4602,11 @@ describe('PowerSearch sheet value types (FR17)', () => {
     tapRow('Lines');
     const input = within(sheet()).getByRole('spinbutton', {name: 'Value'});
     const add = within(sheet()).getByRole('button', {name: 'Add filter'});
-    expect(add).toBeDisabled();
+    expect(add).toHaveAttribute('aria-disabled', 'true');
     fireEvent.input(input, {target: {value: '12'}});
     expect(
       within(sheet()).getByRole('button', {name: 'Add filter'}),
-    ).toBeEnabled();
+    ).not.toHaveAttribute('aria-disabled');
     fireEvent.blur(input);
     addFilter();
     done();
@@ -4626,7 +4626,7 @@ describe('PowerSearch sheet value types (FR17)', () => {
     });
     expect(
       within(sheet()).getByRole('button', {name: 'Add filter'}),
-    ).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('integer: clearing the field unstages the value and disables Add filter', () => {
@@ -4637,23 +4637,23 @@ describe('PowerSearch sheet value types (FR17)', () => {
     fireEvent.input(input, {target: {value: '1'}});
     expect(
       within(sheet()).getByRole('button', {name: 'Add filter'}),
-    ).toBeEnabled();
+    ).not.toHaveAttribute('aria-disabled');
     // Delete the digit: nothing stands to confirm.
     fireEvent.input(input, {target: {value: ''}});
     expect(
       within(sheet()).getByRole('button', {name: 'Add filter'}),
-    ).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(within(sheet()).getByRole('button', {name: 'Add filter'}));
     expect(onChange).not.toHaveBeenCalled();
     // Not a number either: still nothing.
     fireEvent.input(input, {target: {value: '-'}});
     expect(
       within(sheet()).getByRole('button', {name: 'Add filter'}),
-    ).toBeDisabled();
+    ).toHaveAttribute('aria-disabled', 'true');
     fireEvent.input(input, {target: {value: '12'}});
     expect(
       within(sheet()).getByRole('button', {name: 'Add filter'}),
-    ).toBeEnabled();
+    ).not.toHaveAttribute('aria-disabled');
   });
 
   it('float: number input stages a decimal', () => {

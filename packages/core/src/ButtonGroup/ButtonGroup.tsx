@@ -28,7 +28,7 @@ import type {ButtonSize} from '../Button';
 import {radiusVars, shadowVars} from '../theme/tokens.stylex';
 import type {Elevation} from '../utils/types';
 import {SizeProvider, useSize} from '../SizeContext/SizeContext';
-import {useListFocus} from '../hooks/useListFocus';
+import {useInternalListFocus} from '../hooks/useListFocus';
 import {PressGroupContext} from '../hooks/pressGroupContext';
 import {
   GROUP_PRESS_POINTERS,
@@ -137,6 +137,27 @@ const elevationStyles = stylex.create({
 // Component
 // =============================================================================
 
+// Roving rewrites `tabindex` on every item, so the selector cannot key off
+// a value: `[tabindex="0"]` would drop each member the moment it is stamped
+// -1. `a[href]` catches a Button rendered with `href`.
+const MEMBER_SELECTOR = 'button, a[href], [tabindex]';
+
+/**
+ * The members of a disabled group, the Tab stop first: the member that held
+ * the stop, else the first. A member inside an open layer is not a member.
+ */
+function keepDisabledGroupStop(list: HTMLElement): HTMLElement[] {
+  const members = Array.from(
+    list.querySelectorAll<HTMLElement>(MEMBER_SELECTOR),
+  ).filter(member => member.closest('[role="group"], [popover]') === list);
+  const stop =
+    members.find(member => member.getAttribute('tabindex') === '0') ??
+    members[0];
+  return stop == null
+    ? members
+    : [stop, ...members.filter(member => member !== stop)];
+}
+
 /**
  * Groups buttons with connected styling — shared borders, proper border-radius
  * handling (only on outer edges), and horizontal or vertical orientation.
@@ -189,21 +210,22 @@ export function ButtonGroup({
 }: ButtonGroupProps): ReactNode {
   const size = useSize(sizeProp, 'md');
 
-  const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    // Roving rewrites `tabindex` on every item, so the selector cannot key off
-    // a value: `[tabindex="0"]` would drop each member the moment it is
-    // stamped -1. `a[href]` catches a Button rendered with `href`.
-    itemSelector: 'button, a[href], [tabindex]',
-    // A member's layer renders inline inside the group (useLayer does not
-    // portal it), so a key pressed in an open DropdownMenu bubbles here. The
-    // boundary is the group's own root or any layer, whichever is nearer to
-    // the target. Naming the group's own root is what keeps a group rendered
-    // inside a Popover or Toast working: bailing on any [popover] ancestor
-    // instead would swallow every arrow key it owns.
-    boundarySelector: '[role="group"], [popover]',
-    orientation,
-    hasRovingTabIndex: true,
-  });
+  const {listRef, handleKeyDown, handleFocus} =
+    useInternalListFocus<HTMLDivElement>({
+      itemSelector: MEMBER_SELECTOR,
+      // A member's layer renders inline inside the group (useLayer does not
+      // portal it), so a key pressed in an open DropdownMenu bubbles here. The
+      // boundary is the group's own root or any layer, whichever is nearer to
+      // the target. Naming the group's own root is what keeps a group rendered
+      // inside a Popover or Toast working: bailing on any [popover] ancestor
+      // instead would swallow every arrow key it owns.
+      boundarySelector: '[role="group"], [popover]',
+      orientation,
+      hasRovingTabIndex: true,
+      // A group disabled as a whole keeps its one Tab stop, so a keyboard user
+      // still reaches it. Its members are focusable while disabled.
+      tabStopOrder: isDisabled ? keepDisabledGroupStop : undefined,
+    });
 
   const contextValue = useMemo(
     () => ({orientation, isDisabled}),

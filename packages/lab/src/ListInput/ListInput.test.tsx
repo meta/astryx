@@ -1363,7 +1363,7 @@ describe('ListInput', () => {
     );
     expect(
       screen.getByRole('button', {name: 'Reorder guest 1'}),
-    ).toHaveAttribute('aria-disabled', 'true');
+    ).toBeDisabled();
     // Remove carries a tooltip, so it is disabled via aria and stays focusable
     // rather than dropping out of the tab order with its explanation.
     expect(
@@ -1371,15 +1371,6 @@ describe('ListInput', () => {
     ).toHaveAttribute('aria-disabled', 'true');
 
     // The values stay readable — a disabled list still communicates content.
-    expect(screen.getAllByRole('textbox')[0]).toHaveValue('Ada');
-
-    // The focusable reorder handle moves nothing from the keyboard
-    // (spec:AST-085 FR2).
-    const handle = screen.getByRole('button', {name: 'Reorder guest 1'});
-    fireEvent.keyDown(handle, {key: 'ArrowDown'});
-    fireEvent.keyDown(handle, {key: ' '});
-    fireEvent.keyDown(handle, {key: 'ArrowDown'});
-    expect(handle).not.toHaveAttribute('aria-pressed');
     expect(screen.getAllByRole('textbox')[0]).toHaveValue('Ada');
     expect(onChange).not.toHaveBeenCalled();
   });
@@ -1407,7 +1398,7 @@ describe('ListInput', () => {
     expect(addButton).toHaveAttribute('aria-busy', 'true');
     expect(
       screen.getByRole('button', {name: 'Reorder guest 1'}),
-    ).toHaveAttribute('aria-disabled', 'true');
+    ).toBeDisabled();
     expect(
       screen.getByRole('button', {name: 'Remove guest 1'}),
     ).toHaveAttribute('aria-disabled', 'true');

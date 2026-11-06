@@ -1000,8 +1000,8 @@ describe('ButtonGroup', () => {
     });
 
     it('keeps its one tab stop when the whole group is disabled', async () => {
-      // spec:AST-085 FR1/FR7: a group disabled as a whole keeps the focus order
-      // it has when enabled, so it still contributes exactly one tab stop.
+      // A group disabled as a whole keeps the focus order it has when
+      // enabled, so it still contributes exactly one tab stop.
       const user = userEvent.setup();
       render(
         bracketed(
