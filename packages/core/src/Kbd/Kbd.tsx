@@ -49,6 +49,9 @@ const styles = stylex.create({
     justifyContent: 'center',
     minWidth: spacingVars['--spacing-5'],
     height: spacingVars['--spacing-5'],
+    // A minimum, not a new height: at the default text size the line fits
+    // and the theme's height holds. A larger text size grows the badge.
+    minHeight: '1lh',
     paddingInline: spacingVars['--spacing-1'],
     borderRadius: radiusVars['--radius-inner'],
     backgroundColor: colorVars['--color-neutral'],
