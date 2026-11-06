@@ -1753,6 +1753,91 @@ describe('AppShell hiddenRegions', () => {
     expect(screen.queryByTestId('mobile-nav-toggle')).toBeNull();
   });
 
+  // A shell that hides nothing keeps the drawer it had before
+  // `hiddenRegions`, whether the list is omitted or empty.
+  describe.each([
+    {
+      shape: 'a heading-only top nav',
+      topNav: <TopNav heading={<TopNavHeading heading="App" />} />,
+      content: undefined,
+      isEnabled: true,
+      toggles: 0,
+    },
+    {
+      shape: 'a top nav with items',
+      topNav: (
+        <TopNav heading={<TopNavHeading heading="App" />}>
+          <TopNavItem label="Home" href="/home" />
+        </TopNav>
+      ),
+      content: undefined,
+      isEnabled: true,
+      toggles: 1,
+    },
+    {
+      shape: 'app drawer content',
+      topNav: <TopNav heading={<TopNavHeading heading="App" />} />,
+      content: <div>App drawer</div>,
+      isEnabled: true,
+      toggles: 0,
+    },
+    {
+      shape: 'no navigation',
+      topNav: undefined,
+      content: undefined,
+      isEnabled: false,
+      toggles: 0,
+    },
+  ])('on a phone, a shell that hides nothing, with $shape', row => {
+    it.each([
+      ['omitted', undefined],
+      ['empty', []],
+    ])('keeps its drawer with hiddenRegions %s', (_, hiddenRegions) => {
+      stubPhone();
+      render(
+        <AppShell
+          hiddenRegions={hiddenRegions}
+          topNav={row.topNav}
+          mobileNav={{defaultIsMobile: true, content: row.content}}>
+          <MobileProbe />
+        </AppShell>,
+      );
+      expect(probedMobile).toMatchObject({
+        isMobile: true,
+        isMobileNavEnabled: row.isEnabled,
+      });
+      expect(screen.queryAllByTestId('mobile-nav-toggle')).toHaveLength(
+        row.toggles,
+      );
+    });
+  });
+
+  it('on a phone, keeps an app drawer that hides nothing as it is', () => {
+    stubPhone();
+    render(
+      <AppShell
+        topNav={<TopNav heading={<TopNavHeading heading="App" />} />}
+        mobileNav={{defaultIsMobile: true, content: <div>App drawer</div>}}>
+        <MobileProbe />
+      </AppShell>,
+    );
+    expect(probedMobile).toMatchObject({isMobileNavEnabled: true});
+  });
+
+  it('on a phone, keeps the app drawer content when both navs hide', () => {
+    stubPhone();
+    render(
+      <AppShell
+        hiddenRegions={['topNav', 'sideNav']}
+        topNav={<TopNav heading={<TopNavHeading heading="App" />} />}
+        sideNav={<CountingSideNav />}
+        mobileNav={{defaultIsMobile: true, content: <div>App drawer</div>}}>
+        <MobileProbe />
+      </AppShell>,
+    );
+    expect(probedMobile).toMatchObject({isMobileNavEnabled: true});
+  });
+
   it('on a phone, moves focus to main when the drawer closes because its side nav hid', async () => {
     stubPhone();
     vi.useFakeTimers({shouldAdvanceTime: true});

@@ -72,6 +72,7 @@ import {
   TopNavShellContext,
   type TopNavShell,
 } from '../TopNav/TopNavShellContext';
+import {topNavHasDrawerItems} from '../TopNav/TopNav';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useAnimatedLayout} from '../hooks/useAnimatedLayout';
 import {
@@ -712,11 +713,15 @@ export function AppShell({
     hasSideNav && hiddenRegions?.includes('sideNav') === true;
   const showsTopNav = hasTopNav && !isTopNavHidden;
   const showsSideNav = hasSideNav && !isSideNavHidden;
-  // The drawer shows the side nav and the top nav's own items. With nothing
-  // left to show, it reads as closed and disabled. The app's own open state is
-  // kept, and hiding never writes it.
-  const [topNavHasOwnItems, setTopNavHasOwnItems] = useState(true);
-  const drawerHasContent = showsSideNav || (showsTopNav && topNavHasOwnItems);
+  // While a region is hidden, the drawer shows what is left: the side nav,
+  // the top nav's own items, or the app's own drawer content. With nothing
+  // left, it reads as closed and disabled. The app's own open state is kept,
+  // and hiding never writes it.
+  const drawerHasContent =
+    !(isTopNavHidden || isSideNavHidden) ||
+    mobileNavConfig?.content != null ||
+    showsSideNav ||
+    (showsTopNav && topNavHasDrawerItems(topNav));
 
   const [uncontrolledMobileOpen, setUncontrolledMobileOpen] = useState(false);
   const isMobileNavOpen =
@@ -1016,7 +1021,6 @@ export function AppShell({
     () => ({
       isOwnContentHidden: isTopNavHidden,
       isMobileContentHidden: isSideNavHidden,
-      reportOwnItems: setTopNavHasOwnItems,
     }),
     [isTopNavHidden, isSideNavHidden],
   );

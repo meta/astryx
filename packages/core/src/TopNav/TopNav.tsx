@@ -16,8 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/TopNav/ (showcase blocks)
  */
 
-import {use, type ReactNode} from 'react';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {isValidElement, use, type ReactNode} from 'react';
 import {TopNavShellContext} from './TopNavShellContext';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
@@ -133,6 +132,19 @@ const styles = stylex.create({
   drawerExtraContent: {},
 });
 
+/**
+ * Whether a top nav element has items of its own to put in the phone drawer,
+ * read from its props during render. Internal: AppShell reads it to tell an
+ * empty drawer. A slot that is not a TopNav element counts as having items.
+ */
+export function topNavHasDrawerItems(topNav: ReactNode): boolean {
+  if (!isValidElement<TopNavProps>(topNav) || topNav.type !== TopNav) {
+    return true;
+  }
+  const {startContent, children, centerContent} = topNav.props;
+  return isRenderable(startContent ?? children) || isRenderable(centerContent);
+}
+
 export interface TopNavProps extends BaseProps<HTMLElement> {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLElement>;
@@ -220,10 +232,6 @@ export function TopNav({
   // Show mobile toggle when there's ANY drawer content — own items OR SideNav via context
   const hasMobileDrawerContent = hasCollapsibleContent || hasMobileContent;
   const shell = use(TopNavShellContext);
-  // Syncs AppShell's drawer with whether this top nav has items of its own.
-  useIsomorphicLayoutEffect(() => {
-    shell?.reportOwnItems(hasCollapsibleContent);
-  }, [shell, hasCollapsibleContent]);
   const isOwnContentHidden = shell?.isOwnContentHidden === true;
 
   // =========================================================================
@@ -266,7 +274,7 @@ export function TopNav({
     }
 
     return (
-      <MobileNav header={heading}>
+      <MobileNav header={isOwnContentHidden ? undefined : heading}>
         {hasCollapsibleContent && (
           <div
             {...stylex.props(

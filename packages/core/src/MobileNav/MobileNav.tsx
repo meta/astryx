@@ -376,7 +376,8 @@ function resolveCloseDelay(dialog: HTMLDialogElement): number {
  *
  * Focus is left alone when there was no real opener (activeElement was <body>)
  * or the opener has since left the DOM: focusing <body> would blur whatever a
- * router moved focus to, and a detached node cannot take focus.
+ * router moved focus to, and a detached node cannot take focus. Inside
+ * AppShell, an opener removed because the drawer is empty sends focus to main.
  */
 function closeAndRestoreFocus(
   dialog: HTMLDialogElement,
