@@ -13,7 +13,7 @@
  * replayed when the menu arrives.
  */
 
-import {lazy, Suspense, useRef, type ReactNode} from 'react';
+import {lazy, Suspense, useEffect, useRef, type ReactNode} from 'react';
 import type {
   ContextMenuExternalTrigger,
   ContextMenuTriggerHandlers,
@@ -63,6 +63,13 @@ let heldInvocation: HeldInvocation | null = null;
 
 function holdInvocation(held: HeldInvocation): void {
   heldInvocation = held;
+}
+
+/** Drops the held invocation if `owner` holds it. */
+function dropHeldInvocation(owner: object): void {
+  if (heldInvocation?.owner === owner) {
+    heldInvocation = null;
+  }
 }
 
 /** Takes the held invocation if `owner` holds it. */
@@ -145,6 +152,10 @@ function CellTrigger({
       });
     },
   }).current;
+
+  // Syncs the shared hold with this cell's lifetime: a cell that unmounts
+  // before its menu loads drops its own hold, and keeps another cell's.
+  useEffect(() => () => dropHeldInvocation(triggerRef), []);
 
   // The same hold time, movement tolerance and lift rule as the menu's own
   // long press, for a press that starts before the menu attaches.
