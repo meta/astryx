@@ -992,9 +992,10 @@ describe('theming.targets matches the themeProps() call sites', () => {
 });
 
 /**
- * Painted axes that do not reach themeProps() yet. Each key is
- * `Component.prop`; each value says why. Remove the entry when the axis
- * reaches themeProps(). A stale entry fails the guard.
+ * Painted axes that do not reach themeProps(). Each key is `Component.prop`.
+ * Each value says why: the record claim that keeps the axis unreflected, or
+ * the gap that blocks a target. Remove a gap entry when the axis reaches
+ * themeProps(). A stale entry fails the guard.
  */
 const UNREFLECTED_STYLE_AXIS_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
   [
@@ -1009,8 +1010,9 @@ const UNREFLECTED_STYLE_AXIS_EXCEPTIONS: ReadonlyMap<string, string> = new Map([
   ],
   [
     'Skeleton.radius',
-    'The skeleton target paints the radius. Adding the prop to its ' +
-      'themeProps() call is a product change that ships separately.',
+    'component:Skeleton FR2: radius is callsite geometry, like width and ' +
+      'height, and is not reflected. A theme restyles each step through the ' +
+      'radius token that FR2 maps it to.',
   ],
 ]);
 
