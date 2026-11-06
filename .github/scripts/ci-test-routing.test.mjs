@@ -908,7 +908,7 @@ describe('scoped browser audits (spec:AST-030 FR9, FR13)', () => {
       'if [ -n "$DEPENDENTS" ]; then DEPENDENT_ARGS=(--dependents "$DEPENDENTS"); fi',
     );
     expect(visual.run).toContain(
-      'SCOPE_ARGS=(--tiers component --components "$COMPONENTS" "${DEPENDENT_ARGS[@]}" --no-scout)',
+      'SCOPE_ARGS=(--tiers component --components "$COMPONENTS" ${DEPENDENT_ARGS[@]+"${DEPENDENT_ARGS[@]}"} --no-scout)',
     );
     expect(visual.run).toContain(
       "FORCE_FULL_AUDITS=$(jq -r '.forceFullComponentAudits == true' analysis.json)",

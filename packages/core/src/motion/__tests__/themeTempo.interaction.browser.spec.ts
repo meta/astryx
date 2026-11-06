@@ -238,18 +238,18 @@ test('a duration scale nested in a tempo theme glides on its own duration token'
   page,
 }) => {
   await openStory(page, NESTED_STORY, 3);
-  // Each row's `--duration-medium-min`, in ms, as its theme writes it.
+  // Each row's `--duration-medium`, in ms, as its theme writes it.
   const tokenMs = async (row: string) =>
     page.evaluate(
       selector =>
         Number.parseFloat(
           getComputedStyle(
             document.querySelector(selector) as Element,
-          ).getPropertyValue('--duration-medium-min'),
+          ).getPropertyValue('--duration-medium'),
         ),
       row,
     );
-  // Each row glides on the `--duration-medium-min` of the theme it is in.
+  // Each row glides on the `--duration-medium` of the theme it is in.
   for (const row of ['plain', 'outer', 'nested']) {
     const selector = `section[data-row="${row}"]`;
     expect(await glideMs(page, selector), row).toBeCloseTo(
@@ -260,6 +260,6 @@ test('a duration scale nested in a tempo theme glides on its own duration token'
   // The nested scale's own value: the outer tempo is not on it.
   const own = expandMotionScale({fast: 130, medium: 310, ratio: 0.75});
   expect(await tokenMs('section[data-row="nested"]')).toBe(
-    Number.parseFloat(own['--duration-medium-min']),
+    Number.parseFloat(own['--duration-medium']),
   );
 });
